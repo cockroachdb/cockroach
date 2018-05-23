@@ -80,15 +80,15 @@ export class AnalyticsSync {
 
      /**
       * Construct a new AnalyticsSync object.
-      * @param analytics Underlying interface to push to the analytics service.
-      * @param store The redux store for the Admin UI.
+      * @param analyticsService Underlying interface to push to the analytics service.
+      * @param deprecatedStore The redux store for the Admin UI. [DEPRECATED]
       * @param redactions A list of redaction regular expressions, used to
       * scrub any potential personally-identifying information from the data
       * being tracked.
       */
     constructor(
-        private analytics: Analytics,
-        private store: Store<AdminUIState>,
+        private analyticsService: Analytics,
+        private deprecatedStore: Store<AdminUIState>,
         private redactions: PageTrackRedaction[],
     ) {}
 
@@ -147,13 +147,13 @@ export class AnalyticsSync {
         }
 
         // Do nothing if version information is not yet available.
-        const state = this.store.getState();
+        const state = this.deprecatedStore.getState();
         const versions = versionsSelector(state);
         if (_.isEmpty(versions)) {
             return;
         }
 
-        this.analytics.identify({
+        this.analyticsService.identify({
             userId: cluster_id,
             traits: {
                 version: versions[0],
@@ -170,7 +170,7 @@ export class AnalyticsSync {
      * to eventually retrieve this without having to request it ourselves.
      */
     private getCluster(): ClusterResponse | null {
-        const state = this.store.getState();
+        const state = this.deprecatedStore.getState();
 
         // Do nothing if cluster ID has not been loaded.
         const cluster = state.cachedData.cluster;
@@ -202,7 +202,7 @@ export class AnalyticsSync {
             search = "?" + params.toString();
         }
 
-        this.analytics.page({
+        this.analyticsService.page({
             userId: userID,
             name: path,
             properties: {

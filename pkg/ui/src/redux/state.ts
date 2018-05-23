@@ -31,7 +31,7 @@ export interface AdminUIState {
 export function createAdminUIStore() {
   const sagaMiddleware = createSagaMiddleware();
 
-  const store: Store<AdminUIState> = createStore(
+  const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
       cachedData: apiReducersReducer,
       hover: hoverReducer,
@@ -61,7 +61,7 @@ export function createAdminUIStore() {
   );
 
   sagaMiddleware.run(queryMetricsSaga);
-  return store;
+  return s;
 }
 
 export const store = createAdminUIStore();

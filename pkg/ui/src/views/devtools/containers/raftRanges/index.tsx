@@ -271,13 +271,13 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-const raftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
+const selectRaftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
 // Connect the RangesMain class with our redux store.
 const rangesMainConnected = connect(
   (state: AdminUIState) => {
     return {
-      state: raftState(state),
+      state: selectRaftState(state),
     };
   },
   {
