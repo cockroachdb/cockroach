@@ -1307,6 +1307,8 @@ func TestImportMysql(t *testing.T) {
 func TestImportMysqlOutfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("#25835")
+
 	const (
 		nodes = 3
 	)

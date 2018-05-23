@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -99,11 +100,11 @@ func TestWriteBinaryArray(t *testing.T) {
 	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", coltypes.Int)
 
 	writeBuf1 := newWriteBuffer(nil /* bytecount */)
-	writeBuf1.writeTextDatum(context.Background(), ary, time.UTC)
+	writeBuf1.writeTextDatum(context.Background(), ary, time.UTC, sessiondata.BytesEncodeHex)
 	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC)
 
 	writeBuf2 := newWriteBuffer(nil /* bytecount */)
-	writeBuf2.writeTextDatum(context.Background(), ary, time.UTC)
+	writeBuf2.writeTextDatum(context.Background(), ary, time.UTC, sessiondata.BytesEncodeHex)
 
 	writeBuf3 := newWriteBuffer(nil /* bytecount */)
 	writeBuf3.writeBinaryDatum(context.Background(), ary, time.UTC)
@@ -127,7 +128,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 		}
 	}
 
-	buf.writeTextDatum(context.Background(), d, time.UTC)
+	buf.writeTextDatum(context.Background(), d, time.UTC, sessiondata.BytesEncodeHex)
 
 	b := buf.wrapped.Bytes()
 
@@ -139,6 +140,36 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
+	}
+}
+
+func TestByteArrayRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, be := range []sessiondata.BytesEncodeFormat{
+		sessiondata.BytesEncodeHex, sessiondata.BytesEncodeEscape} {
+		t.Run(be.String(), func(t *testing.T) {
+			buf := newWriteBuffer(nil /* bytecount */)
+			buf.bytecount = metric.NewCounter(metric.Metadata{})
+			d := tree.NewDBytes(tree.DBytes("\x00abc\\\n"))
+
+			buf.writeTextDatum(context.Background(), d, time.UTC, be)
+
+			b := buf.wrapped.Bytes()
+
+			got, err := pgwirebase.DecodeOidDatum(oid.T_bytea, pgwirebase.FormatText, b[4:])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := got.(*tree.DBytes); !ok {
+				t.Fatalf("parse does not return DBytes, got %T", got)
+			}
+			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			defer evalCtx.Stop(context.Background())
+			if got.Compare(evalCtx, d) != 0 {
+				t.Fatalf("expected %s, got %s", d, got)
+			}
+		})
 	}
 }
 
@@ -158,7 +189,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: semtyp}, true)
 
-			buf.writeTextDatum(context.Background(), d, time.UTC)
+			buf.writeTextDatum(context.Background(), d, time.UTC, sessiondata.BytesEncodeHex)
 			if buf.err != nil {
 				t.Fatalf("got %s while attempting to write datum %s as text", buf.err, d)
 			}
@@ -177,7 +208,9 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 	buf := newWriteBuffer(nil /* bytecount */)
 	buf.bytecount = metric.NewCounter(metric.Metadata{Name: ""})
 
-	writeMethod := buf.writeTextDatum
+	writeMethod := func(ctx context.Context, d tree.Datum, loc *time.Location) {
+		buf.writeTextDatum(ctx, d, loc, sessiondata.BytesEncodeHex)
+	}
 	if format == pgwirebase.FormatBinary {
 		writeMethod = buf.writeBinaryDatum
 	}
