@@ -1043,7 +1043,8 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			ex.curStmt = tcmd.Stmt
 
 			stmtRes := ex.clientComm.CreateStatementResult(
-				tcmd.Stmt, NeedRowDesc, pos, nil /* formatCodes */, ex.sessionData.Location)
+				tcmd.Stmt, NeedRowDesc, pos, nil, /* formatCodes */
+				ex.sessionData.Location, ex.sessionData.BytesEncodeFormat)
 			res = stmtRes
 			curStmt := Statement{AST: tcmd.Stmt}
 
@@ -1096,7 +1097,8 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				// The client is using the extended protocol, so no row description is
 				// needed.
 				DontNeedRowDesc,
-				pos, portal.OutFormats, ex.sessionData.Location)
+				pos, portal.OutFormats,
+				ex.sessionData.Location, ex.sessionData.BytesEncodeFormat)
 			stmtRes.SetLimit(tcmd.Limit)
 			res = stmtRes
 			curStmt := Statement{

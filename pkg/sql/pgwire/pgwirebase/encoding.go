@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"io"
 	"math"
 	"strconv"
@@ -26,6 +25,11 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -33,9 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/lib/pq"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 const secondsInDay = 24 * 60 * 60
@@ -225,19 +226,11 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return d, nil
 		case oid.T_bytea:
-			// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
-			// Code cribbed from github.com/lib/pq.
-
-			// We only support hex encoding.
-			if len(b) >= 2 && bytes.Equal(b[:2], []byte("\\x")) {
-				b = b[2:] // trim off leading "\\x"
-				result := make([]byte, hex.DecodedLen(len(b)))
-				if _, err := hex.Decode(result, b); err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(result)), nil
+			res, err := lex.DecodeRawBytesToByteArrayAuto(b)
+			if err != nil {
+				return nil, err
 			}
-			return nil, errors.Errorf("unsupported bytea encoding: %q", b)
+			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
 			d, err := tree.ParseDTimestamp(string(b), time.Microsecond)
 			if err != nil {

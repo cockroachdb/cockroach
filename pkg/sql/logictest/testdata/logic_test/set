@@ -83,6 +83,7 @@ query TT
 SHOW ALL
 ----
 application_name                helloworld
+bytea_output                    hex
 client_encoding                 UTF8
 client_min_messages             ·
 database                        foo
@@ -201,6 +202,15 @@ SET experimental_opt = off
 
 statement error not supported
 SET experimental_opt = bogus
+
+statement ok
+SET bytea_output = escape
+
+statement ok
+SET bytea_output = hex
+
+statement error not supported
+SET bytea_output = bogus
 
 query T colnames
 SHOW server_version

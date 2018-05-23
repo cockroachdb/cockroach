@@ -1373,6 +1373,10 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 	}
 }
 
+func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
+	m.data.BytesEncodeFormat = val
+}
+
 func (m *sessionDataMutator) SetDatabase(dbName string) {
 	m.data.Database = dbName
 }

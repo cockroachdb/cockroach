@@ -517,7 +517,12 @@ type resWithPos struct {
 
 // CreateStatementResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateStatementResult(
-	_ tree.Statement, _ RowDescOpt, pos CmdPos, _ []pgwirebase.FormatCode, _ *time.Location,
+	_ tree.Statement,
+	_ RowDescOpt,
+	pos CmdPos,
+	_ []pgwirebase.FormatCode,
+	_ *time.Location,
+	_ sessiondata.BytesEncodeFormat,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

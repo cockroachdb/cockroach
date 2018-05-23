@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -833,7 +834,11 @@ func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffecte
 // which case all columns are encoded using the text encoding. Otherwise, it
 // needs to contain an entry for every column.
 func (c *conn) bufferRow(
-	ctx context.Context, row tree.Datums, formatCodes []pgwirebase.FormatCode, loc *time.Location,
+	ctx context.Context,
+	row tree.Datums,
+	formatCodes []pgwirebase.FormatCode,
+	loc *time.Location,
+	be sessiondata.BytesEncodeFormat,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
@@ -844,7 +849,7 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, loc)
+			c.msgBuilder.writeTextDatum(ctx, col, loc, be)
 		case pgwirebase.FormatBinary:
 			c.msgBuilder.writeBinaryDatum(ctx, col, loc)
 		default:
@@ -1113,8 +1118,9 @@ func (c *conn) CreateStatementResult(
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
 	loc *time.Location,
+	be sessiondata.BytesEncodeFormat,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, loc)
+	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, loc, be)
 	return &res
 }
 

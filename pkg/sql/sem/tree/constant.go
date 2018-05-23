@@ -20,7 +20,6 @@ import (
 	"go/token"
 	"math"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/pkg/errors"
 
@@ -345,22 +344,30 @@ type StrVal struct {
 	// We could embed a constant.Value here (like NumVal) and use the stringVal implementation,
 	// but that would have extra overhead without much of a benefit. However, it would make
 	// constant folding (below) a little more straightforward.
-	s        string
-	bytesEsc bool
+	s string
+
+	// scannedAsBytes is true iff the input syntax was using b'...' or
+	// x'....'. If false, the string is guaranteed to be a valid UTF-8
+	// sequence.
+	scannedAsBytes bool
 
 	// The following fields are used to avoid allocating Datums on type resolution.
 	resString DString
 	resBytes  DBytes
 }
 
-// NewStrVal constructs a StrVal instance.
+// NewStrVal constructs a StrVal instance. This is used during
+// parsing when interpreting a token of type SCONST, i.e. *not* using
+// the b'...' or x'...' syntax.
 func NewStrVal(s string) *StrVal {
 	return &StrVal{s: s}
 }
 
 // NewBytesStrVal constructs a StrVal instance suitable as byte array.
+// This is used during parsing when interpreting a token of type BCONST,
+// i.e. using the b'...' or x'...' syntax.
 func NewBytesStrVal(s string) *StrVal {
-	return &StrVal{s: s, bytesEsc: true}
+	return &StrVal{s: s, scannedAsBytes: true}
 }
 
 // RawString retrieves the underlying string of the StrVal.
@@ -371,7 +378,7 @@ func (expr *StrVal) RawString() string {
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
-	if expr.bytesEsc {
+	if expr.scannedAsBytes {
 		lex.EncodeSQLBytes(buf, expr.s)
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
@@ -397,11 +404,8 @@ var (
 		types.INet,
 		types.JSON,
 	}
-	// StrValAvailBytesString is the set of types convertible to either
-	// byte array or string.
-	StrValAvailBytesString = []types.T{types.Bytes, types.String, types.UUID, types.INet}
 	// StrValAvailBytes is the set of types convertible to byte array.
-	StrValAvailBytes = []types.T{types.Bytes, types.UUID}
+	StrValAvailBytes = []types.T{types.Bytes, types.UUID, types.String}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -434,13 +438,10 @@ var (
 // issues here. Fully parsing the literal into each type would be the only way to
 // concretely avoid the issue of unpredictable inference behavior.
 func (expr *StrVal) AvailableTypes() []types.T {
-	if !expr.bytesEsc {
-		return StrValAvailAllParsable
+	if expr.scannedAsBytes {
+		return StrValAvailBytes
 	}
-	if utf8.ValidString(expr.s) {
-		return StrValAvailBytesString
-	}
-	return StrValAvailBytes
+	return StrValAvailAllParsable
 }
 
 // DesirableTypes implements the Constant interface.
@@ -450,6 +451,23 @@ func (expr *StrVal) DesirableTypes() []types.T {
 
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
+	if expr.scannedAsBytes {
+		// We're looking at typing a byte literal constant into some value type.
+		switch typ {
+		case types.Bytes:
+			expr.resBytes = DBytes(expr.s)
+			return &expr.resBytes, nil
+		case types.UUID:
+			return ParseDUuidFromBytes([]byte(expr.s))
+		case types.String:
+			expr.resString = DString(expr.s)
+			return &expr.resString, nil
+		}
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: attempt to type byte array literal to %T", typ)
+	}
+
+	// Typing a string literal constant into some value type.
 	switch typ {
 	case types.String:
 		expr.resString = DString(expr.s)
@@ -458,16 +476,9 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		expr.resString = DString(expr.s)
 		return NewDNameFromDString(&expr.resString), nil
 	case types.Bytes:
-		s, err := ParseDByte(expr.s, !expr.bytesEsc)
-		if err == nil {
-			expr.resBytes = *s
-		}
-		return &expr.resBytes, err
-	case types.UUID:
-		if expr.bytesEsc {
-			return ParseDUuidFromBytes([]byte(expr.s))
-		}
+		return ParseDByte(expr.s)
 	}
+
 	datum, err := parseStringAs(typ, expr.s, ctx)
 	if datum == nil && err == nil {
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
@@ -571,9 +582,9 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 			if r, ok := t.Right.(*StrVal); ok {
 				switch t.Operator {
 				case Concat:
-					// When folding string-like constants, if either was byte-escaped,
-					// the result is also considered byte escaped.
-					return &StrVal{s: l.s + r.s, bytesEsc: l.bytesEsc || r.bytesEsc}
+					// When folding string-like constants, if either was a byte
+					// array literal, the result is also a byte literal.
+					return &StrVal{s: l.s + r.s, scannedAsBytes: l.scannedAsBytes || r.scannedAsBytes}
 				}
 			}
 		}

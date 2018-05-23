@@ -98,6 +98,34 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
+	// and https://www.postgresql.org/docs/10/static/datatype-binary.html
+	`bytea_output`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getStringVal(&evalCtx.EvalContext, `bytea_output`, values)
+			if err != nil {
+				return err
+			}
+			mode, ok := sessiondata.BytesEncodeFormatFromString(s)
+			if !ok {
+				return fmt.Errorf("set bytea_output: \"%s\" not supported", s)
+			}
+			m.SetBytesEncodeFormat(mode)
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.BytesEncodeFormat.String()
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetBytesEncodeFormat(sessiondata.BytesEncodeHex)
+			return nil
+		},
+	},
+
 	// Supported for PG compatibility only.
 	// Controls returned message verbosity. We don't support this.
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-compatible.html
