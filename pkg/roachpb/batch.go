@@ -422,15 +422,3 @@ func (*BatchRequest) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
 }
-
-// SetNewRequest increases the internal sequence counter of this batch request.
-// The sequence counter is used for replay and reordering protection. At the
-// Store, a sequence counter less than or equal to the last observed one incurs
-// a transaction restart (if the request is transactional).
-func (ba *BatchRequest) SetNewRequest() {
-	if ba.Txn != nil {
-		txn := *ba.Txn
-		txn.Sequence++
-		ba.Txn = &txn
-	}
-}

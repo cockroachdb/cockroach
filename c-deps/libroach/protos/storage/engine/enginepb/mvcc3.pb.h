@@ -234,11 +234,11 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::int32 sequence() const;
   void set_sequence(::google::protobuf::int32 value);
 
-  // int32 batch_index = 8;
-  void clear_batch_index();
-  static const int kBatchIndexFieldNumber = 8;
-  ::google::protobuf::int32 batch_index() const;
-  void set_batch_index(::google::protobuf::int32 value);
+  // int32 deprecated_batch_index = 8;
+  void clear_deprecated_batch_index();
+  static const int kDeprecatedBatchIndexFieldNumber = 8;
+  ::google::protobuf::int32 deprecated_batch_index() const;
+  void set_deprecated_batch_index(::google::protobuf::int32 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMeta)
  private:
@@ -251,7 +251,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::uint32 epoch_;
   ::google::protobuf::int32 priority_;
   ::google::protobuf::int32 sequence_;
-  ::google::protobuf::int32 batch_index_;
+  ::google::protobuf::int32 deprecated_batch_index_;
   mutable int _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
   friend void ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::InitDefaultsTxnMetaImpl();
@@ -958,18 +958,18 @@ inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
 }
 
-// int32 batch_index = 8;
-inline void TxnMeta::clear_batch_index() {
-  batch_index_ = 0;
+// int32 deprecated_batch_index = 8;
+inline void TxnMeta::clear_deprecated_batch_index() {
+  deprecated_batch_index_ = 0;
 }
-inline ::google::protobuf::int32 TxnMeta::batch_index() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
-  return batch_index_;
+inline ::google::protobuf::int32 TxnMeta::deprecated_batch_index() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.deprecated_batch_index)
+  return deprecated_batch_index_;
 }
-inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
+inline void TxnMeta::set_deprecated_batch_index(::google::protobuf::int32 value) {
   
-  batch_index_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
+  deprecated_batch_index_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.deprecated_batch_index)
 }
 
 // -------------------------------------------------------------------

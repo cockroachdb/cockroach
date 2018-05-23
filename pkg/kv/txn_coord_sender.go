@@ -1381,7 +1381,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 		b := txn.NewBatch()
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {
-			req := arg.GetInner()
+			req := arg.GetInner().ShallowCopy()
 			b.AddRawRequest(req)
 		}
 		err := txn.CommitInBatch(ctx, b)

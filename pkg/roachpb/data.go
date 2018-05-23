@@ -727,7 +727,7 @@ func MakeTransaction(
 			Isolation: isolation,
 			Timestamp: now,
 			Priority:  MakePriority(userPriority),
-			Sequence:  1,
+			Sequence:  0, // 1-indexed, incremented before each Request
 		},
 		Name:          name,
 		LastHeartbeat: now,
