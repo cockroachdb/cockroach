@@ -523,6 +523,11 @@ offset
  │    └── const: 5 [type=int]
  └── const: 5 [type=int]
 
+build
+SELECT * FROM xyzw@foo
+----
+error (0A000): index hints are not supported
+
 exec-ddl
 CREATE TABLE boolean_table (
   id INTEGER PRIMARY KEY NOT NULL,
@@ -1048,3 +1053,8 @@ select
       └── eq [type=bool]
            ├── variable: a.x [type=int]
            └── placeholder: $1 [type=int]
+
+build
+SELECT * FROM a AS OF SYSTEM TIME '10ns'
+----
+error (0A000): AS OF clause not supported
