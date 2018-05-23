@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -44,6 +45,7 @@ func (p *planner) showStateMachineSetting(
 	// update its persisted state; see #22796).
 	retryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	tBegin := timeutil.Now()
 	// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 	if err := retry.WithMaxAttempts(retryCtx, retry.Options{}, math.MaxInt32, func() error {
 		datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
@@ -83,7 +85,7 @@ func (p *planner) showStateMachineSetting(
 			gossipObj = fmt.Sprintf("<error: %s>", err)
 		}
 		if !bytes.Equal(gossipRawVal, kvRawVal) {
-			return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later", gossipObj, kvObj)
+			return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)", gossipObj, kvObj, retryCtx.Err(), timeutil.Since(tBegin))
 		}
 
 		d = tree.NewDString(kvObj.(fmt.Stringer).String())
