@@ -580,7 +580,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// TODO(peter): the ARRAY flatten operator requires a single column from
 		// the subquery.
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
-			t.Subquery = s.replaceSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
+			// Copy the ArrayFlatten expression so that the tree isn't mutated.
+			copy := *t
+			copy.Subquery = s.replaceSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
+			expr = &copy
 		}
 
 	case *tree.ComparisonExpr:
@@ -592,7 +595,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		switch t.Operator {
 		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
 			if sub, ok := t.Right.(*tree.Subquery); ok {
-				t.Right = s.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
+				// Copy the Comparison expression so that the tree isn't mutated.
+				copy := *t
+				copy.Right = s.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
+				expr = &copy
 			}
 		}
 

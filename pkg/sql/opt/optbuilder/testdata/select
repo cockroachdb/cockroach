@@ -473,7 +473,7 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
+SELECT * FROM xyzw LIMIT (SELECT COUNT(*) FROM abc) * 2 OFFSET (SELECT COUNT(*) FROM abc) * 3
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -481,14 +481,30 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── scan xyzw
  │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── cast: INT [type=int]
- │         └── mult [type=float]
- │              ├── function: random [type=float]
- │              └── const: 0.0 [type=float]
- └── cast: INT [type=int]
-      └── mult [type=float]
-           ├── function: random [type=float]
-           └── const: 0.0 [type=float]
+ │    └── mult [type=int]
+ │         ├── subquery [type=int]
+ │         │    └── max1-row
+ │         │         ├── columns: count:8(int)
+ │         │         └── group-by
+ │         │              ├── columns: count:8(int)
+ │         │              ├── project
+ │         │              │    └── scan abc
+ │         │              │         └── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
+ │         │              └── aggregations
+ │         │                   └── count-rows [type=int]
+ │         └── const: 3 [type=int]
+ └── mult [type=int]
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: count:12(int)
+      │         └── group-by
+      │              ├── columns: count:12(int)
+      │              ├── project
+      │              │    └── scan abc
+      │              │         └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
+      │              └── aggregations
+      │                   └── count-rows [type=int]
+      └── const: 2 [type=int]
 
 build
 ((SELECT x FROM xyzw LIMIT 1)) LIMIT 1

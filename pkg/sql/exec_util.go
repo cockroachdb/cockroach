@@ -387,33 +387,6 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
-// shouldUseOptimizer determines whether we should use the experimental
-// optimizer for planning.
-func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool {
-	switch optMode {
-	case sessiondata.OptimizerAlways:
-		// Don't try to run SET commands with the optimizer in Always mode, or
-		// else we can't switch to another mode.
-		if _, setVar := stmt.AST.(*tree.SetVar); !setVar {
-			return true
-		}
-
-	case sessiondata.OptimizerOn, sessiondata.OptimizerLocal:
-		// Only handle a subset of the statement types (currently read-only queries).
-		switch stmt.AST.(type) {
-		case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-			*tree.UnionClause, *tree.ValuesClause:
-			return true
-		case *tree.Explain:
-			// The optimizer doesn't yet support EXPLAIN but if we return false, it gets
-			// executed with the old planner which can be very confusing; it's
-			// preferable to error out.
-			return true
-		}
-	}
-	return false
-}
-
 // shouldUseDistSQL determines whether we should use DistSQL for the
 // given logical plan, based on the session settings.
 func shouldUseDistSQL(

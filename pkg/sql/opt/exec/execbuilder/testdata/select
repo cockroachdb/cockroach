@@ -96,3 +96,9 @@ n:int  str:string
 7      seven
 9      nine
 10     one-zero
+
+# Virtual tables are currently not supported.
+build
+SELECT * FROM crdb_internal.jobs
+----
+error (0A000): virtual tables are not supported
