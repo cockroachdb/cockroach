@@ -16,9 +16,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
@@ -47,7 +47,7 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
 	if !cols[0].Typ.Equivalent(types.Int) {
-		return nil, errors.Errorf("%s QUERIES requires int values, not type %s",
+		return nil, errors.Errorf("%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)
 	}
 
@@ -74,15 +74,15 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			break
 		}
 
-		datum := n.rows.Values()[0]
-		if datum == tree.DNull {
+		jobIDDatum := n.rows.Values()[0]
+		if jobIDDatum == tree.DNull {
 			continue
 		}
 
-		jobIDDatum := datum.(*tree.DInt)
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
-			return fmt.Errorf("%s is not a valid job ID", jobIDDatum)
+			return pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: %q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
 		switch n.desiredStatus {
@@ -93,7 +93,8 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusCanceled:
 			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
 		default:
-			err = fmt.Errorf("programmer error: unhandled status %v", n.desiredStatus)
+			err = pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: unhandled status %v", n.desiredStatus)
 		}
 		if err != nil {
 			return err

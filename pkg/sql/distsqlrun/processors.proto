@@ -253,6 +253,12 @@ message JoinReaderSpec {
   // the right stream.
   // Having "ON" expression implies no merged columns.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
+
+  // For lookup joins. Filter expression to be applied to index rows before
+  // joining to the input.
+  optional Expression index_filter_expr = 5 [(gogoproto.nullable) = false];
+
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

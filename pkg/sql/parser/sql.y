@@ -1099,6 +1099,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... DROP CONSTRAINT [IF EXISTS] <constraintname> [RESTRICT | CASCADE]
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
+//   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
@@ -1371,6 +1372,11 @@ alter_table_cmd:
 | ALTER opt_column column_name DROP NOT NULL
   {
     $$.val = &tree.AlterTableDropNotNull{ColumnKeyword: $2.bool(), Column: tree.Name($3)}
+  }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP STORED
+| ALTER opt_column column_name DROP STORED
+  {
+    $$.val = &tree.AlterTableDropStored{Column: tree.Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column column_name SET NOT NULL { return unimplemented(sqllex, "alter set non null") }
