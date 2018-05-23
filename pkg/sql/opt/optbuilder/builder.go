@@ -182,6 +182,9 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
+	case *tree.ShowTrace:
+		return b.buildShowTrace(stmt, inScope)
+
 	default:
 		panic(unimplementedf("unsupported statement: %T", stmt))
 	}
