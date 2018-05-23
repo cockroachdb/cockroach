@@ -977,6 +977,12 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 	return node.Right.(TypedExpr)
 }
 
+// ResolvedBinOp returns the resolved binary op overload; can only be called
+// after Resolve (which happens during TypeCheck).
+func (node *BinaryExpr) ResolvedBinOp() *BinOp {
+	return &node.fn
+}
+
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
 func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ types.T) *BinaryExpr {
 	node := &BinaryExpr{Operator: op, Left: left, Right: right}

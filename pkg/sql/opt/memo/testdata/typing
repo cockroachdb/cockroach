@@ -366,9 +366,11 @@ project
       │    └── variable: unusual.arr [type=int[]]
       ├── concat [type=int[]]
       │    ├── variable: unusual.arr [type=int[]]
-      │    └── null [type=unknown]
+      │    └── cast: INT[] [type=int[]]
+      │         └── null [type=unknown]
       └── concat [type=int[]]
-           ├── null [type=unknown]
+           ├── cast: INT[] [type=int[]]
+           │    └── null [type=unknown]
            └── variable: unusual.arr [type=int[]]
 
 # Array Element Concat
@@ -388,9 +390,11 @@ project
       │    └── variable: unusual.x [type=int]
       ├── concat [type=int[]]
       │    ├── variable: unusual.x [type=int]
-      │    └── null [type=unknown]
+      │    └── cast: INT[] [type=int[]]
+      │         └── null [type=unknown]
       └── concat [type=int[]]
-           ├── null [type=unknown]
+           ├── cast: INT[] [type=int[]]
+           │    └── null [type=unknown]
            └── variable: unusual.x [type=int]
 
 # Function with fixed return type.
