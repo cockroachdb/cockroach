@@ -134,7 +134,7 @@ type Table interface {
 	TabName() TableName
 
 	// IsVirtualTable returns true if this table is a special system table that
-	// constructs its rows "on the fly" when it's queried. An example are the
+	// constructs its rows "on the fly" when it's queried. An example is the
 	// information_schema tables.
 	IsVirtualTable() bool
 

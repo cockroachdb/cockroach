@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -347,6 +348,15 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+	// Start with fast check to see if top-level statement is supported.
+	switch stmt.AST.(type) {
+	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
+		*tree.UnionClause, *tree.ValuesClause, *tree.Explain:
+
+	default:
+		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+	}
+
 	// execEngine is both an exec.Factory and an opt.Catalog. cleanup is not
 	// required on the engine, since planner is cleaned up elsewhere.
 	eng := newExecEngine(p, nil)

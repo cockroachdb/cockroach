@@ -570,24 +570,29 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-	useOptimizer := shouldUseOptimizer(ex.sessionData.OptimizerMode, stmt)
 	var err error
-	if useOptimizer {
+	optMode := ex.sessionData.OptimizerMode
+	if optMode != sessiondata.OptimizerOff {
 		// Experimental path (disabled by default).
-		err = planner.makeOptimizerPlan(ctx, stmt)
-
-		if err != nil && ex.sessionData.OptimizerMode != sessiondata.OptimizerAlways {
+		if err = planner.makeOptimizerPlan(ctx, stmt); err != nil {
 			// Fall back on the heuristic planner if the cost-based optimizer returns
 			// an "unsupported feature" error.
-			if pgerr, ok := err.(*pgerror.Error); ok {
-				if pgerr.Code == pgerror.CodeFeatureNotSupportedError {
-					useOptimizer = false
+			pgerr, ok := err.(*pgerror.Error)
+			if ok && pgerr.Code == pgerror.CodeFeatureNotSupportedError {
+				// Always fallback for SET commands even if the optimizer is in Always
+				// mode, or else we can't switch to another mode.
+				if optMode == sessiondata.OptimizerAlways {
+					if _, setVar := stmt.AST.(*tree.SetVar); setVar {
+						optMode = sessiondata.OptimizerOff
+					}
+				} else {
+					optMode = sessiondata.OptimizerOff
 				}
 			}
 		}
 	}
 
-	if !useOptimizer {
+	if optMode == sessiondata.OptimizerOff {
 		err = planner.makePlan(ctx, stmt)
 	}
 
@@ -612,7 +617,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	useDistSQL := false
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
-	if !(useOptimizer && ex.sessionData.OptimizerMode == sessiondata.OptimizerLocal) {
+	if optMode != sessiondata.OptimizerLocal {
 		ok, err := planner.prepareForDistSQLSupportCheck(
 			ctx, ex.sessionData.DistSQLMode == sessiondata.DistSQLAlways,
 		)
