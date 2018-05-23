@@ -176,7 +176,7 @@ function mapStateToProps(state: AdminUIState) {
 const actions = {
   refreshNodes,
   refreshLiveness,
-  hoverOnAction,
-  hoverOffAction,
+  hoverOn: hoverOnAction,
+  hoverOff: hoverOffAction,
 };
 export default connect(mapStateToProps, actions)(NodeGraphs);
