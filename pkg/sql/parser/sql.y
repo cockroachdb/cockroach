@@ -7694,7 +7694,9 @@ sequence_name:       db_object_name
 
 table_name:          db_object_name
 
-explain_option_name: non_reserved_word
+explain_option_name:
+  non_reserved_word
+| ANALYZE
 
 // Names for column references.
 // Accepted patterns:
