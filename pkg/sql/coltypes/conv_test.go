@@ -78,6 +78,8 @@ func TestTryCastTargetToDatumType(t *testing.T) {
 		{arrayOf(coltypes.Int, []int32{-1}), types.TArray{Typ: types.Int}, true},
 		{arrayOf(coltypes.Int4, []int32{-1}), types.TArray{Typ: types.Int}, false},
 		{arrayOf(coltypes.VarChar, []int32{1, 2}), types.TArray{Typ: types.String}, true},
+		{coltypes.Int2vector, types.TArray{Typ: types.Int}, false},
+		{coltypes.OidVector, types.TArray{Typ: types.Oid}, false},
 
 		{coltypes.TTuple{coltypes.Int}, types.TTuple{Types: []types.T{types.Int}}, true},
 		{
@@ -89,6 +91,11 @@ func TestTryCastTargetToDatumType(t *testing.T) {
 		{
 			coltypes.TTuple{coltypes.Integer, &coltypes.TString{Name: "String", N: 256}},
 			types.TTuple{Types: []types.T{types.Int, types.String}},
+			false,
+		},
+		{
+			coltypes.TTuple{coltypes.OidVector, coltypes.Int},
+			types.TTuple{Types: []types.T{types.TArray{Typ: types.Oid}, types.Int}},
 			false,
 		},
 	}

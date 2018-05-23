@@ -336,7 +336,7 @@ select
 
 # Pushdown constant condition.
 opt
-SELECT * FROM a INNER JOIN xy ON True WHERE a.i=100 AND now()>'2000-01-01T1:00:00'
+SELECT * FROM a INNER JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -351,8 +351,8 @@ inner-join
  │         │    ├── variable: a.i [type=int, outer=(2)]
  │         │    └── const: 100 [type=int]
  │         └── gt [type=bool]
- │              ├── function: now [type=timestamptz]
- │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
+ │              ├── placeholder: $1 [type=string]
+ │              └── const: '2000-01-01T1:00:00' [type=string]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    └── keys: (6)
@@ -724,7 +724,7 @@ inner-join
            └── variable: xy.y [type=int, outer=(7)]
 
 opt
-SELECT * FROM a, xy WHERE a.i=100 AND now()>'2000-01-01T1:00:00' AND xy.x=a.k
+SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -739,8 +739,8 @@ inner-join
  │         │    ├── variable: a.i [type=int, outer=(2)]
  │         │    └── const: 100 [type=int]
  │         └── gt [type=bool]
- │              ├── function: now [type=timestamptz]
- │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
+ │              ├── placeholder: $1 [type=string]
+ │              └── const: '2000-01-01T1:00:00' [type=string]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    └── keys: (6)
@@ -820,7 +820,7 @@ select
 
 # Do *not* push down into scalar GroupBy.
 opt
-SELECT * FROM (SELECT COUNT(*) c FROM a) a WHERE now()<'2000-01-01T10:00:00' AND c=0
+SELECT * FROM (SELECT COUNT(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=0
 ----
 select
  ├── columns: c:6(int!null)
@@ -833,8 +833,8 @@ select
  │         └── count-rows [type=int]
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0])]
       ├── lt [type=bool]
-      │    ├── function: now [type=timestamptz]
-      │    └── const: '2000-01-01 10:00:00+00:00' [type=timestamptz]
+      │    ├── placeholder: $1 [type=string]
+      │    └── const: '2000-01-01T10:00:00' [type=string]
       └── eq [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
            ├── variable: c [type=int, outer=(6)]
            └── const: 0 [type=int]

@@ -246,12 +246,20 @@ project
       ├── null [type=int]
       └── variable: a.s [type=string, outer=(4)]
 
-# Shouldn't eliminate these cases.
+# Shouldn't eliminate these casts.
 opt
-SELECT i::float, arr::decimal[], s::json::json, s::varchar(2), i::smallint::int8 FROM a
+SELECT
+    i::float,
+    arr::decimal[],
+    s::json::json,
+    s::varchar(2),
+    i::smallint::int8,
+    ARRAY[1, 2]::OIDVECTOR,
+    ARRAY[1, 2]::INT2VECTOR
+FROM a
 ----
 project
- ├── columns: "i::FLOAT":7(float) "arr::DECIMAL[]":8(decimal[]) "s::JSON::JSON":9(jsonb) "s::VARCHAR(2)":10(string) "i::SMALLINT::INT8":11(int)
+ ├── columns: "i::FLOAT":7(float) "arr::DECIMAL[]":8(decimal[]) "s::JSON::JSON":9(jsonb) "s::VARCHAR(2)":10(string) "i::SMALLINT::INT8":11(int) "ARRAY[1, 2]::OIDVECTOR":12(oid[]) "ARRAY[1, 2]::INT2VECTOR":13(int[])
  ├── scan a
  │    └── columns: i:2(int) s:4(string) arr:6(int[])
  └── projections [outer=(2,4,6)]
@@ -263,17 +271,30 @@ project
       │    └── variable: a.s [type=string, outer=(4)]
       ├── cast: VARCHAR(2) [type=string, outer=(4)]
       │    └── variable: a.s [type=string, outer=(4)]
-      └── cast: SMALLINT [type=int, outer=(2)]
-           └── variable: a.i [type=int, outer=(2)]
+      ├── cast: SMALLINT [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── cast: OIDVECTOR [type=oid[]]
+      │    └── array: int[] [type=int[]]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── cast: INT2VECTOR [type=int[]]
+           └── array: int[] [type=int[]]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
 
 # --------------------------------------------------
 # FoldNullCast
 # --------------------------------------------------
 opt
-SELECT null::int, null::timestamptz, null::decimal(19,2)::bit::char(2)
+SELECT
+    null::int,
+    null::timestamptz,
+    null::decimal(19,2)::bit::char(2),
+    null::oidvector,
+    null::int2vector
 ----
 project
- ├── columns: "NULL::INT":1(int) "NULL::TIMESTAMP WITH TIME ZONE":2(timestamptz) "NULL::DECIMAL(19,2)::BIT::CHAR(2)":3(string)
+ ├── columns: "NULL::INT":1(int) "NULL::TIMESTAMP WITH TIME ZONE":2(timestamptz) "NULL::DECIMAL(19,2)::BIT::CHAR(2)":3(string) "NULL::OIDVECTOR":4(oid[]) "NULL::INT2VECTOR":5(int[])
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -281,7 +302,9 @@ project
  └── projections
       ├── null [type=int]
       ├── null [type=timestamptz]
-      └── null [type=string]
+      ├── null [type=string]
+      ├── null [type=oid[]]
+      └── null [type=int[]]
 
 # --------------------------------------------------
 # FoldNullUnary
@@ -331,17 +354,17 @@ project
       ├── concat [type=decimal[], outer=(6)]
       │    ├── cast: DECIMAL[] [type=decimal[], outer=(6)]
       │    │    └── variable: a.arr [type=int[], outer=(6)]
-      │    └── null [type=unknown]
+      │    └── null [type=decimal[]]
       ├── concat [type=string[], outer=(6)]
-      │    ├── null [type=unknown]
+      │    ├── null [type=string[]]
       │    └── cast: STRING[] [type=string[], outer=(6)]
       │         └── variable: a.arr [type=int[], outer=(6)]
       ├── concat [type=decimal[], outer=(2)]
       │    ├── cast: DECIMAL [type=decimal, outer=(2)]
       │    │    └── variable: a.i [type=int, outer=(2)]
-      │    └── null [type=unknown]
+      │    └── null [type=decimal[]]
       └── concat [type=float[], outer=(2)]
-           ├── null [type=unknown]
+           ├── null [type=float[]]
            └── cast: FLOAT [type=float, outer=(2)]
                 └── variable: a.i [type=int, outer=(2)]
 

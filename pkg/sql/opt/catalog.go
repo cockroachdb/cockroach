@@ -133,6 +133,11 @@ type Table interface {
 	// TabName returns the name of the table.
 	TabName() TableName
 
+	// IsVirtualTable returns true if this table is a special system table that
+	// constructs its rows "on the fly" when it's queried. An example is the
+	// information_schema tables.
+	IsVirtualTable() bool
+
 	// ColumnCount returns the number of columns in the table.
 	ColumnCount() int
 

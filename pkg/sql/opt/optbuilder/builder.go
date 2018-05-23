@@ -19,10 +19,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -54,6 +54,13 @@ type Builder struct {
 	// expression in an UnsupportedExpr node. This is temporary; it is used for
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
+
+	// AllowImpureFuncs is a control knob: if set, when building a scalar, the
+	// builder will not panic when it encounters an impure function. While the
+	// cost-based optimizer does not currently handle impure functions, the
+	// heuristic planner can handle them (and uses the builder code for index
+	// constraints).
+	AllowImpureFuncs bool
 
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
@@ -133,11 +140,18 @@ type builderError struct {
 	error
 }
 
-// errorf formats according to a format specifier and returns the
-// string as a builderError.
+// errorf formats according to a format specifier and returns the string as a
+// builderError.
 func errorf(format string, a ...interface{}) builderError {
 	err := fmt.Errorf(format, a...)
 	return builderError{err}
+}
+
+// unimplementedf formats according to a format specifier and returns a Postgres
+// error with the pgerror.CodeFeatureNotSupportedError code, wrapped in a
+// builderError.
+func unimplementedf(format string, a ...interface{}) builderError {
+	return builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, format, a...)}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -169,6 +183,6 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildExplain(stmt, inScope)
 
 	default:
-		panic(errorf("unexpected statement: %T", stmt))
+		panic(unimplementedf("unsupported statement: %T", stmt))
 	}
 }

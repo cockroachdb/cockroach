@@ -360,8 +360,8 @@ func (f *Factory) hasColType(group memo.GroupID, colTyp memo.PrivateID) bool {
 	groupType := f.lookupScalar(group).Type
 	reqType, equiv := coltypes.TryCastTargetToDatumType(f.mem.LookupPrivate(colTyp).(coltypes.T))
 	if !equiv {
-		// Column type could not be converted to datum type without losing
-		// information, so it's not an equivalent type. For example:
+		// Column type could not be converted to/from datum type without potentially
+		// losing information, so it's not an equivalent type. For example:
 		//   VARCHAR(2) <> STRING
 		return false
 	}
