@@ -16,11 +16,13 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -224,7 +226,10 @@ func (b *Builder) buildScalarHelper(
 			} else {
 				// TODO(rytaft): remove this check when we are confident that
 				// all operators are included in comparisonOpMap.
-				panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+				panic(builderError{pgerror.Unimplemented(
+					"comparison operator",
+					fmt.Sprintf("unsupported comparison operator: %s", t.Operator),
+				)})
 			}
 		}
 
@@ -305,7 +310,10 @@ func (b *Builder) buildScalarHelper(
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
-			panic(errorf("not yet implemented: scalar expr: %T", scalar))
+			panic(builderError{pgerror.Unimplemented(
+				"scalar expression",
+				fmt.Sprintf("not yet implemented: scalar expression: %T", scalar),
+			)})
 		}
 	}
 
@@ -350,6 +358,14 @@ func (b *Builder) buildFunction(
 
 	if isAggregate(def) {
 		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)
+	}
+
+	// TODO(andyk): Re-enable impure functions once we can properly handle them.
+	if funcDef.Overload.Impure && !b.AllowImpureFuncs {
+		panic(builderError{pgerror.Unimplemented(
+			"impure functions",
+			"impure functions are not supported",
+		)})
 	}
 
 	argList := make([]memo.GroupID, len(f.Exprs))

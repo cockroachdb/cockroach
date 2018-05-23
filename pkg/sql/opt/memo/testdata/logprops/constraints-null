@@ -118,7 +118,7 @@ select
 
 # Test that we get a not-NULL constraint on x.
 opt
-SELECT * FROM xy WHERE now()::int < x
+SELECT * FROM xy WHERE sin(x::float)::int < x
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
@@ -129,8 +129,10 @@ select
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
            ├── variable: xy.x [type=int, outer=(1)]
-           └── cast: INT [type=int]
-                └── function: now [type=timestamptz]
+           └── cast: INT [type=int, outer=(1)]
+                └── function: sin [type=float, outer=(1)]
+                     └── cast: FLOAT [type=float, outer=(1)]
+                          └── variable: xy.x [type=int, outer=(1)]
 
 # Test that we get a not-NULL constraint on x and y.
 opt

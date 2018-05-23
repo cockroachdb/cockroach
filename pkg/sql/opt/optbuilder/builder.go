@@ -19,10 +19,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -54,6 +54,13 @@ type Builder struct {
 	// expression in an UnsupportedExpr node. This is temporary; it is used for
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
+
+	// AllowImpureFuncs is a control knob: if set, when building a scalar, the
+	// builder will not panic when it encounters an impure function. While the
+	// cost-based optimizer does not currently handle impure functions, the
+	// heuristic planner can handle them (and uses the builder code to do index
+	// planning).
+	AllowImpureFuncs bool
 
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
@@ -169,6 +176,9 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildExplain(stmt, inScope)
 
 	default:
-		panic(errorf("unexpected statement: %T", stmt))
+		panic(builderError{pgerror.Unimplemented(
+			"statement",
+			fmt.Sprintf("unsupported statement: %T", stmt),
+		)})
 	}
 }

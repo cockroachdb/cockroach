@@ -79,7 +79,7 @@ SELECT COUNT(*) FILTER (WHERE v>10) FROM t
 statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 
-query error pq: unexpected statement: \*tree.Insert
+query error pq: unsupported statement: \*tree\.Insert
 INSERT INTO test (k, v) VALUES (5, 50)
 
 # Don't fall back to heuristic planner in ALWAYS mode.

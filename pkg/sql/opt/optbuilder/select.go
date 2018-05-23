@@ -62,6 +62,14 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 			panic(builderError{err})
 		}
 
+		// TODO(andyk): Re-enable virtual tables when we can fully support them.
+		if tab.IsVirtualTable() {
+			panic(builderError{pgerror.Unimplemented(
+				"virtual tables",
+				"virtual tables are not supported",
+			)})
+		}
+
 		return b.buildScan(tab, tn, inScope)
 
 	case *tree.ParenTableExpr:
