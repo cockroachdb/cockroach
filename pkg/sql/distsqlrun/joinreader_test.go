@@ -62,14 +62,15 @@ func TestJoinReader(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	testCases := []struct {
-		description string
-		indexIdx    uint32
-		post        PostProcessSpec
-		onExpr      string
-		input       [][]tree.Datum
-		lookupCols  columns
-		outputTypes []sqlbase.ColumnType
-		expected    string
+		description     string
+		indexIdx        uint32
+		post            PostProcessSpec
+		onExpr          string
+		input           [][]tree.Datum
+		lookupCols      columns
+		indexFilterExpr Expression
+		outputTypes     []sqlbase.ColumnType
+		expected        string
 	}{
 		{
 			description: "Test selecting rows using the primary index",
@@ -160,31 +161,31 @@ func TestJoinReader(t *testing.T) {
 			description: "Test lookup join on covering secondary index",
 			indexIdx:    1,
 			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@6 LIKE 'one-%'"},
 				Projection:    true,
 				OutputColumns: []uint32{5},
 			},
 			input: [][]tree.Datum{
 				{aFn(2), bFn(2)},
 			},
-			lookupCols:  []uint32{1},
-			outputTypes: []sqlbase.ColumnType{strType},
-			expected:    "[['one-two']]",
+			lookupCols:      []uint32{1},
+			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			outputTypes:     []sqlbase.ColumnType{strType},
+			expected:        "[['one-two']]",
 		},
 		{
 			description: "Test lookup join on non-covering secondary index",
 			indexIdx:    1,
 			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@6 LIKE 'one-%'"},
 				Projection:    true,
 				OutputColumns: []uint32{4},
 			},
 			input: [][]tree.Datum{
 				{aFn(2), bFn(2)},
 			},
-			lookupCols:  []uint32{1},
-			outputTypes: oneIntCol,
-			expected:    "[[3]]",
+			lookupCols:      []uint32{1},
+			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			outputTypes:     oneIntCol,
+			expected:        "[[3]]",
 		},
 	}
 	for _, c := range testCases {
@@ -213,10 +214,11 @@ func TestJoinReader(t *testing.T) {
 				&flowCtx,
 				0, /* processorID */
 				&JoinReaderSpec{
-					Table:         *td,
-					IndexIdx:      c.indexIdx,
-					LookupColumns: c.lookupCols,
-					OnExpr:        Expression{Expr: c.onExpr},
+					Table:           *td,
+					IndexIdx:        c.indexIdx,
+					LookupColumns:   c.lookupCols,
+					OnExpr:          Expression{Expr: c.onExpr},
+					IndexFilterExpr: c.indexFilterExpr,
 				},
 				in,
 				&c.post,

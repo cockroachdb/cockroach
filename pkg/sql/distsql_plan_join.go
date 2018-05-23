@@ -309,31 +309,6 @@ func remapOnExpr(
 	return distsqlplan.MakeExpression(n.pred.onCond, evalCtx, joinColMap)
 }
 
-// shiftExprCols remaps expression columns when merging rows in a join. It takes
-// expression columns for the right side of a join, and remaps the indices so
-// that they refer to indices in the merged row.
-func shiftExprCols(
-	evalCtx *tree.EvalContext, expr tree.TypedExpr, leftPlanToStream, rightPlanToStream []int,
-) distsqlrun.Expression {
-	offset := 0
-	for _, val := range leftPlanToStream {
-		if val >= 0 {
-			offset++
-		}
-	}
-	shiftMap := make([]int, len(rightPlanToStream))
-	idx := 0
-	for i := 0; i < len(rightPlanToStream); i++ {
-		if rightPlanToStream[i] >= 0 {
-			shiftMap[i] = idx + offset
-			idx++
-		} else {
-			shiftMap[i] = -1
-		}
-	}
-	return distsqlplan.MakeExpression(expr, evalCtx, shiftMap)
-}
-
 // eqCols produces a slice of ordinal references for the plan columns specified
 // in eqIndices using planToColMap.
 // That is: eqIndices contains a slice of plan column indexes and planToColMap
