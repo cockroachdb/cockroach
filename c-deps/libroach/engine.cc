@@ -238,6 +238,24 @@ DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
   return kSuccess;
 }
 
+// EnvReadFile reads the content of the given filename.
+DBStatus DBImpl::EnvReadFile(DBSlice path, DBSlice* contents) {
+  rocksdb::Status status;
+  std::string data;  
+
+  status = ReadFileToString(this->rep->GetEnv(), ToString(path), &data);
+  if (!status.ok()) {
+    if (status.IsNotFound()) {
+      return FmtStatus("No such file or directory");
+    }
+    return ToDBStatus(status);
+  }
+  contents->data = static_cast<char*>(malloc(data.size()));
+  contents->len = data.size();
+  memcpy(contents->data, data.c_str(), data.size());
+  return kSuccess;
+}
+
 // CloseFile closes the given file in the given engine.
 DBStatus DBImpl::EnvCloseFile(rocksdb::WritableFile* file) {
   rocksdb::Status status = file->Close();
@@ -254,6 +272,15 @@ DBStatus DBImpl::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
 // EnvSyncFile synchronously writes the data of the file to the disk.
 DBStatus DBImpl::EnvSyncFile(rocksdb::WritableFile* file) {
   rocksdb::Status status = file->Sync();
+  return ToDBStatus(status);
+}
+
+// EnvDelete deletes the file with the given filename.
+DBStatus DBImpl::EnvDeleteFile(DBSlice path) {
+  rocksdb::Status status = this->rep->GetEnv()->DeleteFile(ToString(path));
+  if (status.IsNotFound()) {
+    return FmtStatus("No such file or directory");
+  }
   return ToDBStatus(status);
 }
 
