@@ -66,6 +66,14 @@ export default function Debug() {
             note="#/reports/nodes?locality=[regex]"
           />
         </DebugTableRow>
+        <DebugTableRow title="Stores">
+          <DebugTableLink name="Stores on this node" url="#/reports/stores/local" />
+          <DebugTableLink
+            name="Stores on a specific node"
+            url="#/reports/stores/1"
+            note="#/reports/stores/[node_id]"
+          />
+        </DebugTableRow>
         <DebugTableRow title="Localities">
           <DebugTableLink name="Locality Tree" url="#/reports/localities" />
         </DebugTableRow>
@@ -174,6 +182,11 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Single Node Specific">
+          <DebugTableLink
+            name="Stores"
+            url="/_status/stores/local"
+            note="/_status/stores/[node_id]"
+          />
           <DebugTableLink
             name="Gossip"
             url="/_status/gossip/local"
