@@ -15,16 +15,6 @@ import DatabaseSummaryTables from "src/views/databases/containers/databaseTables
 import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
 import NonTableSummary from "./nonTableSummary";
 
-// excludedTableList is a list of virtual databases that should be excluded
-// from database lists; they are not physical databases, and thus cause issues
-// with our backend methods.
-// TODO(mrtracy): This exclusion should occur on the backend methods, which
-// should handle virtual tables correctly. Github #9689.
-const excludedTableList = {
-  "information_schema": true,
-  "pg_catalog": true,
-};
-
 const databasePages = [
   { value: "tables", label: "Tables" },
   { value: "grants", label: "Grants" },
@@ -83,9 +73,6 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {
-          if (excludedTableList.hasOwnProperty(n)) {
-            return null;
-          }
           return <DatabaseSummaryTables name={n} key={n} />;
         }) }
         <NonTableSummary />
@@ -109,9 +96,6 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {
-          if (excludedTableList.hasOwnProperty(n)) {
-            return null;
-          }
           return <DatabaseSummaryGrants name={n} key={n} />;
         }) }
       </div>
