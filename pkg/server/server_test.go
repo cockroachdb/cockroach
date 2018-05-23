@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -988,7 +989,13 @@ func TestServeIndexHTML(t *testing.T) {
 			t.Fatal(err)
 		}
 		respString := string(respBytes)
-		expected := fmt.Sprintf(htmlTemplate, `{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null}`)
+		expected := fmt.Sprintf(
+			htmlTemplate,
+			fmt.Sprintf(
+				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Version":"%s"}`,
+				build.VersionPrefix(),
+			),
+		)
 		if respString != expected {
 			t.Fatalf("expected %s; got %s", expected, respString)
 		}
@@ -1012,8 +1019,20 @@ func TestServeIndexHTML(t *testing.T) {
 			client http.Client
 			json   string
 		}{
-			{loggedInClient, `{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user"}`},
-			{loggedOutClient, `{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null}`},
+			{
+				loggedInClient,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Version":"%s"}`,
+					build.VersionPrefix(),
+				),
+			},
+			{
+				loggedOutClient,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Version":"%s"}`,
+					build.VersionPrefix(),
+				),
+			},
 		}
 
 		for _, testCase := range cases {
