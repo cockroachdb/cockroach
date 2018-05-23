@@ -102,3 +102,48 @@ build
 SELECT * FROM crdb_internal.jobs
 ----
 error (0A000): virtual tables are not supported
+
+# Ensure that index is used when indexed column has collation.
+exec-raw
+CREATE TABLE coll (
+  a STRING COLLATE da,
+  b INT,
+  c BOOL,
+  PRIMARY KEY (a, b),
+  INDEX (b, a) STORING (c)
+)
+----
+
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT a, b FROM coll ORDER BY a, b
+----
+scan  ·      ·             (a collatedstring{da}, b int)  +a,+b
+·     table  coll@primary  ·                              ·
+·     spans  ALL           ·                              ·
+
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
+----
+render     ·         ·                        (b int, a collatedstring{da})  ·
+ │         render 0  (b)[int]                 ·                              ·
+ │         render 1  (a)[collatedstring{da}]  ·                              ·
+ └── scan  ·         ·                        (a collatedstring{da}, b int)  +b,+a
+·          table     coll@coll_b_a_idx        ·                              ·
+·          spans     ALL                      ·                              ·
+
+# Ensure correct index is used when indexed column is computed.
+exec-raw
+CREATE TABLE computed (
+  k INT PRIMARY KEY,
+  a JSON,
+  b TEXT AS (a->>'q') STORED,
+  INDEX (b) STORING (k)
+)
+----
+
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT b FROM computed ORDER BY b
+----
+scan  ·      ·                        (b string)  +b
+·     table  computed@computed_b_idx  ·           ·
+·     spans  ALL                      ·           ·
