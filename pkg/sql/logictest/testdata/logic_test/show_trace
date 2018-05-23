@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 # Prepare a trace to be inspected below.
 
@@ -9,18 +9,23 @@ SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off;
 # may contain non-deterministic txn object descriptions.
 # This also checks that the span column properly reports separate
 # SQL transactions.
+# We replace the command position because the values depend on exactly
+# how many commands we ran in the session.
 query ITT
-SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
+SELECT
+  span, regexp_replace(message, 'pos:[0-9]*', 'pos:?'), operation
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
 0  === SPAN START: session recording ===                session recording
-0  [NoTxn pos:5] executing ExecStmt: BEGIN TRANSACTION  session recording
+0  [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
 1  === SPAN START: sql txn ===                          sql txn
-1  [Open pos:6] executing ExecStmt: SELECT 1            sql txn
-1  [Open pos:7] executing ExecStmt: COMMIT TRANSACTION  sql txn
-0  [NoTxn pos:8] executing ExecStmt: SELECT 2           session recording
+1  [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+1  [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+0  [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
 2  === SPAN START: sql txn ===                          sql txn
-2  [Open pos:8] executing ExecStmt: SELECT 2            sql txn
-0  [NoTxn pos:9] executing ExecStmt: SET TRACING = off  session recording
+2  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+0  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
 # Same, with SHOW TRACE FOR.
 # This also tests that sub-spans are reported properly.
@@ -549,343 +554,6 @@ dist sender    querying next range at /Table/3/1/1/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    r1: sending batch 5 CPut to (n1,s1):1
 
-# SELECT queries - used to exercise the KV tracing for other tests
-
-statement ok
-CREATE TABLE abc (
-  a INT,
-  b TEXT,
-  c FLOAT,
-  PRIMARY KEY (a, b),
-  UNIQUE INDEX foo (b),
-  INDEX bar (a),
-  FAMILY (a, b),
-  FAMILY (c)
-)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-
-statement ok
-INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three', NULL)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-output row: [1 'one' 1.1]
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3 'three' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc LIMIT 2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-output row: [1 'one' 1.1]
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc OFFSET 2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3 'three' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc LIMIT 1 OFFSET 1]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-output row: [1 'one' 1.1]
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3 'three' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY b DESC]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-output row: [2 'two' NULL]
-output row: [3 'three' NULL]
-output row: [1 'one' 1.1]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY b DESC LIMIT 1 OFFSET 1]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/foo/'two' -> /2
-fetched: /abc/foo/'three' -> /3
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3 'three' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc WHERE a = 2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM abc@foo]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/foo/'one' -> /1
-output row: ['one']
-fetched: /abc/foo/'three' -> /3
-output row: ['three']
-fetched: /abc/foo/'two' -> /2
-output row: ['two']
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc@bar]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/bar/1/'one' -> NULL
-output row: [1]
-fetched: /abc/bar/2/'two' -> NULL
-output row: [2]
-fetched: /abc/bar/3/'three' -> NULL
-output row: [3]
-
-statement ok
-UPDATE abc SET c = NULL WHERE a = 1
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-output row: [1 'one' NULL]
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3 'three' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT 3]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [3]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR VALUES (1, 2, 3), (4, 5, 6)]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [1 2 3]
-output row: [4 5 6]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR VALUES (1, 2, 3), (4, 5, 6) ORDER BY 1 DESC]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [4 5 6]
-output row: [1 2 3]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [1 2 3]
-output row: [4 5 6]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (SELECT * FROM abc) AS sub WHERE a % 2 = 0]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-fetched: /abc/primary/3/'three' -> NULL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (SELECT a+a/a-1 FROM abc) AS sub(a) WHERE a > 1 OFFSET 1]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/2/'two' -> NULL
-output row: [2 'two' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT DISTINCT * FROM (VALUES (1, 2, 3), (4, 5, 6), (1, 2, 3), (1, 2, 4)) AS a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [1 2 3]
-output row: [4 5 6]
-output row: [1 2 4]
-
-statement ok
-CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b))
-
-statement ok
-INSERT INTO ab VALUES (1, 4), (1, 5), (2, 1), (2, 2), (2, 6), (3, 9)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT COUNT(*) FROM ab]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/3/9 -> NULL
-output row: [6]
-
-# Note: the output from GROUP BY is in random order; the example is constructed so
-# those rows are identical.
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT SUM(b) FROM ab GROUP BY a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-output row: [9]
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/3/9 -> NULL
-output row: [9]
-output row: [9]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [1 2]
-output row: [1 1]
-output row: [2 1]
-output row: [1 3]
-output row: [3 4]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc EXCEPT SELECT * FROM abc WHERE b > 'p']
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/foo/'three' -> /3
-fetched: /abc/foo/'two' -> /2
-fetched: /abc/primary/3/'three' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/1/'one' -> NULL
-output row: [1 'one' NULL]
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b > 1]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/3/9 -> NULL
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-output row: [2 2]
-fetched: /ab/primary/2/6 -> NULL
-output row: [2 6]
-fetched: /ab/primary/3/9 -> NULL
-output row: [3 9]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR INSERT INTO ab(a, b) VALUES (42, 51)]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR INSERT INTO ab(a, b) SELECT a+1, b+1 FROM ab WHERE b > 6]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/3/9 -> NULL
-fetched: /ab/primary/42/51 -> NULL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR UPDATE ab SET a = a + 1 WHERE b > 6]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/3/9 -> NULL
-fetched: /ab/primary/4/10 -> NULL
-fetched: /ab/primary/42/51 -> NULL
-fetched: /ab/primary/43/52 -> NULL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab WHERE b > 6]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
-fetched: /ab/primary/2/1 -> NULL
-fetched: /ab/primary/2/2 -> NULL
-fetched: /ab/primary/2/6 -> NULL
-fetched: /ab/primary/4/9 -> NULL
-fetched: /ab/primary/5/10 -> NULL
-fetched: /ab/primary/43/51 -> NULL
-fetched: /ab/primary/44/52 -> NULL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-
-statement ok
-UPDATE abc SET c = 1.1 WHERE a = 1
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM ab, abc WHERE abc.a+ab.b = abc.a*ab.a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/1/'one'/c -> 1.1
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-
 # Check that session tracing does not inhibit the fast path for inserts &
 # friends (the path resulting in 1PC transactions). This is in contrast with
 # SHOW TRACE FOR <stmt>, which does prevent the inner statement from ever
@@ -939,3 +607,14 @@ SET tracing = off
 
 statement ok
 ROLLBACK
+
+subtest replica
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+query III colnames
+SELECT node_id, store_id, replica_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT * FROM t]
+----
+node_id  store_id  replica_id
+1        1         1
