@@ -22,6 +22,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
       return `Table Dropped: User ${info.User} dropped table ${info.TableName}`;
+    case eventTypes.TRUNCATE_TABLE:
+      return `Table Truncated: User ${info.User} truncated table ${info.TableName}`;
     case eventTypes.ALTER_TABLE:
       return `Schema Change: User ${info.User} began a schema change to alter table ${info.TableName} with ID ${info.MutationID}`;
     case eventTypes.CREATE_INDEX:
