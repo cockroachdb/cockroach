@@ -1,13 +1,13 @@
 # LogicTest: default
 
 statement error unknown variable: "foo"
-SET FOO = bar
+SET foo = bar
 
 statement error unknown variable: "foo"
-SHOW FOO
+SHOW foo
 
 statement error database "foo" does not exist
-SET DATABASE = foo
+SET database = foo
 
 # Ensure that the failing SET DATABASE call did not alter the session.
 # The default session.database value is "test".
@@ -18,7 +18,7 @@ statement ok
 CREATE DATABASE foo
 
 statement ok
-SET DATABASE = foo
+SET database = foo
 
 # Create a table in the session database.
 statement ok
@@ -33,7 +33,7 @@ bar
 
 # Verify set to empty string.
 statement ok
-SET DATABASE = ""
+SET database = ""
 
 query T colnames
 SHOW DATABASE
@@ -52,10 +52,10 @@ bar
 
 # SET statement succeeds, CREATE TABLE fails.
 statement error pgcode 42P07 relation \"bar\" already exists
-SET DATABASE = foo; CREATE TABLE bar (k INT PRIMARY KEY)
+SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 
 query T colnames
-SHOW DATABASE
+SHOW database
 ----
 database
 foo
@@ -71,10 +71,10 @@ statement error invalid variable name: ""
 SET ROW (1, TRUE, NULL)
 
 statement ok
-SET APPLICATION_NAME = helloworld
+SET application_name = helloworld
 
 query T colnames
-SHOW APPLICATION_NAME
+SHOW application_name
 ----
 application_name
 helloworld
@@ -120,19 +120,19 @@ root
 ## Test SET ... TO DEFAULT works
 
 statement ok
-SET DISTSQL TO ON
+SET distsql TO ON
 
 query T colnames
-SHOW DISTSQL
+SHOW distsql
 ----
 distsql
 on
 
 statement ok
-SET DISTSQL TO DEFAULT
+SET distsql TO DEFAULT
 
 query T colnames
-SHOW DISTSQL
+SHOW distsql
 ----
 distsql
 off
@@ -140,76 +140,76 @@ off
 ## Test that our no-op compatibility vars work
 
 statement ok
-SET APPLICATION_NAME = 'hello'
+SET application_name = 'hello'
 
 statement ok
-SET EXTRA_FLOAT_DIGITS = 3
+SET extra_float_digits = 3
 
 statement ok
-SET CLIENT_MIN_MESSAGES = 'debug'
+SET client_min_messages = 'debug'
 
 statement ok
-SET STANDARD_CONFORMING_STRINGS = 'on'
+SET standard_conforming_strings = 'on'
 
 statement error set standard_conforming_strings: "off" not supported
-SET STANDARD_CONFORMING_STRINGS = 'off'
+SET standard_conforming_strings = 'off'
 
 statement ok
-SET CLIENT_ENCODING = 'UTF8'
+SET client_encoding = 'UTF8'
 
 statement ok
-SET CLIENT_ENCODING = 'unicode'
+SET client_encoding = 'unicode'
 
 statement error non-UTF8 encoding other not supported
-SET CLIENT_ENCODING = 'other'
+SET client_encoding = 'other'
 
 statement ok
-SET DATESTYLE = 'ISO'
+SET datestyle = 'ISO'
 
 statement error non-ISO date style other not supported
-SET DATESTYLE = 'other'
+SET datestyle = 'other'
 
 statement ok
-SET INTERVALSTYLE = 'postgres'
+SET intervalstyle = 'postgres'
 
 statement error non-postgres interval style other not supported
-SET INTERVALSTYLE = 'other'
+SET intervalstyle = 'other'
 
 statement ok
-SET SEARCH_PATH = 'blah'
+SET search_path = 'blah'
 
 statement ok
-SET DISTSQL = ALWAYS
+SET distsql = always
 
 statement ok
-SET DISTSQL = ON
+SET distsql = on
 
 statement ok
-SET DISTSQL = OFF
+SET distsql = off
 
 statement error not supported
-SET DISTSQL = bogus
+SET distsql = bogus
 
 statement ok
-SET EXPERIMENTAL_OPT = ON
+SET experimental_opt = on
 
 statement ok
-SET EXPERIMENTAL_OPT = LOCAL
+SET experimental_opt = local
 
 statement ok
-SET EXPERIMENTAL_OPT = OFF
+SET experimental_opt = off
 
 statement error not supported
-SET EXPERIMENTAL_OPT = bogus
+SET experimental_opt = bogus
 
 query T colnames
-SHOW SERVER_VERSION
+SHOW server_version
 ----
 server_version
 9.5.0
 
 query T colnames
-SHOW SERVER_VERSION_NUM
+SHOW server_version_num
 ----
 server_version_num
 90500
@@ -227,6 +227,11 @@ SELECT name, value FROM system.settings WHERE name = 'testing.str'
 
 # quoted identifiers
 statement ok
+SET "timezone" = 'UTC'
+
+# even quoted in postgres the session variable names are
+# case-insensitive for SET and SHOW.
+statement ok
 SET "TIMEZONE" = 'UTC'
 
 query T
@@ -236,10 +241,10 @@ UTC
 
 # without quoted identifiers
 statement ok
-SET TIMEZONE = 'UTC'
+SET timezone = 'UTC'
 
 query T
-SHOW TIMEZONE
+SHOW timezone
 ----
 UTC
 
@@ -254,7 +259,7 @@ UTC
 
 # Regression test for #19727 - invalid EvalContext used to evaluate arguments to set.
 statement ok
-SET APPLICATION_NAME = current_timestamp()::string
+SET application_name = current_timestamp()::string
 
 # Test statement_timeout on a long-running query.
 statement ok
