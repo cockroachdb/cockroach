@@ -22,6 +22,14 @@ import (
 
 func registerKV(r *registry) {
 	runKV := func(ctx context.Context, t *test, c *cluster, percent int) {
+		if !c.isLocal() {
+			// TODO(peter): remountNoBarrier when Nathan's PR merges.
+			c.Run(ctx, c.All(),
+				"sudo", "umount", "/mnt/data1", ";",
+				"sudo", "mount", "-o", "discard,defaults,nobarrier",
+				"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+		}
+
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -48,7 +56,7 @@ func registerKV(r *registry) {
 		for _, n := range []int{1, 3} {
 			r.Add(testSpec{
 				Name:   fmt.Sprintf("kv%d/nodes=%d", p, n),
-				Nodes:  nodes(n + 1),
+				Nodes:  nodes(n+1, cpu(8)),
 				Stable: true, // DO NOT COPY to new tests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runKV(ctx, t, c, p)
