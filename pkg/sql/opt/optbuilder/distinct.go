@@ -64,6 +64,6 @@ func (b *Builder) buildDistinct(
 		}
 	}
 
-	outScope.group = b.constructGroupBy(inScope.group, groupCols, nil /* cols */)
+	outScope.group = b.constructGroupBy(inScope.group, groupCols, nil /* cols */, outScope)
 	return outScope
 }

@@ -38,10 +38,12 @@ func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
 }
 
 // neededColsGroupBy unions the columns needed by either of a GroupBy's
-// operands - either aggregations or groupingCols. This case doesn't fit any
-// of the neededCols methods because groupingCols is a private, not a group.
-func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.PrivateID) opt.ColSet {
-	colSet := f.mem.LookupPrivate(groupingCols).(opt.ColSet)
+// operands - either aggregations, groupingCols, or requested orderings. This
+// case doesn't fit any of the neededCols methods because groupingCols is a
+// private, not a group.
+func (f *Factory) neededColsGroupBy(aggs memo.GroupID, def memo.PrivateID) opt.ColSet {
+	groupByDef := f.mem.LookupPrivate(def).(*memo.GroupByDef)
+	colSet := groupByDef.GroupingCols.Union(groupByDef.Ordering.ColSet())
 	return f.outerCols(aggs).Union(colSet)
 }
 

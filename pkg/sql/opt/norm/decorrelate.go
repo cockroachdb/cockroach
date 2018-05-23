@@ -283,7 +283,9 @@ func (f *Factory) hoistCorrelatedScalarGroupBy(left, input, aggs memo.GroupID) m
 			f.ConstructTrue(),
 		),
 		f.ConstructAggregations(f.InternList(outElems), f.InternColList(outColList)),
-		f.InternColSet(shortestKey),
+		f.InternGroupByDef(&memo.GroupByDef{
+			GroupingCols: shortestKey,
+		}),
 	)
 }
 
@@ -514,7 +516,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 				),
 				aggCols,
 			),
-			r.f.InternColSet(opt.ColSet{}),
+			r.f.InternGroupByDef(&memo.GroupByDef{}),
 		),
 		existsProjection,
 	)
@@ -641,7 +643,7 @@ func (r *subqueryHoister) constructGroupByAny(
 				r.f.internSingletonList(r.f.ConstructBoolOr(notNullVar)),
 				r.f.InternColList(opt.ColList{aggColID}),
 			),
-			r.f.InternColSet(opt.ColSet{}),
+			r.f.InternGroupByDef(&memo.GroupByDef{}),
 		),
 		r.f.ConstructProjections(
 			r.f.internSingletonList(

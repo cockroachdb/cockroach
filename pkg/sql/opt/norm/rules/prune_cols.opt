@@ -188,7 +188,7 @@
     (GroupBy
         $input:*
         $aggregations:*
-        $groupingCols:*
+        $def:*
     )
     $projections:* & (CanPruneCols $aggregations (NeededCols $projections))
 )
@@ -197,7 +197,7 @@
     (GroupBy
         $input
         (PruneCols $aggregations (NeededCols $projections))
-        $groupingCols
+        $def
     )
     $projections
 )
@@ -207,13 +207,13 @@
 (GroupBy
     $input:*
     $aggregations:*
-    $groupingCols:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
+    $def:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $def))
 )
 =>
 (GroupBy
-    (PruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
+    (PruneCols $input (NeededColsGroupBy $aggregations $def))
     $aggregations
-    $groupingCols
+    $def
 )
 
 # PruneValuesCols discards Values columns that are never used.
