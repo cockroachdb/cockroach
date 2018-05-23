@@ -552,15 +552,17 @@ func (c *cluster) Destroy(ctx context.Context) {
 func (c *cluster) destroy(ctx context.Context) {
 	defer close(c.destroyed)
 
-	if c.name != clusterName {
-		c.status("destroying cluster")
-		if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
-			c.l.errorf("%s", err)
-		}
-	} else if clusterWipe {
-		c.status("wiping cluster")
-		if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
-			c.l.errorf("%s", err)
+	if clusterWipe {
+		if c.name != clusterName {
+			c.status("destroying cluster")
+			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
+				c.l.errorf("%s", err)
+			}
+		} else {
+			c.status("wiping cluster")
+			if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
+				c.l.errorf("%s", err)
+			}
 		}
 	} else {
 		c.l.printf("skipping cluster wipe\n")
@@ -748,6 +750,14 @@ func (c *cluster) RunWithBuffer(
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
+// RemountNoBarrier remounts the cluster's local SSDs with the nobarrier option.
+func (c *cluster) RemountNoBarrier(ctx context.Context) {
+	c.Run(ctx, c.All(),
+		"sudo", "umount", "/mnt/data1", ";",
+		"sudo", "mount", "-o", "discard,defaults,nobarrier",
+		"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+}
+
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
 // specifying whether the URL should include the node's internal or external IP
 // address. In general, inter-cluster communication and should use internal IPs
@@ -911,7 +921,13 @@ func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
 // this should be ignored.
 func (m *monitor) ExpectDeath() {
-	atomic.AddInt32(&m.expDeaths, 1)
+	m.ExpectDeaths(1)
+}
+
+// ExpectDeaths lets the monitor know that a specific number of nodes are about
+// to be killed, and that they should be ignored.
+func (m *monitor) ExpectDeaths(count int32) {
+	atomic.AddInt32(&m.expDeaths, count)
 }
 
 func (m *monitor) Go(fn func(context.Context) error) {

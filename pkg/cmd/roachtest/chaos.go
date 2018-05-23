@@ -17,8 +17,6 @@ package main
 import (
 	"context"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // ChaosTimer configures a chaos schedule.
@@ -44,8 +42,9 @@ type Chaos struct {
 	// Target is consulted before each chaos event to determine the node(s) which
 	// should be killed.
 	Target func() nodeListOption
-	// Duration is the duration after which the chaos agent will terminate cleanly.
-	Duration time.Duration
+	// Stopper is a channel that the chaos agent listens on. The agent will
+	// terminate cleanly once it receives on the channel.
+	Stopper <-chan time.Time
 }
 
 // Runner returns a closure that runs chaos against the given cluster without
@@ -57,9 +56,11 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 		if err != nil {
 			return err
 		}
-		for tBegin := timeutil.Now(); timeutil.Since(tBegin) < ch.Duration; {
+		for {
 			before, between := ch.Timer.Timing()
 			select {
+			case <-ch.Stopper:
+				return nil
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(before):
@@ -71,6 +72,8 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			c.Stop(ctx, target)
 
 			select {
+			case <-ch.Stopper:
+				return nil
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(between):
@@ -79,6 +82,5 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			c.l.printf("restarting %v after %s of downtime\n", target, between)
 			c.Start(ctx, target)
 		}
-		return nil
 	}
 }
