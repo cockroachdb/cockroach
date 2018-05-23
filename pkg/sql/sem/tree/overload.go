@@ -273,6 +273,25 @@ func IdentityReturnType(idx int) ReturnTyper {
 	}
 }
 
+// FirstNonNullReturnType returns the type of the first non-null argument, or
+// types.Unknown if all arguments are null. There must be at least one argument,
+// or else FirstNonNullReturnType returns UnknownReturnType. This method is used
+// with HomogeneousType functions, in which all arguments have been checked to
+// have the same type (or be null).
+func FirstNonNullReturnType() ReturnTyper {
+	return func(args []TypedExpr) types.T {
+		if len(args) == 0 {
+			return UnknownReturnType
+		}
+		for _, arg := range args {
+			if t := arg.ResolvedType(); t != types.Unknown {
+				return t
+			}
+		}
+		return types.Unknown
+	}
+}
+
 func returnTypeToFixedType(s ReturnTyper) types.T {
 	if t := s(nil); t != UnknownReturnType {
 		return t
