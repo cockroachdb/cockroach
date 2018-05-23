@@ -23,11 +23,7 @@ import (
 func registerKV(r *registry) {
 	runKV := func(ctx context.Context, t *test, c *cluster, percent int) {
 		if !c.isLocal() {
-			// TODO(peter): remountNoBarrier when Nathan's PR merges.
-			c.Run(ctx, c.All(),
-				"sudo", "umount", "/mnt/data1", ";",
-				"sudo", "mount", "-o", "discard,defaults,nobarrier",
-				"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+			c.RemountNoBarrier(ctx)
 		}
 
 		nodes := c.nodes - 1
@@ -100,10 +96,7 @@ func registerKVScalability(r *registry) {
 		nodes := c.nodes - 1
 
 		if !c.isLocal() {
-			c.Run(ctx, c.All(),
-				"sudo", "umount", "/mnt/data1", ";",
-				"sudo", "mount", "-o", "discard,defaults,nobarrier",
-				"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+			c.RemountNoBarrier(ctx)
 		}
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
