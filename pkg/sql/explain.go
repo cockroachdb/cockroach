@@ -41,7 +41,9 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			return nil, err
 		}
 		return &explainDistSQLNode{
-			plan: plan,
+			plan:     plan,
+			analyze:  opts.Flags.Contains(tree.ExplainFlagAnalyze),
+			stmtType: n.Statement.StatementType(),
 		}, nil
 
 	case tree.ExplainPlan:

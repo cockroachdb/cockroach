@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -27,6 +29,13 @@ type explainDistSQLNode struct {
 	optColumnsSlot
 
 	plan planNode
+
+	// If analyze is set, plan will be executed with tracing enabled and a url
+	// pointing to a visual query plan with statistics will be returned.
+	analyze bool
+	// stmtType is only used if analyzing a statement. It is needed by the
+	// distSQLWrapper.
+	stmtType tree.StatementType
 
 	run explainDistSQLRun
 }
@@ -60,8 +69,47 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		return err
 	}
 	distSQLPlanner.FinalizePlan(&planCtx, &plan)
+
+	var spans []tracing.RecordedSpan
+	if n.analyze {
+		if params.extendedEvalCtx.Tracing.Enabled() {
+			return errTracingAlreadyEnabled
+		}
+
+		// Start tracing. KV tracing is not enabled because we are only interested
+		// in stats present on the spans.
+		if err := params.extendedEvalCtx.Tracing.StartTracing(
+			tracing.SnowballRecording, false, /* kvTracingEnabled */
+		); err != nil {
+			return err
+		}
+
+		// Discard rows that are returned.
+		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			return nil
+		})
+		execCfg := params.p.ExecCfg()
+		recv := makeDistSQLReceiver(
+			params.ctx,
+			rw,
+			n.stmtType,
+			execCfg.RangeDescriptorCache,
+			execCfg.LeaseHolderCache,
+			params.p.txn,
+			func(ts hlc.Timestamp) {
+				_ = execCfg.Clock.Update(ts)
+			},
+		)
+		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.p.ExtendedEvalContext())
+
+		spans = params.extendedEvalCtx.Tracing.getRecording()
+		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
+			return err
+		}
+	}
+
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
+	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramURLWithSpans(flows, spans)
 	if err != nil {
 		return err
 	}
@@ -82,5 +130,11 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *explainDistSQLNode) Values() tree.Datums       { return n.run.values }
-func (n *explainDistSQLNode) Close(ctx context.Context) { n.plan.Close(ctx) }
+func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
+func (n *explainDistSQLNode) Close(ctx context.Context) {
+	// If we analyzed the statement, we relinquished ownership of the plan to a
+	// distSQLWrapper.
+	if !n.analyze {
+		n.plan.Close(ctx)
+	}
+}
