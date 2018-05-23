@@ -167,7 +167,7 @@ const int TxnMeta::kEpochFieldNumber;
 const int TxnMeta::kTimestampFieldNumber;
 const int TxnMeta::kPriorityFieldNumber;
 const int TxnMeta::kSequenceFieldNumber;
-const int TxnMeta::kBatchIndexFieldNumber;
+const int TxnMeta::kDeprecatedBatchIndexFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnMeta::TxnMeta()
@@ -197,8 +197,8 @@ TxnMeta::TxnMeta(const TxnMeta& from)
     timestamp_ = NULL;
   }
   ::memcpy(&isolation_, &from.isolation_,
-    static_cast<size_t>(reinterpret_cast<char*>(&batch_index_) -
-    reinterpret_cast<char*>(&isolation_)) + sizeof(batch_index_));
+    static_cast<size_t>(reinterpret_cast<char*>(&deprecated_batch_index_) -
+    reinterpret_cast<char*>(&isolation_)) + sizeof(deprecated_batch_index_));
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.TxnMeta)
 }
 
@@ -206,8 +206,8 @@ void TxnMeta::SharedCtor() {
   id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&timestamp_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&batch_index_) -
-      reinterpret_cast<char*>(&timestamp_)) + sizeof(batch_index_));
+      reinterpret_cast<char*>(&deprecated_batch_index_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(deprecated_batch_index_));
   _cached_size_ = 0;
 }
 
@@ -253,8 +253,8 @@ void TxnMeta::Clear() {
   }
   timestamp_ = NULL;
   ::memset(&isolation_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&batch_index_) -
-      reinterpret_cast<char*>(&isolation_)) + sizeof(batch_index_));
+      reinterpret_cast<char*>(&deprecated_batch_index_) -
+      reinterpret_cast<char*>(&isolation_)) + sizeof(deprecated_batch_index_));
   _internal_metadata_.Clear();
 }
 
@@ -365,14 +365,14 @@ bool TxnMeta::MergePartialFromCodedStream(
         break;
       }
 
-      // int32 batch_index = 8;
+      // int32 deprecated_batch_index = 8;
       case 8: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &batch_index_)));
+                 input, &deprecated_batch_index_)));
         } else {
           goto handle_unusual;
         }
@@ -442,9 +442,9 @@ void TxnMeta::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(7, this->sequence(), output);
   }
 
-  // int32 batch_index = 8;
-  if (this->batch_index() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(8, this->batch_index(), output);
+  // int32 deprecated_batch_index = 8;
+  if (this->deprecated_batch_index() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(8, this->deprecated_batch_index(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -504,11 +504,11 @@ size_t TxnMeta::ByteSizeLong() const {
         this->sequence());
   }
 
-  // int32 batch_index = 8;
-  if (this->batch_index() != 0) {
+  // int32 deprecated_batch_index = 8;
+  if (this->deprecated_batch_index() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->batch_index());
+        this->deprecated_batch_index());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -553,8 +553,8 @@ void TxnMeta::MergeFrom(const TxnMeta& from) {
   if (from.sequence() != 0) {
     set_sequence(from.sequence());
   }
-  if (from.batch_index() != 0) {
-    set_batch_index(from.batch_index());
+  if (from.deprecated_batch_index() != 0) {
+    set_deprecated_batch_index(from.deprecated_batch_index());
   }
 }
 
@@ -582,7 +582,7 @@ void TxnMeta::InternalSwap(TxnMeta* other) {
   swap(epoch_, other->epoch_);
   swap(priority_, other->priority_);
   swap(sequence_, other->sequence_);
-  swap(batch_index_, other->batch_index_);
+  swap(deprecated_batch_index_, other->deprecated_batch_index_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   swap(_cached_size_, other->_cached_size_);
 }

@@ -406,6 +406,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
+	lIncArgs.Sequence = lTxn.Sequence
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		Txn: &lTxn,
 	}, lIncArgs); pErr != nil {
@@ -414,6 +415,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
 	rTxn := txn
 	rTxn.Sequence++
+	rIncArgs.Sequence = rTxn.Sequence
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		Txn: &rTxn,
 	}, rIncArgs); pErr != nil {
@@ -2941,6 +2943,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	// priority).
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key2)).AsRawKey(), data)
 	txn.Sequence++
+	pArgs.Sequence = txn.Sequence
 	if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}

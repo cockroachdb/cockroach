@@ -475,14 +475,13 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation:  enginepb.SNAPSHOT,
-		Key:        Key("foo"),
-		ID:         uuid.MakeV4(),
-		Epoch:      2,
-		Timestamp:  makeTS(20, 21),
-		Priority:   957356782,
-		Sequence:   123,
-		BatchIndex: 1,
+		Isolation: enginepb.SNAPSHOT,
+		Key:       Key("foo"),
+		ID:        uuid.MakeV4(),
+		Epoch:     2,
+		Timestamp: makeTS(20, 21),
+		Priority:  957356782,
+		Sequence:  123,
 	},
 	Name:                     "name",
 	Status:                   COMMITTED,
