@@ -176,7 +176,7 @@ define AntiJoinApply {
 define GroupBy {
     Input        Expr
     Aggregations Expr
-    GroupingCols ColSet
+    Def          GroupByDef
 }
 
 # Union is an operator used to combine the Left and Right input relations into

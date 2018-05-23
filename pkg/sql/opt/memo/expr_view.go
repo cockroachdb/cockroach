@@ -310,11 +310,16 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	switch ev.Operator() {
-	// Special-case handling for GroupBy private; print grouping columns in
-	// addition to full set of columns.
+	// Special-case handling for GroupBy private; print grouping columns and
+	// ordering in addition to full set of columns.
 	case opt.GroupByOp:
-		groupingColSet := ev.Private().(opt.ColSet)
+		def := ev.Private().(*GroupByDef)
+		groupingColSet := def.GroupingCols
+		ordering := def.Ordering
 		logProps.FormatColSet(f, tp, "grouping columns:", groupingColSet)
+		if ordering.Defined() {
+			tp.Childf("ordering: %s", ordering.String())
+		}
 
 	// Special-case handling for set operators to show the left and right
 	// input columns that correspond to the output columns.
