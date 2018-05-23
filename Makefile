@@ -1009,6 +1009,11 @@ GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
 PBTS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbts
 
+JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
+UI_JS_CCL := $(UI_ROOT)/ccl/src/js/protos.js
+UI_TS_CCL := $(UI_ROOT)/ccl/src/js/protos.d.ts
+UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
+
 UI_JS := $(UI_ROOT)/src/js/protos.js
 UI_TS := $(UI_ROOT)/src/js/protos.d.ts
 UI_PROTOS := $(UI_JS) $(UI_TS)
@@ -1020,8 +1025,6 @@ CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.c
 CPP_PROTOS_CCL := $(filter %/ccl/baseccl/encryption_options.proto %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
 CPP_HEADERS_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.h))
 CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.cc))
-
-UI_PROTOS := $(UI_JS) $(UI_TS)
 
 $(GOGOPROTO_PROTO): $(SUBMODULES_TARGET)
 
@@ -1076,6 +1079,18 @@ $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBTS) $(UI_JS) >> $@
 
+.SECONDARY: $(UI_JS_CCL)
+$(UI_JS_CCL): $(JS_PROTOS_CCL) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) $(JS_PROTOS_CCL) >> $@
+
+.SECONDARY: $(UI_TS_CCL)
+$(UI_TS_CCL): $(UI_JS_CCL) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(PBTS) $(UI_JS_CCL) >> $@
+
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
 KARMA              := ./node_modules/.bin/karma
@@ -1087,7 +1102,7 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 ui-generate: $(UI_ROOT)/distccl/bindata.go
 
 .PHONY: ui-lint
-ui-lint: $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
+ui-lint: $(YARN_INSTALLED_TARGET) $(UI_PROTOS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
@@ -1113,7 +1128,7 @@ UI_MANIFESTS := $(UI_ROOT)/protos-manifest.json $(UI_ROOT)/vendor-manifest.json
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
 .SECONDARY: $(UI_DLLS) $(UI_MANIFESTS)
-$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
+$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
 
 .PHONY: ui-test
@@ -1124,7 +1139,7 @@ ui-test: $(UI_DLLS) $(UI_MANIFESTS)
 ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
 
-$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/ccl $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
+$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_JS_CCL) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/ccl $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
 	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
 	rm -f $(UI_ROOT)/embedded.go
 	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
@@ -1310,7 +1325,7 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS) $(UI_PROTOS_CCL)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.

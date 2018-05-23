@@ -51,6 +51,7 @@ import Nodes from "src/views/reports/containers/nodes";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
+import Stores from "src/views/reports/containers/stores";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -143,6 +144,8 @@ ReactDOM.render(
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
+          <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
+
         </Route>
 
         { /* old route redirects */ }
