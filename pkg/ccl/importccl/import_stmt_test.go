@@ -46,7 +46,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func TestLoadCSV(t *testing.T) {
+func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -60,7 +60,8 @@ func TestLoadCSV(t *testing.T) {
 		name   string
 		create string
 		with   string
-		csv    string
+		typ    string
+		data   string
 		err    string
 		query  map[string][][]string
 	}{
@@ -71,7 +72,8 @@ func TestLoadCSV(t *testing.T) {
 				i int,
 				unique index idx_f (i)
 			`,
-			csv: `1,1
+			typ: "CSV",
+			data: `1,1
 2,2
 3,3
 4,3
@@ -83,7 +85,8 @@ func TestLoadCSV(t *testing.T) {
 			create: `
 				i int primary key
 			`,
-			csv: `1
+			typ: "CSV",
+			data: `1
 2
 3
 3
@@ -95,7 +98,8 @@ func TestLoadCSV(t *testing.T) {
 			create: `
 				s string collate en_u_ks_level1 primary key
 			`,
-			csv: `a
+			typ: "CSV",
+			data: `a
 B
 c
 D
@@ -110,7 +114,8 @@ d
 				s string
 			`,
 			with: `WITH sstsize = '10B'`,
-			csv: `1,0000000000
+			typ:  "CSV",
+			data: `1,0000000000
 1,0000000000`,
 			err: "duplicate key",
 		},
@@ -127,7 +132,8 @@ d
 				family (s, c)
 			`,
 			with: `WITH sstsize = '1B'`,
-			csv:  `5,STRING,7,9`,
+			typ:  "CSV",
+			data: `5,STRING,7,9`,
 			query: map[string][][]string{
 				`SELECT count(*) from d.t`: {{"1"}},
 			},
@@ -135,7 +141,8 @@ d
 		{
 			name:   "good bytes encoding",
 			create: `b bytes`,
-			csv: `\x0143
+			typ:    "CSV",
+			data: `\x0143
 0143`,
 			query: map[string][][]string{
 				`SELECT * from d.t`: {{"\x01C"}, {"0143"}},
@@ -144,34 +151,61 @@ d
 		{
 			name:   "invalid byte",
 			create: `b bytes`,
-			csv:    `\x0g`,
+			typ:    "CSV",
+			data:   `\x0g`,
 			err:    "invalid byte",
 		},
 		{
 			name:   "bad bytes length",
 			create: `b bytes`,
-			csv:    `\x0`,
+			typ:    "CSV",
+			data:   `\x0`,
 			err:    "odd length hex string",
+		},
+
+		// MySQL OUTFILE
+		{
+			name:   "unexpected number of columns",
+			create: `i int`,
+			typ:    "MYSQLOUTFILE",
+			data:   "1\t2\n",
+			err:    "row 1: expected 1 columns, got 2",
+		},
+		{
+			name:   "unmatched field enclosure",
+			create: `i int`,
+			with:   `WITH fields_enclosed_by = '"'`,
+			typ:    "MYSQLOUTFILE",
+			data:   "\"1",
+			err:    "row 1: unmatched field enclosure",
+		},
+		{
+			name:   "unmatched literal",
+			create: `i int`,
+			with:   `WITH fields_escaped_by = '\'`,
+			typ:    "MYSQLOUTFILE",
+			data:   `\`,
+			err:    "row 1: unmatched literal",
 		},
 	}
 
-	var csvString string
+	var dataString string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
-			fmt.Fprint(w, csvString)
+			fmt.Fprint(w, dataString)
 		}
 	}))
 	defer srv.Close()
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
-			q := fmt.Sprintf(`IMPORT TABLE d.t (%s) CSV DATA ($1) %s`, tc.create, tc.with)
+			q := fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
 			t.Log(q)
-			csvString = tc.csv
+			dataString = tc.data
 			_, err := db.Exec(q, srv.URL)
 			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("unexpected: %v", err)
+				t.Errorf("unexpected: %v", err)
 			}
 			for query, res := range tc.query {
 				sqlDB.CheckQueryResults(t, query, res)
@@ -590,10 +624,10 @@ func TestImportCSVStmt(t *testing.T) {
 		)
 
 		data = ",5,e,,,"
-		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `could not parse "" as type int`) {
+		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `row 1: parse "a" as INT: could not parse ""`) {
 			t.Fatalf("unexpected: %v", err)
 		}
-		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"a" violates not-null constraint`) {
+		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "a" violates not-null constraint`) {
 			t.Fatalf("unexpected: %v", err)
 		}
 		data = "2,,e,,,"

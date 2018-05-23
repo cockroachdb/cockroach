@@ -160,12 +160,12 @@ func (c *csvInputReader) convertRecord(ctx context.Context) error {
 					var err error
 					conv.datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, &conv.evalCtx)
 					if err != nil {
-						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
+						return makeRowErr(batch.file, rowNum, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
 					}
 				}
 			}
 			if err := conv.row(ctx, batch.fileIndex, rowNum); err != nil {
-				return errors.Wrapf(err, "converting row: %s: row %d", batch.file, rowNum)
+				return makeRowErr(batch.file, rowNum, "%s", err)
 			}
 		}
 	}
