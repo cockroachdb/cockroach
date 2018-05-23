@@ -616,6 +616,50 @@ project
       │         └── concat_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
       └── true [type=bool]
 
+# Don't decorrelate when the group by input is ordered.
+opt
+SELECT * FROM a WHERE 'foo'=(SELECT MAX(y::string) FROM (SELECT * FROM xy ORDER BY y) WHERE x=k)
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── keys: (1)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:9(string!null)
+      ├── keys: (1)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    └── keys: (1)
+      ├── select
+      │    ├── columns: max:9(string!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── group-by
+      │    │    ├── columns: max:9(string)
+      │    │    ├── ordering: +7
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── project
+      │    │    │    ├── columns: column8:8(string)
+      │    │    │    ├── outer: (1)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    ├── outer: (1)
+      │    │    │    │    ├── keys: (6)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    │    └── keys: (6)
+      │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │    └── projections [outer=(7)]
+      │    │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    └── aggregations [outer=(8)]
+      │    │         └── max [type=string, outer=(8)]
+      │    │              └── variable: column8 [type=string, outer=(8)]
+      │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
+      │         └── max = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
+      └── true [type=bool]
+
+
 # --------------------------------------------------
 # HoistSelectExists
 # --------------------------------------------------

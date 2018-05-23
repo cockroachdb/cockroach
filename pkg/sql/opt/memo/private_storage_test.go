@@ -42,28 +42,6 @@ func TestInternColumnID(t *testing.T) {
 	}
 }
 
-func TestInternColSet(t *testing.T) {
-	var ps privateStorage
-	ps.init()
-
-	test := func(left, right opt.ColSet, expected bool) {
-		t.Helper()
-		leftID := ps.internColSet(left)
-		rightID := ps.internColSet(right)
-		if (leftID == rightID) != expected {
-			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
-		}
-	}
-
-	test(util.MakeFastIntSet(), util.MakeFastIntSet(), true)
-	test(util.MakeFastIntSet(0), util.MakeFastIntSet(0), true)
-	test(util.MakeFastIntSet(0, 1, 2, 10, 63), util.MakeFastIntSet(2, 63, 1, 10, 0), true)
-	test(util.MakeFastIntSet(64, 100, 1000), util.MakeFastIntSet(1000, 100, 64), true)
-	test(util.MakeFastIntSet(1, 10, 100, 1000), util.MakeFastIntSet(10, 100, 1, 1000), true)
-	test(util.MakeFastIntSet(1), util.MakeFastIntSet(2), false)
-	test(util.MakeFastIntSet(1, 2), util.MakeFastIntSet(1, 2, 1000), false)
-}
-
 func TestInternColList(t *testing.T) {
 	var ps privateStorage
 	ps.init()
@@ -160,6 +138,30 @@ func TestInternScanOpDef(t *testing.T) {
 	test(scanDef3, scanDef4, false)
 	scanDef5 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2)}
 	test(scanDef3, scanDef5, false)
+}
+
+func TestInternGroupByDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *GroupByDef, expected bool) {
+		t.Helper()
+		leftID := ps.internGroupByDef(left)
+		rightID := ps.internGroupByDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), props.Ordering{1, -1}}
+	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), props.Ordering{1, -1}}
+	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), props.Ordering{1, 1}}
+	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), props.Ordering{1, 1, 1}}
+
+	test(groupByDef1, groupByDef2, true)
+	test(groupByDef1, groupByDef3, false)
+	test(groupByDef1, groupByDef4, false)
+	test(groupByDef3, groupByDef4, false)
 }
 
 func TestInternFuncOpDef(t *testing.T) {
@@ -439,6 +441,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		PassthroughCols: colSet,
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -446,13 +449,13 @@ func TestPrivateStorageAllocations(t *testing.T) {
 
 	testutils.TestNoMallocs(t, func() {
 		ps.internColumnID(colID)
-		ps.internColSet(colSet)
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
+		ps.internGroupByDef(groupByDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
@@ -480,6 +483,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		PassthroughCols: colSet,
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
 	indexJoinDef := &LookupJoinDef{Table: 1, Cols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
@@ -489,13 +493,14 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ps.internColumnID(colID)
-		ps.internColSet(colSet)
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internScanOpDef(scanOpDef)
+		ps.internScanOpDef(scanOpDef)
+		ps.internGroupByDef(groupByDef)
 		ps.internLookupJoinDef(indexJoinDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -113,7 +114,7 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
 }
 
 func (b *Builder) constructGroupBy(
-	input memo.GroupID, groupingColSet opt.ColSet, cols []scopeColumn,
+	input memo.GroupID, groupingColSet opt.ColSet, cols []scopeColumn, fromScope *scope,
 ) memo.GroupID {
 	colList := make(opt.ColList, 0, len(cols))
 	groupList := make([]memo.GroupID, 0, len(cols))
@@ -134,13 +135,22 @@ func (b *Builder) constructGroupBy(
 		}
 	}
 
+	var ordering props.Ordering
+	if len(cols) > 0 {
+		ordering = fromScope.physicalProps.Ordering
+	}
+
 	return b.factory.ConstructGroupBy(
 		input,
 		b.factory.ConstructAggregations(
 			b.factory.InternList(groupList),
 			b.factory.InternColList(colList),
 		),
-		b.factory.InternColSet(groupingColSet),
+		b.factory.InternGroupByDef(&memo.GroupByDef{
+			GroupingCols: groupingColSet,
+			// The ordering of the GROUP BY is inherited from the input.
+			Ordering: ordering,
+		}),
 	)
 }
 
@@ -238,6 +248,7 @@ func (b *Builder) buildAggregation(
 		aggInScope.group,
 		groupingColSet,
 		aggCols,
+		fromScope,
 	)
 
 	// Wrap with having filter if it exists.

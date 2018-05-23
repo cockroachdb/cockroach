@@ -757,11 +757,11 @@ func (f *Factory) constructNonRightJoin(
 //
 // ----------------------------------------------------------------------
 
-// colsAreKey returns true if the given columns form a strong key for the output
-// rows of the given group. A strong key means that the set of given column
-// values are unique and not null.
+// colsAreKey returns true if the given group by's grouping columns form a
+// strong key for the output rows of the given group. A strong key means that
+// the set of given column values are unique and not null.
 func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
-	colSet := f.mem.LookupPrivate(cols).(opt.ColSet)
+	colSet := f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols
 	props := f.lookupLogical(group).Relational
 	for _, weakKey := range props.WeakKeys {
 		if weakKey.SubsetOf(colSet) && weakKey.SubsetOf(props.NotNullCols) {
@@ -771,11 +771,17 @@ func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 	return false
 }
 
+// isUnorderedGroupBy returns true if the given input ordering for the group by
+// is unspecified.
+func (f *Factory) isUnorderedGroupBy(def memo.PrivateID) bool {
+	return !f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Defined()
+}
+
 // isScalarGroupBy returns true if the given grouping columns come from a
 // "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
 // with any aggregate functions operating over the entire input expression.
-func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
+func (f *Factory) isScalarGroupBy(def memo.PrivateID) bool {
+	return f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Empty()
 }
 
 // ----------------------------------------------------------------------

@@ -793,7 +793,7 @@ func (sb *statisticsBuilder) buildGroupBy(inputStats *opt.Statistics, groupingCo
 
 func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet) *opt.ColumnStatistic {
 	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
-	groupingColSet := sb.ev.Private().(opt.ColSet)
+	groupingColSet := sb.ev.Private().(*GroupByDef).GroupingCols
 
 	if groupingColSet.Empty() {
 		// Scalar group by.
