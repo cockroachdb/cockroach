@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-metadata
 
 statement ok
 CREATE TABLE with_no_column_refs (
@@ -425,14 +425,6 @@ CREATE TABLE x (
   b TEXT AS (a->>'q') STORED,
   INDEX (b) STORING (k)
 )
-
-query TTT
-EXPLAIN SELECT b FROM x ORDER BY b
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  x@x_b_idx
-·          spans  ALL
 
 statement error cannot write directly to computed column
 INSERT INTO x (k, a, b) VALUES (1, '{"q":"xyz"}', 'not allowed!'), (2, '{"q":"abc"}', 'also not allowed')
