@@ -76,8 +76,9 @@ var IndexHTMLTemplate *template.Template
 
 // IndexHTMLArgs are the arguments to IndexHTMLTemplate.
 type IndexHTMLArgs struct {
-	LoginEnabled bool
-	LoggedInUser *string
+	ExperimentalUseLogin bool
+	LoginEnabled         bool
+	LoggedInUser         *string
 }
 
 func init() {
