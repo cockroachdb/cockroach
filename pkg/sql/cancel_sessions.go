@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
@@ -63,12 +64,15 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	}
 
 	statusServer := params.extendedEvalCtx.StatusServer
-	sessionIDDatum := datum.(*tree.DString)
+	sessionIDString, ok := tree.AsDString(datum)
+	if !ok {
+		return false, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: %q: expected *DString, found %T", datum, datum)
+	}
 
-	sessionIDString := string(*sessionIDDatum)
-	sessionID, err := StringToClusterWideID(sessionIDString)
+	sessionID, err := StringToClusterWideID(string(sessionIDString))
 	if err != nil {
-		return false, errors.Wrapf(err, "invalid session ID '%s'", sessionIDString)
+		return false, errors.Wrapf(err, "invalid session ID %s", datum)
 	}
 
 	// Get the lowest 32 bits of the session ID.
