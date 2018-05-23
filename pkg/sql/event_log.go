@@ -40,6 +40,8 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+	// EventLogTruncateTable is recorded when a table is truncated.
+	EventLogTruncateTable EventLogType = "truncate_table"
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
 

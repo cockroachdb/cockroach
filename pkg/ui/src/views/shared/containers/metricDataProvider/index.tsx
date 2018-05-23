@@ -223,7 +223,7 @@ const metricsDataProviderConnected = connect(
     };
   },
   {
-    requestMetricsAction,
+    requestMetrics: requestMetricsAction,
   },
 )(MetricsDataProvider);
 
