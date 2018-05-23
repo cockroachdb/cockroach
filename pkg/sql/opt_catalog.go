@@ -109,6 +109,11 @@ func (ot *optTable) TabName() opt.TableName {
 	return opt.TableName(ot.desc.Name)
 }
 
+// IsVirtualTable is part of the opt.Table interface.
+func (ot *optTable) IsVirtualTable() bool {
+	return ot.desc.IsVirtualTable()
+}
+
 // ColumnCount is part of the opt.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.desc.Columns)

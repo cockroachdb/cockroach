@@ -224,7 +224,7 @@ func (b *Builder) buildScalarHelper(
 			} else {
 				// TODO(rytaft): remove this check when we are confident that
 				// all operators are included in comparisonOpMap.
-				panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+				panic(unimplementedf("unsupported comparison operator: %s", t.Operator))
 			}
 		}
 
@@ -305,7 +305,7 @@ func (b *Builder) buildScalarHelper(
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
-			panic(errorf("not yet implemented: scalar expr: %T", scalar))
+			panic(unimplementedf("not yet implemented: scalar expression: %T", scalar))
 		}
 	}
 
@@ -350,6 +350,11 @@ func (b *Builder) buildFunction(
 
 	if isAggregate(def) {
 		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)
+	}
+
+	// TODO(andyk): Re-enable impure functions once we can properly handle them.
+	if funcDef.Overload.Impure && !b.AllowImpureFuncs {
+		panic(unimplementedf("impure functions are not supported"))
 	}
 
 	argList := make([]memo.GroupID, len(f.Exprs))

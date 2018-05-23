@@ -183,7 +183,7 @@ select
 
 # No needed select columns.
 opt
-SELECT 1 FROM a WHERE now()<'2000-01-01T02:00:00'::timestamp
+SELECT 1 FROM a WHERE $1<'2000-01-01T02:00:00'::timestamp
 ----
 project
  ├── columns: "1":5(int!null)
@@ -191,7 +191,7 @@ project
  │    ├── scan a
  │    └── filters [type=bool]
  │         └── lt [type=bool]
- │              ├── function: now [type=timestamptz]
+ │              ├── placeholder: $1 [type=timestamp]
  │              └── const: '2000-01-01 02:00:00+00:00' [type=timestamp]
  └── projections
       └── const: 1 [type=int]
