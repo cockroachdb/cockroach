@@ -27,10 +27,6 @@ func init() {
 	cli.AddPersistentPreRunE(cli.StartCmd, func(cmd *cobra.Command, _ []string) error {
 		return populateStoreSpecsEncryption()
 	})
-
-	// The flag is kept hidden for now.
-	// TODO(mberhault): make visible once encryption is fully implemented.
-	_ = cli.StartCmd.Flags().MarkHidden(cliflagsccl.EnterpriseEncryption.Name)
 }
 
 // populateStoreSpecsEncryption is a PreRun hook that matches store encryption specs with the
