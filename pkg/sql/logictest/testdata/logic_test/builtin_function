@@ -1203,6 +1203,14 @@ SELECT CURRENT_SCHEMAS(false)
 ----
 {"public"}
 
+# Force the function to be evaluated at execution time and verify it doesn't
+# break when distsql is on.
+query T
+SELECT CURRENT_SCHEMAS(x) FROM (VALUES (true), (false)) AS t(x);
+----
+{"pg_catalog","public"}
+{"public"}
+
 statement ok
 SET SEARCH_PATH=test,pg_catalog
 
