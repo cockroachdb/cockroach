@@ -13,12 +13,10 @@ import (
 	"io"
 	"math/rand"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -170,7 +168,7 @@ type rowConverter struct {
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
 	ri                    sqlbase.RowInserter
-	evalCtx               tree.EvalContext
+	evalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	visibleCols           []sqlbase.ColumnDescriptor
 	defaultExprs          []tree.TypedExpr
@@ -180,12 +178,12 @@ type rowConverter struct {
 const kvBatchSize = 1000
 
 func newRowConverter(
-	tableDesc *sqlbase.TableDescriptor, kvCh chan<- kvBatch,
+	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
 	c := &rowConverter{
 		tableDesc: tableDesc,
 		kvCh:      kvCh,
-		evalCtx:   tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}},
+		evalCtx:   evalCtx,
 	}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
@@ -199,7 +197,7 @@ func newRowConverter(
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &c.evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, c.evalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
@@ -258,7 +256,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	var computedCols []sqlbase.ColumnDescriptor
 
 	row, err := sql.GenerateInsertRow(
-		c.defaultExprs, computeExprs, c.cols, computedCols, c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
+		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrapf(err, "generate insert row")
 	}
@@ -368,13 +366,14 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan kvBatch)
 	sampleCh := make(chan sqlbase.EncDatumRow)
+	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var conv inputConverter
 	switch cp.inputFromat.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
+		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, evalCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
-		conv = newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
+		conv = newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, evalCtx)
 	default:
 		err := errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.inputFromat.Format)
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
