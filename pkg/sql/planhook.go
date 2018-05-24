@@ -152,5 +152,11 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 		return true, nil
 	}
 }
+
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
-func (*hookFnNode) Close(context.Context) {}
+
+func (f *hookFnNode) Close(ctx context.Context) {
+	for _, sub := range f.subplans {
+		sub.Close(ctx)
+	}
+}
