@@ -58,7 +58,7 @@ var (
 	clusterID   string
 	clusterWipe bool
 	username    = os.Getenv("ROACHPROD_USER")
-	zones       string
+	zonesF      string
 	teamCity    bool
 )
 
@@ -337,6 +337,7 @@ type nodeSpec struct {
 	Count       int
 	CPUs        int
 	MachineType string
+	Zones       string
 	Geo         bool
 }
 
@@ -347,6 +348,9 @@ func (s *nodeSpec) args() []string {
 	}
 	if s.Geo {
 		args = append(args, "--geo")
+	}
+	if s.Zones != "" {
+		args = append(args, "--gce-zones="+s.Zones)
 	}
 	return args
 }
@@ -386,6 +390,19 @@ func (o nodeGeoOption) apply(spec *nodeSpec) {
 // geo is a node option which requests geo-distributed nodes.
 func geo() nodeGeoOption {
 	return nodeGeoOption{}
+}
+
+type nodeZonesOption string
+
+func (o nodeZonesOption) apply(spec *nodeSpec) {
+	spec.Zones = string(o)
+}
+
+// zones is a node option which requests geo-distributed nodes. Note that this
+// overrides the --zones flag and is useful for tests that require running on
+// specific zones.
+func zones(s string) nodeZonesOption {
+	return nodeZonesOption(s)
 }
 
 // nodes is a helper method for creating a []nodeSpec given a node count and
@@ -459,8 +476,8 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	if c.name != clusterName {
 		sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
 		sargs = append(sargs, nodes[0].args()...)
-		if !local && zones != "" {
-			sargs = append(sargs, "--gce-zones="+zones)
+		if !local && zonesF != "" && nodes[0].Zones == "" {
+			sargs = append(sargs, "--gce-zones="+zonesF)
 		}
 
 		c.status("creating cluster")
