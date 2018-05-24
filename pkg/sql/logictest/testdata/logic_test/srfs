@@ -33,11 +33,6 @@ SELECT * FROM GENERATE_SERIES('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:0
 ----
 generate_series
 
-query TTT
-EXPLAIN SELECT * FROM GENERATE_SERIES(1, 3)
-----
-generator  ·  ·
-
 query II colnames
 SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
 ----
@@ -46,14 +41,6 @@ generate_series  generate_series
 1                2
 2                1
 2                2
-
-query TTT
-EXPLAIN SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
-----
-join            ·     ·
- │              type  cross
- ├── generator  ·     ·
- └── generator  ·     ·
 
 query I colnames
 SELECT * FROM GENERATE_SERIES(3, 1, -1)
@@ -107,11 +94,6 @@ generate_series
 1
 2
 
-query TTT
-EXPLAIN SELECT GENERATE_SERIES(1, 3)
-----
-generator  ·  ·
-
 subtest multiple_SRFs
 # See #20511
 
@@ -124,17 +106,6 @@ subtest multiple_SRFs
 
 query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
 SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
-
-# query TTT
-# EXPLAIN SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
-# ----
-# join            ·     ·
-# │              type  cross
-# ├── generator  ·     ·
-# └── generator  ·     ·
-
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(1, 2\)"
-EXPLAIN SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
 
 statement ok
 CREATE TABLE t (a string)
@@ -160,34 +131,6 @@ INSERT INTO u VALUES ('bird')
 
 query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
 SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
-
-# query TTT
-# EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
-# ----
-# render                    ·         ·
-# │                        render 0  a
-# │                        render 1  b
-# │                        render 2  generate_series
-# │                        render 3  generate_series
-# └── join                 ·         ·
-#      │                   type      cross
-#      ├── join            ·         ·
-#      │    │              type      cross
-#      │    ├── join       ·         ·
-#      │    │    │         type      cross
-#      │    │    ├── scan  ·         ·
-#      │    │    │         table     t@primary
-#      │    │    │         spans     ALL
-#      │    │    └── scan  ·         ·
-#      │    │              table     u@primary
-#      │    │              spans     ALL
-#      │    └── generator  ·         ·
-#      │                   expr      generate_series(1, 2)
-#      └── generator       ·         ·
-#·                         expr      generate_series(3, 4)
-
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
-EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 
 query TTII colnames
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b

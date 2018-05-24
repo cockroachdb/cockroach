@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default opt distsql distsql-opt
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)
@@ -91,6 +91,9 @@ SELECT COUNT(*) FILTER (WHERE v>10) FROM t
 
 query error pq: views and sequences are not supported
 SELECT * FROM tview
+
+query error pq: virtual tables are not supported
+SELECT * FROM crdb_internal.jobs
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL

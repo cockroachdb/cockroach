@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 statement count 3
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)

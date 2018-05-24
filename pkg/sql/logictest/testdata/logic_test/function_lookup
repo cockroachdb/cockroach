@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE foo(x INT DEFAULT LENGTH(PG_TYPEOF(1234))-1)
