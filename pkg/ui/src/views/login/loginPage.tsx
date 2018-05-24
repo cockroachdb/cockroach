@@ -5,6 +5,9 @@ import { withRouter, WithRouterProps } from "react-router";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
+import docsURL from "src/util/docs";
+
+import "./loginPage.styl";
 
 interface LoginPageProps {
   loginState: LoginAPIState;
@@ -54,27 +57,39 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
 
   render() {
     return (
-      <div>
+      <div className="login-page">
         <Helmet>
           <title>Login</title>
         </Helmet>
         <section className="section">
-          <h1>Login</h1>
+          <h1 className="heading">Sign in to the Console</h1>
+          <p className="aside">
+            Please contact your database administrator for
+            account access and password restoration.
+            For more information, see{" "}
+            <a href={docsURL("admin-ui-overview.html")}>the documentation</a>.
+          </p>
           {this.props.loginState.error
             ? <div className="login-page__error">Login error: {this.props.loginState.error}</div>
             : null}
           <form onSubmit={this.handleSubmit}>
             <input
               type="text"
+              className="input-text"
               onChange={this.handleUpdateUsername}
               value={this.state.username}
             /><br />
             <input
               type="password"
+              className="input-text"
               onChange={this.handleUpdatePassword}
               value={this.state.password}
             /><br />
-            <input type="submit" disabled={this.props.loginState.inProgress} />
+            <input
+              type="submit"
+              className="submit-button"
+              disabled={this.props.loginState.inProgress}
+            />
           </form>
         </section>
       </div>
