@@ -106,7 +106,7 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
-		var timerSet bool
+		var isFast bool // whether the timer is on minInterval (false when unset or on maxAge)
 
 		ctx = log.WithLogTagStr(ctx, "compactor", "")
 
@@ -127,9 +127,9 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					break
 				}
 				// Set the wait timer if not already set.
-				if !timerSet {
+				if !isFast {
+					isFast = true
 					timer.Reset(c.minInterval())
-					timerSet = true
 				}
 
 			case <-timer.C:
@@ -139,15 +139,16 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					log.Warningf(ctx, "failed processing suggested compactions: %s", err)
 				}
 				if ok {
-					// The queue was processed. Wait for the next suggested
-					// compaction before resetting timer.
-					timerSet = false
+					// The queue was processed, so either it's empty or contains suggestions
+					// that were skipped for now. Revisit when they are certainly expired.
+					isFast = false
+					timer.Reset(c.maxAge())
 					break
 				}
-				// Reset the timer to re-attempt processing after the minimum
-				// compaction interval.
+				// More work to do, revisit after minInterval. Note that basically
+				// `ok == (err == nil)` but this refactor is left for a future commit.
+				isFast = true
 				timer.Reset(c.minInterval())
-				timerSet = true
 			}
 		}
 	})
