@@ -1458,7 +1458,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
-		s.compactor.Start(s.AnnotateCtx(context.Background()), s.Tracer(), s.stopper)
+		s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 	}
 
 	// Set the started flag (for unittests).
