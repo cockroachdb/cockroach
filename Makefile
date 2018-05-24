@@ -1089,7 +1089,7 @@ $(UI_JS_CCL): $(JS_PROTOS_CCL) $(YARN_INSTALLED_TARGET)
 $(UI_TS_CCL): $(UI_JS_CCL) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBTS) $(UI_JS_CCL) >> $@
+	$(PBTS) -n protosCCL $(UI_JS_CCL) >> $@
 
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
