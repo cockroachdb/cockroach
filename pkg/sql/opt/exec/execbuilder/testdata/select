@@ -91,7 +91,9 @@ SELECT * FROM c WHERE str >= 'moo'
 9   nine
 10  one-zero
 
+# ------------------------------------------------------------------------------
 # Ensure that index is used when indexed column has collation.
+# ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE coll (
   a STRING COLLATE da,
@@ -118,7 +120,9 @@ render     ·         ·                        (b int, a collatedstring{da})  �
 ·          table     coll@coll_b_a_idx        ·                              ·
 ·          spans     ALL                      ·                              ·
 
+# ------------------------------------------------------------------------------
 # Ensure correct index is used when indexed column is computed.
+# ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE computed (
   k INT PRIMARY KEY,
@@ -134,9 +138,141 @@ scan  ·      ·                        (b string)  +b
 ·     table  computed@computed_b_idx  ·           ·
 ·     spans  ALL                      ·           ·
 
-# Virtual tables are currently not supported.
+# ------------------------------------------------------------------------------
+# Ensure that Select filter probes expected date/time key/values that are in
+# different column families.
+# ------------------------------------------------------------------------------
 statement ok
-SET EXPERIMENTAL_OPT = ALWAYS;
+CREATE TABLE dt (
+  a TIMESTAMP PRIMARY KEY,
+  b DATE,
+  c INTERVAL,
+  UNIQUE (b),
+  UNIQUE (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
+)
 
-statement error virtual tables are not supported
-SELECT * FROM crdb_internal.jobs
+statement ok
+INSERT INTO dt VALUES
+  ('2015-08-30 03:34:45.34567', '2015-08-30', '34h2s'),
+  ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
+  ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
+output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM dt WHERE b < '2015-08-29'::date]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453+00:00'
+output row: ['2015-08-25']
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
+output row: ['2h45m2s234ms']
+fetched: /dt/dt_c_key/'34h2s' -> /'2015-08-30 03:34:45.34567+00:00'
+output row: ['34h2s']
+
+# ------------------------------------------------------------------------------
+# Ensure that special decimal values result in correct scan spans.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE dec (d decimal, v decimal(3, 1), primary key (d, v))
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec WHERE d IS NaN and v IS NaN
+----
+scan  ·      ·                    (d decimal, v decimal)  ·
+·     table  dec@primary          ·                       ·
+·     spans  /NaN/NaN-/NaN/NaN/#  ·                       ·
+
+# The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec WHERE d = 'Infinity' and v = 'Infinity'
+----
+scan  ·      ·                                        (d decimal, v decimal)  ·
+·     table  dec@primary                              ·                       ·
+·     spans  /Infinity/Infinity-/Infinity/Infinity/#  ·                       ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
+----
+scan  ·      ·                                            (d decimal, v decimal)  ·
+·     table  dec@primary                                  ·                       ·
+·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#  ·                       ·
+
+# ------------------------------------------------------------------------------
+# Verify that lookups for Decimal NaN use indices when possible:
+# - `WHERE d IS NaN` should perform a point lookup.
+# - `WHERE d = 'NaN'` should also perform a point lookup.
+# - `WHERE isnan(d)` is a function so it can't perform a point lookup.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE dec2 (d decimal null, index (d))
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d IS NaN
+----
+scan  ·      ·                (d decimal)  ·
+·     table  dec2@dec2_d_idx  ·            ·
+·     spans  /NaN-/-Infinity  ·            ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d = 'NaN'
+----
+scan  ·      ·                (d decimal)  ·
+·     table  dec2@dec2_d_idx  ·            ·
+·     spans  /NaN-/-Infinity  ·            ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
+----
+filter     ·       ·                            (d decimal)  ·
+ │         filter  (isnan((d)[decimal]))[bool]  ·            ·
+ └── scan  ·       ·                            (d decimal)  ·
+·          table   dec2@primary                 ·            ·
+·          spans   ALL                          ·            ·
+
+# ------------------------------------------------------------------------------
+# Verify that lookups for Float NaN use indices when possible:
+# - `WHERE f IS NaN` should perform a point lookup.
+# - `WHERE f = 'NaN'` should also perform a point lookup.
+# - `WHERE isnan(f)` is a function so it can't perform a point lookup.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE flt (f float null, unique index (f))
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM flt WHERE f IS NaN
+----
+scan  ·      ·                    (f float)  ·
+·     table  flt@flt_f_key        ·          ·
+·     spans  /NaN-/NaN/PrefixEnd  ·          ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM flt WHERE f = 'NaN'
+----
+scan  ·      ·                    (f float)  ·
+·     table  flt@flt_f_key        ·          ·
+·     spans  /NaN-/NaN/PrefixEnd  ·          ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
+----
+filter     ·       ·                          (f float)  ·
+ │         filter  (isnan((f)[float]))[bool]  ·          ·
+ └── scan  ·       ·                          (f float)  ·
+·          table   flt@primary                ·          ·
+·          spans   ALL                        ·          ·

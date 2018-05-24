@@ -338,7 +338,7 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 }
 
 // ConstructLimit is part of the exec.Factory interface.
-func (ee *execFactory) ConstructLimit(
+func (ef *execFactory) ConstructLimit(
 	input exec.Node, limit, offset tree.TypedExpr,
 ) (exec.Node, error) {
 	plan := input.(planNode)
