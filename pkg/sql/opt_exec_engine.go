@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/pkg/errors"
 
@@ -449,28 +448,21 @@ func (ee *execEngine) ConstructOrdinality(input exec.Node, colName string) (exec
 
 // ConstructLimit is part of the exec.Factory interface.
 func (ee *execEngine) ConstructLimit(
-	input exec.Node, limit int64, offset int64,
+	input exec.Node, limit, offset tree.TypedExpr,
 ) (exec.Node, error) {
-	var limitVal, offsetVal tree.Datum
-	if limit != math.MaxInt64 {
-		limitVal = tree.NewDInt(tree.DInt(limit))
-	}
-	if offset != 0 {
-		offsetVal = tree.NewDInt(tree.DInt(offset))
-	}
 	plan := input.(planNode)
 	// If the input plan is also a limitNode that has just an offset, and we are
 	// only applying a limit, update the existing node. This is useful because
 	// Limit and Offset are separate operators which result in separate calls to
 	// this function.
-	if l, ok := plan.(*limitNode); ok && l.countExpr == nil && offsetVal == nil {
-		l.countExpr = limitVal
+	if l, ok := plan.(*limitNode); ok && l.countExpr == nil && offset == nil {
+		l.countExpr = limit
 		return l, nil
 	}
 	return &limitNode{
 		plan:       plan,
-		countExpr:  limitVal,
-		offsetExpr: offsetVal,
+		countExpr:  limit,
+		offsetExpr: offset,
 	}, nil
 }
 
