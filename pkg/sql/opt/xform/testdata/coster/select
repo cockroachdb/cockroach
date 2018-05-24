@@ -23,6 +23,4 @@ select
  │    ├── cost: 1000.00
  │    └── keys: (1)
  └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
-      └── ge [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
-           ├── variable: a.s [type=string, outer=(3)]
-           └── const: 'foo' [type=string]
+      └── a.s >= 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]

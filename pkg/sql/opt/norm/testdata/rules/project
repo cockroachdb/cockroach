@@ -77,10 +77,6 @@ project
  │    │    ├── columns: b.x:5(int!null)
  │    │    └── keys: (5)
  │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              ├── variable: a.x [type=int, outer=(1)]
- │              └── variable: b.x [type=int, outer=(5)]
+ │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  └── projections [outer=(2)]
-      └── plus [type=int, outer=(2)]
-           ├── variable: a.y [type=int, outer=(2)]
-           └── const: 1 [type=int]
+      └── a.y + 1 [type=int, outer=(2)]

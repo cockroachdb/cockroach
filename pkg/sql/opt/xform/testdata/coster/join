@@ -41,17 +41,13 @@ project
       │    │    ├── cost: 1000.00
       │    │    └── keys: (1)
       │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
-      │         └── eq [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
-      │              ├── variable: a.d [type=decimal, outer=(4)]
-      │              └── const: 1.0 [type=decimal]
+      │         └── a.d = 1.0 [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
       ├── scan b
       │    ├── columns: x:5(int)
       │    ├── stats: [rows=1000]
       │    └── cost: 1000.00
       └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-                ├── variable: a.k [type=int, outer=(1)]
-                └── variable: b.x [type=int, outer=(5)]
+           └── a.k = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))

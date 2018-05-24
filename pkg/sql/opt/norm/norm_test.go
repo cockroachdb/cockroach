@@ -43,7 +43,7 @@ import (
 //   ...
 func TestNormRules(t *testing.T) {
 	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps |
-		opt.ExprFmtHideQualifications
+		opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -63,7 +63,8 @@ func TestNormRules(t *testing.T) {
 //
 // See OptTester.Handle for supported commands.
 func TestRuleProps(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideQualifications
+	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideQualifications |
+		opt.ExprFmtHideScalars
 	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

@@ -6,11 +6,5 @@ values
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── cost: 0.02
- ├── tuple [type=tuple{int, int, int}]
- │    ├── const: 1 [type=int]
- │    ├── const: 2 [type=int]
- │    └── const: 3 [type=int]
- └── tuple [type=tuple{int, int, int}]
-      ├── const: 4 [type=int]
-      ├── const: 5 [type=int]
-      └── const: 6 [type=int]
+ ├── (1, 2, 3) [type=tuple{int, int, int}]
+ └── (4, 5, 6) [type=tuple{int, int, int}]
