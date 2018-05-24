@@ -73,6 +73,9 @@ func (ef *execFactory) ConstructScan(
 	if err := scan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
+	if indexConstraint != nil && indexConstraint.IsContradiction() {
+		return newZeroNode(scan.resultColumns), nil
+	}
 	scan.index = indexDesc
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
