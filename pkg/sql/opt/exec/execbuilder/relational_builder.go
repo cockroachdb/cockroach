@@ -471,7 +471,7 @@ func (b *Builder) buildLimitOffset(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	// LIMIT/OFFSET expression should never need buildScalarContext, because it
-	// can't refer to input expression.
+	// can't refer to the input expression.
 	expr, err := b.buildScalar(nil, ev.Child(1))
 	if err != nil {
 		return execPlan{}, err

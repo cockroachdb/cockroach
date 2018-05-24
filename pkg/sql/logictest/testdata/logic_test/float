@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # -0 and 0 should not be possible in a unique index.
 
@@ -12,35 +12,6 @@ INSERT INTO p VALUES (NULL), ('NaN'::float), ('Inf'::float), ('-Inf'::float), ('
 
 statement error duplicate key value
 INSERT INTO p VALUES ('-0'::float)
-
-# Verify that lookups for NaN use indices when possible:
-# - `WHERE f IS NaN` should perform a point lookup.
-# - `WHERE f = 'NaN'` should also perform a point lookup.
-# - `WHERE isnan(f)` is a function so it can't perform a point lookup.
-
-query TTT
-EXPLAIN SELECT * FROM p WHERE f IS NaN
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  p@p_f_key
-·          spans  /NaN-/NaN/PrefixEnd
-
-query TTT
-EXPLAIN SELECT * FROM p WHERE f = 'NaN'
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  p@p_f_key
-·          spans  /NaN-/NaN/PrefixEnd
-
-query TTT
-EXPLAIN SELECT * FROM p WHERE isnan(f)
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  p@p_f_key
-·          spans  ALL
 
 query R
 SELECT * FROM p WHERE f = 'NaN'

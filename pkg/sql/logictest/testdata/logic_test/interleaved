@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # Grandparent table
 statement ok
@@ -309,13 +309,6 @@ query IIR
 SELECT * FROM orders WHERE customer = 1 AND id = 1000
 ----
 1 1000 100.00000
-
-query TTT
-EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
-----
-scan  ·      ·
-·     table  orders@primary
-·     spans  /1/#/70/1/1000-/1/#/70/1/1000/#
 
 # Check that interleaving can occur across databases
 statement ok

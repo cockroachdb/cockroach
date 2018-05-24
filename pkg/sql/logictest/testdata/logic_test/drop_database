@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 statement ok
 CREATE DATABASE "foo-bar"
