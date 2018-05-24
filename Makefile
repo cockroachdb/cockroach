@@ -1010,8 +1010,8 @@ PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
 PBTS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbts
 
 JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
-UI_JS_CCL := $(UI_ROOT)/ccl/src/js/protos_ccl.js
-UI_TS_CCL := $(UI_ROOT)/ccl/src/js/protos_ccl.d.ts
+UI_JS_CCL := $(UI_ROOT)/ccl/src/js/protos.js
+UI_TS_CCL := $(UI_ROOT)/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
 UI_JS := $(UI_ROOT)/src/js/protos.js
@@ -1083,7 +1083,7 @@ $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 $(UI_JS_CCL): $(JS_PROTOS_CCL) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(JS_PROTOS_CCL) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) $(JS_PROTOS_CCL) >> $@
 
 .SECONDARY: $(UI_TS_CCL)
 $(UI_TS_CCL): $(UI_JS_CCL) $(YARN_INSTALLED_TARGET)
