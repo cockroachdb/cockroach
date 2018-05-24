@@ -41,13 +41,15 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     bool has_stats = false;
     if (store_key_manager_ != nullptr) {
       has_stats = true;
-      // Transfer ownership of new key info to status proto, this frees any previous value.
+      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
       enc_status.set_allocated_active_store_key(store_key_manager_->CurrentKeyInfo().release());
     }
 
     if (data_key_manager_ != nullptr) {
       has_stats = true;
-      // Transfer ownership of new key info to status proto, this frees any previous value.
+      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
       enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
     }
 
