@@ -255,3 +255,13 @@ Failed test: %s`,
 		}
 	}
 }
+
+func TestGetAssignee(t *testing.T) {
+	listCommits := func(_ context.Context, owner string, repo string,
+		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
+		return []*github.RepositoryCommit{
+			{},
+		}, nil, nil
+	}
+	_, _ = getAssignee(context.Background(), "", listCommits)
+}
