@@ -600,7 +600,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
-				return err
+				return errors.Wrapf(err,
+					"computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
 			}
 			u.run.updateValues[u.run.updateColsIdx[u.run.computedCols[i].ID]] = d
 		}
