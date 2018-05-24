@@ -744,7 +744,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return c.convertRecord(ctx)
+			return c.convertRecordWorker(ctx)
 		})
 	}
 	const batchSize = 500

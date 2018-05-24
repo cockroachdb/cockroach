@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -29,7 +30,7 @@ func newMysqloutfileReader(
 	kvCh chan kvBatch,
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
-	expectedCols int,
+	evalCtx *tree.EvalContext,
 ) *mysqloutfileReader {
 	null := "NULL"
 	if opts.HasEscape {
@@ -37,7 +38,7 @@ func newMysqloutfileReader(
 	}
 	csvOpts := roachpb.CSVOptions{NullEncoding: &null}
 	return &mysqloutfileReader{
-		csvInputReader: *newCSVInputReader(kvCh, csvOpts, tableDesc, expectedCols),
+		csvInputReader: *newCSVInputReader(kvCh, csvOpts, tableDesc, evalCtx),
 		opts:           opts,
 	}
 }

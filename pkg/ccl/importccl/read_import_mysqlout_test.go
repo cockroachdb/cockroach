@@ -23,6 +23,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	_ "github.com/go-sql-driver/mysql"
@@ -217,8 +219,8 @@ func TestMysqlOutfileReader(t *testing.T) {
 	ctx := context.TODO()
 	for _, config := range configs {
 		t.Run(config.name, func(t *testing.T) {
-			const testdataRowWidth = 3
-			converter := newMysqloutfileReader(nil, config.opts, nil, testdataRowWidth)
+			converter := newMysqloutfileReader(nil, config.opts, &sqlbase.TableDescriptor{}, nil)
+			converter.expectedCols = 3
 			// unblock batch chan sends
 			converter.csvInputReader.recordCh = make(chan csvRecord, 4)
 			converter.csvInputReader.batchSize = 10
