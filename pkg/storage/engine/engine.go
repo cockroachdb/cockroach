@@ -346,6 +346,12 @@ type Stats struct {
 	PendingCompactionBytesEstimate int64
 }
 
+// EnvStats is a set of RocksDB env stats, including encryption status.
+type EnvStats struct {
+	// EncryptionStatus is a serialized	enginepbccl/stats.proto::EncryptionStatus protobuf.
+	EncryptionStatus []byte
+}
+
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.

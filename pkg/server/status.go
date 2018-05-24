@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/coreos/etcd/raft"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -1494,6 +1495,53 @@ func (s *statusServer) Diagnostics(
 	}
 
 	return s.admin.server.getReportingInfo(ctx), nil
+}
+
+// Stores returns details for each store.
+func (s *statusServer) Stores(
+	ctx context.Context, req *serverpb.StoresRequest,
+) (*serverpb.StoresResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Stores(ctx, req)
+	}
+
+	resp := &serverpb.StoresResponse{}
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		storeDetails := serverpb.StoreDetails{
+			StoreID: store.Ident.StoreID,
+		}
+
+		// Encryption Status only exists for rocksdb engines.
+		if rocksdb, ok := store.Engine().(*engine.RocksDB); ok {
+			envStats, err := rocksdb.GetEnvStats()
+			if err != nil {
+				return err
+			}
+
+			if len(envStats.EncryptionStatus) > 0 {
+				storeDetails.EncryptionStatus = envStats.EncryptionStatus
+			}
+		}
+
+		resp.Stores = append(resp.Stores, storeDetails)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // jsonWrapper provides a wrapper on any slice data type being

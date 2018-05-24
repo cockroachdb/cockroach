@@ -636,6 +636,8 @@ DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) { return db->GetStats(st
 
 DBString DBGetCompactionStats(DBEngine* db) { return db->GetCompactionStats(); }
 
+DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats) { return db->GetEnvStats(stats); }
+
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }

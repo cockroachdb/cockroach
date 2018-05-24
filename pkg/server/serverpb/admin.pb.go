@@ -113,6 +113,9 @@
 		CommandQueueRequest
 		CommandQueueResponse
 		DiagnosticsRequest
+		StoresRequest
+		StoreDetails
+		StoresResponse
 */
 package serverpb
 

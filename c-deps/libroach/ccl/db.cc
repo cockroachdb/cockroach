@@ -21,12 +21,51 @@
 #include "../rocksdbutils/env_encryption.h"
 #include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
+#include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
 #include "ctr_stream.h"
 #include "key_manager.h"
 
 using namespace cockroach;
 
 namespace cockroach {
+
+class CCLEnvStatsHandler : public EnvStatsHandler {
+ public:
+  explicit CCLEnvStatsHandler(KeyManager* store_key_manager, KeyManager* data_key_manager)
+      : store_key_manager_(store_key_manager), data_key_manager_(data_key_manager) {}
+  virtual ~CCLEnvStatsHandler() {}
+
+  virtual rocksdb::Status GetEncryptionStats(std::string* serialized_stats) override {
+    enginepbccl::EncryptionStatus enc_status;
+
+    bool has_stats = false;
+    if (this->store_key_manager_ != nullptr) {
+      has_stats = true;
+      // Transfer ownership of new key info to status proto, this frees any previous value.
+      enc_status.set_allocated_active_store_key(store_key_manager_->CurrentKeyInfo().release());
+    }
+
+    if (this->data_key_manager_ != nullptr) {
+      has_stats = true;
+      // Transfer ownership of new key info to status proto, this frees any previous value.
+      enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
+    }
+
+    if (!has_stats) {
+      return rocksdb::Status::OK();
+    }
+
+    if (!enc_status.SerializeToString(serialized_stats)) {
+      return rocksdb::Status::InvalidArgument("failed to serialize encryption status");
+    }
+    return rocksdb::Status::OK();
+  }
+
+ private:
+  // KeyManagers are needed to get key information but are not owned by the StatsHandler.
+  KeyManager* store_key_manager_;
+  KeyManager* data_key_manager_;
+};
 
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
@@ -98,11 +137,15 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
   assert(store_key != nullptr);
 
-  // Generate a new data key if needed by giving the active store key info to the data key manager.
+  // Generate a new data key if needed by giving the active store key info to the data key
+  // manager.
   status = data_key_manager->SetActiveStoreKey(std::move(store_key));
   if (!status.ok()) {
     return status;
   }
+
+  // Everything's ok: initialize a stats handler.
+  env_mgr->SetStatsHandler(new CCLEnvStatsHandler(store_key_manager, data_key_manager));
 
   return rocksdb::Status::OK();
 }

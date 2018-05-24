@@ -41,6 +41,7 @@ struct DBEngine {
   virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
+  virtual DBString GetEnvStats(DBEnvStatsResult* stats) = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) = 0;
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents) = 0;
@@ -83,6 +84,7 @@ struct DBImpl : public DBEngine {
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
+  virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);
