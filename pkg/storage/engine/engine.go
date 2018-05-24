@@ -348,7 +348,7 @@ type Stats struct {
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
 type EnvStats struct {
-	// EncryptionStatus is a serialized	enginepbccl/stats.proto::EncryptionStatus protobuf.
+	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
 }
 

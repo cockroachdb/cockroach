@@ -39,13 +39,13 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     enginepbccl::EncryptionStatus enc_status;
 
     bool has_stats = false;
-    if (this->store_key_manager_ != nullptr) {
+    if (store_key_manager_ != nullptr) {
       has_stats = true;
       // Transfer ownership of new key info to status proto, this frees any previous value.
       enc_status.set_allocated_active_store_key(store_key_manager_->CurrentKeyInfo().release());
     }
 
-    if (this->data_key_manager_ != nullptr) {
+    if (data_key_manager_ != nullptr) {
       has_stats = true;
       // Transfer ownership of new key info to status proto, this frees any previous value.
       enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
