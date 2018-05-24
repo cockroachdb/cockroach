@@ -139,10 +139,21 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.IndexIdx > 0 {
 		index = jr.Table.Indexes[jr.IndexIdx-1].Name
 	}
-	details := make([]string, 0, 2)
+	details := make([]string, 0, 4)
+	if jr.Type != sqlbase.InnerJoin {
+		details = append(details, joinTypeDetail(jr.Type))
+	}
 	details = append(details, fmt.Sprintf("%s@%s", index, jr.Table.Name))
 	if jr.LookupColumns != nil {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
+	}
+	if jr.IndexFilterExpr.Expr != "" {
+		// Note: The displayed IndexFilter is a bit confusing because its
+		// IndexedVars refer to only the index column indices. This means they don't
+		// line up with other column indices like the output columns, which refer to
+		// the columns from both sides of the join.
+		details = append(
+			details, fmt.Sprintf("IndexFilter: %s (right side only)", jr.IndexFilterExpr.Expr))
 	}
 	return "JoinReader", details
 }

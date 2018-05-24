@@ -101,7 +101,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFq8zAQhO__U5g9708sp-
 query T rowsort
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFq8zAQhO__U5g9708sp-lBJ11TSlJCb8UY1VqCWkerSjK0BL97sVVoUoibHne0386gOYJjQxt9oAjyCQQgrKBG8IFbipHDKOeltXkHWSJY5_s0yjVCy4FAHiHZ1BFI2PB_9osKEAwlbbtpbUDgPn1DMek9gVwOeHJYzB9-1M8d7UgbCovy7Dz4YA86fChjY4pvXdMxv_a-SRRTI-CSu_iL-x1b92Uurjcfv-F-mosXtq5gJws1its-yUIJVBWqJaobVCtUtxejVmdRf2lgR9Gzi3RVBeVQI5DZU245ch9aegjcTjZ53E7cJBiKKb8u87B2-WkMeAqLWbiah6tZuPwB18O_zwAAAP__2Q3qzg==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkkFr4zAQhe_7K8ScdmGWWPZmDzrpVHApSQm5tSa41pCqdTSuJENC8H8vtgtNCnHT47yZ7z2PR0dwbGhR7iiAegAJCHMoEBrPFYXAvpfHodzsQSUI1jVt7OUCoWJPoI4QbawJFCz4LzezFBAMxdLWw1iHwG38hEIstwQq6_DEWE4br8unmlZUGvKz5MweGm93pT9oY0MMb_WmZn5tm02kEDcSLqXLn6TfsnUf4fL68P433A21eGHrBDsldC_mztD-xtaRfK-IxzZJMhJSKZUv1uK3t9vnKII1JNjVhz-AsGyjElqiTlFnqP-hnqP-f3G79Gy7b462otCwC3TV1ZKuQCCzpfFhBG59RfeeqyFmLJcDNwiGQhy72Vjkbmz1H3gKy0k4nYbTSTj5Ahfdr_cAAAD__8vq-nE=
 
 
 # Ensure lookup join is planned on a multi-node cluster.
@@ -236,7 +236,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJyckTFvszAQhvfvV3y6-apgIB
 query T rowsort
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books ON books.edition = 1 WHERE books.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkc9KAzEQh-8-xTLnke6m9pJTrhVppXiTPaSboca2mZA_oJR9d9mNYCt21WNm5pvvx-QEjg2t9JEiyGdoAGEBLYIP3FGMHIZyGVqaN5A1gnU-p6HcInQcCOQJkk0HAgkrvmU_E4BgKGl7GMd6BM7pC4pJ7wjkvMezxc304ie9PdCGtKEwqy_Wgw_2qMO70jm9DHkR1jnJSjWoBFyTN_-R37N1n-7mZ_eWeT-YH5j32VevbF3FTlZKXMRBNUd1h2pxNZe4yPXLtTcUPbtIfzp33bcIZHZUfjRyDh09Bu5GTXmuR24sGIqpdOflsXSlNQQ8h5tJWEzDYhKuv8Ftf_MRAAD__zUZ4Qg=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkUFLAzEQhe_-ijAnhUg3W3sJCDkJK9JK6U32kG6GNnabWZIstJT975JdwVbsqse8mW_eTN4JHBmc6z0GkG8ggMMMSg6NpwpDIJ_koakwB5AZB-uaNia55FCRR5AniDbWCBLmdE_NJAcOBqO2dd_WcaA2fkEh6g2CnHb8bLAYH7zS6xqXqA36SXYxHhpv99oflW7jNu3LYdFGyZTgKodr5uI_5s9k3ae3-Nl7TbRLzi9Eu7Zh72QdIyeZSl9ROIOHJ1tH9Elhj0xIKYv5it16u9lGFqxBRq4-3l0sz9WUqweuZlevyC-u-CWbJYaGXMA_hZN1JQc0GxzyD9T6Cl89Vb3N8Fz0XC8YDHGoTodH4YZSWvAcFqNwPg7no3D2DS67m48AAAD__5V27x8=
 
 
 statement ok
@@ -372,7 +372,7 @@ insert into t values
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, a FROM (VALUES (1), (3)) AS v(x) LEFT JOIN t ON x = a]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLAzEQhe_-ivBOCoF2F085Ld4qYqUHL7KHsBlq7DazZBJQyv53yeagFSp6y7yZN-_LnBDY0aM9ksC8oEGvMUUeSIRjkerAxr3DrDV8mHIqcq8xcCSYE5JPI8Hg2Y6ZZLWGhqNk_bhsvFV36rpVw2sOB7lBP2twTl9bJNk9waxn_feke_ZhR9ZRXDXnaVP0Rxs_ugSNB-ZDntQb-6A4GNWV2W1O5aW79iJK8x-UHcnEQegM4_Inew1ye6qHFc5xoKfIwxJTy-3iWwRHkmq3qcUm1FYB_G5ufjW3P8z9fPUZAAD__98zpCo=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUUE9LwzAUv_spwjspBNYWTzkVYULHWKVUL9JDaB4zrssL-QOO0e8uaQ46YaK3vN_L7987gyGFO3lED-IVShg4WEcjek8uQflDoz5AFBy0sTEkeOAwkkMQZwg6TAgCXuQU0a8K4KAwSD0tivfsgd1WbHyL5uDvYJg5UAxfKj7IPYIoZv53pw1p06FU6FblpVt_sijYdv3Ys_a5X3ds0zY7SJX0UbpTHYDDlugQLXsnbRgZweqk0caQXryurkYs_xOxQ2_JeLyId738wAHVHvPBPUU34pOjcbHJY7vwFkChD3lb5qExeZUCfieXv5KrH-RhvvkMAAD__w9jqsA=
 
 query II rowsort
 SELECT x, b FROM (VALUES (2), (99)) AS v(x) LEFT JOIN t ON x = a
@@ -384,7 +384,7 @@ SELECT x, b FROM (VALUES (2), (99)) AS v(x) LEFT JOIN t ON x = a
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLAzEQhe_-ivBOCoHulp5yWrxVxEoPXmQPazLU2DWzZBIQyv53yeagFSp6y7yZN-_LnBDY0cPwTgLzjBa9xhTZkgjHItWBrfuAaTR8mHIqcq9hORLMCcmnkWDwNIyZZNVAw1Ea_Lhs3Khbdb1W9jWHo9ygnzU4p68tkoYDwTSz_nvSHfuwp8FRXLXnaS-2S9C4Zz7mSb2xD4qDUV0Z2-VUXrrbXKRo_0OxJ5k4CJ0RXP5fr0HuQPWmwjlaeoxsl5ha7hbfIjiSVLttLbahtgrgd3P7q3n9w9zPV58BAAD__wJNoe0=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9Lw0AUxO9-imVOCgttSk97CkKFlNJIiF4kh7j7qLFxX9g_oJR8d0n2oBUqets3b38zs3uCZUP79o081BMyNBKDY03es5ukdKEw71BLic4OMUxyI6HZEdQJoQs9QeGx7SP5xRIShkLb9bPjWtyK65XQL9Ee_Q2aUYJj-HLxoT0Q1HKUf0_acmcrag25RXaeVn8MpMRuc1eL8qHeVGJbFntIPOs8QGLHfIyDeOXOCrZK5BNexjCdZL6-2C77T7uK_MDW01mzy-9uJMgcKP215-g03TvWc0way5mbBUM-pG2WhsKm1VTwO5z9Cq9-wM149RkAAP__EYCogw==
 
 query II rowsort
 SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
@@ -397,7 +397,7 @@ SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFLBDEQhXt_RXiVQuB2D21SLXYn4skVNrLFmgxnvDWzZBIQjv3vkk2hJ5xol3kzb96XOSKwo4fhnQTmGS16jSmyJRGORaoDG_cB02j4MOVU5F7DciSYI5JPI8HgaRgzyaqBhqM0-HHZeK1u1eVa2dccDnKFftbgnL62SBr2BNPM-u9Jd-zDjgZHcdWepr3YLkHjnvmQJ_XGPigORnVlbJtTeenu5ixF-x-KHcnEQeiE4Pz_eg1ye6o3Fc7R0mNku8TUcrv4FsGRpNpta7EJtVUAv5vbX83rH-Z-vvgMAAD__wNKoe4=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9Lw0AUxO9-imVOCgttil72FIQKKaWREL1IDnH3UWPjvrB_QCn57pLsQStU9LZv3v5mZvcIy4Z27Rt5qCdkaCQGx5q8ZzdJ6UJh3qGWEp0dYpjkRkKzI6gjQhd6gsJj20fyiyUkDIW262fHa3ErLldCv0R78FdoRgmO4cvFh3ZPUMtR_j1pw52tqDXkFtlpWv0xkBLb9V0tyod6XYlNWewg8azzAIkt8yEO4pU7K9gqkU94GcN0kvnN2XbZf9pV5Ae2nk6anX93I0FmT-mvPUen6d6xnmPSWM7cLBjyIW2zNBQ2raaC3-HsV3j1A27Gi88AAAD__xJ9qIQ=
 
 query II rowsort
 SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
@@ -410,7 +410,7 @@ SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 300]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLAzEQhe_-ivBOCoHulp5yWrxVxEoPXmQPazLU2DWzZBIQyv53yeagFSp6y7yZN-_LnBDY0cPwTgLzjBa9xhTZkgjHItWBrfuAaTR8mHIqcq9hORLMCcmnkWDwNIyZZNVAw1Ea_Lhs3Khbdb1W9jWHo9ygnzU4p68tkoYDwTSz_nvSHfuwp8FRXLXnaS-2S9C4Zz7mSb2xD4qDUV0Z2-VUXrrbXKRo_0OxJ5k4CJ0RXP5fr0HuQPWmwjlaeoxsl5ha7hbfIjiSVLttLbahtgrgd3P7q3n9w9zPV58BAAD__wJNoe0=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9r4zAQxe_7KYY5JSCInOSkk1lIwCHES_DuZeuDKw2JGldj9AcSQr57sX1oU0hpj_NGv_f0pCs6NrRrXimg-o8Z1gI7z5pCYN9L44HCnFFJgdZ1KfZyLVCzJ1RXjDa2hAr_NW2iMJMo0FBsbDs4LuE3TOagj8mdwhTrm0BO8d0lxOZAqORNfD9pw9btqTHkZ9l9WnXpSMF2ta6g_Fut9rApix0KfNZ5RIFb5lPq4IWtA3YK8h4vnKHz2raRvIJ8AU9JyoWGhZRKqWJXwcTbwzFCsIaAXXuZosAyxR4X-fJhpewnlfYUOnaB7uo8fqxaIJkDjR8UOHlNfzzrIWYcy4EbBEMhjttsHAo3rvoLfoSzL-H5J7i-_XoLAAD__xfiuIc=
 
 query II rowsort
 SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 200
@@ -422,7 +422,7 @@ SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 200
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 3000]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFLBDEQhXt_RXiVQuB2D21SLXYn4skVNrLFmgxnvDWzZBIQjv3vkk2hJ5xol3kzb96XOSKwo4fhnQTmGS16jSmyJRGORaoDG_cB02j4MOVU5F7DciSYI5JPI8HgaRgzyaqBhqM0-HHZeK1u1eVa2dccDnKFftbgnL62SBr2BNPM-u9Jd-zDjgZHcdWepr3YLkHjnvmQJ_XGPigORnVlbJtTeenu5ixF-x-KHcnEQeiE4Pz_eg1ye6o3Fc7R0mNku8TUcrv4FsGRpNpta7EJtVUAv5vbX83rH-Z-vvgMAAD__wNKoe4=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9rwkAQxe_9FMOcFBbcqL3sKRQUImKKpL20OaTZQbemO2H_gCJ-95Lk0FqwtMd5s7_39u2e0bKmTfVBHtULJlgKbB3X5D27ThoOZPqISgo0to2hk0uBNTtCdcZgQkOo8LlqIvmJRIGaQmWa3nEODzCaQr2P9uDHWF4EcgxfLj5UO0IlL-LvSSs2dkuVJjdJrtOKU0sK1otlAflTsdjCKs82KPCtTgMKXDMfYgvvbCywVZB2eGY1HZemCeQUpHN4jVLOaphJKZVS2aaAkTO7fQBvNAHb5jRGgXkMHS_S-5udkv902pJv2Xq66nP7tUqBpHc0_JDn6Gp6dFz3McOY91wvaPJh2CbDkNlh1V3wO5z8Ck9_wOXl7jMAAP__qcy4uQ==
 
 query II rowsort
 SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 2000
@@ -434,7 +434,7 @@ SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 200
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b WHERE d < 2000]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9LAzEQxe9-ivBOCoFmq73ktHgQVqSVIl50D2sy1Ng1s-QPCGW_u-zmoBUqepw37837JQd4trTu3ilCP6FCKzEENhQjh0kqhsZ-QCsJ54ecJrmVMBwI-oDkUk_QeOz6THGhIGEpda6fL16Ja3G-FOY1-328QDtKcE5fV2LqdgStRvn3plt2fkudpbCojtteTJ0gcce8z4N4Y-cFey3qyXbj-kRBi3olnrNSl0YslVJa62b9AIlNTpNR1quTkNV_ILcUB_aRjgBPP7-VILuj8uWRczB0H9jMNWXczLlZsBRT2VZlaHxZTYDfw9Wv4eWPcDuefQYAAP__3zip9Q==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9Lw0AQxe9-iuWdFBa6qfaypyC0kFIaKdGL5hA3Q42NO2H_gFLy3SXJQStU9Dhv5vfeY_cIyzVtqzfy0I9IUEp0jg15z26QpoOsfodWEo3tYhjkUsKwI-gjQhNagsZD1UbyMwWJmkLVtKPjjbgVl3NhXqI9-CuUvQTH8OXiQ7UnaNXLvyetubE7qmpys-Q0rfjoSIvNclWI_L5Y7sQ6z7aQeDZpgMSG-RA78cqNFWy1SAd81bSBnBbpQjxFpa6NmCultNbZtoBEHsNwKNPF2fLJf8rvyHdsPZ0UP_8spQTVe5q-wnN0hu4cmzFmGvORG4WafJi2yTRkdloNBb_Dya_w_Adc9hefAQAA__-6pLCL
 
 query II rowsort
 SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b WHERE d < 2000
