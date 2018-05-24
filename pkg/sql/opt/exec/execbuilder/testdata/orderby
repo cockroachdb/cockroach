@@ -1,26 +1,23 @@
-# tests adapted from logictest -- order_by
+# LogicTest: opt distsql-opt
 
-exec-raw
+statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
   c BOOLEAN
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO t VALUES (1, 9, true), (2, 8, false), (3, 7, NULL)
-----
 
-exec
+query B
 SELECT c FROM t ORDER BY c
 ----
-c:bool
 NULL
 false
 true
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM t ORDER BY c
 ----
 sort       ·      ·          (c)  +c
@@ -29,23 +26,21 @@ sort       ·      ·          (c)  +c
 ·          table  t@primary  ·    ·
 ·          spans  ALL        ·    ·
 
-exec
+query B
 SELECT c FROM t ORDER BY c DESC
 ----
-c:bool
 true
 false
 NULL
 
-exec
+query II
 SELECT a, b FROM t ORDER BY b
 ----
-a:int  b:int
 3      7
 2      8
 1      9
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b
 ----
 sort       ·      ·          (a, b)  +b
@@ -54,15 +49,14 @@ sort       ·      ·          (a, b)  +b
 ·          table  t@primary  ·       ·
 ·          spans  ALL        ·       ·
 
-exec
+query II
 SELECT a, b FROM t ORDER BY b DESC
 ----
-a:int  b:int
-1      9
-2      8
-3      7
+1 9
+2 8
+3 7
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC
 ----
 sort       ·      ·          (a, b)  -b
@@ -72,15 +66,14 @@ sort       ·      ·          (a, b)  -b
 ·          spans  ALL        ·       ·
 
 
-exec
+query I
 SELECT a FROM t ORDER BY 1 DESC
 ----
-a:int
 3
 2
 1
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit           ·      ·          (a, b)  +b
@@ -91,15 +84,14 @@ limit           ·      ·          (a, b)  +b
 ·               table  t@primary  ·       ·
 ·               spans  ALL        ·       ·
 
-exec
+query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 ----
-a:int  b:int
-1      9
-2      8
+1  9
+2  8
 
 # TODO(radu): this does not work. Unclear if we want to support it or not.
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) #SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
 #----
 #limit                     0  limit     ·         ·                (c)                 weak-key(c)
@@ -121,15 +113,14 @@ a:int  b:int
 #true
 #false
 
-exec
+query I
 SELECT b FROM t ORDER BY a DESC
 ----
-b:int
 7
 8
 9
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC
 ----
 render          ·         ·          (b)     ·
@@ -140,7 +131,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
 render     ·         ·          (b)     ·
@@ -150,7 +141,7 @@ render     ·         ·          (b)     ·
 ·          spans     ALL        ·       ·
 ·          limit     1          ·       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 render          ·         ·          (b)     ·
@@ -161,7 +152,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 render          ·         ·          (b)     ·
@@ -172,7 +163,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -181,7 +172,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -190,7 +181,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -199,7 +190,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -208,50 +199,44 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec-raw
+statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
-----
 
-exec
+query II
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
-a:int  b:int
 3      7
 4      7
 5      7
 
-exec
+query II
 SELECT a, b FROM t ORDER BY b, a DESC
 ----
-a:int  b:int
 5      7
 4      7
 3      7
 2      8
 1      9
 
-exec
+query III
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
-a:int  b:int  ab:int
 5      7      12
 4      7      11
 3      7      10
 
-exec
+query I
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
-a:int
 5
 4
 1
 2
 3
 
-exec
+query I
 SELECT a FROM t ORDER BY (((a)))
 ----
-a:int
 1
 2
 3
@@ -298,7 +283,7 @@ a:int
 
 # Check that sort is skipped if the ORDER BY clause is constant.
 # TODO(radu): we don't optimize constant columns yet.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY 1+2
 ----
 render               ·         ·          (a, b, c)                       ·
@@ -316,7 +301,7 @@ render               ·         ·          (a, b, c)                       ·
 ·                    table     t@primary  ·                               ·
 ·                    spans     ALL        ·                               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1, * FROM t ORDER BY 1
 ----
 sort            ·         ·          ("1", a, b, c)  +"1"
@@ -330,7 +315,7 @@ sort            ·         ·          ("1", a, b, c)  +"1"
 ·               table     t@primary  ·               ·
 ·               spans     ALL        ·               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY length('abc')
 ----
 render               ·         ·              (a, b, c)                       ·
@@ -349,7 +334,7 @@ render               ·         ·              (a, b, c)                       
 ·                    spans     ALL            ·                               ·
 
 # Check that the sort key reuses the existing render.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
 sort            ·         ·          ("b + 2")  +"b + 2"
@@ -361,7 +346,7 @@ sort            ·         ·          ("b + 2")  +"b + 2"
 ·               spans     ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 sort            ·         ·          (y)  +y
@@ -373,7 +358,7 @@ sort            ·         ·          (y)  +y
 ·               spans     ALL        ·    ·
 
 # Check that the sort reuses a render behind a rename properly.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort            ·         ·          (y)  +y
@@ -384,7 +369,7 @@ sort            ·         ·          (y)  +y
 ·               table     t@primary  ·    ·
 ·               spans     ALL        ·    ·
 
-exec-raw
+statement ok
 CREATE TABLE abc (
   a INT,
   b INT,
@@ -396,20 +381,17 @@ CREATE TABLE abc (
   FAMILY (a, b, c),
   FAMILY (d)
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO abc
 SELECT x, (x-1)*3 + y, 4 - x, to_english((x-1)*3+y)
 FROM
   GENERATE_SERIES(1, 3) AS x(x),
   GENERATE_SERIES(1, 3) AS y(y)
-----
 
-exec
+query T
 SELECT d FROM abc ORDER BY LOWER(d)
 ----
-d:string
 eight
 five
 four
@@ -420,28 +402,27 @@ six
 three
 two
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
 scan  ·      ·            (a, b, c, d)  +a
 ·     table  abc@primary  ·             ·
 ·     spans  ALL          ·             ·
 
-exec partialsort=(1)
+query IIIT partialsort(1)
 SELECT * FROM abc ORDER BY a
 ----
-a:int  b:int  c:int  d:string
-1      1      3      one
-1      2      3      two
-1      3      3      three
-2      4      2      four
-2      5      2      five
-2      6      2      six
-3      7      1      seven
-3      8      1      eight
-3      9      1      nine
+1  1  3  one
+1  2  3  two
+1  3  3  three
+2  4  2  four
+2  5  2  five
+2  6  2  six
+3  7  1  seven
+3  8  1  eight
+3  9  1  nine
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a, c
 ----
 sort       ·      ·            (a, b, c, d)  +a,+c
@@ -450,66 +431,63 @@ sort       ·      ·            (a, b, c, d)  +a,+c
 ·          table  abc@primary  ·             ·
 ·          spans  ALL          ·             ·
 
-exec partialsort=(1,3)
+query IIIT partialsort(1,3)
 SELECT * FROM abc ORDER BY a, c
 ----
-a:int  b:int  c:int  d:string
-1      1      3      one
-1      2      3      two
-1      3      3      three
-2      4      2      four
-2      5      2      five
-2      6      2      six
-3      7      1      seven
-3      8      1      eight
-3      9      1      nine
+1  1  3  one
+1  2  3  two
+1  3  3  three
+2  4  2  four
+2  5  2  five
+2  6  2  six
+3  7  1  seven
+3  8  1  eight
+3  9  1  nine
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
 scan  ·      ·       (a, b)  +b,+a
 ·     table  abc@ba  ·       ·
 ·     spans  ALL     ·       ·
 
-exec
+query II
 SELECT a, b FROM abc ORDER BY b, a
 ----
-a:int  b:int
-1      1
-1      2
-1      3
-2      4
-2      5
-2      6
-3      7
-3      8
-3      9
+1  1
+1  2
+1  3
+2  4
+2  5
+2  6
+3  7
+3  8
+3  9
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 scan  ·      ·       (a, b, c)  +b,+a,+c
 ·     table  abc@ba  ·          ·
 ·     spans  ALL     ·          ·
 
-exec
+query III
 SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-a:int  b:int  c:int
-1      1      3
-1      2      3
-1      3      3
-2      4      2
-2      5      2
-2      6      2
-3      7      1
-3      8      1
-3      9      1
+1  1  3
+1  2  3
+1  3  3
+2  4  2
+2  5  2
+2  6  2
+3  7  1
+3  8  1
+3  9  1
 
 # We use the WHERE condition to force the use of index ba.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
 render               ·         ·            (a, b, c)     ·
@@ -524,19 +502,18 @@ render               ·         ·            (a, b, c)     ·
 ·                    table     abc@primary  ·             ·
 ·                    spans     ALL          ·             ·
 
-exec
+query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
-a:int  b:int  c:int
-2      5      2
-2      6      2
-3      7      1
-3      8      1
-3      9      1
+2  5  2
+2  6  2
+3  7  1
+3  8  1
+3  9  1
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
 sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
@@ -547,17 +524,16 @@ sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
 ·               table   abc@primary  ·             ·
 ·               spans   ALL          ·             ·
 
-exec
+query IIIT
 SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
-a:int  b:int  c:int  d:string
-2      5      2      five
-2      6      2      six
-3      7      1      seven
-3      8      1      eight
-3      9      1      nine
+2  5  2  five
+2  6  2  six
+3  7  1  seven
+3  8  1  eight
+3  9  1  nine
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 render     ·         ·       (a, b)     ·
@@ -567,21 +543,20 @@ render     ·         ·       (a, b)     ·
 ·          table     abc@bc  ·          ·
 ·          spans     ALL     ·          ·
 
-exec
+query II
 SELECT a, b FROM abc ORDER BY b, c
 ----
-a:int  b:int
-1      1
-1      2
-1      3
-2      4
-2      5
-2      6
-3      7
-3      8
-3      9
+1  1
+1  2
+1  3
+2  4
+2  5
+2  6
+3  7
+3  8
+3  9
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY c, b
 ----
 render          ·         ·            (a, b)     ·
@@ -593,21 +568,20 @@ render          ·         ·            (a, b)     ·
 ·               table     abc@primary  ·          ·
 ·               spans     ALL          ·          ·
 
-exec
+query II
 SELECT a, b FROM abc ORDER BY c, b
 ----
-a:int  b:int
-3      7
-3      8
-3      9
-2      4
-2      5
-2      6
-1      1
-1      2
-1      3
+3  7
+3  8
+3  9
+2  4
+2  5
+2  6
+1  1
+1  2
+1  3
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 ----
 render     ·         ·       (a, b)     ·
@@ -617,21 +591,20 @@ render     ·         ·       (a, b)     ·
 ·          table     abc@bc  ·          ·
 ·          spans     ALL     ·          ·
 
-exec
+query II
 SELECT a, b FROM abc ORDER BY b, c, a
 ----
-a:int  b:int
-1      1
-1      2
-1      3
-2      4
-2      5
-2      6
-3      7
-3      8
-3      9
+1  1
+1  2
+1  3
+2  4
+2  5
+2  6
+3  7
+3  8
+3  9
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 render          ·         ·            (a, b)     ·
@@ -643,21 +616,20 @@ render          ·         ·            (a, b)     ·
 ·               table     abc@primary  ·          ·
 ·               spans     ALL          ·          ·
 
-exec
+query II
 SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-a:int  b:int
-1      1
-1      2
-1      3
-2      4
-2      5
-2      6
-3      7
-3      8
-3      9
+1  1
+1  2
+1  3
+2  4
+2  5
+2  6
+3  7
+3  8
+3  9
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc ORDER BY a DESC
 ----
 sort       ·      ·            (a)  -a
@@ -666,10 +638,9 @@ sort       ·      ·            (a)  -a
 ·          table  abc@primary  ·    ·
 ·          spans  ALL          ·    ·
 
-exec
+query I
 SELECT a FROM abc ORDER BY a DESC
 ----
-a:int
 3
 3
 3
@@ -680,16 +651,14 @@ a:int
 1
 1
 
-exec
+query I
 SELECT a FROM abc ORDER BY a DESC LIMIT 1
 ----
-a:int
 3
 
-exec
+query I
 SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
-a:int
 3
 3
 2
@@ -699,7 +668,7 @@ a:int
 1
 1
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 sort            ·         ·       (c)     +c
@@ -710,7 +679,7 @@ sort            ·         ·       (c)     +c
 ·               table     abc@bc  ·       ·
 ·               spans     /2-/3   ·       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 sort            ·         ·       (c)     -c
@@ -722,7 +691,7 @@ sort            ·         ·       (c)     -c
 ·               spans     /2-/3   ·       ·
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
 render          ·         ·            (b, c)     ·
@@ -734,20 +703,18 @@ render          ·         ·            (b, c)     ·
 ·               table     abc@primary  ·          ·
 ·               spans     /1-/2        ·          ·
 
-exec-raw
+statement ok
 CREATE TABLE bar (
     id INT PRIMARY KEY,
     baz STRING,
     extra INT,
     UNIQUE INDEX i_bar (baz) STORING (extra)
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO bar VALUES (0, NULL, 10), (1, NULL, 5)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, extra
 ----
 sort       ·      ·            (id, baz, extra)  +baz,+extra
@@ -758,14 +725,13 @@ sort       ·      ·            (id, baz, extra)  +baz,+extra
 
 # Here rowsort is needed because a unique index still allows duplicate NULL
 # values. It's not correct to sort on baz alone, even though it is "unique".
-exec
+query ITI
 SELECT * FROM bar ORDER BY baz, extra
 ----
-id:int  baz:string  extra:int
-1       NULL        5
-0       NULL        10
+1  NULL  5
+0  NULL  10
 
-exec-raw
+statement ok
 CREATE TABLE abcd (
   a INT PRIMARY KEY,
   b INT,
@@ -773,38 +739,33 @@ CREATE TABLE abcd (
   d INT,
   INDEX abc (a, b, c)
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
-----
 
 # Verify that render expressions after sorts perform correctly. We need the
 # rowsort as we're attempting to force a RENDER expression after the first
 # ORDER BY, to ensure it renders correctly, but the outer query doesn't
 # guarantee that it will preserve the order.
 
-exec rowsort
+query I rowsort
 SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
 ----
-a + b:int
 5
 5
 5
 8
 
-exec rowsort
+query I rowsort
 SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
-b + d:int
+7
 4
 4
 5
-7
 
 # The following tests verify we recognize that sorting is not necessary
-# TODO(andyk): Need to actually recognize that sorting is not necessary.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY c
 ----
 sort       ·      ·          (a, b, c)  +c
@@ -813,7 +774,7 @@ sort       ·      ·          (a, b, c)  +c
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 sort       ·      ·          (a, b, c)  +c,+b,+a
@@ -822,7 +783,7 @@ sort       ·      ·          (a, b, c)  +c,+b,+a
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -831,7 +792,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 sort       ·      ·          (a, b, c)  +b,+c,+a
@@ -840,24 +801,21 @@ sort       ·      ·          (a, b, c)  +b,+c,+a
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec-raw
+statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
-----
 
-exec-raw
+statement ok
 INSERT INTO nan VALUES (1, 0/0), (2, -1), (3, 1), (4, 0/0)
-----
 
-exec
+query R
 SELECT x FROM nan ORDER BY x
 ----
-x:float
 NaN
 NaN
--1.0
-1.0
+-1
+1
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort         ·              ·                 (x)  +x
@@ -868,7 +826,7 @@ sort         ·              ·                 (x)  +x
 ·            row 1, expr 0  'b'               ·    ·
 ·            row 2, expr 0  'c'               ·    ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 values  ·              ·                 (x)  ·
@@ -878,14 +836,14 @@ values  ·              ·                 (x)  ·
 ·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): ordinality not supported
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) #SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 #----
 #ordinality   ·     ·
 # └── values  ·     ·
 #·            size  1 column, 3 rows
 #
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 #----
 #sort              ·      ·
@@ -895,7 +853,7 @@ values  ·              ·                 (x)  ·
 #·                 size   1 column, 3 rows
 #
 # Once ordinality is supported these test cases should have a sort node.
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
@@ -904,7 +862,7 @@ values  ·              ·                 (x)  ·
 #·       0  ·       row 1, expr 0  'b'               ·    ·
 #·       0  ·       row 2, expr 0  'c'               ·    ·
 #
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
@@ -915,7 +873,7 @@ values  ·              ·                 (x)  ·
 
 # TODO(radu): DML statements not supported yet.
 ## Check that the ordering of the source does not propagate blindly to RETURNING.
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) #INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 #----
 #insert              0  insert    ·     ·        (b)     ·
@@ -923,7 +881,7 @@ values  ·              ·                 (x)  ·
 # └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
 #      └── emptyrow  2  emptyrow  ·     ·        ()      ·
 #
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 #----
 #delete     0  delete  ·      ·          (b)        ·
@@ -932,7 +890,7 @@ values  ·              ·                 (x)  ·
 #·          1  ·       table  t@primary  ·          ·
 #·          1  ·       spans  /3-/3/#    ·          ·
 #
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 #----
 #update          0  update  ·      ·          (b)                ·
@@ -943,7 +901,7 @@ values  ·              ·                 (x)  ·
 #·               2  ·       table  t@primary  ·                  ·
 #·               2  ·       spans  ALL        ·                  ·
 
-exec-raw
+statement ok
 CREATE TABLE uvwxyz (
   u INT,
   v INT,
@@ -954,11 +912,10 @@ CREATE TABLE uvwxyz (
   INDEX ywxz (y, w, x, z, u, v),
   INDEX ywz (y, w, z, x)
 )
-----
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
 render          ·         ·            (y, w, x)  ·
@@ -971,7 +928,7 @@ render          ·         ·            (y, w, x)  ·
 ·               table     uvwxyz@ywxz  ·          ·
 ·               spans     /1-/2        ·          ·
 
-exec-raw
+statement ok
 CREATE TABLE blocks (
   block_id  INT,
   writer_id STRING,
@@ -979,12 +936,11 @@ CREATE TABLE blocks (
   raw_bytes BYTES,
   PRIMARY KEY (block_id, writer_id, block_num)
 )
-----
 
 # TODO(radu): LIMIT not supported yet.
 ## Test that ordering goes "through" a renderNode that has a duplicate render of
 ## an order-by column (#13696).
-#exec hide-colnames nodist
+#query TTTTT
 #EXPLAIN (VERBOSE) #SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 #----
 #render          0  render  ·         ·                   (block_id, writer_id, block_num, block_id)                                      ·

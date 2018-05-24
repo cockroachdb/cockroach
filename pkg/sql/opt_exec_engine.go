@@ -469,7 +469,6 @@ func (ee *execEngine) ConstructLimit(
 	}
 	return &limitNode{
 		plan:       plan,
-		evaluated:  true,
 		countExpr:  limitVal,
 		offsetExpr: offsetVal,
 	}, nil

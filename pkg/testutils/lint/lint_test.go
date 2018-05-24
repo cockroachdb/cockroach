@@ -851,7 +851,10 @@ func TestLint(t *testing.T) {
 	t.Run("TestLogicTestsLint", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
-			pkgDir, "git", "ls-files", "sql/logictest/testdata/logic_test/",
+			pkgDir, "git", "ls-files",
+			"sql/logictest/testdata/logic_test/",
+			"sql/logictest/testdata/planner_test/",
+			"sql/opt/exec/execbuilder/testdata/",
 		)
 		if err != nil {
 			t.Fatal(err)

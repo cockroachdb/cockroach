@@ -1,66 +1,23 @@
-# Tests that verify we retrieve the stats correctly.
+# LogicTest: distsql-opt
 
-exec-raw
+# Tests that verify we retrieve the stats correctly. Note that we can't create
+# statistics if distsql mode is OFF.
+
+statement ok
 CREATE TABLE a (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
-----
-
-build
-SELECT * FROM a
-----
-project
- ├── columns: u:1(int) v:2(int)
- ├── stats: [rows=1000]
- ├── cost: 1000.00
- └── scan a
-      ├── columns: u:1(int) v:2(int) rowid:3(int!null)
-      ├── stats: [rows=1000]
-      ├── cost: 1000.00
-      └── keys: (3)
 
 # Create a new table to avoid depending on the asynchronous stat cache
 # invalidation.
-exec-raw
+statement ok
 CREATE TABLE b (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
 INSERT INTO b VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
-----
 
-exec-raw
+statement ok
 CREATE STATISTICS u ON u FROM b;
 CREATE STATISTICS v ON v FROM b
-----
-
-build
-SELECT * FROM b
-----
-project
- ├── columns: u:1(int) v:2(int)
- ├── stats: [rows=8]
- ├── cost: 8.00
- └── scan b
-      ├── columns: u:1(int) v:2(int) rowid:3(int!null)
-      ├── stats: [rows=8]
-      ├── cost: 8.00
-      └── keys: (3)
 
 # Verify we scan index v which has the more selective constraint.
-opt
-SELECT * FROM b WHERE u = 1 AND v = 1
-----
-select
- ├── columns: u:1(int!null) v:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
- ├── cost: 1.01
- ├── scan b@b_v_idx
- │    ├── columns: u:1(int) v:2(int)
- │    ├── constraint: /2/3: [/1 - /1]
- │    ├── stats: [rows=1, distinct(2)=1]
- │    └── cost: 1.00
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: b.u [type=int, outer=(1)]
-           └── const: 1 [type=int]
-
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
 filter     ·       ·          (u, v)  ·

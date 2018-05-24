@@ -1,35 +1,35 @@
-exec-raw
-CREATE TABLE xy (x INT PRIMARY KEY, y INT)
-----
+# LogicTest: opt
 
-exec nodist
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+query TTT colnames
 EXPLAIN SELECT * FROM xy
 ----
-Tree:string  Field:string  Description:string
-scan         ·             ·
-·            table         xy@primary
-·            spans         ALL
+Tree  Field  Description
+scan  ·      ·
+·     table  xy@primary
+·     spans  ALL
 
-exec nodist
+query TTTTT colnames
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
-Tree:string  Field:string  Description:string  Columns:string  Ordering:string
-scan         ·             ·                   (x int, y int)  ·
-·            table         xy@primary          ·               ·
-·            spans         ALL                 ·               ·
+Tree  Field  Description  Columns         Ordering
+scan  ·      ·            (x int, y int)  ·
+·     table  xy@primary   ·               ·
+·     spans  ALL          ·               ·
 
-exec nodist
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
-Tree:string  Field:string  Description:string  Columns:string  Ordering:string
-scan         ·             ·                   (x, y)          ·
-·            table         xy@primary          ·               ·
-·            spans         ALL                 ·               ·
+Tree  Field  Description  Columns  Ordering
+scan  ·      ·            (x, y)   ·
+·     table  xy@primary   ·        ·
+·     spans  ALL          ·        ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT x, x, y FROM xy
 ----
-Tree:string  Field:string  Description:string  Columns:string  Ordering:string
 render       ·             ·                   (x, x, y)       ·
  │           render 0      x                   ·               ·
  │           render 1      x                   ·               ·
@@ -38,20 +38,18 @@ render       ·             ·                   (x, x, y)       ·
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
-Tree:string  Field:string  Description:string  Columns:string  Ordering:string
 sort         ·             ·                   (x, y)          +y
  │           order         +y                  ·               ·
  └── scan    ·             ·                   (x, y)          ·
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y
 ----
-Tree:string     Field:string  Description:string  Columns:string  Ordering:string
 render          ·             ·                   (x, x, y)       ·
  │              render 0      x                   ·               ·
  │              render 1      x                   ·               ·
@@ -62,10 +60,9 @@ render          ·             ·                   (x, x, y)       ·
 ·               table         xy@primary          ·               ·
 ·               spans         ALL                 ·               ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
-Tree:string  Field:string   Description:string  Columns:string      Ordering:string
 join         ·              ·                   (x, y, u, v)        ·
  │           type           inner               ·                   ·
  │           equality       (x) = (column1)     ·                   ·
@@ -79,20 +76,18 @@ join         ·              ·                   (x, y, u, v)        ·
 ·            row 1, expr 0  3                   ·                   ·
 ·            row 1, expr 1  4                   ·                   ·
 
-exec nodist
+query TT
 SELECT "Tree", "Columns" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
 ----
-Tree:string  Columns:string
 sort         (x, y)
  │           ·
  └── scan    (x, y)
 ·            ·
 ·            ·
 
-exec nodist
+query IT
 SELECT "Level", "Type" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
 ----
-Level:int  Type:string
 0          sort
 0          ·
 1          scan
