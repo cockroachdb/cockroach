@@ -1,6 +1,7 @@
 import React from "react";
 
 import * as protos from "src/js/protos";
+import * as protosCCL from "src/js/protos_ccl";
 
 interface EncryptionStatusProps {
   store: protos.cockroach.server.serverpb.StoreDetails$Properties;
@@ -17,8 +18,19 @@ export default class EncryptionStatus extends React.Component<EncryptionStatusPr
     );
   }
 
-  render() {
+  render(): React.ReactElement<any> {
     const { store } = this.props;
-    return this.renderSimpleRow("Encryption Status", store.encryption_status.toString());
+    const rawStatus = store.encryption_status;
+    if (rawStatus == null) {
+      return null;
+    }
+
+    try {
+      const decodedStatus = protosCCL.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(rawStatus);
+      return this.renderSimpleRow("Encryption Status", decodedStatus.toJSON().toString());
+    } catch (e) {
+      console.log("Error decoding protobuf: ", e);
+      return null;
+    }
   }
 }
