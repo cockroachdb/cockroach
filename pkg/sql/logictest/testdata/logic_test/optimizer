@@ -4,6 +4,9 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)
 
 statement ok
+CREATE VIEW tview AS SELECT k, v FROM t
+
+statement ok
 INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
 
 statement ok
@@ -85,6 +88,9 @@ INSERT INTO test (k, v) VALUES (5, 50)
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: aggregates with FILTER are not supported yet
 SELECT COUNT(*) FILTER (WHERE v>10) FROM t
+
+query error pq: views and sequences are not supported
+SELECT * FROM tview
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL

@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -60,6 +61,12 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		}
 		tab, err := b.catalog.FindTable(b.ctx, tn)
 		if err != nil {
+			pgerr, ok := err.(*pgerror.Error)
+			if ok && pgerr.Code == pgerror.CodeWrongObjectTypeError {
+				// Remap wrong object error to unimplemented error.
+				panic(unimplementedf("views and sequences are not supported"))
+			}
+
 			panic(builderError{err})
 		}
 
@@ -266,7 +273,7 @@ func (b *Builder) buildSelectClause(
 	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.
-	outScope = b.buildDistinct(sel.Distinct, outScope)
+	outScope = b.buildDistinct(sel.Distinct, sel.DistinctOn, outScope)
 	return outScope
 }
 
