@@ -16,17 +16,25 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // buildDistinct builds a set of memo groups that represent a DISTINCT
 // expression if distinct is true. If distinct is false, we just return
-// `inScope`.
+// `inScope`. If distinctOn is not empty, then this is a DISTINCT ON expression
+// that performs the distinct operation on a subset of columns.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildDistinct(distinct bool, inScope *scope) (outScope *scope) {
+func (b *Builder) buildDistinct(
+	distinct bool, distinctOn tree.DistinctOn, inScope *scope,
+) (outScope *scope) {
 	if !distinct {
 		return inScope
+	}
+
+	if len(distinctOn) > 0 {
+		panic(unimplementedf("DISTINCT ON is not supported"))
 	}
 
 	outScope = inScope.replace()
