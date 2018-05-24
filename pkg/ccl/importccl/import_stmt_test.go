@@ -169,7 +169,7 @@ d
 			name:   "unexpected number of columns",
 			create: `i int`,
 			typ:    "MYSQLOUTFILE",
-			data:   "1\t2\n",
+			data:   "1\t2",
 			err:    "row 1: expected 1 columns, got 2",
 		},
 		{

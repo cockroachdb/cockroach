@@ -65,6 +65,15 @@ func (d *mysqloutfileReader) readFile(
 	var readingField bool
 
 	reader := bufio.NewReaderSize(input, 1024*64)
+	addRow := func() error {
+		if expected := d.csvInputReader.expectedCols; expected != len(row) {
+			return makeRowErr(inputName, int64(count)+1, "expected %d columns, got %d: %#v", expected, len(row), row)
+		}
+		d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
+		count++
+		row = make([]string, 0, len(row))
+		return nil
+	}
 
 	for {
 		c, w, err := reader.ReadRune()
@@ -78,9 +87,14 @@ func (d *mysqloutfileReader) readFile(
 			if readingField {
 				return makeRowErr(inputName, int64(count)+1, "unmatched field enclosure")
 			}
+			if len(field) > 0 {
+				row = append(row, string(field))
+			}
 			// flush the last row if we have one.
 			if len(row) > 0 {
-				d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
+				if err := addRow(); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -158,12 +172,9 @@ func (d *mysqloutfileReader) readFile(
 			field = field[:0]
 
 			if c == d.opts.RowSeparator {
-				if expected := d.csvInputReader.expectedCols; expected != len(row) {
-					return makeRowErr(inputName, int64(count)+1, "expected %d columns, got %d: %#v", expected, len(row), row)
+				if err := addRow(); err != nil {
+					return err
 				}
-				d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
-				count++
-				row = make([]string, 0, len(row))
 			}
 			continue
 		}
