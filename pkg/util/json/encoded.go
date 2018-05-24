@@ -648,13 +648,13 @@ func (j *jsonEncoded) Concat(other JSON) (JSON, error) {
 	return decoded.Concat(other)
 }
 
-// RemoveKey implements the JSON interface.
-func (j *jsonEncoded) RemoveKey(key string) (JSON, bool, error) {
+// RemoveString implements the JSON interface.
+func (j *jsonEncoded) RemoveString(s string) (JSON, bool, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
 	}
-	return decoded.RemoveKey(key)
+	return decoded.RemoveString(s)
 }
 
 func (j *jsonEncoded) RemovePath(path []string) (JSON, bool, error) {

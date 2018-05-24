@@ -1020,7 +1020,7 @@ func TestJSONDeepSet(t *testing.T) {
 	}
 }
 
-func TestJSONRemoveKey(t *testing.T) {
+func TestJSONRemoveString(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
 		key      string
@@ -1061,7 +1061,7 @@ func TestJSONRemoveKey(t *testing.T) {
 
 		for _, tc := range tests {
 			runDecodedAndEncoded(t, k+`-`+tc.key, left, func(t *testing.T, j JSON) {
-				result, ok, err := j.RemoveKey(tc.key)
+				result, ok, err := j.RemoveString(tc.key)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -1902,7 +1902,7 @@ func TestJSONRemovePath(t *testing.T) {
 			{path: []string{}, ok: false, expected: `{"foo": 1}`},
 			{path: []string{"bar"}, ok: false, expected: `{"foo": 1}`},
 		},
-		`{"foo": {"bar": 1, "baz": 2}}}`: {
+		`{"foo": {"bar": 1, "baz": 2}}`: {
 			{path: []string{}, ok: false, expected: `{"foo": {"bar": 1, "baz": 2}}`},
 			{path: []string{"foo"}, ok: true, expected: `{}`},
 			{path: []string{"foo", "bar"}, ok: true, expected: `{"foo": {"baz": 2}}`},
@@ -1932,8 +1932,8 @@ func TestJSONRemovePath(t *testing.T) {
 			{path: []string{"0", "0"}, ok: true, expected: `[[]]`},
 		},
 		`[1]`: {
-			{path: []string{"foo"}, ok: false, expected: `[1]`},
-			{path: []string{""}, ok: false, expected: `[1]`},
+			{path: []string{"foo"}, ok: false, expected: "", errMsg: "a path element is not an integer: foo"},
+			{path: []string{""}, ok: false, expected: "", errMsg: "a path element is not an integer: "},
 			{path: []string{"0"}, ok: true, expected: `[]`},
 			{path: []string{"0", "0"}, ok: false, expected: `[1]`},
 		},

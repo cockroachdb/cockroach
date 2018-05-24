@@ -502,6 +502,31 @@ SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 {"foo": {}}
 
 query T
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo']
+----
+{}
+
+query T
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['bar']
+----
+{"foo": {"bar": 1}}
+
+query T
+SELECT '{"foo": {"bar": 1}, "one": 1, "two": 2}'::JSONB #- ARRAY['one']
+----
+{"foo": {"bar": 1}, "two": 2}
+
+query T
+SELECT '{}'::JSONB #- ARRAY['foo']
+----
+{}
+
+query T
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['']
+----
+{"foo": {"bar": 1}}
+
+query T
 SELECT '{"a": "b"}'::JSONB::STRING
 ----
 {"a": "b"}
@@ -510,3 +535,69 @@ query T
 SELECT CAST('{"a": "b"}'::JSONB AS STRING)
 ----
 {"a": "b"}
+
+query T
+SELECT '["1", "2", "3"]'::JSONB - '1'
+----
+["2", "3"]
+
+query T
+SELECT '["1", "2", "1", "2", "3"]'::JSONB - '2'
+----
+["1", "1", "3"]
+
+query T
+SELECT '["1", "2", "3"]'::JSONB - '4'
+----
+["1", "2", "3"]
+
+query T
+SELECT '[]'::JSONB - '1'
+----
+[]
+
+query T
+SELECT '["1", "2", "3"]'::JSONB - ''
+----
+["1", "2", "3"]
+
+query T
+SELECT '[1, "1", 1.0]'::JSONB - '1'
+----
+[1, 1.0]
+
+query T
+SELECT '[1, 2, 3]'::JSONB #- ARRAY['0']
+----
+[2, 3]
+
+query T
+SELECT '[1, 2, 3]'::JSONB #- ARRAY['3']
+----
+[1, 2, 3]
+
+query T
+SELECT '[]'::JSONB #- ARRAY['0']
+----
+[]
+
+statement error pgcode 22P02 a path element is not an integer: foo
+SELECT '["foo"]'::JSONB #- ARRAY['foo']
+
+query T
+SELECT '{"a": ["foo"]}'::JSONB #- ARRAY['a', '0']
+----
+{"a": []}
+
+query T
+SELECT '{"a": ["foo", "bar"]}'::JSONB #- ARRAY['a', '1']
+----
+{"a": ["foo"]}
+
+query T
+SELECT '{"a": []}'::JSONB #- ARRAY['a', '0']
+----
+{"a": []}
+
+statement error pgcode 22P02 a path element is not an integer: foo
+SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
