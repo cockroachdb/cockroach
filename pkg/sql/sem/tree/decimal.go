@@ -22,6 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
+// DecimalCtxType for different decimal precision.
+type DecimalCtxType int
+
+const (
+	// Default stand for DecimalCtx
+	Default DecimalCtxType = iota
+	// Lossless stand for LosslessCtx
+	Lossless
+)
+
 var (
 	// DecimalCtx is the default context for decimal operations. Any change
 	// in the exponent limits must still guarantee a safe conversion to the
@@ -36,6 +46,14 @@ var (
 	}
 	// ExactCtx is a decimal context with exact precision.
 	ExactCtx = DecimalCtx.WithPrecision(0)
+	// LosslessCtx is a decimal context with very high precision which does not
+	// permit information loss. If an operation would result in an inexact result
+	// because of the bounded precision, it throws an error instead.
+	LosslessCtx = func() *apd.Context {
+		ctx := DecimalCtx.WithPrecision(5000)
+		ctx.Traps |= apd.Inexact
+		return ctx
+	}()
 	// HighPrecisionCtx is a decimal context with high precision.
 	HighPrecisionCtx = DecimalCtx.WithPrecision(2000)
 	// IntermediateCtx is a decimal context with additional precision for

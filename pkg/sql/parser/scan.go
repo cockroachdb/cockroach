@@ -735,7 +735,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &tree.NumVal{Value: floatConst, OrigString: lval.str}
+		lval.union.val = &tree.NumVal{Value: floatConst, OrigString: lval.str, DecimalCtxType: tree.Lossless}
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR

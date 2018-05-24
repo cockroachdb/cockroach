@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -117,9 +118,10 @@ type NumVal struct {
 	OrigString string
 
 	// The following fields are used to avoid allocating Datums on type resolution.
-	resInt     DInt
-	resFloat   DFloat
-	resDecimal DDecimal
+	resInt         DInt
+	resFloat       DFloat
+	resDecimal     DDecimal
+	DecimalCtxType DecimalCtxType
 }
 
 // Format implements the NodeFormatter interface.
@@ -272,13 +274,32 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
 					"from string %q", expr, den)
 			}
-			if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
-				if cond.DivisionByZero() {
+			var cond apd.Condition
+			switch expr.DecimalCtxType {
+			case Default:
+				cond, err = DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal)
+			case Lossless:
+				cond, err = LosslessCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal)
+			}
+			if err != nil {
+				switch {
+				case cond.Inexact():
+					return nil, errDecOutOfRange
+				case cond.DivisionByZero():
 					return nil, ErrDivByZero
 				}
 				return nil, err
 			}
 		} else {
+			if strings.HasPrefix(s, "0x.") || strings.HasPrefix(s, "-0x.") {
+				// The constant.Value was converted to a constant.floatVal,
+				// which is formatted using the 'p' big.Float format (binary
+				// exponent, hexadecimal mantissa). This happens when a
+				// constant.ratVal constains a component that exceeds the
+				// constant.maxExp limit. We detect this and throw an error
+				// because it indicates information loss.
+				return nil, errDecOutOfRange
+			}
 			if err := dd.SetString(s); err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
@@ -537,11 +558,11 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		switch cv := t.Expr.(type) {
 		case *NumVal:
 			if token, ok := unaryOpToToken[t.Operator]; ok {
-				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0), DecimalCtxType: cv.DecimalCtxType}
 			}
 			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
 				if intVal, ok := cv.asConstantInt(); ok {
-					return &NumVal{Value: constant.UnaryOp(token, intVal, 0)}
+					return &NumVal{Value: constant.UnaryOp(token, intVal, 0), DecimalCtxType: cv.DecimalCtxType}
 				}
 			}
 		}
