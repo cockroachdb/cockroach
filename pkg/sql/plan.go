@@ -357,13 +357,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
 	}
 
-	// execEngine is both an exec.Factory and an opt.Catalog. cleanup is not
-	// required on the engine, since planner is cleaned up elsewhere.
-	eng := newExecEngine(p, nil)
-	defer eng.Close()
+	var catalog optCatalog
+	catalog.init(p.execCfg.TableStatsCache, p)
+	factory := makeExecFactory(p)
 
 	o := xform.NewOptimizer(p.EvalContext())
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), eng.Catalog(), o.Factory(), stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
 	root, props, err := bld.Build()
 	if err != nil {
 		return err
@@ -371,7 +370,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	ev := o.Optimize(root, props)
 
-	plan, err := execbuilder.New(eng, ev).Build()
+	plan, err := execbuilder.New(&factory, ev).Build()
 	if err != nil {
 		return err
 	}
