@@ -1,15 +1,14 @@
-# tests adapted from logictest -- aggregate
+# LogicTest: opt
 
-exec-raw
+statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
   s STRING
 )
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
@@ -33,7 +32,7 @@ group           ·             ·                   (min int, max int, count int
 ·               table         kv@primary          ·                                                                                                                                                   ·
 ·               spans         ALL                 ·                                                                                                                                                   ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 render               ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
@@ -69,7 +68,7 @@ render               ·            ·                            (min int, max i
 ·                    spans        ALL                          ·                                                                                                                                                    ·
 
 # Aggregate functions trigger aggregation and computation when there is no source.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 render                 ·             ·                                 (min int, count int, max int, sum_int int, "avg(1)::FLOAT" float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)  ·
@@ -103,7 +102,7 @@ render                 ·             ·                                 (min in
            └── values  ·             ·                                 ()                                                                                                                                                            ·
 ·                      size          0 columns, 1 row                  ·                                                                                                                                                             ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
 render          ·            ·             (count int, k int)  ·
@@ -118,7 +117,7 @@ render          ·            ·             (count int, k int)  ·
 ·               spans        ALL           ·                   ·
 
 # Selecting and grouping on a more complex expression works.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 render               ·            ·                           (count int, "k + v" int)  ·
@@ -135,7 +134,7 @@ render               ·            ·                           (count int, "k +
 ·                    spans        ALL                         ·                         ·
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 render          ·            ·                           (count int, "k + v" int)  ·
@@ -150,7 +149,7 @@ render          ·            ·                           (count int, "k + v" i
 ·               table        kv@primary                  ·                         ·
 ·               spans        ALL                         ·                         ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(k) FROM kv
 ----
 group      ·            ·           (count int)  ·
@@ -159,7 +158,7 @@ group      ·            ·           (count int)  ·
 ·          table        kv@primary  ·            ·
 ·          spans        ALL         ·            ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
 group      ·            ·           (count int, sum decimal, max int)  ·
@@ -170,16 +169,15 @@ group      ·            ·           (count int, sum decimal, max int)  ·
 ·          table        kv@primary  ·                                  ·
 ·          spans        ALL         ·                                  ·
 
-exec-raw
+statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,
   b FLOAT,
   c BOOLEAN,
   d DECIMAL
 )
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(a) FROM abc
 ----
 group      ·            ·            (min string)  ·
@@ -188,7 +186,7 @@ group      ·            ·            (min string)  ·
 ·          table        abc@primary  ·             ·
 ·          spans        ALL          ·             ·
 
-exec-raw
+statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
@@ -199,13 +197,11 @@ CREATE TABLE xyz (
   FAMILY (y),
   FAMILY (z)
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(x) FROM xyz
 ----
 group      ·            ·            (min int)  ·
@@ -215,7 +211,7 @@ group      ·            ·            (min int)  ·
 ·          spans        ALL          ·          ·
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group      ·            ·                        (min int)  ·
@@ -225,7 +221,7 @@ group      ·            ·                        (min int)  ·
 ·          spans        /0-/0/# /4-/4/# /7-/7/#  ·          ·
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MAX(x) FROM xyz
 ----
 group      ·            ·            (max int)  ·
@@ -234,7 +230,7 @@ group      ·            ·            (max int)  ·
 ·          table        xyz@primary  ·          ·
 ·          spans        ALL          ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (min int)       ·
@@ -243,7 +239,7 @@ group      ·            ·            (min int)       ·
 ·          table        xyz@primary  ·               ·
 ·          spans        /1-/1/#      ·               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (max int)       ·
@@ -252,7 +248,7 @@ group      ·            ·            (max int)       ·
 ·          table        xyz@primary  ·               ·
 ·          spans        /1-/1/#      ·               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (min int)       ·
@@ -261,7 +257,7 @@ group      ·            ·            (min int)       ·
 ·          table        xyz@primary  ·               ·
 ·          spans        /7-/7/#      ·               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (max int)       ·
@@ -270,7 +266,7 @@ group      ·            ·            (max int)       ·
 ·          table        xyz@primary  ·               ·
 ·          spans        /7-/7/#      ·               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group      ·            ·          (min int)                ·
@@ -287,7 +283,7 @@ group      ·            ·          (min int)                ·
 #fetched: /xyz/zyx/3.0/2/1 -> NULL
 #output row: [1]
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group      ·            ·          (max int)                ·
@@ -313,7 +309,7 @@ group      ·            ·          (max int)                ·
 #fetched: /xyz/primary/7/z -> 8.0
 #output row: [9 4.5 6.33333333333333]
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (variance decimal)  ·
@@ -323,23 +319,21 @@ group      ·            ·            (variance decimal)  ·
 ·          spans        /1-/1/#      ·                   ·
 
 ## Tests for the single-row optimization.
-exec-raw
+statement ok
 CREATE TABLE ab (
   a INT PRIMARY KEY,
   b INT,
   FAMILY (a),
   FAMILY (b)
 )
-----
 
-exec-raw
+statement ok
 INSERT INTO ab VALUES
   (1, 10),
   (2, 20),
   (3, 30),
   (4, 40),
   (5, 50)
-----
 
 # TODO(radu): we don't support the single-row optimization yet.
 #exec nodist
@@ -384,7 +378,7 @@ INSERT INTO ab VALUES
 #fetched: /ab/primary/5 -> NULL
 #output row: [5]
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
 sort            ·            ·           (v int, count int)  +count
@@ -397,7 +391,7 @@ sort            ·            ·           (v int, count int)  +count
 ·               table        kv@primary  ·                   ·
 ·               spans        ALL         ·                   ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
 sort            ·            ·             (v int, count int)  +count
@@ -410,7 +404,7 @@ sort            ·            ·             (v int, count int)  +count
 ·               table        kv@primary    ·                   ·
 ·               spans        ALL           ·                   ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
 sort                 ·            ·               (v int, count int)         +count
@@ -483,7 +477,7 @@ sort                 ·            ·               (v int, count int)         +
 #·               2  ·       spans        ALL                                ·                                                              ·
 
 # Tests with * inside GROUP BY.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT 1 FROM kv GROUP BY kv.*;
 ----
 render     ·         ·           ("1" int)  ·
@@ -492,7 +486,7 @@ render     ·         ·           ("1" int)  ·
 ·          table     kv@primary  ·          ·
 ·          spans     ALL         ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 render               ·            ·                                 (sum decimal)                                  ·
@@ -572,13 +566,12 @@ render               ·            ·                                 (sum decim
 #·          1  ·      table        opt_test@primary  ·       ·
 #·          1  ·      spans        ALL               ·       ·
 
-exec-raw
+statement ok
 CREATE TABLE xy(x STRING, y STRING);
-----
 
 # TODO(radu): this requires tuples but they are not yet supported in
 # distsql (#15938).
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 render     ·         ·                                        ("(b, a)" tuple{int, int})  ·
@@ -587,7 +580,7 @@ render     ·         ·                                        ("(b, a)" tuple{
 ·          table     ab@primary                               ·                           ·
 ·          spans     ALL                                      ·                           ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 render               ·            ·                                        (min string, "(b, a)" tuple{int, int})  ·
@@ -723,7 +716,7 @@ render               ·            ·                                        (mi
 #·               spans        ALL                ·                 ·
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
 render                    ·            ·                                          ("1" int)                      ·

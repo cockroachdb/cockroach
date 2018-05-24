@@ -1,43 +1,41 @@
-exec-raw
-CREATE TABLE xy (x INT PRIMARY KEY, y INT)
-----
+# LogicTest: opt
 
-exec nodist
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+query TTTTT
 EXPLAIN (VERBOSE) SHOW TRACE FOR SELECT x FROM xy ORDER BY y
 ----
-Tree:string          Field:string  Description:string  Columns:string                                          Ordering:string
-show trace for       ·             ·                   ("timestamp", age, message, tag, loc, operation, span)  ·
- └── render          ·             ·                   (x)                                                     ·
-      │              render 0      x                   ·                                                       ·
-      └── sort       ·             ·                   (x, y)                                                  +y
-           │         order         +y                  ·                                                       ·
-           └── scan  ·             ·                   (x, y)                                                  ·
-·                    table         xy@primary          ·                                                       ·
-·                    spans         ALL                 ·                                                       ·
+show trace for       ·         ·           ("timestamp", age, message, tag, loc, operation, span)  ·
+ └── render          ·         ·           (x)                                                     ·
+      │              render 0  x           ·                                                       ·
+      └── sort       ·         ·           (x, y)                                                  +y
+           │         order     +y          ·                                                       ·
+           └── scan  ·         ·           (x, y)                                                  ·
+·                    table     xy@primary  ·                                                       ·
+·                    spans     ALL         ·                                                       ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SHOW COMPACT KV TRACE FOR SELECT x FROM xy ORDER BY y
 ----
-Tree:string          Field:string  Description:string  Columns:string                  Ordering:string
-show trace for       ·             ·                   (age, message, tag, operation)  ·
- └── render          ·             ·                   (x)                             ·
-      │              render 0      x                   ·                               ·
-      └── sort       ·             ·                   (x, y)                          +y
-           │         order         +y                  ·                               ·
-           └── scan  ·             ·                   (x, y)                          ·
-·                    table         xy@primary          ·                               ·
-·                    spans         ALL                 ·                               ·
+show trace for       ·         ·           (age, message, tag, operation)  ·
+ └── render          ·         ·           (x)                             ·
+      │              render 0  x           ·                               ·
+      └── sort       ·         ·           (x, y)                          +y
+           │         order     +y          ·                               ·
+           └── scan  ·         ·           (x, y)                          ·
+·                    table     xy@primary  ·                               ·
+·                    spans     ALL         ·                               ·
 
-exec nodist
+query TTTTT
 EXPLAIN (VERBOSE) SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT x FROM xy ORDER BY y
 ----
-Tree:string               Field:string  Description:string  Columns:string                                          Ordering:string
-replica trace             ·             ·                   ("timestamp", node_id, store_id, replica_id)            ·
- └── show trace for       ·             ·                   ("timestamp", age, message, tag, loc, operation, span)  ·
-      └── render          ·             ·                   (x)                                                     ·
-           │              render 0      x                   ·                                                       ·
-           └── sort       ·             ·                   (x, y)                                                  +y
-                │         order         +y                  ·                                                       ·
-                └── scan  ·             ·                   (x, y)                                                  ·
-·                         table         xy@primary          ·                                                       ·
-·                         spans         ALL                 ·                                                       ·
+replica trace             ·         ·           ("timestamp", node_id, store_id, replica_id)            ·
+ └── show trace for       ·         ·           ("timestamp", age, message, tag, loc, operation, span)  ·
+      └── render          ·         ·           (x)                                                     ·
+           │              render 0  x           ·                                                       ·
+           └── sort       ·         ·           (x, y)                                                  +y
+                │         order     +y          ·                                                       ·
+                └── scan  ·         ·           (x, y)                                                  ·
+·                         table     xy@primary  ·                                                       ·
+·                         spans     ALL         ·                                                       ·
