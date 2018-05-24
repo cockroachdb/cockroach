@@ -1,0 +1,44 @@
+# LogicTest: default
+
+# Ensure that correct index is used when indexed column has collation.
+statement ok
+CREATE TABLE coll (
+  a STRING COLLATE da,
+  b INT,
+  c BOOL,
+  PRIMARY KEY (a, b),
+  INDEX (b, a) STORING (c)
+)
+
+query TTT
+EXPLAIN SELECT a, b FROM coll ORDER BY a, b
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  coll@primary
+·          spans  ALL
+
+query TTT
+EXPLAIN SELECT b, a FROM coll ORDER BY b, a
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  coll@coll_b_a_idx
+·          spans  ALL
+
+# Ensure correct index is used when indexed column is computed.
+statement ok
+CREATE TABLE computed (
+  k INT PRIMARY KEY,
+  a JSON,
+  b TEXT AS (a->>'q') STORED,
+  INDEX (b) STORING (k)
+)
+
+query TTT
+EXPLAIN SELECT b FROM computed ORDER BY b
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  computed@computed_b_idx
+·          spans  ALL

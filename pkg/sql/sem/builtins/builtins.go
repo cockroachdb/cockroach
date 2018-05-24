@@ -1163,7 +1163,7 @@ CockroachDB supports the following flags:
 	"greatest": {
 		tree.Builtin{
 			Types:        tree.HomogeneousType{},
-			ReturnType:   tree.IdentityReturnType(0),
+			ReturnType:   tree.FirstNonNullReturnType(),
 			NullableArgs: true,
 			Category:     categoryComparison,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1175,7 +1175,7 @@ CockroachDB supports the following flags:
 	"least": {
 		tree.Builtin{
 			Types:        tree.HomogeneousType{},
-			ReturnType:   tree.IdentityReturnType(0),
+			ReturnType:   tree.FirstNonNullReturnType(),
 			NullableArgs: true,
 			Category:     categoryComparison,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

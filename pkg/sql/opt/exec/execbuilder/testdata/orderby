@@ -803,8 +803,9 @@ b + d:int
 7
 
 # The following tests verify we recognize that sorting is not necessary
+# TODO(andyk): Need to actually recognize that sorting is not necessary.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY c
 ----
 sort       ·      ·          (a, b, c)  +c
  │         order  +c         ·          ·
@@ -813,7 +814,7 @@ sort       ·      ·          (a, b, c)  +c
 ·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 sort       ·      ·          (a, b, c)  +c,+b,+a
  │         order  +c,+b,+a   ·          ·
@@ -822,7 +823,7 @@ sort       ·      ·          (a, b, c)  +c,+b,+a
 ·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
  │         order  +b,+a,+c   ·          ·
@@ -831,7 +832,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 sort       ·      ·          (a, b, c)  +b,+c,+a
  │         order  +b,+c,+a   ·          ·

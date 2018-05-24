@@ -1,4 +1,10 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-metadata
+
+statement ok
+CREATE TABLE foo (a int)
+
+statement ok
+INSERT INTO foo (a) VALUES (1)
 
 query error unknown function: foo.bar
 SELECT foo.bar()
@@ -1055,6 +1061,27 @@ SELECT GREATEST(1, 1.2)
 ----
 1.2
 
+# Test homogenous functions that can't be constant folded.
+query I
+SELECT GREATEST(NULL, a, 5, NULL) FROM foo
+----
+5
+
+query I
+SELECT GREATEST(NULL, NULL, NULL, a, -1) FROM foo
+----
+1
+
+query I
+SELECT LEAST(NULL, a, 5, NULL) FROM foo
+----
+1
+
+query I
+SELECT LEAST(NULL, NULL, NULL, a, -1) FROM foo
+----
+-1
+
 # Test float and int comparison.
 
 query BBBB
@@ -1218,9 +1245,6 @@ false
 # SELECT current_schema()
 # ----
 # NULL
-
-statement ok
-CREATE TABLE foo (a int)
 
 query B
 SELECT pg_catalog.pg_table_is_visible('foo'::regclass)
