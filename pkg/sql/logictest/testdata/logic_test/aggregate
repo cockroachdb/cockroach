@@ -1108,3 +1108,11 @@ SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
 1
 1
 1
+
+# Regression test for distsql aggregator crash when using hash aggregation.
+query IT rowsort
+SELECT v, ARRAY_AGG('a') FROM kv GROUP BY v
+----
+2     {"a","a","a"}
+4     {"a","a"}
+NULL  {"a"}
