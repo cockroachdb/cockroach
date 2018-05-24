@@ -61,6 +61,10 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 //
 // The projection columns are added to the orderByScope.
 func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, orderByScope *scope) {
+	if order.Index != "" {
+		panic(unimplementedf("ORDER BY index not supported"))
+	}
+
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr := tree.StripParens(order.Expr)
 

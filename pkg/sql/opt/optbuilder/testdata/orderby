@@ -703,6 +703,11 @@ sort
                      ├── variable: abc.a [type=int]
                      └── const: 1 [type=int]
 
+build
+SELECT a FROM abc ORDER BY INDEX abc@bc
+----
+error (0A000): ORDER BY index not supported
+
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 ----
