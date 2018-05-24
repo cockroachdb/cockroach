@@ -14,8 +14,6 @@ import (
 	"io"
 	"unicode"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -74,10 +72,10 @@ func (d *mysqloutfileReader) readFile(
 		// First check that if we're done and everything looks good.
 		if finished {
 			if nextLiteral {
-				return errors.New("unmatched literal")
+				return makeRowErr(inputName, int64(count)+1, "unmatched literal")
 			}
 			if readingField {
-				return errors.New("unmatched field enclosure")
+				return makeRowErr(inputName, int64(count)+1, "unmatched field enclosure")
 			}
 			// flush the last row if we have one.
 			if len(row) > 0 {
@@ -160,7 +158,7 @@ func (d *mysqloutfileReader) readFile(
 
 			if c == d.opts.RowSeparator {
 				if expected := d.csvInputReader.expectedCols; expected != len(row) {
-					return errors.Errorf("row %d: expected %d columns, go %d: %#v", count+1, expected, len(row), row)
+					return makeRowErr(inputName, int64(count)+1, "expected %d columns, got %d: %#v", expected, len(row), row)
 				}
 				d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
 				count++
