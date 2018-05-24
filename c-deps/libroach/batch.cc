@@ -513,6 +513,8 @@ DBStatus DBBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported
 
 DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
+DBStatus DBBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
+
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
 DBStatus DBBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
@@ -597,6 +599,8 @@ DBIterator* DBWriteOnlyBatch::NewIter(rocksdb::ReadOptions* read_opts) { return 
 DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
 DBString DBWriteOnlyBatch::GetCompactionStats() { return ToDBString("unsupported"); }
+
+DBStatus DBWriteOnlyBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
 
 DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");

@@ -1138,6 +1138,18 @@ func (r *RocksDB) GetCompactionStats() string {
 	return cStringToGoString(C.DBGetCompactionStats(r.rdb))
 }
 
+// GetEnvStats returns stats for the RocksDB env. This may include encryption stats.
+func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
+	var s C.DBEnvStatsResult
+	if err := statusToError(C.DBGetEnvStats(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+
+	return &EnvStats{
+		EncryptionStatus: cStringToGoBytes(s.encryption_status),
+	}, nil
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBEngine

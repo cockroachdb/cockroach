@@ -8,6 +8,8 @@
 
 #include "../db.h"
 #include "../testutils.h"
+#include "ccl/baseccl/encryption_options.pb.h"
+#include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
 
 using namespace cockroach;
 
@@ -29,4 +31,50 @@ TEST(LibroachCCL, DBOpenHook) {
   // Try with file registry but bogus encryption flags.
   db_opts.extra_options = ToDBSlice("blah");
   EXPECT_ERR(DBOpenHook("", db_opts, nullptr), "failed to parse extra options");
+}
+
+TEST(Libroach, DBOpen) {
+  {
+    // Empty options: no encryption.
+    DBOptions db_opts = defaultDBOptions();
+    DBEngine* db;
+    db_opts.use_file_registry = true;
+
+    EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STREQ(stats.encryption_status.data, NULL);
+
+    DBClose(db);
+  }
+  {
+    // Encryption enabled.
+    DBOptions db_opts = defaultDBOptions();
+    DBEngine* db;
+    db_opts.use_file_registry = true;
+
+    // Enable encryption, but plaintext only, that's enough to get stats going.
+    cockroach::ccl::baseccl::EncryptionOptions enc_opts;
+    enc_opts.set_key_source(cockroach::ccl::baseccl::KeyFiles);
+    enc_opts.mutable_key_files()->set_current_key("plain");
+    enc_opts.mutable_key_files()->set_old_key("plain");
+
+    std::string tmpstr;
+    ASSERT_TRUE(enc_opts.SerializeToString(&tmpstr));
+    db_opts.extra_options = ToDBSlice(tmpstr);
+
+    EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STRNE(stats.encryption_status.data, NULL);
+
+    // Now parse the status protobuf.
+    cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus enc_status;
+    ASSERT_TRUE(
+        enc_status.ParseFromArray(stats.encryption_status.data, stats.encryption_status.len));
+    EXPECT_STREQ(enc_status.active_store_key().key_id().c_str(), "plain");
+    EXPECT_STREQ(enc_status.active_data_key().key_id().c_str(), "plain");
+
+    DBClose(db);
+  }
 }

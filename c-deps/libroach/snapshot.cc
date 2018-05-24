@@ -53,6 +53,8 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) { return FmtStatus("unsuppor
 
 DBString DBSnapshot::GetCompactionStats() { return ToDBString("unsupported"); }
 
+DBStatus DBSnapshot::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
+
 DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
 }
