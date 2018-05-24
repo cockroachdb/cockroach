@@ -26,15 +26,15 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
     // TODO(vilterp): focus username field on mount
   }
 
-  handleUpdateUsername = (username: string) => {
+  handleUpdateUsername = (evt: React.FormEvent<any>) => {
     this.setState({
-      username,
+      username: evt.target.value,
     });
   }
 
-  handleUpdatePassword = (password: string) => {
+  handleUpdatePassword = (evt: React.FormEvent<any>) => {
     this.setState({
-      password,
+      password: evt.target.value,
     });
   }
 
@@ -66,12 +66,12 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
           <form onSubmit={this.handleSubmit}>
             <input
               type="text"
-              onChange={(evt) => this.handleUpdateUsername(evt.target.value)}
+              onChange={this.handleUpdateUsername}
               value={this.state.username}
             /><br />
             <input
               type="password"
-              onChange={(evt) => this.handleUpdatePassword(evt.target.value)}
+              onChange={this.handleUpdatePassword}
               value={this.state.password}
             /><br />
             <input type="submit" disabled={this.props.loginState.inProgress} />
