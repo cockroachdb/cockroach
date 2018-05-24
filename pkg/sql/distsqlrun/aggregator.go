@@ -347,8 +347,17 @@ func (ag *hashAggregator) close() {
 	if ag.internalClose() {
 		log.VEventf(ag.ctx, 2, "exiting aggregator")
 		ag.bucketsAcc.Close(ag.ctx)
-		for _, bucket := range ag.buckets {
-			bucket.close(ag.ctx)
+		// If we have started emitting rows, bucketsIter will represent which
+		// buckets are still open, since buckets are closed once their results are
+		// emitted.
+		if ag.bucketsIter == nil {
+			for _, bucket := range ag.buckets {
+				bucket.close(ag.ctx)
+			}
+		} else {
+			for _, bucket := range ag.bucketsIter {
+				ag.buckets[bucket].close(ag.ctx)
+			}
 		}
 	}
 }
