@@ -1,41 +1,10 @@
-exec-raw
+# LogicTest: opt
+
+statement ok
 CREATE TABLE t (k INT PRIMARY KEY, u INT, v INT);
 INSERT INTO t VALUES (1, 1, 1), (2, 4, 8), (3, 9, 27), (4, 16, 64)
-----
 
-opt
-SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
-----
-project
- ├── columns: "EXISTS (SELECT * FROM t WHERE u = (k * k))":4(bool)
- ├── cardinality: [1 - 1]
- ├── stats: [rows=1]
- ├── cost: 1010.01
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.01
- │    └── tuple [type=tuple{}]
- └── projections
-      └── exists [type=bool]
-           └── select
-                ├── columns: k:1(int!null) u:2(int!null) v:3(int)
-                ├── stats: [rows=333]
-                ├── cost: 1010.00
-                ├── keys: (1)
-                ├── scan t
-                │    ├── columns: k:1(int!null) u:2(int) v:3(int)
-                │    ├── stats: [rows=1000]
-                │    ├── cost: 1000.00
-                │    └── keys: (1)
-                └── filters [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-                     └── eq [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-                          ├── variable: t.u [type=int, outer=(2)]
-                          └── mult [type=int, outer=(1)]
-                               ├── variable: t.k [type=int, outer=(1)]
-                               └── variable: t.k [type=int, outer=(1)]
-
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 root                 ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
@@ -53,19 +22,17 @@ root                 ·          ·                 ("EXISTS (SELECT * FROM t WH
 ·                    table      t@primary         ·                                               ·
 ·                    spans      ALL               ·                                               ·
 
-exec nodist
+query B
 SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
-EXISTS (SELECT * FROM t WHERE u = (k * k)):bool
 true
 
-exec nodist
+query B
 SELECT EXISTS(SELECT * FROM t WHERE u != k*k)
 ----
-EXISTS (SELECT * FROM t WHERE u != (k * k)):bool
 false
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 root                 ·            ·          (k, u, v)  ·
@@ -84,13 +51,12 @@ root                 ·            ·          (k, u, v)  ·
 ·                    table        t@primary  ·          ·
 ·                    spans        ALL        ·          ·
 
-exec nodist
+query III
 SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
-k:int  u:int  v:int
-4      16     64
+4  16  64
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 root                      ·            ·                 (k, u, v)  ·
@@ -120,8 +86,7 @@ root                      ·            ·                 (k, u, v)  ·
 ·                         table        t@primary         ·          ·
 ·                         spans        ALL               ·          ·
 
-exec nodist
+query III
 SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
-k:int  u:int  v:int
-4      16     64
+4  16  64

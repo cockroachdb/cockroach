@@ -1,5 +1,7 @@
+# LogicTest: opt
+
 # Tests for the implicit one row, zero column values operator.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1
 ----
 render       ·         ·                 ("1")  ·
@@ -7,13 +9,12 @@ render       ·         ·                 ("1")  ·
  └── values  ·         ·                 ()     ·
 ·            size      0 columns, 1 row  ·      ·
 
-exec
+query I
 SELECT 1
 ----
-1:int
 1
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
 render       ·         ·                 ("1 + 2")  ·
@@ -21,13 +22,12 @@ render       ·         ·                 ("1 + 2")  ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
 
-exec
+query I
 SELECT 1 + 2
 ----
-1 + 2:int
 3
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
 values  ·              ·                  (column1, column2, column3)  ·
@@ -39,14 +39,13 @@ values  ·              ·                  (column1, column2, column3)  ·
 ·       row 1, expr 1  5                  ·                            ·
 ·       row 1, expr 2  6                  ·                            ·
 
-exec
+query III
 VALUES (1, 2, 3), (4, 5, 6)
 ----
-column1:int  column2:int  column3:int
-1            2            3
-4            5            6
+1  2  3
+4  5  6
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
 values  ·              ·                 (column1)  ·
@@ -56,16 +55,15 @@ values  ·              ·                 (column1)  ·
 ·       row 2, expr 0  length('abc')     ·          ·
 ·       row 3, expr 0  length('ab') * 2  ·          ·
 
-exec
+query I
 VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
-column1:int
 1
 2
 3
 4
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
 render       ·              ·                  ("a + b")           ·
@@ -79,10 +77,9 @@ render       ·              ·                  ("a + b")           ·
 ·            row 2, expr 0  5                  ·                   ·
 ·            row 2, expr 1  6                  ·                   ·
 
-exec
+query I
 SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-a + b:int
 3
 7
 11

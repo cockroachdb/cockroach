@@ -1,23 +1,23 @@
-exec-raw
+# LogicTest: opt distsql-opt
+
+statement ok
 CREATE TABLE a (x INT PRIMARY KEY, y INT);
 INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
 scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-        ·       ·
 
-exec rowsort
+query II rowsort
 SELECT * FROM a WHERE x > 1
 ----
-x:int  y:int
-2      20
-3      30
+2  20
+3  30
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
 filter     ·       ·          (x, y)  ·
@@ -26,27 +26,25 @@ filter     ·       ·          (x, y)  ·
 ·          table   a@primary  ·       ·
 ·          spans   ALL        ·       ·
 
-exec rowsort
+query II rowsort
 SELECT * FROM a WHERE y > 10
 ----
-x:int  y:int
-2      20
-3      30
+2  20
+3  30
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-/2/#    ·       ·
 
-exec
+query II
 SELECT * FROM a WHERE x > 1 AND x < 3
 ----
-x:int  y:int
-2      20
+2  20
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
 filter     ·       ·          (x, y)  ·
@@ -55,56 +53,46 @@ filter     ·       ·          (x, y)  ·
 ·          table   a@primary  ·       ·
 ·          spans   /2-        ·       ·
 
-exec
+query II
 SELECT * FROM a WHERE x > 1 AND y < 30
 ----
-x:int  y:int
-2      20
+2  20
 
-exec-raw
+statement ok
 CREATE TABLE b (x INT, y INT);
 INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
 scan  ·      ·          (x, y, rowid[hidden])  ·
 ·     table  b@primary  ·                      ·
 ·     spans  /1-        ·                      ·
 
-exec-raw
+statement ok
 CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
 INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
 ----
 scan  ·      ·                  (n, str)  ·
 ·     table  c@str              ·         ·
 ·     spans  -/"moo"/PrefixEnd  ·         ·
 
-exec rowsort
+query IT rowsort
 SELECT * FROM c WHERE str >= 'moo'
 ----
-n:int  str:string
-1      one
-2      two
-3      three
-6      six
-7      seven
-9      nine
-10     one-zero
-
-# Virtual tables are currently not supported.
-build
-SELECT * FROM crdb_internal.jobs
-----
-error (0A000): virtual tables are not supported
+1   one
+2   two
+3   three
+6   six
+7   seven
+9   nine
+10  one-zero
 
 # Ensure that index is used when indexed column has collation.
-exec-raw
+statement ok
 CREATE TABLE coll (
   a STRING COLLATE da,
   b INT,
@@ -112,16 +100,15 @@ CREATE TABLE coll (
   PRIMARY KEY (a, b),
   INDEX (b, a) STORING (c)
 )
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT a, b FROM coll ORDER BY a, b
 ----
 scan  ·      ·             (a collatedstring{da}, b int)  +a,+b
 ·     table  coll@primary  ·                              ·
 ·     spans  ALL           ·                              ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
 ----
 render     ·         ·                        (b int, a collatedstring{da})  ·
@@ -132,18 +119,24 @@ render     ·         ·                        (b int, a collatedstring{da})  �
 ·          spans     ALL                      ·                              ·
 
 # Ensure correct index is used when indexed column is computed.
-exec-raw
+statement ok
 CREATE TABLE computed (
   k INT PRIMARY KEY,
   a JSON,
   b TEXT AS (a->>'q') STORED,
   INDEX (b) STORING (k)
 )
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (TYPES) SELECT b FROM computed ORDER BY b
 ----
 scan  ·      ·                        (b string)  +b
 ·     table  computed@computed_b_idx  ·           ·
 ·     spans  ALL                      ·           ·
+
+# Virtual tables are currently not supported.
+statement ok
+SET EXPERIMENTAL_OPT = ALWAYS;
+
+statement error virtual tables are not supported
+SELECT * FROM crdb_internal.jobs

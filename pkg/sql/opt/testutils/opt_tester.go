@@ -25,8 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -36,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -97,12 +94,6 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(false /* privileged */),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
-}
-
-// SetCatalog sets the catalog; used when the catalog is not known upfront
-// (a nil catalog was passed to NewOptTester).
-func (ot *OptTester) SetCatalog(catalog opt.Catalog) {
-	ot.catalog = catalog
 }
 
 // RunCommand implements commands that are used by most tests:
@@ -409,35 +400,6 @@ func (ot *OptTester) OptSteps() (string, error) {
 	}
 
 	return buf.String(), nil
-}
-
-// ExecBuild builds the exec node tree for the SQL query. This can be executed
-// by the exec engine.
-func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Plan, error) {
-	ev, err := ot.Optimize()
-	if err != nil {
-		return nil, err
-	}
-	return execbuilder.New(eng.Factory(), ev).Build()
-}
-
-// Exec builds the exec node tree for the SQL query and then executes it.
-func (ot *OptTester) Exec(
-	eng exec.TestEngine, useDistSQL bool,
-) (sqlbase.ResultColumns, []tree.Datums, error) {
-	plan, err := ot.ExecBuild(eng)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	columns := eng.Columns(plan)
-
-	var datums []tree.Datums
-	datums, err = eng.Execute(plan, useDistSQL)
-	if err != nil {
-		return nil, nil, err
-	}
-	return columns, datums, err
 }
 
 func (ot *OptTester) buildExpr(

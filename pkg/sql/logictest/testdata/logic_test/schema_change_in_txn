@@ -182,6 +182,17 @@ cups   23
 forks  23
 plates 23
 
+# drop a column created in the same transaction
+statement ok
+ALTER TABLE warehouse DROP COLUMN quantity
+
+query T rowsort
+SELECT * FROM warehouse@bar
+----
+cups
+forks
+plates
+
 statement ok
 COMMIT
 
