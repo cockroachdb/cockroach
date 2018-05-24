@@ -107,9 +107,9 @@ type Factory interface {
 	ConstructOrdinality(input Node, colName string) (Node, error)
 
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
-	// results of the given node. If only an offset is desired, limit should be
-	// math.MaxInt64.
-	ConstructLimit(input Node, limit int64, offset int64) (Node, error)
+	// results of the given node. If one or the other is not needed, then it is
+	// set to nil.
+	ConstructLimit(input Node, limit, offset tree.TypedExpr) (Node, error)
 
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
