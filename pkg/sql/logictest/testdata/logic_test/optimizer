@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# TestConfigs: default distsql
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)

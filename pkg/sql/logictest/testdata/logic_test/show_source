@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 query T colnames
 SELECT * FROM [SHOW client_encoding]

@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 # Verify information_schema database handles mutation statements correctly.
 

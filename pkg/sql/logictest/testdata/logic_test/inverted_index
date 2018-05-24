@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata parallel-stmts
+# TestConfigs: default distsql distsql-metadata parallel-stmts
 
 statement ok
 CREATE TABLE t (

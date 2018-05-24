@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 # CCL-only statements error out trying to handle the parsed statements.
 

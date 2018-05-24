@@ -99,7 +99,7 @@ import (
 //
 // Logic tests can start with a directive as follows:
 //
-//   # LogicTest: default parallel-stmts distsql
+//   # TestConfigs: default parallel-stmts distsql
 //
 // This directive lists configurations; the test is run once in each
 // configuration (in separate subtests). The configurations are defined by
@@ -251,7 +251,7 @@ import (
 // Configuration:
 //
 // -config name   customizes the test cluster configuration for test
-//                files that lack LogicTest directives; must be one
+//                files that lack TestConfigs directives; must be one
 //                of `logicTestConfigs`.
 //                Example:
 //                  -config distsql
@@ -317,7 +317,7 @@ var (
 	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
 	defaultConfig = flag.String(
 		"config", "default",
-		"customizes the default test cluster configuration for files that lack LogicTest directives",
+		"customizes the default test cluster configuration for files that lack TestConfigs directives",
 	)
 
 	// Testing mode
@@ -380,7 +380,7 @@ type testClusterConfig struct {
 
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
-//   # LogicTest: default distsql
+//   # TestConfigs: default distsql
 // The test is run once on each configuration (in different subtests).
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
@@ -969,13 +969,13 @@ CREATE DATABASE test;
 	t.unsupported = 0
 }
 
-// readTestFileConfigs reads any LogicTest directive at the beginning of a
-// test file. A line that starts with "# LogicTest:" specifies a list of
+// readTestFileConfigs reads any TestConfigs directive at the beginning of a
+// test file. A line that starts with "# TestConfigs:" specifies a list of
 // configuration names. The test file is run against each of those
 // configurations.
 //
 // Example:
-//   # LogicTest: default distsql
+//   # TestConfigs: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
 func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
@@ -997,10 +997,10 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 			break
 		}
 		// Directive lines are of the form:
-		// # LogicTest: opt1=val1 opt2=val3 boolopt1
-		if len(fields) > 1 && cmd == "#" && fields[1] == "LogicTest:" {
+		// # TestConfigs: cfg1 cfg2 ...
+		if len(fields) > 1 && cmd == "#" && fields[1] == "TestConfigs:" {
 			if len(fields) == 2 {
-				t.Fatalf("%s: empty LogicTest directive", path)
+				t.Fatalf("%s: empty TestConfigs directive", path)
 			}
 			var configs []logicTestConfigIdx
 			for _, configName := range fields[2:] {

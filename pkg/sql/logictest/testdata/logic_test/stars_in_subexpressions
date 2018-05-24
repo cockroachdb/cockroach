@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 statement ok
 CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)

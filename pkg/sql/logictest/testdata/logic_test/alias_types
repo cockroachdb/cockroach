@@ -1,4 +1,4 @@
-# LogicTest: default opt distsql distsql-metadata distsql-opt
+# TestConfigs: default opt distsql distsql-metadata distsql-opt
 
 statement ok
 CREATE TABLE aliases (
