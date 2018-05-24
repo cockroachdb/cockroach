@@ -23,6 +23,7 @@ import (
 )
 
 type csvInputReader struct {
+	evalCtx      *tree.EvalContext
 	kvCh         chan kvBatch
 	recordCh     chan csvRecord
 	batchSize    int
@@ -35,12 +36,16 @@ type csvInputReader struct {
 var _ inputConverter = &csvInputReader{}
 
 func newCSVInputReader(
-	kvCh chan kvBatch, opts roachpb.CSVOptions, tableDesc *sqlbase.TableDescriptor, expectedCols int,
+	kvCh chan kvBatch,
+	opts roachpb.CSVOptions,
+	tableDesc *sqlbase.TableDescriptor,
+	evalCtx *tree.EvalContext,
 ) *csvInputReader {
 	return &csvInputReader{
+		evalCtx:      evalCtx,
 		opts:         opts,
 		kvCh:         kvCh,
-		expectedCols: expectedCols,
+		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
 		recordCh:     make(chan csvRecord),
 		batchSize:    500,
@@ -54,7 +59,7 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 
 		defer close(c.kvCh)
 		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
-			return c.convertRecord(ctx)
+			return c.convertRecordWorker(ctx)
 		})
 	})
 }
@@ -138,10 +143,10 @@ type csvRecord struct {
 	rowOffset int
 }
 
-// convertRecord converts CSV records into KV pairs and sends them on the
+// convertRecordWorker converts CSV records into KV pairs and sends them on the
 // kvCh chan.
-func (c *csvInputReader) convertRecord(ctx context.Context) error {
-	conv, err := newRowConverter(c.tableDesc, c.kvCh)
+func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
+	conv, err := newRowConverter(c.tableDesc, c.evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}
@@ -158,7 +163,7 @@ func (c *csvInputReader) convertRecord(ctx context.Context) error {
 					conv.datums[i] = tree.DNull
 				} else {
 					var err error
-					conv.datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, &conv.evalCtx)
+					conv.datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, conv.evalCtx)
 					if err != nil {
 						return makeRowErr(batch.file, rowNum, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
 					}
