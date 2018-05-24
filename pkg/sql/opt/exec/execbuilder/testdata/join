@@ -1,11 +1,12 @@
-exec-raw
+# LogicTest: opt distsql-opt
+
+statement ok
 CREATE TABLE a (x INT PRIMARY KEY, y INT);
 CREATE TABLE b (x INT PRIMARY KEY, z INT);
 INSERT INTO a VALUES (1, 10), (2, 20), (3, 30);
 INSERT INTO b VALUES (2, 200), (3, 300), (4, 400)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a, b
 ----
 join       ·      ·          (x, y, x, z)  ·
@@ -17,21 +18,21 @@ join       ·      ·          (x, y, x, z)  ·
 ·          table  b@primary  ·             ·
 ·          spans  ALL        ·             ·
 
-exec rowsort
+query IIII rowsort,colnames
 SELECT * FROM a, b
 ----
-x:int  y:int  x:int  z:int
-1      10     2      200
-1      10     3      300
-1      10     4      400
-2      20     2      200
-2      20     3      300
-2      20     4      400
-3      30     2      200
-3      30     3      300
-3      30     4      400
+x  y   x  z
+1  10  2  200
+1  10  3  300
+1  10  4  400
+2  20  2  200
+2  20  3  300
+2  20  4  400
+3  30  2  200
+3  30  3  300
+3  30  4  400
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE a.x = b.x
 ----
 join       ·         ·          (x, y, x, z)  ·
@@ -44,14 +45,13 @@ join       ·         ·          (x, y, x, z)  ·
 ·          table     b@primary  ·             ·
 ·          spans     ALL        ·             ·
 
-exec rowsort
+query IIII rowsort
 SELECT * FROM a, b WHERE a.x = b.x
 ----
-x:int  y:int  x:int  z:int
-2      20     2      200
-3      30     3      300
+2  20     2      200
+3  30     3      300
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
 join       ·         ·          (x, y, x, z)  ·
@@ -64,14 +64,13 @@ join       ·         ·          (x, y, x, z)  ·
 ·          table     b@primary  ·             ·
 ·          spans     ALL        ·             ·
 
-exec rowsort
+query IIII rowsort
 SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
-x:int  y:int  x:int  z:int
-2      20     2      200
-3      30     3      300
+2  20  2  200
+3  30  3  300
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL JOIN b
 ----
 render          ·         ·          (x, y, z)     ·
@@ -88,14 +87,14 @@ render          ·         ·          (x, y, z)     ·
 ·               table     b@primary  ·             ·
 ·               spans     ALL        ·             ·
 
-exec rowsort
+query III rowsort,colnames
 SELECT * FROM a NATURAL JOIN b
 ----
-x:int  y:int  z:int
-2      20     200
-3      30     300
+x  y   z
+2  20  200
+3  30  300
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
 join       ·         ·           (x, y, x, z)  ·
@@ -108,15 +107,14 @@ join       ·         ·           (x, y, x, z)  ·
 ·          table     b@primary   ·             ·
 ·          spans     ALL         ·             ·
 
-exec rowsort
+query IIII rowsort
 SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
-x:int  y:int  x:int  z:int
-1      10     NULL   NULL
-2      20     2      200
-3      30     3      300
+1  10  NULL  NULL
+2  20  2     200
+3  30  3     300
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
 render          ·         ·            (x, y, z)     ·
@@ -133,15 +131,14 @@ render          ·         ·            (x, y, z)     ·
 ·               table     b@primary    ·             ·
 ·               spans     ALL          ·             ·
 
-exec rowsort
+query III rowsort
 SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
-x:int  y:int  z:int
-2      20     200
-3      30     300
-4      NULL   400
+2  20    200
+3  30    300
+4  NULL  400
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
 render          ·         ·               (x, y, z)     ·
@@ -158,17 +155,16 @@ render          ·         ·               (x, y, z)     ·
 ·               table     b@primary       ·             ·
 ·               spans     ALL             ·             ·
 
-exec rowsort
+query III rowsort
 SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
-x:int  y:int  z:int
-1      10     NULL
-2      20     200
-3      30     300
-4      NULL   400
+1  10    NULL
+2  20    200
+3  30    300
+4  NULL  400
 
 # Select filters are pushed through join, down to scans.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
 join            ·       ·          (x, y, x, z)  ·
@@ -184,17 +180,16 @@ join            ·       ·          (x, y, x, z)  ·
 ·               table   b@primary  ·             ·
 ·               spans   ALL        ·             ·
 
-exec rowsort
+query IIII rowsort
 SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
-x:int  y:int  x:int  z:int
-2      20     2      200
-2      20     3      300
-3      30     2      200
-3      30     3      300
+2  20  2  200
+2  20  3  300
+3  30  2  200
+3  30  3  300
 
 # Join filter is pushed through join, down to scan.
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
 join            ·         ·           (x, y, x, z)  ·
@@ -209,23 +204,21 @@ join            ·         ·           (x, y, x, z)  ·
 ·               table     b@primary   ·             ·
 ·               spans     ALL         ·             ·
 
-exec rowsort
+query IIII rowsort
 SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
-x:int  y:int  x:int  z:int
-1      10     NULL   NULL
-2      20     2      200
-3      30     NULL   NULL
+1  10  NULL  NULL
+2  20  2     200
+3  30  NULL  NULL
 
 # TODO(radu): we create another table because we have some name resolution bugs
 # when two tables have the same column name and we use both columns in the EXISTS
 # condition.
-exec-raw
+statement ok
 CREATE TABLE c (u INT PRIMARY KEY, v INT);
 INSERT INTO c VALUES (2, 200), (3, 300), (4, 400)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
 ----
 join       ·         ·          (x, y)  ·
@@ -238,14 +231,13 @@ join       ·         ·          (x, y)  ·
 ·          table     c@primary  ·       ·
 ·          spans     ALL        ·       ·
 
-exec rowsort
+query II rowsort
 SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
 ----
-x:int  y:int
-2      20
-3      30
+2  20
+3  30
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
 join       ·      ·            (x, y)  ·
@@ -258,13 +250,12 @@ join       ·      ·            (x, y)  ·
 ·          table  c@primary    ·       ·
 ·          spans  ALL          ·       ·
 
-exec
+query II
 SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
-x:int  y:int
-3      30
+3  30
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
 ----
 join       ·         ·          (x, y)  ·
@@ -277,13 +268,12 @@ join       ·         ·          (x, y)  ·
 ·          table     c@primary  ·       ·
 ·          spans     ALL        ·       ·
 
-exec
+query II
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
 ----
-x:int  y:int
-1      10
+1  10
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
 join       ·      ·            (x, y)  ·
@@ -296,14 +286,13 @@ join       ·      ·            (x, y)  ·
 ·          table  c@primary    ·       ·
 ·          spans  ALL          ·       ·
 
-exec rowsort
+query II rowsort
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
-x:int  y:int
-1      10
-2      20
+1  10
+2  20
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, x+1 plus1 FROM a) NATURAL FULL JOIN (SELECT x, 2 two FROM b)
 ----
 render               ·         ·                       (x, plus1, two)             ·
@@ -326,11 +315,10 @@ render               ·         ·                       (x, plus1, two)        
 ·                    table     b@primary               ·                           ·
 ·                    spans     ALL                     ·                           ·
 
-exec rowsort
+query III rowsort
 SELECT * FROM (SELECT x, x+1 plus1 FROM a) NATURAL FULL JOIN (SELECT x, 2 two FROM b)
 ----
-x:int  plus1:int  two:int
-1      2          NULL
-2      3          2
-3      4          2
-4      NULL       2
+1  2     NULL
+2  3     2
+3  4     2
+4  NULL  2

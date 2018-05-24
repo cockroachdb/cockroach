@@ -1,12 +1,13 @@
+# LogicTest: opt
+#
 # This file tests that we build scalar expressions correctly. We do this by
 # putting expressions inside projections and checking that they roundtrip
 # correctly.
 
-exec-raw
+statement ok
 CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
 render       ·         ·                 ("1 + 2")  ·
@@ -14,7 +15,7 @@ render       ·         ·                 ("1 + 2")  ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT true
 ----
 render       ·         ·                 ("true")  ·
@@ -22,7 +23,7 @@ render       ·         ·                 ("true")  ·
  └── values  ·         ·                 ()        ·
 ·            size      0 columns, 1 row  ·         ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT false
 ----
 render       ·         ·                 ("false")  ·
@@ -30,7 +31,7 @@ render       ·         ·                 ("false")  ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (1, 2)
 ----
 render       ·         ·                 ("(1, 2)")  ·
@@ -38,7 +39,7 @@ render       ·         ·                 ("(1, 2)")  ·
  └── values  ·         ·                 ()          ·
 ·            size      0 columns, 1 row  ·           ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (true, false)
 ----
 render       ·         ·                 ("(true, false)")  ·
@@ -46,7 +47,7 @@ render       ·         ·                 ("(true, false)")  ·
  └── values  ·         ·                 ()                 ·
 ·            size      0 columns, 1 row  ·                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 FROM t
 ----
 render     ·         ·          ("1 + 2")  ·
@@ -55,7 +56,7 @@ render     ·         ·          ("1 + 2")  ·
 ·          table     t@primary  ·          ·
 ·          spans     ALL        ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a + 2 FROM t
 ----
 render     ·         ·          ("a + 2")  ·
@@ -64,7 +65,7 @@ render     ·         ·          ("a + 2")  ·
 ·          table     t@primary  ·          ·
 ·          spans     ALL        ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 FROM t
 ----
 render     ·         ·                                     ("((a >= 5) AND (b <= 10)) AND (c < 4)")  ·
@@ -73,7 +74,7 @@ render     ·         ·                                     ("((a >= 5) AND (b 
 ·          table     t@primary                             ·                                         ·
 ·          spans     ALL                                   ·                                         ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4  FROM t
 ----
 render     ·         ·                                   ("((a >= 5) OR (b <= 10)) OR (c < 4)")  ·
@@ -82,7 +83,7 @@ render     ·         ·                                   ("((a >= 5) OR (b <= 
 ·          table     t@primary                           ·                                       ·
 ·          spans     ALL                                 ·                                       ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) FROM t
 ----
 render     ·         ·          ("NOT (a = 5)")  ·
@@ -91,7 +92,7 @@ render     ·         ·          ("NOT (a = 5)")  ·
 ·          table     t@primary  ·                ·
 ·          spans     ALL        ·                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) FROM t
 ----
 render     ·         ·                     ("NOT ((a > 5) AND (b >= 10))")  ·
@@ -100,7 +101,7 @@ render     ·         ·                     ("NOT ((a > 5) AND (b >= 10))")  ·
 ·          table     t@primary             ·                                ·
 ·          spans     ALL                   ·                                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) FROM t
 ----
 render     ·         ·                                                    ("((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))")  ·
@@ -109,7 +110,7 @@ render     ·         ·                                                    ("((
 ·          table     t@primary                                            ·                                                        ·
 ·          spans     ALL                                                  ·                                                        ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) FROM t
 ----
 render     ·         ·                                    ("(NOT ((a >= 5) OR (b <= 10))) AND (NOT (c >= 10))")  ·
@@ -118,7 +119,7 @@ render     ·         ·                                    ("(NOT ((a >= 5) OR 
 ·          table     t@primary                            ·                                                      ·
 ·          spans     ALL                                  ·                                                      ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  FROM t
 ----
 render     ·         ·                    ("(a, b) = (1, 2)")  ·
@@ -127,7 +128,7 @@ render     ·         ·                    ("(a, b) = (1, 2)")  ·
 ·          table     t@primary            ·                    ·
 ·          spans     ALL                  ·                    ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) FROM t
 ----
 render     ·         ·            ("a IN (1, 2)")  ·
@@ -136,7 +137,7 @@ render     ·         ·            ("a IN (1, 2)")  ·
 ·          table     t@primary    ·                ·
 ·          spans     ALL          ·                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) FROM t
 ----
 render     ·         ·                           ("(a, b) IN ((1, 2), (3, 4))")  ·
@@ -145,7 +146,7 @@ render     ·         ·                           ("(a, b) IN ((1, 2), (3, 4))"
 ·          table     t@primary                   ·                               ·
 ·          spans     ALL                         ·                               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t
 ----
 render     ·         ·                                                                ("(a, b + c, 5 + (d * 2)) = (b + c, 8, a - c)")  ·
@@ -154,7 +155,7 @@ render     ·         ·                                                        
 ·          table     t@primary                                                        ·                                                ·
 ·          spans     ALL                                                              ·                                                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  FROM t
 ----
 render     ·         ·                                                ("((a, b), (c, d)) = ((1, 2), (3, 4))")  ·
@@ -163,7 +164,7 @@ render     ·         ·                                                ("((a, b
 ·          table     t@primary                                        ·                                        ·
 ·          spans     ALL                                              ·                                        ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) FROM t
 ----
 render     ·         ·                                                                                      ("(a, (b, 'a'), (c, 'b', 5)) = (9, (a + c, s), (5, s, a))")  ·
@@ -172,7 +173,7 @@ render     ·         ·                                                        
 ·          table     t@primary                                                                              ·                                                            ·
 ·          spans     ALL                                                                                    ·                                                            ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NULL FROM t
 ----
 render     ·         ·          ("a IS NULL")  ·
@@ -181,7 +182,7 @@ render     ·         ·          ("a IS NULL")  ·
 ·          table     t@primary  ·              ·
 ·          spans     ALL        ·              ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL FROM t
 ----
 render     ·         ·          ("a IS NULL")  ·
@@ -190,7 +191,7 @@ render     ·         ·          ("a IS NULL")  ·
 ·          table     t@primary  ·              ·
 ·          spans     ALL        ·              ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b FROM t
 ----
 render     ·         ·                         ("a IS NOT DISTINCT FROM b")  ·
@@ -199,7 +200,7 @@ render     ·         ·                         ("a IS NOT DISTINCT FROM b")  �
 ·          table     t@primary                 ·                             ·
 ·          spans     ALL                       ·                             ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL FROM t
 ----
 render     ·         ·              ("a IS NOT NULL")  ·
@@ -208,7 +209,7 @@ render     ·         ·              ("a IS NOT NULL")  ·
 ·          table     t@primary      ·                  ·
 ·          spans     ALL            ·                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL FROM t
 ----
 render     ·         ·              ("a IS NOT NULL")  ·
@@ -217,7 +218,7 @@ render     ·         ·              ("a IS NOT NULL")  ·
 ·          table     t@primary      ·                  ·
 ·          spans     ALL            ·                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b FROM t
 ----
 render     ·         ·                     ("a IS DISTINCT FROM b")  ·
@@ -226,7 +227,7 @@ render     ·         ·                     ("a IS DISTINCT FROM b")  ·
 ·          table     t@primary             ·                         ·
 ·          spans     ALL                   ·                         ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT +a + (-b) FROM t
 ----
 render     ·         ·          ("(+a) + (-b)")  ·
@@ -235,7 +236,7 @@ render     ·         ·          ("(+a) + (-b)")  ·
 ·          table     t@primary  ·                ·
 ·          spans     ALL        ·                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t
 ----
 render     ·         ·                                              ("CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END")  ·
@@ -244,7 +245,7 @@ render     ·         ·                                              ("CASE a W
 ·          table     t@primary                                      ·                                                  ·
 ·          spans     ALL                                            ·                                                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t
 ----
 render     ·         ·                                  ("CASE WHEN a = 2 THEN 1 ELSE 2 END")  ·
@@ -253,7 +254,7 @@ render     ·         ·                                  ("CASE WHEN a = 2 THEN
 ·          table     t@primary                          ·                                      ·
 ·          spans     ALL                                ·                                      ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END FROM t
 ----
 render     ·         ·                                                           ("CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END")  ·
@@ -263,7 +264,7 @@ render     ·         ·                                                        
 ·          spans     ALL                                                         ·                                                               ·
 
 # Tests for CASE with no ELSE statement
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END FROM t
 ----
 render     ·         ·                           ("CASE WHEN a = 2 THEN 1 END")  ·
@@ -272,7 +273,7 @@ render     ·         ·                           ("CASE WHEN a = 2 THEN 1 END"
 ·          table     t@primary                   ·                               ·
 ·          spans     ALL                         ·                               ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END FROM t
 ----
 render     ·         ·                         ("CASE a WHEN 2 THEN 1 END")  ·
@@ -281,16 +282,17 @@ render     ·         ·                         ("CASE a WHEN 2 THEN 1 END")  �
 ·          table     t@primary                 ·                             ·
 ·          spans     ALL                       ·                             ·
 
-exec allow-unsupported hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT a FROM t WHERE a IS OF (INT)
-----
-filter     ·       ·                (a)  ·
- │         filter  t.a IS OF (INT)  ·    ·
- └── scan  ·       ·                (a)  ·
-·          table   t@primary        ·    ·
-·          spans   ALL              ·    ·
+# TODO(radu): IS OF not supported yet.
+#query TTTTT
+#EXPLAIN (VERBOSE) SELECT a FROM t WHERE a IS OF (INT)
+#----
+#filter     ·       ·                (a)  ·
+# │         filter  t.a IS OF (INT)  ·    ·
+# └── scan  ·       ·                (a)  ·
+#·          table   t@primary        ·    ·
+#·          spans   ALL              ·    ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT LENGTH(s) FROM t
 ----
 render     ·         ·          (length)  ·
@@ -300,20 +302,18 @@ render     ·         ·          (length)  ·
 ·          spans     ALL        ·         ·
 
 # Verify that the built function can be executed.
-exec-raw
+statement ok
 CREATE TABLE str (s STRING);
 INSERT INTO str VALUES ('a'), ('ab'), ('abc')
-----
 
-exec rowsort
+query I rowsort
 SELECT LENGTH(s) FROM str
 ----
-length:int
 1
 2
 3
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' FROM t
 ----
 render     ·         ·                ("j @> '{""a"": 1}'")  ·
@@ -322,7 +322,7 @@ render     ·         ·                ("j @> '{""a"": 1}'")  ·
 ·          table     t@primary        ·                      ·
 ·          spans     ALL              ·                      ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j FROM t
 ----
 render     ·         ·                ("'{""a"": 1}' <@ j")  ·
@@ -331,7 +331,7 @@ render     ·         ·                ("'{""a"": 1}' <@ j")  ·
 ·          table     t@primary        ·                      ·
 ·          spans     ALL              ·                      ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j->>'a' FROM t
 ----
 render     ·         ·          ("j->>'a'")  ·
@@ -340,7 +340,7 @@ render     ·         ·          ("j->>'a'")  ·
 ·          table     t@primary  ·            ·
 ·          spans     ALL        ·            ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j->'a' FROM t
 ----
 render     ·         ·          ("j->'a'")  ·
@@ -349,7 +349,7 @@ render     ·         ·          ("j->'a'")  ·
 ·          table     t@primary  ·           ·
 ·          spans     ALL        ·           ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j ? 'a' FROM t
 ----
 render     ·         ·          ("j ? 'a'")  ·
@@ -358,7 +358,7 @@ render     ·         ·          ("j ? 'a'")  ·
 ·          table     t@primary  ·            ·
 ·          spans     ALL        ·            ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] FROM t
 ----
 render     ·         ·                          ("j ?| ARRAY['a', 'b', 'c']")  ·
@@ -367,7 +367,7 @@ render     ·         ·                          ("j ?| ARRAY['a', 'b', 'c']") 
 ·          table     t@primary                  ·                              ·
 ·          spans     ALL                        ·                              ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] FROM t
 ----
 render     ·         ·                          ("j ?& ARRAY['a', 'b', 'c']")  ·
@@ -376,7 +376,7 @@ render     ·         ·                          ("j ?& ARRAY['a', 'b', 'c']") 
 ·          table     t@primary                  ·                              ·
 ·          spans     ALL                        ·                              ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] FROM t
 ----
 render     ·         ·              ("j#>ARRAY['a']")  ·
@@ -385,7 +385,7 @@ render     ·         ·              ("j#>ARRAY['a']")  ·
 ·          table     t@primary      ·                  ·
 ·          spans     ALL            ·                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] FROM t
 ----
 render     ·         ·               ("j#>>ARRAY['a']")  ·
@@ -395,7 +395,7 @@ render     ·         ·               ("j#>>ARRAY['a']")  ·
 ·          spans     ALL             ·                   ·
 
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
 render     ·         ·          ("CAST(a AS STRING)", "b::FLOAT")  ·
@@ -405,7 +405,7 @@ render     ·         ·          ("CAST(a AS STRING)", "b::FLOAT")  ·
 ·          table     t@primary  ·                                  ·
 ·          spans     ALL        ·                                  ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
 render     ·         ·                      ("CAST((a + b) + c AS STRING)")  ·
@@ -414,7 +414,7 @@ render     ·         ·                      ("CAST((a + b) + c AS STRING)")  �
 ·          table     t@primary              ·                                ·
 ·          spans     ALL                    ·                                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
 ----
 render     ·         ·              ("s::VARCHAR(2)")  ·
@@ -423,15 +423,14 @@ render     ·         ·              ("s::VARCHAR(2)")  ·
 ·          table     t@primary      ·                  ·
 ·          spans     ALL            ·                  ·
 
-exec rowsort
+query RT rowsort
 SELECT LENGTH(s)::float, s FROM str
 ----
-length(s)::FLOAT:float  s:string
-1.0                     a
-2.0                     ab
-3.0                     abc
+1  a
+2  ab
+3  abc
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
 render       ·              ·                           ("COALESCE(a, b)")  ·
@@ -447,16 +446,15 @@ render       ·              ·                           ("COALESCE(a, b)")  ·
 ·            row 3, expr 0  NULL                        ·                   ·
 ·            row 3, expr 1  NULL                        ·                   ·
 
-exec rowsort
+query I rowsort
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
-COALESCE(a, b):int
-NULL
 1
 3
 4
+NULL
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
 render       ·              ·                                    ("COALESCE(a, b, c)")        ·
@@ -476,16 +474,15 @@ render       ·              ·                                    ("COALESCE(a,
 ·            row 3, expr 1  NULL                                 ·                            ·
 ·            row 3, expr 2  NULL                                 ·                            ·
 
-exec rowsort
+query I rowsort
 SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
-COALESCE(a, b, c):int
-NULL
 1
 4
 6
+NULL
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
 render          ·         ·                      (a)        ·
@@ -496,7 +493,7 @@ render          ·         ·                      (a)        ·
 ·               table     t@primary              ·          ·
 ·               spans     ALL                    ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
 render          ·         ·                   (a)        ·
@@ -507,7 +504,7 @@ render          ·         ·                   (a)        ·
 ·               table     t@primary           ·          ·
 ·               spans     ALL                 ·          ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d FROM t
 ----
 render     ·         ·                                                   ("a BETWEEN SYMMETRIC b AND d")  ·
@@ -516,7 +513,7 @@ render     ·         ·                                                   ("a B
 ·          table     t@primary                                           ·                                ·
 ·          spans     ALL                                                 ·                                ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d FROM t
 ----
 render     ·         ·                                              ("a NOT BETWEEN SYMMETRIC b AND d")  ·
@@ -525,7 +522,7 @@ render     ·         ·                                              ("a NOT BE
 ·          table     t@primary                                      ·                                    ·
 ·          spans     ALL                                            ·                                    ·
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
 render     ·         ·                   ("ARRAY[a + 1, 2, 3]")  ·

@@ -1,43 +1,26 @@
-exec-raw
+# LogicTest: opt distsql-opt
+
+statement ok
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT, s STRING);
 INSERT INTO a VALUES (1, 1.0, 'apple'), (2, 2.0, 'banana'), (3, 3.0, 'cherry')
-----
 
-opt
-SELECT * FROM a
-----
-scan a
- ├── columns: x:1(int!null) y:2(float) s:3(string)
- ├── stats: [rows=1000]
- ├── cost: 1000.00
- └── keys: (1)
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a
 ----
 scan  ·      ·          (x, y, s)  ·
 ·     table  a@primary  ·          ·
 ·     spans  ALL        ·          ·
 
-exec rowsort
+query IRT rowsort
 SELECT * FROM a
 ----
-x:int  y:float  s:string
-1      1.0      apple
-2      2.0      banana
-3      3.0      cherry
+1  1  apple
+2  2  banana
+3  3  cherry
 
 # Test projecting subset of table columns.
-opt
-SELECT s, x FROM a
-----
-scan a
- ├── columns: s:3(string) x:1(int!null)
- ├── stats: [rows=1000]
- ├── cost: 1000.00
- └── keys: (1)
-
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, x FROM a
 ----
 render     ·         ·          (s, x)  ·
@@ -47,37 +30,26 @@ render     ·         ·          (s, x)  ·
 ·          table     a@primary  ·       ·
 ·          spans     ALL        ·       ·
 
-exec rowsort
+query TI rowsort
 SELECT s, x FROM a
 ----
-s:string  x:int
-apple     1
-banana    2
-cherry    3
+apple   1
+banana  2
+cherry  3
 
 # Test with a hidden column.
-exec-raw
+statement ok
 CREATE TABLE b (x INT, y INT, s STRING);
 INSERT INTO b VALUES (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry')
-----
 
-opt
+query TI rowsort
 SELECT s, x FROM b
 ----
-scan b
- ├── columns: s:3(string) x:1(int)
- ├── stats: [rows=1000]
- └── cost: 1000.00
+apple   1
+banana  2
+cherry  3
 
-exec rowsort
-SELECT s, x FROM b
-----
-s:string  x:int
-apple     1
-banana    2
-cherry    3
-
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, x FROM b
 ----
 render     ·         ·          (s, x)  ·
