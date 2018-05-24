@@ -10,6 +10,8 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 
+import "./stores.styl";
+
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.StoresResponse;
   lastError: Error;

@@ -21,7 +21,6 @@ export default class EncryptionStatus extends React.Component<EncryptionStatusPr
     const { store } = this.props;
     const rawStatus = store.encryption_status;
 
-    console.log("Attempting protobuf decode");
     try {
       const decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(rawStatus);
       return this.renderSimpleRow("Encryption Status", JSON.stringify(decodedStatus.toJSON(), null, 2));
