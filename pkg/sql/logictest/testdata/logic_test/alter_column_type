@@ -30,6 +30,65 @@ statement ok
 DROP TABLE t
 
 
+# Demonstrate manual flow for non-trivial column change
+subtest ManualGeneralChange
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b STRING)
+
+statement ok
+CREATE INDEX idx ON t (b)
+
+statement ok
+INSERT INTO t VALUES (1, '01'), (2, '002'), (3, '0003')
+
+query IT colnames
+SELECT * from t ORDER BY b DESC
+----
+a  b
+1  01
+2  002
+3  0003
+
+statement ok
+ALTER TABLE t ADD COLUMN i INT as (b::INT) STORED
+
+statement ok
+CREATE INDEX idx2 ON t (i)
+
+statement ok
+ALTER TABLE t ALTER COLUMN i DROP STORED, DROP COLUMN b CASCADE
+
+query TT colnames
+show create table t
+----
+Table  CreateTable
+t      CREATE TABLE t (
+       a INT NOT NULL,
+       i INT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       INDEX idx2 (i ASC),
+       FAMILY "primary" (a, i)
+)
+
+statement ok
+ALTER TABLE t RENAME COLUMN i TO b
+
+statement ok
+ALTER INDEX idx2 RENAME TO idx
+
+query II colnames
+SELECT * from t ORDER BY b DESC
+----
+a  b
+3  3
+2  2
+1  1
+
+statement ok
+DROP TABLE t CASCADE
+
+
 # Demonstrate that we can change to an alias of a type
 subtest ChangeVisibleColumnType
 
