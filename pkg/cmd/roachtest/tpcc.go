@@ -22,10 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 func registerTPCC(r *registry) {
@@ -138,15 +141,9 @@ func loadTPCCBench(
 
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
-	var tableExists bool
-	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) > 0
-		FROM INFORMATION_SCHEMA.TABLES
-		WHERE TABLE_CATALOG = 'tpcc' AND TABLE_NAME = 'warehouse'`,
-	).Scan(&tableExists); err != nil {
-		return err
-	}
-	if tableExists {
+	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
+		c.l.printf("found existing tpcc database\n")
+
 		var curWarehouses int
 		if err := db.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM tpcc.warehouse`,
@@ -162,6 +159,9 @@ func loadTPCCBench(
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, roachNodes)
+	} else if pqErr, ok := err.(*pq.Error); !ok ||
+		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
+		return err
 	}
 
 	// Load the corresponding fixture.
