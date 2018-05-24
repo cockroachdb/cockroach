@@ -1,9 +1,10 @@
-exec-raw
+# LogicTest: opt distsql-opt
+
+statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v));
 INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 125), (6, -36, 216)
-----
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
 scan  ·      ·          (k, v)  +k
@@ -11,17 +12,16 @@ scan  ·      ·          (k, v)  +k
 ·     spans  ALL        ·       ·
 ·     limit  5          ·       ·
 
-exec
+query II
 SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-k:int  v:int
-1      1
-2      -4
-3      9
-4      -16
-5      25
+1  1
+2  -4
+3  9
+4  -16
+5  25
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
 limit      ·       ·          (k, v)  +k
@@ -30,13 +30,12 @@ limit      ·       ·          (k, v)  +k
 ·          table   t@primary  ·       ·
 ·          spans   ALL        ·       ·
 
-exec
+query II
 SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
-k:int  v:int
-6      -36
+6  -36
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
 limit      ·       ·          (k, v)  +v
@@ -46,17 +45,16 @@ limit      ·       ·          (k, v)  +v
 ·          table   t@t_v_idx  ·       ·
 ·          spans   ALL        ·       ·
 
-exec
+query II
 SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-k:int  v:int
-4      -16
-2      -4
-1      1
-3      9
-5      25
+4  -16
+2  -4
+1  1
+3  9
+5  25
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
 limit           ·       ·          (k, v)  -v
@@ -68,17 +66,16 @@ limit           ·       ·          (k, v)  -v
 ·               table   t@primary  ·       ·
 ·               spans   ALL        ·       ·
 
-exec
+query II
 SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-k:int  v:int
-3      9
-1      1
-2      -4
-4      -16
-6      -36
+3  9
+1  1
+2  -4
+4  -16
+6  -36
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                    ·            ·          (sum)         ·
@@ -96,10 +93,9 @@ render                    ·            ·          (sum)         ·
 ·                         table        t@primary  ·             ·
 ·                         spans        ALL        ·             ·
 
-exec
+query R
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-sum:decimal
 125
 27
 1
@@ -107,7 +103,7 @@ sum:decimal
 94
 216
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·
@@ -117,16 +113,15 @@ render     ·         ·          (k)     ·
 ·          spans     ALL        ·       ·
 ·          limit     4          ·       ·
 
-exec
+query I
 SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
-k:int
 6
 4
 2
 1
 
-exec hide-colnames nodist
+query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·
@@ -136,10 +131,9 @@ render     ·         ·          (k)     ·
 ·          spans     ALL        ·       ·
 ·          limit     4          ·       ·
 
-exec
+query I
 SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
-k:int
 6
 4
 2
