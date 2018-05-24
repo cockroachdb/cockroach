@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-metadata distsql-opt
+# TestConfigs: default opt parallel-stmts distsql distsql-metadata distsql-opt
 
 # see also file `sequences`
 

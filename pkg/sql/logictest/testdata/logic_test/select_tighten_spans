@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql 5node-distsql-metadata
+# TestConfigs: 5node-distsql 5node-distsql-metadata
 
 # This test verifies that we correctly tighten spans during index selection as
 # well as after partitioning spans in distsql.

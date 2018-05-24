@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 statement error unknown variable: "foo"
 RESET FOO

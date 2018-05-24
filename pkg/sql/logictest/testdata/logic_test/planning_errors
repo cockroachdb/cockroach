@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 # Check that plans that fail during expansion/optimization do not cause
 # memory leaks. #17274

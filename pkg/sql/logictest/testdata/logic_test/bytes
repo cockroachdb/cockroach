@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 query T
 SELECT 'non-escaped-string':::BYTES::STRING

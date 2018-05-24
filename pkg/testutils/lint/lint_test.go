@@ -872,8 +872,8 @@ func TestLint(t *testing.T) {
 				t.Errorf("reading first line of %s: %s", filename, err)
 				return
 			}
-			if !strings.HasPrefix(firstLine, "# LogicTest:") {
-				t.Errorf("%s must start with a directive, e.g. `# LogicTest: default`", filename)
+			if !strings.HasPrefix(firstLine, "# TestConfigs:") {
+				t.Errorf("%s must start with a directive, e.g. `# TestConfigs: default`", filename)
 			}
 		}); err != nil {
 			t.Error(err)

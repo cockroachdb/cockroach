@@ -1,4 +1,4 @@
-# LogicTest: default
+# TestConfigs: default
 
 # Check that node_statement_statistics report per application
 
