@@ -708,3 +708,24 @@ INSERT INTO x (a) SELECT 1
 
 statement ok
 DROP TABLE x
+
+# Verify errors emitted from computed columns contain the column name
+statement ok
+CREATE TABLE error_check (k INT PRIMARY KEY, s STRING, i INT AS (s::INT) STORED)
+
+statement ok
+INSERT INTO error_check VALUES(1, '1')
+
+statement error computed column i:
+INSERT INTO error_check VALUES(2, 'foo')
+
+statement error computed column i:
+UPDATE error_check SET s = 'foo' WHERE k = 1
+
+# Upsert -> update
+statement error computed column i:
+UPSERT INTO error_check VALUES (1, 'foo')
+
+# Upsert -> insert
+statement error computed column i:
+UPSERT INTO error_check VALUES (3, 'foo')
