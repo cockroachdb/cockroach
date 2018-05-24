@@ -2600,7 +2600,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 
 	newTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	if !newTableDesc.Adding() {
+	if newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
 	}
 	if err := zoneExists(sqlDB, &cfg, newTableDesc.ID); err != nil {
