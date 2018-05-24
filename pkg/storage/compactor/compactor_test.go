@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -98,7 +97,7 @@ func testSetup(capFn storeCapacityFunc) (*Compactor, *wrappedEngine, *int32, fun
 	doneFn := func(_ context.Context) { atomic.AddInt32(compactionCount, 1) }
 	st := cluster.MakeTestingClusterSettings()
 	compactor := NewCompactor(st, eng, capFn, doneFn)
-	compactor.Start(context.Background(), tracing.NewTracer(), stopper)
+	compactor.Start(context.Background(), stopper)
 	return compactor, eng, compactionCount, func() {
 		stopper.Stop(context.Background())
 	}
@@ -557,7 +556,7 @@ func TestCompactorDeadlockOnStart(t *testing.T) {
 
 	compactor.ch <- struct{}{}
 
-	compactor.Start(context.Background(), tracing.NewTracer(), stopper)
+	compactor.Start(context.Background(), stopper)
 }
 
 // TestCompactorProcessingInitialization verifies that a compactor gets
@@ -589,7 +588,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	fastCompactor := NewCompactor(st, we, capacityFn, doneFn)
 	minInterval.Override(&fastCompactor.st.SV, time.Millisecond)
-	fastCompactor.Start(context.Background(), tracing.NewTracer(), stopper)
+	fastCompactor.Start(context.Background(), stopper)
 	defer stopper.Stop(context.Background())
 
 	testutils.SucceedsSoon(t, func() error {

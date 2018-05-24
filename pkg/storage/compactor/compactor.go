@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -88,21 +87,28 @@ func (c *Compactor) maxAge() time.Duration {
 	return maxSuggestedCompactionRecordAge.Get(&c.st.SV)
 }
 
-// Start launches a compaction processing goroutine and exits when the
-// provided stopper indicates. Processing is done with a periodicity of
-// compactionMinInterval, but only if there are compactions pending.
-func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stopper *stop.Stopper) {
-	// Wake up immediately to examine the queue and set the bytes queued metric.
+func (c *Compactor) poke() {
 	select {
-	// The compactor can already have compactions waiting on it, so don't try to block here.
 	case c.ch <- struct{}{}:
 	default:
 	}
+}
+
+// Start launches a compaction processing goroutine and exits when the
+// provided stopper indicates. Processing is done with a periodicity of
+// compactionMinInterval, but only if there are compactions pending.
+func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
+	// Wake up immediately to examine the queue and set the bytes queued metric.
+	// Note that the compactor may have received suggestions before having been
+	// started (this isn't great, but it's how it is right now).
+	c.poke()
 
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		var timerSet bool
+
+		ctx = log.WithLogTagStr(ctx, "compactor", "")
 
 		for {
 			select {
@@ -128,12 +134,10 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 
 			case <-timer.C:
 				timer.Read = true
-				spanCtx, cleanup := tracing.EnsureContext(ctx, tracer, "process suggested compactions")
-				ok, err := c.processSuggestions(spanCtx)
+				ok, err := c.processSuggestions(ctx)
 				if err != nil {
-					log.Warningf(spanCtx, "failed processing suggested compactions: %s", err)
+					log.Warningf(ctx, "failed processing suggested compactions: %s", err)
 				}
-				cleanup()
 				if ok {
 					// The queue was processed. Wait for the next suggested
 					// compaction before resetting timer.
@@ -186,6 +190,10 @@ func (aggr aggregatedCompaction) String() string {
 // older than maxSuggestedCompactionRecordAge. Returns a boolean
 // indicating whether the queue was successfully processed.
 func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
+	var cleanup func()
+	ctx, cleanup = tracing.EnsureContext(ctx, c.st.Tracer, "process suggested compactions")
+	defer cleanup()
+
 	// Collect all suggestions.
 	var suggestions []storagebase.SuggestedCompaction
 	var totalBytes int64
@@ -427,8 +435,5 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 
 	// Poke the compactor goroutine to reconsider compaction in light of
 	// this new suggested compaction.
-	select {
-	case c.ch <- struct{}{}:
-	default:
-	}
+	c.poke()
 }
