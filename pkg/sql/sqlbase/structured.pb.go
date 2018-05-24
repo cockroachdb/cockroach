@@ -959,8 +959,8 @@ func _DescriptorMutation_OneofSizer(msg proto.Message) (n int) {
 // structured metadata key. The TableDescriptor has a globally-unique ID,
 // while its member {Column,Index}Descriptors have locally-unique IDs.
 type TableDescriptor struct {
-	// The table name. It should be normalized using sqlbase.NormalizeName()
-	// before comparing it.
+	// The table name. It should be normalized using NormalizeName() before
+	// comparing it.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	ID   ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
 	// ID of the parent database.

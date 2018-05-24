@@ -448,8 +448,8 @@ message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
-  // The table name. It should be normalized using sqlbase.NormalizeName()
-  // before comparing it.
+  // The table name. It should be normalized using NormalizeName() before
+  // comparing it.
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
