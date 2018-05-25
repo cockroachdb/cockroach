@@ -44,6 +44,7 @@ func registerTests(r *registry) {
 	registerTPCC(r)
 	registerUpgrade(r)
 	registerVersion(r)
+	registerEncryptionBenchmark(r)
 }
 
 func registerBenchmarks(r *registry) {
