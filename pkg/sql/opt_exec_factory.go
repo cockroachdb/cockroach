@@ -45,6 +45,9 @@ func makeExecFactory(p *planner) execFactory {
 func (ef *execFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
+	if len(cols) == 0 && len(rows) == 1 {
+		return &unaryNode{}, nil
+	}
 	return &valuesNode{
 		columns:          cols,
 		tuples:           rows,
