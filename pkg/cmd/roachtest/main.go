@@ -55,6 +55,8 @@ func main() {
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
+	rootCmd.PersistentFlags().BoolVarP(
+		&encrypt, "encrypt", "", encrypt, "start cluster with encryption at rest turned on")
 
 	clusterWipeRun := true
 	clusterWipeBench := false

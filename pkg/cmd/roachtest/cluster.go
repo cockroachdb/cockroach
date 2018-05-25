@@ -51,6 +51,7 @@ var (
 	local       bool
 	artifacts   string
 	cockroach   string
+	encrypt     bool
 	workload    string
 	roachprod   string
 	buildTag    string
@@ -670,6 +671,9 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
+	if encrypt {
+		args = append(args, "--encrypt")
+	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
 	}
