@@ -2305,9 +2305,10 @@ may increase either contention or retry errors, or both.`,
 	// SQL client against a pg server.
 	"current_schema": {
 		tree.Builtin{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categorySystemInfo,
+			Types:            tree.ArgTypes{},
+			ReturnType:       tree.FixedReturnType(types.String),
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
@@ -2336,9 +2337,10 @@ may increase either contention or retry errors, or both.`,
 	// server.
 	"current_schemas": {
 		tree.Builtin{
-			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
-			Category:   categorySystemInfo,
+			Types:            tree.ArgTypes{{"include_pg_catalog", types.Bool}},
+			ReturnType:       tree.FixedReturnType(types.TArray{Typ: types.String}),
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
