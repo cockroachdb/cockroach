@@ -357,7 +357,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 type pgPrivList map[string]func(withGrantOpt bool) (tree.Datum, error)
 
 // parsePrivilegeStr parses the provided privilege string and calls into the
-// privilege option map for each specified privielge.
+// privilege option map for each specified privilege.
 func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error) {
 	// Postgres allows WITH GRANT OPTION to be added to a privilege type to
 	// test whether the privilege is held with grant option.
