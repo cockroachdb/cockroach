@@ -275,6 +275,7 @@ func (s simpleCtxProvider) Ctx() context.Context {
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
+	parentMonitor *mon.BytesMonitor,
 	req *SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
@@ -311,7 +312,7 @@ func (ds *ServerImpl) setupFlow(
 		noteworthyMemoryUsageBytes,
 		ds.Settings,
 	)
-	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
+	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
 	var txn *client.Txn
@@ -402,9 +403,9 @@ func (ds *ServerImpl) setupFlow(
 // Note: the returned context contains a span that must be finished through
 // Flow.Cleanup.
 func (ds *ServerImpl) SetupSyncFlow(
-	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
+	ctx context.Context, mon *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver,
 ) (context.Context, *Flow, error) {
-	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), req, output)
+	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), mon, req, output)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
@@ -420,7 +421,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 		return errors.Errorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
-	ctx, f, err := ds.SetupSyncFlow(stream.Context(), req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
 	if err != nil {
 		return err
 	}
@@ -453,7 +454,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, req, nil /* syncFlowConsumer */)
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
