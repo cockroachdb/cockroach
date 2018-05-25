@@ -10,8 +10,7 @@ EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 root                 ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
  ├── render          ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
  │    │              render 0   @S1               ·                                               ·
- │    └── values     ·          ·                 ()                                              ·
- │                   size       0 columns, 1 row  ·                                               ·
+ │    └── emptyrow   ·          ·                 ()                                              ·
  └── subquery        ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
       │              id         @S1               ·                                               ·
       │              sql        EXISTS <unknown>  ·                                               ·
