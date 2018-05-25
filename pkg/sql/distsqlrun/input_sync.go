@@ -241,7 +241,8 @@ func (s *orderedSynchronizer) advanceRoot() error {
 			return err
 		} else if cmp > 0 {
 			return errors.Errorf(
-				"incorrectly ordered stream %s after %s", src.row.String(s.types), oldRow.String(s.types),
+				"incorrectly ordered stream %s after %s (ordering: %v)",
+				src.row.String(s.types), oldRow.String(s.types), s.ordering,
 			)
 		}
 	}

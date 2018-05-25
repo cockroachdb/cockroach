@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE with_no_column_refs (
