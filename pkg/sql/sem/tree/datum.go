@@ -1408,7 +1408,7 @@ func (*DIPAddr) Max(_ *EvalContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DIPAddr) AmbiguousFormat() bool {
-	return false
+	return true
 }
 
 // Format implements the NodeFormatter interface.
