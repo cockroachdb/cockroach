@@ -4,10 +4,9 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1
 ----
-render       ·         ·                 ("1")  ·
- │           render 0  1                 ·      ·
- └── values  ·         ·                 ()     ·
-·            size      0 columns, 1 row  ·      ·
+render         ·         ·  ("1")  ·
+ │             render 0  1  ·      ·
+ └── emptyrow  ·         ·  ()     ·
 
 query I
 SELECT 1
@@ -17,10 +16,9 @@ SELECT 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
-render       ·         ·                 ("1 + 2")  ·
- │           render 0  3                 ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render         ·         ·  ("1 + 2")  ·
+ │             render 0  3  ·          ·
+ └── emptyrow  ·         ·  ()         ·
 
 query I
 SELECT 1 + 2
