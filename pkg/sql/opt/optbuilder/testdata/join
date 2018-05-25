@@ -147,18 +147,7 @@ sort
 build
 SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
 ----
-sort
- ├── columns: x:1(int) x:3(int)
- ├── ordering: +1
- └── project
-      ├── columns: onecolumn.x:1(int) onecolumn.x:3(int)
-      └── inner-join
-           ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-           ├── scan onecolumn
-           │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
-           ├── scan onecolumn
-           │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-           └── true [type=bool]
+error (42P09): ORDER BY "x" is ambiguous
 
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
