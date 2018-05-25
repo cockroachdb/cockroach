@@ -162,49 +162,55 @@ right-join
 opt
 SELECT * FROM xysd RIGHT JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
 ----
-project
+right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
- ├── stats: [rows=100000]
- └── right-join-apply
-      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
-      ├── stats: [rows=100000]
-      ├── scan xysd
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (1) weak(3,4)
-      ├── left-join
-      │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
-      │    ├── outer: (1)
-      │    ├── stats: [rows=1000]
-      │    ├── scan uv
-      │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
-      │    │    └── stats: [rows=1000]
-      │    ├── max1-row
-      │    │    ├── columns: uv.u:8(int!null)
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── stats: [rows=1]
-      │    │    └── offset
-      │    │         ├── columns: uv.u:8(int!null)
-      │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=110]
-      │    │         ├── select
-      │    │         │    ├── columns: uv.u:8(int!null)
-      │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=111]
-      │    │         │    ├── scan uv
-      │    │         │    │    ├── columns: uv.u:8(int)
-      │    │         │    │    └── stats: [rows=1000]
-      │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
-      │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
-      │    │         │              ├── variable: uv.u [type=int, outer=(8)]
-      │    │         │              └── variable: xysd.x [type=int, outer=(1)]
-      │    │         └── const: 1 [type=int]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight)]
-           └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight)]
-                ├── variable: uv.u [type=int, outer=(8)]
-                └── null [type=unknown]
+ ├── stats: [rows=1000000]
+ ├── project
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── keys: (1) weak(3,4)
+ │    └── select
+ │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
+ │         ├── stats: [rows=1000, distinct(8)=1]
+ │         ├── keys: (1) weak(3,4)
+ │         ├── left-join-apply
+ │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
+ │         │    ├── stats: [rows=1000, distinct(8)=1]
+ │         │    ├── keys: (1) weak(3,4)
+ │         │    ├── scan xysd
+ │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │         │    │    ├── stats: [rows=1000]
+ │         │    │    └── keys: (1) weak(3,4)
+ │         │    ├── max1-row
+ │         │    │    ├── columns: uv.u:8(int!null)
+ │         │    │    ├── outer: (1)
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── stats: [rows=1, distinct(8)=1]
+ │         │    │    └── offset
+ │         │    │         ├── columns: uv.u:8(int!null)
+ │         │    │         ├── outer: (1)
+ │         │    │         ├── stats: [rows=110]
+ │         │    │         ├── select
+ │         │    │         │    ├── columns: uv.u:8(int!null)
+ │         │    │         │    ├── outer: (1)
+ │         │    │         │    ├── stats: [rows=111]
+ │         │    │         │    ├── scan uv
+ │         │    │         │    │    ├── columns: uv.u:8(int)
+ │         │    │         │    │    └── stats: [rows=1000]
+ │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ │         │    │         │              ├── variable: uv.u [type=int, outer=(8)]
+ │         │    │         │              └── variable: xysd.x [type=int, outer=(1)]
+ │         │    │         └── const: 1 [type=int]
+ │         │    └── true [type=bool]
+ │         └── filters [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight)]
+ │              └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight)]
+ │                   ├── variable: uv.u [type=int, outer=(8)]
+ │                   └── null [type=unknown]
+ ├── scan uv
+ │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    └── stats: [rows=1000]
+ └── true [type=bool]
 
 # Full-join.
 build
