@@ -734,8 +734,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.AlterIndexCmd> alter_index_cmd
 %type <tree.AlterIndexCmds> alter_index_cmds
 
-%type <empty> opt_collate_clause
-
 %type <tree.DropBehavior> opt_drop_behavior
 %type <tree.DropBehavior> opt_interleave_drop_behavior
 
@@ -1536,10 +1534,6 @@ opt_validate_behavior:
   {
     $$.val = tree.ValidationDefault
   }
-
-opt_collate_clause:
-  COLLATE collation_name { return unimplementedWithIssue(sqllex, 9851) }
-| /* EMPTY */ {}
 
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
@@ -6189,6 +6183,7 @@ interval_second:
   }
 | SECOND '(' ICONST ')' { return unimplemented(sqllex, "interval_second") }
 
+
 // General expressions. This is the heart of the expression syntax.
 //
 // We have two expression types: a_expr is the unrestricted kind, and b_expr is
@@ -6389,6 +6384,11 @@ a_expr:
 | a_expr LIKE a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.Like, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr LIKE a_expr ESCAPE a_expr %prec ESCAPE
+  {
+    fmt.Printf("%+v \t\t %+v \t\t %+v\n", $1.expr(), $3.expr(), $5.expr())
+    $$.val = &tree.ComparisonExpr{Operator: tree.Like, Left: $1.expr(), Right: $3.expr(), Escape: $5.expr()}
   }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
@@ -7910,6 +7910,7 @@ unreserved_keyword:
 | DROP
 | EMIT
 | ENCODING
+| ESCAPE
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT

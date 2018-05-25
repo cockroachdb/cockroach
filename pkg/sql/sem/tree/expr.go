@@ -390,6 +390,7 @@ type ComparisonExpr struct {
 	Operator    ComparisonOperator
 	SubOperator ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
 	Left, Right Expr
+	Escape      Expr //optional token that might be used in LIKE/ILIKE/SIMILAR clauses
 
 	typeAnnotation
 	fn CmpOp

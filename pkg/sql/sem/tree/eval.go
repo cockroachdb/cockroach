@@ -2233,21 +2233,26 @@ func evalDatumsCmp(
 }
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
+	fmt.Printf("starting to match LIKE left:%+v\tright:%+v\n", string(MustBeDString(left)), string(MustBeDString(right)))
 	pattern := string(MustBeDString(right))
-	like, err := optimizedLikeFunc(pattern, caseInsensitive)
+	escape := ctx.Escape
+	//like, err := optimizedLikeFunc(pattern, caseInsensitive)
+	like, err := optimizedLikeFunc(pattern, caseInsensitive, escape)
 	if err != nil {
 		return DBoolFalse, pgerror.NewErrorf(
 			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
+		//key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
+		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 		re, err := ctx.ReCache.GetRegexp(key)
 		if err != nil {
 			return DBoolFalse, pgerror.NewErrorf(
 				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 		}
 		like = re.MatchString
+		fmt.Printf("matching LIKE left:%+v\tpattern:%+v\n", string(MustBeDString(left)), re)
 	}
 	return MakeDBool(DBool(like(string(MustBeDString(left))))), nil
 }
@@ -2471,6 +2476,8 @@ type EvalContext struct {
 	// evaluation. It can change over the course of evaluation, such as on a
 	// per-row basis.
 	ActiveMemAcc *mon.BoundAccount
+
+	Escape string
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -3442,7 +3449,16 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if !expr.fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
 		return DNull, nil
 	}
+
+	if escape, ok := expr.Escape.(*StrVal); ok {
+		ctx.Escape = escape.s
+	} else {
+		ctx.Escape = "\\"
+	}
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
+	if op == Like {
+		fmt.Printf("Operator: %+v, result of matching: %v\n", op, d)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -3972,7 +3988,8 @@ func hasUnescapedSuffix(s string, suffix byte, escapeToken string) bool {
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
-func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool, error) {
+//func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool, error) {
+func optimizedLikeFunc(pattern string, caseInsensitive bool, escape string) (func(string) bool, error) {
 	switch len(pattern) {
 	case 0:
 		return func(s string) bool {
@@ -3993,12 +4010,14 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 			// Patterns with even number of `\` preceding the ending `%` will have
 			// anyEnd set to true. Otherwise anyEnd will be set to false.
-			anyEnd := hasUnescapedSuffix(pattern, '%', `\`)
+			anyEnd := hasUnescapedSuffix(pattern, '%', escape)
+			//anyEnd := hasUnescapedSuffix(pattern, '%', `\`)
 			anyStart := pattern[0] == '%'
 
 			// Patterns with even number of `\` preceding the ending `_` will have
 			// singleAnyEnd set to true. Otherwise singleAnyEnd will be set to false.
-			singleAnyEnd := hasUnescapedSuffix(pattern, '_', `\`)
+			singleAnyEnd := hasUnescapedSuffix(pattern, '_', escape)
+			//singleAnyEnd := hasUnescapedSuffix(pattern, '_', `\`)
 			singleAnyStart := pattern[0] == '_'
 
 			// Since we've already checked for escaped characters
@@ -4006,7 +4025,8 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 			// This is required since we do direct string
 			// comparison.
 			var err error
-			if pattern, err = unescapePattern(pattern, `\`); err != nil {
+			if pattern, err = unescapePattern(pattern, escape); err != nil {
+				//if pattern, err = unescapePattern(pattern, `\`); err != nil {
 				return nil, err
 			}
 			switch {
@@ -4091,6 +4111,7 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 type likeKey struct {
 	s               string
 	caseInsensitive bool
+	escape          string
 }
 
 // unescapePattern unescapes a pattern for a given escape token.
@@ -4230,18 +4251,34 @@ func (k likeKey) Pattern() (string, error) {
 	// QuoteMeta escapes `\` to `\\`.
 	pattern := regexp.QuoteMeta(k.s)
 
+	var err error
+	doubleEscape := k.escape + k.escape
+	fmt.Printf("Pattern after QuoteMeta: %v\n", pattern)
+	if k.escape != `\` {
+		pattern = replaceUnescaped(pattern, k.escape, doubleEscape, k.escape)
+		if pattern, err = unescapePattern(pattern, `\\`); err != nil {
+			return "", err
+		}
+	}
+
 	// Replace LIKE/ILIKE specific wildcards with standard wildcards
-	pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
-	pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+	pattern = replaceUnescaped(pattern, `%`, `.*`, doubleEscape)
+	pattern = replaceUnescaped(pattern, `_`, `.`, doubleEscape)
+	//pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
+	//pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+
+	fmt.Printf("Pattern after replacing unescaped: %v\n", pattern)
 
 	// After QuoteMeta, our original escape character `\` has become
 	// `\\`.
 	// We need to unescape escaped escape tokens `\\` (now `\\\\`) and
 	// other escaped characters `\A` (now `\\A`).
-	var err error
-	if pattern, err = unescapePattern(pattern, `\\`); err != nil {
+	if pattern, err = unescapePattern(pattern, doubleEscape); err != nil {
+		//if pattern, err = unescapePattern(pattern, `\\`); err != nil {
 		return "", err
 	}
+
+	fmt.Printf("Pattern after unescaping: %v\n", pattern)
 
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
