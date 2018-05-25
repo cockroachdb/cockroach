@@ -108,6 +108,7 @@ crdb_folk = set([
     "Tobias Schottdorf",
     "Victor Chen",
     "Vivek Menezes",
+    "Yahor Yuzefovich",
 ])
 
 
