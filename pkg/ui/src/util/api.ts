@@ -89,6 +89,9 @@ export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsR
 export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
 export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
 
+export type StoresRequestMessage = protos.cockroach.server.serverpb.StoresRequest;
+export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -316,6 +319,11 @@ export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Durat
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {
   return timeoutFetch(serverpb.UserLoginResponse, `${AUTH_PREFIX}/login`, req as any, timeout);
+}
+
+// getStores returns information about a node's stores.
+export function getStores(req: StoresRequestMessage, timeout?: moment.Duration): Promise<StoresResponseMessage> {
+  return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
 
 // TODO(vilterp): logout
