@@ -51,10 +51,9 @@ func (m *mysqldumpReader) inputFinished(ctx context.Context) {
 func (m *mysqldumpReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
-	var count int64
+	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
-
 	for {
 		stmt, err := mysql.ParseNext(tokens)
 		if err == io.EOF {
@@ -65,10 +64,14 @@ func (m *mysqldumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *mysql.Insert:
+			inserts++
 			rows, ok := i.Rows.(mysql.Values)
 			if !ok {
-				return errors.Errorf("unexpected insert row type %T: %v", rows, i.Rows)
+				return errors.Errorf(
+					"insert statement %d: unexpected insert row type %T: %v", inserts, rows, i.Rows,
+				)
 			}
+			startingCount := count
 			for _, inputRow := range rows {
 				count++
 				if expected, got := len(m.conv.visibleCols), len(inputRow); expected != got {
@@ -77,7 +80,8 @@ func (m *mysqldumpReader) readFile(
 				for i, raw := range inputRow {
 					converted, err := mysqlToCockroach(raw, m.conv.visibleColTypes[i], m.conv.evalCtx)
 					if err != nil {
-						return errors.Wrapf(err, "reading row %d", count)
+						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
+							count, count-startingCount, inserts)
 					}
 					m.conv.datums[i] = converted
 				}
