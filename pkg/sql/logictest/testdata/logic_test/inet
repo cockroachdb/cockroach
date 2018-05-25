@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-metadata distsql-opt
 
 # Basic IPv4 tests
 
@@ -868,3 +868,9 @@ query T
 SELECT text('::ffff:192.168.0.1/24'::INET)
 ----
 ::ffff:192.168.0.1/24
+
+# Verify the inet datum gets serialized correctly for distsql.
+query T
+SELECT host(MAX('192.168.0.2/24'::INET)) FROM (VALUES (1)) AS t(x)
+----
+192.168.0.2
