@@ -221,6 +221,15 @@ func (s *scope) removeHiddenCols() {
 	s.cols = s.cols[:n]
 }
 
+// setTableAlias qualifies the names of all columns in this scope with the
+// given alias name, as if they were part of a table with that name.
+func (s *scope) setTableAlias(alias tree.Name) {
+	tn := tree.MakeUnqualifiedTableName(alias)
+	for i := range s.cols {
+		s.cols[i].table = tn
+	}
+}
+
 // findExistingCol finds the given expression among the bound variables
 // in this scope. Returns nil if the expression is not found.
 func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
