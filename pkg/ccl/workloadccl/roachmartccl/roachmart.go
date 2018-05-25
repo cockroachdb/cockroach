@@ -28,7 +28,7 @@ import (
 // to roachprod.
 //
 // TODO(benesch): avoid hardcoding these.
-var zones = []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
+var zones = []string{"us-central1-b", "us-west1-b", "europe-west2-b"}
 
 var usersSchema = func() string {
 	var buf bytes.Buffer

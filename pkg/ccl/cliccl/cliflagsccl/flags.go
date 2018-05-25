@@ -15,15 +15,35 @@ var (
 	EnterpriseEncryption = cliflags.FlagInfo{
 		Name: "enterprise-encryption",
 		Description: `
+<PRE>
 *** Valid enterprise licenses only ***
 
-TODO(mberhault): fill this.
+WARNING: encryption at rest is an experimental feature.
 
+Enable encryption at rest for a store.
+
+TODO(mberhault): fill in description.
+
+</PRE>
+Key files must be of size 32 bytes + AES key size, such as:
+<PRE>
+AES-128: 48 bytes
+AES-192: 56 bytes
+AES-256: 64 bytes
+
+</PRE>
 Valid fields:
-* path: must match the path of one of the stores
-* key: path to the current key file
-* old-key: path to the previous key file
-* rotation-period: amount of time after which data keys should be rotated
+<PRE>
+* path    (required): must match the path of one of the stores
+* key     (required): path to the current key file, or "plain"
+* old-key (required): path to the previous key file, or "plain"
+* rotation-period   : amount of time after which data keys should be rotated
+
+</PRE>
+example:
+<PRE>
+  --enterprise-encryption=path=cockroach-data,key=/keys/aes-128.key,old-key=plain
+</PRE>
 `,
 	}
 )

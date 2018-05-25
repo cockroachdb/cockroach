@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -171,6 +172,7 @@ type rowConverter struct {
 	evalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	visibleCols           []sqlbase.ColumnDescriptor
+	visibleColTypes       []types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 }
@@ -205,6 +207,10 @@ func newRowConverter(
 	c.defaultExprs = defaultExprs
 
 	c.visibleCols = tableDesc.VisibleColumns()
+	c.visibleColTypes = make([]types.T, len(c.visibleCols))
+	for i := range c.visibleCols {
+		c.visibleColTypes[i] = c.visibleCols[i].DatumType()
+	}
 	c.datums = make([]tree.Datum, len(c.visibleCols), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
@@ -283,6 +289,9 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 }
 
 func (c *rowConverter) sendBatch(ctx context.Context) error {
+	if len(c.kvBatch) == 0 {
+		return nil
+	}
 	select {
 	case c.kvCh <- c.kvBatch:
 	case <-ctx.Done():
@@ -332,7 +341,7 @@ type progressFn func(finished bool) error
 type inputConverter interface {
 	start(group ctxgroup.Group)
 	readFile(ctx context.Context, input io.Reader, fileIdx int32, filename string, progress progressFn) error
-	inputFinished()
+	inputFinished(ctx context.Context)
 }
 
 type readImportDataProcessor struct {
@@ -374,6 +383,13 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, evalCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv = newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, evalCtx)
+	case roachpb.IOFileFormat_Mysqldump:
+		c, err := newMysqldumpReader(kvCh, &cp.tableDesc, evalCtx)
+		if err != nil {
+			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
+			return
+		}
+		conv = c
 	default:
 		err := errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.inputFromat.Format)
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
@@ -385,7 +401,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		defer conv.inputFinished()
+		defer conv.inputFinished(ctx)
 
 		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
 		if err != nil {

@@ -71,6 +71,12 @@ ignored = [
   name = "cloud.google.com/go"
   revision = "094187a3a68a589c8217a46b90af0efae38542b9"
 
+# https://github.com/xwb1989/sqlparser/issues/31
+# https://github.com/xwb1989/sqlparser/issues/32
+[[constraint]]
+  name = "github.com/xwb1989/sqlparser"
+  source = "https://github.com/dt/sqlparser"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
