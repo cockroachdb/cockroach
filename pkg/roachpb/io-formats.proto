@@ -24,6 +24,7 @@ message IOFileFormat {
     Unknown = 0;
     CSV = 1;
     MysqlOutfile = 2;
+    Mysqldump = 3;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];

@@ -497,7 +497,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH MYSQLOUTFILE
+%token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH MYSQLDUMP MYSQLOUTFILE
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF
@@ -1607,6 +1607,11 @@ import_data_format:
   {
     $$ = "MYSQLOUTFILE"
   }
+| MYSQLDUMP
+  {
+    $$ = "MYSQLDUMP"
+  }
+
 
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
@@ -1620,6 +1625,7 @@ import_data_format:
 // Formats:
 //    CSV
 //    MYSQLOUTFILE
+//    MYSQLDUMP (mysqldump's SQL output)
 //
 // Options:
 //    distributed = '...'
@@ -7957,6 +7963,7 @@ unreserved_keyword:
 | MATCH
 | MINUTE
 | MONTH
+| MYSQLDUMP
 | MYSQLOUTFILE
 | NAMES
 | NAN

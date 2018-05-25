@@ -31,7 +31,7 @@ func registerRoachmart(r *registry) {
 			i    int
 			zone string
 		}{
-			{1, "us-east1-b"},
+			{1, "us-central1-b"},
 			{4, "us-west1-b"},
 			{7, "europe-west2-b"},
 		}
@@ -75,7 +75,7 @@ func registerRoachmart(r *registry) {
 		v := v
 		r.Add(testSpec{
 			Name:   fmt.Sprintf("roachmart/partition=%v", v),
-			Nodes:  nodes(9, geo()),
+			Nodes:  nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)

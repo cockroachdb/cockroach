@@ -1015,6 +1015,19 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/xwb1989/sqlparser"
+  packages = [
+    ".",
+    "dependency/bytes2",
+    "dependency/hack",
+    "dependency/querypb",
+    "dependency/sqltypes",
+  ]
+  revision = "6aff8615a33faf1f260a3a8f800456511505d5fd"
+  source = "https://github.com/dt/sqlparser"
+
+[[projects]]
   name = "go.opencensus.io"
   packages = [
     "exporter/stackdriver/propagation",
@@ -1252,6 +1265,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0ee93ecb5df1df1ae0e4fb45e3b1111eac3ba777ec4d93a3c476c9165dd70b0e"
+  inputs-digest = "7cd01a43675d4f71b67733ff9c8883b6af343ccbf3b38bb4d6ec9388e6a22f24"
   solver-name = "gps-cdcl"
   solver-version = 1

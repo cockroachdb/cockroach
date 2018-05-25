@@ -126,7 +126,7 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 			&clusterWipe, "wipe", cmd == runCmd, // default depends on test vs. bench
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
-			&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 	}
 
 	var storeGenCmd = &cobra.Command{
