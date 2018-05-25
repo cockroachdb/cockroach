@@ -787,7 +787,7 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 	}
 	args = append(args, c.makeNodes(node))
 	cmd := exec.CommandContext(ctx, roachprod, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println(strings.Join(cmd.Args, ` `))
 		c.t.Fatal(err)
