@@ -21,11 +21,12 @@ import (
 )
 
 func registerKV(r *registry) {
-	runKV := func(ctx context.Context, t *test, c *cluster, percent int) {
+	runKV := func(ctx context.Context, t *test, c *cluster, percent int, encryption bool) {
 		if !c.isLocal() {
 			c.RemountNoBarrier(ctx)
 		}
 
+		encrypt = encryption
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -50,50 +51,56 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			r.Add(testSpec{
-				Name:   fmt.Sprintf("kv%d/nodes=%d", p, n),
-				Nodes:  nodes(n+1, cpu(8)),
-				Stable: true, // DO NOT COPY to new tests
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runKV(ctx, t, c, p)
-				},
-			})
+			for _, e := range []bool{false, true} {
+				r.Add(testSpec{
+					Name:  fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
+					Nodes: nodes(n+1, cpu(8)),
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runKV(ctx, t, c, p, e)
+					},
+				})
+			}
 		}
 	}
 }
 
 func registerKVSplits(r *registry) {
-	r.Add(testSpec{
-		Name:   "kv/splits/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.nodes - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+	for _, e := range []bool{false, true} {
+		r.Add(testSpec{
+			Name:   fmt.Sprintf("kv/splits/encrypt=%t/nodes=3", e),
+			Nodes:  nodes(4),
+			Stable: true, // DO NOT COPY to new tests
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				nodes := c.nodes - 1
+				encrypt = e
 
-			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
-			m.Go(func(ctx context.Context) error {
-				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-				splits := " --splits=" + ifLocal("2000", "500000")
-				cmd := fmt.Sprintf(
-					"./workload run kv --init --max-ops=1"+
-						concurrency+splits+
-						" {pgurl:1-%d}",
-					nodes)
-				c.Run(ctx, c.Node(nodes+1), cmd)
-				return nil
-			})
-			m.Wait()
-		},
-	})
+				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+				c.Start(ctx, c.Range(1, nodes))
+
+				t.Status("running workload")
+				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m.Go(func(ctx context.Context) error {
+					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + ifLocal("2000", "500000")
+					cmd := fmt.Sprintf(
+						"./workload run kv --init --max-ops=1"+
+							concurrency+splits+
+							" {pgurl:1-%d}",
+						nodes)
+					c.Run(ctx, c.Node(nodes+1), cmd)
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
 
 func registerKVScalability(r *registry) {
-	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
+	runScalability := func(ctx context.Context, t *test, c *cluster, percent int, encryption bool) {
 		nodes := c.nodes - 1
+		encrypt = encryption
 
 		if !c.isLocal() {
 			c.RemountNoBarrier(ctx)
@@ -131,13 +138,15 @@ func registerKVScalability(r *registry) {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			r.Add(testSpec{
-				Name:  fmt.Sprintf("kv%d/scale/nodes=6", p),
-				Nodes: nodes(7, cpu(8)),
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runScalability(ctx, t, c, p)
-				},
-			})
+			for _, e := range []bool{false, true} {
+				r.Add(testSpec{
+					Name:  fmt.Sprintf("kv%d/scale/encrypt=%t/nodes=6", p, e),
+					Nodes: nodes(7, cpu(8)),
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runScalability(ctx, t, c, p, e)
+					},
+				})
+			}
 		}
 	}
 }
