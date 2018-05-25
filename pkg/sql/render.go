@@ -502,11 +502,10 @@ func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode t
 
 	switch t := expr.(type) {
 	case *tree.ColumnAccessExpr:
-		// TODO(knz): support arbitrary composite expressions.
 		fe, ok := t.Expr.(*tree.FuncExpr)
 		if !ok {
-			v.err = pgerror.UnimplementedWithIssueErrorf(24866,
-				"access to field in composite expression: %q", tree.ErrString(t.Expr))
+			// If there is no function inside the column access expression, then it
+			// will be dealt with elsewhere.
 			return false, expr
 		}
 		newFe := *fe
