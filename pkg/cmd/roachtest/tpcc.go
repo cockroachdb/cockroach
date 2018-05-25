@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -99,6 +100,10 @@ type tpccBenchSpec struct {
 	// result. This can be adjusted over time as performance characteristics
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
+	// An optional version that is part of a URL pointing at a pre-generated
+	// store dump directory. Can be used to speed up dataset loading on fresh
+	// clusters.
+	StoreDirVersion string
 }
 
 func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
@@ -134,7 +139,7 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 // function is idempotent and first checks whether a compatible dataset exists,
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
-	ctx context.Context, c *cluster, roachNodes, loadNode nodeListOption, warehouses int,
+	ctx context.Context, c *cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -150,7 +155,7 @@ func loadTPCCBench(
 		).Scan(&curWarehouses); err != nil {
 			return err
 		}
-		if curWarehouses >= warehouses {
+		if curWarehouses >= b.LoadWarehouses {
 			// The cluster has enough warehouses. Nothing to do.
 			return nil
 		}
@@ -164,9 +169,25 @@ func loadTPCCBench(
 		return err
 	}
 
+	// If the fixture has a corresponding store dump, use it.
+	if b.StoreDirVersion != "" {
+		c.l.printf("ingesting existing tpcc store dump\n")
+
+		urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(1),
+			fmt.Sprintf(`./workload fixtures url tpcc --warehouses=%d`, b.LoadWarehouses))
+		if err != nil {
+			return err
+		}
+
+		fixtureURL := string(bytes.TrimSpace(urlBase))
+		storeDirsPath := storeDirURL(fixtureURL, len(roachNodes), b.StoreDirVersion)
+		return downloadStoreDumps(ctx, c, storeDirsPath, len(roachNodes))
+	}
+
 	// Load the corresponding fixture.
+	c.l.printf("restoring tpcc fixture\n")
 	cmd := fmt.Sprintf(
-		"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", warehouses)
+		"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", b.LoadWarehouses)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
@@ -175,7 +196,7 @@ func loadTPCCBench(
 	// generation doesn't actually run.
 	cmd = fmt.Sprintf(
 		"./workload run tpcc --warehouses=%d --split --scatter "+
-			"--duration=1ms {pgurl:1}", warehouses)
+			"--duration=1ms {pgurl:1}", b.LoadWarehouses)
 	return c.RunE(ctx, loadNode, cmd)
 }
 
@@ -219,7 +240,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("setting up dataset")
-		err := loadTPCCBench(ctx, c, roachNodes, loadNode, b.LoadWarehouses)
+		err := loadTPCCBench(ctx, c, b, roachNodes, loadNode)
 		if err != nil {
 			return err
 		}
@@ -333,8 +354,9 @@ func registerTPCCBench(r *registry) {
 			Nodes: 3,
 			CPUs:  4,
 
-			LoadWarehouses: 1000,
-			EstimatedMax:   325,
+			LoadWarehouses:  1000,
+			EstimatedMax:    325,
+			StoreDirVersion: "2.0-5",
 		},
 		{
 			Nodes: 3,

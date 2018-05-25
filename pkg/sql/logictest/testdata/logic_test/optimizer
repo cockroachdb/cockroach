@@ -1,7 +1,10 @@
-# LogicTest: default distsql
+# LogicTest: default opt distsql distsql-opt
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)
+
+statement ok
+CREATE VIEW tview AS SELECT k, v FROM t
 
 statement ok
 INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
@@ -76,6 +79,18 @@ SELECT COUNT(*) FILTER (WHERE v>10) FROM t
 ----
 3
 
+query II rowsort
+SELECT * FROM tview
+----
+1  10
+2  20
+3  30
+4  40
+
+query I rowsort
+SELECT id FROM crdb_internal.jobs
+----
+
 statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 
@@ -85,6 +100,12 @@ INSERT INTO test (k, v) VALUES (5, 50)
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: aggregates with FILTER are not supported yet
 SELECT COUNT(*) FILTER (WHERE v>10) FROM t
+
+query error pq: views and sequences are not supported
+SELECT * FROM tview
+
+query error pq: virtual tables are not supported
+SELECT id FROM crdb_internal.jobs
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL

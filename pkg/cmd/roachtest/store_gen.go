@@ -26,6 +26,33 @@ import (
 
 var stores = 3
 
+func storeDirURL(fixtureURL string, stores int, binVersion string) string {
+	return fmt.Sprintf("%s/stores=%d,bin-version=%s", fixtureURL, stores, binVersion)
+}
+
+func storeDumpExists(ctx context.Context, c *cluster, storeDirPath string) (bool, error) {
+	err := c.RunE(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q ls %s &> /dev/null", storeDirPath))
+	if err == nil {
+		return true, nil
+	}
+	if strings.Contains(err.Error(), "matched no objects") {
+		return false, nil
+	}
+	return false, err
+}
+
+func downloadStoreDumps(ctx context.Context, c *cluster, storeDirPath string, nodeCount int) error {
+	var g errgroup.Group
+	for node := 1; node <= nodeCount; node++ {
+		node := node
+		g.Go(func() error {
+			path := fmt.Sprintf("%s/%d/*", storeDirPath, node)
+			return c.RunE(ctx, c.Node(node), `mkdir -p {store-dir} && gsutil -m -q cp -r `+path+` {store-dir}`)
+		})
+	}
+	return g.Wait()
+}
+
 // registerStoreGen registers a store generation "test" that powers the
 // 'roachtest store-gen' subcommand.
 func registerStoreGen(r *registry, args []string) {
@@ -65,19 +92,20 @@ func registerStoreGen(r *registry, args []string) {
 				t.Fatal(err)
 			}
 
+			fixtureURL := string(bytes.TrimSpace(urlBase))
+			storeDirsPath := storeDirURL(fixtureURL, stores, binVersion)
+
 			// Stop all the nodes before downloading the store directory, or you end
 			// up with invalid fixtures.
 			c.Stop(ctx, c.All())
 
-			fixturesURL := fmt.Sprintf("%s/stores=%d,bin-version=%s",
-				bytes.TrimSpace(urlBase), stores, binVersion)
-
 			// gsutil rm fails if no objects exist, even with -f, so check if any
 			// old store directories exist before attempting to remove them.
-			err = c.RunE(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q ls %s &> /dev/null", fixturesURL))
-			if err == nil {
+			if exists, err := storeDumpExists(ctx, c, storeDirsPath); err != nil {
+				t.Fatal(err)
+			} else if exists {
 				t.Status("deleting old store dumps")
-				c.Run(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q rm -r %s", fixturesURL))
+				c.Run(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q rm -r %s", storeDirsPath))
 			}
 
 			t.Status("uploading store dumps")
@@ -86,7 +114,7 @@ func registerStoreGen(r *registry, args []string) {
 				store := store
 				g.Go(func() error {
 					c.Run(ctx, c.Node(store), fmt.Sprintf("gsutil -m -q cp -r {store-dir}/* %s/%d/",
-						fixturesURL, store))
+						storeDirsPath, store))
 					return nil
 				})
 			}
