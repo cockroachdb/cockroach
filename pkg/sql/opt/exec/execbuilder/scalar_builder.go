@@ -290,6 +290,18 @@ func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 }
 
 func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	if memo.HasOnlyConstChildren(ev) {
+		elementType := ev.Logical().Scalar.Type.(types.TArray).Typ
+		a := tree.NewDArray(elementType)
+		a.Array = make(tree.Datums, ev.ChildCount())
+		for i := range a.Array {
+			a.Array[i] = memo.ExtractConstDatum(ev.Child(i))
+			if a.Array[i] == tree.DNull {
+				a.HasNulls = true
+			}
+		}
+		return a, nil
+	}
 	exprs := make(tree.TypedExprs, ev.ChildCount())
 	var err error
 	for i := range exprs {
