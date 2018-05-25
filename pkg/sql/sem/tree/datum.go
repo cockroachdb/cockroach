@@ -2878,7 +2878,11 @@ func (d *DArray) IsMin(_ *EvalContext) bool {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DArray) AmbiguousFormat() bool { return false }
+func (d *DArray) AmbiguousFormat() bool {
+	// The type of the array is ambiguous if it is empty; when serializing we need
+	// to annotate it with the type.
+	return len(d.Array) == 0
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {

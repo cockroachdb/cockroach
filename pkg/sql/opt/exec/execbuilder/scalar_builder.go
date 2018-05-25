@@ -110,11 +110,7 @@ func (b *Builder) indexedVar(
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	if memo.MatchesTupleOfConstants(ev) {
-		datums := make(tree.Datums, ev.ChildCount())
-		for i := range datums {
-			datums[i] = memo.ExtractConstDatum(ev.Child(i))
-		}
-		return tree.NewDTuple(datums...), nil
+		return memo.ExtractConstDatum(ev), nil
 	}
 
 	typedExprs := make([]tree.TypedExpr, ev.ChildCount())
@@ -290,6 +286,9 @@ func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 }
 
 func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	if memo.HasOnlyConstChildren(ev) {
+		return memo.ExtractConstDatum(ev), nil
+	}
 	exprs := make(tree.TypedExprs, ev.ChildCount())
 	var err error
 	for i := range exprs {

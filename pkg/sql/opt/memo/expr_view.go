@@ -516,19 +516,25 @@ func (ev ExprView) formatWeakKeys(tp treeprinter.Node) {
 	}
 }
 
-// MatchesTupleOfConstants returns true if the expression is a TupleOp with
-// ConstValue children.
-func MatchesTupleOfConstants(ev ExprView) bool {
-	if ev.Operator() != opt.TupleOp {
-		return false
-	}
+// HasOnlyConstChildren returns true if all children of ev are constant values
+// (tuples of constant values are considered constant values).
+func HasOnlyConstChildren(ev ExprView) bool {
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
-		if !child.IsConstValue() {
+		switch {
+		case child.IsConstValue():
+		case child.Operator() == opt.TupleOp && HasOnlyConstChildren(child):
+		default:
 			return false
 		}
 	}
 	return true
+}
+
+// MatchesTupleOfConstants returns true if the expression is a TupleOp with
+// constant values (a nested tuple of constant values is considered constant).
+func MatchesTupleOfConstants(ev ExprView) bool {
+	return ev.Operator() == opt.TupleOp && HasOnlyConstChildren(ev)
 }
 
 // ExprFmtInterceptor is a callback that can be set to a custom formatting
