@@ -21,8 +21,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -31,130 +29,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-var _ exec.TestEngineFactory = &InternalExecutor{}
-
-// NewTestEngine is part of the exec.TestEngineFactory interface.
-func (ie *InternalExecutor) NewTestEngine(defaultDatabase string) exec.TestEngine {
-	txn := client.NewTxn(ie.s.cfg.DB, ie.s.cfg.NodeID.Get(), client.RootTxn)
-	p, cleanup := newInternalPlanner("opt", txn, security.RootUser, &MemoryMetrics{}, ie.s.cfg)
-	// TODO(radu): Setting this directly is a hack.
-	p.extendedEvalCtx.SessionData.Database = defaultDatabase
-	return newExecEngine(p, cleanup)
-}
-
-type execEngine struct {
-	catalog optCatalog
+type execFactory struct {
 	planner *planner
-	cleanup func()
 }
 
-var _ exec.TestEngine = &execEngine{}
+var _ exec.Factory = &execFactory{}
 
-func newExecEngine(p *planner, cleanup func()) *execEngine {
-	ee := &execEngine{planner: p, cleanup: cleanup}
-	ee.catalog.init(p.execCfg.TableStatsCache, p)
-	return ee
+func makeExecFactory(p *planner) execFactory {
+	return execFactory{planner: p}
 }
-
-// Factory is part of the exec.TestEngine interface.
-func (ee *execEngine) Factory() exec.Factory {
-	return ee
-}
-
-// Catalog is part of the exec.TestEngine interface.
-func (ee *execEngine) Catalog() opt.Catalog {
-	return &ee.catalog
-}
-
-// Columns is part of the exec.TestEngine interface.
-func (ee *execEngine) Columns(p exec.Plan) sqlbase.ResultColumns {
-	return planColumns(p.(*planTop).plan)
-}
-
-// Execute is part of the exec.TestEngine interface.
-func (ee *execEngine) Execute(p exec.Plan, useDistSQL bool) ([]tree.Datums, error) {
-	top := p.(*planTop)
-	if useDistSQL {
-		return ee.execDist(top)
-	}
-	return ee.execLocal(top)
-}
-
-func (ee *execEngine) execLocal(top *planTop) ([]tree.Datums, error) {
-	// We have to use planner.curPlan because that is used to evaluate
-	// subqueries (via EvalSubquery upcall).
-	ee.planner.curPlan = *top
-	params := runParams{
-		ctx:             context.TODO(),
-		extendedEvalCtx: &ee.planner.extendedEvalCtx,
-		p:               ee.planner,
-	}
-	defer ee.planner.curPlan.close(context.TODO())
-	if err := ee.planner.curPlan.start(params); err != nil {
-		return nil, err
-	}
-	var res []tree.Datums
-	plan := ee.planner.curPlan.plan
-	for {
-		ok, err := plan.Next(params)
-		if err != nil {
-			return res, nil
-		}
-		if !ok {
-			break
-		}
-		res = append(res, append(tree.Datums(nil), plan.Values()...))
-	}
-	return res, nil
-}
-
-func (ee *execEngine) execDist(top *planTop) ([]tree.Datums, error) {
-	if len(top.subqueryPlans) > 0 {
-		return nil, errors.Errorf("distsql does not support subqueries")
-	}
-	execCfg := ee.planner.ExecCfg()
-	if _, err := execCfg.DistSQLPlanner.CheckSupport(top.plan); err != nil {
-		return nil, err
-	}
-	res := &execEngineRowWriter{}
-	recv := makeDistSQLReceiver(
-		context.TODO(),
-		res,
-		tree.Rows,
-		execCfg.RangeDescriptorCache,
-		execCfg.LeaseHolderCache,
-		ee.planner.txn,
-		func(ts hlc.Timestamp) {
-			_ = execCfg.Clock.Update(ts)
-		},
-	)
-	execCfg.DistSQLPlanner.PlanAndRun(
-		context.TODO(),
-		ee.planner.txn,
-		top.plan,
-		recv,
-		ee.planner.ExtendedEvalContext(),
-	)
-	if err := res.Err(); err != nil {
-		return nil, err
-	}
-	return res.rows, nil
-}
-
-// Close is part of the exec.TestEngine interface.
-func (ee *execEngine) Close() {
-	if ee.cleanup != nil {
-		ee.cleanup()
-	}
-}
-
-var _ exec.Factory = &execEngine{}
 
 // ConstructValues is part of the exec.Factory interface.
-func (ee *execEngine) ConstructValues(
+func (ef *execFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
 	return &valuesNode{
@@ -165,7 +53,7 @@ func (ee *execEngine) ConstructValues(
 }
 
 // ConstructScan is part of the exec.Factory interface.
-func (ee *execEngine) ConstructScan(
+func (ef *execFactory) ConstructScan(
 	table opt.Table,
 	index opt.Index,
 	cols exec.ColumnOrdinalSet,
@@ -176,14 +64,14 @@ func (ee *execEngine) ConstructScan(
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
-	scan := ee.planner.Scan()
+	scan := ef.planner.Scan()
 	colCfg := scanColumnsConfig{
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
 	}
-	if err := scan.initTable(context.TODO(), ee.planner, tabDesc, nil, colCfg); err != nil {
+	if err := scan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 	scan.index = indexDesc
@@ -212,7 +100,7 @@ func asDataSource(n exec.Node) planDataSource {
 }
 
 // ConstructFilter is part of the exec.Factory interface.
-func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+func (ef *execFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
 	src := asDataSource(n)
 	f := &filterNode{
 		source: src,
@@ -223,7 +111,7 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 }
 
 // ConstructSimpleProject is part of the exec.Factory interface.
-func (ee *execEngine) ConstructSimpleProject(
+func (ef *execFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	// If the top node is already a renderNode, just rearrange the columns. But
@@ -281,7 +169,7 @@ func hasDuplicates(cols []exec.ColumnOrdinal) bool {
 }
 
 // ConstructRender is part of the exec.Factory interface.
-func (ee *execEngine) ConstructRender(
+func (ef *execFactory) ConstructRender(
 	n exec.Node, exprs tree.TypedExprs, colNames []string,
 ) (exec.Node, error) {
 	src := asDataSource(n)
@@ -301,7 +189,7 @@ func (ee *execEngine) ConstructRender(
 }
 
 // RenameColumns is part of the exec.Factory interface.
-func (ee *execEngine) RenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
+func (ef *execFactory) RenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
 	inputCols := planMutableColumns(n.(planNode))
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
@@ -310,10 +198,10 @@ func (ee *execEngine) RenameColumns(n exec.Node, colNames []string) (exec.Node, 
 }
 
 // ConstructJoin is part of the exec.Factory interface.
-func (ee *execEngine) ConstructJoin(
+func (ef *execFactory) ConstructJoin(
 	joinType sqlbase.JoinType, left, right exec.Node, onCond tree.TypedExpr,
 ) (exec.Node, error) {
-	p := ee.planner
+	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
 	pred, _, err := p.makeJoinPredicate(
@@ -337,7 +225,7 @@ func (ee *execEngine) ConstructJoin(
 }
 
 // ConstructGroupBy is part of the exec.Factory interface.
-func (ee *execEngine) ConstructGroupBy(
+func (ef *execFactory) ConstructGroupBy(
 	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
 	n := &groupNode{
@@ -357,7 +245,7 @@ func (ee *execEngine) ConstructGroupBy(
 			inputCols[idx].Typ,
 			int(idx),
 			builtins.NewAnyNotNullAggregate,
-			ee.planner.EvalContext().Mon.MakeBoundAccount(),
+			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, inputCols[idx])
@@ -391,7 +279,7 @@ func (ee *execEngine) ConstructGroupBy(
 			agg.ResultType,
 			renderIdx,
 			aggFn,
-			ee.planner.EvalContext().Mon.MakeBoundAccount(),
+			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, sqlbase.ResultColumn{
@@ -407,14 +295,14 @@ func (ee *execEngine) ConstructGroupBy(
 }
 
 // ConstructSetOp is part of the exec.Factory interface.
-func (ee *execEngine) ConstructSetOp(
+func (ef *execFactory) ConstructSetOp(
 	typ tree.UnionType, all bool, left, right exec.Node,
 ) (exec.Node, error) {
-	return ee.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
+	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
 }
 
 // ConstructSort is part of the exec.Factory interface.
-func (ee *execEngine) ConstructSort(
+func (ef *execFactory) ConstructSort(
 	input exec.Node, ordering sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
 	plan := input.(planNode)
@@ -428,7 +316,7 @@ func (ee *execEngine) ConstructSort(
 }
 
 // ConstructOrdinality is part of the exec.Factory interface.
-func (ee *execEngine) ConstructOrdinality(input exec.Node, colName string) (exec.Node, error) {
+func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exec.Node, error) {
 	plan := input.(planNode)
 	inputColumns := planColumns(plan)
 	cols := make(sqlbase.ResultColumns, len(inputColumns)+1)
@@ -448,7 +336,7 @@ func (ee *execEngine) ConstructOrdinality(input exec.Node, colName string) (exec
 }
 
 // ConstructLimit is part of the exec.Factory interface.
-func (ee *execEngine) ConstructLimit(
+func (ef *execFactory) ConstructLimit(
 	input exec.Node, limit int64, offset int64,
 ) (exec.Node, error) {
 	var limitVal, offsetVal tree.Datum
@@ -475,7 +363,9 @@ func (ee *execEngine) ConstructLimit(
 }
 
 // ConstructPlan is part of the exec.Factory interface.
-func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) (exec.Plan, error) {
+func (ef *execFactory) ConstructPlan(
+	root exec.Node, subqueries []exec.Subquery,
+) (exec.Plan, error) {
 	res := &planTop{
 		plan: root.(planNode),
 	}
@@ -501,7 +391,7 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 }
 
 // ConstructExplain is part of the exec.Factory interface.
-func (ee *execEngine) ConstructExplain(
+func (ef *execFactory) ConstructExplain(
 	options *tree.ExplainOptions, plan exec.Plan,
 ) (exec.Node, error) {
 	p := plan.(*planTop)
@@ -514,7 +404,7 @@ func (ee *execEngine) ConstructExplain(
 	opts := *options
 	opts.Flags.Add(tree.ExplainFlagNoExpand)
 	opts.Flags.Add(tree.ExplainFlagNoOptimize)
-	return ee.planner.makeExplainPlanNodeWithPlan(
+	return ef.planner.makeExplainPlanNodeWithPlan(
 		context.TODO(),
 		&opts,
 		false, /* optimizeSubqueries */
@@ -524,7 +414,7 @@ func (ee *execEngine) ConstructExplain(
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.
-func (ee *execEngine) ConstructShowTrace(
+func (ef *execFactory) ConstructShowTrace(
 	typ tree.ShowTraceType, compact bool, input exec.Node,
 ) (exec.Node, error) {
 	var inputPlan planNode
@@ -534,41 +424,11 @@ func (ee *execEngine) ConstructShowTrace(
 
 	// TODO(radu): we hardcode tree.Rows because the optimizer doesn't yet support
 	// statements with other types.
-	node := ee.planner.makeShowTraceNode(inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
+	node := ef.planner.makeShowTraceNode(inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
 
 	if typ == tree.ShowTraceReplica {
 		// Wrap the showTraceNode in a showTraceReplicaNode.
-		return ee.planner.makeShowTraceReplicaNode(node), nil
+		return ef.planner.makeShowTraceReplicaNode(node), nil
 	}
 	return node, nil
-}
-
-// execEngineRowWriter is used when executing via DistSQL as a container for the
-// results.
-type execEngineRowWriter struct {
-	rows []tree.Datums
-	err  error
-}
-
-var _ rowResultWriter = &execEngineRowWriter{}
-
-// AddRow is part of the rowResultWriter interface.
-func (rw *execEngineRowWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	rowCopy := append(tree.Datums(nil), row...)
-	rw.rows = append(rw.rows, rowCopy)
-	return nil
-}
-
-// IncrementRowsAffected is part of the rowResultWriter interface.
-func (rw *execEngineRowWriter) IncrementRowsAffected(n int) {
-}
-
-// SetError is part of the rowResultWriter interface.
-func (rw *execEngineRowWriter) SetError(err error) {
-	rw.err = err
-}
-
-// Err is part of the rowResultWriter interface.
-func (rw *execEngineRowWriter) Err() error {
-	return rw.err
 }
