@@ -886,7 +886,10 @@ func (dsp *DistSQLPlanner) convertOrdering(
 		Columns: make([]distsqlrun.Ordering_Column, len(props.ordering)),
 	}
 	for i, o := range props.ordering {
-		streamColIdx := planToStreamColMap[o.ColIdx]
+		streamColIdx := o.ColIdx
+		if planToStreamColMap != nil {
+			streamColIdx = planToStreamColMap[o.ColIdx]
+		}
 		if streamColIdx == -1 {
 			// Find any column in the equivalency group that is part of the processor
 			// output.
@@ -1018,8 +1021,6 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.ResultRouters[i] = pIdx
 	}
 
-	planToStreamColMap := identityMapInPlace(make([]int, len(n.cols)))
-
 	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
 		// between the parallel streams.
@@ -1027,7 +1028,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, planToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
 	types := make([]sqlbase.ColumnType, len(n.desc.Columns))
@@ -1045,6 +1046,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			outCols[i] = uint32(tableOrdinal(n.desc, id))
 		}
 	}
+	planToStreamColMap := make([]int, len(n.cols))
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
