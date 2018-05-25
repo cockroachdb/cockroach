@@ -201,7 +201,13 @@
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
-[HoistSelectExists, Normalize]
+#
+# This rule is marked as low priority so that it runs after other rules like
+# filter pushdown. Hoisting a correlated subquery is an expensive operation that
+# can't be undone, so do it only once all other work is complete. For example,
+# filter pushdown rules might be able to move the subquery nearer to the input
+# to which it's correlated before it's hoisted, making it easier to decorrelate.
+[HoistSelectExists, Normalize, LowPriority]
 (Select
     $input:*
     $filter:* &
@@ -223,7 +229,9 @@
 # HoistSelectNotExists extracts non-existential subqueries from Select filters,
 # turning them into anti-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
-[HoistSelectNotExists, Normalize]
+#
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+[HoistSelectNotExists, Normalize, LowPriority]
 (Select
     $input:*
     $filter:* &
@@ -251,8 +259,10 @@
 #       LeftJoinApply, which is equivalent to, but not as efficient as, using
 #       SemiJoinApply and AntiJoinApply.
 #
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+#
 # Citations: [4]
-[HoistSelectSubquery, Normalize]
+[HoistSelectSubquery, Normalize, LowPriority]
 (Select
     $input:*
     $filter:* & (HasCorrelatedSubquery $filter) & (Filters)
@@ -263,7 +273,9 @@
 # HoistProjectSubquery extracts subqueries from a projections list and joins
 # them with the Project input. This and other subquery hoisting patterns create
 # a single, top-level relational query with no nesting.
-[HoistProjectSubquery, Normalize]
+#
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+[HoistProjectSubquery, Normalize, LowPriority]
 (Project
     $input:*
     $projections:* & (HasCorrelatedSubquery $projections)
@@ -274,7 +286,9 @@
 # HoistJoinSubquery extracts subqueries from a join filter and joins them with
 # the join's right input. This and other subquery hoisting patterns create a
 # single, top-level relational query with no nesting.
-[HoistJoinSubquery, Normalize]
+#
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+[HoistJoinSubquery, Normalize, LowPriority]
 (Join
     $left:*
     $right:*
@@ -286,7 +300,9 @@
 # HoistValuesSubquery extracts subqueries from row tuples and joins them with
 # the Values operator. This and other subquery hoisting patterns create a
 # single, top-level relational query with no nesting.
-[HoistValuesSubquery, Normalize]
+#
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+[HoistValuesSubquery, Normalize, LowPriority]
 (Values
     $rows:[ ... $item:* & (HasCorrelatedSubquery $item) ... ]
     $cols:*

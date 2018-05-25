@@ -181,17 +181,17 @@ project
       │    │    ├── keys: (1)
       │    │    └── prune: (1,2)
       │    ├── scan xy
-      │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
-      │    │    ├── keys: (5)
-      │    │    └── prune: (5,6)
-      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── keys: (7)
+      │    │    └── prune: (7,8)
+      │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │         └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy
-      │    ├── columns: xy.x:7(int!null)
-      │    ├── keys: (7)
-      │    └── prune: (7)
-      └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── keys: (5)
+      │    └── prune: (5)
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # AntiJoin operator.
 opt
@@ -217,17 +217,17 @@ project
       │    │    ├── keys: (1)
       │    │    └── prune: (1,2)
       │    ├── scan xy
-      │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
-      │    │    ├── keys: (5)
-      │    │    └── prune: (5,6)
-      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── keys: (7)
+      │    │    └── prune: (7,8)
+      │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │         └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy
-      │    ├── columns: xy.x:7(int!null)
-      │    ├── keys: (7)
-      │    └── prune: (7)
-      └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── keys: (5)
+      │    └── prune: (5)
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # GroupBy operator.
 opt
