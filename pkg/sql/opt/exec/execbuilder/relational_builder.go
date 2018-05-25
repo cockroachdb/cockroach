@@ -16,7 +16,6 @@ package execbuilder
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/pkg/errors"
 
@@ -471,22 +470,18 @@ func (b *Builder) buildLimitOffset(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	valueExpr := ev.Child(1)
-	if valueExpr.Operator() != opt.ConstOp {
-		return execPlan{}, errors.Errorf("only constant LIMIT/OFFSET supported")
+	// LIMIT/OFFSET expression should never need buildScalarContext, because it
+	// can't refer to the input expression.
+	expr, err := b.buildScalar(nil, ev.Child(1))
+	if err != nil {
+		return execPlan{}, err
 	}
-	datum := valueExpr.Private().(tree.Datum)
-	value, ok := datum.(*tree.DInt)
-	if !ok {
-		return execPlan{}, errors.Errorf("non-integer LIMIT/OFFSET")
-	}
-	var limit, offset int64
+	var node exec.Node
 	if ev.Operator() == opt.LimitOp {
-		limit, offset = int64(*value), 0
+		node, err = b.factory.ConstructLimit(input.root, expr, nil)
 	} else {
-		limit, offset = math.MaxInt64, int64(*value)
+		node, err = b.factory.ConstructLimit(input.root, nil, expr)
 	}
-	node, err := b.factory.ConstructLimit(input.root, limit, offset)
 	if err != nil {
 		return execPlan{}, err
 	}

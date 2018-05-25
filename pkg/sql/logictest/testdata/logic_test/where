@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE kv (
@@ -17,6 +17,18 @@ CREATE TABLE kvString (
 
 statement ok
 INSERT INTO kvString VALUES ('like1', 'hell%'), ('like2', 'worl%')
+
+query II rowsort
+SELECT * FROM kv WHERE True
+----
+1 2
+3 4
+5 6
+7 8
+
+query II
+SELECT * FROM kv WHERE False
+----
 
 query II rowsort
 SELECT * FROM kv WHERE k IN (1, 3)

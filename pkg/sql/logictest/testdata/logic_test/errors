@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 statement error pgcode 42P01 relation "fake1" does not exist
 ALTER TABLE fake1 DROP COLUMN a

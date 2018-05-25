@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata parallel-stmts
+# LogicTest: default opt distsql distsql-opt distsql-metadata parallel-stmts
 
 statement ok
 CREATE TABLE t (
@@ -153,16 +153,6 @@ INSERT INTO d VALUES (30,  '{"a": []}')
 statement ok
 INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
-----
-index-join  ·      ·                            (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                            (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                    ·                ·
- │          spans  /"a"/"b"-/"a"/"b"/PrefixEnd  ·                ·
- └── scan   ·      ·                            (a, b)           ·
-·           table  d@primary                    ·                ·
-
 query IT
 SELECT * from d where b @> NULL ORDER BY a;
 ----
@@ -177,48 +167,17 @@ SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 1  {"a": "b"}
 7  {"a": "b", "c": "d"}
 
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
-----
-index-join  ·      ·                                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                                ·                ·
- │          spans  /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·                ·
- └── scan   ·      ·                                        (a, b)           ·
-·           table  d@primary                                ·                ·
-
 query IT
 SELECT * from d where b @> '{"a": {"b": [1]}}' ORDER BY a;
 ----
 4  {"a": {"b": [1]}}
 5  {"a": {"b": [1, [2]]}}
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
-----
-index-join  ·      ·                                                (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                                                (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                                        ·                ·
- │          spans  /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·                ·
- └── scan   ·      ·                                                (a, b)           ·
-·           table  d@primary                                        ·                ·
-
 query IT
 SELECT * from d where b @> '{"a": {"b": [[2]]}}' ORDER BY a;
 ----
 5  {"a": {"b": [1, [2]]}}
 6  {"a": {"b": [[2]]}}
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
-----
-index-join  ·      ·                             (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                             (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                     ·                ·
- │          spans  /"a"/"b"/True-/"a"/"b"/False  ·                ·
- └── scan   ·      ·                             (a, b)           ·
-·           table  d@primary                     ·                ·
 
 query IT
 SELECT * from d where b @> '{"a": {"b": true}}' ORDER BY a;
@@ -231,30 +190,10 @@ SELECT * from d where b @> '{"a": {"b": [[2]]}}' ORDER BY a;
 5  {"a": {"b": [1, [2]]}}
 6  {"a": {"b": [[2]]}}
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
-----
-index-join  ·      ·                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                ·                ·
- │          spans  /Arr/1-/Arr/1/PrefixEnd  ·                ·
- └── scan   ·      ·                        (a, b)           ·
-·           table  d@primary                ·                ·
-
 query IT
 SELECT * from d where b @>'[1]' ORDER BY a;
 ----
 2  [1, 2, 3, 4, "foo"]
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
-----
-index-join  ·      ·                                                (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                                                (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                                        ·                ·
- │          spans  /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·                ·
- └── scan   ·      ·                                                (a, b)           ·
-·           table  d@primary                                        ·                ·
 
 query IT
 SELECT * from d where b @>'[{"a": {"b": [1]}}]' ORDER BY a;
@@ -316,24 +255,6 @@ SELECT * from d where b @> '1.23' ORDER BY a;
 ----
 15  1.23
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
-----
-scan  ·       ·          (a, b)  a!=NULL; b!=NULL; key(a)
-·     table   d@primary  ·       ·
-·     spans   ALL        ·       ·
-·     filter  b @> '[]'  ·       ·
-
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
-----
-scan  ·       ·          (a, b)  a!=NULL; b!=NULL; key(a)
-·     table   d@primary  ·       ·
-·     spans   ALL        ·       ·
-·     filter  b @> '{}'  ·       ·
-
-
 query IT
 SELECT * from d where b @> '{}' ORDER BY a;
 ----
@@ -390,26 +311,6 @@ query IT
 SELECT * from d where b->'a' = '"b"'
 ----
 7  {"a": "b", "c": "d"}
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
-----
-index-join  ·      ·                            (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                            (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                    ·                ·
- │          spans  /"a"/"b"-/"a"/"b"/PrefixEnd  ·                ·
- └── scan   ·      ·                            (a, b)           ·
-·           table  d@primary                    ·                ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
-----
-index-join  ·      ·                            (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·      ·                            (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table  d@foo_inv                    ·                ·
- │          spans  /"a"/"b"-/"a"/"b"/PrefixEnd  ·                ·
- └── scan   ·      ·                            (a, b)           ·
-·           table  d@primary                    ·                ·
 
 statement ok
 INSERT INTO d VALUES (23,  '{"a": 123.123}')
@@ -497,14 +398,6 @@ query IT
 SELECT * from d where b = NULL;
 ----
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
-----
-scan  ·       ·          (a, b)  a!=NULL; key(a)
-·     table   d@primary  ·       ·
-·     spans   ALL        ·       ·
-·     filter  b IS NULL  ·       ·
-
 query IT
 SELECT * from d where b @> NULL;
 ----
@@ -531,20 +424,6 @@ SELECT * from d where b @> '{"a": []}' ORDER BY a;
 25  {"a": [{}]}
 30  {"a": []}
 
-query TTT
-EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
-----
-scan  ·      ·
-·     table  d@primary
-·     spans  ALL
-
-query TTT
-EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
-----
-scan  ·      ·
-·     table  d@primary
-·     spans  ALL
-
 ## Multi-path contains queries
 
 query IT
@@ -556,28 +435,6 @@ query IT
 SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 31  {"a": {"b": "c", "d": "e"}, "f": "g"}
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
-----
-index-join  ·       ·                                    (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·       ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table   d@foo_inv                            ·                ·
- │          spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·                ·
- └── scan   ·       ·                                    (a, b)           ·
-·           table   d@primary                            ·                ·
-·           filter  b @> '{"a": {"b": "c"}, "f": "g"}'   ·                ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-index-join  ·       ·                                             (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·       ·                                             (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table   d@foo_inv                                     ·                ·
- │          spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd           ·                ·
- └── scan   ·       ·                                             (a, b)           ·
-·           table   d@primary                                     ·                ·
-·           filter  b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·                ·
 
 query IT
 SELECT * from d where b @> '{"c": "d", "a": "b"}'
@@ -610,36 +467,6 @@ query IT
 SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
-----
-index-join  ·       ·                                                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·       ·                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table   d@foo_inv                                                ·                ·
- │          spans   /Arr/"a"/"b"/Arr/Arr/2-/Arr/"a"/"b"/Arr/Arr/2/PrefixEnd  ·                ·
- └── scan   ·       ·                                                        (a, b)           ·
-·           table   d@primary                                                ·                ·
-·           filter  b @> '[{"a": {"b": [[2]]}}, "d"]'                        ·                ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
-----
-index-join  ·       ·                         (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   ·       ·                         (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          table   d@foo_inv                 ·                ·
- │          spans   /"b"/2-/"b"/2/PrefixEnd   ·                ·
- └── scan   ·       ·                         (a, b)           ·
-·           table   d@primary                 ·                ·
-·           filter  b @> '{"a": {}, "b": 2}'  ·                ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
-----
-scan  ·       ·                          (a, b)  a!=NULL; b!=NULL; key(a)
-·     table   d@primary                  ·       ·
-·     spans   ALL                        ·       ·
-·     filter  b @> '{"a": {}, "b": {}}'  ·       ·
 
 
 statement ok

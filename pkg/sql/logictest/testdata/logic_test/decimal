@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata distsql-disk
 
 # The following tests have results equivalent to Postgres (differences
 # in string representation and number of decimals returned, but otherwise
@@ -117,37 +117,15 @@ SELECT 'NaN'::decimal, '-NaN'::decimal, 'sNaN'::decimal, '-sNaN'::decimal
 ----
 NaN NaN NaN NaN
 
-query TTT
-EXPLAIN SELECT * FROM t2 WHERE d IS NaN and v IS NaN
-----
-scan  ·      ·
-·     table  t2@primary
-·     spans  /NaN/NaN-/NaN/NaN/#
-
 query RR
 SELECT * FROM t2 WHERE d IS NaN and v IS NaN
 ----
 NaN NaN
 
-# The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
-query TTT
-EXPLAIN SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
-----
-scan  ·      ·
-·     table  t2@primary
-·     spans  /Infinity/Infinity-/Infinity/Infinity/#
-
 query RR
 SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
 ----
 Infinity Infinity
-
-query TTT
-EXPLAIN SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
-----
-scan  ·      ·
-·     table  t2@primary
-·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#
 
 query RR
 SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
@@ -198,35 +176,6 @@ query R
 SELECT * FROM s WHERE d = 'inf'::decimal
 ----
 Infinity
-
-# Verify that lookups for NaN use indices when possible:
-# - `WHERE d IS NaN` should perform a point lookup.
-# - `WHERE d = 'NaN'` should also perform a point lookup.
-# - `WHERE isnan(d)` is a function so it can't perform a point lookup.
-
-query TTT
-EXPLAIN SELECT * FROM s WHERE d IS NaN
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  s@s_d_idx
-·          spans  /NaN-/-Infinity
-
-query TTT
-EXPLAIN SELECT * FROM s WHERE d = 'NaN'
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  s@s_d_idx
-·          spans  /NaN-/-Infinity
-
-query TTT
-EXPLAIN SELECT * FROM s WHERE isnan(d)
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  s@s_d_idx
-·          spans  ALL
 
 query R
 SELECT * FROM s WHERE d = 'NaN'

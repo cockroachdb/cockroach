@@ -1,0 +1,65 @@
+# LogicTest: default
+#
+# TODO(radu): enable once SRF's are supported
+#
+#subtest generate_series
+#
+#query TTT
+#EXPLAIN SELECT * FROM GENERATE_SERIES(1, 3)
+#----
+#generator  ·  ·
+#
+#query TTT
+#EXPLAIN SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
+#----
+#join            ·     ·
+# │              type  cross
+# ├── generator  ·     ·
+# └── generator  ·     ·
+#
+#query TTT
+#EXPLAIN SELECT GENERATE_SERIES(1, 3)
+#----
+#generator  ·  ·
+#
+#subtest multiple_SRFs
+## See #20511
+#
+## query TTT
+## EXPLAIN SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
+## ----
+## join            ·     ·
+## │              type  cross
+## ├── generator  ·     ·
+## └── generator  ·     ·
+#
+#statement ok
+#CREATE TABLE t (a string)
+#
+#statement ok
+#CREATE TABLE u (b string)
+#
+## query TTT
+## EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+## ----
+## render                    ·         ·
+## │                        render 0  a
+## │                        render 1  b
+## │                        render 2  generate_series
+## │                        render 3  generate_series
+## └── join                 ·         ·
+##      │                   type      cross
+##      ├── join            ·         ·
+##      │    │              type      cross
+##      │    ├── join       ·         ·
+##      │    │    │         type      cross
+##      │    │    ├── scan  ·         ·
+##      │    │    │         table     t@primary
+##      │    │    │         spans     ALL
+##      │    │    └── scan  ·         ·
+##      │    │              table     u@primary
+##      │    │              spans     ALL
+##      │    └── generator  ·         ·
+##      │                   expr      generate_series(1, 2)
+##      └── generator       ·         ·
+##·                         expr      generate_series(3, 4)
