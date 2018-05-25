@@ -147,6 +147,7 @@ Cockroach cluster with existing data.
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := newRegistry()
 			registerStoreGen(r, args)
+			clusterWipe = true
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
 			os.Exit(r.Run(nil /* filter */))

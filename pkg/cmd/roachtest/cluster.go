@@ -223,7 +223,7 @@ func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, 
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, `%s`, strings.Join(args, ` `))
+		return out, errors.Wrapf(err, `%s`, strings.Join(args, ` `))
 	}
 	return out, nil
 }
