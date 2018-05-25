@@ -10,42 +10,37 @@ CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
-render       ·         ·                 ("1 + 2")  ·
- │           render 0  3                 ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render         ·         ·  ("1 + 2")  ·
+ │             render 0  3  ·          ·
+ └── emptyrow  ·         ·  ()         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT true
 ----
-render       ·         ·                 ("true")  ·
- │           render 0  true              ·         ·
- └── values  ·         ·                 ()        ·
-·            size      0 columns, 1 row  ·         ·
+render         ·         ·     ("true")  ·
+ │             render 0  true  ·         ·
+ └── emptyrow  ·         ·     ()        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT false
 ----
-render       ·         ·                 ("false")  ·
- │           render 0  false             ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render         ·         ·      ("false")  ·
+ │             render 0  false  ·          ·
+ └── emptyrow  ·         ·      ()         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (1, 2)
 ----
-render       ·         ·                 ("(1, 2)")  ·
- │           render 0  (1, 2)            ·           ·
- └── values  ·         ·                 ()          ·
-·            size      0 columns, 1 row  ·           ·
+render         ·         ·       ("(1, 2)")  ·
+ │             render 0  (1, 2)  ·           ·
+ └── emptyrow  ·         ·       ()          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (true, false)
 ----
-render       ·         ·                 ("(true, false)")  ·
- │           render 0  (true, false)     ·                  ·
- └── values  ·         ·                 ()                 ·
-·            size      0 columns, 1 row  ·                  ·
+render         ·         ·              ("(true, false)")  ·
+ │             render 0  (true, false)  ·                  ·
+ └── emptyrow  ·         ·              ()                 ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 FROM t
