@@ -1,4 +1,4 @@
-# LogicTest: default opt distsql distsql-metadata
+# LogicTest: default opt distsql distsql-metadata distsql-opt
 
 # array construction
 

@@ -356,20 +356,20 @@ render     ·         ·          ("j ? 'a'")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] FROM t
 ----
-render     ·         ·                          ("j ?| ARRAY['a', 'b', 'c']")  ·
- │         render 0  j ?| ARRAY['a', 'b', 'c']  ·                              ·
- └── scan  ·         ·                          (j)                            ·
-·          table     t@primary                  ·                              ·
-·          spans     ALL                        ·                              ·
+render     ·         ·                        ("j ?| ARRAY['a', 'b', 'c']")  ·
+ │         render 0  j ?| ARRAY['a','b','c']  ·                              ·
+ └── scan  ·         ·                        (j)                            ·
+·          table     t@primary                ·                              ·
+·          spans     ALL                      ·                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] FROM t
 ----
-render     ·         ·                          ("j ?& ARRAY['a', 'b', 'c']")  ·
- │         render 0  j ?& ARRAY['a', 'b', 'c']  ·                              ·
- └── scan  ·         ·                          (j)                            ·
-·          table     t@primary                  ·                              ·
-·          spans     ALL                        ·                              ·
+render     ·         ·                        ("j ?& ARRAY['a', 'b', 'c']")  ·
+ │         render 0  j ?& ARRAY['a','b','c']  ·                              ·
+ └── scan  ·         ·                        (j)                            ·
+·          table     t@primary                ·                              ·
+·          spans     ALL                      ·                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] FROM t
@@ -516,6 +516,24 @@ render     ·         ·                                              ("a NOT BE
  └── scan  ·         ·                                              (a, b, d)                            ·
 ·          table     t@primary                                      ·                                    ·
 ·          spans     ALL                                            ·                                    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
+----
+render     ·         ·          ("ARRAY[]:::INT[]")  ·
+ │         render 0  ARRAY[]    ·                    ·
+ └── scan  ·         ·          ()                   ·
+·          table     t@primary  ·                    ·
+·          spans     ALL        ·                    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
+----
+render     ·         ·             ("ARRAY[1, 2, 3]")  ·
+ │         render 0  ARRAY[1,2,3]  ·                   ·
+ └── scan  ·         ·             ()                  ·
+·          table     t@primary     ·                   ·
+·          spans     ALL           ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
