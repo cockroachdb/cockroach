@@ -1279,7 +1279,7 @@ func TestImportMysql(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	testRows, dest := getMysqldumpTestdata(t)
+	testRows, dest := getSimpleMysqlDumpTestdata(t)
 
 	cmd := `IMPORT TABLE test_dump (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`
 	sqlDB.Exec(t, cmd, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(dest, baseDir)))
