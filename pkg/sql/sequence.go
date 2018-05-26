@@ -374,8 +374,5 @@ func getUsedSequenceNames(defaultExpr tree.TypedExpr) ([]string, error) {
 			return nil, true, expr
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	return names, nil
+	return names, err
 }
