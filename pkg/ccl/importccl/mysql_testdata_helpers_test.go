@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"unicode/utf8"
 
@@ -110,7 +111,9 @@ func getMultiTableMysqlDumpTestdata(t *testing.T) string {
 	dest := filepath.Join(`testdata`, `mysqldump`, `db.sql`)
 	if rewriteMysqlTestData {
 		genEverythingMysqlTestdata(t, func() {}, func() {
-			genSimpleMysqlTestdata(t, func() { mysqldump(t, dest, "") })
+			genSecondMysqlTestdata(t, func() {}, func() {
+				genSimpleMysqlTestdata(t, func() { mysqldump(t, dest, "") })
+			})
 		})
 	}
 	return dest
@@ -260,6 +263,27 @@ func genSimpleMysqlTestdata(t *testing.T, dump func()) {
 		},
 		dump,
 	)()
+}
+
+const secondTableRows = 7
+
+func genSecondMysqlTestdata(t *testing.T, dump func(), afterLoad func()) {
+	defer genMysqlTestdata(t, `second`, `
+				i       INT PRIMARY KEY,
+				s       VARCHAR(100)
+		`,
+		func(db *gosql.DB) {
+			for i := 0; i < secondTableRows; i++ {
+				if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, i, strconv.Itoa(i)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		},
+		dump,
+	)()
+	if afterLoad != nil {
+		afterLoad()
+	}
 }
 
 func genEverythingMysqlTestdata(t *testing.T, dump func(), afterLoad func()) {
