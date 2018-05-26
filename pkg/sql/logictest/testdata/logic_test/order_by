@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata distsql-disk
 
 statement ok
 CREATE TABLE t (
@@ -40,32 +40,12 @@ SELECT a, b FROM t ORDER BY b
 2 8
 1 9
 
-query TTT
-EXPLAIN SELECT a, b FROM t ORDER BY b
-----
-sort            ·      ·
- │              order  +b
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
-
 query II
 SELECT a, b FROM t ORDER BY b DESC
 ----
 1 9
 2 8
 3 7
-
-query TTT
-EXPLAIN SELECT a, b FROM t ORDER BY b DESC
-----
-sort            ·      ·
- │              order  -b
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -74,45 +54,17 @@ SELECT a FROM t ORDER BY 1 DESC
 2
 1
 
-query TTT
-EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
-----
-limit                ·         ·
- └── sort            ·         ·
-      │              order     +b
-      │              strategy  top 2
-      └── render     ·         ·
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 ----
 1 9
 2 8
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
+query BI
+SELECT DISTINCT c, b FROM t ORDER BY b DESC LIMIT 2
 ----
-limit                     ·         ·                (c)                 weak-key(c)
- │                        count     2                ·                   ·
- └── distinct             ·         ·                (c)                 weak-key(c)
-      └── sort            ·         ·                (c)                 ·
-           │              order     +b               ·                   ·
-           │              strategy  iterative        ·                   ·
-           └── render     ·         ·                (c, b)              ·
-                │         render 0  test.public.t.c  ·                   ·
-                │         render 1  test.public.t.b  ·                   ·
-                └── scan  ·         ·                (a[omitted], b, c)  a!=NULL; key(a)
-·                         table     t@primary        ·                   ·
-·                         spans     ALL              ·                   ·
-
-query B
-SELECT DISTINCT c FROM t ORDER BY b DESC LIMIT 2
-----
-true
-false
+true   9
+false  8
 
 query II
 SELECT a AS foo, b FROM t ORDER BY foo DESC
@@ -152,85 +104,6 @@ SELECT b FROM t ORDER BY a DESC
 7
 8
 9
-
-query TTT
-EXPLAIN SELECT b FROM t ORDER BY a DESC
-----
-nosort             ·      ·
- │                 order  -a
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
-
-# Check that LIMIT propagates past nosort nodes.
-query TTT
-EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
-----
-limit                ·      ·
- └── nosort          ·      ·
-      │              order  +a
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
-·                    limit  1
-
-query TTT
-EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
-----
-nosort             ·      ·
- │                 order  -a,+b
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
-
-query TTT
-EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
-----
-nosort             ·      ·
- │                 order  -a,-b
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
-----
-sort       ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
- │         order  +b,+a,+c   ·          ·
- └── scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-·          table  t@primary  ·          ·
-·          spans  ALL        ·          ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
-----
-sort       ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
- │         order  +b,+a,+c   ·          ·
- └── scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-·          table  t@primary  ·          ·
-·          spans  ALL        ·          ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
-----
-sort       ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
- │         order  +b,+a,+c   ·          ·
- └── scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-·          table  t@primary  ·          ·
-·          spans  ALL        ·          ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
-----
-sort       ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
- │         order  +b,+a,+c   ·          ·
- └── scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-·          table  t@primary  ·          ·
-·          spans  ALL        ·          ·
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -343,72 +216,6 @@ SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER 
 ----
 1 {1}
 
-
-# Check that sort is skipped if the ORDER BY clause is constant.
-query TTT
-EXPLAIN SELECT * FROM t ORDER BY 1+2
-----
-nosort          ·      ·
- │              order  +"1 + 2"
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
-
-query TTT
-EXPLAIN SELECT 1, * FROM t ORDER BY 1
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@primary
-·          spans  ALL
-
-query TTT
-EXPLAIN SELECT * FROM t ORDER BY length('abc')
-----
-nosort          ·      ·
- │              order  +length
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
-
-# Check that the sort key reuses the existing render.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
-----
-sort            ·         ·                    ("b + 2")                    +"b + 2"
- │              order     +"b + 2"             ·                            ·
- └── render     ·         ·                    ("b + 2")                    ·
-      │         render 0  test.public.t.b + 2  ·                            ·
-      └── scan  ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               table     t@primary            ·                            ·
-·               spans     ALL                  ·                            ·
-
-# Check that the sort picks up a renamed render properly.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
-----
-sort            ·         ·                    (y)                          +y
- │              order     +y                   ·                            ·
- └── render     ·         ·                    (y)                          ·
-      │         render 0  test.public.t.b + 2  ·                            ·
-      └── scan  ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               table     t@primary            ·                            ·
-·               spans     ALL                  ·                            ·
-
-# Check that the sort reuses a render behind a rename properly.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
-----
-sort            ·         ·                    (y)                          +y
- │              order     +y                   ·                            ·
- └── render     ·         ·                    (y)                          ·
-      │         render 0  test.public.t.b + 2  ·                            ·
-      └── scan  ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               table     t@primary            ·                            ·
-·               spans     ALL                  ·                            ·
-
 statement ok
 CREATE TABLE abc (
   a INT,
@@ -431,156 +238,6 @@ SELECT d FROM abc ORDER BY LOWER(d)
 one
 Two
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/1/2/3 -> NULL
-fetched: /abc/primary/1/2/3/d -> 'one'
-output row: [1 2 3 'one']
-fetched: /abc/primary/4/5/6 -> NULL
-fetched: /abc/primary/4/5/6/d -> 'Two'
-output row: [4 5 6 'Two']
-
-query TTT
-EXPLAIN SELECT * FROM abc ORDER BY a
-----
-scan  ·      ·
-·     table  abc@primary
-·     spans  ALL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM abc ORDER BY b, a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/ba/2/1/3 -> NULL
-output row: [1 2]
-fetched: /abc/ba/5/4/6 -> NULL
-output row: [4 5]
-
-query TTT
-EXPLAIN SELECT a, b FROM abc ORDER BY b, a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abc@ba
-·          spans  ALL
-
-# The non-unique index ba includes column c (required to make the keys unique)
-# so the results will already be sorted.
-query TTT
-EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abc@ba
-·          spans  ALL
-
-# We use the WHERE condition to force the use of index ba.
-query TTT
-EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
-----
-sort             ·      ·
- │               order  +b,+a,+d
- └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abc@bc
-      │          spans  /11-
-      └── scan   ·      ·
-·                table  abc@primary
-
-# We cannot have rows with identical values for a,b,c so we don't need to
-# sort for d.
-query TTT
-EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
-----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  abc@ba
- │          spans  /11-
- └── scan   ·      ·
-·           table  abc@primary
-
-query TTT
-EXPLAIN SELECT a, b FROM abc ORDER BY b, c
-----
-nosort          ·      ·
- │              order  +b,+c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
-----
-nosort          ·         ·                  (a, b)                 b!=NULL; +b
- │              order     +b,+c              ·                      ·
- └── render     ·         ·                  (a, b, c)              b!=NULL; c!=NULL; key(b,c); +b,+c
-      │         render 0  test.public.abc.a  ·                      ·
-      │         render 1  test.public.abc.b  ·                      ·
-      │         render 2  test.public.abc.c  ·                      ·
-      └── scan  ·         ·                  (a, b, c, d[omitted])  b!=NULL; c!=NULL; key(b,c); +b,+c
-·               table     abc@bc             ·                      ·
-·               spans     ALL                ·                      ·
-
-query TTT
-EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
-----
-nosort          ·      ·
- │              order  +b,+c,+a
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
-
-query TTT
-EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
-----
-nosort          ·      ·
- │              order  +b,+c,-a
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/bc/2/3 -> /1
-output row: [2 3]
-fetched: /abc/bc/5/6 -> /4
-output row: [5 6]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, c FROM abc ORDER BY b]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/bc/2/3 -> /1
-output row: [1 2 3]
-fetched: /abc/bc/5/6 -> /4
-output row: [4 5 6]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc ORDER BY a DESC]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /abc/primary/4/5/6/d -> 'Two'
-fetched: /abc/primary/4/5/6 -> NULL
-output row: [4]
-fetched: /abc/primary/1/2/3/d -> 'one'
-fetched: /abc/primary/1/2/3 -> NULL
-output row: [1]
-
-query TTT
-EXPLAIN SELECT a FROM abc ORDER BY a DESC
-----
-render        ·      ·
- └── revscan  ·      ·
-·             table  abc@primary
-·             spans  ALL
-
 query I
 SELECT a FROM abc ORDER BY a DESC
 ----
@@ -597,50 +254,11 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
 
-query TTT
-EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abc@bc
-·          spans  /2-/3
-
-query TTT
-EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
-----
-render        ·      ·
- └── revscan  ·      ·
-·             table  abc@bc
-·             spans  /2-/3
-
-# Verify that the ordering of the primary index is still used for the outer sort.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
-----
-nosort          ·         ·                  (b, c)                          b!=NULL; c!=NULL; key(b,c); +b,+c
- │              order     +b,+c              ·                               ·
- └── render     ·         ·                  (b, c, a[omitted])              a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-      │         render 0  test.public.abc.b  ·                               ·
-      │         render 1  test.public.abc.c  ·                               ·
-      │         render 2  NULL               ·                               ·
-      └── scan  ·         ·                  (a[omitted], b, c, d[omitted])  a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-·               table     abc@primary        ·                               ·
-·               spans     /1-/2              ·                               ·
-
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 
 statement ok
 INSERT INTO bar VALUES (0, NULL), (1, NULL)
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, id
-----
-sort       ·      ·          (id, baz)  weak-key(baz); +baz,+id
- │         order  +baz,+id   ·          ·
- └── scan  ·      ·          (id, baz)  weak-key(baz); +baz
-·          table  bar@i_bar  ·          ·
-·          spans  ALL        ·          ·
 
 # Here rowsort is needed because the ORDER BY clause does not guarantee any
 # relative ordering between rows where baz is NULL. As we see above, because
@@ -685,39 +303,6 @@ SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
 4
 5
 
-# The following tests verify we recognize that sorting is not necessary
-query TTT
-EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
-
-query TTT
-EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
-
-query TTT
-EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
-
-query TTT
-EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
-
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
 
@@ -732,125 +317,6 @@ NaN
 -1
 1
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
-----
-sort         ·              ·                 (x)  +x
- │           order          +x                ·    ·
- └── values  ·              ·                 (x)  ·
-·            size           1 column, 3 rows  ·    ·
-·            row 0, expr 0  'a'               ·    ·
-·            row 1, expr 0  'b'               ·    ·
-·            row 2, expr 0  'c'               ·    ·
-
-query TTT
-EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
-----
-ordinality   ·     ·
- └── values  ·     ·
-·            size  1 column, 3 rows
-
-query TTT
-EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
-----
-sort              ·      ·
- │                order  -"ordinality"
- └── ordinality   ·      ·
-      └── values  ·      ·
-·                 size   1 column, 3 rows
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
-----
-ordinality   ·              ·                 (x, "ordinality")  weak-key("ordinality")
- └── values  ·              ·                 (x)                ·
-·            size           1 column, 3 rows  ·                  ·
-·            row 0, expr 0  'a'               ·                  ·
-·            row 1, expr 0  'b'               ·                  ·
-·            row 2, expr 0  'c'               ·                  ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
-----
-ordinality        ·              ·                 (x, "ordinality")  weak-key("ordinality")
- └── sort         ·              ·                 (x)                +x
-      │           order          +x                ·                  ·
-      └── values  ·              ·                 (x)                ·
-·                 size           1 column, 3 rows  ·                  ·
-·                 row 0, expr 0  'a'               ·                  ·
-·                 row 1, expr 0  'b'               ·                  ·
-·                 row 2, expr 0  'c'               ·                  ·
-
-# Check that the ordering of the source does not propagate blindly to RETURNING.
-query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
-----
-render                        ·         ·                (b)        ·
- │                            render 0  test.public.t.b  ·          ·
- └── run                      ·         ·                (a, b, c)  ·
-      └── insert              ·         ·                (a, b, c)  ·
-           │                  into      t(a, b)          ·          ·
-           └── render         ·         ·                (x, y)     x=CONST; y=CONST
-                │             render 0  1                ·          ·
-                │             render 1  2                ·          ·
-                └── emptyrow  ·         ·                ()         ·
-
-query TTTTT
-EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
-----
-render               ·         ·                (b)        key()
- │                   render 0  test.public.t.b  ·          ·
- └── run             ·         ·                (a, b, c)  a=CONST; key()
-      └── delete     ·         ·                (a, b, c)  a=CONST; key()
-           │         from      t                ·          ·
-           └── scan  ·         ·                (a, b, c)  a=CONST; key()
-·                    table     t@primary        ·          ·
-·                    spans     /3-/3/#          ·          ·
-
-query TTTTT
-EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
-----
-render                    ·         ·                (b)                ·
- │                        render 0  test.public.t.b  ·                  ·
- └── run                  ·         ·                (a, b, c)          ·
-      └── update          ·         ·                (a, b, c)          ·
-           │              table     t                ·                  ·
-           │              set       c                ·                  ·
-           └── render     ·         ·                (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-                │         render 0  test.public.t.a  ·                  ·
-                │         render 1  test.public.t.b  ·                  ·
-                │         render 2  test.public.t.c  ·                  ·
-                │         render 3  true             ·                  ·
-                └── scan  ·         ·                (a, b, c)          a!=NULL; key(a)
-·                         table     t@primary        ·                  ·
-·                         spans     ALL              ·                  ·
-
-statement ok
-CREATE TABLE uvwxyz (
-  u INT,
-  v INT,
-  w INT,
-  x INT,
-  y INT,
-  z INT,
-  INDEX ywxz (y, w, x, z, u, v),
-  INDEX ywz (y, w, z, x)
-)
-
-# Verify that the outer ordering is propagated to index selection and we choose
-# the index that avoids any sorting.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
-----
-render     ·         ·                     (y, w, x)                                                             y=CONST; +w,+x
- │         render 0  test.public.uvwxyz.y  ·                                                                     ·
- │         render 1  test.public.uvwxyz.w  ·                                                                     ·
- │         render 2  test.public.uvwxyz.x  ·                                                                     ·
- └── scan  ·         ·                     (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; rowid!=NULL; weak-key(u,v,w,x,z,rowid); +w,+x
-·          table     uvwxyz@ywxz           ·                                                                     ·
-·          spans     /1-/2                 ·                                                                     ·
-
-
 statement ok
 CREATE TABLE blocks (
   block_id  INT,
@@ -860,31 +326,105 @@ CREATE TABLE blocks (
   PRIMARY KEY (block_id, writer_id, block_num)
 )
 
-# Test that ordering goes "through" a renderNode that has a duplicate render of
-# an order-by column (#13696).
-query TTTTT
-EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
+# Test ORDER BY with STORING column.
+statement ok
+CREATE TABLE store (
+    id INT PRIMARY KEY,
+    baz STRING,
+    extra INT,
+    UNIQUE INDEX i_store (baz) STORING (extra)
+)
+
+statement ok
+INSERT INTO store VALUES (0, NULL, 10), (1, NULL, 5)
+
+# Here rowsort is needed because a unique index still allows duplicate NULL
+# values. It's not correct to sort on baz alone, even though it is "unique".
+query ITI
+SELECT * FROM store ORDER BY baz, extra
 ----
-limit           ·         ·                             (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
- │              count     1                             ·                                                     ·
- └── render     ·         ·                             (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-      │         render 0  test.public.blocks.block_id   ·                                                     ·
-      │         render 1  test.public.blocks.writer_id  ·                                                     ·
-      │         render 2  test.public.blocks.block_num  ·                                                     ·
-      │         render 3  test.public.blocks.block_id   ·                                                     ·
-      └── scan  ·         ·                             (block_id, writer_id, block_num, raw_bytes[omitted])  block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-·               table     blocks@primary                ·                                                     ·
-·               spans     ALL                           ·                                                     ·
-·               limit     1                             ·                                                     ·
+1  NULL  5
+0  NULL  10
 
-# Regression test for #25197: make sure that order by with an offset works in
-# the top-k sorter.
+# ------------------------------------------------------------------------------
+# ORDER BY INDEX test cases.
+# ------------------------------------------------------------------------------
+subtest order_by_index
 
 statement ok
-CREATE TABLE t25197 (id BIGSERIAL PRIMARY KEY, d TEXT)
+CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
+
+# Check the extended syntax cannot be used in case of renames.
+statement error no data source matches prefix: test.public.kv
+SELECT * FROM kv AS a, kv AS b ORDER BY PRIMARY KEY kv
+
+# The INDEX/PRIMARY syntax can only be used when the data source
+# is a real table, not an alias.
+#
+statement error no data source matches prefix: test.public.kv
+SELECT k FROM (SELECT @1, @1 FROM generate_series(1,10)) AS kv(k,v) ORDER BY PRIMARY KEY kv
+
+statement error no data source matches prefix: test.public.kv
+CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
+
+# Check that prepare doesn't crash on ORDER BY PK clauses #17312
+statement ok
+PREPARE a AS (TABLE kv) ORDER BY PRIMARY KEY kv
+
+statement error ORDER BY INDEX in window definition is not supported
+SELECT avg(k) OVER (ORDER BY PRIMARY KEY kv) FROM kv
 
 statement ok
-INSERT INTO t25197 (d) VALUES ('test1')
+CREATE TABLE abc2 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX bc (b, c),
+  INDEX ba (b, a)
+)
 
-query TT
-SELECT * FROM t25197 ORDER BY d ASC OFFSET 1 LIMIT 10
+statement ok
+INSERT INTO abc2 VALUES (2, 30, 400), (1, 30, 500), (3, 30, 300)
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY PRIMARY KEY abc2
+----
+1  30  500
+2  30  400
+3  30  300
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY PRIMARY KEY abc2 DESC
+----
+3  30  300
+2  30  400
+1  30  500
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY INDEX abc2@bc
+----
+3  30  300
+2  30  400
+1  30  500
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY INDEX abc2@bc DESC
+----
+1  30  500
+2  30  400
+3  30  300
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY INDEX abc2@ba
+----
+1  30  500
+2  30  400
+3  30  300
+
+query III
+SELECT a, b, c FROM abc2 ORDER BY INDEX abc2@ba DESC
+----
+3  30  300
+2  30  400
+1  30  500
