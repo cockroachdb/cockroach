@@ -63,6 +63,30 @@ LOCK TABLES `everything` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `second`
+--
+
+DROP TABLE IF EXISTS `second`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `second` (
+  `i` int(11) NOT NULL,
+  `s` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`i`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `second`
+--
+
+LOCK TABLES `second` WRITE;
+/*!40000 ALTER TABLE `second` DISABLE KEYS */;
+INSERT INTO `second` VALUES (0,'0'),(1,'1'),(2,'2'),(3,'3'),(4,'4'),(5,'5'),(6,'6');
+/*!40000 ALTER TABLE `second` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `simple`
 --
 
@@ -96,4 +120,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-05-26 13:11:39
+-- Dump completed on 2018-05-29 13:47:30
