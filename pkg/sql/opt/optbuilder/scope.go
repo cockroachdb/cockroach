@@ -703,7 +703,9 @@ func (s *scope) newAmbiguousColumnError(
 		if col.name == *n && (allowHidden || !col.hidden) {
 			if col.table.TableName == "" && !col.hidden {
 				if moreThanOneCandidateFromAnonSource {
+					// Only print first anonymous source, since other(s) are identical.
 					fmtCandidate(col.table)
+					break
 				}
 			} else if !col.hidden {
 				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {

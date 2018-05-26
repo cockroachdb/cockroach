@@ -1254,7 +1254,7 @@ project
 build
 SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 ----
-error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x, <anonymous>.x)
+error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x)
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
