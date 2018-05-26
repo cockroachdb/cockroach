@@ -176,8 +176,8 @@ project
       ├── a.s::JSON [type=jsonb, outer=(4)]
       ├── a.s::VARCHAR(2) [type=string, outer=(4)]
       ├── a.i::SMALLINT [type=int, outer=(2)]
-      ├── ARRAY[1, 2]::OIDVECTOR [type=oid[]]
-      └── ARRAY[1, 2]::INT2VECTOR [type=int[]]
+      ├── ARRAY[1,2]::OIDVECTOR [type=oid[]]
+      └── ARRAY[1,2]::INT2VECTOR [type=int[]]
 
 # --------------------------------------------------
 # FoldNullCast

@@ -74,7 +74,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 		return constraint.SingleConstraint(&c), true
 	}
 
-	if val.IsConstValue() {
+	if val.IsConstValue() || MatchesTupleOfConstants(val) {
 		return cb.buildSingleColumnConstraintConst(col, op, ExtractConstDatum(val))
 	}
 
