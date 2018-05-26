@@ -1,0 +1,33 @@
+# LogicTest: opt distsql-opt
+
+statement ok
+CREATE TABLE a (x INT PRIMARY KEY, y INT);
+CREATE TABLE b (x INT PRIMARY KEY, z INT);
+INSERT INTO a VALUES (1, 10), (2, 20), (3, NULL), (4, NULL);
+INSERT INTO b VALUES (2, 200), (3, 300), (4, NULL), (5, 500);
+
+query II rowsort
+SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
+----
+2  20
+3  NULL
+4  NULL
+
+query II rowsort
+SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
+----
+1  10
+2  20
+3  NULL
+4  NULL
+
+query II rowsort
+SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
+----
+1  10
+
+query II rowsort
+SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
+----
+4  NULL
+5  500
