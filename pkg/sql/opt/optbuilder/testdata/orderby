@@ -524,6 +524,24 @@ sort
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
 
+build
+SELECT b, c FROM t ORDER BY @2
+----
+sort
+ ├── columns: b:2(int) c:3(bool)
+ ├── ordering: +4
+ └── project
+      ├── columns: column4:4(int) b:2(int) c:3(bool)
+      ├── scan t
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── projections
+           └── variable: t.b [type=int]
+
+build
+SELECT b, c FROM t ORDER BY @4
+----
+error (42703): invalid column ordinal: @4
+
 exec-ddl
 CREATE TABLE abc (
   a INT,
@@ -705,6 +723,11 @@ sort
 
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
+----
+error (0A000): ORDER BY index not supported
+
+build
+SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
 error (0A000): ORDER BY index not supported
 

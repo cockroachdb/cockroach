@@ -726,3 +726,13 @@ concat [type=oid[]]
  └── array: oid[] [type=oid[]]
       ├── const: 1 [type=oid]
       └── const: 2 [type=oid]
+
+build-scalar
+ARRAY['"foo"'::jsonb]
+----
+error: arrays of jsonb not allowed
+
+build-scalar
+ARRAY['"foo"'::json]
+----
+error: arrays of jsonb not allowed
