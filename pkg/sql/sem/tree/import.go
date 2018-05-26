@@ -21,6 +21,7 @@ type Import struct {
 	CreateDefs TableDefs
 	FileFormat string
 	Files      Exprs
+	Bundle     bool
 	Options    KVOptions
 }
 
@@ -31,20 +32,27 @@ func (node *Import) Format(ctx *FmtCtx) {
 	ctx.WriteString("IMPORT TABLE ")
 	ctx.FormatNode(&node.Table)
 
-	if node.CreateFile != nil {
-		ctx.WriteString(" CREATE USING ")
-		ctx.FormatNode(node.CreateFile)
-		ctx.WriteString(" ")
-	} else {
+	if node.Bundle {
+		ctx.WriteString(" FROM ")
+		ctx.WriteString(node.FileFormat)
 		ctx.WriteString(" (")
-		ctx.FormatNode(&node.CreateDefs)
-		ctx.WriteString(") ")
+		ctx.FormatNode(&node.Files)
+		ctx.WriteString(")")
+	} else {
+		if node.CreateFile != nil {
+			ctx.WriteString(" CREATE USING ")
+			ctx.FormatNode(node.CreateFile)
+			ctx.WriteString(" ")
+		} else {
+			ctx.WriteString(" (")
+			ctx.FormatNode(&node.CreateDefs)
+			ctx.WriteString(") ")
+		}
+		ctx.WriteString(node.FileFormat)
+		ctx.WriteString(" DATA (")
+		ctx.FormatNode(&node.Files)
+		ctx.WriteString(")")
 	}
-
-	ctx.WriteString(node.FileFormat)
-	ctx.WriteString(" DATA (")
-	ctx.FormatNode(&node.Files)
-	ctx.WriteString(")")
 
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")

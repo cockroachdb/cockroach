@@ -1279,31 +1279,57 @@ func TestImportMysql(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	testRows, dest := getSimpleMysqlDumpTestdata(t)
+	simpleTestRows, simple := getSimpleMysqlDumpTestdata(t)
+	simple = fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(simple, baseDir))
+	multitable := getMultiTableMysqlDumpTestdata(t)
+	multitable = fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(multitable, baseDir))
 
-	cmd := `IMPORT TABLE test_dump (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`
-	sqlDB.Exec(t, cmd, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(dest, baseDir)))
-	for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM test_dump ORDER BY i") {
-		{
-			expected, actual := testRows[idx].s, row[1]
-			if expected == injectNull {
-				expected = "NULL"
-			}
-			if expected != actual {
-				t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
-			}
-		}
+	for _, testCase := range [][]string{
+		{`read data only`, simple, `IMPORT TABLE simple (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`},
+		{`single table dump`, simple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`},
+		{`from db dump`, multitable, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`},
+	} {
+		t.Run(testCase[0], func(t *testing.T) {
+			file := testCase[1]
+			cmd := testCase[2]
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple`)
+			sqlDB.Exec(t, cmd, file)
+			for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM simple ORDER BY i") {
+				{
+					expected, actual := simpleTestRows[idx].s, row[1]
+					if expected == injectNull {
+						expected = "NULL"
+					}
+					if expected != actual {
+						t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
+					}
+				}
 
-		{
-			expected, actual := testRows[idx].b, row[2]
-			if expected == nil {
-				expected = []byte("NULL")
+				{
+					expected, actual := simpleTestRows[idx].b, row[2]
+					if expected == nil {
+						expected = []byte("NULL")
+					}
+					if !bytes.Equal(expected, []byte(actual)) {
+						t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+					}
+				}
 			}
-			if !bytes.Equal(expected, []byte(actual)) {
-				t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
-			}
-		}
+		})
 	}
+
+	t.Run("second table in db dump", func(t *testing.T) {
+		sqlDB.Exec(t, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, multitable)
+		res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
+		if expected, actual := secondTableRows, len(res); expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		for _, row := range res {
+			if i, s := row[0], row[1]; i != s {
+				t.Fatalf("expected %s = %s", i, s)
+			}
+		}
+	})
 }
 
 func TestImportMysqlOutfile(t *testing.T) {

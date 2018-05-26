@@ -723,7 +723,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options
-%type <str> import_data_format
+%type <str> import_data_format import_bundle_format
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
@@ -1603,8 +1603,15 @@ restore_stmt:
   }
 | RESTORE error // SHOW HELP: RESTORE
 
+import_bundle_format:
+  MYSQLDUMP
+  {
+    $$ = "MYSQLDUMP"
+  }
+
 import_data_format:
-  CSV
+  import_bundle_format
+|  CSV
   {
     $$ = "CSV"
   }
@@ -1612,15 +1619,10 @@ import_data_format:
   {
     $$ = "MYSQLOUTFILE"
   }
-| MYSQLDUMP
-  {
-    $$ = "MYSQLDUMP"
-  }
 | PGCOPY
   {
     $$ = "PGCOPY"
   }
-
 
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
@@ -1647,7 +1649,11 @@ import_data_format:
 //
 // %SeeAlso: CREATE TABLE
 import_stmt:
-  IMPORT TABLE table_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
+ IMPORT TABLE table_name FROM import_bundle_format '(' string_or_placeholder ')'
+  {
+    $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}}
+  }
+| IMPORT TABLE table_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }

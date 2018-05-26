@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	mysql "github.com/xwb1989/sqlparser"
@@ -71,6 +72,15 @@ func (m *mysqldumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *mysql.Insert:
+
+			if expected, found := m.conv.tableDesc.Name, i.Table.Name.String(); expected != found {
+				// This row does not belong to the table being loaded. If we've already
+				// seen rows, we can assume we're done, otherwise keep reading.
+				if inserts > 0 {
+					break
+				}
+				continue
+			}
 			inserts++
 			rows, ok := i.Rows.(mysql.Values)
 			if !ok {
@@ -153,21 +163,27 @@ func mysqlToCockroach(
 }
 
 func readMysqlCreateTable(
-	input io.Reader,
-	evalCtx *tree.EvalContext,
-	match string,
+	input io.Reader, evalCtx *tree.EvalContext, match string,
 ) (*sqlbase.TableDescriptor, error) {
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 
+	var found []string
 	for {
 		stmt, err := mysql.ParseNext(tokens)
+		if err == io.EOF {
+			if match != "" {
+				return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(found, ", "))
+			}
+			return nil, errors.Errorf("no table definition found")
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "mysql parse error")
 		}
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
 			name := i.NewName.Name.String()
 			if match != "" && match != name {
+				found = append(found, name)
 				continue
 			}
 			id := sqlbase.ID(int(defaultCSVTableID))
@@ -305,8 +321,10 @@ func mysqlColToCockroach(name string, col mysql.ColumnType) (*tree.ColumnTableDe
 	case mysqltypes.Geometry:
 		fallthrough
 	case mysqltypes.TypeJSON:
+		// TODO(dt): is our type close enough to use here?
 		fallthrough
 	case mysqltypes.Bit:
+		// TODO(dt): is our type close enough to use here?
 		fallthrough
 	default:
 		return nil, errors.Errorf("unsupported mysql type %q", col.Type)
