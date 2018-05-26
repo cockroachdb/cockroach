@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-metadata distsql-disk
+# LogicTest: default opt parallel-stmts distsql distsql-metadata distsql-disk distsql-opt
 
 statement ok
 CREATE TABLE t (
