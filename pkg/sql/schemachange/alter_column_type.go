@@ -122,12 +122,13 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 		},
 		sqlbase.ColumnType_STRING: classifierWidth,
 	},
-	sqlbase.ColumnType_TIME: {
-		sqlbase.ColumnType_TIMETZ: ColumnConversionTrivial.classifier(),
-	},
-	sqlbase.ColumnType_TIMETZ: {
-		sqlbase.ColumnType_TIME: ColumnConversionTrivial.classifier(),
-	},
+	// #26078
+	// sqlbase.ColumnType_TIME: {
+	// sqlbase.ColumnType_TIMETZ: ColumnConversionTrivial.classifier(),
+	// },
+	// sqlbase.ColumnType_TIMETZ: {
+	// sqlbase.ColumnType_TIME: ColumnConversionTrivial.classifier(),
+	// },
 	sqlbase.ColumnType_TIMESTAMP: {
 		sqlbase.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
 	},
