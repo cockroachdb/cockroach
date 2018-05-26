@@ -126,12 +126,13 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
 		},
 
-		{SemanticType: sqlbase.ColumnType_TIME}: {
-			{SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionTrivial,
-		},
-		{SemanticType: sqlbase.ColumnType_TIMETZ}: {
-			{SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionTrivial,
-		},
+		// Disabled until #26078 is resolved
+		// {SemanticType: sqlbase.ColumnType_TIME}: {
+		// {SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionTrivial,
+		// },
+		// {SemanticType: sqlbase.ColumnType_TIMETZ}: {
+		// {SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionTrivial,
+		// },
 
 		{SemanticType: sqlbase.ColumnType_TIMESTAMP}: {
 			{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
