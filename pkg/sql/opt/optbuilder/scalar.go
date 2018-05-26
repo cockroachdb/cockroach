@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -252,7 +253,8 @@ func (b *Builder) buildScalarHelper(
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(errorf("invalid column ordinal @%d", t.Idx+1))
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"invalid column ordinal: @%d", t.Idx+1)})
 		}
 		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
 		// TODO(rytaft): Do we need to update varsUsed here?
