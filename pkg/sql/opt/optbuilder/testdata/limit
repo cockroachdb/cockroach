@@ -294,3 +294,13 @@ limit
  │              │              └── columns: k:1(int!null) v:2(int) w:3(int)
  │              └── const: 100 [type=int]
  └── const: 25 [type=int]
+
+build
+SELECT * FROM t LIMIT @1
+----
+error (42703): column reference @1 not allowed in this context
+
+build
+SELECT * FROM t OFFSET @1
+----
+error (42703): column reference @1 not allowed in this context

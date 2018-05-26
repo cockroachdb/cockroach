@@ -675,6 +675,14 @@ func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, erro
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarResolvedType(idx int) types.T {
+	if idx >= len(s.cols) {
+		if len(s.cols) == 0 {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"column reference @%d not allowed in this context", idx+1)})
+		}
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			"invalid column ordinal: @%d", idx+1)})
+	}
 	return s.cols[idx].typ
 }
 

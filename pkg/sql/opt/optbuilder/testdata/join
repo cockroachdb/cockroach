@@ -1170,12 +1170,12 @@ sort
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 ----
-error: column "y" specified in USING clause does not exist in left table
+error (42703): column "y" specified in USING clause does not exist in left table
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 ----
-error: column "x" appears more than once in USING clause
+error (42701): column "x" appears more than once in USING clause
 
 exec-ddl
 CREATE TABLE othertype (x TEXT)
@@ -1189,7 +1189,7 @@ TABLE othertype
 build
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 ----
-error: JOIN/USING types int for left and string for right cannot be matched for column "x"
+error (42804): JOIN/USING types int for left and string for right cannot be matched for column "x"
 
 build
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))

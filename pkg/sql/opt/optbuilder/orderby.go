@@ -61,7 +61,7 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 //
 // The projection columns are added to the orderByScope.
 func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, orderByScope *scope) {
-	if order.Index != "" {
+	if order.OrderType == tree.OrderByIndex {
 		panic(unimplementedf("ORDER BY index not supported"))
 	}
 

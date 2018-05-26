@@ -198,9 +198,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 						// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
 						// ambiguity error.
 						if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-							panic(builderError{pgerror.NewErrorf(
-								pgerror.CodeAmbiguousAliasError, "%s \"%s\" is ambiguous", op, target,
-							)})
+							panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+								"%s \"%s\" is ambiguous", op, target)})
 						}
 						// Use the index of the first matching column.
 						continue
