@@ -61,30 +61,6 @@ LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
-
---
--- Table structure for table `simple`
---
-
-DROP TABLE IF EXISTS `simple`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `simple` (
-  `i` int(11) NOT NULL,
-  `s` text,
-  `b` binary(200) DEFAULT NULL,
-  PRIMARY KEY (`i`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `simple`
---
-
-LOCK TABLES `simple` WRITE;
-/*!40000 ALTER TABLE `simple` DISABLE KEYS */;
-/*!40000 ALTER TABLE `simple` ENABLE KEYS */;
-UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -95,4 +71,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-05-29 13:06:38
+-- Dump completed on 2018-05-25 21:32:01

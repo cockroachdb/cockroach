@@ -9,14 +9,11 @@
 package importccl
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"encoding/hex"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,36 +33,6 @@ var testEvalCtx = &tree.EvalContext{
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 }
 
-func writeMysqldumpTestdata(t *testing.T, dest string, args ...string) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0777); err != nil {
-		t.Fatal(err)
-	}
-	out, err := os.Create(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer out.Close()
-	writer := bufio.NewWriter(out)
-
-	baseArgs := []string{`-u`, `root`, `cockroachtestdata`}
-	args = append(baseArgs, args...)
-	cmd := exec.Command(`mysqldump`, args...)
-	cmd.Stdout = writer
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Wait(); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Flush(); err != nil {
-		t.Fatal(err)
-	}
-	if err := out.Sync(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.TableDescriptor {
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
@@ -82,24 +49,13 @@ func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.T
 	return table
 }
 
-func getMysqldumpTestdata(t *testing.T) ([]testRow, string) {
-	testRows := getMysqlTestRows()
-	dest := filepath.Join(`testdata`, `mysqldump`, `example.sql`)
-	if false {
-		cleanup := loadMysqlTestdata(t, testRows)
-		defer cleanup()
-		writeMysqldumpTestdata(t, dest, `test`)
-	}
-	return testRows, dest
-}
-
 func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testRows, dest := getMysqldumpTestdata(t)
+	testRows, dest := getSimpleMysqlDumpTestdata(t)
 
 	ctx := context.TODO()
-	table := descForTable(t, `CREATE TABLE test (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
+	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
 
 	converter, err := newMysqldumpReader(make(chan kvBatch, 10), table, testEvalCtx)
 	if err != nil {
@@ -176,94 +132,27 @@ func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescript
 func TestMysqldumpSchemaReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	simple := filepath.Join(`testdata`, `mysqldump`, `simple-schema.sql`)
-	everything := filepath.Join(`testdata`, `mysqldump`, `everything-schema.sql`)
-	multi := filepath.Join(`testdata`, `mysqldump`, `multi-schema.sql`)
-
-	if true {
-		db, err := gosql.Open("mysql", "root@/cockroachtestdata")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-
-		if _, err := db.Exec(`DROP TABLE IF EXISTS simple`); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := db.Exec(`CREATE TABLE simple (i INT PRIMARY KEY, s text, b BINARY(200))`); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := db.Exec(`DROP TABLE IF EXISTS everything`); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := db.Exec(`CREATE TABLE everything (
-			i			INT PRIMARY KEY,
-
-			c 		CHAR(10),
-			s			VARCHAR(100),
-			tx		TEXT,
-
-			bin		BINARY(100),
-			vbin	VARBINARY(100),
-			bl 		BLOB,
-
-			dt 		DATETIME,
-			d 		DATE,
-			ts 		TIMESTAMP,
-			t			TIME,
-			-- TODO(dt): fix parser: for YEAR's length option
-			-- y			YEAR,
-
-			de 		DECIMAL,
-			nu		NUMERIC,
-			d53		DECIMAL(5,3),
-
-			iw		INT(5),
-			iz		INT ZEROFILL,
-			ti 		TINYINT,
-			si 		SMALLINT,
-			mi 		MEDIUMINT,
-			bi 		BIGINT,
-
-			fl 		FLOAT,
-			rl		REAL,
-			db 		DOUBLE,
-
-			f17		FLOAT(17),
-			f47		FLOAT(47),
-			f75		FLOAT(7, 5)
-		)`); err != nil {
-			t.Fatal(err)
-		}
-
-		writeMysqldumpTestdata(t, simple, `simple`)
-		writeMysqldumpTestdata(t, everything, `everything`)
-		writeMysqldumpTestdata(t, multi)
-
-		if _, err := db.Exec(`DROP TABLE simple`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`DROP TABLE everything`); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 53)
 
 	t.Run("simple", func(t *testing.T) {
 		expected := simpleTable
-		got := readMysqlCreateFrom(t, simple, "")
-
+		_, testdata := getSimpleMysqlDumpTestdata(t)
+		got := readMysqlCreateFrom(t, testdata, "")
 		compareTables(t, expected, got)
 	})
 
 	t.Run("everything", func(t *testing.T) {
 		expected := descForTable(t, readFile(t, `everything.cockroach-schema.sql`), expectedParent, 53)
 
-		got := readMysqlCreateFrom(t, everything, "")
+		testdata := getEverythingMysqlDumpTestdata(t)
+		got := readMysqlCreateFrom(t, testdata, "")
+		compareTables(t, expected, got)
+	})
+
+	t.Run("simple-in-multi", func(t *testing.T) {
+		expected := simpleTable
+		testdata := getMultiTableMysqlDumpTestdata(t)
+		got := readMysqlCreateFrom(t, testdata, "simple")
 		compareTables(t, expected, got)
 	})
 }

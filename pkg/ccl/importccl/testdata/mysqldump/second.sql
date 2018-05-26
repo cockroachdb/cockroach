@@ -16,50 +16,27 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `everything`
+-- Table structure for table `second`
 --
 
-DROP TABLE IF EXISTS `everything`;
+DROP TABLE IF EXISTS `second`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `everything` (
+CREATE TABLE `second` (
   `i` int(11) NOT NULL,
-  `c` char(10) DEFAULT NULL,
   `s` varchar(100) DEFAULT NULL,
-  `tx` text,
-  `bin` binary(100) DEFAULT NULL,
-  `vbin` varbinary(100) DEFAULT NULL,
-  `bl` blob,
-  `dt` datetime DEFAULT NULL,
-  `d` date DEFAULT NULL,
-  `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `t` time DEFAULT NULL,
-  `de` decimal(10,0) DEFAULT NULL,
-  `nu` decimal(10,0) DEFAULT NULL,
-  `d53` decimal(5,3) DEFAULT NULL,
-  `iw` int(5) DEFAULT NULL,
-  `iz` int(10) unsigned zerofill DEFAULT NULL,
-  `ti` tinyint(4) DEFAULT NULL,
-  `si` smallint(6) DEFAULT NULL,
-  `mi` mediumint(9) DEFAULT NULL,
-  `bi` bigint(20) DEFAULT NULL,
-  `fl` float DEFAULT NULL,
-  `rl` double DEFAULT NULL,
-  `db` double DEFAULT NULL,
-  `f17` float DEFAULT NULL,
-  `f47` double DEFAULT NULL,
-  `f75` float(7,5) DEFAULT NULL,
   PRIMARY KEY (`i`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `everything`
+-- Dumping data for table `second`
 --
 
-LOCK TABLES `everything` WRITE;
-/*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-/*!40000 ALTER TABLE `everything` ENABLE KEYS */;
+LOCK TABLES `second` WRITE;
+/*!40000 ALTER TABLE `second` DISABLE KEYS */;
+INSERT INTO `second` VALUES (0,'0'),(1,'1'),(2,'2'),(3,'3'),(4,'4'),(5,'5'),(6,'6');
+/*!40000 ALTER TABLE `second` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -71,4 +48,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-06-08 13:10:23
+-- Dump completed on 2018-06-08  2:58:38

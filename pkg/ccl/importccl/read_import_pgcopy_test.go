@@ -31,7 +31,7 @@ type pgCopyDumpCfg struct {
 	opts     roachpb.PgCopyOptions
 }
 
-func loadPostgresTestdata(t *testing.T, rows []testRow) func() {
+func loadPostgresTestdata(t *testing.T, rows []simpleTestRow) func() {
 	db, err := gosql.Open("postgres", "postgres://postgres@localhost/test?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func loadPostgresTestdata(t *testing.T, rows []testRow) func() {
 	}
 }
 
-func writePgCopyTestdata(t *testing.T, rows []testRow, configs []pgCopyDumpCfg) {
+func writePgCopyTestdata(t *testing.T, rows []simpleTestRow, configs []pgCopyDumpCfg) {
 	cleanup := loadPostgresTestdata(t, rows)
 	defer cleanup()
 
@@ -101,10 +101,10 @@ func writePgCopyTestdata(t *testing.T, rows []testRow, configs []pgCopyDumpCfg) 
 	}
 }
 
-func getPostgresTestRows() []testRow {
+func getPostgresTestRows() []simpleTestRow {
 	badChars := []rune{'a', ';', '\n', ',', '"', '\\', '\r', '<', '\t', '✅', 'π', rune(10), rune(2425), rune(5183), utf8.RuneError}
 	r := rand.New(rand.NewSource(1))
-	testRows := []testRow{
+	testRows := []simpleTestRow{
 		{i: 0, s: `str`},
 		{i: 1, s: ``},
 		{i: 2, s: ` `},
@@ -134,12 +134,12 @@ func getPostgresTestRows() []testRow {
 		buf := make([]byte, 200)
 		r.Seed(int64(i))
 		r.Read(buf)
-		testRows = append(testRows, testRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
+		testRows = append(testRows, simpleTestRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
 	}
 	return testRows
 }
 
-func getPgCopyTestdata(t *testing.T) ([]testRow, []pgCopyDumpCfg) {
+func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
 	testRows := getPostgresTestRows()
 
 	configs := []pgCopyDumpCfg{
