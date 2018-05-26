@@ -248,7 +248,7 @@ func importPlanHook(
 	}
 
 	var createFileFn func() (string, error)
-	if importStmt.CreateDefs == nil {
+	if !importStmt.Bundle && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
 			return nil, nil, nil, err
@@ -429,37 +429,69 @@ func importPlanHook(
 			sstSize = sz
 		}
 
-		var create *tree.CreateTable
-		if importStmt.CreateDefs != nil {
-			create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
-		} else {
-			filename, err := createFileFn()
+		var tableDesc *sqlbase.TableDescriptor
+		var jobDesc string
+		if importStmt.Bundle {
+			named, err := importStmt.Table.Normalize()
 			if err != nil {
-				return err
-			}
-			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
-			if err != nil {
-				return err
-			}
-
-			if named, err := importStmt.Table.Normalize(); err != nil {
 				return errors.Wrap(err, "normalize import table")
-			} else if parsed, err := create.Table.Normalize(); err != nil {
-				return errors.Wrap(err, "normalize create table")
-			} else if named.TableName != parsed.TableName {
-				return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)
 			}
-		}
 
-		tableDesc, err := MakeSimpleTableDescriptor(
-			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
-		if err != nil {
-			return err
-		}
+			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			reader, err := store.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
 
-		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
-		if err != nil {
-			return err
+			tbl, err := readMysqlCreateTable(reader, &p.ExtendedEvalContext().EvalContext, named.TableName.String())
+			if err != nil {
+				return err
+			}
+			tableDesc = tbl
+			descStr, err := importJobDescription(importStmt, nil, files, opts)
+			if err != nil {
+				return err
+			}
+			jobDesc = descStr
+		} else {
+			var create *tree.CreateTable
+			if importStmt.CreateDefs != nil {
+				create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+			} else {
+				filename, err := createFileFn()
+				if err != nil {
+					return err
+				}
+				create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+				if err != nil {
+					return err
+				}
+
+				if named, err := importStmt.Table.Normalize(); err != nil {
+					return errors.Wrap(err, "normalize import table")
+				} else if parsed, err := create.Table.Normalize(); err != nil {
+					return errors.Wrap(err, "normalize create table")
+				} else if named.TableName != parsed.TableName {
+					return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)
+				}
+			}
+
+			tbl, err := MakeSimpleTableDescriptor(
+				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
+			if err != nil {
+				return err
+			}
+			tableDesc = tbl
+			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
+			if err != nil {
+				return err
+			}
+			jobDesc = descStr
 		}
 
 		if transform != "" {
