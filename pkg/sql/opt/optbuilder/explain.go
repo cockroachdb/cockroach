@@ -34,13 +34,20 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	outScope = inScope.push()
 
-	if opts.Mode != tree.ExplainPlan {
-		panic(errorf("only PLAN is supported for EXPLAIN"))
-	}
+	var cols sqlbase.ResultColumns
+	switch opts.Mode {
+	case tree.ExplainPlan:
+		if opts.Flags.Contains(tree.ExplainFlagVerbose) || opts.Flags.Contains(tree.ExplainFlagTypes) {
+			cols = sqlbase.ExplainPlanVerboseColumns
+		} else {
+			cols = sqlbase.ExplainPlanColumns
+		}
 
-	cols := sqlbase.ExplainPlanColumns
-	if opts.Flags.Contains(tree.ExplainFlagVerbose) || opts.Flags.Contains(tree.ExplainFlagTypes) {
-		cols = sqlbase.ExplainPlanVerboseColumns
+	case tree.ExplainDistSQL:
+		cols = sqlbase.ExplainDistSQLColumns
+
+	default:
+		panic(errorf("unsupported EXPLAIN mode"))
 	}
 	b.synthesizeResultColumns(outScope, cols)
 
