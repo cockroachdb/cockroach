@@ -27,9 +27,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -578,9 +580,16 @@ func TestShowSessions(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
+				DisableEventLog: true,
+				UseDatabase:     "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: execKnobs,
+					SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+						DisableMigrations: true,
+					},
+					Upgrade: &server.UpgradeTestingKnobs{
+						DisableUpgrade: 1,
+					},
 				},
 			},
 		})
@@ -589,7 +598,7 @@ func TestShowSessions(t *testing.T) {
 	conn = tc.ServerConn(0)
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
 
-	const showSessions = "SELECT node_id, (now() - session_start)::FLOAT FROM [SHOW CLUSTER SESSIONS]"
+	const showSessions = "SELECT active_queries, node_id, (now() - session_start)::FLOAT FROM [SHOW CLUSTER SESSIONS]"
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {
@@ -598,14 +607,17 @@ func TestShowSessions(t *testing.T) {
 	defer rows.Close()
 
 	count := 0
+	var q string
 	for rows.Next() {
 		count++
 
 		var nodeID int
 		var delta float64
-		if err := rows.Scan(&nodeID, &delta); err != nil {
+		var queries string
+		if err := rows.Scan(&queries, &nodeID, &delta); err != nil {
 			t.Fatal(err)
 		}
+		q = q + queries
 		if nodeID < 1 || nodeID > 2 {
 			t.Fatalf("invalid node ID: %d", nodeID)
 		}
@@ -622,7 +634,7 @@ func TestShowSessions(t *testing.T) {
 	}
 
 	if expectedCount := 1; count != expectedCount {
-		t.Fatalf("unexpected number of running sessions: %d, expected %d", count, expectedCount)
+		t.Fatalf("unexpected number of running sessions: %d, expected %d, %s", count, expectedCount, q)
 	}
 }
 
