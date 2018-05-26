@@ -323,7 +323,7 @@ func TestScanError(t *testing.T) {
 		{`X'zzz'`, "invalid hexadecimal bytes literal"},
 		{`x'beef\x41'`, "invalid hexadecimal bytes literal"},
 		{`X'beef\x41\x41'`, "invalid hexadecimal bytes literal"},
-		{`x'''1'''`, "invalid hexadecimal bytes literal"},
+		{`x'a'`, "invalid hexadecimal bytes literal"},
 		{`$9223372036854775809`, "integer value out of range"},
 	}
 	for _, d := range testData {
