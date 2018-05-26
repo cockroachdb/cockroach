@@ -42,12 +42,12 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 		outScope = b.buildTable(source.Expr, inScope)
 
-		// Overwrite output properties with any alias information.
-		b.renameSource(source.As, outScope)
-
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality("ordinality", outScope)
 		}
+
+		// Overwrite output properties with any alias information.
+		b.renameSource(source.As, outScope)
 
 		return outScope
 
@@ -110,6 +110,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// functions with just one column.
 
 		// If an alias was specified, use that to qualify the column names.
+		tableAlias = tree.MakeUnqualifiedTableName(as.Alias)
 		scope.setTableAlias(as.Alias)
 	}
 
