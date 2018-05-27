@@ -619,6 +619,7 @@ message ChartCatalogRequest {
 message ChartCatalogResponse {
   repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
+
 // ChartCatalogRequest requests returns a catalog of Admin UI charts.
 message ChartCatalogRequest {
 }

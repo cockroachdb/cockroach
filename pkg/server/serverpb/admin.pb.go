@@ -209,9 +209,13 @@ func (x ZoneConfigurationLevel) String() string {
 }
 func (ZoneConfigurationLevel) EnumDescriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 
@@ -240,9 +244,13 @@ func (x DrainMode) String() string {
 }
 func (DrainMode) EnumDescriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{1}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{1}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{1}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 
@@ -257,9 +265,13 @@ func (m *DatabasesRequest) String() string { return proto.CompactTextString(m) }
 func (*DatabasesRequest) ProtoMessage()    {}
 func (*DatabasesRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DatabasesRequest) XXX_Unmarshal(b []byte) error {
@@ -297,9 +309,13 @@ func (m *DatabasesResponse) String() string { return proto.CompactTextString(m) 
 func (*DatabasesResponse) ProtoMessage()    {}
 func (*DatabasesResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{1}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{1}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{1}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DatabasesResponse) XXX_Unmarshal(b []byte) error {
@@ -339,9 +355,13 @@ func (m *DatabaseDetailsRequest) String() string { return proto.CompactTextStrin
 func (*DatabaseDetailsRequest) ProtoMessage()    {}
 func (*DatabaseDetailsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{2}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{2}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{2}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DatabaseDetailsRequest) XXX_Unmarshal(b []byte) error {
@@ -392,9 +412,13 @@ func (m *DatabaseDetailsResponse) String() string { return proto.CompactTextStri
 func (*DatabaseDetailsResponse) ProtoMessage()    {}
 func (*DatabaseDetailsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{3}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{3}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{3}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DatabaseDetailsResponse) XXX_Unmarshal(b []byte) error {
@@ -434,9 +458,13 @@ func (m *DatabaseDetailsResponse_Grant) String() string { return proto.CompactTe
 func (*DatabaseDetailsResponse_Grant) ProtoMessage()    {}
 func (*DatabaseDetailsResponse_Grant) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{3, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{3, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{3, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DatabaseDetailsResponse_Grant) XXX_Unmarshal(b []byte) error {
@@ -477,9 +505,13 @@ func (m *TableDetailsRequest) String() string { return proto.CompactTextString(m
 func (*TableDetailsRequest) ProtoMessage()    {}
 func (*TableDetailsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{4}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{4}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{4}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableDetailsRequest) XXX_Unmarshal(b []byte) error {
@@ -540,9 +572,13 @@ func (m *TableDetailsResponse) String() string { return proto.CompactTextString(
 func (*TableDetailsResponse) ProtoMessage()    {}
 func (*TableDetailsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{5}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{5}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{5}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableDetailsResponse) XXX_Unmarshal(b []byte) error {
@@ -583,9 +619,13 @@ func (m *TableDetailsResponse_Grant) String() string { return proto.CompactTextS
 func (*TableDetailsResponse_Grant) ProtoMessage()    {}
 func (*TableDetailsResponse_Grant) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{5, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{5, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{5, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableDetailsResponse_Grant) XXX_Unmarshal(b []byte) error {
@@ -633,9 +673,13 @@ func (m *TableDetailsResponse_Column) String() string { return proto.CompactText
 func (*TableDetailsResponse_Column) ProtoMessage()    {}
 func (*TableDetailsResponse_Column) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{5, 1}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{5, 1}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{5, 1}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableDetailsResponse_Column) XXX_Unmarshal(b []byte) error {
@@ -685,9 +729,13 @@ func (m *TableDetailsResponse_Index) String() string { return proto.CompactTextS
 func (*TableDetailsResponse_Index) ProtoMessage()    {}
 func (*TableDetailsResponse_Index) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{5, 2}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{5, 2}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{5, 2}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableDetailsResponse_Index) XXX_Unmarshal(b []byte) error {
@@ -729,9 +777,13 @@ func (m *TableStatsRequest) String() string { return proto.CompactTextString(m) 
 func (*TableStatsRequest) ProtoMessage()    {}
 func (*TableStatsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{6}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{6}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{6}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableStatsRequest) XXX_Unmarshal(b []byte) error {
@@ -789,9 +841,13 @@ func (m *TableStatsResponse) String() string { return proto.CompactTextString(m)
 func (*TableStatsResponse) ProtoMessage()    {}
 func (*TableStatsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{7}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{7}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{7}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableStatsResponse) XXX_Unmarshal(b []byte) error {
@@ -833,9 +889,13 @@ func (m *TableStatsResponse_MissingNode) String() string { return proto.CompactT
 func (*TableStatsResponse_MissingNode) ProtoMessage()    {}
 func (*TableStatsResponse_MissingNode) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{7, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{7, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{7, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *TableStatsResponse_MissingNode) XXX_Unmarshal(b []byte) error {
@@ -873,9 +933,13 @@ func (m *NonTableStatsRequest) String() string { return proto.CompactTextString(
 func (*NonTableStatsRequest) ProtoMessage()    {}
 func (*NonTableStatsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{8}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{8}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{8}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *NonTableStatsRequest) XXX_Unmarshal(b []byte) error {
@@ -918,9 +982,13 @@ func (m *NonTableStatsResponse) String() string { return proto.CompactTextString
 func (*NonTableStatsResponse) ProtoMessage()    {}
 func (*NonTableStatsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{9}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{9}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{9}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *NonTableStatsResponse) XXX_Unmarshal(b []byte) error {
@@ -957,9 +1025,13 @@ func (m *UsersRequest) String() string { return proto.CompactTextString(m) }
 func (*UsersRequest) ProtoMessage()    {}
 func (*UsersRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{10}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{10}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{10}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *UsersRequest) XXX_Unmarshal(b []byte) error {
@@ -998,9 +1070,13 @@ func (m *UsersResponse) String() string { return proto.CompactTextString(m) }
 func (*UsersResponse) ProtoMessage()    {}
 func (*UsersResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{11}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{11}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{11}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *UsersResponse) XXX_Unmarshal(b []byte) error {
@@ -1038,9 +1114,13 @@ func (m *UsersResponse_User) String() string { return proto.CompactTextString(m)
 func (*UsersResponse_User) ProtoMessage()    {}
 func (*UsersResponse_User) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{11, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{11, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{11, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *UsersResponse_User) XXX_Unmarshal(b []byte) error {
@@ -1085,9 +1165,13 @@ func (m *EventsRequest) String() string { return proto.CompactTextString(m) }
 func (*EventsRequest) ProtoMessage()    {}
 func (*EventsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{12}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{12}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{12}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EventsRequest) XXX_Unmarshal(b []byte) error {
@@ -1126,9 +1210,13 @@ func (m *EventsResponse) String() string { return proto.CompactTextString(m) }
 func (*EventsResponse) ProtoMessage()    {}
 func (*EventsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{13}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{13}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{13}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EventsResponse) XXX_Unmarshal(b []byte) error {
@@ -1177,9 +1265,13 @@ func (m *EventsResponse_Event) String() string { return proto.CompactTextString(
 func (*EventsResponse_Event) ProtoMessage()    {}
 func (*EventsResponse_Event) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{13, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{13, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{13, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EventsResponse_Event) XXX_Unmarshal(b []byte) error {
@@ -1219,9 +1311,13 @@ func (m *SetUIDataRequest) String() string { return proto.CompactTextString(m) }
 func (*SetUIDataRequest) ProtoMessage()    {}
 func (*SetUIDataRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{14}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{14}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{14}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *SetUIDataRequest) XXX_Unmarshal(b []byte) error {
@@ -1258,9 +1354,13 @@ func (m *SetUIDataResponse) String() string { return proto.CompactTextString(m) 
 func (*SetUIDataResponse) ProtoMessage()    {}
 func (*SetUIDataResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{15}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{15}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{15}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *SetUIDataResponse) XXX_Unmarshal(b []byte) error {
@@ -1299,9 +1399,13 @@ func (m *GetUIDataRequest) String() string { return proto.CompactTextString(m) }
 func (*GetUIDataRequest) ProtoMessage()    {}
 func (*GetUIDataRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{16}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{16}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{16}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *GetUIDataRequest) XXX_Unmarshal(b []byte) error {
@@ -1342,9 +1446,13 @@ func (m *GetUIDataResponse) String() string { return proto.CompactTextString(m) 
 func (*GetUIDataResponse) ProtoMessage()    {}
 func (*GetUIDataResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{17}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{17}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{17}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *GetUIDataResponse) XXX_Unmarshal(b []byte) error {
@@ -1384,9 +1492,13 @@ func (m *GetUIDataResponse_Value) String() string { return proto.CompactTextStri
 func (*GetUIDataResponse_Value) ProtoMessage()    {}
 func (*GetUIDataResponse_Value) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{17, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{17, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{17, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *GetUIDataResponse_Value) XXX_Unmarshal(b []byte) error {
@@ -1423,9 +1535,13 @@ func (m *ClusterRequest) String() string { return proto.CompactTextString(m) }
 func (*ClusterRequest) ProtoMessage()    {}
 func (*ClusterRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{18}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{18}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{18}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *ClusterRequest) XXX_Unmarshal(b []byte) error {
@@ -1468,9 +1584,13 @@ func (m *ClusterResponse) String() string { return proto.CompactTextString(m) }
 func (*ClusterResponse) ProtoMessage()    {}
 func (*ClusterResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{19}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{19}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{19}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *ClusterResponse) XXX_Unmarshal(b []byte) error {
@@ -1518,9 +1638,13 @@ func (m *DrainRequest) String() string { return proto.CompactTextString(m) }
 func (*DrainRequest) ProtoMessage()    {}
 func (*DrainRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{20}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{20}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{20}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DrainRequest) XXX_Unmarshal(b []byte) error {
@@ -1559,9 +1683,13 @@ func (m *DrainResponse) String() string { return proto.CompactTextString(m) }
 func (*DrainResponse) ProtoMessage()    {}
 func (*DrainResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{21}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{21}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{21}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DrainResponse) XXX_Unmarshal(b []byte) error {
@@ -1600,9 +1728,13 @@ func (m *DecommissionStatusRequest) String() string { return proto.CompactTextSt
 func (*DecommissionStatusRequest) ProtoMessage()    {}
 func (*DecommissionStatusRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{22}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{22}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{22}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DecommissionStatusRequest) XXX_Unmarshal(b []byte) error {
@@ -1644,9 +1776,13 @@ func (m *DecommissionRequest) String() string { return proto.CompactTextString(m
 func (*DecommissionRequest) ProtoMessage()    {}
 func (*DecommissionRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{23}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{23}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{23}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DecommissionRequest) XXX_Unmarshal(b []byte) error {
@@ -1685,9 +1821,13 @@ func (m *DecommissionStatusResponse) String() string { return proto.CompactTextS
 func (*DecommissionStatusResponse) ProtoMessage()    {}
 func (*DecommissionStatusResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{24}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{24}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{24}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DecommissionStatusResponse) XXX_Unmarshal(b []byte) error {
@@ -1729,9 +1869,13 @@ func (m *DecommissionStatusResponse_Status) String() string { return proto.Compa
 func (*DecommissionStatusResponse_Status) ProtoMessage()    {}
 func (*DecommissionStatusResponse_Status) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{24, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{24, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{24, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DecommissionStatusResponse_Status) XXX_Unmarshal(b []byte) error {
@@ -1771,9 +1915,13 @@ func (m *SettingsRequest) String() string { return proto.CompactTextString(m) }
 func (*SettingsRequest) ProtoMessage()    {}
 func (*SettingsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{25}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{25}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{25}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *SettingsRequest) XXX_Unmarshal(b []byte) error {
@@ -1811,9 +1959,13 @@ func (m *SettingsResponse) String() string { return proto.CompactTextString(m) }
 func (*SettingsResponse) ProtoMessage()    {}
 func (*SettingsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{26}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{26}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{26}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *SettingsResponse) XXX_Unmarshal(b []byte) error {
@@ -1852,9 +2004,13 @@ func (m *SettingsResponse_Value) String() string { return proto.CompactTextStrin
 func (*SettingsResponse_Value) ProtoMessage()    {}
 func (*SettingsResponse_Value) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{26, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{26, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{26, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *SettingsResponse_Value) XXX_Unmarshal(b []byte) error {
@@ -1891,9 +2047,13 @@ func (m *HealthRequest) String() string { return proto.CompactTextString(m) }
 func (*HealthRequest) ProtoMessage()    {}
 func (*HealthRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{27}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{27}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{27}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *HealthRequest) XXX_Unmarshal(b []byte) error {
@@ -1932,9 +2092,13 @@ func (m *HealthResponse) String() string { return proto.CompactTextString(m) }
 func (*HealthResponse) ProtoMessage()    {}
 func (*HealthResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{28}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{28}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{28}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *HealthResponse) XXX_Unmarshal(b []byte) error {
@@ -1971,9 +2135,13 @@ func (m *LivenessRequest) String() string { return proto.CompactTextString(m) }
 func (*LivenessRequest) ProtoMessage()    {}
 func (*LivenessRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{29}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{29}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{29}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *LivenessRequest) XXX_Unmarshal(b []byte) error {
@@ -2012,9 +2180,13 @@ func (m *LivenessResponse) String() string { return proto.CompactTextString(m) }
 func (*LivenessResponse) ProtoMessage()    {}
 func (*LivenessResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{30}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{30}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{30}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *LivenessResponse) XXX_Unmarshal(b []byte) error {
@@ -2054,9 +2226,13 @@ func (m *JobsRequest) String() string { return proto.CompactTextString(m) }
 func (*JobsRequest) ProtoMessage()    {}
 func (*JobsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{31}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{31}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{31}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *JobsRequest) XXX_Unmarshal(b []byte) error {
@@ -2094,9 +2270,13 @@ func (m *JobsResponse) String() string { return proto.CompactTextString(m) }
 func (*JobsResponse) ProtoMessage()    {}
 func (*JobsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{32}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{32}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{32}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *JobsResponse) XXX_Unmarshal(b []byte) error {
@@ -2153,9 +2333,13 @@ func (m *JobsResponse_Job) String() string { return proto.CompactTextString(m) }
 func (*JobsResponse_Job) ProtoMessage()    {}
 func (*JobsResponse_Job) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{32, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{32, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{32, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *JobsResponse_Job) XXX_Unmarshal(b []byte) error {
@@ -2192,9 +2376,13 @@ func (m *LocationsRequest) String() string { return proto.CompactTextString(m) }
 func (*LocationsRequest) ProtoMessage()    {}
 func (*LocationsRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{33}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{33}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{33}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *LocationsRequest) XXX_Unmarshal(b []byte) error {
@@ -2232,9 +2420,13 @@ func (m *LocationsResponse) String() string { return proto.CompactTextString(m) 
 func (*LocationsResponse) ProtoMessage()    {}
 func (*LocationsResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{34}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{34}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{34}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *LocationsResponse) XXX_Unmarshal(b []byte) error {
@@ -2274,9 +2466,13 @@ func (m *LocationsResponse_Location) String() string { return proto.CompactTextS
 func (*LocationsResponse_Location) ProtoMessage()    {}
 func (*LocationsResponse_Location) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{34, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{34, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{34, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *LocationsResponse_Location) XXX_Unmarshal(b []byte) error {
@@ -2322,9 +2518,13 @@ func (m *RangeLogRequest) String() string { return proto.CompactTextString(m) }
 func (*RangeLogRequest) ProtoMessage()    {}
 func (*RangeLogRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{35}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{35}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{35}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *RangeLogRequest) XXX_Unmarshal(b []byte) error {
@@ -2362,9 +2562,13 @@ func (m *RangeLogResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeLogResponse) ProtoMessage()    {}
 func (*RangeLogResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{36}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{36}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{36}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *RangeLogResponse) XXX_Unmarshal(b []byte) error {
@@ -2408,9 +2612,13 @@ func (m *RangeLogResponse_PrettyInfo) String() string { return proto.CompactText
 func (*RangeLogResponse_PrettyInfo) ProtoMessage()    {}
 func (*RangeLogResponse_PrettyInfo) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{36, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{36, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{36, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *RangeLogResponse_PrettyInfo) XXX_Unmarshal(b []byte) error {
@@ -2448,9 +2656,13 @@ func (m *RangeLogResponse_Event) String() string { return proto.CompactTextStrin
 func (*RangeLogResponse_Event) ProtoMessage()    {}
 func (*RangeLogResponse_Event) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{36, 1}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{36, 1}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{36, 1}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *RangeLogResponse_Event) XXX_Unmarshal(b []byte) error {
@@ -2489,9 +2701,13 @@ func (m *QueryPlanRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryPlanRequest) ProtoMessage()    {}
 func (*QueryPlanRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{37}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{37}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{37}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *QueryPlanRequest) XXX_Unmarshal(b []byte) error {
@@ -2530,9 +2746,13 @@ func (m *QueryPlanResponse) String() string { return proto.CompactTextString(m) 
 func (*QueryPlanResponse) ProtoMessage()    {}
 func (*QueryPlanResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{38}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{38}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{38}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *QueryPlanResponse) XXX_Unmarshal(b []byte) error {
@@ -2568,9 +2788,13 @@ func (m *DataDistributionRequest) String() string { return proto.CompactTextStri
 func (*DataDistributionRequest) ProtoMessage()    {}
 func (*DataDistributionRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{39}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{39}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{39}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DataDistributionRequest) XXX_Unmarshal(b []byte) error {
@@ -2610,9 +2834,13 @@ func (m *DataDistributionResponse) String() string { return proto.CompactTextStr
 func (*DataDistributionResponse) ProtoMessage()    {}
 func (*DataDistributionResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{40}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{40}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{40}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DataDistributionResponse) XXX_Unmarshal(b []byte) error {
@@ -2654,9 +2882,13 @@ func (m *DataDistributionResponse_ZoneConfig) String() string { return proto.Com
 func (*DataDistributionResponse_ZoneConfig) ProtoMessage()    {}
 func (*DataDistributionResponse_ZoneConfig) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{40, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{40, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{40, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DataDistributionResponse_ZoneConfig) XXX_Unmarshal(b []byte) error {
@@ -2695,9 +2927,13 @@ func (m *DataDistributionResponse_TableInfo) String() string { return proto.Comp
 func (*DataDistributionResponse_TableInfo) ProtoMessage()    {}
 func (*DataDistributionResponse_TableInfo) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{40, 1}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{40, 1}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{40, 1}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DataDistributionResponse_TableInfo) XXX_Unmarshal(b []byte) error {
@@ -2735,9 +2971,13 @@ func (m *DataDistributionResponse_DatabaseInfo) String() string { return proto.C
 func (*DataDistributionResponse_DatabaseInfo) ProtoMessage()    {}
 func (*DataDistributionResponse_DatabaseInfo) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{40, 2}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{40, 2}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{40, 2}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *DataDistributionResponse_DatabaseInfo) XXX_Unmarshal(b []byte) error {
@@ -2774,9 +3014,13 @@ func (m *MetricMetadataRequest) String() string { return proto.CompactTextString
 func (*MetricMetadataRequest) ProtoMessage()    {}
 func (*MetricMetadataRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{41}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{41}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{41}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *MetricMetadataRequest) XXX_Unmarshal(b []byte) error {
@@ -2814,9 +3058,13 @@ func (m *MetricMetadataResponse) String() string { return proto.CompactTextStrin
 func (*MetricMetadataResponse) ProtoMessage()    {}
 func (*MetricMetadataResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{42}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{42}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{42}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *MetricMetadataResponse) XXX_Unmarshal(b []byte) error {
@@ -2863,9 +3111,13 @@ func (m *EnqueueRangeRequest) String() string { return proto.CompactTextString(m
 func (*EnqueueRangeRequest) ProtoMessage()    {}
 func (*EnqueueRangeRequest) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{43}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{43}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{43}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EnqueueRangeRequest) XXX_Unmarshal(b []byte) error {
@@ -2902,9 +3154,13 @@ func (m *EnqueueRangeResponse) String() string { return proto.CompactTextString(
 func (*EnqueueRangeResponse) ProtoMessage()    {}
 func (*EnqueueRangeResponse) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{44}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{44}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{44}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EnqueueRangeResponse) XXX_Unmarshal(b []byte) error {
@@ -2945,9 +3201,13 @@ func (m *EnqueueRangeResponse_Details) String() string { return proto.CompactTex
 func (*EnqueueRangeResponse_Details) ProtoMessage()    {}
 func (*EnqueueRangeResponse_Details) Descriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptor_admin_ec4766c45202ba2e, []int{44, 0}
 =======
 	return fileDescriptor_admin_98231c279874850d, []int{44, 0}
+>>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_admin_d83972ee3d61122a, []int{44, 0}
 >>>>>>> admin: Add Chart Catalog infrastructure
 }
 func (m *EnqueueRangeResponse_Details) XXX_Unmarshal(b []byte) error {
@@ -3001,7 +3261,7 @@ func (m *ChartCatalogRequest) Reset()         { *m = ChartCatalogRequest{} }
 func (m *ChartCatalogRequest) String() string { return proto.CompactTextString(m) }
 func (*ChartCatalogRequest) ProtoMessage()    {}
 func (*ChartCatalogRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_98231c279874850d, []int{45}
+	return fileDescriptor_admin_d83972ee3d61122a, []int{45}
 }
 func (m *ChartCatalogRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3037,7 +3297,7 @@ func (m *ChartCatalogResponse) Reset()         { *m = ChartCatalogResponse{} }
 func (m *ChartCatalogResponse) String() string { return proto.CompactTextString(m) }
 func (*ChartCatalogResponse) ProtoMessage()    {}
 func (*ChartCatalogResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_admin_98231c279874850d, []int{46}
+	return fileDescriptor_admin_d83972ee3d61122a, []int{46}
 }
 func (m *ChartCatalogResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -16206,6 +16466,7 @@ var (
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 func init() { proto.RegisterFile("server/serverpb/admin.proto", fileDescriptor_admin_ec4766c45202ba2e) }
 
 var fileDescriptor_admin_ec4766c45202ba2e = []byte{
@@ -16694,8 +16955,11 @@ var fileDescriptorAdmin = []byte{
 >>>>>>> admin: Add Chart Catalog infrastructure
 =======
 func init() { proto.RegisterFile("server/serverpb/admin.proto", fileDescriptor_admin_98231c279874850d) }
+=======
+func init() { proto.RegisterFile("server/serverpb/admin.proto", fileDescriptor_admin_d83972ee3d61122a) }
+>>>>>>> admin: Add Chart Catalog infrastructure
 
-var fileDescriptor_admin_98231c279874850d = []byte{
+var fileDescriptor_admin_d83972ee3d61122a = []byte{
 	// 4005 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x3a, 0x5d, 0x6f, 0x1b, 0x49,
 	0x72, 0x1e, 0x52, 0xfc, 0x2a, 0x91, 0x12, 0xd5, 0x96, 0x65, 0x9a, 0xf6, 0x89, 0xda, 0xf1, 0xed,
