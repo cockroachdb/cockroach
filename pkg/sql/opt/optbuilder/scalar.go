@@ -261,7 +261,6 @@ func (b *Builder) buildScalarHelper(
 				"invalid column ordinal: @%d", t.Idx+1)})
 		}
 		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
-		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:
 		out = b.factory.ConstructNot(b.buildScalarHelper(t.TypedInnerExpr(), "", inScope, nil))
@@ -286,7 +285,6 @@ func (b *Builder) buildScalarHelper(
 			out = b.buildDatum(d)
 		} else {
 			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
-			// TODO(rytaft): Do we need to update varsUsed here?
 		}
 
 	case *tree.RangeCond:
@@ -359,6 +357,10 @@ func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, label string, inScope, outScope *scope,
 ) (out memo.GroupID) {
+	if f.WindowDef != nil {
+		panic(unimplementedf("window functions are not supported"))
+	}
+
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
 		panic(builderError{err})
