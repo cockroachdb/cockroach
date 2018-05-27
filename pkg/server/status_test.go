@@ -46,9 +46,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -667,6 +669,110 @@ func TestHotRangesResponse(t *testing.T) {
 				lastQPS = r.QueriesPerSecond
 			}
 		}
+
+	}
+}
+
+// TestChartCatalog ensures that the server successfully generates the chart catalog.
+func TestChartCatalogGen(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure each of the 7 constant sections of the chart catalog exist.
+	if len(chartCatalog) != 7 {
+		t.Fatal("Chart catalog failed to generate.")
+	}
+
+	for _, section := range chartCatalog {
+		// Ensure that one of the chartSections has defined Subsections.
+		if len(section.Subsections) == 0 {
+			t.Fatalf(`Chart catalog has missing subsections in %v`, section)
+		}
+	}
+}
+
+func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
+	var undefinedMetrics []string
+	for _, ic := range c.Charts {
+		for _, metric := range ic.Metrics {
+			_, ok := metadata[metric.Name]
+			if !ok {
+				undefinedMetrics = append(undefinedMetrics, metric.Name)
+			}
+		}
+	}
+
+	for _, x := range c.Subsections {
+		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(x, metadata)...)
+	}
+
+	return undefinedMetrics
+}
+
+func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) {
+	for _, x := range c.Charts {
+		for _, metric := range x.Metrics {
+			_, ok := metadata[metric.Name]
+			if ok {
+				delete(metadata, metric.Name)
+			}
+		}
+	}
+
+	for _, x := range c.Subsections {
+		deleteSeenMetrics(x, metadata)
+	}
+}
+
+// TestChartCatalogMetric ensures that all metrics are included in at least one
+// chart, and that every metric included in a chart is still part of the metrics
+// registry.
+func TestChartCatalogMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each metric referenced in the chartCatalog must have a definition in metricsMetadata
+	var undefinedMetrics []string
+	for _, cs := range chartCatalog {
+		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(&cs, metricsMetadata)...)
+	}
+
+	if len(undefinedMetrics) > 0 {
+		t.Fatalf(`The following metrics need are no longer present and  need to be removed
+			from the chart catalog (pkg/ts/chart_catalog.go):%v`, undefinedMetrics)
+	}
+
+	// Each metric in metricsMetadata should have at least one entry in
+	// chartCatalog, which we track by deleting the metric from metricsMetadata.
+	for _, v := range chartCatalog {
+		deleteSeenMetrics(&v, metricsMetadata)
+	}
+
+	if len(metricsMetadata) > 0 {
+		var metricNames []string
+		for metricName := range metricsMetadata {
+			metricNames = append(metricNames, metricName)
+		}
+		t.Fatalf(`The following metrics need to be added to the chart catalog
+			(pkg/ts/chart_catalog.go):\n%v`, metricNames)
 	}
 }
 
