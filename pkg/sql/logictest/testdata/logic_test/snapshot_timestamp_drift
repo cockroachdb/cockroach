@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # Prevents regression of #4293: We used the commit timestamp candidate instead
 # of the original timestamp for reads, which means that transactions were

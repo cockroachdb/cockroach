@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.

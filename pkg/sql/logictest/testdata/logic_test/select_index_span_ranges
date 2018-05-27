@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # This test verifies that we correctly perform an index join when the KV
 # batches span ranges. This is testing that SQL disables batch limits for index
@@ -54,18 +54,8 @@ ALTER INDEX t@c SPLIT AT VALUES (90)
 statement ok
 ALTER INDEX c SPLIT AT VALUES (10)
 
-query TTT
-EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
-----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  t@c
- │          spans  /80-
- └── scan   ·      ·
-·           table  t@primary
-
 query IIII partialsort(3)
-SELECT * FROM t WHERE (c >= 80) ORDER BY c
+SELECT * FROM t@c WHERE (c >= 80) ORDER BY c
 ----
 2   0  80  0
 6   0  85  0

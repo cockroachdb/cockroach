@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 # Test default database-level permissions.
 # Default user is root.
