@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -155,6 +156,26 @@ func (s *adminServer) AllMetricMetadata(
 
 	resp := &serverpb.MetricMetadataResponse{
 		Metadata: s.server.recorder.GetMetricsMetadata(),
+	}
+
+	return resp, nil
+}
+
+// ChartCatalog returns a catalog of Admin UI charts useful for debugging.
+func (s *adminServer) ChartCatalog(
+	ctx context.Context, req *serverpb.ChartCatalogRequest,
+) (*serverpb.ChartCatalogResponse, error) {
+
+	metricsMetadata := s.server.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.ChartCatalogResponse{
+		Catalog: chartCatalog,
 	}
 
 	return resp, nil

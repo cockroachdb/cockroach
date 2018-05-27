@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -441,6 +442,31 @@ func TestMetricsMetadata(t *testing.T) {
 		if v.Unit == 0 {
 			t.Fatalf("%s missing Unit.", v.Name)
 		}
+	}
+}
+
+// TestChartCatalog ensures that the server successfully generates the chart catalog.
+func TestChartCatalog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure each of the 7 constant sections of the chart catalog exist.
+	if len(chartCatalog) != 7 {
+		t.Fatal("Chart catalog failed to generate.")
+	}
+
+	// Ensure that one of the chartSections has defined Subsections.
+	if len(chartCatalog[0].Subsections) == 0 {
+		t.Fatal("Chart catalog failed to add subsections.")
 	}
 }
 
