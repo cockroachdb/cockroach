@@ -668,6 +668,10 @@ func TestHotRangesResponse(t *testing.T) {
 				lastQPS = r.QueriesPerSecond
 			}
 		}
+
+	}
+}
+
 // TestChartCatalog ensures that the server successfully generates the chart catalog.
 func TestChartCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()

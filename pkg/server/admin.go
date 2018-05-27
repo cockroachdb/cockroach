@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 <<<<<<< HEAD
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 =======
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
