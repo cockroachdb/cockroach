@@ -480,24 +480,22 @@ NULL
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
-render          ·         ·                      (a)        ·
- │              render 0  a                      ·          ·
- └── filter     ·         ·                      (a, b, d)  ·
-      │         filter    (a >= b) AND (a <= d)  ·          ·
-      └── scan  ·         ·                      (a, b, d)  ·
-·               table     t@primary              ·          ·
-·               spans     ALL                    ·          ·
+render     ·         ·                      (a)        ·
+ │         render 0  a                      ·          ·
+ └── scan  ·         ·                      (a, b, d)  ·
+·          table     t@primary              ·          ·
+·          spans     ALL                    ·          ·
+·          filter    (a >= b) AND (a <= d)  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
-render          ·         ·                   (a)        ·
- │              render 0  a                   ·          ·
- └── filter     ·         ·                   (a, b, d)  ·
-      │         filter    (a < b) OR (a > d)  ·          ·
-      └── scan  ·         ·                   (a, b, d)  ·
-·               table     t@primary           ·          ·
-·               spans     ALL                 ·          ·
+render     ·         ·                   (a)        ·
+ │         render 0  a                   ·          ·
+ └── scan  ·         ·                   (a, b, d)  ·
+·          table     t@primary           ·          ·
+·          spans     ALL                 ·          ·
+·          filter    (a < b) OR (a > d)  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d FROM t

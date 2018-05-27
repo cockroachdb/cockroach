@@ -22,11 +22,10 @@ SELECT * FROM a WHERE x > 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 1
 ----
-filter     ·       ·          (x, y)  ·
- │         filter  y > 1      ·       ·
- └── scan  ·       ·          (x, y)  ·
-·          table   a@primary  ·       ·
-·          spans   ALL        ·       ·
+scan  ·       ·          (x, y)  ·
+·     table   a@primary  ·       ·
+·     spans   ALL        ·       ·
+·     filter  y > 1      ·       ·
 
 query II
 SELECT * FROM a WHERE y > 1
@@ -124,14 +123,13 @@ SELECT x, x, y, x FROM a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
-render          ·         ·             ("x + 1", "x + y")  ·
- │              render 0  x + 1         ·                   ·
- │              render 1  x + y         ·                   ·
- └── filter     ·         ·             (x, y)              ·
-      │         filter    (x + y) > 20  ·                   ·
-      └── scan  ·         ·             (x, y)              ·
-·               table     a@primary     ·                   ·
-·               spans     ALL           ·                   ·
+render     ·         ·             ("x + 1", "x + y")  ·
+ │         render 0  x + 1         ·                   ·
+ │         render 1  x + y         ·                   ·
+ └── scan  ·         ·             (x, y)              ·
+·          table     a@primary     ·                   ·
+·          spans     ALL           ·                   ·
+·          filter    (x + y) > 20  ·                   ·
 
 query II
 SELECT x + 1, x + y FROM a WHERE x + y > 20

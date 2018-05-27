@@ -106,6 +106,12 @@ func asDataSource(n exec.Node) planDataSource {
 
 // ConstructFilter is part of the exec.Factory interface.
 func (ef *execFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+	if s, ok := n.(*scanNode); ok && s.filter == nil {
+		// Push the filter into the scanNode.
+		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+		return s, nil
+	}
+	// Create a filterNode.
 	src := asDataSource(n)
 	f := &filterNode{
 		source: src,
