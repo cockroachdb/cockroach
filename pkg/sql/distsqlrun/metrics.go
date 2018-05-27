@@ -38,23 +38,41 @@ var _ metric.Struct = DistSQLMetrics{}
 
 var (
 	metaQueriesActive = metric.Metadata{
-		Name: "sql.distsql.queries.active",
-		Help: "Number of distributed SQL queries currently active"}
+		Name:        "sql.distsql.queries.active",
+		Help:        "Number of distributed SQL queries currently active",
+		Unit:        "Queries",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaQueriesTotal = metric.Metadata{
-		Name: "sql.distsql.queries.total",
-		Help: "Number of distributed SQL queries executed"}
+		Name:        "sql.distsql.queries.total",
+		Help:        "Number of distributed SQL queries executed",
+		Unit:        "Queries",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaFlowsActive = metric.Metadata{
-		Name: "sql.distsql.flows.active",
-		Help: "Number of distributed SQL flows currently active"}
+		Name:        "sql.distsql.flows.active",
+		Help:        "Number of distributed SQL flows currently active",
+		Unit:        "Flows",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaFlowsTotal = metric.Metadata{
-		Name: "sql.distsql.flows.total",
-		Help: "Number of distributed SQL flows executed"}
+		Name:        "sql.distsql.flows.total",
+		Help:        "Number of distributed SQL flows executed",
+		Unit:        "Flows",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaMemMaxBytes = metric.Metadata{
-		Name: "sql.mem.distsql.max",
-		Help: "Memory usage per sql statement for distsql"}
+		Name:        "sql.mem.distsql.max",
+		Help:        "Memory usage per sql statement for distsql",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_Bytes,
+	}
 	metaMemCurBytes = metric.Metadata{
-		Name: "sql.mem.distsql.current",
-		Help: "Current sql statement memory usage for distsql"}
+		Name:        "sql.mem.distsql.current",
+		Help:        "Current sql statement memory usage for distsql",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_Bytes,
+	}
 )
 
 // See pkg/sql/mem_metrics.go

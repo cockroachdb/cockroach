@@ -41,17 +41,29 @@ var _ metric.Struct = sklMetrics{}
 
 var (
 	metaSklReadPages = metric.Metadata{
-		Name: "tscache.skl.read.pages",
-		Help: "Number of pages in the read timestamp cache"}
+		Name:        "tscache.skl.read.pages",
+		Help:        "Number of pages in the read timestamp cache",
+		Unit:        "Pages",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaSklReadRotations = metric.Metadata{
-		Name: "tscache.skl.read.rotations",
-		Help: "Number of page rotations in the read timestamp cache"}
+		Name:        "tscache.skl.read.rotations",
+		Help:        "Number of page rotations in the read timestamp cache",
+		Unit:        "Page Rotations",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaSklWritePages = metric.Metadata{
-		Name: "tscache.skl.write.pages",
-		Help: "Number of pages in the write timestamp cache"}
+		Name:        "tscache.skl.write.pages",
+		Help:        "Number of pages in the write timestamp cache",
+		Unit:        "Pages",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaSklWriteRotations = metric.Metadata{
-		Name: "tscache.skl.write.rotations",
-		Help: "Number of page rotations in the write timestamp cache"}
+		Name:        "tscache.skl.write.rotations",
+		Help:        "Number of page rotations in the write timestamp cache",
+		Unit:        "Page Rotations",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 )
 
 // MakeMetrics returns a Metrics struct.

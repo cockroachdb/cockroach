@@ -55,20 +55,35 @@ const (
 
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
-		Name: "queue.replicate.addreplica",
-		Help: "Number of replica additions attempted by the replicate queue"}
+		Name:        "queue.replicate.addreplica",
+		Help:        "Number of replica additions attempted by the replicate queue",
+		Unit:        "Replica Additions",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaReplicateQueueRemoveReplicaCount = metric.Metadata{
-		Name: "queue.replicate.removereplica",
-		Help: "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)"}
+		Name:        "queue.replicate.removereplica",
+		Help:        "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
+		Unit:        "Replica Removals",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{
-		Name: "queue.replicate.removedeadreplica",
-		Help: "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)"}
+		Name:        "queue.replicate.removedeadreplica",
+		Help:        "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Unit:        "Replica Removals",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
-		Name: "queue.replicate.rebalancereplica",
-		Help: "Number of replica rebalancer-initiated additions attempted by the replicate queue"}
+		Name:        "queue.replicate.rebalancereplica",
+		Help:        "Number of replica rebalancer-initiated additions attempted by the replicate queue",
+		Unit:        "Replica Additions",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 	metaReplicateQueueTransferLeaseCount = metric.Metadata{
-		Name: "queue.replicate.transferlease",
-		Help: "Number of range lease transfers attempted by the replicate queue"}
+		Name:        "queue.replicate.transferlease",
+		Help:        "Number of range lease transfers attempted by the replicate queue",
+		Unit:        "Lease Transfers",
+		DisplayUnit: metric.DisplayUnit_Count,
+	}
 )
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.

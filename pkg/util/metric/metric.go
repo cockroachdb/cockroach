@@ -50,6 +50,10 @@ type Iterable interface {
 	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
+	// GetUnit returns the unit that the metric measures.
+	GetUnit() string
+	// GetDisplayUnit returns how the metric should be displayed (e.g. in bytes).
+	GetDisplayUnit() DisplayUnit
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }
@@ -72,13 +76,6 @@ type PrometheusExportable interface {
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
-// Metadata holds metadata about a metric. It must be embedded in
-// each metric object.
-type Metadata struct {
-	Name, Help string
-	labels     []*prometheusgo.LabelPair
-}
-
 // GetName returns the metric's name.
 func (m *Metadata) GetName() string {
 	return m.Name
@@ -89,15 +86,30 @@ func (m *Metadata) GetHelp() string {
 	return m.Help
 }
 
+// GetUnit returns the metric's unit.
+func (m *Metadata) GetUnit() string {
+	return m.Unit
+}
+
+// GetDisplayUnit returns how charts should interpret the metric's unit.
+func (m *Metadata) GetDisplayUnit() DisplayUnit {
+	return m.DisplayUnit
+}
+
 // GetLabels returns the metric's labels.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	return m.labels
+	lps := make([]*prometheusgo.LabelPair, 0)
+	var x []byte
+	for _, v := range m.Labels {
+		lps = append(lps, &prometheusgo.LabelPair{v.Name, v.Value, x})
+	}
+	return lps
 }
 
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
-	m.labels = append(m.labels,
-		&prometheusgo.LabelPair{
+	m.Labels = append(m.Labels,
+		&LabelPair{
 			Name:  proto.String(exportedLabel(name)),
 			Value: proto.String(value),
 		})
