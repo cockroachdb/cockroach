@@ -259,3 +259,13 @@ render     ·      ·
  └── scan  ·      ·
 ·          table  users@primary
 ·          spans  ALL
+
+# EXPLAIN selecting from a sequence.
+statement ok
+CREATE SEQUENCE select_test
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM select_test
+----
+Tree             Field  Description  Columns                           Ordering
+sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
