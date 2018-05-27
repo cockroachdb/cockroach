@@ -185,3 +185,37 @@ project
       └── aggregations [outer=(1)]
            └── sum [type=decimal, outer=(1)]
                 └── variable: b.x [type=int, outer=(1)]
+
+# Regression: statistics builder panics when end key is NULL when it's trying
+# to compute start/end int boundaries.
+exec-ddl
+CREATE TABLE idx (x INT PRIMARY KEY, y INT, z INT, INDEX yz (y DESC, z))
+----
+TABLE idx
+ ├── x int not null
+ ├── y int
+ ├── z int
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX yz
+      ├── y int desc
+      ├── z int
+      └── x int not null
+
+opt
+SELECT y FROM idx WHERE y < 5 AND z < 10
+----
+project
+ ├── columns: y:2(int!null)
+ ├── stats: [rows=111]
+ └── select
+      ├── columns: y:2(int!null) z:3(int!null)
+      ├── stats: [rows=111]
+      ├── scan idx@yz
+      │    ├── columns: y:2(int) z:3(int)
+      │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
+      │    └── stats: [rows=333]
+      └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
+           └── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
+                ├── variable: idx.z [type=int, outer=(3)]
+                └── const: 10 [type=int]
