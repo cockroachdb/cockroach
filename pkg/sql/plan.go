@@ -359,7 +359,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	var catalog optCatalog
 	catalog.init(p.execCfg.TableStatsCache, p)
-	factory := makeExecFactory(p)
 
 	o := xform.NewOptimizer(p.EvalContext())
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
@@ -370,6 +369,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	ev := o.Optimize(root, props)
 
+	factory := makeExecFactory(p)
 	plan, err := execbuilder.New(&factory, ev).Build()
 	if err != nil {
 		return err
