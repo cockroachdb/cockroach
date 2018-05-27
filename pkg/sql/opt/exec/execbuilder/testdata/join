@@ -167,18 +167,16 @@ SELECT * FROM a FULL OUTER JOIN b USING(x)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
-join            ·       ·          (x, y, x, z)  ·
- │              type    cross      ·             ·
- ├── filter     ·       ·          (x, y)        ·
- │    │         filter  y > 10     ·             ·
- │    └── scan  ·       ·          (x, y)        ·
- │              table   a@primary  ·             ·
- │              spans   ALL        ·             ·
- └── filter     ·       ·          (x, z)        ·
-      │         filter  z < 400    ·             ·
-      └── scan  ·       ·          (x, z)        ·
-·               table   b@primary  ·             ·
-·               spans   ALL        ·             ·
+join       ·       ·          (x, y, x, z)  ·
+ │         type    cross      ·             ·
+ ├── scan  ·       ·          (x, y)        ·
+ │         table   a@primary  ·             ·
+ │         spans   ALL        ·             ·
+ │         filter  y > 10     ·             ·
+ └── scan  ·       ·          (x, z)        ·
+·          table   b@primary  ·             ·
+·          spans   ALL        ·             ·
+·          filter  z < 400    ·             ·
 
 query IIII rowsort
 SELECT * FROM a, b WHERE y > 10 AND z < 400
@@ -192,17 +190,16 @@ SELECT * FROM a, b WHERE y > 10 AND z < 400
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
-join            ·         ·           (x, y, x, z)  ·
- │              type      left outer  ·             ·
- │              equality  (x) = (x)   ·             ·
- ├── scan       ·         ·           (x, y)        ·
- │              table     a@primary   ·             ·
- │              spans     ALL         ·             ·
- └── filter     ·         ·           (x, z)        ·
-      │         filter    z < 300     ·             ·
-      └── scan  ·         ·           (x, z)        ·
-·               table     b@primary   ·             ·
-·               spans     ALL         ·             ·
+join       ·         ·           (x, y, x, z)  ·
+ │         type      left outer  ·             ·
+ │         equality  (x) = (x)   ·             ·
+ ├── scan  ·         ·           (x, y)        ·
+ │         table     a@primary   ·             ·
+ │         spans     ALL         ·             ·
+ └── scan  ·         ·           (x, z)        ·
+·          table     b@primary   ·             ·
+·          spans     ALL         ·             ·
+·          filter    z < 300     ·             ·
 
 query IIII rowsort
 SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300

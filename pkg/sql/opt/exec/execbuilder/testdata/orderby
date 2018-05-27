@@ -490,17 +490,16 @@ SELECT a, b, c FROM abc ORDER BY b, a, c
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
-render               ·         ·            (a, b, c)     ·
- │                   render 0  a            ·             ·
- │                   render 1  b            ·             ·
- │                   render 2  c            ·             ·
- └── sort            ·         ·            (a, b, c, d)  +b,+a,+d
-      │              order     +b,+a,+d     ·             ·
-      └── filter     ·         ·            (a, b, c, d)  ·
-           │         filter    b > 4        ·             ·
-           └── scan  ·         ·            (a, b, c, d)  ·
-·                    table     abc@primary  ·             ·
-·                    spans     ALL          ·             ·
+render          ·         ·            (a, b, c)     ·
+ │              render 0  a            ·             ·
+ │              render 1  b            ·             ·
+ │              render 2  c            ·             ·
+ └── sort       ·         ·            (a, b, c, d)  +b,+a,+d
+      │         order     +b,+a,+d     ·             ·
+      └── scan  ·         ·            (a, b, c, d)  ·
+·               table     abc@primary  ·             ·
+·               spans     ALL          ·             ·
+·               filter    b > 4        ·             ·
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -516,13 +515,12 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
-sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
- │              order   +b,+a,+c,+d  ·             ·
- └── filter     ·       ·            (a, b, c, d)  ·
-      │         filter  b > 4        ·             ·
-      └── scan  ·       ·            (a, b, c, d)  ·
-·               table   abc@primary  ·             ·
-·               spans   ALL          ·             ·
+sort       ·       ·            (a, b, c, d)  +b,+a,+c,+d
+ │         order   +b,+a,+c,+d  ·             ·
+ └── scan  ·       ·            (a, b, c, d)  ·
+·          table   abc@primary  ·             ·
+·          spans   ALL          ·             ·
+·          filter  b > 4        ·             ·
 
 query IIIT
 SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
