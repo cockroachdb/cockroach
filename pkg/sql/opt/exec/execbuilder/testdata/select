@@ -276,3 +276,189 @@ filter     ·       ·                          (f float)  ·
  └── scan  ·       ·                          (f float)  ·
 ·          table   flt@primary                ·          ·
 ·          spans   ALL                        ·          ·
+
+# ------------------------------------------------------------------------------
+# ANY, ALL tests.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE abc (a INT, b INT, C INT)
+
+statement ok
+INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+
+query III
+SELECT * FROM abc WHERE a = ANY(SELECT a FROM abc WHERE b = 10)
+----
+1 10 100
+
+query III
+SELECT * FROM abc WHERE a < ANY(SELECT a FROM abc WHERE b = 30) ORDER BY a
+----
+1 10 100
+2 20 200
+
+query III
+SELECT * FROM abc WHERE a > ANY(SELECT a FROM abc WHERE b = 30)
+----
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT b FROM abc) ORDER BY a
+----
+1 10 100
+2 20 200
+3 30 300
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT a FROM abc WHERE a >= 2)
+----
+1 10 100
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT a FROM abc)
+----
+
+# ------------------------------------------------------------------------------
+# IN tests.
+# ------------------------------------------------------------------------------
+# Regression tests for #22670.
+query B
+SELECT 1 IN (1, 2)
+----
+true
+
+query B
+SELECT NULL IN (1, 2)
+----
+NULL
+
+query B
+SELECT 1 IN (1, NULL)
+----
+true
+
+query B
+SELECT 1 IN (NULL, 2)
+----
+NULL
+
+query B
+SELECT (1, NULL) IN ((1, 1))
+----
+NULL
+
+query B
+SELECT (2, NULL) IN ((1, 1))
+----
+false
+
+query B
+SELECT (1, 1) IN ((1, NULL))
+----
+NULL
+
+query B
+SELECT (1, 1) IN ((2, NULL))
+----
+false
+
+# Tests with a tuple coming from a subquery.
+query B
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+NULL
+
+query B
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (2, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+false
+
+query B
+SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (NULL::int, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+false
+
+query B
+SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+NULL
+
+query B
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (2, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+true
+
+query B
+SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+query B
+SELECT (NULL::int, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+true
+
+query B
+SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+NULL
+
+# Tests with an empty IN tuple.
+query B
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+false
+
+query B
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+false
+
+query B
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+true
+
+query B
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
+
+query B
+SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
+
+query B
+SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+true
