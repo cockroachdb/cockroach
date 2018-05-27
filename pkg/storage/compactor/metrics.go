@@ -33,23 +33,41 @@ var _ metric.Struct = Metrics{}
 
 var (
 	metaBytesQueued = metric.Metadata{
-		Name: "compactor.suggestionbytes.queued",
-		Help: "Number of logical bytes in suggested compactions in the queue"}
+		Name:        "compactor.suggestionbytes.queued",
+		Help:        "Number of logical bytes in suggested compactions in the queue",
+		Unit:        "Logical Bytes",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaBytesSkipped = metric.Metadata{
-		Name: "compactor.suggestionbytes.skipped",
-		Help: "Number of logical bytes in suggested compactions which were not compacted"}
+		Name:        "compactor.suggestionbytes.skipped",
+		Help:        "Number of logical bytes in suggested compactions which were not compacted",
+		Unit:        "Logical Bytes",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaBytesCompacted = metric.Metadata{
-		Name: "compactor.suggestionbytes.compacted",
-		Help: "Number of logical bytes compacted from suggested compactions"}
+		Name:        "compactor.suggestionbytes.compacted",
+		Help:        "Number of logical bytes compacted from suggested compactions",
+		Unit:        "Logical Bytes",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaCompactionSuccesses = metric.Metadata{
-		Name: "compactor.compactions.success",
-		Help: "Number of successful compaction requests sent to the storage engine"}
+		Name:        "compactor.compactions.success",
+		Help:        "Number of successful compaction requests sent to the storage engine",
+		Unit:        "Compaction Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaCompactionFailures = metric.Metadata{
-		Name: "compactor.compactions.failure",
-		Help: "Number of failed compaction requests sent to the storage engine"}
+		Name:        "compactor.compactions.failure",
+		Help:        "Number of failed compaction requests sent to the storage engine",
+		Unit:        "Compaction Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaCompactingNanos = metric.Metadata{
-		Name: "compactor.compactingnanos",
-		Help: "Number of nanoseconds spent compacting ranges"}
+		Name:        "compactor.compactingnanos",
+		Help:        "Number of nanoseconds spent compacting ranges",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 )
 
 // makeMetrics returns a Metrics struct.

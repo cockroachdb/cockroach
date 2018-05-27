@@ -66,20 +66,35 @@ func (e *errRetryLiveness) Error() string {
 // Node liveness metrics counter names.
 var (
 	metaLiveNodes = metric.Metadata{
-		Name: "liveness.livenodes",
-		Help: "Number of live nodes in the cluster (will be 0 if this node is not itself live)"}
+		Name:        "liveness.livenodes",
+		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
+		Unit:        "Nodes",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaHeartbeatSuccesses = metric.Metadata{
-		Name: "liveness.heartbeatsuccesses",
-		Help: "Number of successful node liveness heartbeats from this node"}
+		Name:        "liveness.heartbeatsuccesses",
+		Help:        "Number of successful node liveness heartbeats from this node",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaHeartbeatFailures = metric.Metadata{
-		Name: "liveness.heartbeatfailures",
-		Help: "Number of failed node liveness heartbeats from this node"}
+		Name:        "liveness.heartbeatfailures",
+		Help:        "Number of failed node liveness heartbeats from this node",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaEpochIncrements = metric.Metadata{
-		Name: "liveness.epochincrements",
-		Help: "Number of times this node has incremented its liveness epoch"}
+		Name:        "liveness.epochincrements",
+		Help:        "Number of times this node has incremented its liveness epoch",
+		Unit:        "Epochs",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaHeartbeatLatency = metric.Metadata{
-		Name: "liveness.heartbeatlatency",
-		Help: "Node liveness heartbeat latency in nanoseconds"}
+		Name:        "liveness.heartbeatlatency",
+		Help:        "Node liveness heartbeat latency in nanoseconds",
+		Unit:        "Latency",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 )
 
 // IsLive returns whether the node is considered live at the given time with the
