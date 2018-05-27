@@ -20,8 +20,7 @@ CREATE STATISTICS v ON v FROM b
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-filter     ·       ·          (u, v)  ·
- │         filter  u = 1      ·       ·
- └── scan  ·       ·          (u, v)  ·
-·          table   b@b_v_idx  ·       ·
-·          spans   /1-/2      ·       ·
+scan  ·       ·          (u, v)  ·
+·     table   b@b_v_idx  ·       ·
+·     spans   /1-/2      ·       ·
+·     filter  u = 1      ·       ·

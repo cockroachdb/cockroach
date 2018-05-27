@@ -239,13 +239,22 @@ scan  ·      ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-render               ·      ·
- └── sort            ·      ·
-      │              order  +b,+a,+d
-      └── filter     ·      ·
-           └── scan  ·      ·
-·                    table  abc@primary
-·                    spans  ALL
+render          ·      ·
+ └── sort       ·      ·
+      │         order  +b,+a,+d
+      └── scan  ·      ·
+·               table  abc@primary
+·               spans  ALL
+
+query III
+SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
+----
+4  5  6
+
+query III
+SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
+----
+4  5  6
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
@@ -253,13 +262,12 @@ render               ·      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
- │              order   +b,+a,+c,+d  ·             ·
- └── filter     ·       ·            (a, b, c, d)  ·
-      │         filter  b > 10       ·             ·
-      └── scan  ·       ·            (a, b, c, d)  ·
-·               table   abc@primary  ·             ·
-·               spans   ALL          ·             ·
+sort       ·       ·            (a, b, c, d)  +b,+a,+c,+d
+ │         order   +b,+a,+c,+d  ·             ·
+ └── scan  ·       ·            (a, b, c, d)  ·
+·          table   abc@primary  ·             ·
+·          spans   ALL          ·             ·
+·          filter  b > 10       ·             ·
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c

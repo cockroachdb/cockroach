@@ -7,19 +7,18 @@ INSERT INTO t VALUES (1, 1, 1), (2, 4, 8), (3, 9, 27), (4, 16, 64)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
-root                 ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
- ├── render          ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
- │    │              render 0   @S1               ·                                               ·
- │    └── emptyrow   ·          ·                 ()                                              ·
- └── subquery        ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
-      │              id         @S1               ·                                               ·
-      │              sql        EXISTS <unknown>  ·                                               ·
-      │              exec mode  exists            ·                                               ·
-      └── filter     ·          ·                 (k, u, v)                                       ·
-           │         filter     u = (k * k)       ·                                               ·
-           └── scan  ·          ·                 (k, u, v)                                       ·
-·                    table      t@primary         ·                                               ·
-·                    spans      ALL               ·                                               ·
+root                ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+ ├── render         ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+ │    │             render 0   @S1               ·                                               ·
+ │    └── emptyrow  ·          ·                 ()                                              ·
+ └── subquery       ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+      │             id         @S1               ·                                               ·
+      │             sql        EXISTS <unknown>  ·                                               ·
+      │             exec mode  exists            ·                                               ·
+      └── scan      ·          ·                 (k, u, v)                                       ·
+·                   table      t@primary         ·                                               ·
+·                   spans      ALL               ·                                               ·
+·                   filter     u = (k * k)       ·                                               ·
 
 query B
 SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
@@ -35,11 +34,10 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 root                 ·            ·          (k, u, v)  ·
- ├── filter          ·            ·          (k, u, v)  ·
- │    │              filter       u = @S1    ·          ·
- │    └── scan       ·            ·          (k, u, v)  ·
+ ├── scan            ·            ·          (k, u, v)  ·
  │                   table        t@primary  ·          ·
  │                   spans        ALL        ·          ·
+ │                   filter       u = @S1    ·          ·
  └── subquery        ·            ·          (k, u, v)  ·
       │              id           @S1        ·          ·
       │              sql          <unknown>  ·          ·
@@ -58,32 +56,29 @@ SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
-root                      ·            ·                 (k, u, v)  ·
- ├── filter               ·            ·                 (k, u, v)  ·
- │    │                   filter       u = @S2           ·          ·
- │    └── scan            ·            ·                 (k, u, v)  ·
- │                        table        t@primary         ·          ·
- │                        spans        ALL               ·          ·
- ├── subquery             ·            ·                 (k, u, v)  ·
- │    │                   id           @S1               ·          ·
- │    │                   sql          EXISTS <unknown>  ·          ·
- │    │                   exec mode    exists            ·          ·
- │    └── filter          ·            ·                 (k, u, v)  ·
- │         │              filter       u = (k * k)       ·          ·
- │         └── scan       ·            ·                 (k, u, v)  ·
- │                        table        t@primary         ·          ·
- │                        spans        ALL               ·          ·
- └── subquery             ·            ·                 (k, u, v)  ·
-      │                   id           @S2               ·          ·
-      │                   sql          <unknown>         ·          ·
-      │                   exec mode    one row           ·          ·
-      └── group           ·            ·                 (agg0)     ·
-           │              aggregate 0  max(u)            ·          ·
-           └── filter     ·            ·                 (u)        ·
-                │         filter       @S1               ·          ·
-                └── scan  ·            ·                 (u)        ·
-·                         table        t@primary         ·          ·
-·                         spans        ALL               ·          ·
+root                 ·            ·                 (k, u, v)  ·
+ ├── scan            ·            ·                 (k, u, v)  ·
+ │                   table        t@primary         ·          ·
+ │                   spans        ALL               ·          ·
+ │                   filter       u = @S2           ·          ·
+ ├── subquery        ·            ·                 (k, u, v)  ·
+ │    │              id           @S1               ·          ·
+ │    │              sql          EXISTS <unknown>  ·          ·
+ │    │              exec mode    exists            ·          ·
+ │    └── scan       ·            ·                 (k, u, v)  ·
+ │                   table        t@primary         ·          ·
+ │                   spans        ALL               ·          ·
+ │                   filter       u = (k * k)       ·          ·
+ └── subquery        ·            ·                 (k, u, v)  ·
+      │              id           @S2               ·          ·
+      │              sql          <unknown>         ·          ·
+      │              exec mode    one row           ·          ·
+      └── group      ·            ·                 (agg0)     ·
+           │         aggregate 0  max(u)            ·          ·
+           └── scan  ·            ·                 (u)        ·
+·                    table        t@primary         ·          ·
+·                    spans        ALL               ·          ·
+·                    filter       @S1               ·          ·
 
 query III
 SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
