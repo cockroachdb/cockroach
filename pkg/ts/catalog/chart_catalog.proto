@@ -1,0 +1,132 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.ts.catalog;
+option go_package = "catalog";
+
+import "ts/tspb/timeseries.proto";
+
+import "gogoproto/gogo.proto";
+import "prometheus/client_model/metrics.proto";
+
+// AxisUnits describes the Unit options available in the Admin UI. It is defined here
+// as opposed to importing the value from the Admin UI because the existing pb doesn't
+// include an UNSET value, which we use to check for defaults.
+enum AxisUnits {
+  // UNSET_UNITS expresses that the metric's DisplayUnit wasn't explicitly set.
+  UNSET_UNITS = 0;
+  // COUNT expresses that the metric's measurement is a count.
+  COUNT = 1;
+  // BYTES expresses that the metric's measurement is in bytes.
+  BYTES = 2;
+  // DURATION expresses that the metric's measurement represents some unit of time.
+  DURATION = 3;
+}
+
+// DescribeAggregator works as a proxy for cockroach.ts.tspb.TimeSeriesQueryAggregator
+// which does not support an unset zero value.
+enum DescribeAggregator {
+  // UNSET_AGG expresses that the Aggregator value wasn't explicitly set and should
+  // use the default value for the respective metric type defined in chart_catalog.go.
+  UNSET_AGG = 0;
+  // AVG returns the average value of datapoints.
+  AVG = 1;
+  // SUM returns the sum value of datapoints.
+  SUM = 2;
+  // MAX returns the maximum value of datapoints.
+  MAX = 3;
+  // MIN returns the minimum value of datapoints.
+  MIN = 4;
+}
+
+// DescribeDerivative works as a proxy for cockroach.ts.tspb.TimeSeriesQueryDerivative
+// which has an ambiguous zero value; it's unclear if the value isn't set or if it
+// is intentionally set to NONE.
+enum DescribeDerivative {
+  // UNSET_DER expresses that the Derivative value wasn't explicitly set and should
+  // use the default value for the respective metric type defined in chart_catalog.go.
+  UNSET_DER = 0;
+  // NONE does not apply a derivative function.
+  NONE = 1;
+  // DERIVATIVE returns the first-order derivative of values in the time series.
+  DERIVATIVE = 2;
+  // NON_NEGATIVE_DERIVATIVE returns only non-negative values of the first-order
+  // derivative; negative values are returned as zero. This should be used for
+  // counters that monotonically increase, but might wrap or reset.
+  NON_NEGATIVE_DERIVATIVE = 3;
+}
+
+// ChartMetric converts cockroach.util.metric.Metadata
+// into a struct that's useful for generating Admin UI charts.
+message ChartMetric {
+  // name is the name of the metric.
+  required string name = 1 [(gogoproto.nullable) = false];
+  // help is the help text from the metric.
+  required string help = 2 [(gogoproto.nullable) = false];
+  // axisLabel is the label for the metric's y-axis.
+  required string axisLabel = 3 [(gogoproto.nullable) = false];
+  // preferredUnits describes the units the chart should be viewed with
+  // e.g. BYTES for storage.
+  required AxisUnits preferredUnits = 4 [(gogoproto.nullable) = false];
+  // metricType describes the type of metric this is; all metrics on a chart
+  // should be of the same type to ensure the information displays behaves in
+  // expected ways.
+  optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
+}
+
+// IndividualChart describes both the properties necessary to display
+// AdminUI charts, as well as a key to find them (collectionName).
+message IndividualChart {
+  // title is the title of the chart.
+  required string title = 1 [(gogoproto.nullable) = false];
+  // longname displays the chart's organization within the catalog,
+  // as well as its own name.
+  required string longTitle = 2 [(gogoproto.nullable) = false];
+  // collectionName uniquely identifies a chart.
+  required string collectionTitle = 3 [(gogoproto.nullable) = false];
+  // downsampler specifies the chart's downsampler function.
+  required cockroach.ts.tspb.TimeSeriesQueryAggregator downsampler = 4;
+  // aggregator specifies the chart's aggregator function.
+  required cockroach.ts.tspb.TimeSeriesQueryAggregator aggregator = 5;
+  // derivative specifies the chart's derivative function.
+  required cockroach.ts.tspb.TimeSeriesQueryDerivative derivative = 6;
+  // units specifies the Admin UI units to display the chart with.
+  required AxisUnits units = 7 [(gogoproto.nullable) = false];
+  // axisLabel defines the chart's y-axis label.
+  required string axisLabel = 8 [(gogoproto.nullable) = false];
+  // percentiles specifies whether the chart should have its metrics broken
+  // out into percentiles; applies only to histograms.
+  required bool percentiles = 9 [(gogoproto.nullable) = false];
+  // metrics specifies the metics the chart should display.
+  repeated ChartMetric metrics = 10 [(gogoproto.nullable) = false];
+}
+
+// ChartSections organize charts into groups that contain slices or charts and 
+// other subsections.
+message ChartSection {
+  // title is the title of the section.
+  required string title = 1 [(gogoproto.nullable) = false];
+  // longname displays the section's organization within the catalog.
+  required string longTitle = 2 [(gogoproto.nullable) = false];
+  // collectionName uniquely identifies a section.
+  required string collectionTitle = 3 [(gogoproto.nullable) = false];
+  // description describes how to interpret the relationship of subsections
+  // and charts. It's only planned use is in the catalog page for Level 0
+  // sections.
+  required string description = 4 [(gogoproto.nullable) = false];
+  // level represents the section's depth in the catalog's organization.
+  required int32 level = 5 [(gogoproto.nullable) = false];
+  // subsections are deeper levels of the chart's organization.
+  repeated ChartSection subsections = 6;
+  // charts are the IndividualCharts that are grouped into this section.
+  repeated IndividualChart charts = 7;
+}
+
