@@ -17,7 +17,9 @@
 #include <libroach.h>
 #include <memory>
 #include <rocksdb/comparator.h>
+#include <rocksdb/db.h>
 #include <rocksdb/iterator.h>
+#include <rocksdb/metadata.h>
 #include <rocksdb/status.h>
 #include <rocksdb/write_batch.h>
 
@@ -80,5 +82,14 @@ class ScopedStats {
   DBIterator* const iter_;
   uint64_t internal_delete_skipped_count_base_;
 };
+
+// BatchSStables batches the supplied sstable metadata into chunks of
+// sstables that are target_size. An empty start or end key indicates
+// that the a compaction from the beginning (or end) of the key space
+// should be provided. The sstable metadata must already be sorted by
+// smallest key.
+void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData> &sst,
+                                rocksdb::Slice start_key, rocksdb::Slice end_key,
+                                uint64_t target_size, std::vector<rocksdb::Range> *ranges);
 
 }  // namespace cockroach
