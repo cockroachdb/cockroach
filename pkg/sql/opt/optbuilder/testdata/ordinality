@@ -20,6 +20,18 @@ TABLE abcd
       └── c int
 
 build
+SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
+----
+row-number
+ ├── columns: name:1(string) i:2(int!null)
+ └── values
+      ├── columns: column1:1(string)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'a' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'b' [type=string]
+
+build
 SELECT a, ordinality FROM abcd WITH ORDINALITY
 ----
 project

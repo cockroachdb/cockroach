@@ -730,3 +730,39 @@ render                    ·            ·                                      
                 └── scan  ·            ·                                          (v int, w int)                 ·
 ·                         table        kv@primary                                 ·                              ·
 ·                         spans        ALL                                        ·                              ·
+
+statement ok
+CREATE TABLE foo(a INT, b CHAR)
+
+# Check that GROUP BY picks up column ordinals.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
+----
+render               ·            ·            (m)                 ·
+ │                   render 0     agg0         ·                   ·
+ └── group           ·            ·            (column4, agg0)     ·
+      │              aggregate 0  column4      ·                   ·
+      │              aggregate 1  min(foo.a)   ·                   ·
+      │              group by     @1           ·                   ·
+      └── render     ·            ·            (column4, "foo.a")  ·
+           │         render 0     a            ·                   ·
+           │         render 1     a            ·                   ·
+           └── scan  ·            ·            (a)                 ·
+·                    table        foo@primary  ·                   ·
+·                    spans        ALL          ·                   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
+----
+render               ·            ·            (m)                 ·
+ │                   render 0     agg0         ·                   ·
+ └── group           ·            ·            (column4, agg0)     ·
+      │              aggregate 0  column4      ·                   ·
+      │              aggregate 1  min(foo.a)   ·                   ·
+      │              group by     @1           ·                   ·
+      └── render     ·            ·            (column4, "foo.a")  ·
+           │         render 0     b            ·                   ·
+           │         render 1     a            ·                   ·
+           └── scan  ·            ·            (a, b)              ·
+·                    table        foo@primary  ·                   ·
+·                    spans        ALL          ·                   ·

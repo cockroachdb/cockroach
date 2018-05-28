@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -243,7 +244,8 @@ func (b *Builder) buildUsingJoinPredicate(
 
 	for i, name := range names {
 		if _, ok := joined[name]; ok {
-			panic(errorf("column %q appears more than once in USING clause", tree.ErrString(&names[i])))
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeDuplicateColumnError,
+				"column %q appears more than once in USING clause", tree.ErrString(&names[i]))})
 		}
 
 		// For every adjacent pair of tables, add an equality predicate.
@@ -253,10 +255,9 @@ func (b *Builder) buildUsingJoinPredicate(
 		if !leftCol.typ.Equivalent(rightCol.typ) {
 			// First, check if the comparison would even be valid.
 			if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
-				panic(errorf(
+				panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
-					leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name),
-				))
+					leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name))})
 			}
 		}
 
@@ -366,5 +367,6 @@ func findUsingColumn(cols []scopeColumn, name tree.Name, context string) *scopeC
 		}
 	}
 
-	panic(errorf("column \"%s\" specified in USING clause does not exist in %s table", name, context))
+	panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+		"column \"%s\" specified in USING clause does not exist in %s table", name, context)})
 }

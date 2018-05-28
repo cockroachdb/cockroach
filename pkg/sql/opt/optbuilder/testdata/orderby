@@ -367,7 +367,7 @@ error: multiple ORDER BY clauses not allowed
 build
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 ----
-error: incompatible value type:: expected t.c to be of type int, found type bool
+error: incompatible value type: expected c to be of type int, found type bool
 
 build
 SELECT * FROM t ORDER BY 0
@@ -523,6 +523,24 @@ sort
            └── plus [type=int]
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
+
+build
+SELECT b, c FROM t ORDER BY @2
+----
+sort
+ ├── columns: b:2(int) c:3(bool)
+ ├── ordering: +4
+ └── project
+      ├── columns: column4:4(int) b:2(int) c:3(bool)
+      ├── scan t
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── projections
+           └── variable: t.b [type=int]
+
+build
+SELECT b, c FROM t ORDER BY @4
+----
+error (42703): invalid column ordinal: @4
 
 exec-ddl
 CREATE TABLE abc (
@@ -705,6 +723,11 @@ sort
 
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
+----
+error (0A000): ORDER BY index not supported
+
+build
+SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
 error (0A000): ORDER BY index not supported
 

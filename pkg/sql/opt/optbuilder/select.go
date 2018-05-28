@@ -42,12 +42,12 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 		outScope = b.buildTable(source.Expr, inScope)
 
-		// Overwrite output properties with any alias information.
-		b.renameSource(source.As, outScope)
-
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality("ordinality", outScope)
 		}
+
+		// Overwrite output properties with any alias information.
+		b.renameSource(source.As, outScope)
 
 		return outScope
 
@@ -82,7 +82,13 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 	case *tree.Subquery:
 		outScope = b.buildStmt(source.Select, inScope)
+
+		// Treat the subquery result as an anonymous data source (i.e. column names
+		// are not qualified). Remove any hidden columns added by the subquery's
+		// ORDER BY clause.
+		outScope.setTableAlias("")
 		outScope.removeHiddenCols()
+
 		return outScope
 
 	case *tree.StatementSource:
@@ -103,11 +109,9 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// TODO(rytaft): Handle anonymous tables such as set-generating
 		// functions with just one column.
 
-		// If an alias was specified, use that.
+		// If an alias was specified, use that to qualify the column names.
 		tableAlias = tree.MakeUnqualifiedTableName(as.Alias)
-		for i := range scope.cols {
-			scope.cols[i].table = tableAlias
-		}
+		scope.setTableAlias(as.Alias)
 	}
 
 	if len(colAlias) > 0 {

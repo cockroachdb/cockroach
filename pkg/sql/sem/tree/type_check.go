@@ -252,7 +252,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	}
 	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, tmpExprs...)
 	if err != nil {
-		return nil, decorateTypeCheckError(err, "incompatible value type:")
+		return nil, decorateTypeCheckError(err, "incompatible value type")
 	}
 	if expr.Else != nil {
 		expr.Else = typedSubExprs[len(typedSubExprs)-1]

@@ -85,7 +85,16 @@ func (c *scopeColumn) String() string {
 
 // Format implements the NodeFormatter interface.
 func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
-	if c.table.TableName != "" {
+	// FmtCheckEquivalence is used by getExprStr when comparing expressions for
+	// equivalence. If that flag is present, then use the unique column id to
+	// differentiate this column from other columns.
+	if ctx.HasFlags(tree.FmtCheckEquivalence) {
+		// Use double @ to distinguish from Cockroach column ordinals.
+		ctx.Printf("@@%d", c.id)
+		return
+	}
+
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.table.TableName != "" {
 		if c.table.ExplicitSchema && c.table.SchemaName != "" {
 			if c.table.ExplicitCatalog && c.table.CatalogName != "" {
 				ctx.FormatNode(&c.table.CatalogName)

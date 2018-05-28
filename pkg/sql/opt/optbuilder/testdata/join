@@ -147,18 +147,7 @@ sort
 build
 SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
 ----
-sort
- ├── columns: x:1(int) x:3(int)
- ├── ordering: +1
- └── project
-      ├── columns: onecolumn.x:1(int) onecolumn.x:3(int)
-      └── inner-join
-           ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-           ├── scan onecolumn
-           │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
-           ├── scan onecolumn
-           │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-           └── true [type=bool]
+error (42P09): ORDER BY "x" is ambiguous
 
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
@@ -1181,12 +1170,12 @@ sort
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 ----
-error: column "y" specified in USING clause does not exist in left table
+error (42703): column "y" specified in USING clause does not exist in left table
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 ----
-error: column "x" appears more than once in USING clause
+error (42701): column "x" appears more than once in USING clause
 
 exec-ddl
 CREATE TABLE othertype (x TEXT)
@@ -1200,7 +1189,7 @@ TABLE othertype
 build
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 ----
-error: JOIN/USING types int for left and string for right cannot be matched for column "x"
+error (42804): JOIN/USING types int for left and string for right cannot be matched for column "x"
 
 build
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))
@@ -1265,7 +1254,7 @@ project
 build
 SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 ----
-error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x, <anonymous>.x)
+error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x)
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)

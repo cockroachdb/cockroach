@@ -1058,3 +1058,8 @@ build
 SELECT * FROM a AS OF SYSTEM TIME '10ns'
 ----
 error (0A000): AS OF clause not supported
+
+build
+SELECT * FROM a AS t(a, b, c)
+----
+error: source "t" has 2 columns available but 3 columns specified

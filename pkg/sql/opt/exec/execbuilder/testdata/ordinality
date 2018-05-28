@@ -1,24 +1,7 @@
 # LogicTest: opt
 
-query I
-SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
-----
-1
-2
-
 statement ok
 CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
-
-query TI
-SELECT * FROM foo WITH ORDINALITY
-----
-a  1
-b  2
-
-query TI
-SELECT * FROM foo WITH ORDINALITY LIMIT 1
-----
-a  1
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT MAX(ordinality) FROM foo WITH ORDINALITY
@@ -29,14 +12,6 @@ group            ·            ·                (max)           ·
       └── scan   ·            ·                ()              ·
 ·                table        foo@primary      ·               ·
 ·                spans        ALL              ·               ·
-
-query TITI
-SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
-----
-a  1  a  1
-a  1  b  2
-b  2  a  1
-b  2  b  2
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
@@ -59,3 +34,24 @@ sort                  ·       ·                 (x, "ordinality")  -"ordinalit
            └── scan   ·       ·                 (x)                ·
 ·                     table   foo@primary       ·                  ·
 ·                     spans   ALL               ·                  ·
+
+# Show that the primary key is used under ordinalityNode.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
+----
+ordinality  ·      ·            (x, "ordinality")  ·
+ └── scan   ·      ·            (x)                ·
+·           table  foo@primary  ·                  ·
+·           spans  /"a\x00"-    ·                  ·
+
+# Show that the primary key cannot be used with a PK predicate
+# outside of ordinalityNode.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+----
+filter           ·       ·            (x, "ordinality")  ·
+ │               filter  x > 'a'      ·                  ·
+ └── ordinality  ·       ·            (x, "ordinality")  ·
+      └── scan   ·       ·            (x)                ·
+·                table   foo@primary  ·                  ·
+·                spans   ALL          ·                  ·

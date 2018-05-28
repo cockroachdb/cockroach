@@ -221,6 +221,17 @@ func (s *scope) removeHiddenCols() {
 	s.cols = s.cols[:n]
 }
 
+// setTableAlias qualifies the names of all columns in this scope with the
+// given alias name, as if they were part of a table with that name. If the
+// alias is the empty string, then setTableAlias removes any existing column
+// qualifications, as if the columns were part of an "anonymous" table.
+func (s *scope) setTableAlias(alias tree.Name) {
+	tn := tree.MakeUnqualifiedTableName(alias)
+	for i := range s.cols {
+		s.cols[i].table = tn
+	}
+}
+
 // findExistingCol finds the given expression among the bound variables
 // in this scope. Returns nil if the expression is not found.
 func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
@@ -664,6 +675,14 @@ func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, erro
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarResolvedType(idx int) types.T {
+	if idx >= len(s.cols) {
+		if len(s.cols) == 0 {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"column reference @%d not allowed in this context", idx+1)})
+		}
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			"invalid column ordinal: @%d", idx+1)})
+	}
 	return s.cols[idx].typ
 }
 
@@ -694,7 +713,9 @@ func (s *scope) newAmbiguousColumnError(
 		if col.name == *n && (allowHidden || !col.hidden) {
 			if col.table.TableName == "" && !col.hidden {
 				if moreThanOneCandidateFromAnonSource {
+					// Only print first anonymous source, since other(s) are identical.
 					fmtCandidate(col.table)
+					break
 				}
 			} else if !col.hidden {
 				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
