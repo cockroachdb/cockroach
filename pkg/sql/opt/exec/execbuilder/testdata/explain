@@ -93,3 +93,8 @@ SELECT "Level", "Type" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
 1          scan
 1          ·
 1          ·
+
+query BT
+EXPLAIN (DISTSQL) SELECT * FROM xy ORDER BY y
+----
+true  https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFrwzAQhff-jLdWEMujpqxZ2pJ2KxpU6xEMjs-cZEgI_u_F0tCm4NKO907f98TdMErkUzgzwb3DwhtMKh1TEl2j-uAQL3CNQT9Oc15jb9CJEu6G3OeBcHgLHwOPDJG6a2AQmUM_FO2k_TnodX-5wi8GMucvTcrhRDi7mL9XvYpm6s7et-zbx019-x_9kWmSMfFOv2VuFm_AeGK9VpJZO76odKWmjs-FK0FkynVr63AY62r94HfY_gq3P2C_PHwGAAD__2GpmDU=
