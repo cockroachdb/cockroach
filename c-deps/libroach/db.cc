@@ -335,28 +335,70 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
 
   // Walk over the bottom-most sstables in order and perform
   // compactions every 128MB.
-  rocksdb::Slice last;
-  rocksdb::Slice* last_ptr = nullptr;
+  int prev = -1; // index of the last compacted sst
   uint64_t size = 0;
   const uint64_t target_size = 128 << 20;
   for (int i = 0; i < sst.size(); ++i) {
     size += sst[i].size;
-    if (size < target_size) {
+    if (size < target_size && (i + 1) < sst.size()) {
+      // We haven't reached the target size or the end of the sstables
+      // to compact.
       continue;
     }
-    rocksdb::Slice cur(sst[i].largestkey);
-    rocksdb::Status status = db->rep->CompactRange(options, last_ptr, &cur);
+
+    rocksdb::Slice start_slice;
+    rocksdb::Slice* start_ptr = &start_slice;
+    if (prev == -1) {
+      // The start key for the first compaction is either the requested
+      // start key or a nullptr (compact from the beginning) if an empty
+      // start key was specified.
+      if (!start_key.empty()) {
+        start_slice = rocksdb::Slice(start_key);
+      } else {
+        start_ptr = nullptr;
+      }
+    } else {
+      // This is a compaction in the middle or end of the requested
+      // key range. The start key for the compaction is the largest
+      // key from the previous compacted.
+      start_slice = rocksdb::Slice(sst[prev].largestkey);
+    }
+
+    rocksdb::Slice end_slice;
+    rocksdb::Slice* end_ptr = &end_slice;
+    if ((i + 1) == sst.size()) {
+      // This is the last compaction. The end key is either the
+      // requested end key or a nullptr (compact to the end) if an
+      // empty end key was specified.
+      if (!end_key.empty()) {
+        end_slice = rocksdb::Slice(end_key);
+      } else {
+        end_ptr = nullptr;
+      }
+    } else {
+      // This is a compaction at the start or in the middle of the
+      // requested key range. The end key is the largest key in the
+      // current sstable.
+      end_slice = rocksdb::Slice(sst[i].largestkey);
+    }
+
+    if (false) {
+      fprintf(stderr, "compact range (size=%d): %p/%s %p/%s\n",
+              int(size),
+              start_ptr, start_ptr != nullptr ? start_ptr->ToString(true).c_str() : "",
+              end_ptr, end_ptr != nullptr ? end_ptr->ToString(true).c_str() : "");
+      fflush(stderr);
+    }
+
+    rocksdb::Status status = db->rep->CompactRange(options, start_ptr, end_ptr);
     if (!status.ok()) {
       return ToDBStatus(status);
     }
-    last = cur;
-    last_ptr = &last;
+
+    prev = i;
     size = 0;
   }
 
-  if (size > 0) {
-    return ToDBStatus(db->rep->CompactRange(options, last_ptr, nullptr));
-  }
   return kSuccess;
 }
 
