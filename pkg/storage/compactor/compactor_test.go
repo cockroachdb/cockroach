@@ -617,7 +617,10 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 	}
 	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 	minInterval.Override(&compactor.st.SV, time.Millisecond)
-	maxSuggestedCompactionRecordAge.Override(&compactor.st.SV, time.Millisecond)
+	// NB: The compactor had a bug where it would never revisit skipped compactions
+	// alone when there wasn't also a new suggestion. Making the max age larger
+	// than the min interval exercises that code path (flakily).
+	maxSuggestedCompactionRecordAge.Override(&compactor.st.SV, 5*time.Millisecond)
 	defer cleanup()
 
 	// Add a suggested compaction that won't get processed because it's
