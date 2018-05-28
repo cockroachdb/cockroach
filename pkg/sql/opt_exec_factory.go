@@ -378,6 +378,8 @@ func (ef *execFactory) ConstructPlan(
 				out.execMode = execModeExists
 			case exec.SubqueryOneRow:
 				out.execMode = execModeOneRow
+			case exec.SubqueryAnyRows:
+				out.execMode = execModeAllRowsNormalized
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}

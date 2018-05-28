@@ -53,6 +53,7 @@ func init() {
 		opt.CastOp:            (*Builder).buildCast,
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.ArrayOp:           (*Builder).buildArray,
+		opt.AnyOp:             (*Builder).buildAny,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Subquery operators.
@@ -298,6 +299,31 @@ func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedE
 		}
 	}
 	return tree.NewTypedArray(exprs, ev.Logical().Scalar.Type), nil
+}
+
+func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	// Build the execution plan for the input subquery.
+	plan, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct tuple type of columns in the row.
+	types := types.TTuple{Types: make([]types.T, plan.outputCols.Len())}
+	plan.outputCols.ForEach(func(key, val int) {
+		types.Types[val] = ev.Metadata().ColumnType(opt.ColumnID(key))
+	})
+
+	input := b.addSubquery(exec.SubqueryAnyRows, types, plan.root)
+
+	// Build the scalar value that is compared against each row.
+	scalar, err := b.buildScalar(ctx, ev.Child(1))
+	if err != nil {
+		return nil, err
+	}
+
+	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
+	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalar, input), nil
 }
 
 func (b *Builder) buildUnsupportedExpr(

@@ -148,6 +148,11 @@ const (
 	// SubqueryOneRow - the subquery expects at most one row; the result is that
 	// row (as a single value or a tuple), or NULL if there were no rows.
 	SubqueryOneRow
+	// SubqueryAnyRows - the subquery is an argument to ANY. Any number of rows
+	// expected; the result is a sorted, distinct tuple of rows (i.e. it has been
+	// normalized). As a special case, if there is only one column selected, the
+	// result is a tuple of the selected values (instead of a tuple of 1-tuples).
+	SubqueryAnyRows
 )
 
 // ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
