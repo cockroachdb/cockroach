@@ -218,11 +218,8 @@ func (b *Builder) finishBuildScalarRef(
 		return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 	}
 
-	// Project the column.
+	// Project the column, which has the side effect of making it visible.
 	col = outScope.appendColumn(col, label)
-
-	// Mark the column as a visible member of an anonymous table.
-	col.table.TableName = ""
 	col.hidden = false
 	return col.group
 }

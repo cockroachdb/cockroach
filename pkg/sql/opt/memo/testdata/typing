@@ -363,32 +363,28 @@ SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT MAX(x) FROM b WHERE 
 ----
 project
  ├── columns: x:1(int!null) "x::STRING":3(string) y:2(int)
- └── select
-      ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) max:6(string!null)
-      ├── group-by
-      │    ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) max:6(string)
-      │    ├── grouping columns: a.x:1(int!null)
-      │    ├── left-join
-      │    │    ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) b.x:4(string) z:5(decimal)
-      │    │    ├── project
-      │    │    │    ├── columns: "x::STRING":3(string) a.x:1(int!null) y:2(int)
-      │    │    │    ├── scan a
-      │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
-      │    │    │    └── projections
-      │    │    │         └── a.x::STRING [type=string]
-      │    │    ├── scan b
-      │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
-      │    │    └── filters [type=bool]
-      │    │         └── a.y = b.z::INT [type=bool]
-      │    └── aggregations
-      │         ├── max [type=string]
-      │         │    └── variable: b.x [type=string]
-      │         ├── any-not-null [type=int]
-      │         │    └── variable: a.y [type=int]
-      │         └── any-not-null [type=string]
-      │              └── variable: x::STRING [type=string]
-      └── filters [type=bool]
-           └── max > 'foo' [type=bool]
+ ├── select
+ │    ├── columns: a.x:1(int!null) y:2(int) max:6(string!null)
+ │    ├── group-by
+ │    │    ├── columns: a.x:1(int!null) y:2(int) max:6(string)
+ │    │    ├── grouping columns: a.x:1(int!null)
+ │    │    ├── left-join
+ │    │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:4(string) z:5(decimal)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
+ │    │    │    ├── scan b
+ │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
+ │    │    │    └── filters [type=bool]
+ │    │    │         └── a.y = b.z::INT [type=bool]
+ │    │    └── aggregations
+ │    │         ├── max [type=string]
+ │    │         │    └── variable: b.x [type=string]
+ │    │         └── any-not-null [type=int]
+ │    │              └── variable: a.y [type=int]
+ │    └── filters [type=bool]
+ │         └── max > 'foo' [type=bool]
+ └── projections
+      └── a.x::STRING [type=string]
 
 # Cast
 build

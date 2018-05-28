@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 # Check that the various things in a table definition are properly escaped when
 # printed out.
