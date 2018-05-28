@@ -1009,7 +1009,7 @@ GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
 PBTS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbts
 
-JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
+JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
 UI_JS_CCL := $(UI_ROOT)/ccl/src/js/protos.js
 UI_TS_CCL := $(UI_ROOT)/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
