@@ -396,21 +396,30 @@ func (ef *execFactory) ConstructExplain(
 ) (exec.Node, error) {
 	p := plan.(*planTop)
 
-	if options.Mode != tree.ExplainPlan {
-		return nil, errors.Errorf("only PLAN explain mode supported")
+	switch options.Mode {
+	case tree.ExplainDistSQL:
+		if len(p.subqueryPlans) > 0 {
+			return nil, fmt.Errorf("subqueries not supported yet")
+		}
+		return &explainDistSQLNode{plan: p.plan}, nil
+
+	case tree.ExplainPlan:
+		// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
+		// prevent the plans from being modified.
+		opts := *options
+		opts.Flags.Add(tree.ExplainFlagNoExpand)
+		opts.Flags.Add(tree.ExplainFlagNoOptimize)
+		return ef.planner.makeExplainPlanNodeWithPlan(
+			context.TODO(),
+			&opts,
+			false, /* optimizeSubqueries */
+			p.plan,
+			p.subqueryPlans,
+		)
+
+	default:
+		panic(fmt.Sprintf("unsupported explain mode %v", options.Mode))
 	}
-	// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
-	// prevent the plans from being modified.
-	opts := *options
-	opts.Flags.Add(tree.ExplainFlagNoExpand)
-	opts.Flags.Add(tree.ExplainFlagNoOptimize)
-	return ef.planner.makeExplainPlanNodeWithPlan(
-		context.TODO(),
-		&opts,
-		false, /* optimizeSubqueries */
-		p.plan,
-		p.subqueryPlans,
-	)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.

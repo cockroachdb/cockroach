@@ -19,8 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -86,9 +84,3 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 
 func (n *explainDistSQLNode) Values() tree.Datums       { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) { n.plan.Close(ctx) }
-
-var explainDistSQLColumns = sqlbase.ResultColumns{
-	{Name: "Automatic", Typ: types.Bool},
-	{Name: "URL", Typ: types.String},
-	{Name: "JSON", Typ: types.String, Hidden: true},
-}
