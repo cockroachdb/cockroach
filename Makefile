@@ -981,7 +981,10 @@ GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 PBJS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbjs
 PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
 
-JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
+# Unlike the protobuf compiler for Go and C++, the protobuf compiler for
+# JavaScript only needs the entrypoint protobufs to be listed. It automatically
+# compiles any protobufs the entrypoints depend upon.
+JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
 UI_JS_CCL := pkg/ui/ccl/src/js/protos.js
 UI_TS_CCL := pkg/ui/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
