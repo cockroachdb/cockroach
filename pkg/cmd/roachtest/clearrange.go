@@ -18,6 +18,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerClearRange(r *registry) {
@@ -28,6 +30,11 @@ func registerClearRange(r *registry) {
 		// thoroughly brick the cluster.
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			c.Run(ctx, c.All(),
+				"sudo", "umount", "/mnt/data1", ";",
+				"sudo", "mount", "-o", "discard,defaults,nobarrier",
+				"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+
 			t.Status(`downloading store dumps`)
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
@@ -62,6 +69,10 @@ func registerClearRange(r *registry) {
 				conn := c.Conn(ctx, 1)
 				defer conn.Close()
 
+				// if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING compactor.enabled = false`); err != nil {
+				// 	return err
+				// }
+
 				t.WorkerStatus("dropping table")
 				defer t.WorkerStatus()
 
@@ -79,7 +90,7 @@ func registerClearRange(r *registry) {
 				// above didn't brick the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 20
+				const minutes = 60
 				t.WorkerStatus("repeatedly running COUNT(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
@@ -90,10 +101,11 @@ func registerClearRange(r *registry) {
 						return err
 					}
 					// If we can't aggregate over 80kb in 10s, the database is far from usable.
+					start := timeutil.Now()
 					if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
-					c.l.printf("read %d rows\n", count)
+					c.l.printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
 					t.WorkerProgress(float64(i+1) / float64(minutes))
 					select {
 					case <-after:

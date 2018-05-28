@@ -1113,3 +1113,41 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 }
+
+func BenchmarkRocksDBDeleteRangeNewIterator(b *testing.B) {
+	for _, tombstones := range []int{0, 1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("tombstones=%d", tombstones), func(b *testing.B) {
+			db := setupMVCCInMemRocksDB(b, "unused")
+			defer db.Close()
+
+			for i := 0; i < tombstones; i++ {
+				from := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+				to := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i+1)))
+				if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				db.NewIterator(IterOptions{}).Close()
+			}
+		})
+	}
+}
+
+func TestRocksDBDeleteRangePerf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db := setupMVCCInMemRocksDB(t, "unused")
+	defer db.Close()
+
+	if err := db.ClearRange(key("a"), key("z")); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ClearRange(key("g"), key("m")); err != nil {
+		t.Fatal(err)
+	}
+
+	db.NewIterator(IterOptions{}).Close()
+}

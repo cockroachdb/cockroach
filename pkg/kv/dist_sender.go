@@ -1234,6 +1234,7 @@ func (ds *DistSender) sendToReplicas(
 	// Must be buffered because tests have blocking SendNext implementations.
 	done := make(chan BatchCall, 1)
 	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
+	// log.Infof(ctx, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -181,7 +182,8 @@ func (td *tableDeleter) deleteAllRowsFast(
 		return td.legacyDeleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
 	}
 
-	log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
+	log.Infof(ctx, "ClearRange(start) %s - %s", resume.Key, resume.EndKey)
+	start := timeutil.Now()
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
 	b := &client.Batch{}
@@ -195,6 +197,8 @@ func (td *tableDeleter) deleteAllRowsFast(
 	if err := td.txn.DB().Run(ctx, b); err != nil {
 		return resume, err
 	}
+	log.Infof(ctx, "ClearRange(done) %s - %s [%0.1fs]", resume.Key, resume.EndKey,
+		timeutil.Since(start).Seconds())
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
