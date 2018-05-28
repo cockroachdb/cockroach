@@ -23,6 +23,7 @@ func registerTests(r *registry) {
 	registerAllocator(r)
 	registerBackup(r)
 	registerCancel(r)
+	registerClearRange(r)
 	registerClock(r)
 	registerCopy(r)
 	registerDebug(r)
