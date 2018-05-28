@@ -101,12 +101,13 @@ func ClearRange(
 			Compaction: storagebase.Compaction{
 				Bytes:            statsDelta.Total(),
 				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
+				Clear:            true,
 			},
 		},
 	}
-	if err := batch.ClearRange(from, to); err != nil {
-		return result.Result{}, err
-	}
+	// if err := batch.ClearRange(from, to); err != nil {
+	// 	return result.Result{}, err
+	// }
 	return pd, nil
 }
 

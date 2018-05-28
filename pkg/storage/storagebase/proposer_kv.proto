@@ -70,6 +70,7 @@ message Compaction {
   int64 bytes = 1;
   // suggested_at is nanoseconds since the epoch.
   int64 suggested_at_nanos = 2;
+  bool clear = 3;
 }
 
 // SuggestedCompaction holds start and end keys in conjunction with

@@ -101,13 +101,14 @@ func (c *Compactor) poke() {
 // compactionMinInterval, but only if there are compactions pending.
 func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx = log.WithLogTagStr(ctx, "compactor", "")
-
 	// Wake up immediately to examine the queue and set the bytes queued metric.
 	// Note that the compactor may have received suggestions before having been
 	// started (this isn't great, but it's how it is right now).
 	c.poke()
 
 	stopper.RunWorker(ctx, func(ctx context.Context) {
+		log.Infof(ctx, "compaction worker")
+
 		var timer timeutil.Timer
 		defer timer.Stop()
 
@@ -131,7 +132,7 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 				if bytesQueued, err := c.examineQueue(ctx); err != nil {
 					log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
 				} else if bytesQueued > 0 {
-					log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
+					log.Infof(ctx, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
 				} else {
 					// Queue is empty, don't set the timer. This can happen only at startup.
 					break
@@ -220,8 +221,11 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 			if err := protoutil.Unmarshal(kv.Value, &sc.Compaction); err != nil {
 				return false, err
 			}
-			suggestions = append(suggestions, sc)
-			totalBytes += sc.Bytes
+			// TODO(peter): temporarily ignore non-clearing compactions
+			if sc.Clear {
+				suggestions = append(suggestions, sc)
+				totalBytes += sc.Bytes
+			}
 			return false, nil // continue iteration
 		},
 	); err != nil {
@@ -230,15 +234,11 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	// Update at start of processing, and at end. Note that totalBytes
 	// is decremented for any compactions which are processed.
 	c.Metrics.BytesQueued.Update(totalBytes)
-	defer func() {
-		c.Metrics.BytesQueued.Update(totalBytes)
-	}()
 
+	log.Infof(ctx, "considering %d suggested compaction(s)", len(suggestions))
 	if len(suggestions) == 0 {
 		return false, nil
 	}
-
-	log.Eventf(ctx, "considering %d suggested compaction(s)", len(suggestions))
 
 	// Determine whether to attempt a compaction to reclaim space during
 	// this processing. The decision is based on total bytes to free up
@@ -251,18 +251,29 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	// Get information about SSTables in the underlying RocksDB instance.
 	ssti := engine.NewSSTableInfosByLevel(c.eng.GetSSTables())
 
+	// Update the bytes queued metric based, periodically querying the persisted
+	// suggestions so that we pick up newly added suggestions in the case where
+	// we're processing a large number of suggestions.
+	lastUpdate := timeutil.Now()
+	updateBytesQueued := func(delta int64) error {
+		totalBytes -= delta
+		if timeutil.Since(lastUpdate) >= 10*time.Second {
+			lastUpdate = timeutil.Now()
+			bytes, err := c.examineQueue(ctx)
+			if err != nil {
+				return err
+			}
+			totalBytes = bytes
+		}
+		c.Metrics.BytesQueued.Update(totalBytes)
+		return nil
+	}
+
 	// Iterate through suggestions, merging them into a running
 	// aggregation. Aggregates which exceed size thresholds are
 	// compacted. Small, isolated suggestions will be ignored until
 	// becoming too old, at which point they are discarded without
 	// compaction.
-	delBatch := c.eng.NewWriteOnlyBatch()
-	defer func() {
-		if err := delBatch.Commit(true); err != nil {
-			log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
-		}
-		delBatch.Close()
-	}()
 
 	aggr := initAggregatedCompaction(0, len(suggestions), suggestions[0])
 	for i, sc := range suggestions[1:] {
@@ -270,22 +281,24 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 		// the current suggestion cannot be merged with the aggregate, process
 		// it if it meets compaction thresholds.
 		if done := c.aggregateCompaction(ctx, ssti, &aggr, sc); done {
-			processedBytes, err := c.processCompaction(ctx, aggr, capacity, delBatch)
+			processedBytes, err := c.processCompaction(ctx, aggr, capacity)
 			if err != nil {
 				log.Errorf(ctx, "failed processing suggested compactions %+v: %s", aggr, err)
-			} else {
-				totalBytes -= processedBytes
+			} else if err := updateBytesQueued(processedBytes); err != nil {
+				log.Errorf(ctx, "failed updating bytes queued metric %+v", err)
 			}
 			// Reset aggregation to the last, un-aggregated, suggested compaction.
 			aggr = initAggregatedCompaction(i, len(suggestions), sc)
 		}
 	}
 	// Process remaining aggregated compaction.
-	processedBytes, err := c.processCompaction(ctx, aggr, capacity, delBatch)
+	processedBytes, err := c.processCompaction(ctx, aggr, capacity)
 	if err != nil {
 		return false, err
 	}
-	totalBytes -= processedBytes
+	if err := updateBytesQueued(processedBytes); err != nil {
+		log.Errorf(ctx, "failed updating bytes queued metric %+v", err)
+	}
 
 	return true, nil
 }
@@ -297,10 +310,7 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 // deletes any suggestions handed to it). Returns the number of bytes processed
 // (either compacted or skipped and deleted due to age).
 func (c *Compactor) processCompaction(
-	ctx context.Context,
-	aggr aggregatedCompaction,
-	capacity roachpb.StoreCapacity,
-	delBatch engine.Batch,
+	ctx context.Context, aggr aggregatedCompaction, capacity roachpb.StoreCapacity,
 ) (int64, error) {
 	aboveSizeThresh := aggr.Bytes >= c.thresholdBytes()
 	aboveUsedFracThresh := func() bool {
@@ -312,13 +322,32 @@ func (c *Compactor) processCompaction(
 		return thresh > 0 && aggr.Bytes >= int64(float64(capacity.Available)*thresh)
 	}()
 
-	shouldProcess := c.enabled() && (aboveSizeThresh || aboveUsedFracThresh || aboveAvailFracThresh)
+	shouldProcess := aggr.Clear ||
+		c.enabled() && (aboveSizeThresh || aboveUsedFracThresh || aboveAvailFracThresh)
 	if shouldProcess {
 		startTime := timeutil.Now()
 		log.Infof(ctx,
-			"processing compaction %s (reasons: size=%t used=%t avail=%t)",
-			aggr, aboveSizeThresh, aboveUsedFracThresh, aboveAvailFracThresh,
+			"processing compaction %s (reasons: clear=%t size=%t used=%t avail=%t)",
+			aggr, aggr.Clear, aboveSizeThresh, aboveUsedFracThresh, aboveAvailFracThresh,
 		)
+
+		if aggr.Clear {
+			// Note that when aggregating ClearRange suggestions we only aggregate if
+			// there is an overlap and both suggestions had the Clear field set.
+			clearBatch := c.eng.NewWriteOnlyBatch()
+			log.Infof(ctx, "clearing range: %s-%s", aggr.StartKey, aggr.EndKey)
+			from := engine.MakeMVCCMetadataKey(aggr.StartKey)
+			to := engine.MakeMVCCMetadataKey(aggr.EndKey)
+			if err := clearBatch.ClearRange(from, to); err != nil {
+				return 0, err
+			}
+			if err := clearBatch.Commit(true); err != nil {
+				return 0, err
+			}
+			if err := c.eng.Flush(); err != nil {
+				return 0, err
+			}
+		}
 
 		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
 			c.Metrics.CompactionFailures.Inc(1)
@@ -333,7 +362,12 @@ func (c *Compactor) processCompaction(
 		}
 		log.Infof(ctx, "processed compaction %s in %s", aggr, duration)
 	} else {
-		log.VEventf(ctx, 2, "skipping compaction(s) %s", aggr)
+		log.Infof(ctx, "skipping compaction(s) %s", aggr)
+	}
+
+	var delBatch engine.Batch
+	if shouldProcess {
+		delBatch = c.eng.NewWriteOnlyBatch()
 	}
 
 	// Delete suggested compaction records if appropriate.
@@ -354,6 +388,11 @@ func (c *Compactor) processCompaction(
 	}
 
 	if shouldProcess {
+		if err := delBatch.Commit(true); err != nil {
+			log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
+		}
+		delBatch.Close()
+
 		return aggr.Bytes, nil
 	}
 	return 0, nil
@@ -371,6 +410,25 @@ func (c *Compactor) aggregateCompaction(
 	aggr *aggregatedCompaction,
 	sc storagebase.SuggestedCompaction,
 ) bool {
+	if sc.Clear != aggr.Clear {
+		return true // suggested compaction could not be aggregated
+	}
+
+	if aggr.Clear {
+		if aggr.EndKey.Compare(sc.StartKey) < 0 {
+			log.Infof(ctx, "unable to aggregate suggested compaction: %s %s-%s",
+				aggr, sc.StartKey, sc.EndKey)
+			return true // suggested compaction could not be aggregated
+		}
+		// We can aggregate, so merge sc into aggr.
+		if aggr.EndKey.Compare(sc.EndKey) < 0 {
+			aggr.EndKey = sc.EndKey
+		}
+		aggr.Bytes += sc.Bytes
+		aggr.suggestions = append(aggr.suggestions, sc)
+		return false // aggregated successfully
+	}
+
 	// If the key spans don't overlap, then check whether they're
 	// "nearly" contiguous.
 	if aggr.EndKey.Compare(sc.StartKey) < 0 {
@@ -418,7 +476,7 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 // Suggest writes the specified compaction to persistent storage and
 // pings the processing goroutine.
 func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompaction) {
-	log.VEventf(ctx, 2, "suggested compaction from %s - %s: %+v", sc.StartKey, sc.EndKey, sc.Compaction)
+	log.Infof(ctx, "suggested compaction from %s - %s: %+v", sc.StartKey, sc.EndKey, sc.Compaction)
 
 	// Check whether a suggested compaction already exists for this key span.
 	key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)

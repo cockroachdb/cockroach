@@ -66,6 +66,8 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 func (q *consistencyQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (bool, float64) {
+	return false, 0
+
 	interval := q.interval()
 	if interval <= 0 {
 		return false, 0
@@ -99,6 +101,8 @@ func (q *consistencyQueue) shouldQueue(
 func (q *consistencyQueue) process(
 	ctx context.Context, repl *Replica, _ config.SystemConfig,
 ) error {
+	return nil
+
 	if q.interval() <= 0 {
 		return nil
 	}

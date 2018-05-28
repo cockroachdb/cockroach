@@ -47,7 +47,7 @@ import (
 var (
 	// SchemaChangeLeaseDuration is the duration a lease will be acquired for.
 	// Exported for testing purposes only.
-	SchemaChangeLeaseDuration = 5 * time.Minute
+	SchemaChangeLeaseDuration = 100 * time.Minute
 	// MinSchemaChangeLeaseDuration is the minimum duration a lease will have
 	// remaining upon acquisition. Exported for testing purposes only.
 	MinSchemaChangeLeaseDuration = time.Minute
