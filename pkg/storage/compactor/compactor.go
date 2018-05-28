@@ -87,6 +87,8 @@ func (c *Compactor) maxAge() time.Duration {
 	return maxSuggestedCompactionRecordAge.Get(&c.st.SV)
 }
 
+// poke instructs the compactor's main loop to react to new suggestions in a
+// timely manner.
 func (c *Compactor) poke() {
 	select {
 	case c.ch <- struct{}{}:
@@ -98,6 +100,8 @@ func (c *Compactor) poke() {
 // provided stopper indicates. Processing is done with a periodicity of
 // compactionMinInterval, but only if there are compactions pending.
 func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
+	ctx = log.WithLogTagStr(ctx, "compactor", "")
+
 	// Wake up immediately to examine the queue and set the bytes queued metric.
 	// Note that the compactor may have received suggestions before having been
 	// started (this isn't great, but it's how it is right now).
@@ -106,9 +110,15 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
-		var timerSet bool
 
-		ctx = log.WithLogTagStr(ctx, "compactor", "")
+		// The above timer will either be on c.minInterval() or c.maxAge(). The
+		// former applies if we know there are new suggestions waiting to be
+		// inspected: we want to look at them soon, but also want to make sure
+		// "related" suggestions arrive before we start compacting. When no new
+		// suggestions have been made since the last inspection, the expectation
+		// is that all we have to do is clean up any previously skipped ones (at
+		// least after sufficient time has passed), and so we wait out the max age.
+		var isFast bool
 
 		for {
 			select {
@@ -127,9 +137,9 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					break
 				}
 				// Set the wait timer if not already set.
-				if !timerSet {
+				if !isFast {
+					isFast = true
 					timer.Reset(c.minInterval())
-					timerSet = true
 				}
 
 			case <-timer.C:
@@ -139,15 +149,16 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					log.Warningf(ctx, "failed processing suggested compactions: %s", err)
 				}
 				if ok {
-					// The queue was processed. Wait for the next suggested
-					// compaction before resetting timer.
-					timerSet = false
+					// The queue was processed, so either it's empty or contains suggestions
+					// that were skipped for now. Revisit when they are certainly expired.
+					isFast = false
+					timer.Reset(c.maxAge())
 					break
 				}
-				// Reset the timer to re-attempt processing after the minimum
-				// compaction interval.
+				// More work to do, revisit after minInterval. Note that basically
+				// `ok == (err == nil)` but this refactor is left for a future commit.
+				isFast = true
 				timer.Reset(c.minInterval())
-				timerSet = true
 			}
 		}
 	})
@@ -190,8 +201,7 @@ func (aggr aggregatedCompaction) String() string {
 // older than maxSuggestedCompactionRecordAge. Returns a boolean
 // indicating whether the queue was successfully processed.
 func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
-	var cleanup func()
-	ctx, cleanup = tracing.EnsureContext(ctx, c.st.Tracer, "process suggested compactions")
+	ctx, cleanup := tracing.EnsureContext(ctx, c.st.Tracer, "process suggested compactions")
 	defer cleanup()
 
 	// Collect all suggestions.
