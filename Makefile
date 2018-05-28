@@ -1014,9 +1014,9 @@ UI_JS_CCL := $(UI_ROOT)/ccl/src/js/protos.js
 UI_TS_CCL := $(UI_ROOT)/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS := $(UI_ROOT)/src/js/protos.js
-UI_TS := $(UI_ROOT)/src/js/protos.d.ts
-UI_PROTOS := $(UI_JS) $(UI_TS)
+UI_JS_OSS := $(UI_ROOT)/src/js/protos.js
+UI_TS_OSS := $(UI_ROOT)/src/js/protos.d.ts
+UI_PROTOS_OSS := $(UI_JS) $(UI_TS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/file_registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.h))
@@ -1067,29 +1067,18 @@ $(CPP_PROTOS_CCL_TARGET): $(PROTOC) $(CPP_PROTOS_CCL)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS_CCL) $(CPP_SOURCES_CCL)
 	touch $@
 
-.SECONDARY: $(UI_JS)
-$(UI_JS): $(GO_PROTOS) $(YARN_INSTALLED_TARGET)
+.SECONDARY: $(UI_JS_OSS)
+$(UI_JS_CCL): $(JS_PROTOS_CCL)
+$(UI_JS_OSS) $(UI_JS_CCL): $(GW_PROTOS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$^) >> $@
 
-.SECONDARY: $(UI_TS)
-$(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
+.SECONDARY: $(UI_TS_OSS) $(UI_TS_CCL)
+protos%.d.ts: protos%.js $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBTS) $(UI_JS) >> $@
-
-.SECONDARY: $(UI_JS_CCL)
-$(UI_JS_CCL): $(JS_PROTOS_CCL) $(YARN_INSTALLED_TARGET)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) $(JS_PROTOS_CCL) >> $@
-
-.SECONDARY: $(UI_TS_CCL)
-$(UI_TS_CCL): $(UI_JS_CCL) $(YARN_INSTALLED_TARGET)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBTS) $(UI_JS_CCL) >> $@
+	$(PBTS) $< >> $@
 
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
@@ -1111,12 +1100,14 @@ ui-lint: $(YARN_INSTALLED_TARGET) $(UI_PROTOS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_DLLS := $(UI_ROOT)/dist/protos.dll.js $(UI_ROOT)/dist/vendor.dll.js
-UI_MANIFESTS := $(UI_ROOT)/protos-manifest.json $(UI_ROOT)/vendor-manifest.json
+UI_CCL_DLLS := $(UI_ROOT)/dist/protos.ccl.dll.js $(UI_ROOT)/dist/vendor.oss.dll.js
+UI_CCL_MANIFESTS := $(UI_ROOT)/protos.ccl.manifest.json $(UI_ROOT)/vendor.oss.manifest.json
+UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
+UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 
-# (Ab)use a pattern rule to teach Make that this one command produces two files.
-# Normally, it would run the recipe twice if dist/FOO.js and FOO-manifest.js
-# were both out-of-date. [0]
+# (Ab)use pattern rules to teach Make that this one Webpack command produces two
+# files. Normally, Make would run the recipe twice if dist/FOO.js and
+# FOO-manifest.js were both out-of-date. [0]
 #
 # XXX: Ideally we'd scope the dependency on $(UI_PROTOS) to the protos DLL, but
 # Make v3.81 has a bug that causes the dependency to be ignored [1]. We're stuck
@@ -1125,26 +1116,32 @@ UI_MANIFESTS := $(UI_ROOT)/protos-manifest.json $(UI_ROOT)/vendor-manifest.json
 # would need to be strictly enforced, as the way this fails is extremely subtle
 # and doesn't present until the web UI is loaded in the browser.
 #
-# [0]: https://stackoverflow.com/a/3077254/1122351
-# [1]: http://savannah.gnu.org/bugs/?19108
-.SECONDARY: $(UI_DLLS) $(UI_MANIFESTS)
-$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS) $(UI_PROTOS_CCL)
-	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
+# [0]: https://stackoverflow.com/a/3077254/1122351 [1]:
+# http://savannah.gnu.org/bugs/?19108
+.SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
+
+$(UI_ROOT)/dist/%.oss.dll.js $(UI_ROOT)/%.oss.manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS_OSS)
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
+
+$(UI_ROOT)/dist/%.ccl.dll.js $(UI_ROOT)/%.ccl.manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS_CCL)
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
 
 .PHONY: ui-test
-ui-test: $(UI_DLLS) $(UI_MANIFESTS)
+ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start
 
 .PHONY: ui-test-watch
-ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
+ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
 
-$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_JS_CCL) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/ccl $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
-	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
-	rm -f $(UI_ROOT)/embedded.go
+$(UI_ROOT)/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find $(UI_ROOT)/ccl -type f)
+$(UI_ROOT)/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS) $(shell find $(UI_ROOT)/src -type f)
+$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.app.js $(shell find $(UI_ROOT)/styl -type f)
 	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
-	set -e; for dll in $(notdir $(UI_DLLS)); do ln -s ../dist/$$dll $(UI_ROOT)/dist$*/$$dll; done
-	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.$*.js
+	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
+	  ln -s ../dist/$$dll $(UI_ROOT)/dist$*/$${dll/@(.ccl|.oss)}; \
+	done
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix $(UI_ROOT)/dist$* $(UI_ROOT)/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
 	gofmt -s -w $@
@@ -1167,7 +1164,7 @@ ui-watch ui-watch-secure: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	find $(UI_ROOT)/dist* -mindepth 1 -not -name dist*.go -delete
-	rm -f $(UI_DLLS)
+	rm -f $(UI_ROOT)/*manifest.json
 
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies

@@ -14,7 +14,7 @@ module.exports = {
   },
 
   output: {
-    filename: "vendor.dll.js",
+    filename: "vendor.oss.dll.js",
     path: path.resolve(__dirname, "dist"),
     library: "[name]_[hash]",
   },
@@ -40,7 +40,7 @@ module.exports = {
   plugins: [
     new webpack.DllPlugin({
       name: "[name]_[hash]",
-      path: path.resolve(__dirname, "vendor-manifest.json"),
+      path: path.resolve(__dirname, "vendor.oss.manifest.json"),
     }),
   ],
 };
