@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"crypto/rand"
 	"fmt"
 	"os"
 	"strings"
@@ -126,6 +127,57 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var encryptionKeyPath string
+var encryptionKeySize int
+
+var genEncryptionKeyCmd = &cobra.Command{
+	Use:   "encryption-key",
+	Short: "generate store key for encryption at rest",
+	Long: `Generate store key for encryption at rest.
+
+If no size is specified through "--size=48", the size of the key will be 16
+bytes by default. Key size should only be 16, 24, or 32 bytes.
+
+If no path is specified through "--out=/path/to/key", generated key will be
+stored at "keys/aes-128.key" by default.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if encryptionKeyPath == "" {
+			if err := os.MkdirAll("keys", 0755); err != nil {
+				return fmt.Errorf("failed to create directory 'keys'")
+			}
+			encryptionKeyPath = fmt.Sprintf("keys/aes-%d.key", encryptionKeySize*8)
+		}
+
+		// Check encryptionKeySize is suitable for the encryption algorithm.
+		if encryptionKeySize != 16 && encryptionKeySize != 24 && encryptionKeySize != 32 {
+			return fmt.Errorf("store key size should be 16, 24, or 32 bytes, got %d", encryptionKeySize)
+		}
+
+		// 32 bytes are reserved for key ID.
+		keySize := encryptionKeySize + 32
+		b := make([]byte, keySize)
+		if n, err := rand.Read(b); err != nil || n != keySize {
+			return fmt.Errorf("failed to create key with size %d", encryptionKeySize)
+		}
+
+		// Create the file that stores the key.
+		keyFile, err := os.Create(encryptionKeyPath)
+		if err != nil {
+			return err
+		}
+
+		// Write key to file.
+		if n, err := keyFile.Write(b); err != nil {
+			return err
+		} else if n != keySize {
+			return fmt.Errorf("failed to create key with size %d, wrote %d bytes", encryptionKeySize, n)
+		}
+
+		return nil
+	},
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list <output-dir>",
 	Short: "output a list of available cluster settings",
@@ -190,6 +242,7 @@ var genCmds = []*cobra.Command{
 	genExamplesCmd,
 	genHAProxyCmd,
 	genSettingsListCmd,
+	genEncryptionKeyCmd,
 }
 
 func init() {
@@ -199,6 +252,10 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
+	genEncryptionKeyCmd.PersistentFlags().StringVar(&encryptionKeyPath, "out", "",
+		"path to generated store key for encryption at rest")
+	genEncryptionKeyCmd.PersistentFlags().IntVar(&encryptionKeySize, "size", 16,
+		"size of the store key for encryption at rest")
 
 	genCmd.AddCommand(genCmds...)
 }
