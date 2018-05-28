@@ -2,7 +2,7 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 
-interface EncryptionStatusProps {
+export interface EncryptionStatusProps {
   store: protos.cockroach.server.serverpb.StoreDetails$Properties;
 }
 
