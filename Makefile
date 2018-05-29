@@ -755,7 +755,7 @@ BUILD_TAGGED_RELEASE =
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS)
-$(go-targets): $(SQLPARSER_TARGETS) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS)
+$(go-targets): $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -773,7 +773,7 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 .PHONY: build buildoss buildshort install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss buildshort go-install:
+$(COCKROACH) build buildoss buildshort go-install: $(DOCGEN_TARGETS)
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 ifndef XHOST_TRIPLE
 	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
