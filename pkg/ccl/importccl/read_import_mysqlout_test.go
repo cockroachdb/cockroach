@@ -336,3 +336,52 @@ func TestMysqlOutfileReader(t *testing.T) {
 		})
 	}
 }
+
+func TestMysqlOutfileReaderMul(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+	config := dumpCfg{
+		name: "mul-file",
+		opts: roachpb.MySQLOutfileOptions{
+			FieldSeparator: '\t',
+			RowSeparator:   '\n',
+			HasEscape:      false,
+			Escape:         '\\',
+			Enclose:        roachpb.MySQLOutfileOptions_Never,
+			Encloser:       '"',
+		},
+		null: `\N`,
+	}
+	config.filename = filepath.Join(`testdata`, `mysqlout`, config.name, `test.txt`)
+	t.Run(config.name, func(t *testing.T) {
+		converter := newMysqloutfileReader(nil, config.opts, &sqlbase.TableDescriptor{}, nil)
+		converter.expectedCols = 2
+		converter.csvInputReader.recordCh = make(chan csvRecord, 4)
+		converter.csvInputReader.batchSize = 10
+
+		inf, err := os.Open(config.filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer inf.Close()
+		if err := converter.readFile(ctx, inf, 1, config.name, func(_ bool) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		expected := len(converter.csvInputReader.batch.r)
+
+		ins, err := os.Open(config.filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ins.Close()
+		if err := converter.readFile(ctx, ins, 1, config.name, func(_ bool) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		real := len(converter.csvInputReader.batch.r)
+		converter.inputFinished(ctx)
+
+		if expected != real {
+			t.Fatalf("expected %d rows, got %d", expected, real)
+		}
+	})
+}
