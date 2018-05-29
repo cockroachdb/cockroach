@@ -94,7 +94,7 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 			}
 			log.Infof(ctx, "wiping node %d's data directory", nodeIdx)
 		}
-		log.Infof(ctx, "upgrading node %d's binary to %s", nodeIdx, bv.newVersion)
+		log.Infof(ctx, "upgrading node at index %d's binary to %s", nodeIdx, bv.newVersion)
 		lc.ReplaceBinary(nodeIdx, newBin)
 		if err := lc.Restart(ctx, nodeIdx); err != nil {
 			t.Fatal(err)
