@@ -75,7 +75,7 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT VALUES (i, s)",
-			error: `name "i" is not defined`,
+			error: `column "i" does not exist`,
 		},
 		{
 			in: "ALTER INDEX d.t@s_idx SPLIT AT VALUES ('f')",

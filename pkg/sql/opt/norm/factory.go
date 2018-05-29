@@ -17,6 +17,7 @@ package norm
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -357,15 +358,12 @@ func (s listSorter) compare(i, j int) int {
 // hasColType returns true if the given expression has a static type that's
 // equivalent to the requested coltype.
 func (f *Factory) hasColType(group memo.GroupID, colTyp memo.PrivateID) bool {
-	groupType := f.lookupScalar(group).Type
-	reqType, equiv := coltypes.TryCastTargetToDatumType(f.mem.LookupPrivate(colTyp).(coltypes.T))
-	if !equiv {
-		// Column type could not be converted to/from datum type without potentially
-		// losing information, so it's not an equivalent type. For example:
-		//   VARCHAR(2) <> STRING
+	srcTyp, _ := coltypes.DatumTypeToColumnType(f.lookupScalar(group).Type)
+	dstTyp := f.mem.LookupPrivate(colTyp).(coltypes.T)
+	if reflect.TypeOf(srcTyp) != reflect.TypeOf(dstTyp) {
 		return false
 	}
-	return groupType.Equivalent(reqType)
+	return coltypes.ColTypeAsString(srcTyp) == coltypes.ColTypeAsString(dstTyp)
 }
 
 // colTypeToDatumType maps the given column type to a datum type.

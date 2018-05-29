@@ -137,93 +137,70 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 }
 
 // CastTargetToDatumType produces the types.T that is closest to the given SQL
-// cast target type. The resulting type might not be equivalent. See the comment
-// for TryCastTargetToDatumType for more details.
-func CastTargetToDatumType(t CastTargetType) types.T {
-	res, _ := TryCastTargetToDatumType(t)
-	return res
-}
-
-// TryCastTargetToDatumType produces the types.T that is closest to the given
-// SQL cast target type. It returns the resulting type, as well as a boolean
-// indicating whether the source and destination types are "equivalent". If
-// equivalent is true, then:
-//
-//   1. The source type can be cast to the destination type, and the destination
-//      type can be cast to the source type. This is true for all casts except
-//      those involving INT2VECTOR and OIDVECTOR, which are not supported by
-//      Cockroach's Cast operator.
-//   2. The destination type allows exactly the same set of values that the
-//      source type allows. Another way to state this is that conversions in
-//      both directions is non-lossy.
-//
-// For example, the following source and destination types are not equivalent,
+// cast target type. The resulting type might not be exactly equivalent. For
+// example, the following source and destination types are not equivalent,
 // because the destination type allows strings that are longer than two
 // characters. If a string having three characters were converted to VARCHAR(2),
 // the extra character would be truncated (i.e. it's a lossy conversion).
 //
 //   VARCHAR(2) => STRING
 //
-func TryCastTargetToDatumType(src CastTargetType) (dst types.T, equivalent bool) {
-	switch ct := src.(type) {
+func CastTargetToDatumType(t CastTargetType) types.T {
+	switch ct := t.(type) {
 	case *TBool:
-		return types.Bool, true
+		return types.Bool
 	case *TInt:
-		return types.Int, ct.Width == 0
+		return types.Int
 	case *TFloat:
-		return types.Float, ct.Width == 64 && ct.Prec == 0 && !ct.PrecSpecified
+		return types.Float
 	case *TDecimal:
-		return types.Decimal, ct.Prec == 0 && ct.Scale == 0
+		return types.Decimal
 	case *TString:
-		return types.String, ct.N == 0
+		return types.String
 	case *TName:
-		return types.Name, true
+		return types.Name
 	case *TBytes:
-		return types.Bytes, true
+		return types.Bytes
 	case *TDate:
-		return types.Date, true
+		return types.Date
 	case *TTime:
-		return types.Time, true
+		return types.Time
 	case *TTimeTZ:
-		return types.TimeTZ, true
+		return types.TimeTZ
 	case *TTimestamp:
-		return types.Timestamp, true
+		return types.Timestamp
 	case *TTimestampTZ:
-		return types.TimestampTZ, true
+		return types.TimestampTZ
 	case *TInterval:
-		return types.Interval, true
+		return types.Interval
 	case *TJSON:
-		return types.JSON, true
+		return types.JSON
 	case *TUUID:
-		return types.UUID, true
+		return types.UUID
 	case *TIPAddr:
-		return types.INet, true
+		return types.INet
 	case *TCollatedString:
-		return types.TCollatedString{Locale: ct.Locale}, ct.N == 0
+		return types.TCollatedString{Locale: ct.Locale}
 	case *TArray:
-		typ, equiv := TryCastTargetToDatumType(ct.ParamType)
-		return types.TArray{Typ: typ}, equiv
+		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
 	case *TVector:
 		switch ct.ParamType.(type) {
 		case *TInt:
-			return types.IntVector, false
+			return types.IntVector
 		case *TOid:
-			return types.OidVector, false
+			return types.OidVector
 		default:
-			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", src, ct.ParamType))
+			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", t, ct.ParamType))
 		}
 	case TTuple:
-		equivalent = true
 		ret := types.TTuple{Types: make([]types.T, len(ct))}
 		for i := range ct {
-			var equivVal bool
-			ret.Types[i], equivVal = TryCastTargetToDatumType(ct[i])
-			equivalent = equivalent && equivVal
+			ret.Types[i] = CastTargetToDatumType(ct[i])
 		}
-		return ret, equivalent
+		return ret
 	case *TOid:
-		return TOidToType(ct), true
+		return TOidToType(ct)
 	default:
-		panic(fmt.Sprintf("unexpected CastTarget %T", src))
+		panic(fmt.Sprintf("unexpected CastTarget %T", t))
 	}
 }

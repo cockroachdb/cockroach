@@ -1045,6 +1045,9 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 	// out, or perhaps drops the connection while waiting). To that end, we first
 	// run a noop DrainRequest. If that fails, we give up.
 	if err := checkNodeRunning(ctx, c); err != nil {
+		if grpcutil.IsClosedConnection(err) {
+			return nil
+		}
 		return err
 	}
 	// Send a drain request and continue reading until the connection drops (which
@@ -1112,16 +1115,21 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	case err := <-errChan:
 		if err != nil {
 			if _, ok := err.(errTryHardShutdown); ok {
-				fmt.Printf("graceful shutdown failed: %s; proceeding with hard shutdown\n", err)
+				log.Warningf(ctx, "graceful shutdown failed: %s; proceeding with hard shutdown\n", err)
 				break
 			}
 			return err
 		}
 		return nil
 	case <-time.After(time.Minute):
-		fmt.Println("timed out; proceeding with hard shutdown")
+		log.Warningf(ctx, "timed out; proceeding with hard shutdown")
 	}
 	// Not passing drain modes tells the server to not bother and go
-	// straight to shutdown.
+	// straight to shutdown. We try two times just in case there is a transient error.
+	err = doShutdown(ctx, c, nil)
+	if err != nil {
+		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
+		err = doShutdown(ctx, c, nil)
+	}
 	return errors.Wrap(doShutdown(ctx, c, nil), "hard shutdown failed")
 }
