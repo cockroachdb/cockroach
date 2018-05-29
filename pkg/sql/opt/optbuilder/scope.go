@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // scope is used for the build process and maintains the variables that have
@@ -400,8 +401,7 @@ func (s *scope) FindSourceProvidingColumn(
 		}
 	}
 
-	return nil, nil, -1, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-		"column name %q not found", tree.ErrString(&colName))
+	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&colName))
 }
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
@@ -489,8 +489,7 @@ func (s *scope) Resolve(
 		}
 	}
 
-	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-		"column name %q not found", tree.ErrString(tree.NewColumnItem(prefix, colName)))
+	return nil, sqlbase.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
 func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
