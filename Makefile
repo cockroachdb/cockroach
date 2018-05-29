@@ -1289,11 +1289,10 @@ pkg/sql/opt/xform/explorer.og.go: $(optgen-defs) $(optgen-xform-rules) bin/optge
 pkg/sql/opt/norm/factory.og.go: $(optgen-defs) $(optgen-norm-rules) bin/optgen
 	optgen -out $@ factory $(optgen-defs) $(optgen-norm-rules)
 
-# Format libroach .cc and .h files (excluding protos) using clang-format if installed.
-# We also exclude the auto-generated keys.h
+# Format non-generated .cc and .h files in libroach using clang-format.
 .PHONY: c-deps-fmt
-c-deps-fmt: $(shell find $(LIBROACH_SRC_DIR) \( -name '*.cc' -o -name '*.h' \) -not \( -name '*.pb.cc' -o -name '*.pb.h' -o -name 'keys.h' \))
-	clang-format -i $^
+c-deps-fmt:
+	find $(LIBROACH_SRC_DIR) -name '*.cc' -o -name '*.h' | xargs grep -L 'DO NOT EDIT' | xargs clang-format -i
 
 .PHONY: clean-c-deps
 clean-c-deps:
