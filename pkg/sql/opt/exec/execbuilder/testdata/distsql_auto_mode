@@ -1,0 +1,127 @@
+# LogicTest: opt
+
+#
+# Tests that verify DistSQL support and auto mode determination.
+# The cluster size or distsql mode aren't important for these tests.
+#
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+# Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
+query BT colnames
+EXPLAIN (DISTSQL) VALUES (1)
+----
+Automatic  URL
+true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+
+# Check the JSON column is still there, albeit hidden.
+query T colnames
+SELECT "JSON" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
+----
+JSON
+
+# Full table scan - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
+----
+true
+
+# Partial scan - don't distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k=1]
+----
+false
+
+# Partial scan - don't distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
+----
+false
+
+# Partial scan with filter - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
+----
+true
+
+# Sort - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v]
+----
+true
+
+# Aggregation - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k]
+----
+true
+
+# Hard limit in scan - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
+----
+true
+
+# Soft limit in scan - don't distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
+----
+false
+
+# Limit after sort - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1]
+----
+true
+
+# Limit after aggregation - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
+----
+true
+
+statement ok
+CREATE TABLE kw (k INT PRIMARY KEY, w INT)
+
+# Join - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw]
+----
+true
+
+# Join with span - distribute.
+query B
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw WHERE k=1]
+----
+true
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
+
+# TODO(radu): can't execbuild index join yet.
+## Index join - don't distribute.
+#query B
+#SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+#----
+#false
+#
+## Index join with filter on result - don't distribute.
+#query B
+#SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
+#----
+#false
+#
+## Index join with filter on index scan - distribute.
+#query B
+#SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+#----
+#true
+
+# OID cast - don't distribute (#22249).
+statement error pq: cast to REGCLASS is not supported by distsql
+EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+
+# Query with OID expression - don't distribute (#24423).
+statement error pq: OID expressions are not supported by distsql
+EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
