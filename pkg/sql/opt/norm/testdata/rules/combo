@@ -728,7 +728,7 @@ HoistProjectSubquery
   + │    │    │    │    │    ├── scan a
   + │    │    │    │    │    │    ├── columns: k:3(int!null)
   + │    │    │    │    │    │    └── keys: (3)
-  + │    │    │    │    │    └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │    └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    └── aggregations [outer=(9)]
@@ -769,9 +769,9 @@ EnsureSelectFilters
     │    │    │    │    │    ├── scan a
     │    │    │    │    │    │    ├── columns: k:3(int!null)
     │    │    │    │    │    │    └── keys: (3)
-  - │    │    │    │    │    └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │    └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    │    │    │    └── projections [outer=(3)]
     │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
     │    │    │    └── aggregations [outer=(9)]
@@ -828,7 +828,7 @@ TryDecorrelateProject
     │    │    │    │    │    │    ├── columns: k:3(int!null)
   - │    │    │    │    │    │    └── keys: (3)
   - │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    └── aggregations [outer=(9)]
@@ -840,7 +840,7 @@ TryDecorrelateProject
   + │    │    │    │    │    │    │    ├── columns: k:3(int!null)
   + │    │    │    │    │    │    │    └── keys: (3)
   + │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    └── aggregations [outer=(9)]
@@ -897,7 +897,7 @@ TryDecorrelateScalarGroupBy
     │    │    │    │    │    │    │    ├── columns: k:3(int!null)
   - │    │    │    │    │    │    │    └── keys: (3)
   - │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    │    │    │    ├── outer: (1)
@@ -906,7 +906,7 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │    │    │    │    │    ├── columns: k:3(int!null)
   + │    │    │    │    │    │    │    │    └── keys: (3)
   + │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    │    └── true [type=bool]
@@ -955,7 +955,7 @@ TryDecorrelateProjectSelect
   - │    │    │    │    │    │    │    │    ├── columns: k:3(int!null)
   - │    │    │    │    │    │    │    │    └── keys: (3)
   - │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    │    │    └── true [type=bool]
@@ -973,7 +973,7 @@ TryDecorrelateProjectSelect
   + │    │    │    │    │         │    └── projections [outer=(3)]
   + │    │    │    │    │         │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │    │              └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │              └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    │    │    │    └── aggregations [outer=(9)]
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
     │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1019,7 +1019,7 @@ DecorrelateJoin
     │    │    │    │    │         │    └── projections [outer=(3)]
     │    │    │    │    │         │         └── a.k IS NOT NULL [type=bool, outer=(3)]
     │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
-    │    │    │    │    │              └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+    │    │    │    │    │              └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    │    │    │    └── aggregations [outer=(9)]
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
     │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1064,7 +1064,7 @@ EliminateGroupByProject
   - │    │    │    │    │         │    └── projections [outer=(3)]
   - │    │    │    │    │         │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │    │              └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │              └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    │    ├── left-join
   + │    │    │    │    │    ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
   + │    │    │    │    │    ├── scan xy
@@ -1079,7 +1079,7 @@ EliminateGroupByProject
   + │    │    │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    │    │    │    └── aggregations [outer=(9)]
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
     │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1124,7 +1124,7 @@ EliminateSelect
   - │    │    │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    │    │    └── aggregations [outer=(9)]
   - │    │    │    │         └── bool-or [type=bool, outer=(9)]
   - │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1143,7 +1143,7 @@ EliminateSelect
   + │    │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    │    └── aggregations [outer=(9)]
   + │    │    │         └── bool-or [type=bool, outer=(9)]
   + │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1187,7 +1187,7 @@ EliminateSelect
   - │    │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    │    └── aggregations [outer=(9)]
   - │    │    │         └── bool-or [type=bool, outer=(9)]
   - │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1208,7 +1208,7 @@ EliminateSelect
   + │    │    │    │    └── projections [outer=(3)]
   + │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    │    └── aggregations [outer=(9)]
   + │    │         └── bool-or [type=bool, outer=(9)]
   + │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1244,7 +1244,7 @@ PruneProjectCols
     │    │    │    │    └── projections [outer=(3)]
     │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
     │    │    │    └── filters [type=bool, outer=(1,3)]
-    │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+    │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    │    └── aggregations [outer=(9)]
     │    │         └── bool-or [type=bool, outer=(9)]
     │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1278,7 +1278,7 @@ InlineProjectInProject
   - │    │    │    │    └── projections [outer=(3)]
   - │    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   - │    │    │    └── filters [type=bool, outer=(1,3)]
-  - │    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  - │    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   - │    │    └── aggregations [outer=(9)]
   - │    │         └── bool-or [type=bool, outer=(9)]
   - │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -1304,7 +1304,7 @@ InlineProjectInProject
   + │    │    │    └── projections [outer=(3)]
   + │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
   + │    │    └── filters [type=bool, outer=(1,3)]
-  + │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+  + │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
   + │    └── aggregations [outer=(9)]
   + │         └── bool-or [type=bool, outer=(9)]
   + │              └── variable: notnull [type=bool, outer=(9)]
@@ -1337,7 +1337,7 @@ GenerateIndexScans (higher cost)
     │    │    │    └── projections [outer=(3)]
     │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
     │    │    └── filters [type=bool, outer=(1,3)]
-    │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+    │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
     │    └── aggregations [outer=(9)]
     │         └── bool-or [type=bool, outer=(9)]
     │              └── variable: notnull [type=bool, outer=(9)]
@@ -1367,7 +1367,7 @@ Final best expression
    │    │    │    └── projections [outer=(3)]
    │    │    │         └── a.k IS NOT NULL [type=bool, outer=(3)]
    │    │    └── filters [type=bool, outer=(1,3)]
-   │    │         └── (a.k = xy.x) IS NOT false [type=bool, outer=(1,3)]
+   │    │         └── (xy.x = a.k) IS NOT false [type=bool, outer=(1,3)]
    │    └── aggregations [outer=(9)]
    │         └── bool-or [type=bool, outer=(9)]
    │              └── variable: notnull [type=bool, outer=(9)]
