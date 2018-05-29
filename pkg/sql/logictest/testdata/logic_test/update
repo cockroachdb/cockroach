@@ -499,3 +499,33 @@ SELECT * FROM kv
 1  1
 2  3
 3  4
+
+# Check that updates on tables with multiple column families behave as
+# they should.
+
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR UPDATE tu SET b = NULL, c = NULL, d = NULL]
+----
+Scan /Table/61/{1-2}
+querying next range at /Table/61/1
+r1: sending batch 1 Scan to (n1,s1):1
+fetched: /tu/primary/1 -> NULL
+fetched: /tu/primary/1/b -> 2
+fetched: /tu/primary/1/c/d -> /3/4
+Del /Table/61/1/1/1/1
+Del /Table/61/1/1/2/1
+output row: [1 NULL NULL NULL]
+querying next range at /Table/61/1/1/1/1
+r1: sending batch 2 Del, 1 BeginTxn to (n1,s1):1
+
+statement ok
+UPDATE tu SET b = NULL, c = NULL, d = NULL
+
+query IIII rowsort
+SELECT * FROM tu
+----
+1 NULL NULL NULL
