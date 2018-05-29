@@ -599,5 +599,30 @@ SELECT '{"a": []}'::JSONB #- ARRAY['a', '0']
 ----
 {"a": []}
 
+query T
+SELECT '{"a":123,"b":456,"c":567}'::JSONB - array[]:::text[];
+----
+{"a": 123, "b": 456, "c": 567}
+
+query T
+SELECT '{"a":123,"b":456,"c":567}'::JSONB - array['a','c'];
+----
+{"b": 456}
+
+query T
+SELECT '{"a":123,"c":"asdf"}'::JSONB - array['a','c'];
+----
+{}
+
+query T
+SELECT '{}'::JSONB - array['a','c'];
+----
+{}
+
+query T
+SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['a'];
+----
+{"b": [], "c": {"a": "b"}}
+
 statement error pgcode 22P02 a path element is not an integer: foo
 SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
