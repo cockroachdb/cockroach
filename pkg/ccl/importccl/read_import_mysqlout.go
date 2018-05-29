@@ -65,6 +65,7 @@ func (d *mysqloutfileReader) readFile(
 	var readingField bool
 
 	reader := bufio.NewReaderSize(input, 1024*64)
+	d.csvInputReader.batch.r = make([][]string, 0, d.csvInputReader.batchSize)
 
 	for {
 		c, w, err := reader.ReadRune()
