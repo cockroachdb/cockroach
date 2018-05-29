@@ -79,7 +79,6 @@ define VALID_VARS
   LIBROACH_SRC_DIR
   LINKFLAGS
   MACOS
-  MACOSX_DEPLOYMENT_TARGET
   MAKECMDGOALS
   MAKEFLAGS
   MINGW
@@ -88,6 +87,7 @@ define VALID_VARS
   NATIVE_SPECIFIER
   NATIVE_SPECIFIER_TAG
   NATIVE_SUFFIX
+  NCPUS
   NODE_RUN
   OPTGEN_TARGETS
   PATH
@@ -149,7 +149,6 @@ define VALID_VARS
   cyan
   go-targets
   go-targets-ccl
-  go-version-check
   langgen-package
   logictest-package
   logictestccl-package
@@ -158,6 +157,7 @@ define VALID_VARS
   optgen-package
   optgen-xform-rules
   prefix
+  sig
   space
   sse
   term-reset

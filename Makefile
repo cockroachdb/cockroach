@@ -20,6 +20,8 @@
 # double-hash (##) comments throughout this Makefile. Please submit
 # improvements!
 
+-include build/defs.mk
+
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
 $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
 else
@@ -81,7 +83,12 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
-MAKEFLAGS += $(shell build/jflag.sh)
+ifeq "$(findstring -j,$(shell ps -o args= $$PPID))" ""
+ifdef NCPUS
+MAKEFLAGS += -j$(NCPUS)
+$(info Running make with -j$(NCPUS))
+endif
+endif
 
 help: ## Print help for targets with comments.
 	@echo "Usage:"
@@ -196,7 +203,7 @@ XGO     ?= xgo
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
-GOPATH := $(realpath $(shell $(GO) env GOPATH))
+GOPATH := $(realpath $(GOPATH))
 ifeq ($(strip $(GOPATH)),)
 $(error GOPATH is not set and could not be automatically determined, build cannot continue)
 endif
@@ -245,8 +252,6 @@ ifeq ($(SHELL),)
 $(error bash is required)
 endif
 
-GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
-
 # Invocation of any NodeJS script should be prefixed by NODE_RUN. See the
 # comments within node-run.sh for rationale.
 NODE_RUN := build/node-run.sh
@@ -256,7 +261,6 @@ NODE_RUN := build/node-run.sh
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
-UNAME := $(shell uname)
 MACOS := $(findstring Darwin,$(UNAME))
 MINGW := $(findstring MINGW,$(UNAME))
 
@@ -280,16 +284,6 @@ term-reset = $(shell { tput sgr0 || tput me; } 2>/dev/null)
 $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
-
-# We used to check the Go version in a .PHONY target, but the error message, if
-# any, would get mixed in with noise from other targets when Make was executed
-# in parallel job mode. This check, by contrast, is guaranteed to print its
-# error message before any noisy output.
-IGNORE_GOVERS :=
-go-version-check := $(if $(IGNORE_GOVERS),,$(shell build/go-version-check.sh $(GO)))
-ifneq "$(go-version-check)" ""
-$(error $(go-version-check). Disable this check with IGNORE_GOVERS=1)
-endif
 
 # Print an error if the user specified any variables on the command line that
 # don't appear in this Makefile. The list of valid variables is automatically
@@ -317,7 +311,6 @@ ifneq ($(GIT_DIR),)
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
@@ -370,6 +363,37 @@ endif
 	mkdir -p $(@D)
 	touch $@
 
+IGNORE_GOVERS :=
+
+# defs.mk stores cached values of shell commands to avoid recomputing them on
+# every Make invocation. This has a small but noticeable effect, especially on
+# noop builds.
+build/defs.mk: Makefile build/defs.mk.sig
+ifndef IGNORE_GOVERS
+	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
+endif
+	@# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
+	@# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
+	@# to the host machine's actual macOS version works around this. See:
+	@# https://github.com/jemalloc/jemalloc/issues/494.
+	@echo "export MACOSX_DEPLOYMENT_TARGET ?= $$(sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')" > $@
+	@echo "export GOPATH = $$($(GO) env GOPATH)" >> $@
+	@echo "GOEXE = $$($(GO) env GOEXE)" >> $@
+	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" > $@
+	@echo "UNAME = $$(uname)" >> $@
+	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@
+	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@
+	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@
+
+# defs.mk.sig attempts to capture common cases where defs.mk needs to be
+# recomputed, like when compiling for a different platform or using a different
+# Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
+# in place will go unnoticed, for example. Similar problems exist in all Make-
+# based build systems and are not worth solving.
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TYPE):$(IGNORE_GOVERS)
+build/defs.mk.sig: .ALWAYS_REBUILD
+	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
+
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
 # following forms:
@@ -382,7 +406,7 @@ endif
 # The special comments at the beginning are for Github/Go/Reviewable:
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
-build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile
+build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile build/defs.mk
 	@echo '# Code generated by Make. DO NOT EDIT.' > $@
 	@echo '# GENERATED FILE DO NOT EDIT' >> $@
 	@echo 'define VALID_VARS' >> $@
@@ -401,8 +425,6 @@ PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
-
-HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
 CONFIGURE_FLAGS :=
 CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
@@ -501,9 +523,9 @@ NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
 #
 # Unsuffixed flags files (zcgo_flags.cgo) have the build constraint `!make`
 # and are only compiled when invoking the Go toolchain directly on a package--
-# i.e., when the `make` build tag is not specified. These files are rebuilt on
-# every Make invocation, and so reflect the target triple that Make was most
-# recently invoked with.
+# i.e., when the `make` build tag is not specified. These files are rebuilt
+# whenever the build signature changes (see build/defs.mk.sig), and so reflect
+# the target triple that Make was most recently invoked with.
 #
 # Suffixed flags files (e.g. zcgo_flags_arch_vendor_os_abi.go) have the build
 # constraint `arch_vendor_os_abi` and are built the first time a Make-driven
@@ -515,7 +537,7 @@ CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix ./pkg/,$(addsuffix /zcgo_flags.go,$(CG
 CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./pkg/,$(addsuffix /zcgo_flags_$(NATIVE_SPECIFIER_TAG).go,$(CGO_PKGS)))
 CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
-$(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
+$(CGO_UNSUFFIXED_FLAGS_FILES): build/defs.mk.sig
 
 $(CGO_FLAGS_FILES): Makefile
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
@@ -674,21 +696,13 @@ check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy libro
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
-# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
-# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
-# to the host machine's actual macOS version works around this. See:
-# https://github.com/jemalloc/jemalloc/issues/494.
-ifdef MACOS
-export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')
-endif
-
 # Some targets (protobuf) produce different results depending on the sort order;
 # set LC_COLLATE so this is consistent across systems.
 export LC_COLLATE=C
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
-COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
+COCKROACH := ./cockroach$(SUFFIX)$(GOEXE)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
@@ -1295,7 +1309,7 @@ unsafe-clean-c-deps:
 .PHONY: clean
 clean: ## Remove build artifacts.
 clean: clean-c-deps
-	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources
+	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
