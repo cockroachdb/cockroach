@@ -119,7 +119,7 @@ export function getLoginPage(location: Location) {
 
 export interface LoginAPIState {
   loggedInUser: string;
-  error: string;
+  error: Error;
   inProgress: boolean;
 }
 
@@ -180,7 +180,7 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     return userLogin(loginReq)
       .then(
         () => { dispatch(loginSuccess(username)); },
-        (err) => { dispatch(loginFailure(err.toString())); },
+        (err) => { dispatch(loginFailure(err)); },
       );
   };
 }
