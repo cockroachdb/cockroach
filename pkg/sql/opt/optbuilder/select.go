@@ -194,6 +194,10 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
+	if stmt.With != nil {
+		panic(unimplementedf("with clause not supported"))
+	}
+
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit

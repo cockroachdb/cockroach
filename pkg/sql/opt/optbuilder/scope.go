@@ -286,7 +286,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 	for curr := s; curr != nil; curr = curr.parent {
 		if curr.groupby.inAgg {
-			panic(errorf("aggregate function cannot be nested within another aggregate function"))
+			panic(builderError{sqlbase.NewAggInAggError()})
 		}
 
 		if curr.groupby.aggInScope != nil {

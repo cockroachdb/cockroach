@@ -265,7 +265,7 @@ SELECT avg(k) OVER (PARTITION BY a) FROM kv
 query error column "a" does not exist
 SELECT avg(k) OVER (ORDER BY a) FROM kv
 
-query error aggregate function calls cannot contain window function call avg\(\)
+query error pgcode 42803 aggregate function calls cannot contain window function calls
 SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 
 query R

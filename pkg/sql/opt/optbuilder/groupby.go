@@ -40,8 +40,6 @@ package optbuilder
 //   post-projection: 1 + col3
 
 import (
-	"fmt"
-
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -360,8 +358,6 @@ func (b *Builder) buildAggregateFunction(
 	}
 	aggInScopeColsBefore := len(aggInScope.cols)
 	for i, pexpr := range f.Exprs {
-		b.assertNoAggregationOrWindowing(pexpr, fmt.Sprintf("the argument of %s()", &f.Func))
-
 		// This synthesizes a new aggInScope column, unless the argument is a simple
 		// VariableOp.
 		col := b.buildScalarProjection(
