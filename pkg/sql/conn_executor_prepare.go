@@ -197,6 +197,9 @@ func (ex *connExecutor) prepare(
 			p.avoidCachedDescriptors = true
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
+		if testDisableTableLeases {
+			p.avoidCachedDescriptors = true
+		}
 
 		if err := p.prepare(ctx, stmt.AST); err != nil {
 			return err

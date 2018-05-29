@@ -218,7 +218,7 @@ func (tc *TableCollection) getTableVersion(
 	}
 
 	isSystemDB := tn.Catalog() == sqlbase.SystemDB.Name
-	if isSystemDB || testDisableTableLeases {
+	if isSystemDB {
 		// We don't go through the normal lease mechanism for system
 		// tables. The system.lease and system.descriptor table, in
 		// particular, are problematic because they are used for acquiring
@@ -301,17 +301,6 @@ func (tc *TableCollection) getTableVersionByID(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
-
-	if testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
-		if err != nil {
-			return nil, err
-		}
-		if err := filterTableState(table); err != nil {
-			return nil, err
-		}
-		return table, nil
-	}
 
 	for _, table := range tc.uncommittedTables {
 		if table.ID == tableID {
