@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import { createPath } from "src/hacks/createPath";
 import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
-import { LOGIN_PAGE } from "src/routes/login";
+import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
@@ -100,8 +100,20 @@ export const selectLoginState = createSelector(
     },
 );
 
-export function getLoginPage(location: Location) {
-  const query = !location ? undefined : {
+function shouldRedirect(location) {
+  if (!location) {
+    return false;
+  }
+
+  if (location.pathname === LOGOUT_PAGE) {
+    return false;
+  }
+
+  return true;
+}
+
+export function getLoginPage(location) {
+  const query = !shouldRedirect(location) ? undefined : {
     redirectTo: createPath({
       pathname: location.pathname,
       search: location.search,

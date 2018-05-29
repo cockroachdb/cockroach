@@ -7,6 +7,7 @@ import { Link } from "react-router";
 
 import { AdminUIState } from "src/redux/state";
 import { selectLoginState, LoginState, doLogout } from "src/redux/login";
+import { LOGOUT_PAGE } from "src/routes/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
