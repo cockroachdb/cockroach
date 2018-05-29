@@ -125,7 +125,7 @@ CREATE TABLE information_schema.administrable_role_authorizations (
 	IS_GRANTABLE STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -162,7 +162,7 @@ CREATE TABLE information_schema.applicable_roles (
 	IS_GRANTABLE STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -200,8 +200,8 @@ CREATE TABLE information_schema.column_privileges (
 	IS_GRANTABLE   STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
@@ -254,8 +254,8 @@ CREATE TABLE information_schema.columns (
 	GENERATION_EXPRESSION    STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			// Table descriptors already holds columns in-order.
@@ -294,7 +294,7 @@ CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -354,8 +354,8 @@ CREATE TABLE information_schema.constraint_column_usage (
 	CONSTRAINT_SCHEMA  STRING NOT NULL,
 	CONSTRAINT_NAME    STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, prefix, hideVirtual /*no constraints in virtual tables*/, func(
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -414,8 +414,8 @@ CREATE TABLE information_schema.key_column_usage (
 	ORDINAL_POSITION   INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, prefix, hideVirtual /*no constraints in virtual tables*/, func(
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -515,8 +515,8 @@ CREATE TABLE information_schema.referential_constraints (
 	TABLE_NAME                STRING NOT NULL,
 	REFERENCED_TABLE_NAME     STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, prefix, hideVirtual /*no constraints in virtual tables*/, func(
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -589,8 +589,8 @@ CREATE TABLE information_schema.schemata (
 	DEFAULT_CHARACTER_SET_NAME STRING,
 	SQL_PATH                   STRING
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
 			return forEachSchemaName(ctx, p, db, func(sc string) error {
 				return addRow(
 					tree.NewDString(db.Name), // catalog_name
@@ -615,8 +615,8 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE    STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
 			return forEachSchemaName(ctx, p, db, func(scName string) error {
 				privs := db.Privileges.Show()
 				dbNameStr := tree.NewDString(db.Name)
@@ -675,8 +675,8 @@ CREATE TABLE information_schema.sequences (
     INCREMENT                STRING NOT NULL,
     CYCLE_OPTION             STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, hideVirtual, /*no sequences in virtual schemas*/
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*no sequences in virtual schemas*/
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
@@ -718,8 +718,8 @@ CREATE TABLE information_schema.statistics (
 	STORING       STRING NOT NULL,
 	IMPLICIT      STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, hideVirtual, /* virtual tables have no indexes*/
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes*/
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
@@ -813,8 +813,8 @@ CREATE TABLE information_schema.table_constraints (
 	IS_DEFERRABLE      STRING NOT NULL,
 	INITIALLY_DEFERRED STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, prefix, hideVirtual, /* virtual tables have no constraints */
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
 				db *sqlbase.DatabaseDescriptor,
 				scName string,
@@ -860,8 +860,8 @@ CREATE TABLE information_schema.user_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, prefix, func(dbDesc *DatabaseDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, func(dbDesc *DatabaseDescriptor) error {
 			dbNameStr := tree.NewDString(dbDesc.Name)
 			for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
 				grantee := tree.NewDString(u)
@@ -901,9 +901,9 @@ CREATE TABLE information_schema.table_privileges (
 
 // populateTablePrivileges is used to populate both table_privileges and role_table_grants.
 func populateTablePrivileges(
-	ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error,
+	ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) error {
-	return forEachTableDesc(ctx, p, prefix, virtualMany,
+	return forEachTableDesc(ctx, p, dbContext, virtualMany,
 		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
@@ -946,8 +946,8 @@ CREATE TABLE information_schema.tables (
 	IS_INSERTABLE_INTO STRING NOT NULL,
 	VERSION            INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, virtualMany,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				if table.IsSequence() {
 					return nil
@@ -992,8 +992,8 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_DELETABLE       STRING,
     IS_TRIGGER_INSERTABLE_INTO STRING
 );`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, hideVirtual, /* virtual schemas have no views */
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				if !table.IsView() {
 					return nil
@@ -1046,7 +1046,7 @@ func forEachSchemaName(
 func forEachDatabaseDesc(
 	ctx context.Context,
 	p *planner,
-	prefix *DatabaseDescriptor,
+	dbContext *DatabaseDescriptor,
 	fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
@@ -1058,7 +1058,7 @@ func forEachDatabaseDesc(
 	var dbDescs []*sqlbase.DatabaseDescriptor
 	for _, desc := range descs {
 		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok &&
-			(prefix == nil || prefix.ID == dbDesc.ID) &&
+			(dbContext == nil || dbContext.ID == dbDesc.ID) &&
 			userCanSeeDatabase(ctx, p, dbDesc) {
 			dbDescs = append(dbDescs, dbDesc)
 		}
@@ -1077,7 +1077,7 @@ func forEachDatabaseDesc(
 // each table, the function will call fn with its respective database
 // and table descriptor.
 //
-// The prefix argument specifies in which database context we are
+// The dbContext argument specifies in which database context we are
 // requesting the descriptors. In context nil all descriptors are
 // visible, in non-empty contexts only the descriptors of that
 // database are visible.
@@ -1087,11 +1087,11 @@ func forEachDatabaseDesc(
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
-	prefix *DatabaseDescriptor,
+	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookup(ctx, p, prefix, virtualOpts, func(
+	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
 		db *sqlbase.DatabaseDescriptor,
 		scName string,
 		table *sqlbase.TableDescriptor,
@@ -1117,18 +1117,20 @@ const (
 func forEachTableDescAll(
 	ctx context.Context,
 	p *planner,
-	db *DatabaseDescriptor,
+	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, db, virtualOpts, true /* allowAdding */, func(
-		db *sqlbase.DatabaseDescriptor,
-		scName string,
-		table *sqlbase.TableDescriptor,
-		_ tableLookupFn,
-	) error {
-		return fn(db, scName, table)
-	})
+	return forEachTableDescWithTableLookupInternal(ctx,
+		p, dbContext, virtualOpts, true, /* allowAdding */
+		func(
+			db *sqlbase.DatabaseDescriptor,
+			scName string,
+			table *sqlbase.TableDescriptor,
+			_ tableLookupFn,
+		) error {
+			return fn(db, scName, table)
+		})
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
@@ -1136,18 +1138,18 @@ func forEachTableDescAll(
 // on demand. This is important for callers dealing with objects like foreign keys, where
 // the metadata for each object must be augmented by looking at the referenced table.
 //
-// The prefix argument specifies in which database context we are
+// The dbContext argument specifies in which database context we are
 // requesting the descriptors.  In context "" all descriptors are
 // visible, in non-empty contexts only the descriptors of that
 // database are visible.
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	prefix *DatabaseDescriptor,
+	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, virtualOpts, false /* allowAdding */, fn)
+	return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn)
 }
 
 // forEachTableDescWithTableLookupInternal is the logic that supports
@@ -1158,7 +1160,7 @@ func forEachTableDescWithTableLookup(
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
-	prefix *DatabaseDescriptor,
+	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	allowAdding bool,
 	fn func(*DatabaseDescriptor, string, *TableDescriptor, tableLookupFn) error,
@@ -1167,7 +1169,7 @@ func forEachTableDescWithTableLookupInternal(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(descs, prefix)
+	lCtx := newInternalLookupCtx(descs, dbContext)
 
 	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
 		// Virtual descriptors first.
