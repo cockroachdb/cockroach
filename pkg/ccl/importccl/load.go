@@ -329,6 +329,10 @@ func (i inserter) CPut(key, value, expValue interface{}) {
 	panic("unimplemented")
 }
 
+func (i inserter) Del(key ...interface{}) {
+	panic("unimplemented")
+}
+
 func (i inserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
