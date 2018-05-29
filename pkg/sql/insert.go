@@ -598,7 +598,8 @@ func GenerateInsertRow(
 			// available.
 			d, err := computeExprs[i].Eval(&evalCtx)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err,
+					"computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
 			}
 			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
 		}
