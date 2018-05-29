@@ -73,9 +73,15 @@ function LoginIndicator({ loginState }: { loginState: LoginState }) {
   }
 
   return (
-    <div className="login-indicator">
-        Logged in as {user}
-    </div>
+    <li className="login-indicator">
+        <div
+          className="login-indicator__initial"
+          title={`Signed in as ${user}`}
+        >
+          { user[0] }
+        </div>
+        <Link to="/logout">Sign Out</Link>
+    </li>
   );
 }
 
@@ -101,10 +107,8 @@ export default class Sidebar extends React.Component {
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
-        <div className="logged-in-user">
-          <LoginIndicatorConnected />
-        </div>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
+          <LoginIndicatorConnected />
           <IconLink to="/" icon={cockroachIcon} className="cockroach" />
         </ul>
       </nav>
