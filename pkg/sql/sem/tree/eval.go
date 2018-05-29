@@ -910,11 +910,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				j := left.(*DJSON).JSON
 				arr := *MustBeDArray(right)
 
-				var err error
-				err = nil
-
-				for _, idx := range arr.Array {
-					j, _, err = j.RemoveString(string(MustBeDString(idx)))
+				for _, str := range arr.Array {
+					var err error
+					j, _, err = j.RemoveString(string(MustBeDString(str)))
 
 					if err != nil {
 						return nil, err
