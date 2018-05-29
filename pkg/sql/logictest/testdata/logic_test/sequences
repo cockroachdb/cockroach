@@ -177,7 +177,7 @@ SELECT last_value FROM select_test
 1
 
 # Since this is a custom plan node, verify that column validation works.
-statement error pq: column name "foo" not found
+statement error pq: column "foo" does not exist
 SELECT foo from select_test
 
 query TTTTT colnames

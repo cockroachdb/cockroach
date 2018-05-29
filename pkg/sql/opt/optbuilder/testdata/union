@@ -735,7 +735,7 @@ error: EXCEPT types int and string cannot be matched
 build
 SELECT 1 UNION SELECT 3 ORDER BY z
 ----
-error (42703): column name "z" not found
+error (42703): column "z" does not exist
 
 build
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']

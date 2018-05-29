@@ -183,7 +183,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`1.1 # 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'a' > 2`, `unsupported comparison operator:`},
-		{`a`, `name "a" is not defined`},
+		{`a`, `column "a" does not exist`},
 		{`COS(*)`, `cannot use "*" in this context`},
 		{`a.*`, `cannot use "a.*" in this context`},
 		{`1 AND true`, `incompatible AND argument type: int`},

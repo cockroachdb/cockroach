@@ -334,14 +334,14 @@ TABLE xyzw
 build
 SELECT * FROM xyzw LIMIT x
 ----
-error (42703): column name "x" not found
+error (42703): column "x" does not exist
 
 # TODO(rytaft): Fix error message:
 # error: name "y" is not defined
 build
 SELECT * FROM xyzw OFFSET 1 + y
 ----
-error (42703): column name "y" not found
+error (42703): column "y" does not exist
 
 build
 SELECT * FROM xyzw LIMIT 3.3
