@@ -45,6 +45,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/build"
 	"io"
@@ -59,7 +60,7 @@ var buildCtx = func() build.Context {
 	return bc
 }()
 
-func collectFiles(path string) ([]string, error) {
+func collectFiles(path string, includeTest bool) ([]string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -72,10 +73,12 @@ func collectFiles(path string) ([]string, error) {
 	}
 
 	srcDir := cwd // top-level relative imports are relative to cwd
-	return collectFilesImpl(cwd, path, srcDir, map[string]struct{}{})
+	return collectFilesImpl(cwd, path, srcDir, includeTest, map[string]struct{}{})
 }
 
-func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]string, error) {
+func collectFilesImpl(
+	cwd, path, srcDir string, includeTest bool, seen map[string]struct{},
+) ([]string, error) {
 	// Skip packages we've seen before.
 	if _, ok := seen[path]; ok {
 		return nil, nil
@@ -93,10 +96,8 @@ func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]str
 		return nil, err
 	}
 
-	// Collect files recursively from the package and its dependencies.
-	var out []string
-	for _, sourceFiles := range [][]string{
-		// Include Go and Cgo source files, but skip test files.
+	sourceFileSets := [][]string{
+		// Include all Go and Cgo source files.
 		pkg.GoFiles, pkg.CgoFiles, pkg.IgnoredGoFiles, pkg.InvalidGoFiles,
 		pkg.CFiles, pkg.CXXFiles, pkg.MFiles, pkg.HFiles, pkg.FFiles, pkg.SFiles,
 		pkg.SwigFiles, pkg.SwigCXXFiles, pkg.SysoFiles,
@@ -104,9 +105,18 @@ func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]str
 		// Include the package directory itself so that the target is considered
 		// out-of-date if a new file is added to the directory.
 		{"."},
-	} {
+	}
+	importSets := [][]string{pkg.Imports}
+	if includeTest {
+		sourceFileSets = append(sourceFileSets, pkg.TestGoFiles, pkg.XTestGoFiles)
+		importSets = append(importSets, pkg.TestImports, pkg.XTestImports)
+	}
+
+	// Collect files recursively from the package and its dependencies.
+	var out []string
+	for _, sourceFiles := range sourceFileSets {
 		for _, sourceFile := range sourceFiles {
-			if isFileAlwaysIgnored(sourceFile) {
+			if isFileAlwaysIgnored(sourceFile) || strings.HasPrefix(sourceFile, "zcgo_flags") {
 				continue
 			}
 			f, err := filepath.Rel(cwd, filepath.Join(pkg.Dir, sourceFile))
@@ -116,12 +126,16 @@ func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]str
 			out = append(out, f)
 		}
 	}
-	for _, importPath := range pkg.Imports {
-		files, err := collectFilesImpl(cwd, importPath, pkg.Dir, seen)
-		if err != nil {
-			return nil, err
+	for _, imports := range importSets {
+		for _, imp := range imports {
+			// Only the root package's tests are included in test binaries, so
+			// unconditionally disable includeTest for imported packages.
+			files, err := collectFilesImpl(cwd, imp, pkg.Dir, false /* includeTest */, seen)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, files...)
 		}
-		out = append(out, files...)
 	}
 
 	return out, nil
@@ -157,8 +171,8 @@ var filenameEscaper = strings.NewReplacer(
 	`#`, `\#`,
 )
 
-func run(w io.Writer, path string) error {
-	files, err := collectFiles(path)
+func run(w io.Writer, path string, includeTest bool) error {
+	files, err := collectFiles(path, includeTest)
 	if err != nil {
 		return err
 	}
@@ -185,12 +199,15 @@ func run(w io.Writer, path string) error {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s <package>\n", os.Args[0])
+	includeTest := flag.Bool("test", false, "include test dependencies")
+	flag.Usage = func() { fmt.Fprintf(os.Stderr, "usage: %s [-test] <package>\n", os.Args[0]) }
+	flag.Parse()
+	if flag.NArg() != 1 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	if err := run(os.Stdout, os.Args[1]); err != nil {
+	if err := run(os.Stdout, flag.Arg(0), *includeTest); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err)
 		os.Exit(1)
 	}
