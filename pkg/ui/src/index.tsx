@@ -66,7 +66,7 @@ ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
       { /* login */}
-      { loginRoutes() }
+      { loginRoutes(store) }
 
       <Route path="/" component={Layout}>
         <IndexRedirect to="overview" />
