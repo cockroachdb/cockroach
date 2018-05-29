@@ -15,6 +15,7 @@
 package tree_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 func TestNormalizeTableName(t *testing.T) {
@@ -257,10 +259,10 @@ func TestClassifyColumnName(t *testing.T) {
 // fakeSource represents a fake column resolution environment for tests.
 type fakeSource struct {
 	t           *testing.T
-	knownTables knownTableList
+	knownTables []knownTable
 }
 
-type knownTableList []struct {
+type knownTable struct {
 	srcName tree.TableName
 	columns []tree.Name
 }
@@ -269,7 +271,7 @@ type colsRes tree.NameList
 
 func (c colsRes) ColumnSourceMeta() {}
 
-// FindSourceMatchingName implements the ColumnItemResolver interface.
+// FindSourceMatchingName is part of the ColumnItemResolver interface.
 func (f *fakeSource) FindSourceMatchingName(
 	_ context.Context, tn tree.TableName,
 ) (
@@ -300,7 +302,7 @@ func (f *fakeSource) FindSourceMatchingName(
 			}
 		}
 		if found {
-			return tree.MoreThanOne, nil, nil, fmt.Errorf("ambiguous table name: %s", &tn)
+			return tree.MoreThanOne, nil, nil, fmt.Errorf("ambiguous source name: %q", &tn)
 		}
 		found = true
 		prefix = &t.srcName
@@ -312,7 +314,7 @@ func (f *fakeSource) FindSourceMatchingName(
 	return tree.ExactlyOne, prefix, columns, nil
 }
 
-// FindSourceProvidingColumn implements the ColumnItemResolver interface.
+// FindSourceProvidingColumn is part of the ColumnItemResolver interface.
 func (f *fakeSource) FindSourceProvidingColumn(
 	_ context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
@@ -329,7 +331,7 @@ func (f *fakeSource) FindSourceProvidingColumn(
 				continue
 			}
 			if found {
-				return nil, nil, -1, fmt.Errorf("ambiguous column name: %s", &col)
+				return nil, nil, -1, f.ambiguousColumnErr(col)
 			}
 			found = true
 			colHint = c
@@ -339,16 +341,31 @@ func (f *fakeSource) FindSourceProvidingColumn(
 		}
 	}
 	if !found {
-		return nil, nil, -1, fmt.Errorf("unknown column name: %s", &col)
+		return nil, nil, -1, fmt.Errorf("column %q does not exist", &col)
 	}
 	return prefix, columns, colHint, nil
+}
+
+func (f *fakeSource) ambiguousColumnErr(col tree.Name) error {
+	var candidates bytes.Buffer
+	sep := ""
+	for i := range f.knownTables {
+		t := &f.knownTables[i]
+		for _, cn := range t.columns {
+			if cn == col {
+				fmt.Fprintf(&candidates, "%s%s.%s", sep, tree.ErrString(&t.srcName), cn)
+				sep = ", "
+			}
+		}
+	}
+	return fmt.Errorf("column reference %q is ambiguous (candidates: %s)", &col, candidates.String())
 }
 
 type colRes string
 
 func (c colRes) ColumnResolutionResult() {}
 
-// Resolve implements the ColumnItemResolver interface.
+// Resolve is part of the ColumnItemResolver interface.
 func (f *fakeSource) Resolve(
 	_ context.Context,
 	prefix *tree.TableName,
@@ -367,166 +384,61 @@ func (f *fakeSource) Resolve(
 		if columns[colHint] != col {
 			return nil, fmt.Errorf("programming error: invalid colHint %d", colHint)
 		}
-		return colRes(fmt.Sprintf("%s.%s(%d)", prefix, col, colHint)), nil
+		return colRes(fmt.Sprintf("%s.%s", prefix, col)), nil
 	}
-	for c, cn := range columns {
+	for _, cn := range columns {
 		if col == cn {
 			// Resolution succeeded.
-			return colRes(fmt.Sprintf("%s.%s(%d)", prefix, col, c)), nil
+			return colRes(fmt.Sprintf("%s.%s", prefix, col)), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown column name: %s", &col)
 }
 
-func newFakeSource() *fakeSource {
-	return &fakeSource{
-		knownTables: knownTableList{
-			{tree.MakeTableNameWithSchema("", "crdb_internal", "tables"), []tree.Name{"table_name"}},
-			{tree.MakeTableName("db1", "foo"), []tree.Name{"x"}},
-			{tree.MakeTableName("db2", "foo"), []tree.Name{"x"}},
-			{tree.MakeUnqualifiedTableName("bar"), []tree.Name{"x"}},
-			{tree.MakeTableName("db1", "kv"), []tree.Name{"k", "v"}},
-		},
+var _ sqlutils.ColumnItemResolverTester = &fakeSource{}
+
+// GetColumnItemResolver is part of the sqlutils.ColumnItemResolverTester
+// interface.
+func (f *fakeSource) GetColumnItemResolver() tree.ColumnItemResolver {
+	return f
+}
+
+// AddTable is part of the sqlutils.ColumnItemResolverTester interface.
+func (f *fakeSource) AddTable(tabName tree.TableName, colNames []tree.Name) {
+	f.knownTables = append(f.knownTables, knownTable{srcName: tabName, columns: colNames})
+}
+
+// ResolveQualifiedStarTestResults is part of the
+// sqlutils.ColumnItemResolverTester interface.
+func (f *fakeSource) ResolveQualifiedStarTestResults(
+	srcName *tree.TableName, srcMeta tree.ColumnSourceMeta,
+) (string, string, error) {
+	cs, ok := srcMeta.(colsRes)
+	if !ok {
+		return "", "", fmt.Errorf("fake resolver did not return colsRes, found %T instead", srcMeta)
 	}
+	nl := tree.NameList(cs)
+	return srcName.String(), nl.String(), nil
+}
+
+// ResolveColumnItemTestResults is part of the
+// sqlutils.ColumnItemResolverTester interface.
+func (f *fakeSource) ResolveColumnItemTestResults(res tree.ColumnResolutionResult) (string, error) {
+	c, ok := res.(colRes)
+	if !ok {
+		return "", fmt.Errorf("fake resolver did not return colRes, found %T instead", res)
+	}
+	return string(c), nil
 }
 
 func TestResolveQualifiedStar(t *testing.T) {
-	testCases := []struct {
-		in    string
-		tnout string
-		csout string
-		err   string
-	}{
-		{`a.*`, ``, ``, `no data source matches pattern: a.*`},
-		{`foo.*`, ``, ``, `ambiguous table name: foo`},
-		{`db1.public.foo.*`, `db1.public.foo`, `x`, ``},
-		{`db1.foo.*`, `db1.public.foo`, `x`, ``},
-		{`dbx.foo.*`, ``, ``, `no data source matches pattern: dbx.foo.*`},
-		{`kv.*`, `db1.public.kv`, `k, v`, ``},
-	}
-	fakeFrom := newFakeSource()
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			fakeFrom.t = t
-			tnout, csout, err := func() (string, string, error) {
-				stmt, err := parser.ParseOne(fmt.Sprintf("SELECT %s", tc.in))
-				if err != nil {
-					return "", "", err
-				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
-				c, err := v.NormalizeVarName()
-				if err != nil {
-					return "", "", err
-				}
-				acs, ok := c.(*tree.AllColumnsSelector)
-				if !ok {
-					return "", "", fmt.Errorf("var name %s (%T) did not resolve to AllColumnsSelector, found %T instead",
-						v, v, c)
-				}
-				tn, res, err := acs.Resolve(context.Background(), fakeFrom)
-				if err != nil {
-					return "", "", err
-				}
-				cs, ok := res.(colsRes)
-				if !ok {
-					return "", "", fmt.Errorf("fake resolver did not return colsRes, found %T instead", res)
-				}
-				nl := tree.NameList(cs)
-				return tn.String(), nl.String(), nil
-			}()
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
-			}
-			if tc.err != "" {
-				return
-			}
-
-			if tc.tnout != tnout {
-				t.Fatalf("%s: expected tn %s, but found %s", tc.in, tc.tnout, tnout)
-			}
-			if tc.csout != csout {
-				t.Fatalf("%s: expected cs %s, but found %s", tc.in, tc.csout, csout)
-			}
-		})
-	}
+	f := &fakeSource{t: t}
+	sqlutils.RunResolveQualifiedStarTest(t, f)
 }
 
 func TestResolveColumnItem(t *testing.T) {
-	testCases := []struct {
-		in  string
-		out string
-		err string
-	}{
-		{`a`, ``, `unknown column name`},
-		{`x`, ``, `ambiguous column name`},
-		{`k`, `db1.public.kv.k(0)`, ``},
-		{`v`, `db1.public.kv.v(1)`, ``},
-		{`table_name`, `"".crdb_internal.tables.table_name(0)`, ``},
-
-		{`blix.x`, ``, `no data source matches prefix: blix`},
-		{`"".x`, ``, `invalid column name: ""\.x`},
-		{`foo.x`, ``, `ambiguous table name`},
-		{`kv.k`, `db1.public.kv.k(0)`, ``},
-		{`bar.x`, `bar.x(0)`, ``},
-		{`tables.table_name`, `"".crdb_internal.tables.table_name(0)`, ``},
-
-		{`a.b.x`, ``, `no data source matches prefix: a\.b`},
-		{`crdb_internal.tables.table_name`, `"".crdb_internal.tables.table_name(0)`, ``},
-		{`public.foo.x`, ``, `ambiguous table name`},
-		{`public.kv.k`, `db1.public.kv.k(0)`, ``},
-
-		// CockroachDB extension: d.t.x -> d.public.t.x
-		{`db1.foo.x`, `db1.public.foo.x(0)`, ``},
-		{`db2.foo.x`, `db2.public.foo.x(0)`, ``},
-
-		{`a.b.c.x`, ``, `no data source matches prefix: a\.b\.c`},
-		{`"".crdb_internal.tables.table_name`, `"".crdb_internal.tables.table_name(0)`, ``},
-		{`db1.public.foo.x`, `db1.public.foo.x(0)`, ``},
-		{`db2.public.foo.x`, `db2.public.foo.x(0)`, ``},
-		{`db1.public.kv.v`, `db1.public.kv.v(1)`, ``},
-	}
-
-	fakeFrom := newFakeSource()
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			fakeFrom.t = t
-			out, err := func() (string, error) {
-				stmt, err := parser.ParseOne(fmt.Sprintf("SELECT %s", tc.in))
-				if err != nil {
-					return "", err
-				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
-				c, err := v.NormalizeVarName()
-				if err != nil {
-					return "", err
-				}
-				ci, ok := c.(*tree.ColumnItem)
-				if !ok {
-					return "", fmt.Errorf("var name %s (%T) did not resolve to ColumnItem, found %T instead",
-						v, v, c)
-				}
-				res, err := ci.Resolve(context.Background(), fakeFrom)
-				if err != nil {
-					return "", err
-				}
-				s, ok := res.(colRes)
-				if !ok {
-					return "", fmt.Errorf("fake resolver did not return colRes, found %T instead", res)
-				}
-				return string(s), nil
-			}()
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
-			}
-			if tc.err != "" {
-				return
-			}
-
-			if tc.out != out {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.out, out)
-			}
-		})
-	}
+	f := &fakeSource{t: t}
+	sqlutils.RunResolveColumnItemTest(t, f)
 }
 
 // fakeMetadata represents a fake table resolution environment for tests.

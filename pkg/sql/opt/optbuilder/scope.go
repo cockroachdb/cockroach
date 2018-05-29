@@ -540,6 +540,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if err != nil {
 			panic(builderError{err})
 		}
+		if isGenerator(def) {
+			panic(unimplementedf("generator functions are not supported"))
+		}
+
 		if len(t.Exprs) != 1 {
 			break
 		}
