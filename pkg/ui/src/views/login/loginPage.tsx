@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -55,7 +56,27 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         });
   }
 
+  renderError() {
+    const { error } = this.props.loginState;
+
+    if (!error) {
+      return null;
+    }
+
+    let message = "Invalid username or password.";
+    if (error.message !== "Unauthorized") {
+        message = error.message;
+    }
+    return (
+      <div className="login-page__error">Unable to log in: { message }</div>
+    );
+  }
+
   render() {
+    const inputClasses = classNames("input-text", {
+      "input-text--error": !!this.props.loginState.error,
+    });
+
     return (
       <div className="login-page">
         <Helmet>
@@ -66,22 +87,23 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
           <p className="aside">
             Please contact your database administrator for
             account access and password restoration.
+
+          </p>
+          <p className="aside">
             For more information, see{" "}
             <a href={docsURL("admin-ui-overview.html")}>the documentation</a>.
           </p>
-          {this.props.loginState.error
-            ? <div className="login-page__error">Login error: {this.props.loginState.error}</div>
-            : null}
+          {this.renderError()}
           <form onSubmit={this.handleSubmit}>
             <input
               type="text"
-              className="input-text"
+              className={inputClasses}
               onChange={this.handleUpdateUsername}
               value={this.state.username}
             /><br />
             <input
               type="password"
-              className="input-text"
+              className={inputClasses}
               onChange={this.handleUpdatePassword}
               value={this.state.password}
             /><br />

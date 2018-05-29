@@ -16,7 +16,7 @@
     margin-top 12px
     line-height 24px
     letter-spacing 1px
-    color #666
+    color $body-color
     width 350px
 
   .input-text
@@ -28,6 +28,9 @@
     border-radius 4px
     margin 12px 0
     color $body-color
+
+    &--error
+      border-color $alert-color
 
   .submit-button
     text-transform uppercase
@@ -41,3 +44,7 @@
     margin 24px 0
     color $background-color
     background-color $link-color
+
+  &__error
+    color $alert-color
+    margin 12px 0
