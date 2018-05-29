@@ -2,7 +2,7 @@
 
 #
 # Tests that verify DistSQL support and auto mode determination.
-# The cluster size isn't important for these tests.
+# The cluster size or distsql mode aren't important for these tests.
 #
 
 statement ok
