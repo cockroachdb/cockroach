@@ -989,6 +989,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				Txn:     txn,
 				Replica: desc,
 			}
+			assignSeqNumsForReqs(txn, &pArgs)
 			pReply, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &pArgs)
 			test.check(manual.UnixNano(), pReply, pErr)
 		}()
@@ -1046,11 +1047,12 @@ func TestStoreAnnotateNow(t *testing.T) {
 				defer stopper.Stop(context.TODO())
 				store := createTestStoreWithConfig(t, stopper, &cfg)
 				var txn *roachpb.Transaction
+				pArgs := putArgs(test.key, []byte("value"))
 				if useTxn {
 					txn = newTransaction("test", test.key, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 					txn.MaxTimestamp = hlc.MaxTimestamp
+					assignSeqNumsForReqs(txn, &pArgs)
 				}
-				pArgs := putArgs(test.key, []byte("value"))
 				ba := roachpb.BatchRequest{
 					Header: roachpb.Header{
 						Txn:     txn,
@@ -1073,7 +1075,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
-	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a")}})
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
 	ba.Add(&roachpb.NoopRequest{})
 
 	br, pErr := store.Send(context.Background(), ba)
@@ -1424,7 +1426,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"))
 		h := roachpb.Header{Txn: pushee}
-		pushee.Sequence++
+		assignSeqNumsForReqs(pushee, &pArgs)
 		if _, err := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), h, &pArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -1458,7 +1460,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			case <-time.After(10 * time.Millisecond):
 				// Send an end transaction to allow the original push to complete.
 				etArgs, h := endTxnArgs(pushee, true)
-				pushee.Sequence++
+				assignSeqNumsForReqs(pushee, &etArgs)
 				if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -1487,7 +1489,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1)
 	h := roachpb.Header{Txn: pushee}
-	pushee.Sequence++
+	assignSeqNumsForReqs(pushee, &args)
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), h, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1495,6 +1497,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	// Now, try a put using the pusher's txn.
 	h.Txn = pusher
 	args.Increment = 2
+	assignSeqNumsForReqs(pusher, &args)
 	if resp, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &args); pErr != nil {
 		t.Errorf("expected increment to succeed: %s", pErr)
 	} else if reply := resp.(*roachpb.IncrementResponse); reply.NewValue != 2 {
@@ -1550,6 +1553,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		{
 			_, btH := beginTxnArgs(key, pushee)
 			args := putArgs(key, []byte("value2"))
+			assignSeqNumsForReqs(pushee, &args)
 			if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), btH, &args); pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -1560,6 +1564,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		pusher.OrigTimestamp.Forward(now)
 		pusher.Timestamp.Forward(now)
 		gArgs := getArgs(key)
+		assignSeqNumsForReqs(pusher, &gArgs)
 		firstReply, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: pusher}, &gArgs)
 		if test.resolvable {
 			if pErr != nil {
@@ -1575,7 +1580,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// commit timestamp is greater than pusher's Timestamp.
 			// Otherwise, verify commit fails with TransactionRetryError.
 			etArgs, h := endTxnArgs(pushee, true)
-			pushee.Sequence++
+			assignSeqNumsForReqs(pushee, &etArgs)
 			reply, cErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs)
 
 			minExpTS := pusher.Timestamp
@@ -1639,6 +1644,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	pushee := newTransaction("test", key, 1, enginepb.SNAPSHOT, store.cfg.Clock)
 	h := roachpb.Header{Txn: pushee}
 	args.Value.SetBytes([]byte("value2"))
+	assignSeqNumsForReqs(pushee, &args)
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), h, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1647,6 +1653,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	gArgs := getArgs(key)
 	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 	h.Txn = pusher
+	assignSeqNumsForReqs(pusher, &gArgs)
 	if reply, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &gArgs); pErr != nil {
 		t.Errorf("expected read to succeed: %s", pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
@@ -1659,7 +1666,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// SNAPSHOT isolation, the end should work, but verify the txn
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs, h := endTxnArgs(pushee, true)
-	h.Txn.Sequence++
+	assignSeqNumsForReqs(pushee, &etArgs)
 	reply, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -1686,6 +1693,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// First, lay down intent from pushee.
 	args := putArgs(key, []byte("value1"))
+	assignSeqNumsForReqs(pushee, &args)
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: pushee}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1742,7 +1750,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Finally, try to end the pushee's transaction; it should have
 	// been aborted.
 	etArgs, h := endTxnArgs(pushee, true)
-	pushee.Sequence++
+	assignSeqNumsForReqs(pushee, &etArgs)
 	_, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs)
 	if pErr == nil {
 		t.Errorf("unexpected success committing transaction")
@@ -1804,13 +1812,14 @@ func TestStoreReadInconsistent(t *testing.T) {
 				txnB := newTransaction("testB", keyB, priority, enginepb.SERIALIZABLE, store.cfg.Clock)
 				for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 					args.Key = txn.Key
+					assignSeqNumsForReqs(txn, &args)
 					if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
 						t.Fatal(pErr)
 					}
 				}
 				// End txn B, but without resolving the intent.
 				etArgs, h := endTxnArgs(txnB, true)
-				txnB.Sequence++
+				assignSeqNumsForReqs(txnB, &etArgs)
 				if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -2104,10 +2113,10 @@ func TestStoreScanIntents(t *testing.T) {
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, enginepb.SERIALIZABLE, store.cfg.Clock)
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
+			assignSeqNumsForReqs(txn, &args)
 			if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			txn.Sequence++
 			txn.Writing = true
 		}
 
@@ -2153,10 +2162,10 @@ func TestStoreScanIntents(t *testing.T) {
 			} else {
 				// Commit the unpushable txn so the read can finish.
 				etArgs, h := endTxnArgs(txn, true)
-				txn.Sequence++
 				for _, key := range keys {
 					etArgs.IntentSpans = append(etArgs.IntentSpans, roachpb.Span{Key: key})
 				}
+				assignSeqNumsForReqs(txn, &etArgs)
 				if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -2198,7 +2207,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
 		keys = append(keys, key)
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
-		txn.Sequence++
+		assignSeqNumsForReqs(txn, &args)
 		if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -2209,7 +2218,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// of Txn entries in this test, the Txn entry would be removed and later
 	// attempts to resolve the intents would fail.
 	etArgs, h := endTxnArgs(txn, true)
-	txn.Sequence++
+	assignSeqNumsForReqs(txn, &etArgs)
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2245,7 +2254,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	key1 := roachpb.Key("bar")
 	txn1 := newTransaction("test1", key1, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 	args := putArgs(key1, []byte("value1"))
-	txn1.Sequence++
+	assignSeqNumsForReqs(txn1, &args)
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: txn1}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2254,7 +2263,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	key2 := roachpb.Key("foo")
 	txn2 := newTransaction("test2", key2, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 	args = putArgs(key2, []byte("value2"))
-	txn2.Sequence++
+	assignSeqNumsForReqs(txn2, &args)
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.TestSender(), roachpb.Header{Txn: txn2}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2305,6 +2314,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
 		ba.Add(&pArgs)
+		assignSeqNumsForReqs(txn, &pArgs)
 	}
 	ba.Header = roachpb.Header{Txn: txn}
 	if _, pErr := store.TestSender().Send(context.Background(), ba); pErr != nil {
@@ -2397,7 +2407,7 @@ func TestStoreBadRequests(t *testing.T) {
 			test.header = &roachpb.Header{}
 		}
 		if test.header.Txn != nil {
-			test.header.Txn.Sequence++
+			assignSeqNumsForReqs(test.header.Txn, test.args)
 		}
 		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), *test.header, test.args); !testutils.IsPError(pErr, test.err) {
 			t.Errorf("%d expected error %q, got error %v", i, test.err, pErr)
@@ -2494,7 +2504,7 @@ func TestStoreGCThreshold(t *testing.T) {
 
 	gcr := roachpb.GCRequest{
 		// Bogus span to make it a valid request.
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("b"),
 		},

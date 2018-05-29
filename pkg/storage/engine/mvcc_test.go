@@ -3035,12 +3035,12 @@ func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
 		// Start with sequence 2, batch index 1.
 		txn := *txn1
 		txn.Sequence = 2
-		txn.BatchIndex = 1
+		txn.DeprecatedBatchIndex = 1
 		if err := MVCCPut(context.Background(), engine, nil, key, ts, value1, &txn); err != nil {
 			t.Fatal(err)
 		}
 
-		txn.Sequence, txn.BatchIndex = tc.sequence, tc.batchIndex
+		txn.Sequence, txn.DeprecatedBatchIndex = tc.sequence, tc.batchIndex
 		err := MVCCPut(context.Background(), engine, nil, key, ts, value2, &txn)
 		_, ok := err.(*roachpb.TransactionRetryError)
 		if !tc.expRetry && ok {

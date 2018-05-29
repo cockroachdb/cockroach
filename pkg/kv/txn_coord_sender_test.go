@@ -436,9 +436,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	{
 		var ba roachpb.BatchRequest
 		ba.Add(&roachpb.EndTransactionRequest{
-			Span:   roachpb.Span{Key: initialTxn.Proto().Key},
-			Commit: false,
-			Poison: true,
+			RequestHeader: roachpb.RequestHeader{Key: initialTxn.Proto().Key},
+			Commit:        false,
+			Poison:        true,
 		})
 		ba.Txn = initialTxn.Proto()
 		if _, pErr := tc.TxnCoordSenderFactory.wrapped.Send(context.Background(), ba); pErr != nil {
@@ -465,7 +465,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(db *client.DB, txn *roachpb.Transaction) (*roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 	}
@@ -1211,8 +1211,8 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	key := roachpb.Key("test")
-	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
-	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
 	txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
 	ba.Txn = &txn
@@ -1269,8 +1269,8 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
-			ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
-			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
+			ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
 			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
 			ba.Txn = &txn

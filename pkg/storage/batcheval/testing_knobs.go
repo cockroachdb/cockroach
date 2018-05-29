@@ -32,4 +32,13 @@ type TestingKnobs struct {
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64
+	// DisallowUnsequencedTransactionalWrites enables an assertion that all
+	// transactional writes include Request-scoped sequence numbers. This
+	// assertion is not safe to enable by default, because it would trigger
+	// in mixed-version clusters. However, it is useful in testing to ensure
+	// that tests properly assign these sequence numbers.
+	//
+	// TODO(nvanbenschoten): Remove this testing knob in 2.2. The corresponding
+	// assertion can be performed unconditionally.
+	DisallowUnsequencedTransactionalWrites bool
 }

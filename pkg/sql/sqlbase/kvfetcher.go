@@ -271,13 +271,13 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].Span = f.spans[i]
+			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].Span = f.spans[i]
+			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}

@@ -28,9 +28,9 @@ func DefaultDeclareKeys(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	if roachpb.IsReadOnly(req) {
-		spans.Add(spanset.SpanReadOnly, req.Header())
+		spans.Add(spanset.SpanReadOnly, req.Header().Span())
 	} else {
-		spans.Add(spanset.SpanReadWrite, req.Header())
+		spans.Add(spanset.SpanReadWrite, req.Header().Span())
 	}
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())

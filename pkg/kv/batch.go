@@ -35,7 +35,7 @@ var emptySpan = roachpb.Span{}
 // then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
 func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
-		header := args.Header()
+		header := args.Header().Span()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
@@ -103,15 +103,18 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 	truncBA := ba
 	truncBA.Requests = nil
 	for pos, arg := range ba.Requests {
-		hasRequest, newHeader, err := truncateOne(arg.GetInner())
+		hasRequest, newSpan, err := truncateOne(arg.GetInner())
 		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
-			if inner := ba.Requests[pos].GetInner(); newHeader.EqualValue(inner.Header()) {
+			inner := ba.Requests[pos].GetInner()
+			oldHeader := inner.Header()
+			if newSpan.EqualValue(oldHeader.Span()) {
 				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
 				var union roachpb.RequestUnion
+				oldHeader.SetSpan(newSpan)
 				shallowCopy := inner.ShallowCopy()
-				shallowCopy.SetHeader(newHeader)
+				shallowCopy.SetHeader(oldHeader)
 				union.MustSetInner(shallowCopy)
 				truncBA.Requests = append(truncBA.Requests, union)
 			}

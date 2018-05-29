@@ -164,7 +164,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	// No request in progress. Let's propose a Lease command asynchronously.
 	llHandle := p.newHandle()
-	reqSpan := roachpb.Span{
+	reqHeader := roachpb.RequestHeader{
 		Key: startKey,
 	}
 	var leaseReq roachpb.Request
@@ -194,14 +194,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
-			Span:      reqSpan,
-			Lease:     reqLease,
-			PrevLease: status.Lease,
+			RequestHeader: reqHeader,
+			Lease:         reqLease,
+			PrevLease:     status.Lease,
 		}
 	} else {
 		minProposedTS := p.repl.mu.minLeaseProposedTS
 		leaseReq = &roachpb.RequestLeaseRequest{
-			Span:          reqSpan,
+			RequestHeader: reqHeader,
 			Lease:         reqLease,
 			PrevLease:     status.Lease,
 			MinProposedTS: &minProposedTS,

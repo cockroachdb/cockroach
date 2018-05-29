@@ -136,7 +136,7 @@ func TestServerStartClock(t *testing.T) {
 	// actually not needed because other commands run during server
 	// initialization, but we cannot guarantee that's going to stay that way.
 	get := &roachpb.GetRequest{
-		Span: roachpb.Span{Key: roachpb.Key("a")},
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
 	}
 	if _, err := client.SendWrapped(
 		context.Background(), s.DB().GetSender(), get,
@@ -292,7 +292,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
 	get := &roachpb.GetRequest{
-		Span: roachpb.Span{Key: writes[0]},
+		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
 	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
@@ -321,7 +321,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	del := &roachpb.DeleteRangeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    writes[0],
 			EndKey: writes[len(writes)-1].Next(),
 		},

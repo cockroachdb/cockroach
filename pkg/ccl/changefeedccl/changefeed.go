@@ -301,10 +301,10 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 	for _, span := range cf.spans {
 		header := roachpb.Header{Timestamp: endTime}
 		req := &roachpb.ExportRequest{
-			Span:       roachpb.Span{Key: span.Key, EndKey: span.EndKey},
-			StartTime:  startTime,
-			MVCCFilter: roachpb.MVCCFilter_Latest,
-			ReturnSST:  true,
+			RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			StartTime:     startTime,
+			MVCCFilter:    roachpb.MVCCFilter_Latest,
+			ReturnSST:     true,
 		}
 		res, pErr := client.SendWrappedWith(ctx, cf.db.GetSender(), header, req)
 		if pErr != nil {

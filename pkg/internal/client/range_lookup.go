@@ -310,7 +310,7 @@ func lookupRangeFwdScan(
 		ba.MaxSpanRequestKeys = prefetchNum + 1
 	}
 	ba.Add(&roachpb.ScanRequest{
-		Span: bounds.AsRawSpanWithNoLocals(),
+		RequestHeader: roachpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
 		// NOTE (subtle): we want the scan to return intents as well as values
 		// when scanning inconsistently. The reason is because it's not clear
 		// whether the intent or the previous value points to the correct
@@ -399,7 +399,7 @@ func lookupRangeRevScan(
 	ba.ReadConsistency = rc
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
-		Span: revBounds.AsRawSpanWithNoLocals(),
+		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
 		// See explanation above in lookupRangeFwdScan.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
@@ -480,7 +480,7 @@ func LegacyRangeLookup(
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
 	ba.Add(&roachpb.DeprecatedRangeLookupRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: keys.RangeMetaKey(rkey).AsRawKey(),
 		},
 		MaxRanges: int32(prefetchNum + 1),

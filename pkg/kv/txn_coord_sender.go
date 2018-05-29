@@ -697,18 +697,18 @@ func (tc *TxnCoordSender) tryUpdatingTxnSpans(
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
-					Span:  u,
-					Write: write,
+					RequestHeader: roachpb.RequestHeaderFromSpan(u),
+					Write:         write,
 				}
 			} else {
 				req = &roachpb.RefreshRangeRequest{
-					Span:  u,
-					Write: write,
+					RequestHeader: roachpb.RequestHeaderFromSpan(u),
+					Write:         write,
 				}
 			}
 			refreshSpanBa.Add(req)
 			log.VEventf(ctx, 2, "updating span %s @%s - @%s to avoid serializable restart",
-				req.Header(), refreshTxn.OrigTimestamp, refreshTxn.Timestamp)
+				req.Header().Span(), refreshTxn.OrigTimestamp, refreshTxn.Timestamp)
 		}
 	}
 	addRefreshes(refreshReads, false)
@@ -1012,7 +1012,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 			// clients to specify intents.
 			resp, pErr := client.SendWrappedWith(
 				ctx, tc.wrapped, roachpb.Header{Txn: &txn}, &roachpb.EndTransactionRequest{
-					Span: roachpb.Span{
+					RequestHeader: roachpb.RequestHeader{
 						Key: txn.Key,
 					},
 					Commit:      false,
@@ -1381,7 +1381,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 		b := txn.NewBatch()
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {
-			req := arg.GetInner()
+			req := arg.GetInner().ShallowCopy()
 			b.AddRawRequest(req)
 		}
 		err := txn.CommitInBatch(ctx, b)

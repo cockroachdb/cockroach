@@ -38,7 +38,7 @@ import (
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
 	return &roachpb.AdminMergeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}

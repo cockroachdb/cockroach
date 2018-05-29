@@ -163,7 +163,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	// make this part optional.
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: desc.StartKey.AsRawKey(),
 		},
 	})

@@ -450,6 +450,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &dArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Timestamp: datum.ts,
@@ -464,6 +465,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &pArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Timestamp: datum.ts,
@@ -841,12 +843,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		// 5 puts per transaction.
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%d", i, j)), []byte("value"))
+			assignSeqNumsForReqs(txns[i], &pArgs)
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
-			txns[i].Sequence++
 		}
 	}
 

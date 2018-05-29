@@ -1969,7 +1969,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	gcr := roachpb.GCRequest{
 		// Bogus span to make it a valid request.
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.MakeTablePrefix(keys.MinUserDescID),
 			EndKey: keys.MaxKey,
 		},

@@ -62,7 +62,7 @@ import (
 // adminSplitArgs creates an AdminSplitRequest for the provided split key.
 func adminSplitArgs(splitKey roachpb.Key) *roachpb.AdminSplitRequest {
 	return &roachpb.AdminSplitRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
 		},
 		SplitKey: splitKey,
@@ -406,6 +406,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
+	lIncArgs.Sequence = lTxn.Sequence
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		Txn: &lTxn,
 	}, lIncArgs); pErr != nil {
@@ -414,6 +415,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
 	rTxn := txn
 	rTxn.Sequence++
+	rIncArgs.Sequence = rTxn.Sequence
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		Txn: &rTxn,
 	}, rIncArgs); pErr != nil {
@@ -1292,7 +1294,7 @@ func runSetupSplitSnapshotRace(
 	// Scan the meta ranges to resolve all intents
 	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0],
 		&roachpb.ScanRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key:    keys.MetaMin,
 				EndKey: keys.MetaMax,
 			},
@@ -1417,13 +1419,13 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 			return nil
 		}
 		log.Infof(ctx, "received lease request (%s, %s)",
-			leaseReq.Span, leaseReq.Lease)
+			leaseReq.Span(), leaseReq.Lease)
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}
 		log.Infof(ctx,
 			"refusing lease request (%s, %s) because %+v held lease for LHS of split",
-			leaseReq.Span, leaseReq.Lease, forbiddenDesc)
+			leaseReq.Span(), leaseReq.Lease, forbiddenDesc)
 		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
 	}
 
@@ -1757,7 +1759,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 		WallTime: 3E9,
 	}
 	gcArgs := &roachpb.GCRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    leftKey,
 			EndKey: rightKey,
 		},
@@ -2047,7 +2049,7 @@ func writeRandomTimeSeriesDataToRange(
 					t.Fatal(err)
 				}
 				mArgs := roachpb.MergeRequest{
-					Span: roachpb.Span{
+					RequestHeader: roachpb.RequestHeader{
 						Key: encoding.EncodeVarintAscending(keyPrefix, idata.StartTimestampNanos),
 					},
 					Value: value,
@@ -2236,7 +2238,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		_, pErr := store.LookupReplica(roachpb.RKey(splitKey), nil).AdminSplit(
 			context.TODO(),
 			roachpb.AdminSplitRequest{
-				Span: roachpb.Span{
+				RequestHeader: roachpb.RequestHeader{
 					Key: splitKey,
 				},
 				SplitKey: splitKey,
@@ -2349,7 +2351,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 					ba := roachpb.BatchRequest{}
 					ba.RangeID = lhs.RangeID
 					ba.Add(&roachpb.PushTxnRequest{
-						Span: roachpb.Span{
+						RequestHeader: roachpb.RequestHeader{
 							Key: txn.Proto().Key,
 						},
 						Now:       store.Clock().Now(),
@@ -2730,7 +2732,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		// perform a continuation lookup.
 		scanStart := roachpb.Key(keys.MakeTablePrefix(tableID - 2)) // 49
 		scanEnd := scanStart.PrefixEnd()                            // 50
-		span := roachpb.Span{
+		header := roachpb.RequestHeader{
 			Key:    scanStart,
 			EndKey: scanEnd,
 		}
@@ -2738,9 +2740,9 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		var lookupReq roachpb.Request
 		if rev {
 			// A ReverseScanRequest will trigger a reverse RangeLookup scan.
-			lookupReq = &roachpb.ReverseScanRequest{Span: span}
+			lookupReq = &roachpb.ReverseScanRequest{RequestHeader: header}
 		} else {
-			lookupReq = &roachpb.ScanRequest{Span: span}
+			lookupReq = &roachpb.ScanRequest{RequestHeader: header}
 		}
 		if _, err := client.SendWrapped(ctx, s.DB().GetSender(), lookupReq); err != nil {
 			t.Fatalf("%T %v", err.GoError(), err)
@@ -2941,6 +2943,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	// priority).
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key2)).AsRawKey(), data)
 	txn.Sequence++
+	pArgs.Sequence = txn.Sequence
 	if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}

@@ -146,7 +146,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	var rows rowCounter
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
-		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Span.Key)
+		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Key)
 
 		dir, err := MakeExportStorage(ctx, file.Dir, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
