@@ -8,7 +8,10 @@ import _ from "lodash";
 import { Action, Dispatch } from "redux";
 import { assert } from "chai";
 import moment from "moment";
+import { hashHistory } from "react-router";
+import { push } from "react-router-redux";
 
+import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
@@ -177,16 +180,30 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req, this.requestTimeout).then((data) => {
-        // Dispatch the results to the store.
-        dispatch(this.receiveData(data, req));
-      }).catch((error: Error) => {
-        // If an error occurred during the fetch, add it to the store.
-        // Wait 1s to record the error to avoid spamming errors.
-        // TODO(maxlang): Fix error handling more comprehensively.
-        // Tracked in #8699
-        setTimeout(() => dispatch(this.errorData(error, req)), 1000);
-      }).then(() => {
+      return this.apiEndpoint(req, this.requestTimeout).then(
+        (data) => {
+          // Dispatch the results to the store.
+          dispatch(this.receiveData(data, req));
+        },
+        (error: Error) => {
+          // TODO(couchand): This is a really myopic way to check for HTTP
+          // codes.  However, at the moment that's all that the underlying
+          // timeoutFetch offers.  Major changes to this plumbing are warranted.
+          if (error.message === "Unauthorized") {
+            // TODO(couchand): This is an unpleasant dependency snuck in here...
+            const location = hashHistory.getCurrentLocation();
+            if (location && !location.pathname.startsWith("/login")) {
+              dispatch(push(getLoginPage(location)));
+            }
+          }
+
+          // If an error occurred during the fetch, add it to the store.
+          // Wait 1s to record the error to avoid spamming errors.
+          // TODO(maxlang): Fix error handling more comprehensively.
+          // Tracked in #8699
+          setTimeout(() => dispatch(this.errorData(error, req)), 1000);
+        },
+      ).then(() => {
         // Invalidate data after the invalidation period if one exists.
         if (this.invalidationPeriod) {
           setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
