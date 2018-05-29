@@ -408,6 +408,11 @@ func isAggregate(def *tree.FunctionDefinition) bool {
 	return ok
 }
 
+func isGenerator(def *tree.FunctionDefinition) bool {
+	_, ok := builtins.Generators[strings.ToLower(def.Name)]
+	return ok
+}
+
 var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
 	"array_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructArrayAgg(argList[0])
