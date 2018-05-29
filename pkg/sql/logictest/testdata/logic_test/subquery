@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # Tests for subqueries (SELECT statements which are part of a bigger statement).
 
@@ -157,21 +157,6 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 statement ok
 INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
-query TTT
-EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
-----
-root                          ·          ·
- ├── split                    ·          ·
- │    └── values              ·          ·
- │                            size       1 column, 1 row
- └── subquery                 ·          ·
-      │                       id         @S1
-      │                       sql        (SELECT 42)
-      │                       exec mode  one row
-      └── limit               ·          ·
-           └── render         ·          ·
-                └── emptyrow  ·          ·
-
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
@@ -193,23 +178,6 @@ SELECT (SELECT * FROM abc)
 
 query error more than one row returned by a subquery used as an expression
 SELECT (SELECT a FROM abc)
-
-query TTT
-EXPLAIN SELECT EXISTS (SELECT a FROM abc)
-----
-root                      ·          ·
- ├── render               ·          ·
- │    └── emptyrow        ·          ·
- └── subquery             ·          ·
-      │                   id         @S1
-      │                   sql        EXISTS (SELECT a FROM abc)
-      │                   exec mode  exists
-      └── limit           ·          ·
-           └── render     ·          ·
-                └── scan  ·          ·
-·                         table      abc@primary
-·                         spans      ALL
-·                         limit      1
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
@@ -292,6 +260,11 @@ SELECT * FROM xyz WHERE x = (SELECT MIN(x) FROM xyz)
 
 query III
 SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
+----
+10 11 12
+
+query III
+SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz WHERE EXISTS(SELECT * FROM xyz WHERE z=x+3))
 ----
 10 11 12
 
@@ -409,14 +382,6 @@ foo1 moo2 moo3
 2    4    4
 3    1    1
 
-query TTT
-EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
-----
-sort         ·      ·
- │           order  +foo1
- └── values  ·      ·
-·            size   3 columns, 3 rows
-
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
 ----
@@ -462,27 +427,6 @@ INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz
 ----
 true
 
-# check that residual filters are not expanded twice
-query TTTTT
-EXPLAIN (VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
-----
-root                 ·          ·                    (x)                          x!=NULL; key(x)
- ├── render          ·          ·                    (x)                          x!=NULL; key(x)
- │    │              render 0   test.public.xyz.x    ·                            ·
- │    └── scan       ·          ·                    (x, y[omitted], z[omitted])  x!=NULL; key(x)
- │                   table      xyz@primary          ·                            ·
- │                   spans      ALL                  ·                            ·
- │                   filter     x IN @S1             ·                            ·
- └── subquery        ·          ·                    (x)                          x!=NULL; key(x)
-      │              id         @S1                  ·                            ·
-      │              sql        (SELECT x FROM xyz)  ·                            ·
-      │              exec mode  all rows normalized  ·                            ·
-      └── render     ·          ·                    (x)                          x!=NULL; key(x)
-           │         render 0   test.public.xyz.x    ·                            ·
-           └── scan  ·          ·                    (x, y[omitted], z[omitted])  x!=NULL; key(x)
-·                    table      xyz@primary          ·                            ·
-·                    spans      ALL                  ·                            ·
-
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
 # panic.
@@ -499,34 +443,17 @@ query I
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 
-query TTT
-EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
-----
-root                 ·          ·
- ├── render          ·          ·
- │    └── scan       ·          ·
- │                   table      tab4@primary
- │                   spans      ALL
- └── subquery        ·          ·
-      │              id         @S1
-      │              sql        (SELECT col1 FROM tab4 WHERE col1 > 8.27)
-      │              exec mode  all rows normalized
-      └── render     ·          ·
-           └── scan  ·          ·
-·                    table      tab4@primary
-·                    spans      ALL
-
 statement ok
-CREATE TABLE a (a INT PRIMARY KEY)
+CREATE TABLE z (z INT PRIMARY KEY)
 
 # Regression test for #24171.
 query I
-SELECT * FROM  a WHERE CAST(COALESCE((SELECT 'a' FROM crdb_internal.zones LIMIT 1 OFFSET 5), (SELECT 'b' FROM pg_catalog.pg_trigger)) AS BYTEA) <= 'a'
+SELECT * FROM  z WHERE CAST(COALESCE((SELECT 'a' FROM crdb_internal.zones LIMIT 1 OFFSET 5), (SELECT 'b' FROM pg_catalog.pg_trigger)) AS BYTEA) <= 'a'
 ----
 
 # Regression test for #24170.
 query I
-SELECT * FROM a WHERE CAST(COALESCE((SELECT 'a'), (SELECT 'a')) AS bytea) < 'a'
+SELECT * FROM z WHERE CAST(COALESCE((SELECT 'a'), (SELECT 'a')) AS bytea) < 'a'
 ----
 
 statement ok
