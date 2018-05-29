@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type unaryFactoryFunc func(f *norm.Factory, input memo.GroupID) memo.GroupID
@@ -358,6 +359,9 @@ func (b *Builder) buildFunction(
 	f *tree.FuncExpr, label string, inScope, outScope *scope,
 ) (out memo.GroupID) {
 	if f.WindowDef != nil {
+		if inScope.groupby.inAgg {
+			panic(builderError{sqlbase.NewWindowInAggError()})
+		}
 		panic(unimplementedf("window functions are not supported"))
 	}
 

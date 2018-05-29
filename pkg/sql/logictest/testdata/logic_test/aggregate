@@ -359,7 +359,7 @@ SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
 query error aggregate functions are not allowed in WHERE
 SELECT k FROM kv WHERE AVG(k) > 1
 
-query error aggregate functions are not allowed in the argument of max()
+query error aggregate function calls cannot be nested
 SELECT MAX(AVG(k)) FROM kv
 
 # Test case from #2761.
@@ -392,7 +392,7 @@ SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 ----
 8 2
 
-query error aggregate functions are not allowed in the argument of max()
+query error pgcode 42803 aggregate function calls cannot be nested
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
 
 query error argument of HAVING must be type bool, not type int
@@ -507,6 +507,16 @@ SELECT COUNT(DISTINCT (k, v)) FROM kv
 
 query I
 SELECT COUNT(DISTINCT (k, (v))) FROM kv
+----
+6
+
+query I
+SELECT COUNT(*) FROM kv a, kv b
+----
+36
+
+query I
+SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
 ----
 6
 

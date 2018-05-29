@@ -1,10 +1,10 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE abc (a INT, b INT, C INT)
 
 statement ok
-INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (NULL, NULL, NULL)
 
 # ANY/SOME with arrays.
 
@@ -179,6 +179,26 @@ query III
 SELECT * FROM abc WHERE a > ANY(SELECT a FROM abc WHERE b = 30)
 ----
 
+# ANY predicate in disjunction.
+query III rowsort
+SELECT * FROM abc WHERE a > ANY(SELECT a FROM abc WHERE b = 20) OR b IS NULL
+----
+NULL NULL NULL
+3    30   300
+
+# ALL predicate in disjunction.
+query III rowsort
+SELECT * FROM abc WHERE a >= ALL(SELECT a FROM abc WHERE a IS NOT NULL) OR b=10
+----
+1 10 100
+3 30 300
+
+# ANY predicate in NOT NULL expression.
+query III rowsort
+SELECT * FROM abc WHERE a > ANY(SELECT a FROM abc WHERE b = 20) IS NULL
+----
+NULL NULL NULL
+
 query III
 SELECT * FROM abc WHERE a = ANY(SELECT * FROM unnest(ARRAY[1, NULL]))
 ----
@@ -250,8 +270,8 @@ false
 query III
 SELECT * FROM abc WHERE a > ALL(ARRAY[0, 1]) ORDER BY a
 ----
-2 20 200
-3 30 300
+2    20   200
+3    30   300
 
 query III
 SELECT * FROM abc WHERE a > ALL(ARRAY[1, 4])
@@ -309,11 +329,11 @@ SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
 NULL
 
 query III
-SELECT * FROM abc WHERE a < ALL(SELECT b FROM abc) ORDER BY a
+SELECT * FROM abc WHERE a < ALL(SELECT b FROM abc WHERE b IS NOT NULL) ORDER BY a
 ----
-1 10 100
-2 20 200
-3 30 300
+1    10   100
+2    20   200
+3    30   300
 
 query III
 SELECT * FROM abc WHERE a < ALL(SELECT a FROM abc WHERE a >= 2)

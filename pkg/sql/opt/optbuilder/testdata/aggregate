@@ -590,7 +590,7 @@ error (42803): aggregate functions are not allowed in WHERE
 build
 SELECT MAX(AVG(k)) FROM kv
 ----
-error (42803): aggregate functions are not allowed in the argument of max()
+error (42803): aggregate function calls cannot be nested
 
 # Test case from #2761.
 build

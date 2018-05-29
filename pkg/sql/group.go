@@ -674,12 +674,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			case 1:
 				argExpr := t.Exprs[0].(tree.TypedExpr)
 
-				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
-					argExpr,
-					fmt.Sprintf("the argument of %s()", &t.Func),
-					v.planner.SessionData().SearchPath,
-				); err != nil {
-					v.err = err
+				if v.planner.txCtx.WindowFuncInExpr(argExpr) {
+					v.err = sqlbase.NewWindowInAggError()
+					return false, expr
+				} else if v.planner.txCtx.AggregateInExpr(argExpr, v.planner.SessionData().SearchPath) {
+					v.err = sqlbase.NewAggInAggError()
 					return false, expr
 				}
 
