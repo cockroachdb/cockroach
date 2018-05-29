@@ -882,7 +882,7 @@ CREATE TABLE t (a int, b string)
 statement ok
 INSERT INTO t VALUES (1, 'one'), (2, 'two')
 
-query error pq: column name "t" not found
+query error pq: column "t" does not exist
 SELECT (t).a FROM t
 
 statement ok

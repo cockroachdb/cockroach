@@ -76,7 +76,7 @@ send "alter table d.t EXPERIMENTAL_AUDIT SET READ WRITE;\r"
 eexpect "ALTER TABLE"
 eexpect root@
 send "select helloworld from d.t;\r"
-eexpect "not found"
+eexpect "does not exist"
 eexpect root@
 interrupt
 eexpect eof

@@ -218,7 +218,7 @@ SELECT generate_series(generate_series(1, 3), 3)
 query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(1, 3\)"
 SELECT generate_series(1, 3) + generate_series(1, 3)
 
-query error pq: column name "generate_series" not found
+query error pq: column "generate_series" does not exist
 SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
 
 # Regressions for #15900: ensure that null parameters to generate_series don't
@@ -468,7 +468,7 @@ n
 2
 3
 
-query error pq: column name "information_schema._pg_expandarray.other" not found
+query error pq: column "information_schema._pg_expandarray.other" does not exist
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 
 query T colnames
@@ -487,7 +487,7 @@ n
 2
 3
 
-query error pq: column name "temp.other" not found
+query error pq: column "temp.other" does not exist
 SELECT temp.other from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 
 query TI colnames

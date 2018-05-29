@@ -487,7 +487,7 @@ SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 query error column reference "x" is ambiguous \(candidates: a\.x, b\.x\)
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
 
-query error column name "a.y" not found
+query error column "a.y" does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
 
 statement ok

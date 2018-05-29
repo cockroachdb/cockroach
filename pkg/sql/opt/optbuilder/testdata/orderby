@@ -392,7 +392,7 @@ error: non-integer constant in ORDER BY: 2.5
 build
 SELECT * FROM t ORDER BY foo
 ----
-error (42703): column name "foo" not found
+error (42703): column "foo" does not exist
 
 build
 SELECT a FROM t ORDER BY a.b

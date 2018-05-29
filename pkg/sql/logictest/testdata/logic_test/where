@@ -57,7 +57,7 @@ SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 5 6
 7 8
 
-query error column name "nonexistent" not found
+query error column "nonexistent" does not exist
 SELECT * FROM kv WHERE nonexistent = 1
 
 query B

@@ -89,7 +89,7 @@ start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statem
 
 # trigger the error state
 send "begin; select nonexistent;\r\r"
-eexpect "not found"
+eexpect "does not exist"
 eexpect ERROR
 
 # Try to send a txn prefix, expect no multiline entry

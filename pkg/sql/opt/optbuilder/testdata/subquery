@@ -760,7 +760,7 @@ TABLE kv
 build
 SELECT (SELECT abc.k FROM abc) FROM kv AS abc
 ----
-error (42703): column name "abc.k" not found
+error (42703): column "abc.k" does not exist
 
 build
 VALUES (1, (SELECT (2)))

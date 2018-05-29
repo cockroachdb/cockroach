@@ -150,9 +150,7 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		}
 	}
 	if colIdx == invalidColIdx {
-		return nil, nil, -1,
-			pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"column name %q not found", tree.ErrString(&col))
+		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&col))
 	}
 	r.ResolverState.SrcIdx = srcIdx
 	r.ResolverState.ColIdx = colIdx
@@ -198,8 +196,7 @@ func (r *ColumnResolver) Resolve(
 	if colIdx == invalidColIdx {
 		r.ResolverState.SrcIdx = invalidSrcIdx
 		r.ResolverState.ColIdx = invalidColIdx
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-			"column name %q not found",
+		return nil, NewUndefinedColumnError(
 			tree.ErrString(tree.NewColumnItem(&src.SourceAliases[colSetIdx].Name, tree.Name(colName))))
 	}
 	r.ResolverState.SrcIdx = srcIdx

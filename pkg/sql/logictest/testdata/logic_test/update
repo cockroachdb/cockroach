@@ -200,7 +200,7 @@ SELECT * FROM kv3
 ----
 a   b
 
-statement error column name "nonexistent" not found
+statement error column "nonexistent" does not exist
 UPDATE kv3 SET v = NULL WHERE nonexistent = 'a'
 
 statement ok

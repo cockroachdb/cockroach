@@ -25,9 +25,9 @@ eexpect root@
 
 # Errors must be logged too
 send "SELECT nonexistent;\r"
-eexpect "column name"
+eexpect "column"
 eexpect "nonexistent"
-eexpect "not found"
+eexpect "does not exist"
 eexpect root@
 
 # Check logging after disable
