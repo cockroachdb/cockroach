@@ -69,6 +69,116 @@ group           ·            ·
 ·               table        kv@primary
 ·               spans        ALL
 
+query TTTTT
+EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+----
+group                ·            ·                             (count)                                                       ·
+ │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
+ └── render          ·            ·                             ("(k, v, w, s)")                                              ·
+      │              render 0     (a.k, a.v, a.w, a.s)          ·                                                             ·
+      └── join       ·            ·                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
+           │         type         cross                         ·                                                             ·
+           ├── scan  ·            ·                             (k, v, w, s)                                                  k!=NULL; key(k)
+           │         table        kv@primary                    ·                                                             ·
+           │         spans        ALL                           ·                                                             ·
+           └── scan  ·            ·                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
+·                    table        kv@primary                    ·                                                             ·
+·                    spans        ALL                           ·                                                             ·
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY a.*
+]
+----
+group                ·            ·
+ │                   aggregate 0  min(k)
+ │                   group by     @1-@4
+ └── render          ·            ·
+      │              render 0     a.k
+      │              render 1     a.v
+      │              render 2     a.w
+      │              render 3     a.s
+      │              render 4     b.k
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
+]
+----
+group                ·            ·
+ │                   aggregate 0  min(k)
+ │                   group by     @1-@5
+ └── render          ·            ·
+      │              render 0     1
+      │              render 1     a.k
+      │              render 2     a.v
+      │              render 3     a.w
+      │              render 4     a.s
+      │              render 5     b.k
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+# A useful optimization: naked tuple expansion in GROUP BY clause.
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (a.*)
+]
+----
+group                ·            ·
+ │                   aggregate 0  min(k)
+ │                   group by     @1-@4
+ └── render          ·            ·
+      │              render 0     a.k
+      │              render 1     a.v
+      │              render 2     a.w
+      │              render 3     a.s
+      │              render 4     b.k
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+# Show reuse of renders expression inside an expansion.
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
+]
+----
+group                ·            ·
+ │                   aggregate 0  k
+ │                   group by     @1-@4
+ └── render          ·            ·
+      │              render 0     a.k
+      │              render 1     a.v
+      │              render 2     a.w
+      │              render 3     a.s
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
 statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,

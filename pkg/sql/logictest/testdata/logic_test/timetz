@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # Note that the odd '0000-01-01 hh:mi:ss +0000 UTC' result format is an
 # artifact of how pq displays TIMETZs.

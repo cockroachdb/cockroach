@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts
+# LogicTest: default opt parallel-stmts
 
 statement ok
 CREATE TABLE kv (
