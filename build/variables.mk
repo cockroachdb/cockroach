@@ -52,6 +52,7 @@ define VALID_VARS
   GITHOOKSDIR
   GIT_DIR
   GO
+  GOEXE
   GOFLAGS
   GOGOPROTO_PROTO
   GOGO_PROTOBUF_PATH
@@ -95,6 +96,7 @@ define VALID_VARS
   NATIVE_SPECIFIER
   NATIVE_SPECIFIER_TAG
   NATIVE_SUFFIX
+  NCPUS
   NODE_RUN
   OPTGEN_TARGETS
   PATH
@@ -157,7 +159,7 @@ define VALID_VARS
   cyan
   go-targets
   go-targets-ccl
-  go-version-check
+  have-defs
   langgen-package
   logictest-package
   logictestccl-package
@@ -166,6 +168,7 @@ define VALID_VARS
   optgen-package
   optgen-xform-rules
   prefix
+  sig
   space
   sse
   term-reset
