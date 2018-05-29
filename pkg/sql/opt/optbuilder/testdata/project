@@ -139,7 +139,7 @@ project
 build
 SELECT rowid FROM (SELECT * FROM b)
 ----
-error (42703): column name "rowid" not found
+error (42703): column "rowid" does not exist
 
 build
 SELECT rowid FROM (SELECT rowid FROM b)
@@ -234,17 +234,17 @@ TABLE abc
 build
 SELECT c FROM (SELECT a FROM abc)
 ----
-error (42703): column name "c" not found
+error (42703): column "c" does not exist
 
 build
 SELECT c FROM (SELECT a FROM abc ORDER BY c)
 ----
-error (42703): column name "c" not found
+error (42703): column "c" does not exist
 
 build
 SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
 ----
-error (42703): column name "c" not found
+error (42703): column "c" does not exist
 
 build fully-qualify-names
 SELECT t.kv.k FROM abc AS kv

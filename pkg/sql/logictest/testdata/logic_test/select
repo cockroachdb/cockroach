@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 # SELECT with no table.
 
@@ -166,14 +166,6 @@ SELECT foo.* FROM kv
 query error cannot use "\*" without a FROM clause
 SELECT *
 
-# "*" must expand to zero columns if there are zero columns to select.
-statement ok
-CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
-
-query I
-SELECT 1, * FROM nocols
-----
-
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 
@@ -221,10 +213,10 @@ CREATE TABLE xyzw (
 statement ok
 INSERT INTO xyzw VALUES (4, 5, 6, 7), (1, 2, 3, 4)
 
-query error name \"x\" is not defined
+query error pq: column "x" does not exist
 SELECT * FROM xyzw LIMIT x
 
-query error name \"y\" is not defined
+query error pq: column "y" does not exist
 SELECT * FROM xyzw OFFSET 1 + y
 
 query error argument of LIMIT must be type int, not type decimal
@@ -505,3 +497,115 @@ query B
 SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
+
+statement ok
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
+
+query II rowsort
+SELECT * FROM a WHERE x > 1
+----
+2  20
+3  30
+
+query II rowsort
+SELECT * FROM a WHERE y > 1
+----
+1  10
+2  20
+3  30
+
+query II
+SELECT * FROM a WHERE x > 1 AND x < 3
+----
+2  20
+
+query II
+SELECT * FROM a WHERE x > 1 AND y < 30
+----
+2  20
+
+query I rowsort
+SELECT x + 1 FROM a
+----
+2
+3
+4
+
+query IIIII rowsort
+SELECT x, x + 1, y, y + 1, x + y FROM a
+----
+1  2  10  11  11
+2  3  20  21  22
+3  4  30  31  33
+
+query I rowsort
+SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+----
+24
+35
+46
+
+query IIII rowsort
+SELECT x, x, y, x FROM a
+----
+1  1  10  1
+2  2  20  2
+3  3  30  3
+
+query II rowsort
+SELECT x + 1, x + y FROM a WHERE x + y > 20
+----
+3  22
+4  33
+
+# ------------------------------------------------------------------------------
+# Test with a hidden column.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE b (x INT, y INT);
+INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
+
+query II rowsort
+SELECT * FROM b
+----
+1  10
+2  20
+3  30
+
+query I rowsort
+SELECT x FROM b WHERE rowid > 0
+----
+1
+2
+3
+
+# ------------------------------------------------------------------------------
+# String inequality filter.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
+INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
+
+query IT rowsort
+SELECT * FROM c WHERE str >= 'moo'
+----
+1   one
+2   two
+3   three
+6   six
+7   seven
+9   nine
+10  one-zero
+
+# ------------------------------------------------------------------------------
+# "*" must expand to zero columns if there are zero columns to select.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
+
+query I
+SELECT 1, * FROM nocols
+----

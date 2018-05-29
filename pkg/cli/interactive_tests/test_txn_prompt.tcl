@@ -68,7 +68,7 @@ end_test
 
 start_test "Test that prompt becomes ERROR upon txn error."
 send "select a;\r"
-eexpect "pq: column name \"a\""
+eexpect "pq: column \"a\" does not exist"
 eexpect root@
 eexpect "ERROR>"
 end_test

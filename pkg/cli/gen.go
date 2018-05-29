@@ -15,7 +15,9 @@
 package cli
 
 import (
+	"crypto/rand"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -126,6 +128,44 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var aesSize int
+
+var genEncryptionKeyCmd = &cobra.Command{
+	Use:   "encryption-key <key-file>",
+	Short: "generate store key for encryption at rest",
+	Long: `Generate store key for encryption at rest.
+
+If no AES key size is specified through "-s=256", the key size used for AES
+algorithm will be 128 by default. AES key size should only be 128, 192, or 256.
+
+Users are required to provide a filename for the key to be stored.
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		encryptionKeyPath := args[0]
+
+		// Check encryptionKeySize is suitable for the encryption algorithm.
+		if aesSize != 128 && aesSize != 192 && aesSize != 256 {
+			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
+		}
+
+		// 32 bytes are reserved for key ID.
+		keySize := aesSize/8 + 32
+		b := make([]byte, keySize)
+		if _, err := rand.Read(b); err != nil {
+			return fmt.Errorf("failed to create key with size %d bytes", keySize)
+		}
+
+		// Write key to the file with owner read/write permission.
+		if err := ioutil.WriteFile(encryptionKeyPath, b, 0600); err != nil {
+			return err
+		}
+
+		fmt.Printf("successfully created AES-%d key: %s\n", aesSize, encryptionKeyPath)
+		return nil
+	},
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list <output-dir>",
 	Short: "output a list of available cluster settings",
@@ -190,6 +230,7 @@ var genCmds = []*cobra.Command{
 	genExamplesCmd,
 	genHAProxyCmd,
 	genSettingsListCmd,
+	genEncryptionKeyCmd,
 }
 
 func init() {
@@ -199,6 +240,8 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
+	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
+		"AES key size for encryption at rest")
 
 	genCmd.AddCommand(genCmds...)
 }

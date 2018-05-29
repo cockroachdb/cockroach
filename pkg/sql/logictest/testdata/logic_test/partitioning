@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 statement error creating or manipulating partitions requires a CCL binary
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (

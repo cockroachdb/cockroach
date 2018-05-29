@@ -116,12 +116,12 @@ limit
 build
 SELECT k FROM T LIMIT k
 ----
-error (42703): column name "k" not found
+error (42703): column "k" does not exist
 
 build
 SELECT k FROM T LIMIT v
 ----
-error (42703): column name "v" not found
+error (42703): column "v" does not exist
 
 build
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10

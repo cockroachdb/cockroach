@@ -753,7 +753,8 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, e
 	if _, ok := presetTypesForTesting[name]; ok {
 		return expr, nil
 	}
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "name \"%s\" is not defined", name)
+	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+		"column %q does not exist", ErrString(expr))
 }
 
 // TypeCheck implements the Expr interface.

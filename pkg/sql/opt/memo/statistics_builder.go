@@ -478,12 +478,13 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			return applied
 		}
 		startVal := sp.StartKey().Value(col)
-		if startVal.Compare(sb.evalCtx, sp.EndKey().Value(col)) != 0 {
+		endVal := sp.EndKey().Value(col)
+		if startVal.Compare(sb.evalCtx, endVal) != 0 {
 			// TODO(rytaft): are there other types we should handle here
 			// besides int?
-			if startVal.ResolvedType() == types.Int {
+			if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
 				start := int(*startVal.(*tree.DInt))
-				end := int(*sp.EndKey().Value(col).(*tree.DInt))
+				end := int(*endVal.(*tree.DInt))
 				// We assume that both start and end boundaries are inclusive. This
 				// should be the case for integer valued columns (due to normalization
 				// by constraint.PreferInclusive).

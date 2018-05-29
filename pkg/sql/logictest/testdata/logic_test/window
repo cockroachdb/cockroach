@@ -259,10 +259,10 @@ SELECT avg(k) OVER (w PARTITION BY v) FROM kv WINDOW w AS (PARTITION BY v)
 query error cannot override ORDER BY clause of window "w"
 SELECT avg(k) OVER (w ORDER BY v) FROM kv WINDOW w AS (ORDER BY v)
 
-query error column name "a" not found
+query error column "a" does not exist
 SELECT avg(k) OVER (PARTITION BY a) FROM kv
 
-query error column name "a" not found
+query error column "a" does not exist
 SELECT avg(k) OVER (ORDER BY a) FROM kv
 
 query error aggregate function calls cannot contain window function call avg\(\)

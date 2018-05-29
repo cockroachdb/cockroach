@@ -1264,7 +1264,7 @@ error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
 ----
-error (42703): column name "a.y" not found
+error (42703): column "a.y" does not exist
 
 # THe following queries verify that only the necessary columns are scanned.
 build

@@ -183,7 +183,7 @@ SELECT * FROM t ORDER BY 'a'
 query error non-integer constant in ORDER BY: 2\.5
 SELECT * FROM t ORDER BY 2.5
 
-query error column name "foo" not found
+query error column "foo" does not exist
 SELECT * FROM t ORDER BY foo
 
 query error no data source matches prefix: a

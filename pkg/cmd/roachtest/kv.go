@@ -71,7 +71,7 @@ func registerKVSplits(r *registry) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes), startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m"))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))

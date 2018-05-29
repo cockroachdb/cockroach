@@ -180,10 +180,10 @@ SELECT x, X, "Y" FROM foo
 ----
 x x Y
 
-statement error column name "X" not found
+statement error column "X" does not exist
 SELECT "X" FROM foo
 
-statement error column name "y" not found
+statement error column "y" does not exist
 SELECT Y FROM foo
 
 # The following should not be ambiguous.

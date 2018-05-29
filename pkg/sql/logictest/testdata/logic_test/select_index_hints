@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE abcd (
@@ -22,13 +22,6 @@ SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 20 21 22 23
 30 31 32 33
 
-query TTT
-EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
-----
-scan  ·      ·
-·     table  abcd@primary
-·     spans  /20-/30/#
-
 # Force primary
 
 query IIII rowsort
@@ -36,13 +29,6 @@ SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 ----
 20 21 22 23
 30 31 32 33
-
-query TTT
-EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
-----
-scan  ·      ·
-·     table  abcd@primary
-·     spans  /20-/30/#
 
 # Force index b
 
@@ -52,16 +38,6 @@ SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 20 21 22 23
 30 31 32 33
 
-query TTT
-EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
-----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  abcd@b
- │          spans  ALL
- └── scan   ·      ·
-·           table  abcd@primary
-
 # Force index cd
 
 query IIII rowsort
@@ -70,24 +46,7 @@ SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 20 21 22 23
 30 31 32 33
 
-query TTT
-EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
-----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  abcd@cd
- │          spans  ALL
- └── scan   ·      ·
-·           table  abcd@primary
-
 # Force index bcd
-
-query TTT
-EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
-----
-scan  ·      ·
-·     table  abcd@bcd
-·     spans  ALL
 
 query IIII rowsort
 SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
@@ -97,26 +56,18 @@ SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 
 # Force index b (covering)
 
-query TTT
-EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
+query I rowsort
+SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@b
-·          spans  ALL
+21
+31
 
 # Force index b (non-covering due to WHERE clause)
 
-query TTT
-EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
+query I rowsort
+SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-render           ·      ·
- └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abcd@b
-      │          spans  ALL
-      └── scan   ·      ·
-·                table  abcd@primary
+21
 
 # No hint, should be using index cd
 
@@ -126,14 +77,6 @@ SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 22 23
 32 33
 
-query TTT
-EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@cd
-·          spans  /20-/40
-
 # Force no index
 
 query II rowsort
@@ -141,14 +84,6 @@ SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ----
 22 23
 32 33
-
-query TTT
-EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@primary
-·          spans  ALL
 
 # Force index b
 
@@ -158,70 +93,11 @@ SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 22 23
 32 33
 
-query TTT
-EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
-----
-render           ·      ·
- └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abcd@b
-      │          spans  ALL
-      └── scan   ·      ·
-·                table  abcd@primary
-
 query error index \"badidx\" not found
 SELECT * FROM abcd@badidx
 
 query error index \"badidx\" not found
 SELECT * FROM abcd@{FORCE_INDEX=badidx}
-
-query TTT
-EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
-----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  abcd@b
- │          spans  ALL
- └── scan   ·      ·
-·           table  abcd@primary
-
-query TTT
-EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
-----
-render           ·      ·
- └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abcd@cd
-      │          spans  /10-/11
-      └── scan   ·      ·
-·                table  abcd@primary
-
-query TTT
-EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@bcd
-·          hint   no index join
-·          spans  ALL
-
-query TTT
-EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@bcd
-·          hint   no index join
-·          spans  ALL
-
-query TTT
-EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@primary
-·          hint   no index join
-·          spans  ALL
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10
