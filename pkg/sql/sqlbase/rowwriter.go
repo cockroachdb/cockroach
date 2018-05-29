@@ -793,10 +793,19 @@ func (ru *RowUpdater) UpdateRow(
 			}
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-			if traceKV {
-				log.VEventf(ctx, 2, "Put %s -> %v", keys.PrettyPrint(ru.Helper.primIndexValDirs, ru.key), ru.marshaled[idx].PrettyPrint())
+			if ru.marshaled[idx].RawBytes == nil {
+				// If the new family contains a NULL value, then we must delete
+				// any pre-existing row.
+				if traceKV {
+					log.VEventf(ctx, 2, "Del %s", ru.key)
+				}
+				batch.Del(&ru.key)
+			} else {
+				if traceKV {
+					log.VEventf(ctx, 2, "Put %s -> %v", keys.PrettyPrint(ru.Helper.primIndexValDirs, ru.key), ru.marshaled[idx].PrettyPrint())
+				}
+				batch.Put(&ru.key, &ru.marshaled[idx])
 			}
-			batch.Put(&ru.key, &ru.marshaled[idx])
 			ru.key = nil
 
 			continue
