@@ -379,8 +379,9 @@ func registerTPCCBench(r *registry) {
 			CPUs:  16,
 			Chaos: true,
 
-			LoadWarehouses: 5000,
-			EstimatedMax:   500,
+			LoadWarehouses:  5000,
+			EstimatedMax:    500,
+			StoreDirVersion: "2.0-5",
 		},
 		// objective 3, key result 2.
 		{

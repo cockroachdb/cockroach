@@ -31,11 +31,12 @@ func storeDirURL(fixtureURL string, stores int, binVersion string) string {
 }
 
 func storeDumpExists(ctx context.Context, c *cluster, storeDirPath string) (bool, error) {
-	err := c.RunE(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q ls %s &> /dev/null", storeDirPath))
+	output, err := c.RunWithBuffer(ctx, c.l, c.Node(1),
+		fmt.Sprintf("gsutil -m -q ls %s", storeDirPath))
 	if err == nil {
 		return true, nil
 	}
-	if strings.Contains(err.Error(), "matched no objects") {
+	if strings.Contains(string(output), "matched no objects") {
 		return false, nil
 	}
 	return false, err
