@@ -224,8 +224,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		t.Fatal("geo-distributed benchmarking not supported")
 	}
 
-	roachNodeCount := c.nodes - 1
-	roachNodes := c.Range(1, roachNodeCount)
+	roachNodes := c.Range(1, c.nodes-1)
 	loadNode := c.Node(c.nodes)
 
 	// Disable write barrier on mounted SSDs.
@@ -233,9 +232,18 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		c.RemountNoBarrier(ctx)
 	}
 
-	c.Put(ctx, cockroach, "./cockroach", roachNodes)
+	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", loadNode)
 	c.Start(ctx, roachNodes)
+
+	useHAProxy := b.Chaos
+	if useHAProxy {
+		t.Status("installing haproxy")
+		c.Install(ctx, loadNode, "haproxy")
+		c.Run(ctx, loadNode, fmt.Sprintf("./cockroach gen haproxy --insecure --host %s",
+			c.InternalIP(ctx, c.Node(1))[0]))
+		c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
+	}
 
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {
@@ -254,7 +262,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		res, err := s.Search(func(warehouses int) (bool, error) {
 			// Restart the cluster before each iteration to help eliminate
 			// inter-trial interactions.
-			m.ExpectDeaths(int32(roachNodeCount))
+			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
 			c.Start(ctx, roachNodes)
 			time.Sleep(10 * time.Second)
@@ -280,9 +288,14 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			}
 
 			t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
+			connStr := fmt.Sprintf("{pgurl:1-%d}", len(roachNodes))
+			if useHAProxy {
+				connStr = fmt.Sprintf("{pgurl:%d}", loadNode[0])
+			}
 			cmd := fmt.Sprintf("ulimit -n 32768; "+
-				"./workload run tpcc --warehouses=%d --ramp=30s --duration=%s%s {pgurl:1-%d}",
-				warehouses, loadDur, extraFlags, roachNodeCount)
+				"./workload run tpcc --warehouses=%d --ramp=30s --duration=%s%s %s",
+				warehouses, loadDur, extraFlags, connStr)
+
 			out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd)
 			loadDone <- timeutil.Now()
 			if err != nil {
