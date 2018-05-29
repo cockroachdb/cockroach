@@ -46,16 +46,15 @@ SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ]
 ----
-join            ·       ·
- │              type    cross
- ├── filter     ·       ·
- │    │         filter  x = 44
- │    └── scan  ·       ·
- │              table   twocolumn@primary
- │              spans   ALL
- └── scan       ·       ·
-·               table   twocolumn@primary
-·               spans   ALL
+join       ·       ·
+ │         type    cross
+ ├── scan  ·       ·
+ │         table   twocolumn@primary
+ │         spans   ALL
+ │         filter  x = 44
+ └── scan  ·       ·
+·          table   twocolumn@primary
+·          spans   ALL
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
@@ -458,20 +457,19 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ]
 ----
-filter               ·         ·
- │                   filter    ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
- └── join            ·         ·
-      │              type      left outer
-      │              equality  (b) = (sq)
-      │              pred      a > 1
-      ├── filter     ·         ·
-      │    │         filter    b > 1
-      │    └── scan  ·         ·
-      │              table     pairs@primary
-      │              spans     ALL
-      └── scan       ·         ·
-·                    table     square@primary
-·                    spans     -/5/#
+filter          ·         ·
+ │              filter    ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+ └── join       ·         ·
+      │         type      left outer
+      │         equality  (b) = (sq)
+      │         pred      a > 1
+      ├── scan  ·         ·
+      │         table     pairs@primary
+      │         spans     ALL
+      │         filter    b > 1
+      └── scan  ·         ·
+·               table     square@primary
+·               spans     -/5/#
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
@@ -481,20 +479,19 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-filter               ·         ·
- │                   filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
- └── join            ·         ·
-      │              type      right outer
-      │              equality  (b) = (sq)
-      │              pred      n < 6
-      ├── filter     ·         ·
-      │    │         filter    a > 1
-      │    └── scan  ·         ·
-      │              table     pairs@primary
-      │              spans     ALL
-      └── scan       ·         ·
-·                    table     square@primary
-·                    spans     /2-
+filter          ·         ·
+ │              filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+ └── join       ·         ·
+      │         type      right outer
+      │         equality  (b) = (sq)
+      │         pred      n < 6
+      ├── scan  ·         ·
+      │         table     pairs@primary
+      │         spans     ALL
+      │         filter    a > 1
+      └── scan  ·         ·
+·               table     square@primary
+·               spans     /2-
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -505,18 +502,17 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-join            ·         ·
- │              type      inner
- │              equality  (b) = (sq)
- │              pred      (a IS NULL) OR (a < sq)
- ├── filter     ·         ·
- │    │         filter    (a > 1) AND ((a IS NULL) OR (a > 2))
- │    └── scan  ·         ·
- │              table     pairs@primary
- │              spans     ALL
- └── scan       ·         ·
-·               table     square@primary
-·               spans     /2-/5/#
+join       ·         ·
+ │         type      inner
+ │         equality  (b) = (sq)
+ │         pred      (a IS NULL) OR (a < sq)
+ ├── scan  ·         ·
+ │         table     pairs@primary
+ │         spans     ALL
+ │         filter    (a > 1) AND ((a IS NULL) OR (a > 2))
+ └── scan  ·         ·
+·          table     square@primary
+·          spans     /2-/5/#
 
 
 statement ok
@@ -1038,17 +1034,16 @@ CREATE TABLE abg (
 query TTT
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
-render               ·         ·
- └── join            ·         ·
-      │              type      inner
-      │              equality  (a, b) = (a, b)
-      ├── filter     ·         ·
-      │    └── scan  ·         ·
-      │              table     abcdef@primary
-      │              spans     /1/2/6/9-
-      └── scan       ·         ·
-·                    table     abg@primary
-·                    spans     ALL
+render          ·         ·
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a, b) = (a, b)
+      ├── scan  ·         ·
+      │         table     abcdef@primary
+      │         spans     /1/2/6/9-
+      └── scan  ·         ·
+·               table     abg@primary
+·               spans     ALL
 
 # Regression tests for mixed-type equality columns (#22514).
 statement ok

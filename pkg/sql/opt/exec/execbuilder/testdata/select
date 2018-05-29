@@ -20,11 +20,10 @@ SELECT * FROM a WHERE x > 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
-filter     ·       ·          (x, y)  ·
- │         filter  y > 10     ·       ·
- └── scan  ·       ·          (x, y)  ·
-·          table   a@primary  ·       ·
-·          spans   ALL        ·       ·
+scan  ·       ·          (x, y)  ·
+·     table   a@primary  ·       ·
+·     spans   ALL        ·       ·
+·     filter  y > 10     ·       ·
 
 query II rowsort
 SELECT * FROM a WHERE y > 10
@@ -47,11 +46,10 @@ SELECT * FROM a WHERE x > 1 AND x < 3
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
-filter     ·       ·          (x, y)  ·
- │         filter  y < 30     ·       ·
- └── scan  ·       ·          (x, y)  ·
-·          table   a@primary  ·       ·
-·          spans   /2-        ·       ·
+scan  ·       ·          (x, y)  ·
+·     table   a@primary  ·       ·
+·     spans   /2-        ·       ·
+·     filter  y < 30     ·       ·
 
 query II
 SELECT * FROM a WHERE x > 1 AND y < 30
@@ -239,11 +237,10 @@ scan  ·      ·                (d decimal)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ----
-filter     ·       ·                            (d decimal)  ·
- │         filter  (isnan((d)[decimal]))[bool]  ·            ·
- └── scan  ·       ·                            (d decimal)  ·
-·          table   dec2@primary                 ·            ·
-·          spans   ALL                          ·            ·
+scan  ·       ·                            (d decimal)  ·
+·     table   dec2@primary                 ·            ·
+·     spans   ALL                          ·            ·
+·     filter  (isnan((d)[decimal]))[bool]  ·            ·
 
 # ------------------------------------------------------------------------------
 # Verify that lookups for Float NaN use indices when possible:
@@ -271,11 +268,10 @@ scan  ·      ·                    (f float)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ----
-filter     ·       ·                          (f float)  ·
- │         filter  (isnan((f)[float]))[bool]  ·          ·
- └── scan  ·       ·                          (f float)  ·
-·          table   flt@primary                ·          ·
-·          spans   ALL                        ·          ·
+scan  ·       ·                          (f float)  ·
+·     table   flt@primary                ·          ·
+·     spans   ALL                        ·          ·
+·     filter  (isnan((f)[float]))[bool]  ·          ·
 
 # ------------------------------------------------------------------------------
 # ANY, ALL tests.
