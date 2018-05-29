@@ -143,7 +143,7 @@ func (sq *splitQueue) processAttempt(
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
-				Span: roachpb.Span{
+				RequestHeader: roachpb.RequestHeader{
 					Key: splitKey.AsRawKey(),
 				},
 				SplitKey: splitKey.AsRawKey(),

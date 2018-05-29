@@ -1553,7 +1553,7 @@ CREATE TABLE crdb_internal.ranges (
 			// make this part optional.
 			b := &client.Batch{}
 			b.AddRawRequest(&roachpb.LeaseInfoRequest{
-				Span: roachpb.Span{
+				RequestHeader: roachpb.RequestHeader{
 					Key: desc.StartKey.AsRawKey(),
 				},
 			})

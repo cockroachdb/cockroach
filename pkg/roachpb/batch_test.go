@@ -175,7 +175,7 @@ func TestIntentSpanIterate(t *testing.T) {
 	ba := BatchRequest{}
 	br := BatchResponse{}
 	for _, tc := range testCases {
-		tc.req.SetHeader(tc.span)
+		tc.req.SetHeader(RequestHeaderFromSpan(tc.span))
 		ba.Add(tc.req)
 		br.Add(tc.resp)
 	}
@@ -197,7 +197,7 @@ func TestIntentSpanIterate(t *testing.T) {
 	ba = BatchRequest{}
 	br = BatchResponse{}
 	for _, tc := range testCases {
-		tc.req.SetHeader(tc.span)
+		tc.req.SetHeader(RequestHeaderFromSpan(tc.span))
 		ba.Add(tc.req)
 		tc.resp.SetHeader(ResponseHeader{ResumeSpan: &tc.resume})
 		br.Add(tc.resp)
@@ -243,7 +243,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	ba := BatchRequest{}
 	br := BatchResponse{}
 	for _, tc := range testCases {
-		tc.req.SetHeader(tc.span)
+		tc.req.SetHeader(RequestHeaderFromSpan(tc.span))
 		ba.Add(tc.req)
 		br.Add(tc.resp)
 	}
@@ -272,7 +272,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	ba = BatchRequest{}
 	br = BatchResponse{}
 	for _, tc := range testCases {
-		tc.req.SetHeader(tc.span)
+		tc.req.SetHeader(RequestHeaderFromSpan(tc.span))
 		ba.Add(tc.req)
 		if tc.resume != nil {
 			tc.resp.SetHeader(ResponseHeader{ResumeSpan: tc.resume})

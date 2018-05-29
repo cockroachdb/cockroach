@@ -340,8 +340,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				Timestamp: hlc.Timestamp{WallTime: nowNanos},
 			},
 			Args: &roachpb.AddSSTableRequest{
-				Span: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-				Data: sstBytes,
+				RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
+				Data:          sstBytes,
 			},
 			Stats: &enginepb.MVCCStats{},
 		}

@@ -636,7 +636,7 @@ func (ts *TestServer) SplitRange(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
 	splitReq := roachpb.AdminSplitRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
 		},
 		SplitKey: splitKey,
@@ -721,7 +721,7 @@ func (ts *TestServer) GetRangeLease(
 	ctx context.Context, key roachpb.Key,
 ) (_ roachpb.Lease, now hlc.Timestamp, _ error) {
 	leaseReq := roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}

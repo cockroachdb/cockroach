@@ -199,10 +199,10 @@ func BenchmarkImport(b *testing.B) {
 					// Import is a point request because we don't want DistSender to split
 					// it. Assume (but don't require) the entire post-rewrite span is on the
 					// same range.
-					Span:     roachpb.Span{Key: newStartKey},
-					DataSpan: roachpb.Span{Key: oldStartKey, EndKey: oldStartKey.PrefixEnd()},
-					Files:    files,
-					Rekeys:   rekeys,
+					RequestHeader: roachpb.RequestHeader{Key: newStartKey},
+					DataSpan:      roachpb.Span{Key: oldStartKey, EndKey: oldStartKey.PrefixEnd()},
+					Files:         files,
+					Rekeys:        rekeys,
 				}
 				res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
 				if pErr != nil {
