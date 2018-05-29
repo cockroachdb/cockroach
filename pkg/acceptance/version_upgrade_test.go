@@ -62,8 +62,6 @@ const sourceVersion = "source"
 func (bv binaryVersionUpgrade) name() string { return fmt.Sprintf("binary=%s", bv.newVersion) }
 
 func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
-	t.Helper()
-
 	var newBin string
 	if bv.newVersion == sourceVersion {
 		newBin = localcluster.SourceBinary()
