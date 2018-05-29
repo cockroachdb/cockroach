@@ -7,6 +7,8 @@ import { withRouter, WithRouterProps } from "react-router";
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 import docsURL from "src/util/docs";
+import { trustIcon } from "src/util/trust";
+import { cockroachIcon } from "src/views/shared/components/icons";
 
 import "./loginPage.styl";
 
@@ -82,6 +84,8 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         <Helmet>
           <title>Login</title>
         </Helmet>
+        <div className="image-container"
+             dangerouslySetInnerHTML={trustIcon(cockroachIcon)}/>
         <section className="section">
           <h1 className="heading">Sign in to the Console</h1>
           <p className="aside">
@@ -111,6 +115,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
               type="submit"
               className="submit-button"
               disabled={this.props.loginState.inProgress}
+              value="Sign In"
             />
           </form>
         </section>
