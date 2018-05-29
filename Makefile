@@ -627,36 +627,44 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | bin/.submodules-initi
 # .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
 # and we certainly don't want to duplicate them.
 
-$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD | libprotobuf
-	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
+$(PROTOC): $(PROTOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD | libprotobuf
+	@uptodate $(PROTOC) $(PROTOBUF_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
 .PHONY: libcryptopp
-libcryptopp: $(CRYPTOPP_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
+libcryptopp: $(CRYPTOPP_DIR)/Makefile bin/uptodate
+	@uptodate $(PROTOBUF_DIR)/libprotobuf.a $(PROTOBUF_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
 
 .PHONY: libjemalloc
-libjemalloc: $(JEMALLOC_DIR)/Makefile
-	@set -o pipefail; $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static | { grep -v "Nothing to be done" || true; }
+libjemalloc: $(JEMALLOC_DIR)/Makefile bin/uptodate
+	@uptodate $(JEMALLOC_DIR)/lib/libjemalloc.a $(JEMALLOC_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
 .PHONY: libprotobuf
-libprotobuf: $(PROTOBUF_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
+libprotobuf: $(PROTOBUF_DIR)/Makefile bin/uptodate
+	@uptodate $(PROTOBUF_DIR)/libprotobuf.a $(PROTOBUF_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
 
 .PHONY: libsnappy
-libsnappy: $(SNAPPY_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
+libsnappy: $(SNAPPY_DIR)/Makefile bin/uptodate
+	@uptodate $(SNAPPY_DIR)/libsnappy.a $(SNAPPY_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
 
 .PHONY: librocksdb
-librocksdb: $(ROCKSDB_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
+librocksdb: $(ROCKSDB_DIR)/Makefile bin/uptodate
+	@uptodate $(ROCKSDB_DIR)/librocksdb.a $(ROCKSDB_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
+libroach: $(LIBROACH_DIR)/Makefile bin/uptodate
+	@uptodate $(LIBROACH_DIR)/libroach.a $(LIBROACH_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
+libroachccl: $(LIBROACH_DIR)/Makefile bin/uptodate
+	@uptodate $(LIBROACH_DIR)/libroach.a $(LIBROACH_SRC_DIR) \
+	  || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
 check-libroach: ## Run libroach tests.
@@ -1325,6 +1333,7 @@ bins = \
   bin/returncheck \
   bin/roachtest \
   bin/teamcity-trigger \
+  bin/uptodate \
   bin/urlcheck \
   bin/workload \
   bin/zerosum
