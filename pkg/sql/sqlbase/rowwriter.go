@@ -250,6 +250,7 @@ type putter interface {
 	CPut(key, value, expValue interface{})
 	Put(key, value interface{})
 	InitPut(key, value interface{}, failOnTombstones bool)
+	Del(key ...interface{})
 }
 
 // InsertRow adds to the batch the kv operations necessary to insert a table row
@@ -258,7 +259,7 @@ func (ri *RowInserter) InsertRow(
 	ctx context.Context,
 	b putter,
 	values []tree.Datum,
-	ignoreConflicts bool,
+	overwrite bool,
 	checkFKs checkFKConstraints,
 	traceKV bool,
 ) error {
@@ -267,7 +268,7 @@ func (ri *RowInserter) InsertRow(
 	}
 
 	putFn := insertCPutFn
-	if ignoreConflicts {
+	if overwrite {
 		putFn = insertPutFn
 	}
 
@@ -305,6 +306,7 @@ func (ri *RowInserter) InsertRow(
 			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
 		}
 
+		ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
@@ -314,20 +316,25 @@ func (ri *RowInserter) InsertRow(
 				continue
 			}
 
-			if ri.marshaled[idx].RawBytes != nil {
+			if ri.marshaled[idx].RawBytes == nil {
+				if overwrite {
+					// If the new family contains a NULL value, then we must
+					// delete any pre-existing row.
+					if traceKV {
+						log.VEventf(ctx, 2, "Del %s", ri.key)
+					}
+					b.Del(&ri.key)
+				}
+			} else {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
-
-				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 				putFn(ctx, b, &ri.key, &ri.marshaled[idx], traceKV)
-				ri.key = nil
 			}
 
 			continue
 		}
 
-		ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		ri.valueBuf = ri.valueBuf[:0]
 
 		var lastColID ColumnID
@@ -361,7 +368,16 @@ func (ri *RowInserter) InsertRow(
 			}
 		}
 
-		if family.ID == 0 || len(ri.valueBuf) > 0 {
+		if family.ID != 0 && len(ri.valueBuf) == 0 {
+			if overwrite {
+				// The family might have already existed but every column in it is being
+				// set to NULL, so delete it.
+				if traceKV {
+					log.VEventf(ctx, 2, "Del %s", ri.key)
+				}
+				b.Del(&ri.key)
+			}
+		} else {
 			ri.value.SetTuple(ri.valueBuf)
 			putFn(ctx, b, &ri.key, &ri.value, traceKV)
 		}
