@@ -1070,8 +1070,8 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, db, hideVirtual,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
@@ -1110,10 +1110,10 @@ CREATE TABLE crdb_internal.table_indexes (
   is_unique        BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		return forEachTableDescAll(ctx, p, prefix, hideVirtual,
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
@@ -1158,7 +1158,7 @@ CREATE TABLE crdb_internal.index_columns (
   column_direction STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		key := tree.NewDString("key")
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
@@ -1168,7 +1168,7 @@ CREATE TABLE crdb_internal.index_columns (
 			sqlbase.IndexDescriptor_DESC: tree.NewDString(sqlbase.IndexDescriptor_DESC.String()),
 		}
 
-		return forEachTableDescAll(ctx, p, prefix, hideVirtual,
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 			func(parent *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				parentName := parent.Name
@@ -1271,12 +1271,12 @@ CREATE TABLE crdb_internal.backward_dependencies (
   dependson_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
-		return forEachTableDescAll(ctx, p, prefix, hideVirtual, /* virtual tables have no backward/forward dependencies*/
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
@@ -1382,12 +1382,12 @@ CREATE TABLE crdb_internal.forward_dependencies (
   dependedonby_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
-		return forEachTableDescAll(ctx, p, prefix, hideVirtual, /* virtual tables have no backward/forward dependencies*/
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
@@ -1929,8 +1929,8 @@ CREATE TABLE crdb_internal.partitions (
 	columns     INT NOT NULL
 )
 	`,
-	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, prefix, hideVirtual, /* virtual tables have no partitions*/
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 					return addPartitioningRows(table, index, &index.Partitioning,
