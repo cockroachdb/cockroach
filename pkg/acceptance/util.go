@@ -31,5 +31,6 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
+	db.SetMaxIdleConns(0)
 	return db
 }

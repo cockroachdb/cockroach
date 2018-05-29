@@ -315,6 +315,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	// the cluster, and we had a bug about migrations on large numbers of tables:
 	// #22370.
 	db := makePGClient(t, c.PGUrl(ctx, 0 /* nodeId */))
+	defer db.Close()
 	if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +325,6 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 			t.Fatal(err)
 		}
 	}
-	defer db.Close()
 
 	startingBinVersion.checkAll(ctx, t, c)
 	for _, step := range steps {
