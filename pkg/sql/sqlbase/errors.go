@@ -197,6 +197,19 @@ func NewWindowingError(in string) error {
 	return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", in)
 }
 
+// NewWindowInAggError creates an error for the case when a window function is
+// nested within an aggregate function.
+func NewWindowInAggError() error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+		"aggregate function calls cannot contain window function calls")
+}
+
+// NewAggInAggError creates an error for the case when an aggregate function is
+// contained within another aggregate function.
+func NewAggInAggError() error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+}
+
 // NewStatementCompletionUnknownError creates an error with the corresponding pg
 // code. This is used to inform the client that it's unknown whether a statement
 // succeeded or not. Of particular interest to clients is when this error is

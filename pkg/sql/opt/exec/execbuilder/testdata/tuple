@@ -1,0 +1,94 @@
+# LogicTest: opt
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  INDEX (u,v,w)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /1/2/3-            ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /2/1/2-            ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
+----
+scan  ·       ·                       (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx       ·          ·
+·     spans   /!NULL-/2/3/2           ·          ·
+·     filter  (u, v, w) <= (2, 3, 1)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
+----
+scan  ·       ·                      (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx      ·          ·
+·     spans   /!NULL-/2/2/2          ·          ·
+·     filter  (u, v, w) < (2, 2, 2)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
+----
+scan  ·       ·                       (u, v, w)  +u,+v,+w
+·     table   uvw@uvw_u_v_w_idx       ·          ·
+·     spans   -/1/2/3 /1/2/4-         ·          ·
+·     filter  (u, v, w) != (1, 2, 3)  ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /2-                ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
+----
+scan  ·      ·                  (u, v, w)  +u,+v,+w
+·     table  uvw@uvw_u_v_w_idx  ·          ·
+·     spans  /!NULL-/2          ·          ·
+
+statement ok
+DROP TABLE uvw
+
+# Regression test for #6390.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
+
+# TODO(radu): should be using index
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3);
+----
+scan  ·       ·                      (a, b, c)  ·
+·     table   abc@primary            ·          ·
+·     spans   ALL                    ·          ·
+·     filter  (a, b, c) > (1, 2, 3)  ·          ·
+
+statement ok
+DROP TABLE abc
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
+----
+scan  ·       ·                      (a, b, c)  ·
+·     table   abc@abc_a_b_c_idx      ·          ·
+·     spans   /1-                    ·          ·
+·     filter  (a, b, c) > (1, 2, 3)  ·          ·
+
+statement ok
+DROP TABLE abc

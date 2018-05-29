@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 query T colnames
 SHOW USERS

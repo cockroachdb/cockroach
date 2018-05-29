@@ -613,7 +613,7 @@ func (r *subqueryHoister) constructGroupByAny(
 				r.f.ConstructSelect(
 					input,
 					r.f.ConstructIsNot(
-						r.f.constructBinary(cmp, inputVar, scalar),
+						r.f.constructBinary(cmp, scalar, inputVar),
 						r.f.ConstructFalse(),
 					),
 				),

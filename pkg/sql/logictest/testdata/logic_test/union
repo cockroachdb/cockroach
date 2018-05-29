@@ -51,12 +51,6 @@ VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1
 2 1
 3 4
 
-query I
-(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
-----
-3
-2
-
 # The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
 query I
 VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
@@ -89,7 +83,7 @@ SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 1  unknown
 2  int
 
-query IT
+query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
 1  int
@@ -167,32 +161,6 @@ SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 
 3
 2
 
-query TTT rowsort
-EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
-----
-union           ·      ·
- ├── render     ·      ·
- │    └── scan  ·      ·
- │              table  uniontest@primary
- │              spans  ALL
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  uniontest@primary
-·               spans  ALL
-
-query TTT rowsort
-EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
-----
-append          ·      ·
- ├── render     ·      ·
- │    └── scan  ·      ·
- │              table  uniontest@primary
- │              spans  ALL
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  uniontest@primary
-·               spans  ALL
-
 query II
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
 ----
@@ -226,17 +194,6 @@ SELECT 1 UNION SELECT 3 ORDER BY z
 
 query error UNION types int\[] and string\[] cannot be matched
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
-
-# Check that EXPLAIN properly releases memory for virtual tables.
-query TTT
-EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
-----
-union             ·     ·
- ├── values       ·     ·
- │                size  1 column, 1 row
- └── render       ·     ·
-      └── values  ·     ·
-·                 size  3 columns, 6 rows
 
 # Check that UNION permits columns of different visible types
 

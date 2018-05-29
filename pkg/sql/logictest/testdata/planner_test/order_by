@@ -604,6 +604,40 @@ sort            ·         ·                  (b, a)                         +b
 ·               spans     ALL                ·                              ·
 
 # ------------------------------------------------------------------------------
+# Check star expansion in ORDER BY.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
+]
+----
+sort            ·         ·
+ │              order     +x,+y
+ └── render     ·         ·
+      │         render 0  test.public.a.x
+      │         render 1  test.public.a.y
+      └── scan  ·         ·
+·               table     a@primary
+·               spans     ALL
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
+]
+----
+sort            ·         ·
+ │              order     +x,+y
+ └── render     ·         ·
+      │         render 0  test.public.a.x
+      │         render 1  test.public.a.y
+      └── scan  ·         ·
+·               table     a@primary
+·               spans     ALL
+
+# ------------------------------------------------------------------------------
 # ORDER BY INDEX test cases.
 # ------------------------------------------------------------------------------
 subtest order_by_index
