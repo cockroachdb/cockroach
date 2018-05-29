@@ -168,6 +168,123 @@ group      ·            ·           (count int, sum decimal, max int)  ·
 ·          table        kv@primary  ·                                  ·
 ·          spans        ALL         ·                                  ·
 
+query TTTTT
+EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+----
+group                ·            ·                             (count)                                                       ·
+ │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
+ └── render          ·            ·                             ("(k, v, w, s)")                                              ·
+      │              render 0     (a.k, a.v, a.w, a.s)          ·                                                             ·
+      └── join       ·            ·                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
+           │         type         cross                         ·                                                             ·
+           ├── scan  ·            ·                             (k, v, w, s)                                                  k!=NULL; key(k)
+           │         table        kv@primary                    ·                                                             ·
+           │         spans        ALL                           ·                                                             ·
+           └── scan  ·            ·                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
+·                    table        kv@primary                    ·                                                             ·
+·                    spans        ALL                           ·                                                             ·
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY a.*
+]
+----
+render               ·            ·
+ │                   render 0     agg0
+ └── group           ·            ·
+      │              aggregate 0  k
+      │              aggregate 1  v
+      │              aggregate 2  w
+      │              aggregate 3  s
+      │              aggregate 4  min(k)
+      │              group by     @1-@4
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
+]
+----
+render                    ·            ·
+ │                        render 0     agg0
+ └── group                ·            ·
+      │                   aggregate 0  kv.k
+      │                   aggregate 1  kv.v
+      │                   aggregate 2  kv.w
+      │                   aggregate 3  kv.s
+      │                   aggregate 4  column9
+      │                   aggregate 5  min(kv.k)
+      │                   group by     @2,@3,@4,@5,@1
+      └── render          ·            ·
+           │              render 0     1
+           │              render 1     k
+           │              render 2     v
+           │              render 3     w
+           │              render 4     s
+           │              render 5     k
+           └── join       ·            ·
+                │         type         cross
+                ├── scan  ·            ·
+                │         table        kv@primary
+                │         spans        ALL
+                └── scan  ·            ·
+·                         table        kv@primary
+·                         spans        ALL
+
+# A useful optimization: naked tuple expansion in GROUP BY clause.
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (a.*)
+]
+----
+render               ·            ·
+ │                   render 0     agg0
+ └── group           ·            ·
+      │              aggregate 0  k
+      │              aggregate 1  v
+      │              aggregate 2  w
+      │              aggregate 3  s
+      │              aggregate 4  min(k)
+      │              group by     @1-@4
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+# Show reuse of renders expression inside an expansion.
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
+]
+----
+render               ·            ·
+ │                   render 0     k
+ └── group           ·            ·
+      │              aggregate 0  k
+      │              aggregate 1  v
+      │              aggregate 2  w
+      │              aggregate 3  s
+      │              group by     @1-@4
+      └── join       ·            ·
+           │         type         cross
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
 statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,

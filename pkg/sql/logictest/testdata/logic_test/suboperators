@@ -267,7 +267,7 @@ SELECT 5 > ALL(ARRAY[6, 7] || 8)
 ----
 false
 
-query III rowsort
+query III
 SELECT * FROM abc WHERE a > ALL(ARRAY[0, 1]) ORDER BY a
 ----
 2    20   200
@@ -328,7 +328,7 @@ SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
 ----
 NULL
 
-query III rowsort
+query III
 SELECT * FROM abc WHERE a < ALL(SELECT b FROM abc WHERE b IS NOT NULL) ORDER BY a
 ----
 1    10   100
