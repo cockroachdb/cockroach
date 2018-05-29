@@ -91,6 +91,19 @@ query I rowsort
 SELECT id FROM crdb_internal.jobs
 ----
 
+query I rowsort
+SELECT * FROM GENERATE_SERIES(1, 3)
+----
+1
+2
+3
+
+query I rowsort
+SELECT GENERATE_SERIES(1, 2)
+----
+1
+2
+
 statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 
@@ -106,6 +119,12 @@ SELECT * FROM tview
 
 query error pq: virtual tables are not supported
 SELECT id FROM crdb_internal.jobs
+
+query error pq: not yet implemented: table expr: \*tree\.FuncExpr
+SELECT * FROM GENERATE_SERIES(1, 3)
+
+query error pq: generator functions are not supported
+SELECT GENERATE_SERIES(1, 2)
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL
