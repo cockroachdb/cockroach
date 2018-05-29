@@ -102,7 +102,7 @@ project
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
 ----
-error (42803): aggregate functions are not allowed in the argument of max()
+error (42803): aggregate function calls cannot be nested
 
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING k
