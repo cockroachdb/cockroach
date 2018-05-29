@@ -789,9 +789,6 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
 FIND_RELEVANT := find ./pkg -name node_modules -prune -o
 
-pkg/%.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go' -not -name 'bindata.go' -not -path '*/testdata/*')
-	$(MAKE) testbuild PKG='./pkg/$(*D)'
-
 bench: ## Run benchmarks.
 bench: TESTS := -
 bench: BENCHES := .
@@ -807,15 +804,15 @@ check test testshort testrace bench benchshort:
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testlogic: ## Run SQL Logic Tests.
-testlogic: pkg/sql/logictest/logictest.test
+testlogic: bin/logictest
 
 testccllogic: ## Run SQL CCL Logic Tests.
-testccllogic: pkg/ccl/logictestccl/logictestccl.test
+testccllogic: bin/logictestccl
 
 testlogic testccllogic: TESTS := Test\w*Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic testccllogic:
-	cd $(<D) && ./$(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
@@ -1311,7 +1308,7 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 #
 # [0]: http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/
 
-bins := \
+bins = \
   bin/allocsim \
   bin/benchmark \
   bin/cockroach-oss \
@@ -1332,9 +1329,15 @@ bins := \
   bin/workload \
   bin/zerosum
 
+testbins = \
+  bin/logictest \
+  bin/logictestccl
+
 # Mappings for binaries that don't live in pkg/cmd.
-langgen-package := ./pkg/sql/opt/optgen/cmd/langgen
-optgen-package := ./pkg/sql/opt/optgen/cmd/optgen
+langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
+optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
+logictest-package = ./pkg/sql/logictest
+logictestccl-package = ./pkg/ccl/logictestccl
 
 # Additional dependencies for binaries that depend on generated code.
 bin/workload bin/docgen: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
@@ -1344,6 +1347,12 @@ $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
 	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
+
+$(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
+	@echo go test -c $($*-package)
+	bin/prereqs -test $($*-package) > $@.d.tmp
+	mv -f $@.d.tmp $@.d
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
 
 bin/prereqs: ./pkg/cmd/prereqs/*.go
 	@echo go install -v ./pkg/cmd/prereqs

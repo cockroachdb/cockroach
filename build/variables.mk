@@ -151,6 +151,8 @@ define VALID_VARS
   go-targets-ccl
   go-version-check
   langgen-package
+  logictest-package
+  logictestccl-package
   optgen-defs
   optgen-norm-rules
   optgen-package
@@ -159,5 +161,6 @@ define VALID_VARS
   space
   sse
   term-reset
+  testbins
   yellow
 endef
