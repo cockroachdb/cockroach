@@ -347,6 +347,9 @@ func doExpandPlan(
 	case *controlJobsNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
+	case *projectSetNode:
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
@@ -700,6 +703,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		if n.expanded {
 			n.plan = p.simplifyOrderings(n.plan, nil)
 		}
+
+	case *projectSetNode:
+		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *indexJoinNode:
 		n.index.props.trim(usefulOrdering)

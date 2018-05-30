@@ -92,6 +92,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *valuesNode:
 		markOmitted(n.columns, needed)
 
+	case *projectSetNode:
+		setNeededColumns(n.source, needed[:n.numColsInSource])
+
 	case *delayedNode:
 		if n.plan != nil {
 			setNeededColumns(n.plan, needed)
