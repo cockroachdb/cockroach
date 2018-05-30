@@ -127,8 +127,8 @@ func (p *planner) getDataSource(
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
 		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
-	case *tree.FuncExpr:
-		return p.getGeneratorPlan(ctx, t, sqlbase.AnonymousTable)
+	case *tree.RowsFromExpr:
+		return p.getPlanForRowsFrom(ctx, sqlbase.AnonymousTable, t.Items...)
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)
@@ -421,10 +421,11 @@ func (p *planner) getSubqueryPlan(
 	}, nil
 }
 
-func (p *planner) getGeneratorPlan(
-	ctx context.Context, t *tree.FuncExpr, srcName tree.TableName,
+// getPlanForRowsFrom builds the plan for a ROWS FROM(...) expression.
+func (p *planner) getPlanForRowsFrom(
+	ctx context.Context, srcName tree.TableName, exprs ...tree.Expr,
 ) (planDataSource, error) {
-	plan, err := p.ProjectSet(ctx, &unaryNode{}, "FROM", t)
+	plan, err := p.ProjectSet(ctx, &unaryNode{}, "ROWS FROM", exprs...)
 	if err != nil {
 		return planDataSource{}, err
 	}

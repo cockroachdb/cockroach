@@ -1735,11 +1735,10 @@ distinct_on_clause ::=
 
 table_ref ::=
 	relation_expr opt_index_hints opt_ordinality opt_alias_clause
-	| func_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
-	| special_function opt_ordinality opt_alias_clause
 	| select_with_parens opt_ordinality opt_alias_clause
 	| joined_table
 	| '(' joined_table ')' opt_ordinality alias_clause
+	| func_table opt_ordinality opt_alias_clause
 	| '[' explainable_stmt ']' opt_ordinality opt_alias_clause
 
 all_or_distinct ::=
@@ -1918,28 +1917,6 @@ opt_alias_clause ::=
 	alias_clause
 	| 
 
-func_name ::=
-	type_function_name
-	| prefixed_column_path
-
-special_function ::=
-	'CURRENT_DATE' '(' ')'
-	| 'CURRENT_SCHEMA' '(' ')'
-	| 'CURRENT_TIMESTAMP' '(' ')'
-	| 'CURRENT_TIME' '(' ')'
-	| 'CURRENT_USER' '(' ')'
-	| 'EXTRACT' '(' extract_list ')'
-	| 'EXTRACT_DURATION' '(' extract_list ')'
-	| 'OVERLAY' '(' overlay_list ')'
-	| 'POSITION' '(' position_list ')'
-	| 'SUBSTRING' '(' substr_list ')'
-	| 'TRIM' '(' 'BOTH' trim_list ')'
-	| 'TRIM' '(' 'LEADING' trim_list ')'
-	| 'TRIM' '(' 'TRAILING' trim_list ')'
-	| 'TRIM' '(' trim_list ')'
-	| 'GREATEST' '(' expr_list ')'
-	| 'LEAST' '(' expr_list ')'
-
 joined_table ::=
 	'(' joined_table ')'
 	| table_ref 'CROSS' 'JOIN' table_ref
@@ -1951,6 +1928,10 @@ joined_table ::=
 alias_clause ::=
 	'AS' table_alias_name opt_column_list
 	| table_alias_name opt_column_list
+
+func_table ::=
+	func_expr_windowless
+	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
 
 iso_level ::=
 	'READ' 'UNCOMMITTED'
@@ -2021,11 +2002,33 @@ prefixed_column_path ::=
 	| name '.' unrestricted_name '.' unrestricted_name
 	| name '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
+func_name ::=
+	type_function_name
+	| prefixed_column_path
+
 window_specification ::=
 	'(' opt_existing_window_name opt_partition_clause opt_sort_clause ')'
 
 window_name ::=
 	name
+
+special_function ::=
+	'CURRENT_DATE' '(' ')'
+	| 'CURRENT_SCHEMA' '(' ')'
+	| 'CURRENT_TIMESTAMP' '(' ')'
+	| 'CURRENT_TIME' '(' ')'
+	| 'CURRENT_USER' '(' ')'
+	| 'EXTRACT' '(' extract_list ')'
+	| 'EXTRACT_DURATION' '(' extract_list ')'
+	| 'OVERLAY' '(' overlay_list ')'
+	| 'POSITION' '(' position_list ')'
+	| 'SUBSTRING' '(' substr_list ')'
+	| 'TRIM' '(' 'BOTH' trim_list ')'
+	| 'TRIM' '(' 'LEADING' trim_list ')'
+	| 'TRIM' '(' 'TRAILING' trim_list ')'
+	| 'TRIM' '(' trim_list ')'
+	| 'GREATEST' '(' expr_list ')'
+	| 'LEAST' '(' expr_list ')'
 
 window_definition ::=
 	window_name 'AS' window_specification
@@ -2033,10 +2036,49 @@ window_definition ::=
 index_hints_param_list ::=
 	( index_hints_param ) ( ( ',' index_hints_param ) )*
 
+join_type ::=
+	'FULL' join_outer
+	| 'LEFT' join_outer
+	| 'RIGHT' join_outer
+	| 'INNER'
+
+join_qual ::=
+	'USING' '(' name_list ')'
+	| 'ON' a_expr
+
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
+
+rowsfrom_list ::=
+	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
+
+partition ::=
+	'PARTITION' partition_name
+
+opt_name_parens ::=
+	'(' name ')'
+	| 
+
+reference_action ::=
+	'NO' 'ACTION'
+	| 'RESTRICT'
+	| 'CASCADE'
+	| 'SET' 'NULL'
+	| 'SET' 'DEFAULT'
+
 type_function_name ::=
 	'identifier'
 	| unreserved_keyword
 	| type_func_name_keyword
+
+opt_existing_window_name ::=
+	name
+	| 
+
+opt_partition_clause ::=
+	'PARTITION' 'BY' expr_list
+	| 
 
 extract_list ::=
 	extract_arg 'FROM' a_expr
@@ -2063,41 +2105,19 @@ trim_list ::=
 	| 'FROM' expr_list
 	| expr_list
 
-join_type ::=
-	'FULL' join_outer
-	| 'LEFT' join_outer
-	| 'RIGHT' join_outer
-	| 'INNER'
-
-join_qual ::=
-	'USING' '(' name_list ')'
-	| 'ON' a_expr
-
-partition ::=
-	'PARTITION' partition_name
-
-opt_name_parens ::=
-	'(' name ')'
-	| 
-
-reference_action ::=
-	'NO' 'ACTION'
-	| 'RESTRICT'
-	| 'CASCADE'
-	| 'SET' 'NULL'
-	| 'SET' 'DEFAULT'
-
-opt_existing_window_name ::=
-	name
-	| 
-
-opt_partition_clause ::=
-	'PARTITION' 'BY' expr_list
-	| 
-
 index_hints_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+
+join_outer ::=
+	'OUTER'
+	| 
+
+rowsfrom_item ::=
+	func_expr_windowless
+
+partition_name ::=
+	unrestricted_name
 
 extract_arg ::=
 	'identifier'
@@ -2116,10 +2136,3 @@ substr_from ::=
 
 substr_for ::=
 	'FOR' a_expr
-
-join_outer ::=
-	'OUTER'
-	| 
-
-partition_name ::=
-	unrestricted_name
