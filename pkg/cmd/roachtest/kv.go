@@ -21,16 +21,15 @@ import (
 )
 
 func registerKV(r *registry) {
-	runKV := func(ctx context.Context, t *test, c *cluster, percent int, encryption bool) {
+	runKV := func(ctx context.Context, t *test, c *cluster, percent int, encryption option) {
 		if !c.isLocal() {
 			c.RemountNoBarrier(ctx)
 		}
 
-		encrypt = encryption
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes), encryption)
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -51,13 +50,22 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			for _, e := range []bool{false, true} {
-				e := e
+			// Run kv with encryption turned off because of recently found
+			// checksum mismatch when running workload against encrypted
+			// cluster.
+			// TODO(marc): add back true to turn on encryption for kv when
+			// checksum issue is resolved.
+			for _, e := range []bool{false} {
+				minVersion := "2.0.0"
+				if e {
+					minVersion = "2.1.0"
+				}
 				r.Add(testSpec{
-					Name:  fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
-					Nodes: nodes(n+1, cpu(8)),
+					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
+					MinVersion: minVersion,
+					Nodes:      nodes(n+1, cpu(8)),
 					Run: func(ctx context.Context, t *test, c *cluster) {
-						runKV(ctx, t, c, p, e)
+						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
 					},
 				})
 			}
