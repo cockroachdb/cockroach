@@ -756,7 +756,7 @@ query error pq: star expansion of tuples is not supported
 SELECT ((ROW(1,'2',true) AS a,b,c)).*
 
 # From a Subquery
-query error pq: type tuple{int, string, bool} is not composite
+query error pq: unimplemented: cannot access column "e" in non-tuple expression
 SELECT ((t)).e, ((t)).f, ((t)).g
 FROM (
   SELECT ((1,'2',true) AS e,f,g) AS t
