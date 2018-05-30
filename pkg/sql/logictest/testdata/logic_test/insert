@@ -43,224 +43,14 @@ SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING 
 fhello
 hello
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
-fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
-fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
-fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
-fetched: /kv/primary/'nil4' -> NULL
-output row: ['nil4' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
-fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
-fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
-fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
-fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
-fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
-fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
-
 statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'f')
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
-fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
-fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
-fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
-fetched: /kv/primary/'nil4' -> NULL
-output row: ['nil4' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
-fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
-fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
-fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
-fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
-fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
-fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
 
 statement ok
 INSERT INTO kv VALUES ('f', 'g')
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv/primary/'f' -> NULL
-fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
-fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
-fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
-fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
-fetched: /kv/primary/'nil4' -> NULL
-output row: ['nil4' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
-fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
-fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
-fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
-fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
-fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
-fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
-fetched: /kv/a/'g' -> /'f'
-output row: ['f' 'g']
-
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'g')
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
-fetched: /kv/primary/'a' -> NULL
-fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv/primary/'c' -> NULL
-fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv/primary/'e' -> NULL
-fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv/primary/'f' -> NULL
-fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
-fetched: /kv/primary/'g' -> NULL
-fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
-fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
-fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
-fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
-fetched: /kv/primary/'nil4' -> NULL
-output row: ['nil4' NULL]
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
-fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
-fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
-fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
-fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
-fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
-fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
-fetched: /kv/a/'g' -> /'f'
-output row: ['f' 'g']
 
 query TT
 SELECT * FROM kv ORDER BY k
@@ -374,13 +164,6 @@ INSERT INTO kv5 VALUES ('a', NULL)
 
 statement error VALUES lists must all be the same length, expected 1 columns, found 2
 INSERT INTO kv5 VALUES ('b'), ('c', DEFAULT)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv5@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv5/a/NULL/'a' -> NULL
-output row: ['a' NULL]
 
 query TT
 SELECT v, k FROM kv5@a
@@ -601,27 +384,6 @@ statement ok
 INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
 # Check that INSERT supports ORDER BY (MySQL extension)
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
-]
-----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── sort            ·          ·
-           │              order      -v
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
-
 query II
 INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
 ----
@@ -634,27 +396,6 @@ INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
 
 statement ok
 TRUNCATE TABLE insert_t
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
-]
-----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── limit           ·          ·
-           │              count      1
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
-·                         limit      1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -675,62 +416,11 @@ SELECT * FROM insert_t
 ----
 1  9
 
-# Check the grouping of LIMIT and ORDER BY
-
-query TTT
-EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
-----
-count                  ·     ·
- └── insert            ·     ·
-      │                into  insert_t(x, v, rowid)
-      └── limit        ·     ·
-           └── values  ·     ·
-·                      size  2 columns, 2 rows
-
-query TTT
-EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
-----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
-
-query TTT
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
-----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
-
-query TTT
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
-----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
-
 statement error pq: multiple LIMIT clauses not allowed
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) LIMIT 1) LIMIT 1
+INSERT INTO insert_t (VALUES (1,1), (2,2) LIMIT 1) LIMIT 1
 
 statement error pq: multiple ORDER BY clauses not allowed
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) ORDER BY 2
+INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) ORDER BY 2
 
 statement error DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
 INSERT INTO insert_t (VALUES (1, DEFAULT), (2,'BBB') LIMIT 1)

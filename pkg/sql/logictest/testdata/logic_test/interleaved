@@ -54,19 +54,6 @@ SELECT * FROM p2
 5  5
 7  7
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM p1_0]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /p1_0/primary/2/'2'/s2 -> /'2.01'
-fetched: /p1_0/primary/2/'2'/d -> 2
-output row: [2 '2' '2.01' 2]
-fetched: /p1_0/primary/3/'3'/s2 -> /'3.01'
-fetched: /p1_0/primary/3/'3'/d -> 3
-output row: [3 '3' '3.01' 3]
-fetched: /p1_0/primary/5/'5' -> NULL
-output row: [5 '5' NULL NULL]
-
 query ITTT rowsort
 SELECT * FROM p1_0
 ----

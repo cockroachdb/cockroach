@@ -97,69 +97,8 @@ c   d
 e   f
 f   g
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv2/primary/'a' -> NULL
-fetched: /kv2/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv2/primary/'c' -> NULL
-fetched: /kv2/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv2/primary/'e' -> NULL
-fetched: /kv2/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv2/primary/'f' -> NULL
-fetched: /kv2/primary/'f'/v -> 'g'
-output row: ['f' 'g']
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv2/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv2/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv2/a/'f' -> /'e'
-output row: ['e' 'f']
-fetched: /kv2/a/'g' -> /'f'
-output row: ['f' 'g']
-
-
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv2/primary/'a' -> NULL
-fetched: /kv2/primary/'a'/v -> 'b'
-output row: ['a' 'b']
-fetched: /kv2/primary/'c' -> NULL
-fetched: /kv2/primary/'c'/v -> 'd'
-output row: ['c' 'd']
-fetched: /kv2/primary/'e' -> NULL
-fetched: /kv2/primary/'e'/v -> 'f'
-output row: ['e' 'f']
-fetched: /kv2/primary/'f' -> NULL
-fetched: /kv2/primary/'f'/v -> 'g'
-output row: ['f' 'g']
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv2/a/'b' -> /'a'
-output row: ['a' 'b']
-fetched: /kv2/a/'d' -> /'c'
-output row: ['c' 'd']
-fetched: /kv2/a/'f' -> /'e'
-output row: ['e' 'f']
-fetched: /kv2/a/'g' -> /'f'
-output row: ['f' 'g']
 
 statement count 1
 UPDATE kv2 SET v = 'i' WHERE k IN ('a')
@@ -333,61 +272,6 @@ SELECT * from xyz
 ----
 2 777 666
 
-query TTT
-EXPLAIN UPDATE xyz SET y = x
-----
-count           ·      ·
- └── update     ·      ·
-      │         table  xyz
-      │         set    y
-      └── scan  ·      ·
-·               table  xyz@primary
-·               spans  ALL
-
-query TTTTT
-EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
-----
-count                ·         ·                  ()                   ·
- └── update          ·         ·                  ()                   ·
-      │              table     xyz                ·                    ·
-      │              set       x, y               ·                    ·
-      └── render     ·         ·                  (x, y, z, "1", "2")  "1"=CONST; "2"=CONST; x!=NULL; key(x)
-           │         render 0  test.public.xyz.x  ·                    ·
-           │         render 1  test.public.xyz.y  ·                    ·
-           │         render 2  test.public.xyz.z  ·                    ·
-           │         render 3  1                  ·                    ·
-           │         render 4  2                  ·                    ·
-           └── scan  ·         ·                  (x, y, z)            x!=NULL; key(x)
-·                    table     xyz@primary        ·                    ·
-·                    spans     ALL                ·                    ·
-
-query TTTTT
-EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
-----
-count           ·      ·            ()         ·
- └── update     ·      ·            ()         ·
-      │         table  xyz          ·          ·
-      │         set    x, y         ·          ·
-      └── scan  ·      ·            (x, y, z)  x!=NULL; key(x)
-·               table  xyz@primary  ·          ·
-·               spans  ALL          ·          ·
-
-query TTTTT
-EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
-----
-count                ·         ·                  ()              ·
- └── update          ·         ·                  ()              ·
-      │              table     xyz                ·               ·
-      │              set       x, y               ·               ·
-      └── render     ·         ·                  (x, y, z, "2")  "2"=CONST; x!=NULL; key(x)
-           │         render 0  test.public.xyz.x  ·               ·
-           │         render 1  test.public.xyz.y  ·               ·
-           │         render 2  test.public.xyz.z  ·               ·
-           │         render 3  2                  ·               ·
-           └── scan  ·         ·                  (x, y, z)       x!=NULL; key(x)
-·                    table     xyz@primary        ·               ·
-·                    spans     ALL                ·               ·
-
 statement ok
 CREATE TABLE lots (
   k1 INT,
@@ -438,13 +322,11 @@ UPDATE pks SET k2 = 5 where k1 = 1
 statement count 1
 UPDATE pks SET k1 = 2 WHERE k1 = 1
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+query III
+SELECT * FROM pks
 ----
-fetched: /pks/primary/2/2 -> NULL
-fetched: /pks/primary/2/2/v -> 3
-output row: [2 2 3]
+2  2  3
+4  5  3
 
 # Check that UPDATE properly supports ORDER BY (MySQL extension)
 
@@ -453,20 +335,6 @@ TRUNCATE kv
 
 statement count 4
 INSERT INTO kv VALUES (1, 9), (8, 2), (3, 7), (6, 4)
-
-query TTT
-EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC
-----
-count                     ·      ·
- └── update               ·      ·
-      │                   table  kv
-      │                   set    v
-      └── render          ·      ·
-           └── sort       ·      ·
-                │         order  -v
-                └── scan  ·      ·
-·                         table  kv@primary
-·                         spans  ALL
 
 query II
 UPDATE kv SET v = v + 1 ORDER BY v DESC RETURNING k,v
@@ -489,20 +357,6 @@ UPDATE kv SET k = k * 2 ORDER BY k DESC
 statement count 3
 TRUNCATE kv; INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
 
-query TTT
-EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
-----
-count                     ·      ·
- └── update               ·      ·
-      │                   table  kv
-      │                   set    v
-      └── render          ·      ·
-           └── limit      ·      ·
-                └── scan  ·      ·
-·                         table  kv@primary
-·                         spans  -/2/#
-·                         limit  1
-
 query II
 UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v
 ----
@@ -521,21 +375,6 @@ SELECT * FROM kv
 statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR UPDATE tu SET b = NULL, c = NULL, d = NULL]
-----
-Scan /Table/63/{1-2}
-querying next range at /Table/63/1
-r1: sending batch 1 Scan to (n1,s1):1
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /3/4
-Del /Table/63/1/1/1/1
-Del /Table/63/1/1/2/1
-querying next range at /Table/63/1/1/1/1
-r1: sending batch 2 Del, 1 BeginTxn to (n1,s1):1
-fast path - rows affected: 1
 
 statement ok
 UPDATE tu SET b = NULL, c = NULL, d = NULL
