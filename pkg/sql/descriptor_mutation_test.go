@@ -157,13 +157,17 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 // change.
 func TestOperationsWithColumnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect
+			// so disable leases on tables.
+			DisableTableCache: true,
+		},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -390,12 +394,16 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 // change.
 func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect.
-	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect.
+			DisableTableCache: true,
+		},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -534,13 +542,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 // and DELETE operations while an index mutation refers to a column mutation.
 func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect
+			// so disable leases on tables.
+			DisableTableCache: true,
+		},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -713,12 +725,14 @@ CREATE INDEX allidx ON t.test (k, v);
 // mutations that are not yet live.
 func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect
+			// so disable leases on tables.
+			DisableTableCache: true,
+		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
 			AsyncExecNotification: asyncSchemaChangerDisabled,

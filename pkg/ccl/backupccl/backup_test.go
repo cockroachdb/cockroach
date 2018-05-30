@@ -150,6 +150,29 @@ func backupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
 }
 
+// TODO(dan): Actually invalidate the descriptor cache and use
+// backupRestoreTestSetup instead.
+func backupRestoreTestSetupDisableDescriptorCache(
+	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
+) (
+	ctx context.Context,
+	tc *testcluster.TestCluster,
+	sqlDB *sqlutils.SQLRunner,
+	tempDir string,
+	cleanup func(),
+) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						DisableTableCache: true,
+					},
+				},
+			},
+		})
+}
+
 func verifyBackupRestoreStatementResult(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
 ) error {

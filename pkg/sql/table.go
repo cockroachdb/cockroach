@@ -38,17 +38,6 @@ import (
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
 
-var testDisableTableLeases bool
-
-// TestDisableTableLeases disables table leases and returns
-// a function that can be used to enable it.
-func TestDisableTableLeases() func() {
-	testDisableTableLeases = true
-	return func() {
-		testDisableTableLeases = false
-	}
-}
-
 type namespaceKey struct {
 	parentID sqlbase.ID
 	name     string

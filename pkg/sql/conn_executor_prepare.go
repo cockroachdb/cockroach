@@ -197,7 +197,7 @@ func (ex *connExecutor) prepare(
 			p.avoidCachedDescriptors = true
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
-		if testDisableTableLeases {
+		if ex.server.cfg.TestingKnobs.DisableTableCache {
 			p.avoidCachedDescriptors = true
 		}
 

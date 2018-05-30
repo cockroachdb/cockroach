@@ -360,7 +360,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.avoidCachedDescriptors = true
 		}
 	}
-	if testDisableTableLeases {
+	if ex.server.cfg.TestingKnobs.DisableTableCache {
 		p.avoidCachedDescriptors = true
 	}
 
