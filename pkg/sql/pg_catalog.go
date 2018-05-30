@@ -1902,7 +1902,7 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	usesysid OID,
 	username NAME,
 	application_name TEXT,
-	client_addr TEXT,
+	client_addr INET,
 	client_hostname TEXT,
 	client_port INTEGER,
 	backend_start TIMESTAMPTZ,

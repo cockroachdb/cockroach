@@ -141,7 +141,7 @@ pid               INTEGER                   true  NULL     {}
 usesysid          OID                       true  NULL     {}
 username          NAME                      true  NULL     {}
 application_name  STRING                    true  NULL     {}
-client_addr       STRING                    true  NULL     {}
+client_addr       INET                      true  NULL     {}
 client_hostname   STRING                    true  NULL     {}
 client_port       INTEGER                   true  NULL     {}
 backend_start     TIMESTAMP WITH TIME ZONE  true  NULL     {}
