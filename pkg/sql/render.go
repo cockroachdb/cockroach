@@ -656,7 +656,7 @@ func (v *srfExtractionVisitor) transformSRF(
 	// Transform the SRF. This must be done in any case, whether the SRF
 	// was used as scalar or whether a specific column was requested.
 	tblName := tree.MakeUnqualifiedTableName(tree.Name(srfName))
-	src, err := v.p.getGeneratorPlan(v.ctx, srf, tblName)
+	src, err := v.p.getPlanForRowsFrom(v.ctx, tblName, srf)
 	if err != nil {
 		return nil, err
 	}
