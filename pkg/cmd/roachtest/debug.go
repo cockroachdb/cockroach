@@ -25,7 +25,7 @@ func registerDebug(r *registry) {
 	runDebug := func(ctx context.Context, t *test, c *cluster) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Start(ctx, false, c.Range(1, nodes))
 		db := c.Conn(ctx, nodes)
 
 		// Run debug zip command against a node, produce a zip file, extract it, and

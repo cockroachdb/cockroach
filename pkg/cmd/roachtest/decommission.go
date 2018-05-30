@@ -48,10 +48,10 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 
 	for i := 1; i <= numDecom; i++ {
-		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		c.Start(ctx, false, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
 	}
 
-	c.Start(ctx, c.Range(numDecom+1, nodes))
+	c.Start(ctx, false, c.Range(numDecom+1, nodes))
 	c.Run(ctx, c.Node(nodes), `./workload init kv --drop`)
 
 	waitReplicatedAwayFrom := func(downNodeID string) error {
@@ -206,7 +206,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			c.Start(ctx, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
+			c.Start(ctx, false, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
 				c.InternalAddr(ctx, c.Node(nodes))[0], node)))
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes

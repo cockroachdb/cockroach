@@ -79,7 +79,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 
 	c.Put(ctx, b, app, appNode)
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
-	c.Start(ctx, roachNodes)
+	c.Start(ctx, false, roachNodes)
 
 	// Sqlapps each take a `--cockroach_ip_addresses_csv` flag, which is a
 	// comma-separated list of node IP addresses with optional port specifiers.
