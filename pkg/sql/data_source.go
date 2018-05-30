@@ -127,8 +127,14 @@ func (p *planner) getDataSource(
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
 		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
-	case *tree.FuncExpr:
-		return p.getGeneratorPlan(ctx, t, sqlbase.AnonymousTable)
+	case *tree.RowsFromExpr:
+		if len(t.Items) == 1 {
+			if f, ok := t.Items[0].Expr.(*tree.FuncExpr); ok && t.Items[0].ColNames == nil {
+				return p.getGeneratorPlan(ctx, f, sqlbase.AnonymousTable)
+			}
+		}
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"not supported yet: %q", tree.ErrString(t))
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)

@@ -400,39 +400,39 @@ SELECT a FROM t ORDER BY a.b
 error (42P01): no data source matches prefix: a
 
 build
-SELECT GENERATE_SERIES FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
+SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
+SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY 1
+SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY 1
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT ARRAY[GENERATE_SERIES] AS a FROM GENERATE_SERIES(1, 100) ORDER BY a
+SELECT ARRAY[generate_series] AS a FROM generate_series(1, 100) ORDER BY a
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY 1
+SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY 1
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY GENERATE_SERIES
+SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY generate_series
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 build
-SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY -GENERATE_SERIES
+SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY -generate_series
 ----
-error (0A000): not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 
 
 # Sort should be skipped if the ORDER BY clause is constant.
