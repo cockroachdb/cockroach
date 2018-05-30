@@ -61,6 +61,7 @@ type tpcc struct {
 	partitions        int
 	affinityPartition int
 	zones             []string
+	activeWarehouses  int
 
 	usePostgres  bool
 	serializable bool
@@ -107,6 +108,7 @@ var tpccMeta = workload.Meta{
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
 			`zones`:              {RuntimeOnly: true},
+			`active-warehouses`:  {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
@@ -128,6 +130,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
+		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, -1, `Run the load generator against a specific number of warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -148,12 +151,20 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.workers == 0 {
-				w.workers = w.warehouses * numWorkersPerWarehouse
+			if w.activeWarehouses > w.warehouses {
+				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
 			}
-			if w.doWaits && w.workers != w.warehouses*numWorkersPerWarehouse {
+
+			if w.activeWarehouses == -1 {
+				w.activeWarehouses = w.warehouses
+			}
+
+			if w.workers == 0 {
+				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+			}
+			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
 				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
-					w.warehouses, w.warehouses*numWorkersPerWarehouse)
+					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
 			}
 
 			if w.partitions != 0 && !w.split {
@@ -414,15 +425,21 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.reg = reg
 
+	startWarehouse := 0
+	if w.affinityPartition != -1 {
+		startWarehouse = w.affinityPartition * (w.warehouses / w.partitions)
+	}
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx % w.warehouses
+		warehouse := workerIdx % w.activeWarehouses
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
 		p := (warehouse * w.partitions) / w.warehouses
 		// Here we're making sure that if we have a warehouse affinity, that we only create
 		// workers for the correct warehouses.
-		if w.affinityPartition != -1 && p != w.affinityPartition {
+		if w.activeWarehouses != w.warehouses {
+			warehouse += startWarehouse
+		} else if w.affinityPartition != -1 && p != w.affinityPartition {
 			continue
 		}
 		dbs := partitionDBs[p]
