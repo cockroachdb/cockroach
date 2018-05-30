@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node 5node-distsql-opt
 
 statement ok
 CREATE TABLE t (k1 INT, k2 INT, v INT, w INT, PRIMARY KEY (k1, k2))
@@ -107,22 +107,6 @@ NULL       /8       {1}       1
 /9         /100/1   {1}       1
 /100/1     /100/50  {3}       3
 /100/50    NULL     {1}       1
-
-# Verify limits and orderings are propagated correctly to the select.
-query TTTTT colnames
-EXPLAIN (VERBOSE) ALTER TABLE t SPLIT AT SELECT k1,k2 FROM t ORDER BY k1 LIMIT 3
-----
-Tree                 Field     Description       Columns                           Ordering
-split                ·         ·                 (key, pretty)                     ·
- └── limit           ·         ·                 (k1, k2)                          k1!=NULL; k2!=NULL; key(k1,k2); +k1
-      │              count     3                 ·                                 ·
-      └── render     ·         ·                 (k1, k2)                          k1!=NULL; k2!=NULL; key(k1,k2); +k1
-           │         render 0  test.public.t.k1  ·                                 ·
-           │         render 1  test.public.t.k2  ·                                 ·
-           └── scan  ·         ·                 (k1, k2, v[omitted], w[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
-·                    table     t@primary         ·                                 ·
-·                    spans     ALL               ·                                 ·
-·                    limit     3                 ·                                 ·
 
 # -- Tests with interleaved tables --
 
