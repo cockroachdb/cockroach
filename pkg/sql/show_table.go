@@ -43,9 +43,7 @@ func (p *planner) showTableDetails(
 	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
-	})
+	desc, err = ResolveExistingTableFromStore(ctx, p, tn, true /*required*/, anyDescType)
 	if err != nil {
 		return nil, err
 	}

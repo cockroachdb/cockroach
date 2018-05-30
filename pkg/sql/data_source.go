@@ -125,7 +125,7 @@ func (p *planner) getDataSource(
 		}
 
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
-		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
+		return p.getPlanForDesc(ctx, &desc.TableDescriptor, tn, hints, colCfg)
 
 	case *tree.FuncExpr:
 		return p.getGeneratorPlan(ctx, t, sqlbase.AnonymousTable)
@@ -210,11 +210,11 @@ func (p *planner) QualifyWithDatabase(
 
 func (p *planner) getTableDescByID(
 	ctx context.Context, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, error) {
+) (*ObjectDescriptor, error) {
 	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
 	descFunc := p.Tables().getTableVersionByID
 	if p.avoidCachedDescriptors {
-		descFunc = sqlbase.GetTableDescFromID
+		descFunc = sqlbase.GetExtendedTableDescFromID
 	}
 	return descFunc(ctx, p.txn, tableID)
 }
@@ -242,7 +242,7 @@ func (p *planner) getTableScanByRef(
 		addUnwantedAsHidden: true,
 		visibility:          scanVisibility,
 	}
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, colCfg)
+	src, err := p.getPlanForDesc(ctx, &desc.TableDescriptor, &tn, hints, colCfg)
 	if err != nil {
 		return src, err
 	}

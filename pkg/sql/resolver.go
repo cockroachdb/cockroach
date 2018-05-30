@@ -90,7 +90,7 @@ func ResolveExistingObject(
 		}
 		return nil, nil
 	}
-	desc := descI.(*ObjectDescriptor)
+	desc := descI.(*ObjectDescriptor).TableDescriptor
 	goodType := true
 	switch requiredType {
 	case requireTableDesc:
@@ -105,7 +105,23 @@ func ResolveExistingObject(
 	if !goodType {
 		return nil, sqlbase.NewWrongObjectTypeError(tn, requiredTypeNames[requiredType])
 	}
-	return desc, nil
+	return descI.(*ObjectDescriptor), nil
+}
+
+// ResolveExistingTableFromStore resolves an object and reads it from the store.
+func ResolveExistingTableFromStore(
+	ctx context.Context, p *planner, tn *ObjectName, required bool, requiredType requiredType,
+) (res *sqlbase.TableDescriptor, err error) {
+	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
+	p.avoidCachedDescriptors = true
+	obj, err := ResolveExistingObject(ctx, p, tn, required, requiredType)
+	if err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		return nil, nil
+	}
+	return &obj.TableDescriptor, nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -255,7 +271,7 @@ func getDescriptorsFromTargetList(
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, descriptor)
+			descs = append(descs, &descriptor.TableDescriptor)
 		}
 	}
 	if len(descs) == 0 {
@@ -327,7 +343,7 @@ func findTableContainingIndex(
 				idxName, tn.String(), result.String())
 		}
 		result = tn
-		desc = tableDesc
+		desc = &tableDesc.TableDescriptor
 	}
 	if result == nil && lookupFlags.required {
 		return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
@@ -356,10 +372,11 @@ func expandIndexName(
 
 	if !index.SearchTable {
 		// The index and its table prefix must exist already. Resolve the table.
-		desc, err = ResolveExistingObject(ctx, sc, tn, requireTable, requireTableDesc)
+		obj, err := ResolveExistingObject(ctx, sc, tn, requireTable, requireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
+		desc = &obj.TableDescriptor
 	} else {
 		// On the first call to expandIndexName(), index.SearchTable is
 		// true, index.Index is empty and tn.Table() is the index
@@ -422,20 +439,19 @@ func (p *planner) getTableAndIndex(
 	var err error
 
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		if tableWithIndex == nil {
-			// Variant: ALTER TABLE
-			tn, err = table.Normalize()
-			if err != nil {
-				return
-			}
-			tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-		} else {
+	if tableWithIndex == nil {
+		// Variant: ALTER TABLE
+		tn, err = table.Normalize()
+		if err != nil {
+			return nil, nil, err
+		}
+		tableDesc, err = ResolveExistingTableFromStore(ctx, p, tn, true /*required*/, requireTableDesc)
+	} else {
+		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			// Variant: ALTER INDEX
 			tn, tableDesc, err = expandIndexName(ctx, p, tableWithIndex, true /* requireTable */)
-		}
-	})
+		})
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -495,7 +511,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *sqlbase.TableDescriptor
+	newTableDesc *sqlbase.ExtendedTableDescriptor
 }
 
 var _ SchemaResolver = &fkSelfResolver{}

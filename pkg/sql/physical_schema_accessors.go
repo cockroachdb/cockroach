@@ -139,17 +139,22 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// No: let's see the flag.
 			if err == errTableAdding {
 				// We'll keep that despite the ADD state.
-				return desc, dbDesc, nil
+				obj := sqlbase.NewExtendedTableDescriptor(*desc)
+				return &obj, dbDesc, nil
 			}
 			// Bad state: the descriptor is essentially invisible.
 			desc = nil
 		}
 	}
 
-	if desc == nil && flags.required {
-		return nil, nil, sqlbase.NewUndefinedRelationError(name)
+	if desc == nil {
+		if flags.required {
+			return nil, nil, sqlbase.NewUndefinedRelationError(name)
+		}
+		return nil, dbDesc, nil
 	}
-	return desc, dbDesc, nil
+	obj := sqlbase.NewExtendedTableDescriptor(*desc)
+	return &obj, dbDesc, nil
 }
 
 // CachedPhysicalAccessor adds a cache on top of any SchemaAccessor.

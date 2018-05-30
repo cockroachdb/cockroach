@@ -67,7 +67,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 ) (*ObjectDescriptor, *DatabaseDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		if t, ok := scEntry.tables[name.Table()]; ok {
-			return t.desc, nil, nil
+			return &sqlbase.ExtendedTableDescriptor{TableDescriptor: *t.desc}, nil, nil
 		}
 		if flags.required {
 			return nil, nil, sqlbase.NewUndefinedRelationError(name)

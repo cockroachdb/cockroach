@@ -175,6 +175,18 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 	return table, nil
 }
 
+// GetExtendedTableDescFromID retrieves the table descriptor for
+// the table ID passed in using an existing txn. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a table.
+func GetExtendedTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*ExtendedTableDescriptor, error) {
+	table, err := GetTableDescFromID(ctx, txn, id)
+	if err != nil {
+		return nil, err
+	}
+	obj := NewExtendedTableDescriptor(*table)
+	return &obj, nil
+}
+
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
 // If there is an error, that error is returned immediately.
 func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error {
@@ -2744,4 +2756,15 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		refs[c.ID] = struct{}{}
 	}
 	return refs, nil
+}
+
+// ExtendedTableDescriptor is a TableDescriptor along with some
+// precomputed values. It is meant to be const.
+type ExtendedTableDescriptor struct {
+	TableDescriptor
+}
+
+// NewExtendedTableDescriptor returns a fully constructed ExtendedTableDescriptor.
+func NewExtendedTableDescriptor(table TableDescriptor) ExtendedTableDescriptor {
+	return ExtendedTableDescriptor{TableDescriptor: table}
 }

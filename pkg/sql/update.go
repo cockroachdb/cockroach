@@ -91,7 +91,7 @@ func (p *planner) Update(
 	// Determine what are the foreign key tables that are involved in the update.
 	fkTables, err := sqlbase.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc.TableDescriptor,
 		sqlbase.CheckUpdates,
 		p.lookupFKTable,
 		p.CheckPrivilege,
@@ -148,7 +148,7 @@ func (p *planner) Update(
 	// Extract the column descriptors for the column names listed
 	// in the LHS operands of SET expressions. This also checks
 	// that each column is assigned at most once.
-	updateCols, err := p.processColumns(desc, names,
+	updateCols, err := p.processColumns(&desc.TableDescriptor, names,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func (p *planner) Update(
 	// all the computed columns. The computedCols result is an alias for the suffix
 	// of updateCols that corresponds to computed columns.
 	updateCols, computedCols, computeExprs, err :=
-		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, desc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, &desc.TableDescriptor, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (p *planner) Update(
 	// process of being added.
 	ru, err := sqlbase.MakeRowUpdater(
 		p.txn,
-		desc,
+		&desc.TableDescriptor,
 		fkTables,
 		updateCols,
 		requestedCols,

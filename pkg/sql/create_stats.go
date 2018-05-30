@@ -66,7 +66,7 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 
 	return &createStatsNode{
 		CreateStats: *n,
-		tableDesc:   tableDesc,
+		tableDesc:   &tableDesc.TableDescriptor,
 		columns:     columnIDs,
 	}, nil
 }

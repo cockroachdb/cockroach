@@ -59,14 +59,11 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	var tableDesc *TableDescriptor
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	tableDesc, err := ResolveExistingTableFromStore(ctx, p, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

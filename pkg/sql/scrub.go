@@ -112,7 +112,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
+		if err := n.startScrubTable(params.ctx, params.p, &tableDesc.TableDescriptor, tableName); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:
@@ -191,7 +191,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if !tableDesc.IsTable() {
 			continue
 		}
-		if err := n.startScrubTable(ctx, p, tableDesc, tableName); err != nil {
+		if err := n.startScrubTable(ctx, p, &tableDesc.TableDescriptor, tableName); err != nil {
 			return err
 		}
 	}

@@ -204,7 +204,7 @@ func (sc *SchemaChanger) runBackfill(
 
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, error) {
+) (*ObjectDescriptor, error) {
 	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				rd, err := sqlbase.MakeRowDeleter(
-					txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+					txn, &tableDesc.TableDescriptor, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
 				)
 				if err != nil {
 					return err
@@ -493,7 +493,7 @@ func (sc *SchemaChanger) distBackfill(
 			if backfillType == columnBackfill {
 				fkTables, err := sqlbase.TablesNeededForFKs(
 					ctx,
-					*tableDesc,
+					tableDesc.TableDescriptor,
 					sqlbase.CheckUpdates,
 					sqlbase.NoLookup,
 					sqlbase.NoCheckPrivilege,
@@ -507,7 +507,7 @@ func (sc *SchemaChanger) distBackfill(
 					if err != nil {
 						return err
 					}
-					otherTableDescs = append(otherTableDescs, *table)
+					otherTableDescs = append(otherTableDescs, table.TableDescriptor)
 				}
 			}
 			rw := &errOnlyResultWriter{}
@@ -524,7 +524,7 @@ func (sc *SchemaChanger) distBackfill(
 			)
 			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
+				&planCtx, backfillType, tableDesc.TableDescriptor, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
 			if err != nil {
 				return err
@@ -715,7 +715,7 @@ func columnBackfillInTxn(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
 		table := tc.getUncommittedTableByID(k)
-		otherTableDescs = append(otherTableDescs, *table)
+		otherTableDescs = append(otherTableDescs, table.TableDescriptor)
 	}
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {

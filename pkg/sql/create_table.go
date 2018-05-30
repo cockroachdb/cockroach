@@ -449,10 +449,11 @@ func resolveFK(
 ) error {
 	targetTable := d.Table.TableName()
 
-	target, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
+	obj, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
+	target := &obj.TableDescriptor
 	if target.ID == tbl.ID {
 		// When adding a self-ref FK to an _existing_ table, we want to make sure
 		// we edit the same copy.
@@ -1224,9 +1225,10 @@ func MakeTableDesc(
 
 	// We use a fkSelfResolver so that name resolution can find the newly created
 	// table.
+	obj := sqlbase.NewExtendedTableDescriptor(desc)
 	fkResolver := &fkSelfResolver{
 		SchemaResolver: vt,
-		newTableDesc:   &desc,
+		newTableDesc:   &obj,
 		newTableName:   n.Table.TableName(),
 	}
 
