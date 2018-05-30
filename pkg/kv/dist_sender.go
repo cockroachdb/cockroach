@@ -718,6 +718,12 @@ type response struct {
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Clone the BatchRequest's transaction so that future mutations to the
+	// proto don't affect the proto in this batch.
+	if ba.Txn != nil {
+		txnCopy := *ba.Txn
+		ba.Txn = &txnCopy
+	}
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection
 	var seekKey roachpb.RKey
@@ -867,14 +873,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && ds.rpcContext != nil &&
 			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
-			// Note that we pass the batch request by value to the parallel
-			// goroutine to avoid using the cloned txn.
-
-			// Clone the txn to preserve the current txn sequence for the async call.
-			if ba.Txn != nil {
-				txnClone := ba.Txn.Clone()
-				ba.Txn = &txnClone
-			}
+			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
 			responseCh <- resp
