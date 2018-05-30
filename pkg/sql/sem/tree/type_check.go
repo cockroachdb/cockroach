@@ -432,7 +432,9 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 		)
 	}
 
-	return expr.Expr.(*Tuple).Exprs[colIndex].(TypedExpr), nil
+	expr.ColIndex = colIndex
+	expr.typ = resolvedType.(types.TTuple).Types[colIndex]
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.

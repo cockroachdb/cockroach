@@ -756,6 +756,7 @@ query error pq: star expansion of tuples is not supported
 SELECT ((ROW(1,'2',true) AS a,b,c)).*
 
 # From a Subquery
+# TODO(bram): Figure out why type labels are not being propagated in this case.
 query error pq: type tuple{int, string, bool} is not composite
 SELECT ((t)).e, ((t)).f, ((t)).g
 FROM (
@@ -767,10 +768,41 @@ statement ok
 CREATE TABLE t (a int, b string)
 
 statement ok
-INSERT INTO t VALUES (1, 'one'), (2, 'two')
+INSERT INTO t VALUES (1, 'one'), (2, 'two'), (2, 'two'), (3, 'three')
 
-query error pq: column "t" does not exist
-SELECT (t).a FROM t
+query error pq: column "unk" does not exist
+SELECT (unk).a FROM t
+
+query I rowsort
+SELECT (c).a FROM (SELECT ((a, b) AS a,b) AS c FROM t)
+----
+1
+2
+2
+3
+
+# Nested tuples.
+query T rowsort
+SELECT ((c).b).b FROM (SELECT ((a, ((b, b) AS b,b2)) AS a,b) AS c FROM t)
+----
+one
+two
+two
+three
+
+# Column access expressions in interesting query locations.
+query T
+SELECT MAX((c).b)
+FROM
+(
+    SELECT ((a, b) AS a,b) AS c FROM t
+)
+WHERE (c).b <> 'three'
+GROUP BY (c).a
+ORDER BY (c).a DESC
+----
+two
+one
 
 statement ok
 DROP TABLE t

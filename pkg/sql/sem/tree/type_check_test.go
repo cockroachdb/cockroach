@@ -141,9 +141,9 @@ func TestTypeCheck(t *testing.T) {
 		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
 		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
 
-		{`((ROW (1) AS a)).a`, `1:::INT`},
-		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
-		{`((('1', 2) AS a, b)).b`, `2:::INT`},
+		{`((ROW (1) AS a)).a`, `((ROW(1:::INT) AS a)).a`},
+		{`((('1', 2) AS a, b)).a`, `((('1':::STRING, 2:::INT) AS a, b)).a`},
+		{`((('1', 2) AS a, b)).b`, `((('1':::STRING, 2:::INT) AS a, b)).b`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the

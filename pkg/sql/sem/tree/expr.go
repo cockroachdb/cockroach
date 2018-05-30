@@ -1496,9 +1496,10 @@ func (node *CollateExpr) Format(ctx *FmtCtx) {
 // ColumnAccessExpr represents (SRF).x or (SRF).* expression. Specifically, it
 // allows accessing the column(s) from a Set Retruning Function.
 type ColumnAccessExpr struct {
-	Expr    Expr
-	ColName string
-	Star    bool
+	Expr     Expr
+	ColName  string
+	Star     bool
+	ColIndex int // This should only be set during type checking.
 
 	typeAnnotation
 }
