@@ -62,8 +62,6 @@ const sourceVersion = "source"
 func (bv binaryVersionUpgrade) name() string { return fmt.Sprintf("binary=%s", bv.newVersion) }
 
 func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
-	t.Helper()
-
 	var newBin string
 	if bv.newVersion == sourceVersion {
 		newBin = localcluster.SourceBinary()
@@ -94,7 +92,7 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 			}
 			log.Infof(ctx, "wiping node %d's data directory", nodeIdx)
 		}
-		log.Infof(ctx, "upgrading node %d's binary to %s", nodeIdx, bv.newVersion)
+		log.Infof(ctx, "upgrading node at index %d's binary to %s", nodeIdx, bv.newVersion)
 		lc.ReplaceBinary(nodeIdx, newBin)
 		if err := lc.Restart(ctx, nodeIdx); err != nil {
 			t.Fatal(err)
@@ -110,7 +108,6 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 }
 
 func (bv binaryVersionUpgrade) checkAll(ctx context.Context, t *testing.T, c cluster.Cluster) {
-	t.Helper()
 	for i := 0; i < c.NumNodes(); i++ {
 		bv.checkNode(ctx, t, c, i)
 	}
@@ -119,7 +116,6 @@ func (bv binaryVersionUpgrade) checkAll(ctx context.Context, t *testing.T, c clu
 func (bv binaryVersionUpgrade) checkNode(
 	ctx context.Context, t *testing.T, c cluster.Cluster, nodeIdx int,
 ) {
-	t.Helper()
 	db := makePGClient(t, c.PGUrl(ctx, nodeIdx))
 	defer db.Close()
 
@@ -177,8 +173,6 @@ type clusterVersionUpgrade struct {
 func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s", cv.newVersion) }
 
 func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
-	t.Helper()
-
 	// hasShowSettingBug is true when we're working around
 	// https://github.com/cockroachdb/cockroach/issues/22796.
 	//
@@ -315,6 +309,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	// the cluster, and we had a bug about migrations on large numbers of tables:
 	// #22370.
 	db := makePGClient(t, c.PGUrl(ctx, 0 /* nodeId */))
+	defer db.Close()
 	if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +319,6 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 			t.Fatal(err)
 		}
 	}
-	defer db.Close()
 
 	startingBinVersion.checkAll(ctx, t, c)
 	for _, step := range steps {
