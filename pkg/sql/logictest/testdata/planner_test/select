@@ -1,6 +1,146 @@
 # LogicTest: default
 
 # ------------------------------------------------------------------------------
+# Test with storing columns.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b_idx (b) STORING (c, d),
+  UNIQUE INDEX c_idx (c) STORING (a, b, d)
+)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM t
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+t      primary  true    1    a       ASC        false    false
+t      b_idx    false   1    b       ASC        false    false
+t      b_idx    false   2    c       N/A        true     false
+t      b_idx    false   3    d       N/A        true     false
+t      b_idx    false   4    a       ASC        false    true
+t      c_idx    true    1    c       ASC        false    false
+t      c_idx    true    2    a       N/A        true     false
+t      c_idx    true    3    b       N/A        true     false
+t      c_idx    true    4    d       N/A        true     false
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/b_idx/2/1/c/d -> /3/4
+output row: [1 2 3 4]
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@c_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/c_idx/3 -> /1/2/4
+output row: [1 2 3 4]
+
+# Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
+
+statement ok
+CREATE INDEX d_idx ON t (d) STORING (a, b)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, d FROM t@d_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/d_idx/4/1/b -> /2
+output row: [1 2 4]
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t@a_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/a_idx/1/b -> /2
+output row: [1 2]
+
+# Test that unspecified storing values are treated like NULL values.
+statement ok
+INSERT INTO t (a) VALUES (2)
+
+statement ok
+INSERT INTO t VALUES (3)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/b_idx/NULL/2 -> NULL
+output row: [2 NULL NULL NULL]
+fetched: /t/b_idx/NULL/3 -> NULL
+output row: [3 NULL NULL NULL]
+fetched: /t/b_idx/2/1/c/d -> /3/4
+output row: [1 2 3 4]
+
+# Regression test for #14601.
+
+statement ok
+CREATE TABLE t14601 (a STRING, b BOOL)
+
+statement ok
+CREATE INDEX i14601 ON t14601 (a) STORING (b)
+
+query TTT
+EXPLAIN SELECT a FROM t14601 ORDER BY a
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601@i14601
+·          spans  ALL
+
+# Updates were broken too.
+
+statement ok
+CREATE TABLE t14601a (
+  a STRING,
+  b BOOL,
+  c INT,
+  FAMILY f1 (a),
+  FAMILY f2 (b),
+  FAMILY f3 (c)
+)
+
+statement ok
+CREATE INDEX i14601a ON t14601a (a) STORING (b, c)
+
+query TTT
+EXPLAIN SELECT a, b FROM t14601a ORDER BY a
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601a@i14601a
+·          spans  ALL
+
+statement ok
+DROP index i14601a
+
+statement ok
+CREATE UNIQUE INDEX i14601a ON t14601a (a) STORING (b)
+
+query TTT
+EXPLAIN SELECT a, b FROM t14601a ORDER BY a
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601a@i14601a
+·          spans  ALL
+
+statement ok
+DROP TABLE t; DROP TABLE t14601; DROP TABLE t14601a
+
+# ------------------------------------------------------------------------------
 # Ensure that correct index is used when indexed column has collation.
 # ------------------------------------------------------------------------------
 statement ok
@@ -95,7 +235,7 @@ fetched: /dt/dt_c_key/'34h2s' -> /'2015-08-30 03:34:45.34567+00:00'
 output row: ['34h2s']
 
 # ------------------------------------------------------------------------------
-# Ensure that special decimal values result in correct scan spans.
+# Ensure that decimal values result in correct scan spans.
 # ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE dec (d decimal, v decimal(3, 1), primary key (d, v))
@@ -121,6 +261,35 @@ EXPLAIN SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
 scan  ·      ·
 ·     table  dec@primary
 ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#
+
+# Test composite encoding of DECIMAL type in indexes.
+statement ok
+CREATE TABLE c (
+  a INT PRIMARY KEY,
+  b DECIMAL(2,2),
+  INDEX b_idx (b)
+)
+
+statement ok
+INSERT INTO c VALUES(1, 0.4)
+
+# Test that unspecifying b is like specifying NULL.
+statement ok
+INSERT INTO c (a) VALUES(2)
+
+statement ok
+INSERT INTO c VALUES(3)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM c@b_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /c/b_idx/NULL/2 -> NULL
+output row: [2 NULL]
+fetched: /c/b_idx/NULL/3 -> NULL
+output row: [3 NULL]
+fetched: /c/b_idx/0.4/1/b -> /0.40
+output row: [1 0.40]
 
 # ------------------------------------------------------------------------------
 # Verify that lookups for Decimal NaN use indices when possible:

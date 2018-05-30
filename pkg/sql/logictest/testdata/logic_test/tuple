@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata distsql-disk
 
 subtest unlabeled_tuple
 
@@ -254,9 +254,9 @@ NULL
 
 # Issue 10407: tuple comparisons should not require homogeneous types
 query B colnames
-SELECT (now(), 2) = ((now() :: timestamp), 2)
+SELECT (now(), 2) = (now() :: timestamp, 2)
 ----
-(now(), 2) = ((now()::TIMESTAMP), 2)
+(now(), 2) = (now()::TIMESTAMP, 2)
 true
 
 query B colnames

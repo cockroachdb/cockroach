@@ -11,14 +11,6 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1,1)
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/primary/1 -> NULL
-fetched: /t/primary/1/b -> 1
-output row: [1 1]
-
 user root
 
 statement ok
@@ -41,24 +33,8 @@ t      primary  true    1    a       ASC        false    false
 t      foo      false   1    b       ASC        false    false
 t      foo      false   2    a       ASC        false    true
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@foo]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/foo/1/1 -> NULL
-output row: [1 1]
-
 statement ok
 INSERT INTO t VALUES (2,1)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@foo]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/foo/1/1 -> NULL
-output row: [1 1]
-fetched: /t/foo/1/2 -> NULL
-output row: [2 1]
 
 statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
@@ -70,15 +46,6 @@ Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
 t      primary  true    1    a       ASC        false    false
 t      foo      false   1    b       ASC        false    false
 t      foo      false   2    a       ASC        false    true
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@foo]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/foo/1/1 -> NULL
-output row: [1 1]
-fetched: /t/foo/1/2 -> NULL
-output row: [2 1]
 
 # test for DESC index
 
@@ -111,18 +78,6 @@ t      b_desc   false   2    a       ASC        false    true
 t      b_asc    false   1    b       ASC        false    false
 t      b_asc    false   2    c       DESC       false    false
 t      b_asc    false   3    a       ASC        false    true
-
-# index b_desc is well formed and column c is scanned using the primary index.
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_desc]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/b_desc/2/2 -> NULL
-fetched: /t/b_desc/1/1 -> NULL
-fetched: /t/primary/2/b/c -> /2/2
-output row: [2 2 2]
-fetched: /t/primary/1/b/c -> /1/1
-output row: [1 1 1]
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
