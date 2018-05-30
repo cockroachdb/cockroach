@@ -671,12 +671,21 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if encrypt {
+	if encrypt && !argExists(args, "--encrypt") {
 		args = append(args, "--encrypt")
 	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+func argExists(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target || strings.HasPrefix(arg, target+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 // Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
