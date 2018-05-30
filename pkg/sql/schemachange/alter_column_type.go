@@ -122,13 +122,18 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 		},
 		sqlbase.ColumnType_STRING: classifierWidth,
 	},
-	// #26078
-	// sqlbase.ColumnType_TIME: {
-	// sqlbase.ColumnType_TIMETZ: ColumnConversionTrivial.classifier(),
-	// },
-	// sqlbase.ColumnType_TIMETZ: {
-	// sqlbase.ColumnType_TIME: ColumnConversionTrivial.classifier(),
-	// },
+	// TODO(bob): It looks like TIMETZ is currently in flux and the
+	// implementation, encoding, and semantics may be changing.
+	// We'll disable this change for the moment until these
+	// issues settle:
+	// https://github.com/cockroachdb/cockroach/issues/25224
+	// https://github.com/cockroachdb/cockroach/issues/26097
+	sqlbase.ColumnType_TIME: {
+		sqlbase.ColumnType_TIMETZ: ColumnConversionDangerous.classifier(),
+	},
+	sqlbase.ColumnType_TIMETZ: {
+		sqlbase.ColumnType_TIME: ColumnConversionDangerous.classifier(),
+	},
 	sqlbase.ColumnType_TIMESTAMP: {
 		sqlbase.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
 	},
