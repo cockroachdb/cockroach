@@ -50,6 +50,7 @@ type Overload struct {
 	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)
+	Generator     GeneratorFactory
 }
 
 // params implements the overloadImpl interface.
@@ -71,8 +72,16 @@ func (b Overload) FixedReturnType() types.T {
 }
 
 // Signature returns a human-readable signature.
-func (b Overload) Signature() string {
-	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
+// If simplify is bool, tuple-returning functions with just
+// 1 tuple element unwrap the return type in the signature.
+func (b Overload) Signature(simplify bool) string {
+	retType := b.FixedReturnType()
+	if simplify {
+		if t, ok := retType.(types.TTuple); ok && len(t.Types) == 1 {
+			retType = t.Types[0]
+		}
+	}
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), retType)
 }
 
 // overloadImpl is an implementation of an overloaded function. It provides

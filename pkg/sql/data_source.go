@@ -266,9 +266,18 @@ func renameSource(
 		isAnonymousTable := (len(src.info.SourceAliases) == 0 ||
 			(len(src.info.SourceAliases) == 1 && src.info.SourceAliases[0].Name == sqlbase.AnonymousTable))
 		noColNameSpecified := len(colAlias) == 0
-		if vg, ok := src.plan.(*valueGenerator); ok && isAnonymousTable && noColNameSpecified {
-			if tType, ok := vg.expr.ResolvedType().(types.TTable); ok && len(tType.Cols.Types) == 1 {
-				colAlias = tree.NameList{as.Alias}
+
+		// A SRF uses projectSetNode.
+		if vg, ok := src.plan.(*projectSetNode); ok &&
+			isAnonymousTable && noColNameSpecified && len(vg.funcs) == 1 {
+			// And we only pluck the name if the projection is done over the
+			// unary table.
+			if _, ok := vg.source.(*unaryNode); ok {
+				// And there is just one column in the result.
+				if tType, ok := vg.funcs[0].ResolvedType().(types.TTuple); ok &&
+					len(tType.Types) == 1 {
+					colAlias = tree.NameList{as.Alias}
+				}
 			}
 		}
 
@@ -415,7 +424,7 @@ func (p *planner) getSubqueryPlan(
 func (p *planner) getGeneratorPlan(
 	ctx context.Context, t *tree.FuncExpr, srcName tree.TableName,
 ) (planDataSource, error) {
-	plan, err := p.makeGenerator(ctx, t)
+	plan, err := p.ProjectSet(ctx, &unaryNode{}, "FROM", t)
 	if err != nil {
 		return planDataSource{}, err
 	}

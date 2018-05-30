@@ -1306,17 +1306,17 @@ CREATE TABLE pg_catalog.pg_proc (
 					isRetSet := false
 					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 						var retOid oid.Oid
-						if t, ok := fixedRetType.(types.TTable); ok {
+						if t, ok := fixedRetType.(types.TTuple); ok && builtin.Generator != nil {
 							isRetSet = true
 							// Functions returning tables with zero, or more than one
 							// columns are marked to return "anyelement"
 							// (e.g. `unnest`)
 							retOid = oid.T_anyelement
-							if len(t.Cols.Types) == 1 {
+							if len(t.Types) == 1 {
 								// Functions returning tables with exactly one column
 								// are marked to return the type of that column
 								// (e.g. `generate_series`).
-								retOid = t.Cols.Types[0].Oid()
+								retOid = t.Types[0].Oid()
 							}
 						} else {
 							retOid = fixedRetType.Oid()
@@ -1973,7 +1973,6 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 	reflect.TypeOf(types.Timestamp):   typCategoryDateTime,
 	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
 	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
-	reflect.TypeOf(types.FamTable):    typCategoryPseudo,
 	reflect.TypeOf(types.Oid):         typCategoryNumeric,
 	reflect.TypeOf(types.UUID):        typCategoryUserDefined,
 	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
