@@ -41,6 +41,7 @@ pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
+pg_stat_activity
 pg_tables
 pg_tablespace
 pg_trigger
@@ -101,6 +102,7 @@ pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
+pg_stat_activity
 pg_tables
 pg_tablespace
 pg_trigger
@@ -1146,6 +1148,38 @@ query TOOBTTT colnames
 SELECT * FROM pg_catalog.pg_extension
 ----
 extname  extowner  extnamespace  extrelocatable  extversion  extconfig  extcondition
+
+## pg_catalog.pg_stat_activity
+
+query OTIOTTTTITTTTTTTIIT colnames
+SELECT * FROM pg_catalog.pg_stat_activity
+----
+datid  datname  pid  usesysid  username  application_name  client_addr  client_hostname  client_port  backend_start  xact_start  query_start  state_change  wait_event_type  wait_event  state  backend_xid  backend_xmin  query
+
+query TTBTT colnames
+SHOW COLUMNS FROM pg_catalog.pg_stat_activity
+----
+Field             Type                      Null  Default  Indices
+datid             OID                       true  NULL     {}
+datname           NAME                      true  NULL     {}
+pid               INTEGER                   true  NULL     {}
+usesysid          OID                       true  NULL     {}
+username          NAME                      true  NULL     {}
+application_name  STRING                    true  NULL     {}
+client_addr       INET                      true  NULL     {}
+client_hostname   STRING                    true  NULL     {}
+client_port       INTEGER                   true  NULL     {}
+backend_start     TIMESTAMP WITH TIME ZONE  true  NULL     {}
+xact_start        TIMESTAMP WITH TIME ZONE  true  NULL     {}
+query_start       TIMESTAMP WITH TIME ZONE  true  NULL     {}
+state_change      TIMESTAMP WITH TIME ZONE  true  NULL     {}
+wait_event_type   STRING                    true  NULL     {}
+wait_event        STRING                    true  NULL     {}
+state             STRING                    true  NULL     {}
+backend_xid       INTEGER                   true  NULL     {}
+backend_xmin      INTEGER                   true  NULL     {}
+query             STRING                    true  NULL     {}
+
 
 ## pg_catalog.pg_settings
 
