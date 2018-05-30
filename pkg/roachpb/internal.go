@@ -48,3 +48,28 @@ func (samp InternalTimeSeriesSample) Minimum() float64 {
 	}
 	return 0
 }
+
+// IsColumnar returns true if this InternalTimeSeriesData stores its samples
+// in columnar format.
+func (data *InternalTimeSeriesData) IsColumnar() bool {
+	return len(data.Offset) > 0
+}
+
+// IsColumnar returns true if this InternalTimeSeriesData stores its samples
+// in columnar format.
+func (data *InternalTimeSeriesData) IsRollup() bool {
+	return len(data.Offset) > 0
+}
+
+// IsColumnar returns true if this InternalTimeSeriesData stores its samples
+// in columnar format.
+func (data *InternalTimeSeriesData) SampleCount() int {
+	if data.IsColumnar() {
+		return len(data.Offset)
+	}
+	return len(data.Samples)
+}
+
+func (data *InternalTimeSeriesData) OffsetForTimestamp(timestampNanos int64) int32 {
+	return int32((timestampNanos - data.StartTimestampNanos) / data.SampleDurationNanos)
+}
