@@ -3471,8 +3471,23 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return d, nil
 }
 
-// Eval implements the TypedExpr interface.
-func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+// EvalArgsAndGetGenerator evaluates the arguments and instanciates a
+// ValueGenerator for use by set projections.
+func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator, error) {
+	if expr.fn == nil || expr.fn.Class != GeneratorClass {
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
+	}
+	args, err := expr.evalArgs(ctx)
+	if err != nil || args == nil {
+		return nil, err
+	}
+	return expr.fn.Generator(ctx, args.D)
+}
+
+// evalArgs evaluates just the function application's arguments.
+// A nil DTuple indicates NULL.
+func (expr *FuncExpr) evalArgs(ctx *EvalContext) (*DTuple, error) {
 	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
@@ -3480,9 +3495,21 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return nil, err
 		}
 		if arg == DNull && !expr.fn.NullableArgs {
-			return DNull, nil
+			return nil, nil
 		}
 		args.D = append(args.D, arg)
+	}
+	return args, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	args, err := expr.evalArgs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if args == nil {
+		return DNull, err
 	}
 
 	res, err := expr.fn.Fn(ctx, args.D)
@@ -3863,11 +3890,6 @@ func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DArray) Eval(_ *EvalContext) (Datum, error) {
-	return t, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (t *DTable) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

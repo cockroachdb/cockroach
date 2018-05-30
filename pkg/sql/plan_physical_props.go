@@ -43,6 +43,10 @@ func planPhysicalProps(plan planNode) physicalProps {
 		if n.run.rowsNeeded {
 			return planPhysicalProps(n.source)
 		}
+	case *projectSetNode:
+		// TODO(knz): the result is ordered by any of the underlying
+		// SRF orders, not just the source first.
+		return planPhysicalProps(n.source)
 
 	case *filterNode:
 		return n.props

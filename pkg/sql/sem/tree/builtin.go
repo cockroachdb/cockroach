@@ -110,6 +110,7 @@ type Builtin struct {
 	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)
+	Generator     GeneratorFactory
 }
 
 // params implements the overloadImpl interface.
