@@ -134,6 +134,12 @@ message RangeProblems {
   bool no_raft_leader = 3;
   bool underreplicated = 4;
   bool no_lease = 5;
+
+  // Quiescent ranges do not tick by definition, but we track this in
+  // two different ways and suspect that they're getting out of sync.
+  // If the replica's quiescent flag doesn't agree with the store's
+  // list of replicas that are ticking, warn about it.
+  bool quiescent_equals_ticking = 6;
 }
 
 message RangeStatistics {
@@ -179,6 +185,7 @@ message RangeInfo {
   CommandQueueMetrics cmd_q_global = 12 [ (gogoproto.nullable) = false ];
   storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
+  bool ticking = 15;
 }
 
 message RangesRequest {
@@ -502,6 +509,11 @@ message ProblemRangesResponse {
     ];
     repeated int64 underreplicated_range_ids = 6 [
       (gogoproto.customname) = "UnderreplicatedRangeIDs",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 quiescent_equals_ticking_range_ids = 7 [
+      (gogoproto.customname) = "QuiescentEqualsTickingRangeIDs",
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];

@@ -6021,7 +6021,13 @@ type ReplicaMetrics struct {
 	Leaseholder bool
 	LeaseType   roachpb.LeaseType
 	LeaseStatus LeaseStatus
-	Quiescent   bool
+
+	// Quiescent indicates whether the replica believes itself to be quiesced.
+	Quiescent bool
+	// Ticking indicates whether the store is ticking the replica. It should be
+	// the opposite of Quiescent.
+	Ticking bool
+
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
 	RangeCounter      bool
@@ -6050,6 +6056,10 @@ func (r *Replica) Metrics(
 	r.cmdQMu.Unlock()
 	r.mu.RUnlock()
 
+	r.store.unquiescedReplicas.Lock()
+	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
+	r.store.unquiescedReplicas.Unlock()
+
 	return calcReplicaMetrics(
 		ctx,
 		now,
@@ -6060,6 +6070,7 @@ func (r *Replica) Metrics(
 		leaseStatus,
 		r.store.StoreID(),
 		quiescent,
+		ticking,
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
 	)
@@ -6084,6 +6095,7 @@ func calcReplicaMetrics(
 	leaseStatus LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
+	ticking bool,
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
 ) ReplicaMetrics {
@@ -6099,6 +6111,7 @@ func calcReplicaMetrics(
 	m.Leaseholder = m.LeaseValid && leaseOwner
 	m.Leader = isRaftLeader(raftStatus)
 	m.Quiescent = quiescent
+	m.Ticking = ticking
 
 	// We compute an estimated range count across the cluster by counting the
 	// first live replica in each descriptor. Note that the first live replica is
