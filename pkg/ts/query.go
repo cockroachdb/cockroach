@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -59,7 +58,7 @@ func makeTimeSeriesSpanIterator(span timeSeriesSpan) timeSeriesSpanIterator {
 func (tsi *timeSeriesSpanIterator) computeLength() {
 	tsi.length = 0
 	for _, data := range tsi.span {
-		tsi.length += len(data.Samples)
+		tsi.length += data.SampleCount()
 	}
 }
 
@@ -71,7 +70,7 @@ func (tsi *timeSeriesSpanIterator) computeTimestamp() {
 		return
 	}
 	data := tsi.span[tsi.outer]
-	tsi.timestamp = data.StartTimestampNanos + data.SampleDurationNanos*int64(data.Samples[tsi.inner].Offset)
+	tsi.timestamp = data.StartTimestampNanos + data.SampleDurationNanos*int64(tsi.offset())
 }
 
 // forward moves the iterator forward one sample. The maximum index is equal
@@ -82,7 +81,7 @@ func (tsi *timeSeriesSpanIterator) forward() {
 	}
 	tsi.total++
 	tsi.inner++
-	if tsi.inner >= len(tsi.span[tsi.outer].Samples) {
+	if tsi.inner >= tsi.span[tsi.outer].SampleCount() {
 		tsi.inner = 0
 		tsi.outer++
 	}
@@ -98,7 +97,7 @@ func (tsi *timeSeriesSpanIterator) backward() {
 	tsi.total--
 	if tsi.inner == 0 {
 		tsi.outer--
-		tsi.inner = len(tsi.span[tsi.outer].Samples) - 1
+		tsi.inner = tsi.span[tsi.outer].SampleCount() - 1
 	} else {
 		tsi.inner--
 	}
@@ -122,8 +121,8 @@ func (tsi *timeSeriesSpanIterator) seekIndex(index int) {
 
 	remaining := index
 	newOuter := 0
-	for len(tsi.span) > newOuter && remaining >= len(tsi.span[newOuter].Samples) {
-		remaining -= len(tsi.span[newOuter].Samples)
+	for len(tsi.span) > newOuter && remaining >= tsi.span[newOuter].SampleCount() {
+		remaining -= tsi.span[newOuter].SampleCount()
 		newOuter++
 	}
 	tsi.inner = remaining
@@ -143,6 +142,150 @@ func (tsi *timeSeriesSpanIterator) seekTimestamp(timestamp int64) {
 	tsi.seekIndex(index)
 }
 
+func (tsi *timeSeriesSpanIterator) isColumnar() bool {
+	return tsi.span[tsi.outer].IsColumnar()
+}
+
+func (tsi *timeSeriesSpanIterator) isRollup() bool {
+	return tsi.span[tsi.outer].IsRollup()
+}
+
+func (tsi *timeSeriesSpanIterator) offset() int32 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		return data.Offset[tsi.inner]
+	}
+	return data.Samples[tsi.inner].Offset
+}
+
+func (tsi *timeSeriesSpanIterator) count() uint32 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.Count[tsi.inner]
+		}
+		return 1
+	}
+	return data.Samples[tsi.inner].Count
+}
+
+func (tsi *timeSeriesSpanIterator) sum() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.Sum[tsi.inner]
+		}
+		return data.Last[tsi.inner]
+	}
+	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) max() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.Max[tsi.inner]
+		}
+		return data.Last[tsi.inner]
+	}
+	if max := data.Samples[tsi.inner].Max; max != nil {
+		return *max
+	}
+	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) min() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.Min[tsi.inner]
+		}
+		return data.Last[tsi.inner]
+	}
+	if min := data.Samples[tsi.inner].Min; min != nil {
+		return *min
+	}
+	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) setOffset(value int32) {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		data.Offset[tsi.inner] = value
+		return
+	}
+	data.Samples[tsi.inner].Offset = value
+}
+
+func (tsi *timeSeriesSpanIterator) setSingleValue(value float64) {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		data.Last[tsi.inner] = value
+		return
+	}
+	data.Samples[tsi.inner].Sum = value
+	data.Samples[tsi.inner].Count = 1
+	data.Samples[tsi.inner].Min = nil
+	data.Samples[tsi.inner].Max = nil
+}
+
+// truncateSpan truncates the span underlying this iterator to the current
+// iterator, *not including* the current position. That is, the logical
+// underlying span is truncated to [0, current).
+func (tsi *timeSeriesSpanIterator) truncateSpan() {
+	var outerExtent int
+	if tsi.inner == 0 {
+		outerExtent = tsi.outer
+	} else {
+		outerExtent = tsi.outer + 1
+	}
+
+	// Reclaim memory from unused slabs.
+	unused := tsi.span[outerExtent:]
+	tsi.span = tsi.span[:outerExtent]
+	for i := range unused {
+		unused[i] = roachpb.InternalTimeSeriesData{}
+	}
+
+	if tsi.inner != 0 {
+		data := tsi.span[tsi.outer]
+		size := tsi.inner
+		if tsi.isColumnar() {
+			data.Offset = data.Offset[:size]
+			data.Last = data.Last[:size]
+			if tsi.isRollup() {
+				data.First = data.First[:size]
+				data.Min = data.Min[:size]
+				data.Max = data.Max[:size]
+				data.Count = data.Count[:size]
+				data.Sum = data.Sum[:size]
+				data.Variance = data.Variance[:size]
+			}
+			return
+		}
+		data.Samples = data.Samples[:size]
+		tsi.span[tsi.outer] = data
+	}
+
+	tsi.computeLength()
+	tsi.computeTimestamp()
+}
+
+// Convert the underlying span to single-valued by removing all optional columns
+// from any columnar spans.
+func convertToSingleValue(span timeSeriesSpan) {
+	for i := range span {
+		if span[i].IsColumnar() {
+			span[i].Count = nil
+			span[i].Sum = nil
+			span[i].Min = nil
+			span[i].Max = nil
+			span[i].First = nil
+			span[i].Variance = nil
+		}
+	}
+}
+
 // value returns the value of the sample at the iterators index, according to
 // the provided downsampler operation.
 func (tsi *timeSeriesSpanIterator) value(downsampler tspb.TimeSeriesQueryAggregator) float64 {
@@ -151,13 +294,13 @@ func (tsi *timeSeriesSpanIterator) value(downsampler tspb.TimeSeriesQueryAggrega
 	}
 	switch downsampler {
 	case tspb.TimeSeriesQueryAggregator_AVG:
-		return tsi.data().Average()
+		return tsi.sum() / float64(tsi.count())
 	case tspb.TimeSeriesQueryAggregator_MAX:
-		return tsi.data().Maximum()
+		return tsi.max()
 	case tspb.TimeSeriesQueryAggregator_MIN:
-		return tsi.data().Minimum()
+		return tsi.min()
 	case tspb.TimeSeriesQueryAggregator_SUM:
-		return tsi.data().Summation()
+		return tsi.sum()
 	}
 
 	panic(fmt.Sprintf("unknown downsampler option encountered: %v", downsampler))
@@ -231,23 +374,6 @@ func (tsi *timeSeriesSpanIterator) derivative(
 // samplePeriod returns the sample period duration for this iterator.
 func (tsi *timeSeriesSpanIterator) samplePeriod() int64 {
 	return tsi.span[0].SampleDurationNanos
-}
-
-// data returns the actual sample at the current iterator position.
-func (tsi *timeSeriesSpanIterator) data() roachpb.InternalTimeSeriesSample {
-	if !tsi.isValid() {
-		panic("call of data() on an invalid timeSeriesSpanIterator")
-	}
-	return tsi.span[tsi.outer].Samples[tsi.inner]
-}
-
-// dataSlice returns a slice of one element containing the sample at the current
-// iterator position. This is used for mutating the sample at this index.
-func (tsi *timeSeriesSpanIterator) dataSlice() []roachpb.InternalTimeSeriesSample {
-	if !tsi.isValid() {
-		panic("call of dataSlice() on an invalid timeSeriesSpanIterator")
-	}
-	return tsi.span[tsi.outer].Samples[tsi.inner : tsi.inner+1]
 }
 
 // isValid returns true if the iterator currently points to a valid sample.
@@ -384,7 +510,14 @@ func (db *DB) queryChunk(
 	}
 
 	if timespan.SampleDurationNanos != diskResolution.SampleDuration() {
-		downsampleSpans(sourceSpans, timespan.SampleDurationNanos)
+		downsampleSpans(sourceSpans, timespan.SampleDurationNanos, query.GetDownsampler())
+		// downsampleSpans always produces single-valued spans. At the time of
+		// writing, all downsamplers are the identity on single-valued spans, but
+		// that may not be true forever (consider for instance a variance
+		// downsampler). Therefore, before continuing to the aggregation step we
+		// convert the downsampler to SUM, which is equivalent to identify for a
+		// single-valued span.
+		query.Downsampler = tspb.TimeSeriesQueryAggregator_SUM.Enum()
 	}
 
 	// Aggregate spans, increasing our memory usage if the destination slice is
@@ -405,63 +538,55 @@ func (db *DB) queryChunk(
 }
 
 // downsampleSpans downsamples the provided timeSeriesSpans in place, without
-// allocating additional memory.
-func downsampleSpans(spans map[string]timeSeriesSpan, duration int64) {
+// allocating additional memory. The output data from downsampleSpans is
+// single-valued, without rollups; unused rollup data will be discarded.
+func downsampleSpans(
+	spans map[string]timeSeriesSpan, duration int64, downsampler tspb.TimeSeriesQueryAggregator,
+) {
 	// Downsample data in place.
 	for k, span := range spans {
 		nextInsert := makeTimeSeriesSpanIterator(span)
 		for start, end := nextInsert, nextInsert; start.isValid(); start = end {
-			var (
-				sampleTimestamp = normalizeToPeriod(start.timestamp, duration)
-				max             = -math.MaxFloat64
-				min             = math.MaxFloat64
-				count           uint32
-				sum             float64
-			)
-			for end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp {
-				data := end.data()
-				count += data.Count
-				sum += data.Sum
-				if data.Max != nil {
-					max = math.Max(max, *data.Max)
-				} else {
-					max = math.Max(max, data.Sum)
+			sampleTimestamp := normalizeToPeriod(start.timestamp, duration)
+
+			switch downsampler {
+			case tspb.TimeSeriesQueryAggregator_MAX:
+				max := -math.MaxFloat64
+				for ; end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp; end.forward() {
+					max = math.Max(max, end.max())
 				}
-				if data.Min != nil {
-					min = math.Min(min, *data.Min)
-				} else {
-					min = math.Min(min, data.Sum)
+				nextInsert.setSingleValue(max)
+			case tspb.TimeSeriesQueryAggregator_MIN:
+				min := math.MaxFloat64
+				for ; end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp; end.forward() {
+					min = math.Min(min, end.min())
 				}
-				end.forward()
+				nextInsert.setSingleValue(min)
+			case tspb.TimeSeriesQueryAggregator_AVG:
+				count, sum := uint32(0), 0.0
+				for ; end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp; end.forward() {
+					count += end.count()
+					sum += end.sum()
+				}
+				nextInsert.setSingleValue(sum / float64(count))
+			case tspb.TimeSeriesQueryAggregator_SUM:
+				sum := 0.0
+				for ; end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp; end.forward() {
+					sum += end.sum()
+				}
+				nextInsert.setSingleValue(sum)
 			}
-			nextInsert.dataSlice()[0] = roachpb.InternalTimeSeriesSample{
-				Offset: int32((sampleTimestamp - nextInsert.span[nextInsert.outer].StartTimestampNanos) / nextInsert.span[nextInsert.outer].SampleDurationNanos),
-				Count:  count,
-				Sum:    sum,
-				Max:    proto.Float64(max),
-				Min:    proto.Float64(min),
-			}
+
+			nextInsert.setOffset(span[nextInsert.outer].OffsetForTimestamp(sampleTimestamp))
 			nextInsert.forward()
 		}
 
-		// Trim span using nextInsert, which is where the next value would be inserted
-		// and is thus the first unnneeded value.
-		var outerExtent int
-		if nextInsert.inner == 0 {
-			outerExtent = nextInsert.outer
-		} else {
-			outerExtent = nextInsert.outer + 1
-		}
-		spans[k] = span[:outerExtent]
-		// Reclaim memory from unused slabs.
-		unused := span[outerExtent:]
-		for i := range unused {
-			unused[i] = roachpb.InternalTimeSeriesData{}
-		}
-
-		if nextInsert.inner != 0 {
-			spans[k][len(spans[k])-1].Samples = spans[k][len(spans[k])-1].Samples[:nextInsert.inner]
-		}
+		// Trim span using nextInsert, which is where the next value would be
+		// inserted and is thus the first unneeded value.
+		nextInsert.truncateSpan()
+		span = nextInsert.span
+		convertToSingleValue(span)
+		spans[k] = span
 	}
 }
 

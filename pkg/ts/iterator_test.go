@@ -15,6 +15,7 @@
 package ts
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -34,10 +35,10 @@ type dataSample struct {
 	value     float64
 }
 
-// makeInternalData makes an InternalTimeSeriesData object from a collection of data
+// makeInternalRowData makes an InternalTimeSeriesData object from a collection of data
 // samples. Input is the start timestamp, the sample duration, and the set of
 // samples. Sample data must be ordered by timestamp.
-func makeInternalData(
+func makeInternalRowData(
 	startTimestamp, sampleDuration int64, samples []dataSample,
 ) roachpb.InternalTimeSeriesData {
 	// Adjust startTimestamp to an exact multiple of sampleDuration.
@@ -82,6 +83,99 @@ func makeInternalData(
 	return result
 }
 
+// makeInternalColumnData makes an InternalTimeSeriesData object from a collection of data
+// samples. Input is the start timestamp, the sample duration, and the set of
+// samples. Sample data must be ordered by timestamp.
+func makeInternalColumnData(
+	startTimestamp, sampleDuration int64, samples []dataSample,
+) roachpb.InternalTimeSeriesData {
+	// Adjust startTimestamp to an exact multiple of sampleDuration.
+	startTimestamp -= startTimestamp % sampleDuration
+	result := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: startTimestamp,
+		SampleDurationNanos: sampleDuration,
+	}
+
+	// Run through all samples, merging any consecutive samples which correspond
+	// to the same sample interval. Assume that the data will contain relevant
+	// roll-ups, but discard the roll-up data if there is only one sample per
+	// sample period.
+	isRollup := false
+
+	// Variance computation must consider each value against the the average.
+	// Retain the component values of each column and compute a variance.
+	valuesForSample := make([]float64, 0, 1)
+	computeVariance := func() float64 {
+		variance := 0.0
+		if len(valuesForSample) > 1 {
+			// Compute average of values.
+			sum := 0.0
+			for _, value := range valuesForSample {
+				sum += value
+			}
+			avg := sum / float64(len(valuesForSample))
+
+			// Compute variance of values using the average.
+			totalSquaredDeviation := 0.0
+			for _, value := range valuesForSample {
+				totalSquaredDeviation += math.Pow(value-avg, 2)
+			}
+			variance = totalSquaredDeviation / float64(len(valuesForSample))
+		}
+		// Reset value collection.
+		valuesForSample = valuesForSample[:0]
+		return variance
+	}
+
+	for _, sample := range samples {
+		offset := result.OffsetForTimestamp(sample.timestamp)
+		value := sample.value
+
+		// Merge into the previous sample if we have the same offset.
+		if count := len(result.Offset); count > 0 && result.Offset[count-1] == offset {
+			isRollup = true
+			result.Last[count-1] = value
+			result.Count[count-1]++
+			result.Sum[count-1] += value
+			result.Max[count-1] = math.Max(result.Max[count-1], value)
+			result.Min[count-1] = math.Min(result.Min[count-1], value)
+			valuesForSample = append(valuesForSample, value)
+		} else if count > 0 && result.Offset[count-1] > offset {
+			panic("sample data provided to generateData must be ordered by timestamp.")
+		} else {
+			// Compute variance for previous sample if there was more than one
+			// value.
+			if len(valuesForSample) > 1 {
+				result.Variance[count-1] = computeVariance()
+			}
+
+			result.Offset = append(result.Offset, offset)
+			result.Last = append(result.Last, value)
+			result.First = append(result.First, value)
+			result.Count = append(result.Count, 1)
+			result.Sum = append(result.Sum, value)
+			result.Min = append(result.Min, value)
+			result.Max = append(result.Max, value)
+			result.Variance = append(result.Variance, 0)
+			valuesForSample = append(valuesForSample, value)
+		}
+	}
+
+	// Compute variance for last sample.
+	result.Variance[len(result.Variance)-1] = computeVariance()
+
+	if !isRollup {
+		result.First = nil
+		result.Count = nil
+		result.Sum = nil
+		result.Min = nil
+		result.Max = nil
+		result.Variance = nil
+	}
+
+	return result
+}
+
 func verifySpanIteratorPosition(t *testing.T, actual, expected timeSeriesSpanIterator) {
 	t.Helper()
 	if a, e := actual.total, expected.total; a != e {
@@ -103,20 +197,6 @@ func verifySpanIteratorPosition(t *testing.T, actual, expected timeSeriesSpanIte
 
 func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
-		makeInternalData(0, 10, []dataSample{
-			{10, 1},
-			{20, 2},
-		}),
-		makeInternalData(30, 10, []dataSample{
-			{30, 3},
-		}),
-		makeInternalData(50, 10, []dataSample{
-			{50, 5},
-			{70, 7},
-			{90, 9},
-		}),
-	})
 
 	// initialize explicit iterator results for the entire span - this makes the
 	// movement tests easier to read, as we are often asserting that the same
@@ -171,74 +251,128 @@ func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 	}
 
 	// Initial position.
-	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+	verifyIterTest := func(t *testing.T, iter timeSeriesSpanIterator) {
+		verifySpanIteratorPosition(t, iter, explicitPositions[0])
 
-	// Forwarding.
-	iter.forward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[1])
-	iter.forward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[2])
+		// Forwarding.
+		iter.forward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[1])
+		iter.forward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[2])
 
-	iter.forward()
-	iter.forward()
-	iter.forward()
-	iter.forward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[6])
-	iter.forward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+		iter.forward()
+		iter.forward()
+		iter.forward()
+		iter.forward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[6])
+		iter.forward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[6])
 
-	// Backwards.
-	iter.backward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[5])
-	iter.backward()
-	iter.backward()
-	iter.backward()
-	iter.backward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[1])
-	iter.backward()
-	iter.backward()
-	iter.backward()
-	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+		// Backwards.
+		iter.backward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[5])
+		iter.backward()
+		iter.backward()
+		iter.backward()
+		iter.backward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[1])
+		iter.backward()
+		iter.backward()
+		iter.backward()
+		verifySpanIteratorPosition(t, iter, explicitPositions[0])
 
-	// Seek index.
-	iter.seekIndex(2)
-	verifySpanIteratorPosition(t, iter, explicitPositions[2])
-	iter.seekIndex(4)
-	verifySpanIteratorPosition(t, iter, explicitPositions[4])
-	iter.seekIndex(0)
-	verifySpanIteratorPosition(t, iter, explicitPositions[0])
-	iter.seekIndex(1000)
-	verifySpanIteratorPosition(t, iter, explicitPositions[6])
-	iter.seekIndex(-1)
-	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+		// Seek index.
+		iter.seekIndex(2)
+		verifySpanIteratorPosition(t, iter, explicitPositions[2])
+		iter.seekIndex(4)
+		verifySpanIteratorPosition(t, iter, explicitPositions[4])
+		iter.seekIndex(0)
+		verifySpanIteratorPosition(t, iter, explicitPositions[0])
+		iter.seekIndex(1000)
+		verifySpanIteratorPosition(t, iter, explicitPositions[6])
+		iter.seekIndex(-1)
+		verifySpanIteratorPosition(t, iter, explicitPositions[0])
 
-	// Seek timestamp.
-	iter.seekTimestamp(0)
-	verifySpanIteratorPosition(t, iter, explicitPositions[0])
-	iter.seekTimestamp(15)
-	verifySpanIteratorPosition(t, iter, explicitPositions[1])
-	iter.seekTimestamp(50)
-	verifySpanIteratorPosition(t, iter, explicitPositions[3])
-	iter.seekTimestamp(80)
-	verifySpanIteratorPosition(t, iter, explicitPositions[5])
-	iter.seekTimestamp(10000)
-	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+		// Seek timestamp.
+		iter.seekTimestamp(0)
+		verifySpanIteratorPosition(t, iter, explicitPositions[0])
+		iter.seekTimestamp(15)
+		verifySpanIteratorPosition(t, iter, explicitPositions[1])
+		iter.seekTimestamp(50)
+		verifySpanIteratorPosition(t, iter, explicitPositions[3])
+		iter.seekTimestamp(80)
+		verifySpanIteratorPosition(t, iter, explicitPositions[5])
+		iter.seekTimestamp(10000)
+		verifySpanIteratorPosition(t, iter, explicitPositions[6])
+	}
+
+	// Row data only.
+	t.Run("row only", func(t *testing.T) {
+		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
+			makeInternalRowData(0, 10, []dataSample{
+				{10, 1},
+				{20, 2},
+			}),
+			makeInternalRowData(30, 10, []dataSample{
+				{30, 3},
+			}),
+			makeInternalRowData(50, 10, []dataSample{
+				{50, 5},
+				{70, 7},
+				{90, 9},
+			}),
+		}))
+	})
+
+	t.Run("columns only", func(t *testing.T) {
+		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
+			makeInternalColumnData(0, 10, []dataSample{
+				{10, 1},
+				{20, 2},
+			}),
+			makeInternalColumnData(30, 10, []dataSample{
+				{30, 3},
+			}),
+			makeInternalColumnData(50, 10, []dataSample{
+				{50, 5},
+				{70, 7},
+				{90, 9},
+			}),
+		}))
+	})
+
+	t.Run("mixed rows and columns", func(t *testing.T) {
+		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
+			makeInternalRowData(0, 10, []dataSample{
+				{10, 1},
+				{20, 2},
+			}),
+			makeInternalColumnData(30, 10, []dataSample{
+				{30, 3},
+			}),
+			makeInternalRowData(50, 10, []dataSample{
+				{50, 5},
+				{70, 7},
+				{90, 9},
+			}),
+		}))
+	})
 }
 
 func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
-		makeInternalData(0, 10, []dataSample{
+		makeInternalRowData(0, 10, []dataSample{
 			{10, 1},
 			{20, 2},
 			{20, 4},
 		}),
-		makeInternalData(30, 10, []dataSample{
+		makeInternalRowData(30, 10, []dataSample{
 			{30, 3},
 			{30, 6},
 			{30, 9},
 		}),
-		makeInternalData(50, 10, []dataSample{
+		makeInternalRowData(50, 10, []dataSample{
 			{50, 12},
 			{70, 700},
 			{90, 9},
@@ -326,193 +460,341 @@ func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 	}
 }
 
+// dataDesc is used to describe an internal data structure independently of it
+// being formatted using rows or columns.
+type dataDesc struct {
+	startTimestamp int64
+	sampleDuration int64
+	samples        []dataSample
+}
+
 func TestDownsampleSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, tc := range []struct {
-		span           timeSeriesSpan
-		samplePeriod   int64
-		expectedResult timeSeriesSpan
+
+	// Each test case is structured as such:
+	// + A description of an "input" span, which describes a list of
+	// InternalTimeSeriesData structures that will be assembled into a data span.
+	// Each structure has a start timestamp, a sample period (should be the same
+	// for all structure), and a set of data samples.
+	// + A sample period, which should be greater than or equal to the sample
+	// period of the input span structures.
+	// + A downsampler operation.
+	// + A description of an "expected" span, which describes the list of
+	// InternalTimeSeriesData structures that should result from running the input
+	// span through the downsampling operation.
+	//
+	// Importantly, both the "input" and "expected" spans are defined using the
+	// dataDesc structure, rather than explicitly creating InternalTimeSeriesData
+	// structures. This is because we want to test both the row format and the
+	// columnar format of InternalTimeSeriesData when downsampling - therefore,
+	// using the descriptors, each test case is run using first row-structured
+	// data, then column-structured data, and finally a mixed-format test which
+	// combines the two. This gives us a very broad test area while still
+	// maintaining a compact set of test cases.
+	for tcnum, tc := range []struct {
+		inputDesc    []dataDesc
+		samplePeriod int64
+		downsampler  tspb.TimeSeriesQueryAggregator
+		expectedDesc []dataDesc
 	}{
-		// Same sample period as disk has no result.
+		// Original sample period, average downsampler.
 		{
-			span: timeSeriesSpan{
-				makeInternalData(0, 10, []dataSample{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
 					{10, 1},
 					{20, 2},
 					{20, 4},
 					{30, 5},
-				}),
-				makeInternalData(50, 10, []dataSample{
+				}},
+				{50, 10, []dataSample{
 					{50, 5},
 					{60, 6},
-				}),
+				}},
 			},
 			samplePeriod: 10,
-			expectedResult: timeSeriesSpan{
-				{
-					StartTimestampNanos: 0,
-					SampleDurationNanos: 10,
-					Samples: []roachpb.InternalTimeSeriesSample{
-						{
-							Offset: 1,
-							Sum:    1,
-							Count:  1,
-							Max:    proto.Float64(1),
-							Min:    proto.Float64(1),
-						},
-						{
-							Offset: 2,
-							Sum:    6,
-							Count:  2,
-							Max:    proto.Float64(4),
-							Min:    proto.Float64(2),
-						},
-						{
-							Offset: 3,
-							Sum:    5,
-							Count:  1,
-							Max:    proto.Float64(5),
-							Min:    proto.Float64(5),
-						},
-					},
-				},
-				{
-					StartTimestampNanos: 50,
-					// Downsample does not adjust SampleDurationNanos.
-					SampleDurationNanos: 10,
-					Samples: []roachpb.InternalTimeSeriesSample{
-						{
-							Offset: 0,
-							Sum:    5,
-							Count:  1,
-							Max:    proto.Float64(5),
-							Min:    proto.Float64(5),
-						},
-						{
-							Offset: 1,
-							Sum:    6,
-							Count:  1,
-							Max:    proto.Float64(6),
-							Min:    proto.Float64(6),
-						},
-					},
-				},
+			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 3},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
 			},
 		},
-		// Basic downsampling.
+		// Original sample period, max downsampler. Should fill in max value.
 		{
-			span: timeSeriesSpan{
-				makeInternalData(0, 10, []dataSample{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
 					{10, 1},
 					{20, 2},
 					{20, 4},
 					{30, 5},
-				}),
-				makeInternalData(50, 10, []dataSample{
+				}},
+				{50, 10, []dataSample{
 					{50, 5},
 					{60, 6},
-				}),
-				makeInternalData(70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
-				}),
+				}},
 			},
-			samplePeriod: 50,
-			expectedResult: timeSeriesSpan{
-				{
-					StartTimestampNanos: 0,
-					// Downsample does not adjust SampleDurationNanos.
-					SampleDurationNanos: 10,
-					Samples: []roachpb.InternalTimeSeriesSample{
-						{
-							Offset: 0,
-							Sum:    12,
-							Count:  4,
-							Max:    proto.Float64(5.0),
-							Min:    proto.Float64(1.0),
-						},
-						{
-							Offset: 5,
-							Sum:    27,
-							Count:  4,
-							Max:    proto.Float64(9.0),
-							Min:    proto.Float64(5.0),
-						},
-						{
-							Offset: 10,
-							Sum:    8,
-							Count:  1,
-							Max:    proto.Float64(8.0),
-							Min:    proto.Float64(8.0),
-						},
-					},
-				},
+			samplePeriod: 10,
+			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 4},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
 			},
 		},
-		// Downsampling while re-using multiple InternalTimeSeriesData structures.
+		// Original sample period, min downsampler.
 		{
-			span: timeSeriesSpan{
-				makeInternalData(0, 10, []dataSample{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
 					{10, 1},
-				}),
-				makeInternalData(50, 10, []dataSample{
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
 					{50, 5},
 					{60, 6},
-				}),
-				makeInternalData(70, 10, []dataSample{
+				}},
+			},
+			samplePeriod: 10,
+			downsampler:  tspb.TimeSeriesQueryAggregator_MIN,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+			},
+		},
+		// AVG downsamper. Should re-use original span data.
+		{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+				{70, 10, []dataSample{
 					{70, 7},
 					{90, 9},
 					{110, 8},
-				}),
+				}},
 			},
 			samplePeriod: 50,
-			expectedResult: timeSeriesSpan{
-				{
-					StartTimestampNanos: 0,
-					// Downsample does not adjust SampleDurationNanos.
-					SampleDurationNanos: 10,
-					Samples: []roachpb.InternalTimeSeriesSample{
-						{
-							Offset: 0,
-							Sum:    1,
-							Count:  1,
-							Max:    proto.Float64(1.0),
-							Min:    proto.Float64(1.0),
-						},
-					},
-				},
-				{
-					// Downsample does not adjust SampleDurationNanos or
-					// StartTimestampNanos.
-					StartTimestampNanos: 50,
-					SampleDurationNanos: 10,
-					Samples: []roachpb.InternalTimeSeriesSample{
-						{
-							Offset: 0,
-							Sum:    27,
-							Count:  4,
-							Max:    proto.Float64(9.0),
-							Min:    proto.Float64(5.0),
-						},
-						{
-							Offset: 5,
-							Sum:    8,
-							Count:  1,
-							Max:    proto.Float64(8.0),
-							Min:    proto.Float64(8.0),
-						},
-					},
-				},
+			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{0, 3},
+					{50, 6.75},
+					{100, 8},
+				}},
+			},
+		},
+		// MAX downsamper. Should re-use original span data; note that the sum and
+		// count values are NOT overwritten.
+		{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+				{70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}},
+			},
+			samplePeriod: 50,
+			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{0, 5},
+					{50, 9},
+					{100, 8},
+				}},
+			},
+		},
+		// MIN downsamper. Should re-use original span data; note that the sum and
+		// count values are NOT overwritten.
+		{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+				{70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}},
+			},
+			samplePeriod: 50,
+			downsampler:  tspb.TimeSeriesQueryAggregator_MIN,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{0, 1},
+					{50, 5},
+					{100, 8},
+				}},
+			},
+		},
+		// AVG downsampler, downsampling while re-using multiple
+		// InternalTimeSeriesData structures.
+		{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+				{70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}},
+			},
+			samplePeriod: 50,
+			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{0, 1},
+				}},
+				{50, 10, []dataSample{
+					{50, 6.75},
+					{100, 8},
+				}},
+			},
+		},
+		// MAX downsampler, downsampling while re-using multiple
+		// InternalTimeSeriesData structures.
+		{
+			inputDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{10, 1},
+				}},
+				{50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}},
+				{70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}},
+			},
+			samplePeriod: 50,
+			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
+			expectedDesc: []dataDesc{
+				{0, 10, []dataSample{
+					{0, 1},
+				}},
+				{50, 10, []dataSample{
+					{50, 9},
+					{100, 8},
+				}},
 			},
 		},
 	} {
-		t.Run("", func(t *testing.T) {
-			spans := map[string]timeSeriesSpan{
-				"test": tc.span,
+
+		// Run case in Row format.
+		t.Run(fmt.Sprintf("%d:Row", tcnum), func(t *testing.T) {
+			span := make(timeSeriesSpan, len(tc.inputDesc))
+			for i, desc := range tc.inputDesc {
+				span[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
 			}
-			downsampleSpans(spans, tc.samplePeriod)
-			if a, e := spans["test"], tc.expectedResult; !reflect.DeepEqual(a, e) {
+			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
+			for i, desc := range tc.expectedDesc {
+				expectedSpan[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+			}
+			spans := map[string]timeSeriesSpan{
+				"test": span,
+			}
+			downsampleSpans(spans, tc.samplePeriod, tc.downsampler)
+			if a, e := spans["test"], expectedSpan; !reflect.DeepEqual(a, e) {
+				for _, diff := range pretty.Diff(a, e) {
+					t.Error(diff)
+				}
+			}
+		})
+
+		// Run case in Column format.
+		t.Run(fmt.Sprintf("%d:Column", tcnum), func(t *testing.T) {
+			span := make(timeSeriesSpan, len(tc.inputDesc))
+			for i, desc := range tc.inputDesc {
+				span[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+			}
+			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
+			for i, desc := range tc.expectedDesc {
+				expectedSpan[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+			}
+			spans := map[string]timeSeriesSpan{
+				"test": span,
+			}
+			downsampleSpans(spans, tc.samplePeriod, tc.downsampler)
+			if a, e := spans["test"], expectedSpan; !reflect.DeepEqual(a, e) {
+				for _, diff := range pretty.Diff(a, e) {
+					t.Error(diff)
+				}
+			}
+		})
+
+		// Run case in Mixed format.
+		t.Run(fmt.Sprintf("%d:Mixed", tcnum), func(t *testing.T) {
+			span := make(timeSeriesSpan, len(tc.inputDesc))
+			for i, desc := range tc.inputDesc {
+				if i%2 == 0 {
+					span[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+				} else {
+					span[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+				}
+			}
+			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
+			for i, desc := range tc.expectedDesc {
+				if i%2 == 0 {
+					expectedSpan[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+				} else {
+					expectedSpan[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
+				}
+			}
+			spans := map[string]timeSeriesSpan{
+				"test": span,
+			}
+			downsampleSpans(spans, tc.samplePeriod, tc.downsampler)
+			if a, e := spans["test"], expectedSpan; !reflect.DeepEqual(a, e) {
 				for _, diff := range pretty.Diff(a, e) {
 					t.Error(diff)
 				}
