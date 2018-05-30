@@ -296,10 +296,10 @@ SELECT json_array_elements('[]'::JSON)
 ----
 
 
-query error pq: json_array_elements\(\): cannot be called on a non-array
+query error pq: cannot be called on a non-array
 SELECT json_array_elements('{"1": 2}'::JSON)
 
-query error pq: jsonb_array_elements\(\): cannot be called on a non-array
+query error pq: cannot be called on a non-array
 SELECT jsonb_array_elements('{"1": 2}'::JSON)
 
 
@@ -334,10 +334,10 @@ query T
 SELECT json_array_elements('[]'::JSON)
 ----
 
-query error pq: json_array_elements_text\(\): cannot be called on a non-array
+query error pq: cannot be called on a non-array
 SELECT json_array_elements_text('{"1": 2}'::JSON)
 
-query error pq: jsonb_array_elements_text\(\): cannot be called on a non-array
+query error pq: cannot be called on a non-array
 SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
 
 
@@ -372,10 +372,10 @@ SELECT json_object_keys('{"a": 1, "1": 2, "3": {"4": 5, "6": 7}}'::JSON)
 3
 a
 
-query error pq: json_object_keys\(\): cannot call json_object_keys on a scalar
+query error pq: cannot call json_object_keys on a scalar
 SELECT json_object_keys('null'::JSON)
 
-query error pq: json_object_keys\(\): cannot call json_object_keys on an array
+query error pq: cannot call json_object_keys on an array
 SELECT json_object_keys('[1, 2, 3]'::JSON)
 
 ## json_build_object

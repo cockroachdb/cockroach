@@ -935,7 +935,7 @@ CREATE TABLE crdb_internal.builtin_functions (
 			for _, f := range overloads {
 				if err := addRow(
 					tree.NewDString(name),
-					tree.NewDString(f.Signature()),
+					tree.NewDString(f.Signature(false /* simplify */)),
 					tree.NewDString(props.Category),
 					tree.NewDString(f.Info),
 				); err != nil {

@@ -126,11 +126,6 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 		}
 
-	case *valueGenerator:
-		if v.observer.expr != nil {
-			v.expr(name, "expr", -1, n.expr)
-		}
-
 	case *scanNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
@@ -514,6 +509,14 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *controlJobsNode:
 		v.visit(n.rows)
+
+	case *projectSetNode:
+		if v.observer.expr != nil {
+			for i, texpr := range n.exprs {
+				v.observer.expr(name, "render", i, texpr)
+			}
+		}
+		v.visit(n.source)
 	}
 }
 
@@ -596,6 +599,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&joinNode{}):                 "join",
 	reflect.TypeOf(&limitNode{}):                "limit",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
+	reflect.TypeOf(&projectSetNode{}):           "project set",
 	reflect.TypeOf(&testingRelocateNode{}):      "testingRelocate",
 	reflect.TypeOf(&renderNode{}):               "render",
 	reflect.TypeOf(&rowCountNode{}):             "count",
@@ -616,7 +620,6 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&unionNode{}):                "union",
 	reflect.TypeOf(&updateNode{}):               "update",
 	reflect.TypeOf(&upsertNode{}):               "upsert",
-	reflect.TypeOf(&valueGenerator{}):           "generator",
 	reflect.TypeOf(&valuesNode{}):               "values",
 	reflect.TypeOf(&windowNode{}):               "window",
 	reflect.TypeOf(&zeroNode{}):                 "norows",

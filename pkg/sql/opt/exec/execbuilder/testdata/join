@@ -298,62 +298,62 @@ SELECT "Level", "Type", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT
            pos.n
   ] WHERE "Type" <> 'values' AND "Field" <> 'size'
 ----
-0   sort       ·          ·
-0   ·          order      +pktable_schem,+pktable_name,+fk_name,+key_seq
-1   render     ·          ·
-1   ·          render 0   CAST(NULL AS STRING)
-1   ·          render 1   pkn.nspname
-1   ·          render 2   pkc.relname
-1   ·          render 3   pka.attname
-1   ·          render 4   CAST(NULL AS STRING)
-1   ·          render 5   fkn.nspname
-1   ·          render 6   fkc.relname
-1   ·          render 7   fka.attname
-1   ·          render 8   pos.n
-1   ·          render 9   CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END
-1   ·          render 10  CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END
-1   ·          render 11  con.conname
-1   ·          render 12  pkic.relname
-1   ·          render 13  CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END
-2   join       ·          ·
-2   ·          type       inner
-2   ·          equality   (oid) = (relnamespace)
-3   join       ·          ·
-3   ·          type       inner
-3   ·          equality   (oid, oid) = (attrelid, confrelid)
-4   join       ·          ·
-4   ·          type       inner
-4   ·          pred       pka.attnum = con.confkey[pos.n]
-5   join       ·          ·
-5   ·          type       inner
-5   ·          equality   (oid) = (relnamespace)
-6   filter     ·          ·
-6   ·          filter     fkn.nspname = 'public'
-6   join       ·          ·
-6   ·          type       inner
-6   ·          equality   (oid, oid) = (attrelid, conrelid)
-7   filter     ·          ·
-7   ·          filter     fkc.relname = 'orders'
-7   join       ·          ·
-7   ·          type       inner
-7   ·          pred       fka.attnum = con.conkey[pos.n]
-8   join       ·          ·
-8   ·          type       inner
-8   ·          equality   (oid) = (objid)
-9   filter     ·          ·
-9   ·          filter     con.contype = 'f'
-9   join       ·          ·
-9   ·          type       cross
-10  generator  ·          ·
-10  ·          expr       generate_series(1, 32)
-10  join       ·          ·
-10  ·          type       inner
-10  ·          equality   (refobjid) = (oid)
-11  filter     ·          ·
-11  ·          filter     (dep.classid = 139623798) AND (dep.refclassid = 1411792157)
-11  filter     ·          ·
-11  ·          filter     pkic.relkind = 'i'
-
+0   sort         ·          ·
+0   ·            order      +pktable_schem,+pktable_name,+fk_name,+key_seq
+1   render       ·          ·
+1   ·            render 0   CAST(NULL AS STRING)
+1   ·            render 1   pkn.nspname
+1   ·            render 2   pkc.relname
+1   ·            render 3   pka.attname
+1   ·            render 4   CAST(NULL AS STRING)
+1   ·            render 5   fkn.nspname
+1   ·            render 6   fkc.relname
+1   ·            render 7   fka.attname
+1   ·            render 8   pos.n
+1   ·            render 9   CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END
+1   ·            render 10  CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END
+1   ·            render 11  con.conname
+1   ·            render 12  pkic.relname
+1   ·            render 13  CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END
+2   join         ·          ·
+2   ·            type       inner
+2   ·            equality   (oid) = (relnamespace)
+3   join         ·          ·
+3   ·            type       inner
+3   ·            equality   (oid, oid) = (attrelid, confrelid)
+4   join         ·          ·
+4   ·            type       inner
+4   ·            pred       pka.attnum = con.confkey[pos.n]
+5   join         ·          ·
+5   ·            type       inner
+5   ·            equality   (oid) = (relnamespace)
+6   filter       ·          ·
+6   ·            filter     fkn.nspname = 'public'
+6   join         ·          ·
+6   ·            type       inner
+6   ·            equality   (oid, oid) = (attrelid, conrelid)
+7   filter       ·          ·
+7   ·            filter     fkc.relname = 'orders'
+7   join         ·          ·
+7   ·            type       inner
+7   ·            pred       fka.attnum = con.conkey[pos.n]
+8   join         ·          ·
+8   ·            type       inner
+8   ·            equality   (oid) = (objid)
+9   filter       ·          ·
+9   ·            filter     con.contype = 'f'
+9   join         ·          ·
+9   ·            type       cross
+10  project set  ·          ·
+10  ·            render 0   generate_series(1, 32)
+11  emptyrow     ·          ·
+10  join         ·          ·
+10  ·            type       inner
+10  ·            equality   (refobjid) = (oid)
+11  filter       ·          ·
+11  ·            filter     (dep.classid = 139623798) AND (dep.refclassid = 1411792157)
+11  filter       ·          ·
+11  ·            filter     pkic.relkind = 'i'
 
 # Tests for filter propagation through joins.
 

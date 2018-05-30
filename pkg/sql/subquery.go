@@ -451,10 +451,10 @@ func (v *subqueryVisitor) extractSubquery(
 		//
 		// Wrap the type in a tuple.
 		//
-		// TODO(peter): Using a tuple type to represent a multi-row subquery works
-		// with the current type checking code, but seems semantically incorrect. A
-		// tuple represents a fixed number of elements. Instead, we should either
-		// be using the table type (TTable) or introduce a new vtuple type.
+		// TODO(peter): Using a tuple type to represent a multi-row
+		// subquery works with the current type checking code, but seems
+		// semantically incorrect. A tuple represents a fixed number of
+		// elements. Instead, we should introduce a new vtuple type.
 		sub.SetType(types.TTuple{Types: []types.T{sub.ResolvedType()}})
 	}
 
