@@ -672,7 +672,16 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
 	if encrypt {
-		args = append(args, "--encrypt")
+		var exists bool
+		for _, arg := range args {
+			if strings.HasPrefix(arg, "--encrypt") {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			args = append(args, "--encrypt")
+		}
 	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
