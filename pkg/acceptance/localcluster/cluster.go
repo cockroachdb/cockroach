@@ -629,8 +629,9 @@ func (n *Node) StartAsync(ctx context.Context, joins ...string) <-chan error {
 	}
 
 	go func() {
-		n.waitUntilLive()
-		ch <- nil
+		// If the node does not become live within a minute, something is wrong and
+		// it's better not to hang indefinitely.
+		ch <- n.waitUntilLive(time.Minute)
 	}()
 
 	return ch
@@ -692,12 +693,15 @@ func (n *Node) AdvertiseAddr() (s string) {
 	return addr
 }
 
-func (n *Node) waitUntilLive() {
+func (n *Node) waitUntilLive(dur time.Duration) error {
 	ctx := context.Background()
+	closer := make(chan struct{})
+	defer time.AfterFunc(dur, func() { close(closer) }).Stop()
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		Multiplier:     2,
+		Closer:         closer,
 	}
 	for r := retry.Start(opts); r.Next(); {
 		var pid int
@@ -708,7 +712,7 @@ func (n *Node) waitUntilLive() {
 		n.Unlock()
 		if pid == 0 {
 			log.Info(ctx, "process already quit")
-			return
+			return nil
 		}
 
 		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
@@ -757,7 +761,7 @@ func (n *Node) waitUntilLive() {
 				`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
 			).Scan(&uiStr); err != nil {
 				log.Info(ctx, err)
-				break
+				return nil
 			}
 
 			_, uiURL, err = portFromURL(uiStr)
@@ -766,8 +770,9 @@ func (n *Node) waitUntilLive() {
 				// TODO(tschottdorf): see above.
 			}
 		}
-		break
+		return nil
 	}
+	return errors.Errorf("node %+v was unable to join cluster within %s", n.Cfg, dur)
 }
 
 // Kill stops a node abruptly by sending it SIGKILL.

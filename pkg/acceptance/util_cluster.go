@@ -120,11 +120,11 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 		}
 
-		perNodeCfg := map[int]localcluster.NodeConfig{}
+		perNodeCfg := localcluster.MakePerNodeFixedPortsCfg(len(cfg.Nodes))
 		for i := 0; i < len(cfg.Nodes); i++ {
 			// TODO(tschottdorf): handle Nodes[i].Stores properly.
 			if cfg.Nodes[i].Version != "" {
-				var nCfg localcluster.NodeConfig
+				nCfg := perNodeCfg[i]
 				nCfg.Binary = GetBinary(ctx, t, cfg.Nodes[i].Version)
 				perNodeCfg[i] = nCfg
 			}
