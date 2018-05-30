@@ -262,8 +262,8 @@ func newAmbiguousSourceError(tn *tree.TableName) error {
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }
 
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*TableDescriptor) NameResolutionResult() {}
+// ExtendedTableDescriptor implements the tree.NameResolutionResult interface.
+func (*ExtendedTableDescriptor) NameResolutionResult() {}
 
 // SchemaMeta implements the tree.SchemaMeta interface.
 func (*DatabaseDescriptor) SchemaMeta() {}

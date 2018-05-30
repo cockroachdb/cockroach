@@ -120,20 +120,20 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sql.ObjectDescriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sql.ObjectDescriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).AcquireAndAssertMinVersion(
 		context.TODO(), t.server.Clock().Now(), descID, minVersion)
 }
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp) {
+) (*sql.ObjectDescriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquire(nodeID, descID)
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func (t *leaseTest) mustAcquire(
 
 func (t *leaseTest) mustAcquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp) {
+) (*sql.ObjectDescriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquireMinVersion(nodeID, descID, minVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func (t *leaseTest) mustAcquireMinVersion(
 	return table, expiration
 }
 
-func (t *leaseTest) release(nodeID uint32, table *sqlbase.TableDescriptor) error {
+func (t *leaseTest) release(nodeID uint32, table *sql.ObjectDescriptor) error {
 	return t.node(nodeID).Release(table)
 }
 
@@ -160,7 +160,7 @@ func (t *leaseTest) release(nodeID uint32, table *sqlbase.TableDescriptor) error
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32, table *sqlbase.TableDescriptor, leaseRemovalTracker *sql.LeaseRemovalTracker,
+	nodeID uint32, table *sql.ObjectDescriptor, leaseRemovalTracker *sql.LeaseRemovalTracker,
 ) {
 	var tracker sql.RemovalTracker
 	if leaseRemovalTracker != nil {
@@ -577,7 +577,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sql.ObjectDescriptor, hlc.Timestamp, error) {
 	return s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
 }
 
@@ -696,12 +696,12 @@ func TestSubqueryLeases(t *testing.T) {
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table sql.ObjectDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseReleasedEvent: func(table sql.ObjectDescriptor, _ error) {
 					if table.Name == "foo" {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
@@ -774,12 +774,12 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				// Set this so we observe a release event from the cache
 				// when the API releases the descriptor.
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table sql.ObjectDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseReleasedEvent: func(table sql.ObjectDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
@@ -928,7 +928,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table sql.ObjectDescriptor, _ error) {
 					if table.Name == "kv" {
 						var err error
 						if table.Version != 2 {
@@ -1061,7 +1061,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(_ sql.ObjectDescriptor, _ error) {
 
 					atomic.AddInt32(&testAcquiredCount, 1)
 				},

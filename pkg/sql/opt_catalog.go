@@ -58,10 +58,10 @@ func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.
 	if oc.wrappers == nil {
 		oc.wrappers = make(map[*sqlbase.TableDescriptor]*optTable)
 	}
-	wrapper, ok := oc.wrappers[desc]
+	wrapper, ok := oc.wrappers[&desc.TableDescriptor]
 	if !ok {
-		wrapper = newOptTable(oc.statsCache, desc)
-		oc.wrappers[desc] = wrapper
+		wrapper = newOptTable(oc.statsCache, &desc.TableDescriptor)
+		oc.wrappers[&desc.TableDescriptor] = wrapper
 	}
 	return wrapper, nil
 }

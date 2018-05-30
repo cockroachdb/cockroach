@@ -37,11 +37,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 
 	// TODO(vivek,knz): this lookup should really use the cached descriptor.
 	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingTableFromStore(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -95,11 +91,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 ) (int64, error) {
 	// TODO(vivek,knz): this lookup should really use the cached descriptor.
 	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingTableFromStore(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -124,11 +116,7 @@ func (p *planner) SetSequenceValue(
 
 	// TODO(vivek,knz): this lookup should really use the cached descriptor.
 	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingTableFromStore(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return err
 	}
@@ -306,7 +294,7 @@ func maybeAddSequenceDependencies(
 			ID:        tableDesc.ID,
 			ColumnIDs: []sqlbase.ColumnID{col.ID},
 		})
-		seqDescs = append(seqDescs, seqDesc)
+		seqDescs = append(seqDescs, &seqDesc.TableDescriptor)
 	}
 	return seqDescs, nil
 }

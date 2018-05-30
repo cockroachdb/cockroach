@@ -401,7 +401,7 @@ func (p *planner) lookupFKTable(
 		}
 		return sqlbase.TableLookup{}, err
 	}
-	return sqlbase.TableLookup{Table: table}, nil
+	return sqlbase.TableLookup{Table: &table.TableDescriptor}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

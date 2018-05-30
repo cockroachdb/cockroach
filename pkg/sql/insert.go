@@ -103,7 +103,7 @@ func (p *planner) Insert(
 	}
 	fkTables, err := sqlbase.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc.TableDescriptor,
 		fkCheckType,
 		p.lookupFKTable,
 		p.CheckPrivilege,
@@ -121,7 +121,7 @@ func (p *planner) Insert(
 		insertCols = desc.Columns
 	} else {
 		var err error
-		if insertCols, err = p.processColumns(desc, n.Columns,
+		if insertCols, err = p.processColumns(&desc.TableDescriptor, n.Columns,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func (p *planner) Insert(
 
 	// We update the set of columns being inserted into with any computed columns.
 	insertCols, computedCols, computeExprs, err :=
-		sqlbase.ProcessComputedColumns(ctx, insertCols, tn, desc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, insertCols, tn, &desc.TableDescriptor, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (p *planner) Insert(
 	// because `defaultExprs` is expected to line up with the final set of
 	// columns being inserted into.
 	insertCols, defaultExprs, err :=
-		sqlbase.ProcessDefaultColumns(insertCols, desc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessDefaultColumns(insertCols, &desc.TableDescriptor, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (p *planner) Insert(
 	}
 
 	// Create the table insert, which does the bulk of the work.
-	ri, err := sqlbase.MakeRowInserter(p.txn, desc, fkTables, insertCols,
+	ri, err := sqlbase.MakeRowInserter(p.txn, &desc.TableDescriptor, fkTables, insertCols,
 		sqlbase.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (p *planner) Insert(
 		// This is an UPSERT, or INSERT ... ON CONFLICT.
 		// The upsert path has a separate constructor.
 		node, err = p.newUpsertNode(
-			ctx, n, desc, ri, tn, alias, rows, rowsNeeded, columns,
+			ctx, n, &desc.TableDescriptor, ri, tn, alias, rows, rowsNeeded, columns,
 			defaultExprs, computeExprs, computedCols, fkTables, desiredTypes)
 		if err != nil {
 			return nil, err

@@ -56,7 +56,7 @@ func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.TableDescriptor) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table *ObjectDescriptor) RemovalTracker {
 	id := tableVersionID{
 		id:      table.ID,
 		version: table.Version,
@@ -80,7 +80,7 @@ func (t RemovalTracker) WaitForRemoval() error {
 // LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
-func (w *LeaseRemovalTracker) LeaseRemovedNotification(table sqlbase.TableDescriptor, err error) {
+func (w *LeaseRemovalTracker) LeaseRemovedNotification(table ObjectDescriptor, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -114,7 +114,7 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	timestamp hlc.Timestamp,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*ObjectDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
@@ -123,5 +123,5 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	return &table.TableDescriptor, table.expiration, nil
+	return &table.ObjectDescriptor, table.expiration, nil
 }

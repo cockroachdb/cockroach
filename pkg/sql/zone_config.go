@@ -180,10 +180,11 @@ func (p *planner) resolveTableForZone(
 		if err != nil {
 			return nil, err
 		}
-		res, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+		obj, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
 		if err != nil {
 			return nil, err
 		}
+		res = &obj.TableDescriptor
 	}
 	return res, err
 }

@@ -34,14 +34,11 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 		return nil, err
 	}
 
-	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the constraints without
 	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	desc, err := ResolveExistingTableFromStore(ctx, p, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}

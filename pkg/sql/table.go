@@ -143,7 +143,7 @@ type TableCollection struct {
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
-	leasedTables []*sqlbase.TableDescriptor
+	leasedTables []*ObjectDescriptor
 	// Tables modified by the uncommitted transaction affiliated
 	// with this TableCollection. This allows a transaction to see
 	// its own modifications while bypassing the table lease mechanism.
@@ -152,7 +152,7 @@ type TableCollection struct {
 	// the table. These table descriptors are local to this
 	// TableCollection and invisible to other transactions. A dropped
 	// table is marked dropped.
-	uncommittedTables []*sqlbase.TableDescriptor
+	uncommittedTables []*ObjectDescriptor
 
 	// Map of tables created in the transaction.
 	createdTables map[sqlbase.ID]struct{}
@@ -205,7 +205,7 @@ type dbCacheSubscriber interface {
 // TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
-) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+) (*ObjectDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
@@ -299,7 +299,7 @@ func (tc *TableCollection) getTableVersion(
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, error) {
+) (*ObjectDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
 	if testDisableTableLeases {
@@ -310,7 +310,7 @@ func (tc *TableCollection) getTableVersionByID(
 		if err := filterTableState(table); err != nil {
 			return nil, err
 		}
-		return table, nil
+		return &ObjectDescriptor{TableDescriptor: *table}, nil
 	}
 
 	for _, table := range tc.uncommittedTables {
@@ -436,13 +436,14 @@ func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) er
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
+	obj := &ObjectDescriptor{TableDescriptor: desc}
 	for i, table := range tc.uncommittedTables {
 		if table.ID == desc.ID {
-			tc.uncommittedTables[i] = &desc
+			tc.uncommittedTables[i] = obj
 			return
 		}
 	}
-	tc.uncommittedTables = append(tc.uncommittedTables, &desc)
+	tc.uncommittedTables = append(tc.uncommittedTables, obj)
 	tc.releaseAllDescriptors()
 }
 
@@ -506,7 +507,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 // still exist).
 func (tc *TableCollection) getUncommittedTable(
 	dbID sqlbase.ID, tn *tree.TableName, required bool,
-) (refuseFurtherLookup bool, table *sqlbase.TableDescriptor, err error) {
+) (refuseFurtherLookup bool, table *ObjectDescriptor, err error) {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
 	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
@@ -534,7 +535,7 @@ func (tc *TableCollection) getUncommittedTable(
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			// Can we see this table?
-			if err = filterTableState(table); err != nil {
+			if err = filterTableState(&table.TableDescriptor); err != nil {
 				if !required {
 					// Table is being dropped or added; if it's not required here,
 					// we simply say we don't have it.
@@ -552,7 +553,7 @@ func (tc *TableCollection) getUncommittedTable(
 	return false, nil, nil
 }
 
-func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *sqlbase.TableDescriptor {
+func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *ObjectDescriptor {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
 	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
@@ -682,15 +683,15 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 
 // bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.
 func (p *planner) bumpTableVersion(ctx context.Context, tn *tree.TableName) error {
-	var tableDesc *TableDescriptor
+	var obj *ObjectDescriptor
 	var err error
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(tn,
+		obj, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(tn,
 			p.ObjectLookupFlags(ctx, true /*required*/))
 	})
 	if err != nil {
 		return err
 	}
 
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
+	return p.saveNonmutationAndNotify(ctx, &obj.TableDescriptor)
 }

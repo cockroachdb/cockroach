@@ -90,7 +90,7 @@ func (p *planner) Delete(
 	// Determine what are the foreign key tables that are involved in the deletion.
 	fkTables, err := sqlbase.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc.TableDescriptor,
 		sqlbase.CheckDeletes,
 		p.lookupFKTable,
 		p.CheckPrivilege,
@@ -120,7 +120,7 @@ func (p *planner) Delete(
 
 	// Create the table deleter, which does the bulk of the work.
 	rd, err := sqlbase.MakeRowDeleter(
-		p.txn, desc, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+		p.txn, &desc.TableDescriptor, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
 	)
 	if err != nil {
 		return nil, err

@@ -44,7 +44,7 @@ type (
 	DatabaseDescriptor = sqlbase.DatabaseDescriptor
 	// ObjectDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ObjectDescriptor = sqlbase.TableDescriptor
+	ObjectDescriptor = sqlbase.ExtendedTableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = sqlbase.TableDescriptor
