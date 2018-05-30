@@ -1,8 +1,9 @@
-import { createPath } from "history/lib/PathUtils";
+import { Location } from "history";
+import { Action } from "redux";
 import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
-import { Action } from "redux";
+import { createPath } from "src/hacks/createPath";
 import { userLogin } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
 import { LOGIN_PAGE } from "src/routes/login";
@@ -99,7 +100,7 @@ export const selectLoginState = createSelector(
     },
 );
 
-export function getLoginPage(location) {
+export function getLoginPage(location: Location) {
   const query = !location ? undefined : {
     redirectTo: createPath({
       pathname: location.pathname,
