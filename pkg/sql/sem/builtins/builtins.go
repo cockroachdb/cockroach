@@ -467,6 +467,72 @@ var Builtins = map[string][]tree.Builtin{
 		},
 	},
 
+	"like_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+		)},
+
+	"not_like_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+		)},
+
+	"ilike_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Matches case insensetively `unescaped` with `pattern` using 'escape' as an escape token.",
+		)},
+
+	"not_ilike_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches case insensetively with `pattern` using 'escape' as an escape token.",
+		)},
+
+	"similar_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+		)},
+
+	"not_similar_escape": {
+		stringBuiltin3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				// TODO(yuzefovich): actually do the checking
+				return tree.MakeDBool(false), nil
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+		)},
+
 	"from_ip": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"val", types.Bytes}},
