@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -345,7 +346,7 @@ type nodeSpec struct {
 func (s *nodeSpec) args() []string {
 	var args []string
 	if s.MachineType != "" {
-		args = append(args, s.MachineType)
+		args = append(args, "--gce-machine-type="+s.MachineType)
 	}
 	if s.Geo {
 		args = append(args, "--geo")
@@ -370,9 +371,9 @@ func (o nodeCPUOption) apply(spec *nodeSpec) {
 		// configurations, but the rules for the amount of RAM per CPU need to be
 		// determined (you can't request any arbitrary amount of RAM).
 		if spec.CPUs < 16 {
-			spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-standard-%d", spec.CPUs)
+			spec.MachineType = fmt.Sprintf("n1-standard-%d", spec.CPUs)
 		} else {
-			spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-highcpu-%d", spec.CPUs)
+			spec.MachineType = fmt.Sprintf("n1-highcpu-%d", spec.CPUs)
 		}
 	}
 }
@@ -487,9 +488,48 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 			return nil
 		}
 	} else {
-		// NB: if the existing cluster is not as large as the desired cluster, the
-		// test will fail when trying to perform various operations such as putting
-		// binaries or starting the cockroach nodes.
+		// Perform validation on the existing cluster.
+		c.status("checking that existing cluster matches spec")
+		sargs := []string{roachprod, "list", c.name, "--json"}
+		out, err := execCmdWithBuffer(ctx, l, sargs...)
+		if err != nil {
+			t.Fatal(err)
+			return nil
+		}
+
+		// jsonOutput matches the structure of the output from `roachprod list`
+		// when in json mode.
+		type jsonOutput struct {
+			Clusters map[string]struct {
+				VMs []struct {
+					MachineType string `json:"machine_type"`
+				} `json:"vms"`
+			} `json:"clusters"`
+		}
+		var details jsonOutput
+		if err := json.Unmarshal(out, &details); err != nil {
+			t.Fatal(err)
+			return nil
+		}
+
+		cDetails, ok := details.Clusters[c.name]
+		if !ok {
+			t.Fatalf("cluster %q not found", c.name)
+			return nil
+		}
+		if len(cDetails.VMs) < c.nodes {
+			t.Fatalf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.nodes)
+			return nil
+		}
+		if typ := nodes[0].MachineType; typ != "" {
+			for i, vm := range cDetails.VMs {
+				if vm.MachineType != typ {
+					t.Fatalf("node %d has machine type %s, test requires %s", i, vm.MachineType, typ)
+					return nil
+				}
+			}
+		}
+
 		c.status("stopping cluster")
 		c.Stop(ctx, c.All())
 		if clusterWipe {
