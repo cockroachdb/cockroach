@@ -8,8 +8,8 @@ sudo apt-get install -y --no-install-recommends ocaml-nox
 
 # Ubuntu's "unison" package does not ship unison-fsmonitor, which is needed for
 # the "-repeat watch" option to function properly.
-git clone --branch=unison-2.48 https://github.com/bcpierce00/unison
-(cd unison && git cherry-pick -n c64b007ca0c20e1cea94a79b82d7c415aa3729eb && make)
+git clone --branch=v2.51.2 https://github.com/bcpierce00/unison
+(cd unison && make)
 for bin in unison unison-fsmonitor; do
   sudo install -m 755 "unison/src/$bin" "/usr/local/bin/$bin"
 done
