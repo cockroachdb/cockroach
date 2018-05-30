@@ -1065,6 +1065,7 @@ $(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.installed
 
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
+TSC                := ./node_modules/.bin/tsc
 KARMA              := ./node_modules/.bin/karma
 WEBPACK            := ./node_modules/.bin/webpack
 WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
@@ -1079,6 +1080,7 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json -p tsconfig.json
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
 	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json *.js
+	$(NODE_RUN) -C pkg/ui $(TSC)
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
