@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE t (
@@ -27,24 +27,10 @@ t      c_idx    true    4    d       N/A        true     false
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/b_idx/2/1/c/d -> /3/4
-output row: [1 2 3 4]
-
 query IIII
 SELECT a, b, c, d FROM t@b_idx
 ----
 1 2 3 4
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@c_idx]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/c_idx/3 -> /1/2/4
-output row: [1 2 3 4]
 
 query IIII
 SELECT a, b, c, d FROM t@c_idx
@@ -56,13 +42,6 @@ SELECT a, b, c, d FROM t@c_idx
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, d FROM t@d_idx]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/d_idx/4/1/b -> /2
-output row: [1 2 4]
-
 query III
 SELECT a, b, d FROM t@d_idx
 ----
@@ -73,13 +52,6 @@ CREATE INDEX error ON t (d) STORING (d)
 
 statement ok
 CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t@a_idx]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/a_idx/1/b -> /2
-output row: [1 2]
 
 # Regression test for #14601.
 
@@ -97,14 +69,6 @@ INSERT INTO t14601 VALUES
 
 statement ok
 DELETE FROM t14601 WHERE a > 'a' AND a < 'c'
-
-query TTT
-EXPLAIN SELECT a FROM t14601 ORDER BY a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  t14601@i14601
-·          spans  ALL
 
 query T
 SELECT a FROM t14601 ORDER BY a
@@ -145,14 +109,6 @@ INSERT INTO t14601a VALUES
 statement ok
 UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
 
-query TTT
-EXPLAIN SELECT a, b FROM t14601a ORDER BY a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  t14601a@i14601a
-·          spans  ALL
-
 query TB
 SELECT a, b FROM t14601a ORDER BY a
 ----
@@ -185,14 +141,6 @@ INSERT INTO t14601a VALUES
 statement ok
 UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
 
-query TTT
-EXPLAIN SELECT a, b FROM t14601a ORDER BY a
-----
-render     ·      ·
- └── scan  ·      ·
-·          table  t14601a@i14601a
-·          spans  ALL
-
 query TB
 SELECT a, b FROM t14601a ORDER BY a
 ----
@@ -216,14 +164,3 @@ INSERT INTO t (a) VALUES (2)
 
 statement ok
 INSERT INTO t VALUES (3)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/b_idx/NULL/2 -> NULL
-output row: [2 NULL NULL NULL]
-fetched: /t/b_idx/NULL/3 -> NULL
-output row: [3 NULL NULL NULL]
-fetched: /t/b_idx/2/1/c/d -> /3/4
-output row: [1 2 3 4]
