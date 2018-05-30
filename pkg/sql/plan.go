@@ -207,6 +207,7 @@ var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &CreateUserNode{}
 var _ planNode = &DropUserNode{}
+var _ planNode = &funcScanNode{}
 
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}

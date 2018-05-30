@@ -514,6 +514,11 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *controlJobsNode:
 		v.visit(n.rows)
+
+	case *funcScanNode:
+		for _, plan := range n.sources {
+			v.visit(plan)
+		}
 	}
 }
 
@@ -585,6 +590,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&distSQLWrapper{}):           "distsql query",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
+	reflect.TypeOf(&funcScanNode{}):             "function scan",
 	reflect.TypeOf(&showTraceNode{}):            "show trace for",
 	reflect.TypeOf(&showTraceReplicaNode{}):     "replica trace",
 	reflect.TypeOf(&filterNode{}):               "filter",

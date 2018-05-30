@@ -87,6 +87,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *upsertNode:
 		return n.columns
+	case *funcScanNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:

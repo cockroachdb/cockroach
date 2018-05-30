@@ -361,6 +361,13 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *funcScanNode:
+		for i := range n.sources {
+			if n.sources[i], err = p.triggerFilterPropagation(ctx, n.sources[i]); err != nil {
+				return plan, extraFilter, err
+			}
+		}
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
