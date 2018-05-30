@@ -654,8 +654,9 @@ func roachprodArgs(opts []option) []string {
 
 // Start cockroach nodes on a subset of the cluster. The nodes parameter can
 // either be a specific node, empty (to indicate all nodes), or a pair of nodes
-// indicating a range.
-func (c *cluster) Start(ctx context.Context, opts ...option) {
+// indicating a range. Encryption at rest will be turned on for all the nodes
+// if useEncryption parameter is true.
+func (c *cluster) Start(ctx context.Context, useEncryption bool, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -671,7 +672,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if encrypt {
+	if useEncryption {
 		args = append(args, "--encrypt")
 	}
 	if err := execCmd(ctx, c.l, args...); err != nil {

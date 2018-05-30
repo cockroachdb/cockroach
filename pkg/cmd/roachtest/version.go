@@ -48,7 +48,7 @@ func registerVersion(r *registry) {
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Start(ctx, false, c.Range(1, nodes))
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -167,7 +167,7 @@ func registerVersion(r *registry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i))
+				c.Start(ctx, false, c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -188,7 +188,7 @@ func registerVersion(r *registry) {
 
 			// Do upgrade for the last node.
 			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-			c.Start(ctx, c.Node(nodes))
+			c.Start(ctx, false, c.Node(nodes))
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -200,7 +200,7 @@ func registerVersion(r *registry) {
 					return err
 				}
 				c.Put(ctx, b, "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i))
+				c.Start(ctx, false, c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -213,7 +213,7 @@ func registerVersion(r *registry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i))
+				c.Start(ctx, false, c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

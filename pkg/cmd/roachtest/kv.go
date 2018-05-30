@@ -26,11 +26,10 @@ func registerKV(r *registry) {
 			c.RemountNoBarrier(ctx)
 		}
 
-		encrypt = encryption
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Start(ctx, encryption, c.Range(1, nodes))
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -51,16 +50,18 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			for _, e := range []bool{false, true} {
-				e := e
-				r.Add(testSpec{
-					Name:  fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
-					Nodes: nodes(n+1, cpu(8)),
-					Run: func(ctx context.Context, t *test, c *cluster) {
-						runKV(ctx, t, c, p, e)
-					},
-				})
+			minVersion := "2.0.0"
+			if encrypt {
+				minVersion = "2.1.0"
 			}
+			r.Add(testSpec{
+				Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, encrypt, n),
+				MinVersion: minVersion,
+				Nodes:      nodes(n+1, cpu(8)),
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runKV(ctx, t, c, p, encrypt)
+				},
+			})
 		}
 	}
 }
@@ -74,7 +75,7 @@ func registerKVSplits(r *registry) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes), startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m"))
+			c.Start(ctx, false, c.Range(1, nodes), startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m"))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -108,7 +109,7 @@ func registerKVScalability(r *registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, false, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))

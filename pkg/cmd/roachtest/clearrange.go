@@ -41,7 +41,7 @@ func registerClearRange(r *registry) {
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, false)
 
 			// Also restore a much smaller table. We'll use it to run queries against
 			// the cluster after having dropped the large table above, verifying that
