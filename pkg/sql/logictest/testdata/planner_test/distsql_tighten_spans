@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql 5node-distsql-metadata
+# LogicTest: 5node-distsql
 
 # This test verifies that we correctly tighten spans during index selection as
 # well as after partitioning spans in distsql.
@@ -36,58 +36,6 @@ CREATE TABLE bytes_t (a BYTES PRIMARY KEY)
 
 statement ok
 CREATE TABLE decimal_t (a DECIMAL PRIMARY KEY)
-
-#######################
-# Insert dummy values #
-#######################
-
-statement ok
-INSERT INTO p1 VALUES
-  (1,10),
-  (2,1),
-  (2,2),
-  (2,8),
-  (3,5),
-  (3,10),
-  (4,1),
-  (4,2),
-  (4,4)
-
-statement ok
-INSERT INTO c1 VALUES
-  (1,10),
-  (2,1),
-  (2,4),
-  (2,8),
-  (2,10),
-  (4,2)
-
-statement ok
-INSERT INTO p2 VALUES
-  (1, NULL),
-  (2, 2),
-  (3, 1),
-  (4, NULL),
-  (5, NULL),
-  (6, 10),
-  (7, 2),
-  (8, 3)
-
-statement ok
-INSERT INTO bytes_t VALUES
-  ('a'),
-  ('aa'),
-  ('b'),
-  ('c'),
-  ('ca')
-
-statement ok
-INSERT INTO decimal_t VALUES
-  (1),
-  (1.000001),
-  (1.5),
-  (2),
-  (2.001)
 
 ############################
 # Split ranges for distsql #
@@ -191,14 +139,6 @@ scan  ·      ·
 ·     table  p1@b
 ·     spans  -/4
 
-query II rowsort
-SELECT * FROM p1 WHERE b <= 3
-----
-2 1
-2 2
-4 1
-4 2
-
 # Partial predicate on primary key should not be tightened.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3
@@ -206,16 +146,6 @@ EXPLAIN SELECT * FROM p1 WHERE a <= 3
 scan  ·      ·
 ·     table  p1@primary
 ·     spans  -/4
-
-query II rowsort
-SELECT * FROM p1 WHERE a <= 3
-----
-1 10
-2 1
-2 2
-2 8
-3 5
-3 10
 
 # Tighten end key if span contains full primary key.
 query TTT
@@ -232,12 +162,6 @@ scan  ·      ·
 ·     table  p1@primary
 ·     spans  -/3/3/#
 
-query II rowsort
-SELECT * FROM p1 WHERE a <= 3 AND b <= 3
-----
-2 1
-2 2
-
 # Mixed bounds.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
@@ -245,14 +169,6 @@ EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 scan  ·      ·
 ·     table  p1@primary
 ·     spans  /2-
-
-query II rowsort
-SELECT * FROM p1 WHERE a >= 2 AND b <= 3
-----
-2 1
-2 2
-4 1
-4 2
 
 # Edge cases.
 
@@ -295,15 +211,6 @@ scan  ·      ·
 ·     table  c1@primary
 ·     spans  -/4
 
-query II rowsort
-SELECT * FROM c1 WHERE a <= 3
-----
-1 10
-2 1
-2 4
-2 8
-2 10
-
 # Tighten span on fully primary key.
 query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
@@ -311,11 +218,6 @@ EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 scan  ·      ·
 ·     table  c1@primary
 ·     spans  -/3/3/#/54/1/#
-
-query II rowsort
-SELECT * FROM c1 WHERE a <= 3 AND b <= 3
-----
-2 1
 
 # Table p2 with interleaved index.
 
@@ -329,17 +231,6 @@ scan  ·      ·
 ·     table  p2@primary
 ·     spans  /2-
 
-query II rowsort
-SELECT * FROM p2 WHERE i>= 2
-----
-2 2
-3 1
-4 NULL
-5 NULL
-6 10
-7 2
-8 3
-
 # Upper bound (i <= 5)
 
 query TTT
@@ -348,15 +239,6 @@ EXPLAIN SELECT * FROM p2 WHERE i <= 5
 scan  ·      ·
 ·     table  p2@primary
 ·     spans  -/5/#
-
-query II rowsort
-SELECT * FROM p2 WHERE i <= 5
-----
-1 NULL
-2 2
-3 1
-4 NULL
-5 NULL
 
 # From the interleaved index: no tightening at all.
 
@@ -370,14 +252,6 @@ scan  ·      ·
 ·     table  p2@p2_id
 ·     spans  /1/#/55/2/2-
 
-query II rowsort
-SELECT * FROM p2@p2_id WHERE i>= 1 AND d >= 2
-----
-2 2
-6 10
-7 2
-8 3
-
 # Upper bound (i <= 6 AND d <= 5)
 
 query TTT
@@ -386,12 +260,6 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 scan  ·      ·
 ·     table  p2@p2_id
 ·     spans  -/6/#/55/2/6
-
-query II rowsort
-SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
-----
-2 2
-3 1
 
 # IS NULL
 
@@ -402,13 +270,6 @@ scan  ·      ·
 ·     table  p2@p2_id
 ·     spans  /1/#/55/2/NULL-
 
-query II rowsort
-SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
-----
-1 NULL
-4 NULL
-5 NULL
-
 # IS NOT NULL
 
 query TTT
@@ -417,15 +278,6 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 scan  ·      ·
 ·     table  p2@p2_id
 ·     spans  /1/#/55/2/!NULL-
-
-query II rowsort
-SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NOT NULL
-----
-2 2
-3 1
-6 10
-7 2
-8 3
 
 # String table
 
@@ -437,11 +289,6 @@ scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  /"a"-/"a"/#
 
-query T
-SELECT * FROM bytes_t WHERE a = 'a'
-----
-a
-
 # No tightening.
 
 query TTT colnames
@@ -452,11 +299,6 @@ scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  -/"aa"
 
-query T
-SELECT * FROM bytes_t WHERE a < 'aa'
-----
-a
-
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
@@ -464,11 +306,6 @@ Tree  Field  Description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  /1-/1/#
-
-query R
-SELECT * FROM decimal_t WHERE a = 1.00
-----
-1
 
 # No tightening.
 
@@ -479,10 +316,3 @@ Tree  Field  Description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  -/2
-
-query R rowsort
-SELECT * FROM decimal_t WHERE a < 2
-----
-1
-1.000001
-1.5
