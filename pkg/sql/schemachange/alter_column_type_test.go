@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -125,14 +124,13 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 19}: ColumnConversionValidate,
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
 		},
-
-		// Disabled until #26078 is resolved
-		// {SemanticType: sqlbase.ColumnType_TIME}: {
-		// {SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionTrivial,
-		// },
-		// {SemanticType: sqlbase.ColumnType_TIMETZ}: {
-		// {SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionTrivial,
-		// },
+		// See discussion in alter_column_type.go
+		{SemanticType: sqlbase.ColumnType_TIME}: {
+			{SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionDangerous,
+		},
+		{SemanticType: sqlbase.ColumnType_TIMETZ}: {
+			{SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionDangerous,
+		},
 
 		{SemanticType: sqlbase.ColumnType_TIMESTAMP}: {
 			{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
@@ -246,6 +244,7 @@ func TestColumnConversions(t *testing.T) {
 						const timeTZ = "15:04:05 -0700"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
+
 						var fromFmt string
 						switch from.SemanticType {
 						case sqlbase.ColumnType_TIME:
@@ -261,11 +260,12 @@ func TestColumnConversions(t *testing.T) {
 						// Always use a non-UTC zone for this test
 						const tz = "America/New_York"
 						sqlDB.Exec(t, fmt.Sprintf("SET SESSION TIME ZONE '%s'", tz))
-						loc, err := time.LoadLocation(tz)
-						if err != nil {
-							t.Fatal(err)
-						}
-						now := timeutil.Now().In(loc).Format(fromFmt)
+
+						// Use a fixed time so we don't experience weirdness when
+						// testing TIME values if the local time would roll over
+						// a day boundary when moving between Eastern and UTC.
+						// We can re-use the format strings as test data.
+						now := fromFmt
 						insert = []interface{}{now}
 
 						switch to.SemanticType {
