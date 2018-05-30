@@ -92,6 +92,12 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *valuesNode:
 		markOmitted(n.columns, needed)
 
+	case *funcScanNode:
+		markOmitted(n.columns, needed)
+		for _, src := range n.sources {
+			setNeededColumns(src, allColumns(src))
+		}
+
 	case *delayedNode:
 		if n.plan != nil {
 			setNeededColumns(n.plan, needed)

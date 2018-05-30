@@ -142,6 +142,11 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.plan, numRows, soft)
 		}
 
+	case *funcScanNode:
+		for _, src := range n.sources {
+			p.applyLimit(src, numRows, soft)
+		}
+
 	case *rowCountNode:
 		p.setUnlimited(n.source)
 	case *serializeNode:

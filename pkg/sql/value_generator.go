@@ -40,7 +40,7 @@ type valueGenerator struct {
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
-func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
+func (p *planner) makeGenerator(ctx context.Context, t tree.Expr) (planNode, error) {
 	if err := p.txCtx.AssertNoAggregationOrWindowing(
 		t, "FROM", p.SessionData().SearchPath,
 	); err != nil {
@@ -70,9 +70,19 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 		}, nil
 	}
 
-	// Scalar functions: cos, etc.
+	// Scalar expressions.
+	var colName string
+	if f, ok := t.(*tree.FuncExpr); ok {
+		// If we have a function, use the function's name.
+		colName = f.Func.String()
+	} else {
+		// Otherwise, use the expression itself.
+		// TODO(knz): This is not strictly compatible with
+		// PostgreSQL. Postgres uses the operator name as column label.
+		colName = t.String()
+	}
 	return &valuesNode{
-		columns:          sqlbase.ResultColumns{{Name: t.Func.String(), Typ: normalized.ResolvedType()}},
+		columns:          sqlbase.ResultColumns{{Name: colName, Typ: normalized.ResolvedType()}},
 		tuples:           [][]tree.TypedExpr{{normalized}},
 		isConst:          isConst,
 		specifiedInQuery: true,

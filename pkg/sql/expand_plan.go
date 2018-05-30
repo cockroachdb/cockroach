@@ -347,6 +347,14 @@ func doExpandPlan(
 	case *controlJobsNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
+	case *funcScanNode:
+		for i := range n.sources {
+			n.sources[i], err = doExpandPlan(ctx, p, noParams, n.sources[i])
+			if err != nil {
+				return plan, err
+			}
+		}
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
@@ -699,6 +707,11 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *explainPlanNode:
 		if n.expanded {
 			n.plan = p.simplifyOrderings(n.plan, nil)
+		}
+
+	case *funcScanNode:
+		for i := range n.sources {
+			n.sources[i] = p.simplifyOrderings(n.sources[i], nil)
 		}
 
 	case *indexJoinNode:

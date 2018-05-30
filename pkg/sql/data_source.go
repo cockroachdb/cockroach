@@ -128,13 +128,7 @@ func (p *planner) getDataSource(
 		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
 	case *tree.RowsFromExpr:
-		if len(t.Items) == 1 {
-			if f, ok := t.Items[0].Expr.(*tree.FuncExpr); ok && t.Items[0].ColNames == nil {
-				return p.getGeneratorPlan(ctx, f, sqlbase.AnonymousTable)
-			}
-		}
-		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"not supported yet: %q", tree.ErrString(t))
+		return p.getPlanForRowsFrom(ctx, t)
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)
@@ -413,6 +407,20 @@ func (p *planner) getSubqueryPlan(
 	}
 	return planDataSource{
 		info: sqlbase.NewSourceInfoForSingleTable(tn, cols),
+		plan: plan,
+	}, nil
+}
+
+// getPlanForRowsFrom builds the plan for a ROWS FROM(...) expression.
+func (p *planner) getPlanForRowsFrom(
+	ctx context.Context, t *tree.RowsFromExpr,
+) (planDataSource, error) {
+	plan, err := p.RowsFrom(ctx, t)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	return planDataSource{
+		info: sqlbase.NewSourceInfoForSingleTable(sqlbase.AnonymousTable, planColumns(plan)),
 		plan: plan,
 	}, nil
 }

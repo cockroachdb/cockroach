@@ -50,6 +50,11 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *groupNode:
 		return n.props
 
+	case *funcScanNode:
+		// TODO(knz): the result is ordered by any of the underlying
+		// orders, not just the first.
+		return planPhysicalProps(n.sources[0])
+
 	case *windowNode:
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.
