@@ -2652,6 +2652,7 @@ func (r *RocksDB) ReadFile(filename string) ([]byte, error) {
 }
 
 // DeleteFile deletes the file with the given filename from this RocksDB's env.
+// If the file with given filename doesn't exist, return os.ErrNotExist.
 func (r *RocksDB) DeleteFile(filename string) error {
 	if err := statusToError(C.DBEnvDeleteFile(r.rdb, goToCSlice([]byte(filename)))); err != nil {
 		return notFoundErrOrDefault(err)
@@ -2706,7 +2707,7 @@ func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 }
 
 func notFoundErrOrDefault(err error) error {
-	if strings.Contains(err.Error(), "No such file or directory") {
+	if strings.Contains(err.Error(), "No such file or directory") || strings.Contains(err.Error(), "File not found") {
 		return os.ErrNotExist
 	}
 	return err
