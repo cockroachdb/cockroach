@@ -33,7 +33,6 @@ import (
 func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans, err error) {
 	switch n := plan.(type) {
 	case
-		*valueGenerator,
 		*valuesNode,
 		*zeroNode,
 		*unaryNode:
@@ -60,6 +59,8 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	case *rowCountNode:
 		return collectSpans(params, n.source)
 	case *serializeNode:
+		return collectSpans(params, n.source)
+	case *projectSetNode:
 		return collectSpans(params, n.source)
 
 	case *delayedNode:

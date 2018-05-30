@@ -67,8 +67,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *unionNode:
 		return n.columns
-	case *valueGenerator:
-		return n.columns
 	case *valuesNode:
 		return n.columns
 	case *explainPlanNode:
@@ -86,6 +84,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *insertNode:
 		return n.columns
 	case *upsertNode:
+		return n.columns
+	case *projectSetNode:
 		return n.columns
 
 	// Nodes with a fixed schema.

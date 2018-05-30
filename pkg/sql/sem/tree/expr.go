@@ -1171,7 +1171,12 @@ func typesOfExprs(exprs Exprs) []types.T {
 	return types
 }
 
-// IsWindowFunctionApplication returns if the function is being applied as a window function.
+// IsGeneratorApplication returns true iff the function applied is a generator (SRF).
+func (node *FuncExpr) IsGeneratorApplication() bool {
+	return node.fn != nil && node.fn.Generator != nil
+}
+
+// IsWindowFunctionApplication returns true iff the function is being applied as a window function.
 func (node *FuncExpr) IsWindowFunctionApplication() bool {
 	return node.WindowDef != nil
 }
@@ -1546,7 +1551,6 @@ func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
-func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }
