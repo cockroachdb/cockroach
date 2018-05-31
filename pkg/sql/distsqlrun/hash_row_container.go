@@ -412,7 +412,7 @@ func makeHashDiskRowContainer(diskMonitor *mon.BytesMonitor, e engine.Engine) ha
 
 // Init implements the hashRowContainer interface.
 func (h *hashDiskRowContainer) Init(
-	ctx context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
+	_ context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
 ) error {
 	h.columnEncoder.init(types, storedEqCols)
 	// Provide the diskRowContainer with an ordering on the equality columns of
@@ -444,7 +444,7 @@ func (h *hashDiskRowContainer) Init(
 		)
 	}
 
-	h.diskRowContainer = makeDiskRowContainer(ctx, h.diskMonitor, storedTypes, ordering, h.engine)
+	h.diskRowContainer = makeDiskRowContainer(h.diskMonitor, storedTypes, ordering, h.engine)
 	return nil
 }
 

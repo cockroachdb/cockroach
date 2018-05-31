@@ -246,7 +246,7 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	}
 	log.VEventf(ctx, 2, "falling back to disk")
 	diskContainer := makeDiskRowContainer(
-		ctx, s.flowCtx.diskMonitor, s.rows.types, s.rows.ordering, s.tempStorage,
+		s.flowCtx.diskMonitor, s.rows.types, s.rows.ordering, s.tempStorage,
 	)
 	s.diskContainer = &diskContainer
 
