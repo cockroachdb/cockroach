@@ -116,7 +116,7 @@ func (b *Builder) buildScalarHelper(
 		// Change this to generate the string once for the top-level expression and
 		// check the relevant slice for this subexpression.
 		if col, ok := inScope.groupby.groupStrs[symbolicExprStr(scalar)]; ok {
-			return b.finishBuildScalarRef(col, label, inScope, outScope)
+			return b.finishBuildScalarRef(col, label, inScope.groupby.aggOutScope, outScope)
 		}
 	}
 
