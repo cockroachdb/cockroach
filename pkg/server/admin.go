@@ -1359,13 +1359,13 @@ func (s *adminServer) Decommission(
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
-// ReplicaMatrix returns a count of replicas on each node for each table.
-func (s *adminServer) ReplicaMatrix(
-	ctx context.Context, req *serverpb.ReplicaMatrixRequest,
-) (*serverpb.ReplicaMatrixResponse, error) {
-	resp := &serverpb.ReplicaMatrixResponse{
-		DatabaseInfo: make(map[string]serverpb.ReplicaMatrixResponse_DatabaseInfo),
-		ZoneConfigs:  make(map[int64]serverpb.ReplicaMatrixResponse_ZoneConfig),
+// DataDistribution returns a count of replicas on each node for each table.
+func (s *adminServer) DataDistribution(
+	ctx context.Context, req *serverpb.DataDistributionRequest,
+) (*serverpb.DataDistributionResponse, error) {
+	resp := &serverpb.DataDistributionResponse{
+		DatabaseInfo: make(map[string]serverpb.DataDistributionResponse_DatabaseInfo),
+		ZoneConfigs:  make(map[int64]serverpb.DataDistributionResponse_ZoneConfig),
 	}
 
 	// Get ids and names for databases and tables.
@@ -1384,7 +1384,7 @@ func (s *adminServer) ReplicaMatrix(
 	}
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
-	tableInfosByTableID := map[uint64]serverpb.ReplicaMatrixResponse_TableInfo{}
+	tableInfosByTableID := map[uint64]serverpb.DataDistributionResponse_TableInfo{}
 
 	for _, row := range rows1 {
 		tableName := (*string)(row[0].(*tree.DString))
@@ -1394,8 +1394,8 @@ func (s *adminServer) ReplicaMatrix(
 		// Insert database if it doesn't exist.
 		dbInfo, ok := resp.DatabaseInfo[*dbName]
 		if !ok {
-			dbInfo = serverpb.ReplicaMatrixResponse_DatabaseInfo{
-				TableInfo: make(map[string]serverpb.ReplicaMatrixResponse_TableInfo),
+			dbInfo = serverpb.DataDistributionResponse_DatabaseInfo{
+				TableInfo: make(map[string]serverpb.DataDistributionResponse_TableInfo),
 			}
 			resp.DatabaseInfo[*dbName] = dbInfo
 		}
@@ -1422,7 +1422,7 @@ func (s *adminServer) ReplicaMatrix(
 		zcID := int64(tree.MustBeDInt(zcRow[0]))
 
 		// Insert table.
-		tableInfo := serverpb.ReplicaMatrixResponse_TableInfo{
+		tableInfo := serverpb.DataDistributionResponse_TableInfo{
 			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
 			ZoneConfigId:         zcID,
 		}
@@ -1492,7 +1492,7 @@ func (s *adminServer) ReplicaMatrix(
 			return nil, s.serverError(err)
 		}
 
-		resp.ZoneConfigs[zcID] = serverpb.ReplicaMatrixResponse_ZoneConfig{
+		resp.ZoneConfigs[zcID] = serverpb.DataDistributionResponse_ZoneConfig{
 			CliSpecifier: zcCliSpecifier,
 			Config:       zcProto,
 			ConfigYaml:   string(zcYaml),

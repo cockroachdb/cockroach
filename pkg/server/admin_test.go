@@ -1298,7 +1298,7 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	}
 }
 
-func TestAdminAPIReplicaMatrix(t *testing.T) {
+func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Skip("#24802")
@@ -1321,12 +1321,12 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE "sp'ec\ch""ars"`)
 	sqlDB.Exec(t, `CREATE TABLE "sp'ec\ch""ars"."more\spec'chars" (id INT PRIMARY KEY)`)
 
-	// Verify that we see their replicas in the ReplicaMatrix response, evenly spread
+	// Verify that we see their replicas in the DataDistribution response, evenly spread
 	// across the test cluster's three nodes.
 
-	expectedResp := map[string]serverpb.ReplicaMatrixResponse_DatabaseInfo{
+	expectedResp := map[string]serverpb.DataDistributionResponse_DatabaseInfo{
 		"roachblog": {
-			TableInfo: map[string]serverpb.ReplicaMatrixResponse_TableInfo{
+			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
 				"posts": {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
@@ -1344,7 +1344,7 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 			},
 		},
 		`sp'ec\ch"ars`: {
-			TableInfo: map[string]serverpb.ReplicaMatrixResponse_TableInfo{
+			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
 				`more\spec'chars`: {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
@@ -1358,7 +1358,7 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 
 	// Wait for the new tables' ranges to be created and replicated.
 	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.ReplicaMatrixResponse
+		var resp serverpb.DataDistributionResponse
 		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
 			t.Fatal(err)
 		}
@@ -1392,7 +1392,7 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 
 	// Verify that we see the zone config and its effects.
 	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.ReplicaMatrixResponse
+		var resp serverpb.DataDistributionResponse
 		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
 			t.Fatal(err)
 		}
@@ -1421,7 +1421,7 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 	})
 }
 
-func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
+func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1441,7 +1441,7 @@ func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		var resp serverpb.ReplicaMatrixResponse
+		var resp serverpb.DataDistributionResponse
 		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
 			b.Fatal(err)
 		}
