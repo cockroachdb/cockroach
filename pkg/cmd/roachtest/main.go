@@ -58,9 +58,6 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&encrypt, "encrypt", "", encrypt, "start cluster with encryption at rest turned on")
 
-	clusterWipeRun := true
-	clusterWipeBench := false
-
 	var runCmd = &cobra.Command{
 		Use:   "run [tests]",
 		Short: "run automated tests on cockroach cluster",
@@ -81,7 +78,6 @@ Use 'roachtest run -n' to see a list of all tests.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			clusterWipe = clusterWipeRun
 			os.Exit(r.Run(args))
 			return nil
 		},
@@ -107,15 +103,13 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			clusterWipe = clusterWipeBench
 			os.Exit(r.Run(args))
 			return nil
 		},
 	}
 
 	// Register flags shared between `run` and `bench`.
-	wipe := []*bool{&clusterWipeRun, &clusterWipeBench}
-	for i, cmd := range []*cobra.Command{runCmd, benchCmd} {
+	for _, cmd := range []*cobra.Command{runCmd, benchCmd} {
 		cmd.Flags().StringVar(
 			&artifacts, "artifacts", "artifacts", "path to artifacts directory")
 		cmd.Flags().StringVar(
@@ -131,7 +125,7 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 		cmd.Flags().StringVar(
 			&roachprod, "roachprod", "", "path to roachprod binary to use")
 		cmd.Flags().BoolVar(
-			wipe[i], "wipe", *wipe[i],
+			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
 			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
@@ -147,7 +141,6 @@ Cockroach cluster with existing data.
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := newRegistry()
 			registerStoreGen(r, args)
-			clusterWipe = true
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
 			os.Exit(r.Run(nil /* filter */))
