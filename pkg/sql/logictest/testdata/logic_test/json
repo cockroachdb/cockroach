@@ -626,3 +626,11 @@ SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['a'];
 
 statement error pgcode 22P02 a path element is not an integer: foo
 SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
+
+query TT
+SELECT b'1'::JSONB, b'2'::JSON
+----
+1 2
+
+statement error could not parse JSON
+SELECT b'\x00'::JSON
