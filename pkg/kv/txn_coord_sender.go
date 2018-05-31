@@ -260,12 +260,25 @@ func NewTxnCoordSenderFactory(
 }
 
 // New is part of the TxnCoordSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) New(typ client.TxnType) client.TxnSender {
+func (tcf *TxnCoordSenderFactory) New(
+	typ client.TxnType, txn *roachpb.Transaction,
+) client.TxnSender {
 	tcs := &TxnCoordSender{
 		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.meta.RefreshValid = true
+
+	// If a transaction was passed in bind the TxnCoordSender to it.
+	// TODO(andrei): Ideally, if a transaction is not passed it, we should take
+	// that to mean that a TxnCoordSender is not needed and we should return the
+	// wrapped sender directly. However, there are tests that pass nil and still
+	// send transactional requests. That's why the TxnCoordSender is still
+	// littered with code handling the case where it is not yet bound to a
+	// transaction.
+	if txn != nil {
+		tcs.mu.meta.Txn = txn.Clone()
+	}
 	return tcs
 }
 

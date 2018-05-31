@@ -688,9 +688,9 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	tc := s.DB.GetSender().(*TxnCoordSender)
-	origSender := tc.TxnCoordSenderFactory.wrapped
-	tc.TxnCoordSenderFactory.wrapped = client.SenderFunc(
+	factory := s.DB.GetFactory().(*TxnCoordSenderFactory)
+	origSender := factory.WrappedSender()
+	factory.wrapped = client.SenderFunc(
 		func(ctx context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			if _, hasET := args.GetArg(roachpb.EndTransaction); hasET {
 				// Cancel the transaction while also sending it along. This tickled a
@@ -1201,7 +1201,6 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		ambient, cluster.MakeTestingClusterSettings(),
 		senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	tc := factory.New(client.RootTxn)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -1214,6 +1213,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
 	txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
+	tc := factory.New(client.RootTxn, &txn)
 	ba.Txn = &txn
 	_, pErr := tc.Send(context.Background(), ba)
 	if pErr != nil {
@@ -1263,8 +1263,6 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				stopper,
 				MakeTxnMetrics(metric.TestSampleInterval),
 			)
-			tc := factory.New(client.RootTxn)
-			defer teardownHeartbeat(tc.(*TxnCoordSender))
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1272,6 +1270,8 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
 			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
+			tc := factory.New(client.RootTxn, &txn)
+			defer teardownHeartbeat(tc.(*TxnCoordSender))
 			ba.Txn = &txn
 			_, pErr := tc.Send(context.Background(), ba)
 			if !testutils.IsPError(pErr, test.errMsg) {
@@ -1418,7 +1418,7 @@ func checkTxnMetricsOnce(
 func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetrics, func()) {
 	s := createTestDB(t)
 	metrics := MakeTxnMetrics(metric.TestSampleInterval)
-	s.DB.GetSender().(*TxnCoordSender).TxnCoordSenderFactory.metrics = metrics
+	s.DB.GetFactory().(*TxnCoordSenderFactory).metrics = metrics
 	return s, metrics, func() {
 		s.Stop()
 	}
