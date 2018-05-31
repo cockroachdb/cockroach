@@ -3693,16 +3693,15 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
 
-			s.unquiescedReplicas.Lock()
-			for k := range s.unquiescedReplicas.m {
+			s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 				// Why do we bother to ever queue a Replica on the Raft scheduler for
 				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
 				// then a single bad/slow Replica can disrupt tick processing for every
 				// Replica on the store which cascades into Raft elections and more
 				// disruption.
-				rangeIDs = append(rangeIDs, k)
-			}
-			s.unquiescedReplicas.Unlock()
+				rangeIDs = append(rangeIDs, roachpb.RangeID(k))
+				return true
+			})
 
 			s.scheduler.EnqueueRaftTick(rangeIDs...)
 			s.metrics.RaftTicks.Inc(1)
