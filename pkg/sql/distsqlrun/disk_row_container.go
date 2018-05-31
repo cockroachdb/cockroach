@@ -69,7 +69,6 @@ var _ sortableRowContainer = &diskRowContainer{}
 // 	- ordering is the output ordering; the order in which rows should be sorted.
 // 	- e is the underlying store that rows are stored on.
 func makeDiskRowContainer(
-	ctx context.Context,
 	diskMonitor *mon.BytesMonitor,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
