@@ -515,10 +515,10 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
-message ReplicaMatrixRequest {
+message DataDistributionRequest {
 }
 
-message ReplicaMatrixResponse {
+message DataDistributionResponse {
   message ZoneConfig {
     // cli_specifier is ".default" for the default zone config.
     // Otherwise, it's of the form [database.]table[@index[.partition]]
@@ -729,9 +729,9 @@ service Admin {
     };
   }
 
-  rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
+  rpc DataDistribution(DataDistributionRequest) returns (DataDistributionResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/replica_matrix"
+      get: "/_admin/v1/data_distribution"
     };
   }
 
