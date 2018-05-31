@@ -704,32 +704,32 @@ left-join
 build
 SELECT 1, 2 UNION SELECT 3
 ----
-error: each UNION query must have the same number of columns: 2 vs 1
+error (42601): each UNION query must have the same number of columns: 2 vs 1
 
 build
 SELECT 1, 2 INTERSECT SELECT 3
 ----
-error: each INTERSECT query must have the same number of columns: 2 vs 1
+error (42601): each INTERSECT query must have the same number of columns: 2 vs 1
 
 build
 SELECT 1, 2 EXCEPT SELECT 3
 ----
-error: each EXCEPT query must have the same number of columns: 2 vs 1
+error (42601): each EXCEPT query must have the same number of columns: 2 vs 1
 
 build
 SELECT 1 UNION SELECT '3'
 ----
-error: UNION types int and string cannot be matched
+error (42804): UNION types int and string cannot be matched
 
 build
 SELECT 1 INTERSECT SELECT '3'
 ----
-error: INTERSECT types int and string cannot be matched
+error (42804): INTERSECT types int and string cannot be matched
 
 build
 SELECT 1 EXCEPT SELECT '3'
 ----
-error: EXCEPT types int and string cannot be matched
+error (42804): EXCEPT types int and string cannot be matched
 
 # TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
 build
@@ -740,7 +740,7 @@ error (42703): column "z" does not exist
 build
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
 ----
-error: UNION types int[] and string[] cannot be matched
+error (42804): UNION types int[] and string[] cannot be matched
 
 exec-ddl
 CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)

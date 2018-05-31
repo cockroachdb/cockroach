@@ -1,0 +1,23 @@
+exec-ddl
+CREATE TABLE x(a INT)
+----
+TABLE x
+ ├── a int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE y(a INT)
+----
+TABLE y
+ ├── a int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+error (0A000): with clause not supported

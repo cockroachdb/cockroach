@@ -147,20 +147,30 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 			}
 			ord = val
 		} else {
-			panic(errorf("non-integer constant in %s: %s", context, expr))
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeSyntaxError,
+				"non-integer constant in %s: %s", context, expr,
+			)})
 		}
 	case *tree.DInt:
 		if *i >= 0 {
 			ord = int64(*i)
 		}
 	case *tree.StrVal:
-		panic(errorf("non-integer constant in %s: %s", context, expr))
+		panic(builderError{pgerror.NewErrorf(
+			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+		)})
 	case tree.Datum:
-		panic(errorf("non-integer constant in %s: %s", context, expr))
+		panic(builderError{pgerror.NewErrorf(
+			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+		)})
 	}
 	if ord != -1 {
 		if ord < 1 || ord > int64(numOriginalCols) {
-			panic(errorf("%s position %s is not in select list", context, expr))
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeInvalidColumnReferenceError,
+				"%s position %s is not in select list", context, expr,
+			)})
 		}
 		ord--
 	}

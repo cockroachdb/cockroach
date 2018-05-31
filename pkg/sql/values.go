@@ -16,11 +16,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -97,7 +95,8 @@ func (p *planner) Values(
 			} else if v.columns[i].Typ == types.Unknown {
 				v.columns[i].Typ = typ
 			} else if typ != types.Unknown && !typ.Equivalent(v.columns[i].Typ) {
-				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
+				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
 			}
 
 			tupleRow[i] = typedExpr
@@ -201,6 +200,8 @@ func (n *valuesNode) Close(ctx context.Context) {
 }
 
 func newValuesListLenErr(exp, got int) error {
-	return errors.Errorf("VALUES lists must all be the same length, expected %d columns, found %d",
+	return pgerror.NewErrorf(
+		pgerror.CodeSyntaxError,
+		"VALUES lists must all be the same length, expected %d columns, found %d",
 		exp, got)
 }

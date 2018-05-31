@@ -365,10 +365,12 @@ func (v *subqueryVisitor) extractSubquery(
 		switch desiredColumns {
 		case 1:
 			plan.Close(v.ctx)
-			return nil, fmt.Errorf("subquery must return only one column, found %d", len(cols))
+			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"subquery must return only one column, found %d", len(cols))
 		default:
 			plan.Close(v.ctx)
-			return nil, fmt.Errorf("subquery must return %d columns, found %d", desiredColumns, len(cols))
+			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"subquery must return %d columns, found %d", desiredColumns, len(cols))
 		}
 	}
 

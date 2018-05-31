@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -167,8 +168,11 @@ func (p *planner) makeJoin(
 				// ambiguity later.
 				continue
 			}
-			return planDataSource{}, fmt.Errorf(
-				"cannot join columns from the same source name %q (missing AS clause)", t)
+			return planDataSource{}, pgerror.NewErrorf(
+				pgerror.CodeDuplicateAliasError,
+				"source name %q specified more than once (missing AS clause)",
+				t,
+			)
 		}
 	}
 

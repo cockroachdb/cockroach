@@ -131,12 +131,12 @@ inner-join
 build fully-qualify-names
 SELECT * FROM a, a
 ----
-error: cannot join columns from the same source name "a" (missing AS clause)
+error (42712): source name "a" specified more than once (missing AS clause)
 
 build fully-qualify-names
 SELECT * FROM t.a, a
 ----
-error: cannot join columns from the same source name "a" (missing AS clause)
+error (42712): source name "a" specified more than once (missing AS clause)
 
 build fully-qualify-names
 SELECT * FROM t.a, a AS a

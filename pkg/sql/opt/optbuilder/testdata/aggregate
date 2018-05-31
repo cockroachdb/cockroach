@@ -273,7 +273,7 @@ project
 build
 SELECT COUNT(*), k FROM kv
 ----
-error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*) FROM kv GROUP BY s < 5
@@ -339,17 +339,17 @@ error (42803): aggregate functions are not allowed in VALUES
 build
 SELECT COUNT(*), k FROM kv GROUP BY 5
 ----
-error: GROUP BY position 5 is not in select list
+error (42P10): GROUP BY position 5 is not in select list
 
 build
 SELECT COUNT(*), k FROM kv GROUP BY 0
 ----
-error: GROUP BY position 0 is not in select list
+error (42P10): GROUP BY position 0 is not in select list
 
 build
 SELECT 1 GROUP BY 'a'
 ----
-error: non-integer constant in GROUP BY: 'a'
+error (42601): non-integer constant in GROUP BY: 'a'
 
 # Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
 build
@@ -522,7 +522,7 @@ project
 build
 SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 ----
-error: column "s" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "s" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Selecting and grouping on a more complex expression works.
 build
@@ -570,17 +570,17 @@ project
 build
 SELECT COUNT(*), k+v FROM kv GROUP BY k
 ----
-error: column "v" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*), k+v FROM kv GROUP BY v
 ----
-error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
 ----
-error: column "v" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k FROM kv WHERE AVG(k) > 1
@@ -2022,7 +2022,7 @@ project
 build
 SELECT b1.b AND abc.c AND abc.c FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
 ----
-error: column "c" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "c" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT b1.b OR abc.c OR b2.b FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
@@ -2058,7 +2058,7 @@ project
 build
 SELECT b1.b OR abc.c OR abc.c FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
 ----
-error: column "c" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "c" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k % w % v FROM kv GROUP BY k % w, v
@@ -2110,7 +2110,7 @@ project
 build
 SELECT CONCAT(CONCAT(s, a), s) FROM kv, abc GROUP BY CONCAT(s, a), a
 ----
-error: column "s" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "s" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k < w AND v != 5 FROM kv GROUP BY k < w, v
@@ -2138,7 +2138,7 @@ project
 build
 SELECT k < w AND k < v FROM kv GROUP BY k < w, v
 ----
-error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 exec-ddl
 CREATE TABLE foo (bar JSON, baz JSON)
@@ -2181,7 +2181,7 @@ project
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
 ----
-error: column "bar" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "bar" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT b.baz <@ a.bar AND b.baz <@ b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
@@ -2253,7 +2253,7 @@ build
 SELECT date_trunc('second', a.t) - date_trunc('second', b.t) FROM times a, times b
   GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
 ----
-error: column "t" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "t" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT NOT b FROM bools GROUP BY NOT b
@@ -2272,7 +2272,7 @@ group-by
 build
 SELECT b FROM bools GROUP BY NOT b
 ----
-error: column "b" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "b" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT NOT b FROM bools GROUP BY b
@@ -2314,7 +2314,7 @@ project
 build
 SELECT k * (-w) FROM kv GROUP BY +k, -w
 ----
-error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
+error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT +k * (-w) FROM kv GROUP BY k, w

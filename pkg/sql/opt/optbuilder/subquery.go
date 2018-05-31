@@ -265,7 +265,9 @@ func (b *Builder) buildMultiRowSubquery(
 		}
 
 	default:
-		panic(fmt.Errorf("transformSubquery called with operator %v", c.Operator))
+		panic(fmt.Errorf(
+			"buildMultiRowSubquery called with operator %v", c.Operator,
+		))
 	}
 
 	// Construct the outer Any(...) operator.

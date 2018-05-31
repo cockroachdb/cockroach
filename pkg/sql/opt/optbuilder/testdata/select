@@ -509,7 +509,7 @@ limit
 build
 ((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
 ----
-error: multiple LIMIT clauses not allowed
+error (42601): multiple LIMIT clauses not allowed
 
 build
 SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
@@ -1062,4 +1062,4 @@ error (0A000): AS OF clause not supported
 build
 SELECT * FROM a AS t(a, b, c)
 ----
-error: source "t" has 2 columns available but 3 columns specified
+error (42P10): source "t" has 2 columns available but 3 columns specified

@@ -616,7 +616,7 @@ project
 build
 SELECT (SELECT 1, 2)
 ----
-error: subquery must return only one column, found 2
+error (42601): subquery must return only one column, found 2
 
 build
 SELECT 1 IN (SELECT 1, 2)
@@ -696,7 +696,7 @@ project
 build
 SELECT (SELECT * FROM abc)
 ----
-error: subquery must return only one column, found 3
+error (42601): subquery must return only one column, found 3
 
 build
 SELECT (SELECT a FROM abc)

@@ -296,7 +296,7 @@ func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 		}
 	}
 
-	panic(errorf("aggregate function is not allowed in this context"))
+	panic(fmt.Errorf("aggregate function is not allowed in this context"))
 }
 
 // endAggFunc is called when the builder finishes building an aggregate
@@ -306,7 +306,7 @@ func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 // added.
 func (s *scope) endAggFunc() {
 	if !s.groupby.inAgg {
-		panic(errorf("mismatched calls to start/end aggFunc"))
+		panic(fmt.Errorf("mismatched calls to start/end aggFunc"))
 	}
 	s.groupby.inAgg = false
 }
@@ -647,9 +647,11 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 		n := len(outScope.cols)
 		switch desiredColumns {
 		case 1:
-			panic(errorf("subquery must return only one column, found %d", n))
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"subquery must return only one column, found %d", n)})
 		default:
-			panic(errorf("subquery must return %d columns, found %d", desiredColumns, n))
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"subquery must return %d columns, found %d", desiredColumns, n)})
 		}
 	}
 

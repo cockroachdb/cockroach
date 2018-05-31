@@ -165,22 +165,22 @@ query I
 3
 2
 
-query error multiple ORDER BY clauses not allowed
+query error pgcode 42601 multiple ORDER BY clauses not allowed
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 
 query error expected c to be of type int, found type bool
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 
-query error ORDER BY position 0 is not in select list
+query error pgcode 42P10 ORDER BY position 0 is not in select list
 SELECT * FROM t ORDER BY 0
 
-query error non-integer constant in ORDER BY: true
+query error pgcode 42601 non-integer constant in ORDER BY: true
 SELECT * FROM t ORDER BY true
 
-query error non-integer constant in ORDER BY: 'a'
+query error pgcode 42601 non-integer constant in ORDER BY: 'a'
 SELECT * FROM t ORDER BY 'a'
 
-query error non-integer constant in ORDER BY: 2\.5
+query error pgcode 42601 non-integer constant in ORDER BY: 2\.5
 SELECT * FROM t ORDER BY 2.5
 
 query error column "foo" does not exist
