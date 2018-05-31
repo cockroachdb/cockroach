@@ -56,16 +56,21 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	var statusString string
 	var created time.Time
 	var payloadBytes []byte
+	var progressBytes []byte
 	if err := expected.DB.QueryRow(
-		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, id,
+		`SELECT status, created, payload, progress FROM system.jobs WHERE id = $1`, id,
 	).Scan(
-		&statusString, &created, &payloadBytes,
+		&statusString, &created, &payloadBytes, &progressBytes,
 	); err != nil {
 		return err
 	}
 
 	var payload jobs.Payload
 	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
+		return err
+	}
+	var progress jobs.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 		return err
 	}
 
@@ -92,7 +97,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if e, a := expected.Type, payload.Type(); e != a {
 		return errors.Errorf("expected type %v, got type %v", e, a)
 	}
-	if e, a := expected.FractionCompleted, payload.FractionCompleted; e != a {
+	if e, a := expected.FractionCompleted, progress.FractionCompleted; e != a {
 		return errors.Errorf("expected fraction completed %f, got %f", e, a)
 	}
 
@@ -111,6 +116,20 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return errors.Errorf("expected error %q, got %q", e, a)
 	}
 	return nil
+}
+
+func TestJobsTableProgressFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	var table, schema string
+	sqlutils.MakeSQLRunner(db).QueryRow(t, `SHOW CREATE TABLE system.jobs`).Scan(&table, &schema)
+	if !strings.Contains(schema, `FAMILY progress (progress)`) {
+		t.Fatalf("expected progress family, got %q", schema)
+	}
 }
 
 func TestRegistryLifecycle(t *testing.T) {
