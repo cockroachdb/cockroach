@@ -33,7 +33,7 @@ SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 7
 11
 
-query error VALUES lists must all be the same length, expected 1 columns, found 2
+query error pgcode 42601 VALUES lists must all be the same length, expected 1 columns, found 2
 VALUES (1), (2, 3)
 
 query I
@@ -52,3 +52,6 @@ VALUES ((SELECT 1)), ((SELECT 2))
 ----
 1
 2
+
+query error pgcode 42804 VALUES types string and int cannot be matched
+VALUES (NULL, 1), (2, NULL), (NULL, 'a')

@@ -93,10 +93,11 @@ func (b *Builder) validateJoinTableNames(leftTables map[string]struct{}, rightSc
 			continue
 		}
 		if _, ok := leftTables[t.FQString()]; ok {
-			panic(errorf(
-				"cannot join columns from the same source name %q (missing AS clause)",
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeDuplicateAliasError,
+				"source name %q specified more than once (missing AS clause)",
 				tree.ErrString(&t.TableName),
-			))
+			)})
 		}
 	}
 }

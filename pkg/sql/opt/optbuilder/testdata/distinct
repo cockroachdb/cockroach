@@ -148,7 +148,7 @@ error (22023): unsupported binary operator: <int> + <float>
 build
 SELECT DISTINCT y AS w FROM xyz ORDER by z
 ----
-error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select list
 
 build
 SELECT DISTINCT y AS w FROM xyz ORDER by y

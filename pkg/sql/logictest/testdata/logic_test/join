@@ -454,10 +454,10 @@ CREATE TABLE othertype (x TEXT)
 query error pgcode 42804 JOIN/USING types.*cannot be matched
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 
-query error cannot join columns from the same source name "onecolumn"
+query error pgcode 42712 source name "onecolumn" specified more than once \(missing AS clause\)
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))
 
-query error cannot join columns from the same source name "onecolumn"
+query error pgcode 42712 source name "onecolumn" specified more than once \(missing AS clause\)
 SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 
 # Check that star expansion works across anonymous sources.

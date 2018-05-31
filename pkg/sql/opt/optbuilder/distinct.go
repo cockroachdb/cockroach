@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -56,7 +57,10 @@ func (b *Builder) buildDistinct(
 	// CockroachDB, so we may need to support it eventually.
 	for _, col := range outScope.physicalProps.Ordering {
 		if !outScope.hasColumn(col.ID()) {
-			panic(errorf("for SELECT DISTINCT, ORDER BY expressions must appear in select list"))
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeInvalidColumnReferenceError,
+				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+			)})
 		}
 	}
 

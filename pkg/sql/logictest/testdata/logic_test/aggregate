@@ -185,7 +185,7 @@ SELECT 3 FROM kv HAVING TRUE
 ----
 3
 
-query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+query error pgcode 42803 column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
 
 query error unsupported comparison operator: <string> < <int>
@@ -230,13 +230,13 @@ SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
 query error aggregate functions are not allowed in VALUES
 INSERT INTO kv (k, v) VALUES (99, COUNT(1))
 
-query error GROUP BY position 5 is not in select list
+query error pgcode 42P10 GROUP BY position 5 is not in select list
 SELECT COUNT(*), k FROM kv GROUP BY 5
 
-query error GROUP BY position 0 is not in select list
+query error pgcode 42P10 GROUP BY position 0 is not in select list
 SELECT COUNT(*), k FROM kv GROUP BY 0
 
-query error non-integer constant in GROUP BY
+query error pgcode 42601 non-integer constant in GROUP BY
 SELECT 1 GROUP BY 'a'
 
 # Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
