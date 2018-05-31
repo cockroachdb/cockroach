@@ -712,6 +712,7 @@ system         public        eventlog          uniqueID        6
 system         public        jobs              created         3
 system         public        jobs              id              1
 system         public        jobs              payload         4
+system         public        jobs              progress        5
 system         public        jobs              status          2
 system         public        lease             descID          1
 system         public        lease             expiration      4
