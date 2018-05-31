@@ -394,6 +394,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 	if err != nil {
 		return nil, err
 	}
+
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
@@ -401,6 +402,12 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"type %s is not composite", resolvedType,
 		)
+	}
+
+	// For now, only support column access into tuple expressions.
+	if _, ok := expr.Expr.(*Tuple); !ok {
+		return nil, pgerror.UnimplementedWithIssueErrorf(
+			24866, "cannot access column \"%s\" in non-tuple expression", expr.ColName)
 	}
 
 	labels := resolvedType.(types.TTuple).Labels

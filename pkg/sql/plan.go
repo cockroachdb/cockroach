@@ -374,8 +374,18 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	if err != nil {
 		return err
 	}
+
 	p.curPlan = *plan.(*planTop)
 	p.curPlan.AST = stmt.AST
+
+	cols := planColumns(p.curPlan.plan)
+	if stmt.ExpectedTypes != nil {
+		if !stmt.ExpectedTypes.TypesEqual(cols) {
+			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+				"cached plan must not change result type")
+		}
+	}
+
 	return nil
 }
 

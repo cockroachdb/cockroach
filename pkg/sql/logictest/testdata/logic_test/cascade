@@ -192,44 +192,6 @@ SELECT
 ----
 0 0 0 0 0 0
 
-# Perform the same operation but with show trace.
-statement ok
-INSERT INTO a VALUES ('a-pk1');
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1');
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1');
-INSERT INTO c1 VALUES
-  ('c1-pk1-b1-pk1', 'b1-pk1')
- ,('c1-pk2-b1-pk1', 'b1-pk1')
- ,('c1-pk3-b1-pk2', 'b1-pk2')
- ,('c1-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c2 VALUES
-  ('c2-pk1-b1-pk1', 'b1-pk1')
- ,('c2-pk2-b1-pk1', 'b1-pk1')
- ,('c2-pk3-b1-pk2', 'b1-pk2')
- ,('c2-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
-
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
-] WHERE message LIKE 'cascading %';
-----
-5
-
-query IIIIII
-SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
-;
-----
-0 0 0 0 0 0
-
 # Clean up after the test.
 statement ok
 DROP TABLE c3, c2, c1, b2, b1, a;
@@ -994,47 +956,6 @@ c2-pk1 updated
 c2-pk2 updated
 c2-pk3 updated
 c2-pk4 updated
-
-# Update again but this time check show trace
-statement ok
-
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR UPDATE a SET id = 'updated2' WHERE id = 'updated'
-] WHERE message LIKE 'cascading %';
-----
-5
-
-query T
-SELECT * FROM a;
-----
-updated2
-
-query TT
-SELECT * FROM b1;
-----
-b1-pk1 updated2
-
-query TT
-SELECT * FROM b2;
-----
-b2-pk1 updated2
-
-query TT rowsort
-SELECT * FROM c1;
-----
-c1-pk1 updated2
-c1-pk2 updated2
-c1-pk3 updated2
-c1-pk4 updated2
-
-query TT rowsort
-SELECT * FROM c2;
-----
-c2-pk1 updated2
-c2-pk2 updated2
-c2-pk3 updated2
-c2-pk4 updated2
 
 # Clean up after the test.
 statement ok
@@ -2030,45 +1951,6 @@ b3-pk2 untouched
 b4-pk1 NULL
 b4-pk2 NULL
 
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE a, b1, b2, b3, b4;
-
-statement ok
-INSERT INTO a VALUES ('delete_me'), ('untouched');
-INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
-INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
-INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
-INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'delete_me'
-] WHERE message LIKE 'cascading %';
-----
-4
-
-query TT rowsort
-  SELECT id, delete_set_null FROM b1
-UNION ALL
-  SELECT id, delete_set_null FROM b2
-UNION ALL
-  SELECT id, delete_set_null FROM b3
-UNION ALL
-  SELECT id, delete_set_null FROM b4
-;
-----
-b1-pk1 untouched
-b1-pk2 untouched
-b2-pk1 untouched
-b2-pk2 NULL
-b3-pk1 NULL
-b3-pk2 untouched
-b4-pk1 NULL
-b4-pk2 NULL
-
 # Clean up after the test.
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
@@ -2163,64 +2045,6 @@ c3-pk4-b2-pk2  NULL
 
 statement ok
 TRUNCATE c3, c2, c1, b2, b1, a;
-
-# Perform the same operation but with show trace.
-statement ok
-INSERT INTO a VALUES ('a-pk1');
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1');
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1');
-INSERT INTO c1 VALUES
-  ('c1-pk1-b1-pk1', 'b1-pk1')
- ,('c1-pk2-b1-pk1', 'b1-pk1')
- ,('c1-pk3-b1-pk2', 'b1-pk2')
- ,('c1-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c2 VALUES
-  ('c2-pk1-b1-pk1', 'b1-pk1')
- ,('c2-pk2-b1-pk1', 'b1-pk1')
- ,('c2-pk3-b1-pk2', 'b1-pk2')
- ,('c2-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c3 VALUES
-  ('c3-pk1-b2-pk1', 'b2-pk1')
- ,('c3-pk2-b2-pk1', 'b2-pk1')
- ,('c3-pk3-b2-pk2', 'b2-pk2')
- ,('c3-pk4-b2-pk2', 'b2-pk2')
-;
-
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
-] WHERE message LIKE 'cascading %';
-----
-5
-
-query TT rowsort
-  SELECT id, 'empty' FROM a
-UNION ALL
-  SELECT id, delete_cascade FROM b1
-UNION ALL
-  SELECT id, delete_cascade FROM b2
-UNION ALL
-  SELECT id, delete_set_null FROM c1
-UNION ALL
-  SELECT id, delete_set_null FROM c2
-UNION ALL
-  SELECT id, delete_set_null FROM c3
-;
-----
-c1-pk1-b1-pk1  NULL
-c1-pk2-b1-pk1  NULL
-c1-pk3-b1-pk2  NULL
-c1-pk4-b1-pk2  NULL
-c2-pk1-b1-pk1  NULL
-c2-pk2-b1-pk1  NULL
-c2-pk3-b1-pk2  NULL
-c2-pk4-b1-pk2  NULL
-c3-pk1-b2-pk1  NULL
-c3-pk2-b2-pk1  NULL
-c3-pk3-b2-pk2  NULL
-c3-pk4-b2-pk2  NULL
 
 # Clean up after the test.
 statement ok
@@ -2380,45 +2204,6 @@ b3-pk2 untouched
 b4-pk1 NULL
 b4-pk2 NULL
 
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE a, b1, b2, b3, b4;
-
-statement ok
-INSERT INTO a VALUES ('original'), ('untouched');
-INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
-INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'original');
-INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
-INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
-] WHERE message LIKE 'cascading %';
-----
-4
-
-query TT rowsort
-  SELECT id, update_set_null FROM b1
-UNION ALL
-  SELECT id, update_set_null FROM b2
-UNION ALL
-  SELECT id, update_set_null FROM b3
-UNION ALL
-  SELECT id, update_set_null FROM b4
-;
-----
-b1-pk1 untouched
-b1-pk2 untouched
-b2-pk1 untouched
-b2-pk2 NULL
-b3-pk1 NULL
-b3-pk2 untouched
-b4-pk1 NULL
-b4-pk2 NULL
-
 # Clean up after the test.
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
@@ -2482,71 +2267,6 @@ INSERT INTO c3 VALUES
 # ON UPDATE CASCADE
 statement ok
 UPDATE a SET id = 'updated' WHERE id = 'original';
-
-query TT rowsort
-  SELECT id, update_cascade FROM b1
-UNION ALL
-  SELECT id, update_cascade FROM b2
-UNION ALL
-  SELECT id, update_set_null FROM c1
-UNION ALL
-  SELECT id, update_set_null FROM c2
-UNION ALL
-  SELECT id, update_set_null FROM c3
-;
-----
-b1-pk1         updated
-b1-pk2         untouched
-b2-pk1         updated
-b2-pk2         untouched
-c1-pk1-b1-pk1  NULL
-c1-pk2-b1-pk1  NULL
-c1-pk3-b1-pk2  untouched
-c1-pk4-b1-pk2  untouched
-c2-pk1-b1-pk1  NULL
-c2-pk2-b1-pk1  NULL
-c2-pk3-b1-pk2  untouched
-c2-pk4-b1-pk2  untouched
-c3-pk1-b2-pk1  NULL
-c3-pk2-b2-pk1  NULL
-c3-pk3-b2-pk2  untouched
-c3-pk4-b2-pk2  untouched
-
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE c3, c2, c1, b2, b1, a;
-
-statement ok
-INSERT INTO a VALUES ('original'), ('untouched');
-INSERT INTO b1 VALUES ('b1-pk1', 'original'), ('b1-pk2', 'untouched');
-INSERT INTO b2 VALUES ('b2-pk1', 'original'), ('b2-pk2', 'untouched');
-INSERT INTO c1 VALUES
-  ('c1-pk1-b1-pk1', 'original')
- ,('c1-pk2-b1-pk1', 'original')
- ,('c1-pk3-b1-pk2', 'untouched')
- ,('c1-pk4-b1-pk2', 'untouched')
-;
-INSERT INTO c2 VALUES
-  ('c2-pk1-b1-pk1', 'original')
- ,('c2-pk2-b1-pk1', 'original')
- ,('c2-pk3-b1-pk2', 'untouched')
- ,('c2-pk4-b1-pk2', 'untouched')
-;
-INSERT INTO c3 VALUES
-  ('c3-pk1-b2-pk1', 'original')
- ,('c3-pk2-b2-pk1', 'original')
- ,('c3-pk3-b2-pk2', 'untouched')
- ,('c3-pk4-b2-pk2', 'untouched')
-;
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
-] WHERE message LIKE 'cascading %';
-----
-5
 
 query TT rowsort
   SELECT id, update_cascade FROM b1
@@ -2731,45 +2451,6 @@ b3-pk2  untouched
 b4-pk1  b4-default
 b4-pk2  b4-default
 
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE a, b1, b2, b3, b4;
-
-statement ok
-INSERT INTO a VALUES ('delete_me'), ('untouched'), ('b2-default'), ('b3-default'), ('b4-default');
-INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
-INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
-INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
-INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'delete_me'
-] WHERE message LIKE 'cascading %';
-----
-4
-
-query TT rowsort
-  SELECT id, delete_set_default FROM b1
-UNION ALL
-  SELECT id, delete_set_default FROM b2
-UNION ALL
-  SELECT id, delete_set_default FROM b3
-UNION ALL
-  SELECT id, delete_set_default FROM b4
-;
-----
-b1-pk1  untouched
-b1-pk2  untouched
-b2-pk1  untouched
-b2-pk2  b2-default
-b3-pk1  b3-default
-b3-pk2  untouched
-b4-pk1  b4-default
-b4-pk2  b4-default
-
 # Clean up after the test.
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
@@ -2911,67 +2592,6 @@ c3-pk4-b2-pk2  b2-default
 
 statement ok
 TRUNCATE c3, c2, c1, b2, b1, a;
-
-# Perform the same operation but with show trace.
-statement ok
-INSERT INTO a VALUES ('a-pk1'), ('a-default');
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1'), ('b1-default', 'a-default');
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1'), ('b2-default', 'a-default');
-INSERT INTO c1 VALUES
-  ('c1-pk1-b1-pk1', 'b1-pk1')
- ,('c1-pk2-b1-pk1', 'b1-pk1')
- ,('c1-pk3-b1-pk2', 'b1-pk2')
- ,('c1-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c2 VALUES
-  ('c2-pk1-b1-pk1', 'b1-pk1')
- ,('c2-pk2-b1-pk1', 'b1-pk1')
- ,('c2-pk3-b1-pk2', 'b1-pk2')
- ,('c2-pk4-b1-pk2', 'b1-pk2')
-;
-INSERT INTO c3 VALUES
-  ('c3-pk1-b2-pk1', 'b2-pk1')
- ,('c3-pk2-b2-pk1', 'b2-pk1')
- ,('c3-pk3-b2-pk2', 'b2-pk2')
- ,('c3-pk4-b2-pk2', 'b2-pk2')
-;
-
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
-] WHERE message LIKE 'cascading %';
-----
-5
-
-query TT rowsort
-  SELECT id, 'empty' FROM a
-UNION ALL
-  SELECT id, delete_cascade FROM b1
-UNION ALL
-  SELECT id, delete_cascade FROM b2
-UNION ALL
-  SELECT id, delete_set_default FROM c1
-UNION ALL
-  SELECT id, delete_set_default FROM c2
-UNION ALL
-  SELECT id, delete_set_default FROM c3
-;
-----
-a-default      empty
-b1-default     a-default
-b2-default     a-default
-c1-pk1-b1-pk1  b1-default
-c1-pk2-b1-pk1  b1-default
-c1-pk3-b1-pk2  b1-default
-c1-pk4-b1-pk2  b1-default
-c2-pk1-b1-pk1  b1-default
-c2-pk2-b1-pk1  b1-default
-c2-pk3-b1-pk2  b1-default
-c2-pk4-b1-pk2  b1-default
-c3-pk1-b2-pk1  b2-default
-c3-pk2-b2-pk1  b2-default
-c3-pk3-b2-pk2  b2-default
-c3-pk4-b2-pk2  b2-default
 
 # Clean up after the test.
 statement ok
@@ -3280,45 +2900,6 @@ b3-pk2  untouched
 b4-pk1  b3-default
 b4-pk2  b3-default
 
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE a, b1, b2, b3, b4;
-
-statement ok
-INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default'), ('b3-default'), ('b4-default');
-INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
-INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'original');
-INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
-INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
-] WHERE message LIKE 'cascading %';
-----
-4
-
-query TT rowsort
-  SELECT id, update_set_null FROM b1
-UNION ALL
-  SELECT id, update_set_null FROM b2
-UNION ALL
-  SELECT id, update_set_null FROM b3
-UNION ALL
-  SELECT id, update_set_null FROM b4
-;
-----
-b1-pk1  untouched
-b1-pk2  untouched
-b2-pk1  untouched
-b2-pk2  b2-default
-b3-pk1  b3-default
-b3-pk2  untouched
-b4-pk1  b3-default
-b4-pk2  b3-default
-
 # Clean up after the test.
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
@@ -3426,73 +3007,6 @@ INSERT INTO c3 VALUES
 # originals should now be set to defaults.
 statement ok
 UPDATE a SET id = 'updated' WHERE id = 'original';
-
-query TT rowsort
-  SELECT id, update_cascade FROM b1
-UNION ALL
-  SELECT id, update_cascade FROM b2
-UNION ALL
-  SELECT id, update_set_null FROM c1
-UNION ALL
-  SELECT id, update_set_null FROM c2
-UNION ALL
-  SELECT id, update_set_null FROM c3
-;
-----
-b1-default     b1-default
-b1-pk1         updated
-b1-pk2         untouched
-b2-default     b2-default
-b2-pk1         updated
-b2-pk2         untouched
-c1-pk1-b1-pk1  b1-default
-c1-pk2-b1-pk1  b1-default
-c1-pk3-b1-pk2  untouched
-c1-pk4-b1-pk2  untouched
-c2-pk1-b1-pk1  b1-default
-c2-pk2-b1-pk1  b1-default
-c2-pk3-b1-pk2  untouched
-c2-pk4-b1-pk2  untouched
-c3-pk1-b2-pk1  b2-default
-c3-pk2-b2-pk1  b2-default
-c3-pk3-b2-pk2  untouched
-c3-pk4-b2-pk2  untouched
-
-# Perform the same operation but with show trace.
-statement ok
-TRUNCATE c3, c2, c1, b2, b1, a;
-
-statement ok
-INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default');
-INSERT INTO b1 VALUES ('b1-pk1', 'original'), ('b1-pk2', 'untouched'), ('b1-default', 'b1-default');
-INSERT INTO b2 VALUES ('b2-pk1', 'original'), ('b2-pk2', 'untouched'), ('b2-default', 'b2-default');
-INSERT INTO c1 VALUES
-  ('c1-pk1-b1-pk1', 'original')
- ,('c1-pk2-b1-pk1', 'original')
- ,('c1-pk3-b1-pk2', 'untouched')
- ,('c1-pk4-b1-pk2', 'untouched')
-;
-INSERT INTO c2 VALUES
-  ('c2-pk1-b1-pk1', 'original')
- ,('c2-pk2-b1-pk1', 'original')
- ,('c2-pk3-b1-pk2', 'untouched')
- ,('c2-pk4-b1-pk2', 'untouched')
-;
-INSERT INTO c3 VALUES
-  ('c3-pk1-b2-pk1', 'original')
- ,('c3-pk2-b2-pk1', 'original')
- ,('c3-pk3-b2-pk2', 'untouched')
- ,('c3-pk4-b2-pk2', 'untouched')
-;
-
-# Ensure that show trace adds a cascade message for each of the tables that is
-# cascaded into.
-query I
-SELECT COUNT(*) FROM [
-  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
-] WHERE message LIKE 'cascading %';
-----
-5
 
 query TT rowsort
   SELECT id, update_cascade FROM b1
