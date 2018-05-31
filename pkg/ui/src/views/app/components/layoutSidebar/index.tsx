@@ -6,7 +6,7 @@ import PropTypes from "prop-types";
 import { Link } from "react-router";
 
 import { AdminUIState } from "src/redux/state";
-import { selectLoginState, LoginState } from "src/redux/login";
+import { selectLoginState, LoginState, doLogout } from "src/redux/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
@@ -58,7 +58,12 @@ class IconLink extends React.Component<IconLinkProps, {}> {
   }
 }
 
-function LoginIndicator({ loginState }: { loginState: LoginState }) {
+interface LoginIndicatorProps {
+  loginState: LoginState;
+  handleLogout: () => null;
+}
+
+function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
   if (!loginState.useLogin()) {
     return null;
   }
@@ -75,6 +80,8 @@ function LoginIndicator({ loginState }: { loginState: LoginState }) {
   return (
     <div className="login-indicator">
         Logged in as {user}
+        <br />
+        <button onClick={handleLogout}>Logout</button>
     </div>
   );
 }
@@ -83,6 +90,11 @@ function LoginIndicator({ loginState }: { loginState: LoginState }) {
 const LoginIndicatorConnected = connect(
   (state: AdminUIState) => ({
     loginState: selectLoginState(state),
+  }),
+  (dispatch) => ({
+    handleLogout: () => {
+      dispatch(doLogout());
+    },
   }),
 )(LoginIndicator);
 

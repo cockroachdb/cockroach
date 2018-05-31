@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -44,7 +45,8 @@ import (
 const (
 	// authPrefix is the prefix for RESTful endpoints used to provide
 	// authentication methods.
-	authPrefix = "/_auth/v1/"
+	loginPath  = "/login"
+	logoutPath = "/logout"
 	// secretLength is the number of random bytes generated for session secrets.
 	secretLength      = 16
 	sessionCookieName = "session"
@@ -72,7 +74,8 @@ func newAuthenticationServer(s *Server) *authenticationServer {
 
 // RegisterService registers the GRPC service.
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
-	serverpb.RegisterAuthenticationServer(g, s)
+	serverpb.RegisterLogInServer(g, s)
+	serverpb.RegisterLogOutServer(g, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -80,7 +83,10 @@ func (s *authenticationServer) RegisterService(g *grpc.Server) {
 func (s *authenticationServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
-	return serverpb.RegisterAuthenticationHandler(ctx, mux, conn)
+	if err := serverpb.RegisterLogInHandler(ctx, mux, conn); err != nil {
+		return err
+	}
+	return serverpb.RegisterLogOutHandler(ctx, mux, conn)
 }
 
 // UserLogin verifies an incoming request by a user to create an web
@@ -150,7 +156,46 @@ func (s *authenticationServer) UserLogin(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "Logout method has not yet been implemented.")
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+	}
+	sessionIDs := md.Get(webSessionIDKeyStr)
+	if len(sessionIDs) != 1 {
+		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+	}
+
+	sessionID, err := strconv.Atoi(sessionIDs[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid session id: %d", sessionID)
+	}
+
+	// Revoke the session.
+	if n, err := s.server.internalExecutor.Exec(
+		ctx,
+		"revoke-auth-session",
+		nil, /* txn */
+		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
+		sessionID,
+	); err != nil {
+		return nil, apiInternalError(ctx, err)
+	} else if n == 0 {
+		msg := fmt.Sprintf("session with id %d nonexistent", sessionID)
+		log.Info(ctx, msg)
+		return nil, fmt.Errorf(msg)
+	}
+
+	// Send back a header which will cause the browser to destroy the cookie.
+	// See https://tools.ietf.org/search/rfc6265, page 7.
+	cookie := makeCookieWithValue("")
+	cookie.MaxAge = -1
+
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLogoutResponse{}, nil
 }
 
 // verifySession verifies the existence and validity of the session claimed by
@@ -303,17 +348,24 @@ func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenti
 	}
 }
 
-type loggedInUserKey struct{}
+type webSessionUserKey struct{}
+type webSessionIDKey struct{}
+
+const webSessionUserKeyStr = "webSessionUser"
+const webSessionIDKeyStr = "webSessionID"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, err := am.getSession(w, req)
+	username, cookie, err := am.getSession(w, req)
 	if err != nil && !am.allowAnonymous {
 		log.Infof(req.Context(), "Web session error: %s", err)
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
 
-	newCtx := context.WithValue(req.Context(), loggedInUserKey{}, username)
+	newCtx := context.WithValue(req.Context(), webSessionUserKey{}, username)
+	if cookie != nil {
+		newCtx = context.WithValue(newCtx, webSessionIDKey{}, cookie.ID)
+	}
 	newReq := req.WithContext(newCtx)
 
 	am.inner.ServeHTTP(w, newReq)
@@ -324,43 +376,49 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
+	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
+	return makeCookieWithValue(value), nil
+}
 
+func makeCookieWithValue(value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    base64.StdEncoding.EncodeToString(cookieValueBytes),
+		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-	}, nil
+	}
 }
 
 // getSession decodes the cookie from the request, looks up the corresponding session, and
 // returns the logged in user name. If there's an error, it returns an error value and the
 // HTTP error code.
-func (am *authenticationMux) getSession(w http.ResponseWriter, req *http.Request) (string, error) {
+func (am *authenticationMux) getSession(
+	w http.ResponseWriter, req *http.Request,
+) (string, *serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
 	rawCookie, err := req.Cookie(sessionCookieName)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	cookie, err := decodeSessionCookie(rawCookie)
 	if err != nil {
 		err = errors.Wrap(err, "a valid authentication cookie is required")
-		return "", err
+		return "", nil, err
 	}
 
 	valid, username, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
 		err := apiInternalError(req.Context(), err)
-		return "", err
+		return "", nil, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		return "", err
+		return "", nil, err
 	}
 
-	return username, nil
+	return username, cookie, nil
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
@@ -393,4 +451,15 @@ func authenticationHeaderMatcher(key string) (string, bool) {
 	// likely be added to GRPC Gateway so that the logic does not have to be
 	// duplicated here.
 	return fmt.Sprintf("%s%s", gwruntime.MetadataHeaderPrefix, key), true
+}
+
+func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadata.MD {
+	md := metadata.MD{}
+	if user := ctx.Value(webSessionUserKey{}); user != nil {
+		md.Set(webSessionUserKeyStr, user.(string))
+	}
+	if sessionID := ctx.Value(webSessionIDKey{}); sessionID != nil {
+		md.Set(webSessionIDKeyStr, fmt.Sprintf("%v", sessionID))
+	}
+	return md
 }

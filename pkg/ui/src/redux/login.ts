@@ -4,7 +4,7 @@ import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
 import { createPath } from "src/hacks/createPath";
-import { userLogin } from "src/util/api";
+import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
 import { LOGIN_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
@@ -131,9 +131,9 @@ const emptyLoginState: LoginAPIState = {
 
 // Actions
 
-const LOGIN_BEGIN = "LOGIN_BEGIN";
-const LOGIN_SUCCESS = "LOGIN_SUCCESS";
-const LOGIN_FAILURE = "LOGIN_FAILURE";
+const LOGIN_BEGIN = "cockroachui/auth/LOGIN_BEGIN";
+const LOGIN_SUCCESS = "cockroachui/auth/LOGIN_SUCCESS";
+const LOGIN_FAILURE = "cockroachui/auth/LOGIN_FAILURE";
 
 const loginBeginAction = {
   type: LOGIN_BEGIN,
@@ -163,6 +163,12 @@ function loginFailure(error: string): LoginFailureAction {
   };
 }
 
+const LOGOUT_BEGIN = "cockroachui/auth/LOGOUT_BEGIN";
+
+const logoutBeginAction = {
+  type: LOGOUT_BEGIN,
+};
+
 export function doLogin(username: string, password: string): ThunkAction<Promise<void>, AdminUIState, void> {
   return (dispatch) => {
     dispatch(loginBeginAction);
@@ -175,6 +181,26 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
       .then(
         () => { dispatch(loginSuccess(username)); },
         (err) => { dispatch(loginFailure(err.toString())); },
+      );
+  };
+}
+
+export function doLogout(): ThunkAction<Promise<void>, AdminUIState, void> {
+  return (dispatch) => {
+    dispatch(logoutBeginAction);
+
+    // Make request to log out, reloading the page whether it succeeds or not.
+    // If there was a successful log out but the network dropped the response somehow,
+    // you'll get the login page on reload. If The logout actually didn't work, you'll
+    // be reloaded to the same page and can try to log out again.
+    return userLogout()
+      .then(
+        () => {
+          document.location.reload();
+        },
+        () => {
+          document.location.reload();
+        },
       );
   };
 }
@@ -200,6 +226,12 @@ export function loginReducer(state = emptyLoginState, action: Action): LoginAPIS
         loggedInUser: null,
         inProgress: false,
         error: (action as LoginFailureAction).error,
+      };
+    case LOGOUT_BEGIN:
+      return {
+        loggedInUser: state.loggedInUser,
+        inProgress: true,
+        error: null,
       };
     default:
       return state;

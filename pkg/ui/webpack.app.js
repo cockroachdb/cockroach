@@ -25,7 +25,7 @@ try {
   DashboardPlugin = class { apply() { /* no-op */ } };
 }
 
-const proxyPrefixes = ["/_admin", "/_status", "/ts", "/_auth"];
+const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
 function shouldProxy(reqPath) {
   if (reqPath === "/") {
     return true;
