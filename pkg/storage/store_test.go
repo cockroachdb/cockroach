@@ -77,7 +77,7 @@ type testSenderFactory struct {
 	store *Store
 }
 
-func (f *testSenderFactory) New(typ client.TxnType) client.TxnSender {
+func (f *testSenderFactory) New(typ client.TxnType, _ *roachpb.Transaction) client.TxnSender {
 	return &testSender{store: f.store}
 }
 
@@ -93,7 +93,7 @@ type testSender struct {
 
 func (db *testSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
 
-func (db *testSender) AugmentMeta(roachpb.TxnCoordMeta) { panic("unimplemented") }
+func (db *testSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic("unimplemented") }
 
 func (db *testSender) OnFinish(func(error)) { panic("unimplemented") }
 
