@@ -361,6 +361,13 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *projectSetNode:
+		n.source, err = p.propagateOrWrapFilters(ctx, n.source, nil, extraFilter)
+		if err != nil {
+			return plan, extraFilter, err
+		}
+		return plan, tree.DBoolTrue, nil
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
