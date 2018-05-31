@@ -156,12 +156,15 @@ type NodeLiveness struct {
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
 	heartbeatInterval time.Duration
-	pauseHeartbeat    atomic.Value // contains a bool
 	selfSem           chan struct{}
 	st                *cluster.Settings
 	otherSem          chan struct{}
-	triggerHeartbeat  chan struct{} // for testing
-	metrics           LivenessMetrics
+	// heartbeatPaused contains an atomically-swapped number representing a bool
+	// (1 or 0). heartbeatToken is a channel containing a token which is taken
+	// when heartbeating or when pausing the heartbeat. Used for testing.
+	heartbeatPaused uint32
+	heartbeatToken  chan struct{}
+	metrics         LivenessMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -195,7 +198,7 @@ func NewNodeLiveness(
 		selfSem:           make(chan struct{}, 1),
 		st:                st,
 		otherSem:          make(chan struct{}, 1),
-		triggerHeartbeat:  make(chan struct{}, 1),
+		heartbeatToken:    make(chan struct{}, 1),
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -204,8 +207,8 @@ func NewNodeLiveness(
 		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
 		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, histogramWindow),
 	}
-	nl.pauseHeartbeat.Store(false)
 	nl.mu.nodes = map[roachpb.NodeID]Liveness{}
+	nl.heartbeatToken <- struct{}{}
 
 	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
@@ -442,37 +445,40 @@ func (nl *NodeLiveness) StartHeartbeat(
 		defer ticker.Stop()
 		incrementEpoch := true
 		for {
-			if !nl.pauseHeartbeat.Load().(bool) {
-				func() {
-					// Give the context a timeout approximately as long as the time we
-					// have left before our liveness entry expires.
-					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
-					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
-					defer cancel()
-					defer sp.Finish()
-
-					// Retry heartbeat in the event the conditional put fails.
-					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-						liveness, err := nl.Self()
-						if err != nil && err != ErrNoLivenessRecord {
-							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
-						}
-						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-							if err == ErrEpochIncremented {
-								log.Infof(ctx, "%s; retrying", err)
-								continue
-							}
-							log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
-						} else {
-							incrementEpoch = false // don't increment epoch after first heartbeat
-						}
-						break
-					}
-				}()
+			select {
+			case <-nl.heartbeatToken:
+			case <-stopper.ShouldStop():
+				return
 			}
+			func() {
+				// Give the context a timeout approximately as long as the time we
+				// have left before our liveness entry expires.
+				ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
+				ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+				defer cancel()
+				defer sp.Finish()
+
+				// Retry heartbeat in the event the conditional put fails.
+				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+					liveness, err := nl.Self()
+					if err != nil && err != ErrNoLivenessRecord {
+						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
+					}
+					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
+						if err == ErrEpochIncremented {
+							log.Infof(ctx, "%s; retrying", err)
+							continue
+						}
+						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+					} else {
+						incrementEpoch = false // don't increment epoch after first heartbeat
+					}
+					break
+				}
+			}()
+			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
-			case <-nl.triggerHeartbeat:
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -481,15 +487,17 @@ func (nl *NodeLiveness) StartHeartbeat(
 }
 
 // PauseHeartbeat stops or restarts the periodic heartbeat depending on the
-// pause parameter. When unpausing, triggers an immediate heartbeat.
-// This is only used by tests as of the 1.1 release, so be careful about using
-// it in non-test code.
+// pause parameter. When pause is true, waits until it acquires the heartbeatToken
+// (unless heartbeat was already paused); this ensures that no heartbeats happen
+// after this is called. This function is only safe for use in tests.
 func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
-	nl.pauseHeartbeat.Store(pause)
-	if !pause {
-		select {
-		case nl.triggerHeartbeat <- struct{}{}:
-		default:
+	if pause {
+		if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 0, 1); swapped {
+			<-nl.heartbeatToken
+		}
+	} else {
+		if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 1, 0); swapped {
+			nl.heartbeatToken <- struct{}{}
 		}
 	}
 }
