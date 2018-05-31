@@ -2111,17 +2111,56 @@ func (r *Replica) adminScatter(
 		MaxRetries:     5,
 	}
 
+	if args.RandomizeReplicas {
+		_, liveStores, _ := r.store.cfg.StorePool.getStoreList(r.RangeID, storeFilterNone)
+		zone, err := sysCfg.GetZoneConfigForKey(r.Desc().StartKey)
+		if err != nil {
+			return roachpb.AdminScatterResponse{}, err
+		}
+		numReplicas := int(zone.NumReplicas)
+		replicasToAdd := rand.Intn(liveStores) + 1 - numReplicas
+		if replicasToAdd < 0 {
+			replicasToAdd = 0
+		} else if replicasToAdd > numReplicas {
+			replicasToAdd = numReplicas
+		}
+
+		var replicasAdded int
+		for re := retry.StartWithCtx(ctx, retryOpts); re.Next() && replicasAdded < replicasToAdd; {
+			requeue, err := rq.processOneChange(ctx, r, sysCfg, func() bool { return false } /* canTransferLease */, false /* dryRun */, true /* disableStatsBasedRebalancing */, true /* forceAddReplica */)
+			if err != nil {
+				if IsSnapshotError(err) {
+					// TODO: remove
+					log.Infof(ctx, "encountered snapshot error when adding replica for scatter: %s", err)
+					continue
+				}
+				log.Warningf(ctx, "encountered error when adding replica for scatter: %s", err)
+				break
+			}
+			replicasAdded++
+			if !requeue {
+				break
+			}
+			re.Reset()
+		}
+		// TODO: remove
+		log.Infof(ctx, "SCATTER RandomizeReplicas added %d out of %d desired replicas", replicasAdded, replicasToAdd)
+	}
+
 	// Loop until the replicate queue decides there is nothing left to do for the
 	// range. Note that we disable lease transfers until the final step as
 	// transferring the lease prevents any further action on this node.
 	var allowLeaseTransfer bool
 	canTransferLease := func() bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */, true /* disableStatsBasedRebalancing */)
+		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */, true /* disableStatsBasedRebalancing */, false /* forceAddReplica */)
 		if err != nil {
 			if IsSnapshotError(err) {
+				// TODO: remove
+				log.Infof(ctx, "encountered snapshot error from replicate queue during scatter: %s", err)
 				continue
 			}
+			log.Warningf(ctx, "encountered error from replicate queue during scatter: %s", err)
 			break
 		}
 		if !requeue {

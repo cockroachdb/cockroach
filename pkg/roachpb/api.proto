@@ -1150,6 +1150,7 @@ message AdminScatterRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
+  bool randomize_replicas = 3;
 }
 
 // ScatterResponse is the response to a Scatter() operation.

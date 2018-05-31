@@ -90,6 +90,12 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 	}
 }
 
+type replicateQueueOptions struct {
+	dryRun                       bool
+	forceAddReplica              bool
+	disableStatsBasedRebalancing bool
+}
+
 // replicateQueue manages a queue of replicas which may need to add an
 // additional replica to their range.
 type replicateQueue struct {
@@ -215,7 +221,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalancing */); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalancing */, false /* forceAddReplica */); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -243,6 +249,7 @@ func (rq *replicateQueue) processOneChange(
 	canTransferLease func() bool,
 	dryRun bool,
 	disableStatsBasedRebalancing bool,
+	forceAddReplica bool,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 
@@ -263,7 +270,13 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalancing); action {
+	var action AllocatorAction
+	if forceAddReplica {
+		action = AllocatorAdd
+	} else {
+		action, _ = rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalancing)
+	}
+	switch action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
@@ -351,7 +364,7 @@ func (rq *replicateQueue) processOneChange(
 		if removeReplica.StoreID == repl.store.StoreID() {
 			// The local replica was selected as the removal target, but that replica
 			// is the leaseholder, so transfer the lease instead. We don't check that
-			// the current store has too many leases in this case under the
+			// the current store has too few leases in this case under the
 			// assumption that replica balance is a greater concern. Also note that
 			// AllocatorRemove action takes preference over AllocatorConsiderRebalance
 			// (rebalancing) which is where lease transfer would otherwise occur. We
@@ -373,6 +386,7 @@ func (rq *replicateQueue) processOneChange(
 			}
 			// Do not requeue as we transferred our lease away.
 			if transferred {
+				log.Infof(ctx, "transferred lease away to facilitate replica removal")
 				return false, nil
 			}
 		} else {
