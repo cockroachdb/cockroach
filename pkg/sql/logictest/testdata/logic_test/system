@@ -26,47 +26,6 @@ users
 web_sessions
 zones
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM system.namespace]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /namespace/primary/0/'defaultdb'/id -> 50
-output row: [0 'defaultdb' 50]
-fetched: /namespace/primary/0/'postgres'/id -> 51
-output row: [0 'postgres' 51]
-fetched: /namespace/primary/0/'system'/id -> 1
-output row: [0 'system' 1]
-fetched: /namespace/primary/0/'test'/id -> 52
-output row: [0 'test' 52]
-fetched: /namespace/primary/1/'descriptor'/id -> 3
-output row: [1 'descriptor' 3]
-fetched: /namespace/primary/1/'eventlog'/id -> 12
-output row: [1 'eventlog' 12]
-fetched: /namespace/primary/1/'jobs'/id -> 15
-output row: [1 'jobs' 15]
-fetched: /namespace/primary/1/'lease'/id -> 11
-output row: [1 'lease' 11]
-fetched: /namespace/primary/1/'locations'/id -> 21
-output row: [1 'locations' 21]
-fetched: /namespace/primary/1/'namespace'/id -> 2
-output row: [1 'namespace' 2]
-fetched: /namespace/primary/1/'rangelog'/id -> 13
-output row: [1 'rangelog' 13]
-fetched: /namespace/primary/1/'role_members'/id -> 23
-output row: [1 'role_members' 23]
-fetched: /namespace/primary/1/'settings'/id -> 6
-output row: [1 'settings' 6]
-fetched: /namespace/primary/1/'table_statistics'/id -> 20
-output row: [1 'table_statistics' 20]
-fetched: /namespace/primary/1/'ui'/id -> 14
-output row: [1 'ui' 14]
-fetched: /namespace/primary/1/'users'/id -> 4
-output row: [1 'users' 4]
-fetched: /namespace/primary/1/'web_sessions'/id -> 19
-output row: [1 'web_sessions' 19]
-fetched: /namespace/primary/1/'zones'/id -> 5
-output row: [1 'zones' 5]
-
 query ITI rowsort
 SELECT * FROM system.namespace
 ----

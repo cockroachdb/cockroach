@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default opt
 
 ## Tests for ensuring that prepared statements can't get overwritten and for
 ## deallocate and deallocate all.

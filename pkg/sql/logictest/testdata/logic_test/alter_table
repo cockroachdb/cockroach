@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
@@ -11,13 +11,6 @@ CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f
 
 statement ok
 INSERT INTO t VALUES (1, 9)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/primary/1/f -> /9
-output row: [1 9]
 
 statement error syntax error at or near "*"
 ALTER TABLE t RENAME TO t.*
@@ -35,13 +28,6 @@ b     INT  true  NULL    {}
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM t@foo]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/foo/NULL -> /1
-output row: [NULL]
 
 query TTTTRT
 SELECT type, description, username, status, fraction_completed, error
@@ -208,30 +194,15 @@ t      primary  true    1    a       ASC        false    false
 t      t_f_idx  false   1    f       ASC        false    false
 t      t_f_idx  false   2    a       ASC        false    true
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /t/primary/1/f -> /9
-output row: [1 9 NULL NULL]
-fetched: /t/primary/2/f/b/c -> /9/1/1
-output row: [2 9 1 1]
-fetched: /t/primary/3/f/b/c -> /9/2/1
-output row: [3 9 2 1]
-
 statement ok
 ALTER TABLE t DROP b, DROP c
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+query II rowsort
+SELECT * FROM t
 ----
-fetched: /t/primary/1/f -> /9
-output row: [1 9]
-fetched: /t/primary/2/f -> /9
-output row: [2 9]
-fetched: /t/primary/3/f -> /9
-output row: [3 9]
+1  9
+2  9
+3  9
 
 statement ok
 ALTER TABLE t ADD d INT UNIQUE
@@ -649,25 +620,6 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT VALUES (42)
-
-statement ok
-CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
-
-# Verify limits and orderings are propagated correctly to the select.
-query TTTTT colnames
-EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
-----
-Tree                 Field     Description       Columns               Ordering
-split                ·         ·                 (key, pretty)         ·
- └── limit           ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-      │              count     3                 ·                     ·
-      └── render     ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-           │         render 0  test.public.s.k1  ·                     ·
-           │         render 1  test.public.s.k2  ·                     ·
-           └── scan  ·         ·                 (k1, k2, v[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
-·                    table     s@primary         ·                     ·
-·                    spans     ALL               ·                     ·
-·                    limit     3                 ·                     ·
 
 # Verify that impure defaults are evaluated separately on each row
 # (#14352)

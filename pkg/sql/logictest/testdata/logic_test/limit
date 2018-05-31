@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 query I
 SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series LIMIT 5;
