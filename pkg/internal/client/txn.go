@@ -141,7 +141,7 @@ func NewTxnWithProto(
 	proto.AssertInitialized(context.TODO())
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.Proto = proto
-	txn.mu.sender = db.factory.New(typ)
+	txn.mu.sender = db.factory.New(typ, &proto)
 	return txn
 }
 
@@ -1106,11 +1106,11 @@ func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
 // information with the supplied meta. For use with GetTxnCoordMeta().
-func (txn *Txn) AugmentTxnCoordMeta(meta roachpb.TxnCoordMeta) {
+func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.mu.Proto.Update(&meta.Txn)
-	txn.mu.sender.AugmentMeta(meta)
+	txn.mu.sender.AugmentMeta(ctx, meta)
 }
 
 // UpdateStateOnRemoteRetryableErr updates the Txn, and the
@@ -1167,7 +1167,7 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		txn.mu.Proto = *newTxn
 
 		// Create a new txn sender.
-		txn.mu.sender = txn.db.factory.New(txn.typ)
+		txn.mu.sender = txn.db.factory.New(txn.typ, newTxn)
 	} else {
 		// Update the transaction proto with the one to be used for the next
 		// attempt. The txn inside pErr was correctly prepared for this by

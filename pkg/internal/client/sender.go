@@ -69,7 +69,7 @@ type TxnSender interface {
 	GetMeta() roachpb.TxnCoordMeta
 	// AugmentMeta combines the TxnCoordMeta from another distributed
 	// TxnSender which is part of the same transaction.
-	AugmentMeta(meta roachpb.TxnCoordMeta)
+	AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta)
 	// OnFinish invokes the supplied closure when the sender has finished
 	// with the txn (i.e. it's been abandoned, aborted, or committed).
 	// The error passed is meant to indicate to an extant distributed
@@ -83,11 +83,13 @@ type TxnSender interface {
 // TxnSenderFactory is the interface used to create new instances
 // of TxnSender.
 type TxnSenderFactory interface {
-	// New returns a new instance of TxnSender. The typ parameter
-	// specifies whether the sender is the root or one of potentially
-	// many child "leaf" nodes in a tree of transaction objects, as is
-	// created during a DistSQL flow.
-	New(typ TxnType) TxnSender
+	// New returns a new instance of TxnSender.
+	// typ specifies whether the sender is the root or one of potentially many
+	// child "leaf" nodes in a tree of transaction objects, as is created during a
+	// DistSQL flow.
+	// txn is the transaction whose requests this sender will carry. It can be nil
+	// if the sender will not be used for transactional requests.
+	New(typ TxnType, txn *roachpb.Transaction) TxnSender
 	// WrappedSender returns the TxnSenderFactory's wrapped Sender.
 	WrappedSender() Sender
 }
@@ -119,7 +121,7 @@ func (f TxnSenderFunc) Send(
 func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
 
 // AugmentMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
+func (f TxnSenderFunc) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic("unimplemented") }
 
 // OnFinish is part of the TxnSender interface.
 func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
@@ -129,7 +131,7 @@ func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
 type TxnSenderFactoryFunc func(TxnType) TxnSender
 
 // New calls f().
-func (f TxnSenderFactoryFunc) New(typ TxnType) TxnSender {
+func (f TxnSenderFactoryFunc) New(typ TxnType, _ *roachpb.Transaction) TxnSender {
 	return f(typ)
 }
 

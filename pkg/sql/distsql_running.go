@@ -376,7 +376,7 @@ func (r *distSQLReceiver) Push(
 		if meta.TxnMeta != nil {
 			if r.txn != nil {
 				if r.txn.ID() == meta.TxnMeta.Txn.ID {
-					r.txn.AugmentTxnCoordMeta(*meta.TxnMeta)
+					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnMeta)
 				}
 			} else {
 				r.resultWriter.SetError(
