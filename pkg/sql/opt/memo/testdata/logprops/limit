@@ -104,31 +104,33 @@ build
 SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 ----
 project
- ├── columns: "(SELECT x FROM kuv LIMIT y)":8(int)
+ ├── columns: "(SELECT x FROM kuv LIMIT y)":9(int)
  ├── stats: [rows=1000]
  ├── scan xyzs
- │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
-                ├── columns: x:1(int)
+                ├── columns: x:8(int)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1]
                 └── limit
-                     ├── columns: x:1(int)
+                     ├── columns: x:8(int)
                      ├── outer: (1,2)
                      ├── stats: [rows=1000]
                      ├── project
-                     │    ├── columns: x:1(int)
+                     │    ├── columns: x:8(int)
                      │    ├── outer: (1)
                      │    ├── stats: [rows=1000]
-                     │    └── scan kuv
-                     │         ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │         ├── stats: [rows=1000]
-                     │         └── keys: (5)
+                     │    ├── scan kuv
+                     │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+                     │    │    ├── stats: [rows=1000]
+                     │    │    └── keys: (5)
+                     │    └── projections [outer=(1)]
+                     │         └── variable: xyzs.x [type=int, outer=(1)]
                      └── variable: xyzs.y [type=int, outer=(2)]
 
 # Test very high limit (> max uint32).
