@@ -25,11 +25,13 @@ message IOFileFormat {
     CSV = 1;
     MysqlOutfile = 2;
     Mysqldump = 3;
+    PgCopy = 4;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
   optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
+  optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
 }
 
 // CSVOptions describe the format of csv data (delimiter, comment, etc).
@@ -52,9 +54,9 @@ message MySQLOutfileOptions {
     Optional = 2;
   }
 
-  // row_separator is the delimitor between rows (mysql's --rows-terminated-by)
+  // row_separator is the delimiter between rows (mysql's --rows-terminated-by)
   optional int32 row_separator = 1 [(gogoproto.nullable) = false];
-  // field_separator is the delimitor between fields (mysql's --fields-terminated-by)
+  // field_separator is the delimiter between fields (mysql's --fields-terminated-by)
   optional int32 field_separator = 2 [(gogoproto.nullable) = false];
   // enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
   optional Enclose enclose = 3 [(gogoproto.nullable) = false];
@@ -62,7 +64,14 @@ message MySQLOutfileOptions {
   optional int32 encloser = 4 [(gogoproto.nullable) = false];
   // has_escape indicates that an escape character is set (mysql's default is not).
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
-  // escape is the character used to prefix the other delimitors (--fields-escaped-by)
+  // escape is the character used to prefix the other delimiters (--fields-escaped-by)
   optional int32 escape = 6 [(gogoproto.nullable) = false];
+}
 
+// PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
+message PgCopyOptions {
+  // delimiter is the delimitor between columns (DELIMITER)
+  optional int32 delimiter = 1 [(gogoproto.nullable) = false];
+  // null is the NULL value (NULL)
+  optional string null = 2 [(gogoproto.nullable) = false];
 }

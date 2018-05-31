@@ -163,6 +163,7 @@
 		IOFileFormat
 		CSVOptions
 		MySQLOutfileOptions
+		PgCopyOptions
 		Attributes
 		ReplicationTarget
 		ReplicaDescriptor
