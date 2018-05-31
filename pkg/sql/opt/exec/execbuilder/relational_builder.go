@@ -127,6 +127,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.SortOp:
 		ep, err = b.buildSort(ev)
 
+	case opt.LookupJoinOp:
+		ep, err = b.buildLookupJoin(ev)
+
 	case opt.ExplainOp:
 		ep, err = b.buildExplain(ev)
 
@@ -190,23 +193,35 @@ func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
+// getColumns returns the set of column ordinals in the table for the set of
+// column IDs, along with a mapping from the column IDs to output ordinals.
+func (*Builder) getColumns(
+	md *opt.Metadata, cols opt.ColSet, tableID opt.TableID,
+) (exec.ColumnOrdinalSet, opt.ColMap) {
+	needed := exec.ColumnOrdinalSet{}
+	output := opt.ColMap{}
+
+	columnCount := md.Table(tableID).ColumnCount()
+	n := 0
+	for i := 0; i < columnCount; i++ {
+		colID := md.TableColumn(tableID, i)
+		if cols.Contains(int(colID)) {
+			needed.Add(i)
+			output.Set(int(colID), n)
+			n++
+		}
+	}
+
+	return needed, output
+}
+
 func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	def := ev.Private().(*memo.ScanOpDef)
 	md := ev.Metadata()
 	tab := md.Table(def.Table)
 
-	// Construct subset of columns needed from scan.
-	n := 0
-	needed := exec.ColumnOrdinalSet{}
-	res := execPlan{}
-	for i := 0; i < tab.ColumnCount(); i++ {
-		colID := md.TableColumn(def.Table, i)
-		if def.Cols.Contains(int(colID)) {
-			needed.Add(i)
-			res.outputCols.Set(int(colID), n)
-			n++
-		}
-	}
+	needed, output := b.getColumns(md, def.Cols, def.Table)
+	res := execPlan{outputCols: output}
 
 	var reqOrder sqlbase.ColumnOrdering
 	if reqProps := ev.Physical(); len(reqProps.Ordering) > 0 {
@@ -531,6 +546,27 @@ func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
 	outputCols.Set(int(def.ColID), outputCols.Len())
 
 	return execPlan{root: node, outputCols: outputCols}, nil
+}
+
+func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	md := ev.Metadata()
+	def := ev.Private().(*memo.LookupJoinDef)
+
+	needed, output := b.getColumns(md, def.Cols, def.Table)
+	res := execPlan{outputCols: output}
+
+	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed)
+	if err != nil {
+		return execPlan{}, nil
+	}
+
+	res.root = node
+	return res, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan

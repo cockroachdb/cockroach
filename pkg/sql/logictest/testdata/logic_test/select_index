@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-metadata
 
 statement ok
 CREATE TABLE t (
@@ -293,11 +293,10 @@ SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 1  NULL
 1  1
 
-# TODO(justinj): re-enable once lookup join can be executed
-#query II
-#SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
-#----
-#1  1
+query II
+SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
+----
+1  1
 
 # Test index constraints for IS (NOT) TRUE/FALSE.
 statement ok
@@ -417,16 +416,15 @@ CREATE TABLE noncover (
 statement ok
 INSERT INTO noncover VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
-# TODO(justinj): re-enable once lookup join execution support is merged
-#query IIII
-#SELECT * FROM noncover WHERE b = 2
-#----
-#1 2 3 4
+query IIII
+SELECT * FROM noncover WHERE b = 2
+----
+1 2 3 4
 
-#query IIII
-#SELECT * FROM noncover WHERE c = 7
-#----
-#5 6 7 8
+query IIII
+SELECT * FROM noncover WHERE c = 7
+----
+5 6 7 8
 
 query IIII
 SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
