@@ -3198,6 +3198,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		}
 	case *coltypes.TJSON:
 		switch v := d.(type) {
+		case *DBytes:
+			return ParseDJSON(string(*v))
 		case *DString:
 			return ParseDJSON(string(*v))
 		case *DJSON:

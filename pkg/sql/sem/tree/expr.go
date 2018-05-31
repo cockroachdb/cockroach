@@ -1361,7 +1361,7 @@ var (
 	uuidCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
 	inetCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet}
 	arrayCastTypes     = []types.T{types.Unknown, types.String}
-	jsonCastTypes      = []types.T{types.Unknown, types.String, types.JSON}
+	jsonCastTypes      = []types.T{types.Unknown, types.String, types.JSON, types.Bytes}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
