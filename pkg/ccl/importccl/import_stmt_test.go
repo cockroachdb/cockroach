@@ -283,7 +283,6 @@ func makeCSVData(
 
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#26036")
 
 	const (
 		nodes       = 3
