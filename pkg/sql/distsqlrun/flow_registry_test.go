@@ -541,7 +541,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 
 	types := make([]sqlbase.ColumnType, 0)
 	rb := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &req, rb)
+	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
 	if err != nil {
 		t.Fatal(err)
 	}

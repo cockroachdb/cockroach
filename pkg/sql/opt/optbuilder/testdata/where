@@ -90,7 +90,7 @@ select
 build
 SELECT * FROM kv WHERE nonexistent = 1
 ----
-error (42703): column name "nonexistent" not found
+error (42703): column "nonexistent" does not exist
 
 build
 SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%' ORDER BY k

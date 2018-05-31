@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // scope is used for the build process and maintains the variables that have
@@ -285,7 +286,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 	for curr := s; curr != nil; curr = curr.parent {
 		if curr.groupby.inAgg {
-			panic(errorf("aggregate function cannot be nested within another aggregate function"))
+			panic(builderError{sqlbase.NewAggInAggError()})
 		}
 
 		if curr.groupby.aggInScope != nil {
@@ -400,8 +401,7 @@ func (s *scope) FindSourceProvidingColumn(
 		}
 	}
 
-	return nil, nil, -1, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-		"column name %q not found", tree.ErrString(&colName))
+	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&colName))
 }
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
@@ -489,8 +489,7 @@ func (s *scope) Resolve(
 		}
 	}
 
-	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-		"column name %q not found", tree.ErrString(tree.NewColumnItem(prefix, colName)))
+	return nil, sqlbase.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
 func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
@@ -541,6 +540,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if err != nil {
 			panic(builderError{err})
 		}
+		if isGenerator(def) {
+			panic(unimplementedf("generator functions are not supported"))
+		}
+
 		if len(t.Exprs) != 1 {
 			break
 		}

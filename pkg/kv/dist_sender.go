@@ -718,6 +718,12 @@ type response struct {
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Clone the BatchRequest's transaction so that future mutations to the
+	// proto don't affect the proto in this batch.
+	if ba.Txn != nil {
+		txnCopy := *ba.Txn
+		ba.Txn = &txnCopy
+	}
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection
 	var seekKey roachpb.RKey
@@ -735,7 +741,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
-		ba.SetNewRequest()
 		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, false /* needsTruncate */)
 		return resp.reply, resp.pErr
 	}
@@ -809,19 +814,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
-		// Increase the sequence counter only once before sending RPCs to
-		// the ranges involved in this chunk of the batch (as opposed to
-		// for each RPC individually). On RPC errors, there's no guarantee
-		// that the request hasn't made its way to the target regardless
-		// of the error; we'd like the second execution to be caught. There
-		// is a small chance that we address a range twice in this chunk
-		// (stale/suboptimal descriptors due to splits/merges) which leads
-		//to a transaction retry.
-		//
-		// TODO(tschottdorf): it's possible that if we don't evict from
-		// the cache we could be in for a busy loop.
-		ba.SetNewRequest()
-
 		responseCh := make(chan response, 1)
 		responseChs = append(responseChs, responseCh)
 
@@ -881,14 +873,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && ds.rpcContext != nil &&
 			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
-			// Note that we pass the batch request by value to the parallel
-			// goroutine to avoid using the cloned txn.
-
-			// Clone the txn to preserve the current txn sequence for the async call.
-			if ba.Txn != nil {
-				txnClone := ba.Txn.Clone()
-				ba.Txn = &txnClone
-			}
+			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
 			responseCh <- resp
@@ -1213,7 +1198,7 @@ func fillSkippedResponses(
 		}
 		hdr := resp.GetInner().Header()
 		hdr.ResumeReason = resumeReason
-		origSpan := req.Header()
+		origSpan := req.Header().Span()
 		if isReverse {
 			if hdr.ResumeSpan != nil {
 				// The ResumeSpan.Key might be set to the StartKey of a range;

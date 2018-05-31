@@ -206,7 +206,7 @@ func (dsp *DistSQLPlanner) Run(
 		Flow:        flows[thisNodeID],
 		EvalContext: evalCtxProto,
 	}
-	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
+	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
 	if err != nil {
 		recv.SetError(err)
 		return

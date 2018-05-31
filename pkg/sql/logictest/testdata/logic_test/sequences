@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata parallel-stmts
+# LogicTest: default opt distsql distsql-opt distsql-metadata parallel-stmts
 
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
@@ -177,14 +177,8 @@ SELECT last_value FROM select_test
 1
 
 # Since this is a custom plan node, verify that column validation works.
-statement error pq: column name "foo" not found
+statement error pq: column "foo" does not exist
 SELECT foo from select_test
-
-query TTTTT colnames
-EXPLAIN (VERBOSE) SELECT * FROM select_test
-----
-Tree             Field  Description  Columns                           Ordering
-sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 

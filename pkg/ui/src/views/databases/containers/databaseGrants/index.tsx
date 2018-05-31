@@ -86,7 +86,7 @@ export default connect(
       tableInfos: tableInfos(state, ownProps.name),
       sortSetting: grantsSortSetting.selector(state),
       dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
-      grants: selectrants(state, ownProps.name),
+      grants: selectGrants(state, ownProps.name),
     };
   },
   {

@@ -3872,7 +3872,8 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	e, ok := ctx.Placeholders.Value(t.Name)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "missing value for placeholder %s", t.Name)
+		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+			"no value provided for placeholder: $%s", t.Name)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
 	// not need to recurse.

@@ -309,7 +309,9 @@ func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 		return err
 	}
 	r := roachpb.RequestUnion{}
-	scan := roachpb.ScanRequest{Span: span}
+	scan := roachpb.ScanRequest{
+		RequestHeader: roachpb.RequestHeaderFromSpan(span),
+	}
 	r.MustSetInner(&scan)
 	f.batch.Requests = append(f.batch.Requests, r)
 	f.batchIdxToFk = append(f.batchIdxToFk, source)

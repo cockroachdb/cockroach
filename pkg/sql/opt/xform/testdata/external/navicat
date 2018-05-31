@@ -312,7 +312,7 @@ sort
       │    │    │         │    │    │    │    │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[])
       │    │    │         │    │    │    │    │    │    │    │    │    └── keys: (1) (2,3)
       │    │    │         │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(17)]
-      │    │    │         │    │    │    │    │    │    │    │         └── (pg_class.relkind = 'r') OR (pg_class.relkind = 'f') [type=bool, outer=(17)]
+      │    │    │         │    │    │    │    │    │    │    │         └── (pg_class.relkind = 'r'::CHAR) OR (pg_class.relkind = 'f'::CHAR) [type=bool, outer=(17)]
       │    │    │         │    │    │    │    │    │    │    ├── scan pg_namespace
       │    │    │         │    │    │    │    │    │    │    │    ├── columns: pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null)
       │    │    │         │    │    │    │    │    │    │    │    └── keys: (28) (29)

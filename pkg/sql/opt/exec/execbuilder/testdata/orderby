@@ -621,11 +621,39 @@ render               ·         ·            (b, a)                       ·
 ·                    table     foo@primary  ·                            ·
 ·                    spans     ALL          ·                            ·
 
-subtest order_by_index
+# ------------------------------------------------------------------------------
+# Check star expansion in ORDER BY.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
+]
+----
+sort       ·      ·
+ │         order  +x,+y
+ └── scan  ·      ·
+·          table  a@primary
+·          spans  ALL
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
+]
+----
+sort       ·      ·
+ │         order  +x,+y
+ └── scan  ·      ·
+·          table  a@primary
+·          spans  ALL
 
 # ------------------------------------------------------------------------------
 # ORDER BY INDEX test cases.
 # ------------------------------------------------------------------------------
+# subtest order_by_index
+#
 # TODO(radu): enable once we support ORDER BY INDEX
 #statement ok
 #CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)

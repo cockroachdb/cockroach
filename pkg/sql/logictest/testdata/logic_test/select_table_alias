@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 # Tests for SELECT with table aliasing.
 
@@ -83,7 +83,7 @@ SELECT abc.foo1 FROM abc AS foo (foo1)
 query error no data source matches prefix: abc
 SELECT abc.b FROM abc AS foo (foo1)
 
-query error column name "foo.a" not found
+query error column "foo.a" does not exist
 SELECT foo.a FROM abc AS foo (foo1)
 
 

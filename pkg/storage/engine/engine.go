@@ -288,6 +288,7 @@ type Engine interface {
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
 	ReadFile(filename string) ([]byte, error)
 	// DeleteFile deletes the file with the given filename from this RocksDB's env.
+	// If the file with given filename doesn't exist, return os.ErrNotExist.
 	DeleteFile(filename string) error
 }
 

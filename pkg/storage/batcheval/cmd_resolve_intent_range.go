@@ -48,7 +48,7 @@ func ResolveIntentRange(
 	}
 
 	intent := roachpb.Intent{
-		Span:   args.Span,
+		Span:   args.Span(),
 		Txn:    args.IntentTxn,
 		Status: args.Status,
 	}

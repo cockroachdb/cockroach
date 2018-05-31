@@ -255,7 +255,7 @@ func batchRequestForIndexValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, nil, err
 		}
-		req.Add(&roachpb.ScanRequest{Span: span})
+		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	}
 	return req, colIDtoRowIndex, nil
 }
@@ -286,7 +286,7 @@ func batchRequestForPKValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, err
 		}
-		req.Add(&roachpb.ScanRequest{Span: span})
+		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	}
 	return req, nil
 }

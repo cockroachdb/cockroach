@@ -302,7 +302,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manual.Increment(100)
 
 	priority := roachpb.UserPriority(-math.MaxInt32)
-	requestHeader := roachpb.Span{
+	requestHeader := roachpb.RequestHeader{
 		Key: roachpb.Key(key),
 	}
 	h := roachpb.Header{
@@ -310,14 +310,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: priority,
 	}
 	if _, err := client.SendWrappedWith(
-		context.Background(), store.TestSender(), h, &roachpb.GetRequest{Span: requestHeader},
+		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 	// Write to the restart key so that the Writer's txn must restart.
 	putReq := &roachpb.PutRequest{
-		Span:  roachpb.Span{Key: roachpb.Key(restartKey)},
-		Value: roachpb.MakeValueFromBytes([]byte("restart-value")),
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(restartKey)},
+		Value:         roachpb.MakeValueFromBytes([]byte("restart-value")),
 	}
 	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
 		t.Fatalf("failed to put: %s", err)
@@ -335,7 +335,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	h.Timestamp = cfg.Clock.Now()
 	if _, err := client.SendWrappedWith(
-		context.Background(), store.TestSender(), h, &roachpb.GetRequest{Span: requestHeader},
+		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err == nil {
 		t.Fatal("unexpected success of get")
 	}
@@ -379,7 +379,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	// Resolve the intents.
 	scanArgs := roachpb.ScanRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.RangeMetaKey(roachpb.RKeyMin.Next()).AsRawKey(),
 			EndKey: keys.RangeMetaKey(roachpb.RKeyMax).AsRawKey(),
 		},
@@ -1176,7 +1176,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	errChan := make(chan error)
 	go func() {
 		getReq := roachpb.GetRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key: key,
 			},
 		}
@@ -1211,7 +1211,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		leaseReq := roachpb.RequestLeaseRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key: key,
 			},
 			Lease: roachpb.Lease{
@@ -1237,7 +1237,7 @@ func LeaseInfo(
 	readConsistency roachpb.ReadConsistencyType,
 ) roachpb.LeaseInfoResponse {
 	leaseInfoReq := &roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
@@ -1367,7 +1367,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	// Send the lease request.
 	key := roachpb.Key("a")
 	leaseReq := roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}
@@ -1457,7 +1457,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify multiple range infos on a scan request.
 	scanArgs := roachpb.ScanRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.SystemMax,
 			EndKey: roachpb.KeyMax,
 		},
@@ -1484,7 +1484,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify multiple range infos and order on a reverse scan request.
 	revScanArgs := roachpb.ReverseScanRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.SystemMax,
 			EndKey: roachpb.KeyMax,
 		},

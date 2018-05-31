@@ -1,9 +1,12 @@
+import { Location } from "history";
+import { Action } from "redux";
 import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
-import { Action } from "redux";
+import { createPath } from "src/hacks/createPath";
 import { userLogin } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
+import { LOGIN_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
@@ -96,6 +99,19 @@ export const selectLoginState = createSelector(
         return new LoginEnabledState(login);
     },
 );
+
+export function getLoginPage(location: Location) {
+  const query = !location ? undefined : {
+    redirectTo: createPath({
+      pathname: location.pathname,
+      search: location.search,
+    }),
+  };
+  return {
+    pathname: LOGIN_PAGE,
+    query: query,
+  };
+}
 
 // Redux implementation.
 

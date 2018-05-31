@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE with_no_column_refs (
@@ -294,7 +294,7 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error column name "a" not found
+statement error column "a" does not exist
 CREATE TABLE y (
   b INT AS (a) STORED
 )
@@ -664,7 +664,7 @@ SELECT * FROM x ORDER BY a
 6 12 10
 
 # Verify error if a default and computed column are added at the same time.
-statement error column name "d" not found
+statement error column "d" does not exist
 ALTER TABLE x ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + a) STORED
 
 # Verify a bad statement fails.
@@ -708,3 +708,24 @@ INSERT INTO x (a) SELECT 1
 
 statement ok
 DROP TABLE x
+
+# Verify errors emitted from computed columns contain the column name
+statement ok
+CREATE TABLE error_check (k INT PRIMARY KEY, s STRING, i INT AS (s::INT) STORED)
+
+statement ok
+INSERT INTO error_check VALUES(1, '1')
+
+statement error computed column i:
+INSERT INTO error_check VALUES(2, 'foo')
+
+statement error computed column i:
+UPDATE error_check SET s = 'foo' WHERE k = 1
+
+# Upsert -> update
+statement error computed column i:
+UPSERT INTO error_check VALUES (1, 'foo')
+
+# Upsert -> insert
+statement error computed column i:
+UPSERT INTO error_check VALUES (3, 'foo')

@@ -1,8 +1,10 @@
-# LogicTest: opt distsql-opt
+# LogicTest: opt
 
+# ------------------------------------------------------------------------------
+# Basic filter combinations.
+# ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE a (x INT PRIMARY KEY, y INT);
-INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
@@ -10,12 +12,6 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-        ·       ·
-
-query II rowsort
-SELECT * FROM a WHERE x > 1
-----
-2  20
-3  30
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
@@ -25,23 +21,12 @@ scan  ·       ·          (x, y)  ·
 ·     spans   ALL        ·       ·
 ·     filter  y > 10     ·       ·
 
-query II rowsort
-SELECT * FROM a WHERE y > 10
-----
-2  20
-3  30
-
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-/2/#    ·       ·
-
-query II
-SELECT * FROM a WHERE x > 1 AND x < 3
-----
-2  20
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
@@ -51,14 +36,75 @@ scan  ·       ·          (x, y)  ·
 ·     spans   /2-        ·       ·
 ·     filter  y < 30     ·       ·
 
-query II
-SELECT * FROM a WHERE x > 1 AND y < 30
+query TTTTT
+EXPLAIN (VERBOSE) SELECT x + 1 FROM a
 ----
-2  20
+render     ·         ·          ("x + 1")  ·
+ │         render 0  x + 1      ·          ·
+ └── scan  ·         ·          (x)        ·
+·          table     a@primary  ·          ·
+·          spans     ALL        ·          ·
 
+query TTTTT
+EXPLAIN (VERBOSE) SELECT x, x + 1, y, y + 1, x + y FROM a
+----
+render     ·         ·          (x, "x + 1", y, "y + 1", "x + y")  ·
+ │         render 0  x          ·                                  ·
+ │         render 1  x + 1      ·                                  ·
+ │         render 2  y          ·                                  ·
+ │         render 3  y + 1      ·                                  ·
+ │         render 4  x + y      ·                                  ·
+ └── scan  ·         ·          (x, y)                             ·
+·          table     a@primary  ·                                  ·
+·          spans     ALL        ·                                  ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u * v + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+----
+render          ·         ·                                ("(u * v) + v")      ·
+ │              render 0  "y + 10" + ("x + 3" * "y + 10")  ·                    ·
+ └── render     ·         ·                                ("x + 3", "y + 10")  ·
+      │         render 0  x + 3                            ·                    ·
+      │         render 1  y + 10                           ·                    ·
+      └── scan  ·         ·                                (x, y)               ·
+·               table     a@primary                        ·                    ·
+·               spans     ALL                              ·                    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT x, x, y, x FROM a
+----
+render     ·         ·          (x, x, y, x)  ·
+ │         render 0  x          ·             ·
+ │         render 1  x          ·             ·
+ │         render 2  y          ·             ·
+ │         render 3  x          ·             ·
+ └── scan  ·         ·          (x, y)        ·
+·          table     a@primary  ·             ·
+·          spans     ALL        ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
+----
+render     ·         ·             ("x + 1", "x + y")  ·
+ │         render 0  x + 1         ·                   ·
+ │         render 1  x + y         ·                   ·
+ └── scan  ·         ·             (x, y)              ·
+·          table     a@primary     ·                   ·
+·          spans     ALL           ·                   ·
+·          filter    (x + y) > 20  ·                   ·
+
+# ------------------------------------------------------------------------------
+# Test with a hidden column.
+# ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE b (x INT, y INT);
-INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM b
+----
+scan  ·      ·          (x, y)  ·
+·     table  b@primary  ·       ·
+·     spans  ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
@@ -67,9 +113,11 @@ scan  ·      ·          (x, y, rowid[hidden])  ·
 ·     table  b@primary  ·                      ·
 ·     spans  /1-        ·                      ·
 
+# ------------------------------------------------------------------------------
+# String inequality filter.
+# ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
-INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
@@ -78,16 +126,20 @@ scan  ·      ·                  (n, str)  ·
 ·     table  c@str              ·         ·
 ·     spans  -/"moo"/PrefixEnd  ·         ·
 
-query IT rowsort
-SELECT * FROM c WHERE str >= 'moo'
+# ------------------------------------------------------------------------------
+# "*" must expand to zero columns if there are zero columns to select.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 1, * FROM nocols
 ----
-1   one
-2   two
-3   three
-6   six
-7   seven
-9   nine
-10  one-zero
+render     ·         ·               ("1")  ·
+ │         render 0  1               ·      ·
+ └── scan  ·         ·               ()     ·
+·          table     nocols@primary  ·      ·
+·          spans     ALL             ·      ·
 
 # ------------------------------------------------------------------------------
 # Ensure that index is used when indexed column has collation.
