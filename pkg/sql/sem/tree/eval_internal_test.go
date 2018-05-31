@@ -45,7 +45,7 @@ func TestUnescapePattern(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s-->%s Escape=%s", tc.pattern, tc.expected, tc.escapeToken), func(t *testing.T) {
-			actual, err := unescapePattern(tc.pattern, tc.escapeToken)
+			actual, err := unescapePattern(tc.pattern, tc.escapeToken, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,11 +70,11 @@ func TestUnescapePatternError(t *testing.T) {
 		{`ABC\\\\\\`, `\\`},
 	}
 
-	const errorMessage = "pattern ends with escape character"
+	const errorMessage = "LIKE pattern must not end with escape character"
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Pattern=%s Escape=%s", tc.pattern, tc.escapeToken), func(t *testing.T) {
-			actual, err := unescapePattern(tc.pattern, tc.escapeToken)
+			actual, err := unescapePattern(tc.pattern, tc.escapeToken, false)
 			if err == nil {
 				t.Fatalf("error not raised. expected error message: %s\ngot unescaped pattern: %s\n", errorMessage, actual)
 			}
