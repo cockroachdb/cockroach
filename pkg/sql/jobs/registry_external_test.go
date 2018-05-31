@@ -18,7 +18,6 @@ import (
 	"context"
 	"math"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -62,8 +60,8 @@ func TestRoundtripJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e, a := storedJob, retrievedJob; !reflect.DeepEqual(e, a) {
-		diff := strings.Join(pretty.Diff(e, a), "\n")
-		t.Fatalf("stored job did not match retrieved job:\n%s", diff)
+		//diff := strings.Join(pretty.Diff(e, a), "\n")
+		t.Fatalf("stored job did not match retrieved job:\n%+v\n%+v", e, a)
 	}
 }
 

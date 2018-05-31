@@ -695,12 +695,10 @@ func TestShowJobs(t *testing.T) {
 	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
 	// row struct directly.
 	inPayload, err := protoutil.Marshal(&jobs.Payload{
-		Description:       in.description,
-		StartedMicros:     in.started.UnixNano() / time.Microsecond.Nanoseconds(),
-		FinishedMicros:    in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
-		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
-		FractionCompleted: in.fractionCompleted,
-		Username:          in.username,
+		Description:    in.description,
+		StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
+		FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
+		Username:       in.username,
 		Lease: &jobs.Lease{
 			NodeID: 7,
 		},
@@ -710,9 +708,17 @@ func TestShowJobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	inProgress, err := protoutil.Marshal(&jobs.Progress{
+		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+		FractionCompleted: in.fractionCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	sqlDB.Exec(t,
-		`INSERT INTO system.jobs (id, status, created, payload) VALUES ($1, $2, $3, $4)`,
-		in.id, in.status, in.created, inPayload,
+		`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
+		in.id, in.status, in.created, inPayload, inProgress,
 	)
 
 	var out row

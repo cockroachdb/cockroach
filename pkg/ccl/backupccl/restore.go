@@ -1034,7 +1034,7 @@ func restore(
 	progressLogger := jobs.ProgressLogger{
 		Job:           job,
 		TotalChunks:   len(importSpans),
-		StartFraction: job.Payload().FractionCompleted,
+		StartFraction: job.FractionCompleted(),
 		ProgressedFn: func(progressedCtx context.Context, details jobs.Details) {
 			switch d := details.(type) {
 			case *jobs.Payload_Restore:

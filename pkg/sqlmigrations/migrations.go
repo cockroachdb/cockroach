@@ -184,6 +184,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:           createDefaultDbs,
 		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
 	},
+	{
+		// Introduced in v2.0. Baked into v2.1.
+		name:   "add progress to system.jobs",
+		workFn: addJobsProgress,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -779,4 +784,25 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 		}
 	}
 	return err
+}
+
+func addJobsProgress(ctx context.Context, r runner) error {
+	tablefn := func(desc *sqlbase.TableDescriptor) (upgraded bool, err error) {
+		if desc.ID == keys.JobsTableID {
+			if _, err := desc.FindActiveColumnByName("progress"); err == nil {
+				return false, nil
+			}
+			desc.AddColumn(sqlbase.ColumnDescriptor{
+				Name:     "progress",
+				Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+				Nullable: true,
+			})
+			if err := desc.AddColumnToFamilyMaybeCreate("progress", "progress", true, false); err != nil {
+				return false, err
+			}
+			return true, desc.AllocateIDs()
+		}
+		return false, nil
+	}
+	return upgradeDescsWithFn(ctx, r, tablefn, nil)
 }
