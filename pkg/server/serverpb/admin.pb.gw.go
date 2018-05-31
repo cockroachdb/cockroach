@@ -366,11 +366,11 @@ func request_Admin_RangeLog_1(ctx context.Context, marshaler runtime.Marshaler, 
 
 }
 
-func request_Admin_ReplicaMatrix_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ReplicaMatrixRequest
+func request_Admin_DataDistribution_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq DataDistributionRequest
 	var metadata runtime.ServerMetadata
 
-	msg, err := client.ReplicaMatrix(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.DataDistribution(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
@@ -973,7 +973,7 @@ func RegisterAdminHandlerClient(ctx context.Context, mux *runtime.ServeMux, clie
 
 	})
 
-	mux.Handle("GET", pattern_Admin_ReplicaMatrix_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("GET", pattern_Admin_DataDistribution_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
@@ -991,14 +991,14 @@ func RegisterAdminHandlerClient(ctx context.Context, mux *runtime.ServeMux, clie
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_Admin_ReplicaMatrix_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_Admin_DataDistribution_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_Admin_ReplicaMatrix_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Admin_DataDistribution_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1073,7 +1073,7 @@ var (
 
 	pattern_Admin_RangeLog_1 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"_admin", "v1", "rangelog", "range_id"}, ""))
 
-	pattern_Admin_ReplicaMatrix_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"_admin", "v1", "replica_matrix"}, ""))
+	pattern_Admin_DataDistribution_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"_admin", "v1", "data_distribution"}, ""))
 
 	pattern_Admin_Queries_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"_admin", "v1", "queries"}, ""))
 )
@@ -1117,7 +1117,7 @@ var (
 
 	forward_Admin_RangeLog_1 = runtime.ForwardResponseMessage
 
-	forward_Admin_ReplicaMatrix_0 = runtime.ForwardResponseMessage
+	forward_Admin_DataDistribution_0 = runtime.ForwardResponseMessage
 
 	forward_Admin_Queries_0 = runtime.ForwardResponseMessage
 )
