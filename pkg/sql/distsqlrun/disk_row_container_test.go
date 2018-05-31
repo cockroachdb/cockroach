@@ -126,7 +126,7 @@ func TestDiskRowContainer(t *testing.T) {
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
-					d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)
+					d := makeDiskRowContainer(&diskMonitor, types, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -176,7 +176,7 @@ func TestDiskRowContainer(t *testing.T) {
 			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
-				d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)
+				d := makeDiskRowContainer(&diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
 				for i := 0; i < len(rows); i++ {
 					if err := d.AddRow(ctx, rows[i]); err != nil {
@@ -266,7 +266,6 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	d := makeDiskRowContainer(
-		ctx,
 		&monitor,
 		[]sqlbase.ColumnType{columnTypeInt},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
