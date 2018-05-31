@@ -1099,7 +1099,7 @@ func (s *statusServer) Ranges(
 				NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
 				Underreplicated:        metrics.Underreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
-				QuiescentEqualsTicking: metrics.Quiescent == metrics.Ticking,
+				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 			},
 			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
 			CmdQGlobal:  serverpb.CommandQueueMetrics(metrics.CmdQMetricsGlobal),
