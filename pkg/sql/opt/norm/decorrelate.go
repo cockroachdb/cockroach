@@ -214,7 +214,7 @@ func (f *Factory) canAggsIgnoreNulls(aggs memo.GroupID) bool {
 //   INNER JOIN LATERAL
 //   (
 //     SELECT COUNT(*), SUM(c) FROM input WHERE input.x = left.x
-//   )
+//   ) AS input
 //   ON left.y = 10
 //   =>
 //   SELECT ANY_NOT_NULL(left.x), ANY_NOT_NULL(left.y), COUNT(input.t), SUM(input.c)
