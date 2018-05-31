@@ -433,7 +433,7 @@ func (q *Queue) MaybeWaitForPush(
 	var queryPusherCh <-chan *roachpb.Transaction // accepts updates to the pusher txn
 	var queryPusherErrCh <-chan *roachpb.Error    // accepts errors querying the pusher txn
 	var readyCh chan struct{}                     // signaled when pusher txn should be queried
-	if req.PusherTxn.ID != (uuid.UUID{}) {
+	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.Key != nil {
 		// Create a context which will be canceled once this call completes.
 		// This ensures that the goroutine created to query the pusher txn
 		// is properly cleaned up.
