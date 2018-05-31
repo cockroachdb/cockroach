@@ -1774,8 +1774,7 @@ func TestTxnStarvation(t *testing.T) {
 // TestTxnCoordSenderHeartbeatFailurePostSplit verifies that on
 // heartbeat timeout, the transaction is aborted asynchronously,
 // leaving abort span entries which cause concurrent reads to fail
-// with txn aborted errors on both the range the transaction started
-// on and a separate range involved in the same transaction.
+// with txn aborted errors on a range different that the txn's anchor.
 //
 // Note that this is a post-split version of TestTxnCoordSenderGCTimeout.
 func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
@@ -1836,7 +1835,6 @@ func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
 		}()
 		return errCh
 	}
-	errChA := startReader(keyA)
 	errChB := startReader(keyB)
 
 	stores := s.GetStores().(*storage.Stores)
@@ -1863,9 +1861,6 @@ func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
 	// Now signal the inflight readers to continue; they should witness
 	// abort span entries.
 	close(signal)
-	if err := <-errChA; !testutils.IsError(err, "txn aborted") {
-		t.Errorf("expected transaction aborted error reading %s; got %s", keyA, err)
-	}
 	if err := <-errChB; !testutils.IsError(err, "txn aborted") {
 		t.Errorf("expected transaction aborted error reading %s; got %s", keyB, err)
 	}
