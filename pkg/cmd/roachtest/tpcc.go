@@ -173,7 +173,7 @@ func loadTPCCBench(
 	if b.StoreDirVersion != "" {
 		c.l.printf("ingesting existing tpcc store dump\n")
 
-		urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(1),
+		urlBase, err := c.RunWithBuffer(ctx, c.l, loadNode,
 			fmt.Sprintf(`./workload fixtures url tpcc --warehouses=%d`, b.LoadWarehouses))
 		if err != nil {
 			return err
@@ -299,7 +299,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd)
 			loadDone <- timeutil.Now()
 			if err != nil {
-				return false, err
+				return false, errors.Wrapf(err, "error running tpcc load generator:\n\n%s\n", out)
 			}
 
 			// Parse the stats header and stats lines from the output.
@@ -380,7 +380,7 @@ func registerTPCCBench(r *registry) {
 		},
 		// objective 1, key result 1 & 2.
 		{
-			Nodes: 18,
+			Nodes: 30,
 			CPUs:  16,
 
 			LoadWarehouses: 10000,
