@@ -184,7 +184,7 @@ func (f *Factory) canAggsIgnoreNulls(aggs memo.GroupID) bool {
 		switch f.mem.NormExpr(elem).Operator() {
 		case opt.AvgOp, opt.BoolAndOp, opt.BoolOrOp, opt.CountOp, opt.CountRowsOp,
 			opt.MaxOp, opt.MinOp, opt.SumIntOp, opt.SumOp, opt.SqrDiffOp,
-			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.ExistsAggOp, opt.AnyNotNullOp:
+			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.AnyNotNullOp:
 
 		default:
 			return false
@@ -485,23 +485,32 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	pb.addSynthesized(r.f.ConstructTrue(), trueColID)
 	trueProjection := pb.buildProjections()
 
-	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
-
+	aggColID := r.f.Metadata().AddColumn("any_not_null", types.Bool)
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
-	return r.f.ConstructGroupBy(
-		r.f.ConstructProject(
-			subquery,
-			trueProjection,
-		),
-		r.f.ConstructAggregations(
-			r.f.internSingletonList(
-				r.f.ConstructExistsAgg(
-					r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
-				),
+	aggVar := r.f.ConstructVariable(r.f.InternColumnID(aggColID))
+
+	existsColID := r.f.Metadata().AddColumn("exists", types.Bool)
+	nullVal := r.f.ConstructNull(r.f.InternType(types.Unknown))
+	pb.addSynthesized(r.f.ConstructIsNot(aggVar, nullVal), existsColID)
+	existsProjection := pb.buildProjections()
+
+	return r.f.ConstructProject(
+		r.f.ConstructGroupBy(
+			r.f.ConstructProject(
+				subquery,
+				trueProjection,
 			),
-			aggCols,
+			r.f.ConstructAggregations(
+				r.f.internSingletonList(
+					r.f.ConstructAnyNotNull(
+						r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
+					),
+				),
+				aggCols,
+			),
+			r.f.InternColSet(opt.ColSet{}),
 		),
-		r.f.InternColSet(opt.ColSet{}),
+		existsProjection,
 	)
 }
 
