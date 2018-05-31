@@ -1094,16 +1094,18 @@ func (s *statusServer) Ranges(
 				WritesPerSecond:  rep.WritesPerSecond(),
 			},
 			Problems: serverpb.RangeProblems{
-				Unavailable:          metrics.Unavailable,
-				LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
-				NoRaftLeader:         !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
-				Underreplicated:      metrics.Underreplicated,
-				NoLease:              metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
+				Unavailable:            metrics.Unavailable,
+				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+				NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
+				Underreplicated:        metrics.Underreplicated,
+				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
+				QuiescentEqualsTicking: metrics.Quiescent == metrics.Ticking,
 			},
 			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
 			CmdQGlobal:  serverpb.CommandQueueMetrics(metrics.CmdQMetricsGlobal),
 			LeaseStatus: metrics.LeaseStatus,
 			Quiescent:   metrics.Quiescent,
+			Ticking:     metrics.Ticking,
 		}
 	}
 

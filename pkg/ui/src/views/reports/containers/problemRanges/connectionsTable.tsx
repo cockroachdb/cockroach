@@ -39,13 +39,18 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: (problem) => problem.underreplicated_range_ids.length,
   },
   {
+    title: "Quiescent equals ticking",
+    extract: (problem) => problem.quiescent_equals_ticking_range_ids.length,
+  },
+  {
     title: "Total",
     extract: (problem) => {
       return problem.unavailable_range_ids.length +
         problem.no_raft_leader_range_ids.length +
         problem.no_lease_range_ids.length +
         problem.raft_leader_not_lease_holder_range_ids.length +
-        problem.underreplicated_range_ids.length;
+        problem.underreplicated_range_ids.length +
+        problem.quiescent_equals_ticking_range_ids.length;
     },
   },
   { title: "Error", extract: (problem) => problem.error_message },

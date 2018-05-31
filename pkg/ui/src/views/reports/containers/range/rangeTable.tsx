@@ -41,6 +41,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "problems", display: "Problems", compareToLeader: true },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
   { variable: "quiescent", display: "Quiescent", compareToLeader: true },
+  { variable: "ticking", display: "Ticking", compareToLeader: true },
   { variable: "leaseType", display: "Lease Type", compareToLeader: true },
   { variable: "leaseState", display: "Lease State", compareToLeader: true },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
@@ -203,6 +204,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     }
     if (problems.unavailable) {
       results = _.concat(results, "Unavailable");
+    }
+    if (problems.quiescent_equals_ticking) {
+      results = _.concat(results, "Quiescent equals ticking");
     }
     if (awaitingGC) {
       results = _.concat(results, "Awaiting GC");
@@ -449,6 +453,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         problems: this.contentProblems(info.problems, awaitingGC),
         raftState: raftState,
         quiescent: info.quiescent ? rangeTableQuiescent : rangeTableEmptyContent,
+        ticking: this.createContent(info.ticking.toString()),
         leaseState: leaseState,
         leaseHolder: this.createContent(
           Print.ReplicaID(rangeID, lease.replica),
