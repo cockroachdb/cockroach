@@ -266,6 +266,16 @@ accidents. This can also be overridden in a session with SET
 sql_safe_updates = FALSE.`,
 	}
 
+	Set = FlagInfo{
+		Name:      "set",
+		Shorthand: "s",
+		Description: `
+Execute the \set statements before entering the SQL shell or executing SQL
+statements specified with --execute. This flag may be specified multiple times.
+If an error occurs in any statement, the command exits with a non-zero status
+code and further statements are not executed.`,
+	}
+
 	TableDisplayFormat = FlagInfo{
 		Name: "format",
 		Description: `

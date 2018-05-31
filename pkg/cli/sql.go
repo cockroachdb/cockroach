@@ -1048,6 +1048,21 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
+			if len(sqlCtx.setStmts) > 0 {
+				// Execute any \set commands to allow setting client variables
+				// before statement execution non-interactive mode.
+				for i := 0; i < len(sqlCtx.setStmts); i++ {
+					if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
+						return c.exitErr
+					}
+				}
+			}
+
+			if len(sqlCtx.execStmts) > 0 {
+				// Single-line sql; run as simple as possible, without noise on stdout.
+				return runStatements(conn, sqlCtx.execStmts)
+			}
+
 			if cliCtx.terminalOutput {
 				// If results are shown on a terminal also enable printing of
 				// times by default.
@@ -1169,10 +1184,6 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	if len(sqlCtx.execStmts) > 0 {
-		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts)
-	}
 	return runInteractive(conn)
 }
 
