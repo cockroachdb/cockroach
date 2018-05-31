@@ -4,20 +4,20 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
 
 # There must be no limit at the index scan level.
-# TODO(radu): re-enable once lookup join can be executed
-#query TTTTT colnames
-#EXPLAIN (VERBOSE) SELECT * FROM t WHERE v = 4 AND w > 30 ORDER BY v LIMIT 2
-#----
-#Tree                 Field   Description           Columns    Ordering
-#limit                ·       ·                     (k, v, w)  +v
-# │                   count   2                     ·          ·
-# └── sort            ·       ·                     (k, v, w)  +v
-#      │              order   +v                    ·          ·
-#      └── filter     ·       ·                     (k, v, w)  ·
-#           │         filter  (v > 4) AND (w > 30)  ·          ·
-#           └── scan  ·       ·                     (k, v, w)  ·
-#·                    table   t@primary             ·          ·
-#·                    spans   ALL                   ·          ·
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND v < 8 AND w > 30 ORDER BY v LIMIT 2
+----
+Tree                  Field   Description  Columns    Ordering
+limit                 ·       ·            (k, v, w)  ·
+ │                    count   2            ·          ·
+ └── filter           ·       ·            (k, v, w)  ·
+      │               filter  w > 30       ·          ·
+      └── index-join  ·       ·            (k, v, w)  +v
+           ├── scan   ·       ·            (k, v)     +v
+           │          table   t@t_v_idx    ·          ·
+           │          spans   /5-/8        ·          ·
+           └── scan   ·       ·            (k, v, w)  ·
+·                     table   t@primary    ·          ·
 
 # This kind of query can be used to work around memory usage limits. We need to
 # choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
@@ -117,3 +117,13 @@ render     ·         ·          (k)     ·
 ·          table     t@t_v_idx  ·       ·
 ·          spans     ALL        ·       ·
 ·          limit     4          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
+----
+filter     ·       ·          (k)  ·
+ │         filter  k != 2     ·    ·
+ └── scan  ·       ·          (k)  ·
+·          table   t@primary  ·    ·
+·          spans   ALL        ·    ·
+·          limit   5          ·    ·

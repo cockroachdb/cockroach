@@ -107,8 +107,9 @@ func asDataSource(n exec.Node) planDataSource {
 
 // ConstructFilter is part of the exec.Factory interface.
 func (ef *execFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
-	if s, ok := n.(*scanNode); ok && s.filter == nil {
-		// Push the filter into the scanNode.
+	// Push the filter into the scanNode. We cannot do this if the scanNode has a
+	// limit (it would make the limit apply AFTER the filter).
+	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 		return s, nil
 	}
