@@ -1006,6 +1006,11 @@ func (txn *Txn) Send(
 		}
 	}
 
+	// If the request was part of a previous attempt, don't return any results.
+	if requestTxnID != txn.mu.Proto.ID || ba.Txn.Epoch != txn.mu.Proto.Epoch {
+		return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
+	}
+
 	if pErr != nil {
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
@@ -1019,12 +1024,8 @@ func (txn *Txn) Send(
 				log.Fatalf(ctx, "retryable error for the wrong txn. "+
 					"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 					requestTxnID, retryErr.TxnID, retryErr)
-			} else if requestTxnID == txn.mu.Proto.ID {
-				// Our requestTxnID still matches the proto, so update the state.
-				// If it doesn't match here, it means a concurrent request through
-				// this Txn object has already aborted and restarted the txn.
-				txn.updateStateOnRetryableErrLocked(ctx, retryErr)
 			}
+			txn.updateStateOnRetryableErrLocked(ctx, retryErr)
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to
@@ -1040,9 +1041,6 @@ func (txn *Txn) Send(
 	if br != nil {
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(txn.mu.sender, br))
-		}
-		if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
-			return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
 		}
 
 		// Only successful requests can carry an updated Txn in their response
