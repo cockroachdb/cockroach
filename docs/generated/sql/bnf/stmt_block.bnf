@@ -330,6 +330,7 @@ import_data_format ::=
 	'CSV'
 	| 'MYSQLOUTFILE'
 	| 'MYSQLDUMP'
+	| 'PGCOPY'
 
 privileges ::=
 	'ALL'
@@ -747,6 +748,7 @@ unreserved_keyword ::=
 	| 'PASSWORD'
 	| 'PAUSE'
 	| 'PHYSICAL'
+	| 'PGCOPY'
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'

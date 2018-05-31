@@ -242,6 +242,50 @@ d
 				`SELECT * from d.t`: {{`\x`}},
 			},
 		},
+
+		// PG COPY
+		{
+			name:   "unexpected escape x",
+			create: `b bytes`,
+			typ:    "PGCOPY",
+			data:   `\x`,
+			err:    `row 1: unsupported escape sequence: \\x`,
+		},
+		{
+			name:   "unexpected escape 3",
+			create: `b bytes`,
+			typ:    "PGCOPY",
+			data:   `\3`,
+			err:    `row 1: unsupported escape sequence: \\3`,
+		},
+		{
+			name:   "escapes",
+			create: `b bytes`,
+			typ:    "PGCOPY",
+			data:   `\x43\122`,
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"CR"}},
+			},
+		},
+		{
+			name:   "normal",
+			create: `i int, s string`,
+			typ:    "PGCOPY",
+			data:   "1\tSTR\n2\t\\N\n\\N\t\\t",
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", "\t"}},
+			},
+		},
+		{
+			name:   "comma delim",
+			create: `i int, s string`,
+			typ:    "PGCOPY",
+			with:   `WITH delimiter = ','`,
+			data:   "1,STR\n2,\\N\n\\N,\\,",
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
+			},
+		},
 	}
 
 	var dataString string
@@ -1306,6 +1350,60 @@ func TestImportMysqlOutfile(t *testing.T) {
 			if len(flags) > 0 {
 				cmd += " WITH " + strings.Join(flags, ", ")
 			}
+			sqlDB.Exec(t, cmd, opts...)
+			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
+				expected, actual := testRows[idx].s, row[1]
+				if expected == injectNull {
+					expected = "NULL"
+				}
+
+				if expected != actual {
+					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+				}
+			}
+		})
+	}
+}
+
+func TestImportPgCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "pgcopy")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	testRows, configs := getPgCopyTestdata(t)
+
+	for i, cfg := range configs {
+		t.Run(cfg.name, func(t *testing.T) {
+			var opts []interface{}
+
+			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT PRIMARY KEY, s text, b bytea) PGCOPY DATA ($1)`, i)
+			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
+
+			var flags []string
+			if cfg.opts.Delimiter != '\t' {
+				opts = append(opts, string(cfg.opts.Delimiter))
+				flags = append(flags, fmt.Sprintf("delimiter = $%d", len(opts)))
+			}
+			if cfg.opts.Null != `\N` {
+				opts = append(opts, cfg.opts.Null)
+				flags = append(flags, fmt.Sprintf("nullif = $%d", len(opts)))
+			}
+			if len(flags) > 0 {
+				cmd += " WITH " + strings.Join(flags, ", ")
+			}
+			t.Log(cmd, opts)
 			sqlDB.Exec(t, cmd, opts...)
 			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
 				expected, actual := testRows[idx].s, row[1]

@@ -506,7 +506,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
-%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PGCOPY PLACING
 %token <str> PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str> QUERIES QUERY
@@ -1611,6 +1611,10 @@ import_data_format:
   {
     $$ = "MYSQLDUMP"
   }
+| PGCOPY
+  {
+    $$ = "PGCOPY"
+  }
 
 
 // %Help: IMPORT - load data from file in a distributed manner
@@ -1626,14 +1630,15 @@ import_data_format:
 //    CSV
 //    MYSQLOUTFILE
 //    MYSQLDUMP (mysqldump's SQL output)
+//    PGCOPY
 //
 // Options:
 //    distributed = '...'
 //    sstsize = '...'
 //    temp = '...'
-//    delimiter = '...'      [CSV-specific]
+//    delimiter = '...'      [CSV, PGCOPY-specific]
+//    nullif = '...'         [CSV, PGCOPY-specific]
 //    comment = '...'        [CSV-specific]
-//    nullif = '...'         [CSV-specific]
 //
 // %SeeAlso: CREATE TABLE
 import_stmt:
@@ -7992,6 +7997,7 @@ unreserved_keyword:
 | PASSWORD
 | PAUSE
 | PHYSICAL
+| PGCOPY
 | PLANS
 | PRECEDING
 | PREPARE
