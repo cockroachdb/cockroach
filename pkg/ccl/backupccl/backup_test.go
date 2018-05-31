@@ -680,20 +680,27 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobs.Payload{
-		Username:       security.RootUser,
-		DescriptorIDs:  descriptorIDs,
-		StartedMicros:  now,
-		ModifiedMicros: now,
-		Details:        jobs.WrapPayloadDetails(details),
-		Lease:          &jobs.Lease{NodeID: 1},
+		Username:      security.RootUser,
+		DescriptorIDs: descriptorIDs,
+		StartedMicros: now,
+		Details:       jobs.WrapPayloadDetails(details),
+		Lease:         &jobs.Lease{NodeID: 1},
 	})
 	if err != nil {
 		return err
 	}
+
+	progress, err := protoutil.Marshal(&jobs.Progress{
+		ModifiedMicros: now,
+	})
+	if err != nil {
+		return err
+	}
+
 	var jobID int64
 	if err := db.QueryRow(
-		`INSERT INTO system.jobs (created, status, payload) VALUES ($1, $2, $3) RETURNING id`,
-		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload,
+		`INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
+		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progress,
 	).Scan(&jobID); err != nil {
 		return err
 	}
