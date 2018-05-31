@@ -580,11 +580,7 @@ func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
 
-func (c *cluster) Destroy(ctx context.Context) {
-	if c == nil {
-		return
-	}
-
+func (c *cluster) FetchLogs(ctx context.Context) {
 	// Don't hang forever if we can't fetch the logs.
 	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -592,6 +588,12 @@ func (c *cluster) Destroy(ctx context.Context) {
 	c.status("retrieving logs")
 	_ = execCmd(execCtx, c.l, roachprod, "get", c.name, "logs",
 		filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "logs"))
+}
+
+func (c *cluster) Destroy(ctx context.Context) {
+	if c == nil {
+		return
+	}
 
 	// Only destroy the cluster if it exists in the cluster registry. The cluster
 	// may not exist if the test was interrupted and the teardown machinery is
