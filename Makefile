@@ -148,19 +148,22 @@ else ifeq ($(TYPE),release-linux-gnu)
 # this toolchain's libstdc++ version is quite recent and must be statically
 # linked to avoid depending on the target's available libstdc++.
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override LDFLAGS = -static-libgcc -static-libstdc++
+override LINKFLAGS += -extldflags "$(LDFLAGS)"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
 XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -extldflags "-static"
+override LDFLAGS = -static
+override LINKFLAGS += -extldflags "$(LDFLAGS)"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-aarch64-linux)
 XGOARCH := arm64
 export CGO_ENABLED := 1
 XHOST_TRIPLE := aarch64-unknown-linux-gnueabi
-override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override LDFLAGS = -static-libgcc -static-libstdc++
+override LINKFLAGS += -extldflags "$(LDFLAGS)"
 override SUFFIX := $(SUFFIX)-linux-3.7.10-gnu-aarch64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-darwin)
@@ -174,7 +177,8 @@ XGOOS := windows
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-w64-mingw32
 override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -extldflags "-static"
+override LDFLAGS += -static
+override LINKFLAGS += -extldflags "$(LDFLAGS)"
 BUILD_TYPE := release
 else
 $(error unknown build type $(TYPE))
