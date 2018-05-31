@@ -50,7 +50,8 @@ type Job struct {
 
 	mu struct {
 		syncutil.Mutex
-		payload Payload
+		payload  Payload
+		progress Progress
 	}
 }
 
@@ -145,7 +146,7 @@ func (j *Job) created(ctx context.Context, id int64, lease *Lease) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
 		if *status != StatusPending {
 			// Already started - do nothing.
 			return false, nil
@@ -175,15 +176,15 @@ func FractionUpdater(f float32) ProgressedFn {
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
 		if *status != StatusRunning {
 			return false, &InvalidStatusError{*j.id, *status, "update progress on"}
 		}
-		payload.FractionCompleted = progressedFn(ctx, payload.Details)
-		if payload.FractionCompleted < 0.0 || payload.FractionCompleted > 1.0 {
+		progress.FractionCompleted = progressedFn(ctx, payload.Details)
+		if progress.FractionCompleted < 0.0 || progress.FractionCompleted > 1.0 {
 			return false, errors.Errorf(
 				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				payload.FractionCompleted, j.id,
+				progress.FractionCompleted, j.id,
 			)
 		}
 		return true, nil
@@ -194,7 +195,7 @@ func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
 func (j *Job) paused(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
 		if *status == StatusPaused {
 			// Already paused - do nothing.
 			return false, nil
@@ -211,7 +212,7 @@ func (j *Job) paused(ctx context.Context) error {
 // currently paused. It does not directly resume the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
 func (j *Job) resumed(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
 		if *status == StatusRunning {
 			// Already resumed - do nothing.
 			return false, nil
@@ -233,7 +234,7 @@ func (j *Job) resumed(ctx context.Context) error {
 func (j *Job) canceled(
 	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
 		if *status == StatusCanceled {
 			// Already canceled - do nothing.
 			return false, nil
@@ -260,7 +261,7 @@ var NoopFn func(context.Context, *client.Txn, *Job) error
 func (j *Job) Failed(
 	ctx context.Context, err error, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
@@ -282,7 +283,7 @@ func (j *Job) Failed(
 func (j *Job) Succeeded(
 	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
@@ -294,14 +295,14 @@ func (j *Job) Succeeded(
 			}
 		}
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		payload.FractionCompleted = 1.0
+		progress.FractionCompleted = 1.0
 		return true, nil
 	})
 }
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *Payload, _ *Progress) (bool, error) {
 		payload.Details = WrapPayloadDetails(details)
 		return true, nil
 	})
@@ -313,6 +314,19 @@ func (j *Job) Payload() Payload {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.payload
+}
+
+// Progress returns the most recently sent Progress for this Job. Will return an
+// empty Progress until Created() is called on a new Job.
+func (j *Job) Progress() Progress {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.mu.progress
+}
+
+// FractionCompleted returns completion according to the in-memory job state.
+func (j *Job) FractionCompleted() float32 {
+	return j.Progress().FractionCompleted
 }
 
 // WithTxn sets the transaction that this Job will use for its next operation.
@@ -333,7 +347,7 @@ func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn
 	return j.registry.db.Txn(ctx, fn)
 }
 
-func (j *Job) initialize(payload *Payload) (err error) {
+func (j *Job) initialize(payload *Payload, progress *Progress) (err error) {
 	j.Record.Description = payload.Description
 	j.Record.Username = payload.Username
 	j.Record.DescriptorIDs = payload.DescriptorIDs
@@ -343,13 +357,15 @@ func (j *Job) initialize(payload *Payload) (err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.mu.payload = *payload
+	j.mu.progress = *progress
 	return nil
 }
 
 func (j *Job) load(ctx context.Context) error {
 	var payload *Payload
+	var progress *Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		const stmt = "SELECT payload FROM system.jobs WHERE id = $1"
+		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, stmt, *j.id)
 		if err != nil {
 			return err
@@ -358,11 +374,15 @@ func (j *Job) load(ctx context.Context) error {
 			return fmt.Errorf("job with ID %d does not exist", *j.id)
 		}
 		payload, err = UnmarshalPayload(row[0])
+		if err != nil {
+			return err
+		}
+		progress, err = UnmarshalProgress(row[1])
 		return err
 	}); err != nil {
 		return err
 	}
-	return j.initialize(payload)
+	return j.initialize(payload, progress)
 }
 
 func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
@@ -371,6 +391,7 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
 		return nil
 	}
 
+	progress := &Progress{}
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Note: although the following uses OrigTimestamp and
 		// OrigTimestamp can diverge from the value of now() throughout a
@@ -378,33 +399,40 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
 		// to be equal *or greater* than previously inserted timestamps
 		// computed by now(). For now OrigTimestamp can only move forward
 		// and the assertion OrigTimestamp >= now() holds at all times.
-		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
+		progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
+		progressBytes, err := protoutil.Marshal(progress)
+		if err != nil {
+			return err
+		}
 
-		const stmt = "INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)"
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes)
+		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes, progressBytes)
 		return err
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
+	j.mu.progress = *progress
 	j.id = &id
 	return nil
 }
 
 func (j *Job) update(
-	ctx context.Context, updateFn func(*client.Txn, *Status, *Payload) (doUpdate bool, err error),
+	ctx context.Context,
+	updateFn func(*client.Txn, *Status, *Payload, *Progress) (doUpdate bool, err error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
 	}
 
 	var payload *Payload
+	var progress *Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		const selectStmt = "SELECT status, payload FROM system.jobs WHERE id = $1"
+		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, selectStmt, *j.id)
 		if err != nil {
 			return err
@@ -419,7 +447,12 @@ func (j *Job) update(
 			return err
 		}
 
-		doUpdate, err := updateFn(txn, &status, payload)
+		progress, err = UnmarshalProgress(row[2])
+		if err != nil {
+			return err
+		}
+
+		doUpdate, err := updateFn(txn, &status, payload, progress)
 		if err != nil {
 			return err
 		}
@@ -427,14 +460,18 @@ func (j *Job) update(
 			return nil
 		}
 
-		payload.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		progress.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
+		progressBytes, err := protoutil.Marshal(progress)
+		if err != nil {
+			return err
+		}
 
-		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
-		updateArgs := []interface{}{status, payloadBytes, *j.id}
+		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2, progress = $3 WHERE id = $4"
+		updateArgs := []interface{}{status, payloadBytes, progressBytes, *j.id}
 		n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
 			return err
@@ -455,7 +492,7 @@ func (j *Job) update(
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
 		if *status != StatusRunning {
 			return false, errors.Errorf("job %d no longer running", *j.id)
 		}
@@ -464,7 +501,7 @@ func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
 				payload.Lease, oldLease)
 		}
 		payload.Lease = j.registry.newLease()
-		if err := j.initialize(payload); err != nil {
+		if err := j.initialize(payload, progress); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -547,12 +584,30 @@ func UnmarshalPayload(datum tree.Datum) (*Payload, error) {
 	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
-			"Job: failed to unmarshal payload as DBytes (was %T)", bytes)
+			"Job: failed to unmarshal payload as DBytes (was %T)", datum)
 	}
 	if err := protoutil.Unmarshal([]byte(*bytes), payload); err != nil {
 		return nil, err
 	}
 	return payload, nil
+}
+
+// UnmarshalProgress unmarshals and returns the Progress encoded in the input
+// datum, which should be a tree.DBytes.
+func UnmarshalProgress(datum tree.Datum) (*Progress, error) {
+	progress := &Progress{}
+	if datum == tree.DNull {
+		return progress, nil
+	}
+	bytes, ok := datum.(*tree.DBytes)
+	if !ok {
+		return nil, errors.Errorf(
+			"Job: failed to unmarshal Progress as DBytes (was %T)", datum)
+	}
+	if err := protoutil.Unmarshal([]byte(*bytes), progress); err != nil {
+		return nil, err
+	}
+	return progress, nil
 }
 
 func (t Type) String() string {

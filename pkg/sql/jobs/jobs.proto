@@ -130,12 +130,12 @@ message Payload {
   // precision, and use microsecond integers directly.
   int64 started_micros = 3;
   int64 finished_micros = 4;
-  int64 modified_micros = 5;
+  reserved 5;
   repeated uint32 descriptor_ids = 6 [
     (gogoproto.customname) = "DescriptorIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
-  float fraction_completed = 7;
+  float legacy_fraction_completed = 7;
   string error = 8;
   // ID 9 is intentionally reserved for lease information.
   Lease lease = 9;
@@ -146,6 +146,11 @@ message Payload {
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
   }
+}
+
+message Progress {
+  float fraction_completed = 1;
+  int64 modified_micros = 2;
 }
 
 enum Type {

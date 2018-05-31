@@ -420,7 +420,7 @@ func (sc *SchemaChanger) distBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
-	origFractionCompleted := sc.job.Payload().FractionCompleted
+	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
 	for {
 		// Repeat until getMutationToBackfill returns a mutation with no remaining
