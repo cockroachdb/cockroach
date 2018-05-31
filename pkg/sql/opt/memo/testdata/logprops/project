@@ -60,19 +60,19 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── filters [type=bool, outer=(1,2)]
       └── gt [type=bool, outer=(1,2)]
            ├── subquery [type=int, outer=(1,2)]
            │    └── max1-row
-           │         ├── columns: "(SELECT y)":8(int)
+           │         ├── columns: "(SELECT y)":9(int)
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
            │         └── project
-           │              ├── columns: "(SELECT y)":8(int)
+           │              ├── columns: "(SELECT y)":9(int)
            │              ├── outer: (1,2)
            │              ├── stats: [rows=111]
            │              ├── select
@@ -91,19 +91,21 @@ select
            │              └── projections [outer=(2)]
            │                   └── subquery [type=int, outer=(2)]
            │                        └── max1-row
-           │                             ├── columns: y:2(int)
+           │                             ├── columns: y:8(int)
            │                             ├── outer: (2)
            │                             ├── cardinality: [1 - 1]
            │                             ├── stats: [rows=1]
            │                             └── project
-           │                                  ├── columns: y:2(int)
+           │                                  ├── columns: y:8(int)
            │                                  ├── outer: (2)
            │                                  ├── cardinality: [1 - 1]
            │                                  ├── stats: [rows=1]
-           │                                  └── values
-           │                                       ├── cardinality: [1 - 1]
-           │                                       ├── stats: [rows=1]
-           │                                       └── tuple [type=tuple{}]
+           │                                  ├── values
+           │                                  │    ├── cardinality: [1 - 1]
+           │                                  │    ├── stats: [rows=1]
+           │                                  │    └── tuple [type=tuple{}]
+           │                                  └── projections [outer=(2)]
+           │                                       └── variable: xysd.y [type=int, outer=(2)]
            └── const: 5 [type=int]
 
 # Pass through cardinality.
