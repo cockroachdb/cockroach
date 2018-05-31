@@ -50,7 +50,7 @@ new engineers.
 2. Get the CockroachDB code:
 
    ```shell
-   go get -d github.com/cockroachdb/cockroach
+   git clone https://github.com/cockroachdb/cockroach $(go env GOPATH)/src/github.com/cockroachdb/cockroach
    cd $(go env GOPATH)/src/github.com/cockroachdb/cockroach
    ```
 

@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -47,7 +49,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainDistSQLColumns
 
 	default:
-		panic(errorf("unsupported EXPLAIN mode"))
+		panic(fmt.Errorf("unsupported EXPLAIN mode: %d", opts.Mode))
 	}
 	b.synthesizeResultColumns(outScope, cols)
 

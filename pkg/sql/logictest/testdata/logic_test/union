@@ -171,22 +171,22 @@ SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.colu
 ----
 1 1
 
-query error each UNION query must have the same number of columns: 2 vs 1
+query error pgcode 42601 each UNION query must have the same number of columns: 2 vs 1
 SELECT 1, 2 UNION SELECT 3
 
-query error each INTERSECT query must have the same number of columns: 2 vs 1
+query error pgcode 42601 each INTERSECT query must have the same number of columns: 2 vs 1
 SELECT 1, 2 INTERSECT SELECT 3
 
-query error each EXCEPT query must have the same number of columns: 2 vs 1
+query error pgcode 42601 each EXCEPT query must have the same number of columns: 2 vs 1
 SELECT 1, 2 EXCEPT SELECT 3
 
-query error UNION types int and string cannot be matched
+query error pgcode 42804 UNION types int and string cannot be matched
 SELECT 1 UNION SELECT '3'
 
-query error INTERSECT types int and string cannot be matched
+query error pgcode 42804 INTERSECT types int and string cannot be matched
 SELECT 1 INTERSECT SELECT '3'
 
-query error EXCEPT types int and string cannot be matched
+query error pgcode 42804 EXCEPT types int and string cannot be matched
 SELECT 1 EXCEPT SELECT '3'
 
 query error pgcode 42703 column \"z\" does not exist

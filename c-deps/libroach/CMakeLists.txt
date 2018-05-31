@@ -152,6 +152,10 @@ foreach(tsrc ${tests})
     ${SNAPPY_LIB}
   )
 
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    target_link_libraries(${tname} rt)
+  endif()
+
   set_target_properties(${tname} PROPERTIES
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
