@@ -140,7 +140,7 @@ func Compare(a, b Interface) int {
 	}
 }
 
-// Equal returns a boolean indicating whethter the given Interfaces are equal to each other. If
+// Equal returns a boolean indicating whether the given Interfaces are equal to each other. If
 // "Equal(a, b) == true", "a.Range().End == b.Range().End" must hold. Otherwise, the interval tree
 // behavior is undefined. "Equal(a, b) == true" is equivalent to "Compare(a, b) == 0". But the
 // former has measurably better performance than the latter. So Equal should be used when only

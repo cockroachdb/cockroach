@@ -23,7 +23,7 @@ import (
 // last logged fractionCompleted and the current fractionCompleted is more than
 // progressFractionThreshold.
 var (
-	progressTimeThreshold             = time.Second
+	progressTimeThreshold             = 30 * time.Second
 	progressFractionThreshold float32 = 0.05
 )
 
@@ -53,14 +53,6 @@ type ProgressLogger struct {
 // chunkFinished marks one chunk of the job as completed. If either the time or
 // fraction threshold has been reached, the progress update will be persisted to
 // system.jobs.
-//
-// NB: chunkFinished is not threadsafe. A previous implementation that was
-// threadsafe occasionally led to massive contention. One 2TB restore on a 15
-// node cluster, for example, had 60 goroutines attempting to update the
-// progress at once, causing massive contention on the row in system.jobs. This
-// inadvertently applied backpressure on the restore's import requests and
-// slowed the job to a crawl. If multiple threads need to update progress, use a
-// channel and a dedicated goroutine that calls loop.
 func (jpl *ProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.completedChunks++
 	fraction := float32(jpl.completedChunks) / float32(jpl.TotalChunks)

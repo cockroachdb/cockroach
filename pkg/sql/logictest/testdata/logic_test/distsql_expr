@@ -1,4 +1,4 @@
-# LogicTest: default distsql distsql-metadata
+# LogicTest: default opt distsql distsql-opt distsql-metadata
 
 statement ok
 CREATE TABLE t (c int PRIMARY KEY)
@@ -12,6 +12,3 @@ SELECT c FROM t WHERE (c, c) > (2, -9223372036854775808)
 ----
 2
 3
-
-statement ok
-CREATE TABLE ab (a int PRIMARY KEY, b int)
