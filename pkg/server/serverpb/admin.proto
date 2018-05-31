@@ -514,10 +514,10 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
-message ReplicaMatrixRequest {
+message DataDistributionRequest {
 }
 
-message ReplicaMatrixResponse {
+message DataDistributionResponse {
   message ZoneConfig {
     // cli_specifier is ".default" for the default zone config.
     // Otherwise, it's of the form [database.]table[@index[.partition]]
@@ -706,14 +706,14 @@ service Admin {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.
-  rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
+  rpc DecommissionStatus (DecommissionStatusRequest) returns (DecommissionStatusResponse) {
   }
 
   // URL: /_admin/v1/rangelog
   // URL: /_admin/v1/rangelog?limit=100
   // URL: /_admin/v1/rangelog/1
   // URL: /_admin/v1/rangelog/1?limit=100
-  rpc RangeLog(RangeLogRequest) returns (RangeLogResponse) {
+  rpc RangeLog (RangeLogRequest) returns (RangeLogResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/rangelog"
       additional_bindings {
@@ -722,9 +722,9 @@ service Admin {
     };
   }
 
-  rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
+  rpc DataDistribution (DataDistributionRequest) returns (DataDistributionResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/replica_matrix"
+      get: "/_admin/v1/data_distribution"
     };
   }
 }
