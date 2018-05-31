@@ -1892,7 +1892,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.String,
 			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				key := similarToKey(MustBeDString(right))
+				key := similarToKey{s: string(MustBeDString(right)), escape: `\`}
 				return matchRegexpWithKey(ctx, left, key)
 			},
 		},
@@ -2232,16 +2232,43 @@ func evalDatumsCmp(
 	return DBoolFalse, nil
 }
 
-func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
-	pattern := string(MustBeDString(right))
-	like, err := optimizedLikeFunc(pattern, caseInsensitive)
+// MatchLikeEscape matches 'unescaped' with 'pattern' using custom escape character 'escape'.
+// 'escape' must be either empty (which disables escape mechanism) or a single character.
+func MatchLikeEscape(
+	ctx *EvalContext, unescaped, pattern, escape string, caseInsensitive bool,
+) (Datum, error) {
+	if len(escape) > 1 {
+		return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+	}
+
+	like, err := optimizedLikeFunc(pattern, caseInsensitive, escape)
 	if err != nil {
 		return DBoolFalse, pgerror.NewErrorf(
 			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
+		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
+		re, err := ctx.ReCache.GetRegexp(key)
+		if err != nil {
+			return DBoolFalse, pgerror.NewErrorf(
+				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+		}
+		like = re.MatchString
+	}
+	return MakeDBool(DBool(like(unescaped))), nil
+}
+
+func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
+	pattern := string(MustBeDString(right))
+	like, err := optimizedLikeFunc(pattern, caseInsensitive, `\`)
+	if err != nil {
+		return DBoolFalse, pgerror.NewErrorf(
+			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+	}
+
+	if like == nil {
+		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: `\`}
 		re, err := ctx.ReCache.GetRegexp(key)
 		if err != nil {
 			return DBoolFalse, pgerror.NewErrorf(
@@ -3974,7 +4001,9 @@ func hasUnescapedSuffix(s string, suffix byte, escapeToken string) bool {
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
-func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool, error) {
+func optimizedLikeFunc(
+	pattern string, caseInsensitive bool, escape string,
+) (func(string) bool, error) {
 	switch len(pattern) {
 	case 0:
 		return func(s string) bool {
@@ -3983,32 +4012,40 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 	case 1:
 		switch pattern[0] {
 		case '%':
+			if escape == `%` {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+			}
 			return func(s string) bool {
 				return true
 			}, nil
 		case '_':
+			if escape == `_` {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+			}
 			return func(s string) bool {
 				return len(s) == 1
 			}, nil
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-			// Patterns with even number of `\` preceding the ending `%` will have
+			// Patterns with even number of escape characters preceding the ending `%` will have
 			// anyEnd set to true. Otherwise anyEnd will be set to false.
-			anyEnd := hasUnescapedSuffix(pattern, '%', `\`)
-			anyStart := pattern[0] == '%'
+			anyEnd := hasUnescapedSuffix(pattern, '%', escape)
+			// If '%' is the escape character, then it's not a wildcard.
+			anyStart := pattern[0] == '%' && escape != `%`
 
-			// Patterns with even number of `\` preceding the ending `_` will have
+			// Patterns with even number of escape characters preceding the ending `_` will have
 			// singleAnyEnd set to true. Otherwise singleAnyEnd will be set to false.
-			singleAnyEnd := hasUnescapedSuffix(pattern, '_', `\`)
-			singleAnyStart := pattern[0] == '_'
+			singleAnyEnd := hasUnescapedSuffix(pattern, '_', escape)
+			// If '_' is the escape character, then it's not a wildcard.
+			singleAnyStart := pattern[0] == '_' && escape != `_`
 
 			// Since we've already checked for escaped characters
 			// at the end, we can un-escape every character.
 			// This is required since we do direct string
 			// comparison.
 			var err error
-			if pattern, err = unescapePattern(pattern, `\`); err != nil {
+			if pattern, err = unescapePattern(pattern, escape); err != nil {
 				return nil, err
 			}
 			switch {
@@ -4093,6 +4130,7 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 type likeKey struct {
 	s               string
 	caseInsensitive bool
+	escape          string
 }
 
 // unescapePattern unescapes a pattern for a given escape token.
@@ -4227,33 +4265,201 @@ OldLoop:
 	return string(ret[0:retWidth])
 }
 
+// Replaces all custom escape characters in s with `\\` only when they are unescaped. 					(1)
+// E.g. original pattern			after QuoteMeta			after replaceCustomEscape with '@' as escape
+//        '@w@w'          ->      '@w@w'        ->        '\\w\\w'
+//        '@\@\'          ->      '@\\@\\'      ->        '\\\\\\\\'
+//
+// When an escape character is escaped, we replace it with its single occurrence.								(2)
+// E.g. original pattern			after QuoteMeta			after replaceCustomEscape with '@' as escape
+//        '@@w@w'         ->      '@@w@w'       ->        '@w||w'
+//        '@@@\'          ->      '@@@\\'       ->        '@\\\\'
+//
+// At the same time, we do not want to confuse original backslashes (which
+// after QuoteMeta are '\\') with backslashes that replace our custom escape characters,
+// so we escape these original backslashes again by converting '\\' into '\\\\'.								(3)
+// E.g. original pattern			after QuoteMeta			after replaceCustomEscape with '@' as escape
+//        '@\'            ->      '@\\'         ->        '\\\\\\'
+//        '@\@@@\'        ->      '@\\@@@\\'    ->        '\\\\\\@\\\\\\'
+//
+// Explanation of the last example:
+// 1. we replace '@' with '\\' since it's unescaped;
+// 2. we escape single original backslash ('\' is not our escape character, so we want
+// the pattern to understand it) by putting an extra backslash in front of it. However,
+// we later will call unescapePattern, so we need to double our double backslahes.
+// Therefore, '\\' is converted into '\\\\'.
+// 3. '@@' is replaced by '@' because it is escaped escape character.
+// 4. '@' is replaced with '\\' since it's unescaped.
+// 5. Similar logic to step 2: '\\' -> '\\\\'.
+//
+// We always need to keep in mind that later call of unescapePattern
+// to actually unescape '\\' and '\\\\' is necessary and that
+// escape character must be of length 1 and not `\`.
+func replaceCustomEscape(s, escape string) (string, error) {
+	sLen := len(s)
+	doubleEscape := escape + escape
+	doubleEscapeCount := strings.Count(s, doubleEscape)
+	escapeCount := strings.Count(s, escape)
+
+	// Due to (1), each unescaped escape character will be replaced by `\\`
+	// which will add an additional character per each occurrence.
+	// To calculate number of such unescaped escape character we need to subtract
+	// 2 x # of occurrences of escaped escape characters (i.e. 2*doubleEscapeCount)
+	// from all occurrences of escape character (i.e. escapeCount).
+	unescapedEscapeCount := escapeCount - 2*doubleEscapeCount
+
+	// Due to (2), two consequent escape characters will be replaced by just one,
+	// each occurrence of double escape will remove 1 character.
+	escapedEscapeCount := doubleEscapeCount
+
+	// Due to (3), '\\' will be converted into '\\\\', so each occurrence of '\\'
+	// will add 2 more characters into the resulting pattern.
+	doubleBackslashesCount := strings.Count(s, `\\`)
+
+	retLen := sLen + unescapedEscapeCount - escapedEscapeCount + (2 * doubleBackslashesCount)
+	ret := make([]byte, retLen)
+	retIndex, sIndex := 0, 0
+	for retIndex < retLen {
+		if s[sIndex] == escape[0] {
+			// We encountered an escape character.
+			if sIndex+1 < sLen {
+				// Escape character is not the last character in s, so we need
+				// to look ahead to figure out how to process it.
+				if s[sIndex+1] == escape[0] {
+					// Escape character is escaped, so we replace its two occurrences with just one. See (2).
+					// We copied only one escape character to ret, so we advance retIndex only by 1.
+					// Since we've already processed two characters in s, we advance sIndex by 2.
+					ret[retIndex] = escape[0]
+					retIndex++
+					sIndex += 2
+				} else {
+					// Escape character is unescaped, so we replace it with `\\`. See (1).
+					// Since we've added two characters to ret, we advance retIndex by 2.
+					// We processed only a single escape character in s, we advance sIndex by 1.
+					ret[retIndex] = '\\'
+					ret[retIndex+1] = '\\'
+					retIndex += 2
+					sIndex++
+				}
+			} else {
+				// Escape character is the last character in s, so we need to return an error.
+				return "", pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+			}
+		} else if s[sIndex] == '\\' {
+			// We encountered a backslash which after QuoteMeta should have been doubled.
+			if sIndex+1 == sLen || s[sIndex+1] != '\\' {
+				// This case should never be reached.
+				return "", pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
+			}
+			// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
+			// Since we've added four characters to ret, we advance retIndex by 4.
+			// Since we've already processed two characters in s, we advance sIndex by 2.
+			ret[retIndex] = '\\'
+			ret[retIndex+1] = '\\'
+			ret[retIndex+2] = '\\'
+			ret[retIndex+3] = '\\'
+			retIndex += 4
+			sIndex += 2
+		} else {
+			// Regular character, so we simply copy it.
+			ret[retIndex] = s[sIndex]
+			retIndex++
+			sIndex++
+		}
+
+	}
+	return string(ret), nil
+}
+
 // Pattern implements the RegexpCacheKey interface.
+// The strategy for handling custom escape character
+// is to convert all unescaped escape character into '\'.
+// k.escape can either be empty or a single character.
 func (k likeKey) Pattern() (string, error) {
 	// QuoteMeta escapes `\` to `\\`.
 	pattern := regexp.QuoteMeta(k.s)
+	var err error
+	if k.escape == `` {
+		// Replace all LIKE/ILIKE specific wildcards with standard wildcards
+		// (escape character is empty - escape mechanism is turned off - so
+		// all '%' and '_' are actual wildcards regardless of what precedes them.
+		pattern = strings.Replace(pattern, `%`, `.*`, -1)
+		pattern = strings.Replace(pattern, `_`, `.`, -1)
+	} else if k.escape == `\` {
+		// Replace LIKE/ILIKE specific wildcards with standard wildcards only when
+		// these wildcards are not escaped by '\\' (equivalent of '\' after QuoteMeta).
+		pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
+		pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+	} else if k.escape != `` && k.escape != `\` {
+		// If `%` is escape character, then it's not a wildcard.
+		if k.escape != `%` {
+			// Replace LIKE/ILIKE specific wildcards '%' only if it's unescaped.
+			pattern = replaceUnescaped(pattern, `%`, `.*`, k.escape)
+		}
+		// If `_` is escape character, then it's not a wildcard.
+		if k.escape != `_` {
+			// Replace LIKE/ILIKE specific wildcards '_' only if it's unescaped.
+			pattern = replaceUnescaped(pattern, `_`, `.`, k.escape)
+		}
 
-	// Replace LIKE/ILIKE specific wildcards with standard wildcards
-	pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
-	pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+		// If a sequence of symbols ` escape+`\\` ` is unescaped, then that escape
+		// character escapes backslash in the original pattern (we need to use double
+		// backslash because of QuoteMeta behavior), so we want to "consume" the escape character.
+		pattern = replaceUnescaped(pattern, k.escape+`\\`, `\\`, k.escape)
 
-	// After QuoteMeta, our original escape character `\` has become
-	// `\\`.
+		// We want to replace all escape characters with `\\` only
+		// when they are unescaped. When an escape character is escaped,
+		// we replace it with its single occurrence.
+		if pattern, err = replaceCustomEscape(pattern, k.escape); err != nil {
+			return pattern, err
+		}
+	}
+
+	// After QuoteMeta, all '\' were converted to '||'.
+	// After replaceCustomEscape, our custom unescaped escape characters were converted to `\\`,
+	// so now our pattern contains only '\\' as escape tokens.
 	// We need to unescape escaped escape tokens `\\` (now `\\\\`) and
 	// other escaped characters `\A` (now `\\A`).
-	var err error
-	if pattern, err = unescapePattern(pattern, `\\`); err != nil {
-		return "", err
+	if k.escape != `` {
+		// We do not want to return an error when pattern ends with supposed escape character `\`
+		// whereas actual escape character is not `\`. Case when pattern ends with an actual
+		// escape character is handled in replaceCustomEscape. For example, with '-' as the escape
+		// character on pattern 'abc\\' we do not want to return an error 'pattern ends with escape
+		// character' because '\\' is not an escape character in this case.
+		if pattern, err = unescapePattern(pattern, `\\`); err != nil && k.escape == `\` {
+			return "", err
+		}
 	}
 
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 
-type similarToKey string
+type similarToKey struct {
+	s      string
+	escape string
+}
 
 // Pattern implements the RegexpCacheKey interface.
 func (k similarToKey) Pattern() (string, error) {
-	pattern := SimilarEscape(string(k))
+	var pattern string
+	if k.escape == `` {
+		// We need to provide non-empty escape character to make type checking
+		// happy, but it won't be used.
+		pattern = similarEscapeCustomChar(k.s, rune('\\'), false)
+	} else {
+		pattern = similarEscapeCustomChar(k.s, rune(k.escape[0]), true)
+	}
 	return anchorPattern(pattern, false), nil
+}
+
+// SimilarToEscape checks whether 'unescaped' is SIMILAR TO 'pattern' using custom escape token
+// 'escape' which must be either empty (which disables escape mechanism) or a single character.
+func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum, error) {
+	if len(escape) > 1 {
+		return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+	}
+	key := similarToKey{s: pattern, escape: escape}
+	return matchRegexpWithKey(ctx, NewDString(unescaped), key)
 }
 
 type regexpKey struct {
@@ -4272,13 +4478,14 @@ func (k regexpKey) Pattern() (string, error) {
 // SimilarEscape converts a SQL:2008 regexp pattern to POSIX style, so it can
 // be used by our regexp engine.
 func SimilarEscape(pattern string) string {
-	return similarEscapeCustomChar(pattern, '\\')
+	return similarEscapeCustomChar(pattern, '\\', true)
 }
 
 // similarEscapeCustomChar converts a SQL:2008 regexp pattern to POSIX style,
 // so it can be used by our regexp engine. This version of the function allows
 // for a custom escape character.
-func similarEscapeCustomChar(pattern string, escapeChar rune) string {
+// 'isEscapeNonEmpty' signals whether 'escapeChar' should be treated as empty.
+func similarEscapeCustomChar(pattern string, escapeChar rune, isEscapeNonEmpty bool) string {
 	patternBuilder := make([]rune, 0, utf8.RuneCountInString(pattern))
 
 	inCharClass := false
@@ -4299,7 +4506,7 @@ func similarEscapeCustomChar(pattern string, escapeChar rune) string {
 				patternBuilder = append(patternBuilder, '\\', c)
 			}
 			afterEscape = false
-		case utf8.ValidRune(escapeChar) && c == escapeChar:
+		case utf8.ValidRune(escapeChar) && c == escapeChar && isEscapeNonEmpty:
 			// SQL99 escape character; do not immediately send to output
 			afterEscape = true
 		case inCharClass:
