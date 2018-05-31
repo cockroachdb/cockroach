@@ -715,6 +715,11 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 
 		if t.spec.Run != nil {
 			if !dryrun {
+				if c != nil {
+					defer func() {
+						c.FetchLogs(ctx)
+					}()
+				}
 				t.spec.Run(ctx, t, c)
 			}
 		} else {
