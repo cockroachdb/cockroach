@@ -137,6 +137,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols()
 		if !constraintNotNullCols.Empty() {
 			logical.Relational.NotNullCols = logical.Relational.NotNullCols.Union(constraintNotNullCols)
+			logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
 		}
 	}
 
