@@ -77,7 +77,7 @@ type testSenderFactory struct {
 	store *Store
 }
 
-func (f *testSenderFactory) New(typ client.TxnType) client.TxnSender {
+func (f *testSenderFactory) New(typ client.TxnType, _ *roachpb.Transaction) client.TxnSender {
 	return &testSender{store: f.store}
 }
 
