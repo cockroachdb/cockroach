@@ -279,6 +279,10 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
+
+	// DisableTableCache disables the table descriptor cache. Table descriptors
+	// are read from the store.
+	DisableTableCache bool
 }
 
 // DistSQLPlannerTestingKnobs is used to control internals of the DistSQLPlanner

@@ -360,6 +360,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.avoidCachedDescriptors = true
 		}
 	}
+	if ex.server.cfg.TestingKnobs.DisableTableCache {
+		p.avoidCachedDescriptors = true
+	}
 
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders

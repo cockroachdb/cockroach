@@ -197,6 +197,9 @@ func (ex *connExecutor) prepare(
 			p.avoidCachedDescriptors = true
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
+		if ex.server.cfg.TestingKnobs.DisableTableCache {
+			p.avoidCachedDescriptors = true
+		}
 
 		if err := p.prepare(ctx, stmt.AST); err != nil {
 			return err

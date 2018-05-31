@@ -167,14 +167,17 @@ func validExpirationTime(expirationTime int64) bool {
 
 func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
-
 	params, _ := tests.CreateTestServerParams()
 	// Disable external processing of mutations.
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect
+			// so disable leases on tables.
+			DisableTableCache: true,
+		},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -320,13 +323,15 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			// The descriptor changes made must have an immediate effect
+			// so disable leases on tables.
+			DisableTableCache: true,
+		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
