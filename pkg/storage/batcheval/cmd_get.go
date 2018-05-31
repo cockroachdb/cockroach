@@ -37,6 +37,9 @@ func Get(
 
 	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
 
 	reply.Value = val
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
