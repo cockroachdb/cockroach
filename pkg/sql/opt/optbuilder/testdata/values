@@ -25,7 +25,7 @@ values
 build
 VALUES (1), (2, 3)
 ----
-error: VALUES lists must all be the same length, expected 1 columns, found 2
+error (42601): VALUES lists must all be the same length, expected 1 columns, found 2
 
 build
 VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
@@ -57,7 +57,7 @@ error (42703): column "z" does not exist
 build
 VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)
 ----
-error: VALUES list type mismatch, int for string
+error (42804): VALUES types int and string cannot be matched
 
 build
 VALUES ('one', 1, 1.0), ('two', 2, 2.0)
@@ -129,7 +129,7 @@ values
 build
 VALUES (NULL, 1), (2, NULL), (NULL, 'a')
 ----
-error: VALUES list type mismatch, string for int
+error (42804): VALUES types string and int cannot be matched
 
 build
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)

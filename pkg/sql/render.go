@@ -101,13 +101,17 @@ func (p *planner) Select(
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
-				return nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
+				)
 			}
 			orderBy = s.Select.OrderBy
 		}
 		if s.Select.Limit != nil {
 			if limit != nil {
-				return nil, fmt.Errorf("multiple LIMIT clauses not allowed")
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
+				)
 			}
 			limit = s.Select.Limit
 		}

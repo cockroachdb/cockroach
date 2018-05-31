@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +51,7 @@ func (b *Builder) buildShowTrace(showTrace *tree.ShowTrace, inScope *scope) (out
 		b.synthesizeResultColumns(outScope, sqlbase.ShowReplicaTraceColumns)
 
 	default:
-		panic(errorf("SHOW %s not supported", showTrace.TraceType))
+		panic(fmt.Errorf("SHOW %s not supported", showTrace.TraceType))
 	}
 
 	def := memo.ShowTraceOpDef{

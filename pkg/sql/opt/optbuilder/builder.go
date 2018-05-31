@@ -16,7 +16,6 @@ package optbuilder
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -138,13 +137,6 @@ func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err erro
 // back to errors inside Builder.Build.
 type builderError struct {
 	error
-}
-
-// errorf formats according to a format specifier and returns the string as a
-// builderError.
-func errorf(format string, a ...interface{}) builderError {
-	err := fmt.Errorf(format, a...)
-	return builderError{err}
 }
 
 // unimplementedf formats according to a format specifier and returns a Postgres

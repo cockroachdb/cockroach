@@ -89,7 +89,7 @@ SELECT foo.a FROM abc AS foo (foo1)
 
 # Verify error for too many column aliases.
 
-query error source "foo" has 3 columns available but 4 columns specified
+query error pgcode 42P10 source "foo" has 3 columns available but 4 columns specified
 SELECT * FROM abc AS foo (foo1, foo2, foo3, foo4)
 
 

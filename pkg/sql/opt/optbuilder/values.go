@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -45,9 +46,10 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 
 	for _, tuple := range values.Tuples {
 		if numCols != len(tuple.Exprs) {
-			panic(errorf(
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeSyntaxError,
 				"VALUES lists must all be the same length, expected %d columns, found %d",
-				numCols, len(tuple.Exprs)))
+				numCols, len(tuple.Exprs))})
 		}
 
 		for i, expr := range tuple.Exprs {
@@ -60,7 +62,8 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 			if colTypes[i] == types.Unknown {
 				colTypes[i] = typ
 			} else if typ != types.Unknown && !typ.Equivalent(colTypes[i]) {
-				panic(errorf("VALUES list type mismatch, %s for %s", typ, colTypes[i]))
+				panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+					"VALUES types %s and %s cannot be matched", typ, colTypes[i])})
 			}
 		}
 

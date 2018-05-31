@@ -1194,12 +1194,12 @@ error (42804): JOIN/USING types int for left and string for right cannot be matc
 build
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))
 ----
-error: cannot join columns from the same source name "onecolumn" (missing AS clause)
+error (42712): source name "onecolumn" specified more than once (missing AS clause)
 
 build
 SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 ----
-error: cannot join columns from the same source name "onecolumn" (missing AS clause)
+error (42712): source name "onecolumn" specified more than once (missing AS clause)
 
 # Check that star expansion works across anonymous sources.
 build
