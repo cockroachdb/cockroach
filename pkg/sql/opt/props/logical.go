@@ -280,6 +280,11 @@ func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, 
 	fmt.Fprintf(buf, "%d", id)
 	buf.WriteByte('(')
 	buf.WriteString(typ.String())
+
+	if !p.Relational.NotNullCols.SubsetOf(p.Relational.OutputCols) {
+		panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
+			p.Relational.NotNullCols, p.Relational.OutputCols))
+	}
 	if p.Relational.NotNullCols.Contains(int(id)) {
 		buf.WriteString("!null")
 	}

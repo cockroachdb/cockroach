@@ -242,3 +242,51 @@ select
       └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
            ├── variable: abcd.b [type=int, outer=(2)]
            └── variable: abcd.d [type=int, outer=(4)]
+
+# Test outer column in select filter that is part of a not-null constraint.
+build
+SELECT * FROM abcd WHERE (SELECT COUNT(*) FROM xy WHERE y = b) > 0
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ ├── stats: [rows=333]
+ └── select
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
+      ├── stats: [rows=333]
+      ├── keys: (5)
+      ├── scan abcd
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
+      └── filters [type=bool, outer=(2)]
+           └── gt [type=bool, outer=(2)]
+                ├── subquery [type=int, outer=(2)]
+                │    └── max1-row
+                │         ├── columns: count:8(int)
+                │         ├── outer: (2)
+                │         ├── cardinality: [1 - 1]
+                │         ├── stats: [rows=1]
+                │         └── group-by
+                │              ├── columns: count:8(int)
+                │              ├── outer: (2)
+                │              ├── cardinality: [1 - 1]
+                │              ├── stats: [rows=1]
+                │              ├── project
+                │              │    ├── outer: (2)
+                │              │    ├── stats: [rows=111]
+                │              │    └── select
+                │              │         ├── columns: x:6(int!null) y:7(int!null)
+                │              │         ├── outer: (2)
+                │              │         ├── stats: [rows=111]
+                │              │         ├── keys: (6)
+                │              │         ├── scan xy
+                │              │         │    ├── columns: x:6(int!null) y:7(int)
+                │              │         │    ├── stats: [rows=1000]
+                │              │         │    └── keys: (6)
+                │              │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+                │              │              └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+                │              │                   ├── variable: xy.y [type=int, outer=(7)]
+                │              │                   └── variable: abcd.b [type=int, outer=(2)]
+                │              └── aggregations
+                │                   └── count-rows [type=int]
+                └── const: 0 [type=int]
