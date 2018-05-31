@@ -157,6 +157,9 @@ var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = struct {
 	*cliContext
 
+	// setStmts is a list of \set commands to execute before entering the sql shell.
+	setStmts statementsValue
+
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
 

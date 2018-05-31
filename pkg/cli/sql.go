@@ -1038,10 +1038,9 @@ func (c *cliState) doDecidePath() cliStateEnum {
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(conn *sqlConn) (exitErr error) {
-	c := cliState{conn: conn}
-
+func runInteractive(c *cliState) (exitErr error) {
 	state := cliStart
+
 	for {
 		if state == cliStop {
 			break
@@ -1169,11 +1168,24 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
+	c := cliState{conn: conn}
+
+	if len(sqlCtx.setStmts) > 0 {
+		// Execute any \set commands to allow setting client variables
+		// before statement execution non-interactive mode.
+		for i := 0; i < len(sqlCtx.setStmts); i++ {
+			if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
+				return c.exitErr
+			}
+		}
+	}
+
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(conn, sqlCtx.execStmts)
 	}
-	return runInteractive(conn)
+
+	return runInteractive(&c)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is

@@ -86,5 +86,5 @@ func runDemo(_ *cobra.Command, _ []string) error {
 # Admin UI: %s
 #
 `, server.AdminURL())
-	return runInteractive(conn)
+	return runInteractive(&cliState{conn: conn})
 }

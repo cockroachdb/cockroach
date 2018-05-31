@@ -143,7 +143,7 @@ select '''
 		stdin = f
 
 		out, err := captureOutput(func() {
-			err := runInteractive(conn)
+			err := runInteractive(&cliState{conn: conn})
 			if err != nil {
 				t.Fatal(err)
 			}
