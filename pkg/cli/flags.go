@@ -325,6 +325,7 @@ func init() {
 
 	for _, cmd := range []*cobra.Command{sqlShellCmd, demoCmd} {
 		f := cmd.Flags()
+		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		VarFlag(f, &sqlCtx.execStmts, cliflags.Execute)
 		BoolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
 	}

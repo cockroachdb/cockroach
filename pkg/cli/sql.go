@@ -1085,6 +1085,21 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
+			if len(sqlCtx.setStmts) > 0 {
+				// Execute any \set commands to allow setting client variables
+				// before statement execution non-interactive mode.
+				for i := range sqlCtx.setStmts {
+					if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
+						return c.exitErr
+					}
+				}
+			}
+
+			if len(sqlCtx.execStmts) > 0 {
+				// Single-line sql; run as simple as possible, without noise on stdout.
+				return c.runStatements(sqlCtx.execStmts)
+			}
+
 			if cliCtx.terminalOutput {
 				// If results are shown on a terminal also enable printing of
 				// times by default.
@@ -1164,17 +1179,34 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string) error {
-	for _, stmt := range stmts {
-		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt)); err != nil {
-			// Expand the details and hints so that they are printed to the user.
-			var buf bytes.Buffer
-			buf.WriteString(err.Error())
-			maybeShowErrorDetails(&buf, err, true)
-			return errors.New(strings.TrimSuffix(buf.String(), "\n"))
+func (c *cliState) runStatements(stmts []string) error {
+	for i, stmt := range stmts {
+		// We do not use the logic from doRunStatement here
+		// because we need a different error handling mechanism:
+		// the error, if any, must not be printed to stderr if
+		// we are returning directly.
+		c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+		if c.exitErr != nil {
+			if !c.errExit && i < len(stmts)-1 {
+				// Print the error now because we don't get a chance later.
+				fmt.Fprintln(stderr, c.exitErr)
+				maybeShowErrorDetails(stderr, c.exitErr, false)
+			}
+			if c.errExit {
+				break
+			}
 		}
 	}
-	return nil
+
+	if c.exitErr != nil {
+		// Don't write the error to stderr ourselves. Cobra will do this for
+		// us on the exit path. We do want the details though, so add them.
+		var buf bytes.Buffer
+		fmt.Fprintln(&buf, c.exitErr)
+		maybeShowErrorDetails(&buf, c.exitErr, false)
+		c.exitErr = errors.New(strings.TrimSuffix(buf.String(), "\n"))
+	}
+	return c.exitErr
 }
 
 // checkInteractive sets the isInteractive parameter depending on the
@@ -1216,10 +1248,6 @@ func runClient(cmd *cobra.Command, conn *sqlConn) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	if len(sqlCtx.execStmts) > 0 {
-		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts)
-	}
 	return runInteractive(conn)
 }
 
