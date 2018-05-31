@@ -903,6 +903,24 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.JSON,
+			RightType:  types.TArray{Typ: types.String},
+			ReturnType: types.JSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				j := left.(*DJSON).JSON
+				arr := *MustBeDArray(right)
+
+				for _, str := range arr.Array {
+					var err error
+					j, _, err = j.RemoveString(string(MustBeDString(str)))
+					if err != nil {
+						return nil, err
+					}
+				}
+				return &DJSON{j}, nil
+			},
+		},
+		BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.Int,
