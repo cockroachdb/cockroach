@@ -1687,17 +1687,19 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	post := distsqlrun.PostProcessSpec{
 		Filter: distsqlplan.MakeExpression(
 			n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */),
-		Projection:    true,
-		OutputColumns: getOutputColumnsFromScanNode(n.table, getScanNodeToTableOrdinalMap(n.table)),
+		Projection: true,
 	}
 
-	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
-	// output stream.
-	for i := range plan.planToStreamColMap {
-		plan.planToStreamColMap[i] = -1
-	}
-	for i, col := range post.OutputColumns {
-		plan.planToStreamColMap[col] = i
+	// Calculate the output columns from n.cols.
+	post.OutputColumns = make([]uint32, 0, len(n.cols))
+	plan.planToStreamColMap = makePlanToStreamColMap(len(n.cols))
+
+	for i := range n.cols {
+		if !n.resultColumns[i].Omitted {
+			plan.planToStreamColMap[i] = len(post.OutputColumns)
+			ord := tableOrdinal(n.table.desc, n.cols[i].ID)
+			post.OutputColumns = append(post.OutputColumns, uint32(ord))
+		}
 	}
 
 	types, err := getTypesForPlanResult(n, plan.planToStreamColMap)
