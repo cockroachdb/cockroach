@@ -519,20 +519,24 @@ semi-join-apply
  │    │    ├── outer: (2)
  │    │    ├── keys: (6)
  │    │    ├── left-join
- │    │    │    ├── columns: x:6(int!null) y:7(int) v:9(int)
+ │    │    │    ├── columns: x:6(int!null) y:7(int) v:9(int) notnull:12(bool)
  │    │    │    ├── outer: (2)
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    └── keys: (6)
- │    │    │    ├── scan uv
- │    │    │    │    └── columns: v:9(int)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: notnull:12(bool!null) v:9(int)
+ │    │    │    │    ├── scan uv
+ │    │    │    │    │    └── columns: v:9(int)
+ │    │    │    │    └── projections [outer=(9)]
+ │    │    │    │         └── true [type=bool]
  │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
- │    │    └── aggregations [outer=(2,7,9)]
+ │    │    └── aggregations [outer=(7,9,12)]
  │    │         ├── sum [type=decimal, outer=(9)]
  │    │         │    └── variable: uv.v [type=int, outer=(9)]
- │    │         ├── count [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         ├── count [type=int, outer=(12)]
+ │    │         │    └── variable: notnull [type=bool, outer=(12)]
  │    │         └── any-not-null [type=int, outer=(7)]
  │    │              └── variable: xy.y [type=int, outer=(7)]
  │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
@@ -939,9 +943,9 @@ project
       │    │    │    │    │    └── columns: xy.y:7(int)
       │    │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │    └── aggregations [outer=(1-5)]
-      │    │    │         ├── count [type=int, outer=(1)]
-      │    │    │         │    └── variable: a.k [type=int, outer=(1)]
+      │    │    │    └── aggregations [outer=(2-5,7)]
+      │    │    │         ├── count [type=int, outer=(7)]
+      │    │    │         │    └── variable: xy.y [type=int, outer=(7)]
       │    │    │         ├── any-not-null [type=int, outer=(2)]
       │    │    │         │    └── variable: a.i [type=int, outer=(2)]
       │    │    │         ├── any-not-null [type=float, outer=(3)]
@@ -993,9 +997,9 @@ project
       │    │    │    └── keys: (6)
       │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │         └── a.k = uv.u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    └── aggregations [outer=(1-5)]
-      │         ├── count [type=int, outer=(1)]
-      │         │    └── variable: a.k [type=int, outer=(1)]
+      │    └── aggregations [outer=(2-6)]
+      │         ├── count [type=int, outer=(6)]
+      │         │    └── variable: uv.u [type=int, outer=(6)]
       │         ├── any-not-null [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
       │         ├── any-not-null [type=float, outer=(3)]
@@ -1209,9 +1213,9 @@ project
  │    │    │    └── columns: xy.y:20(int)
  │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
  │    │         └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
- │    └── aggregations [outer=(1,7)]
- │         ├── count [type=int, outer=(1)]
- │         │    └── variable: a.k [type=int, outer=(1)]
+ │    └── aggregations [outer=(7,20)]
+ │         ├── count [type=int, outer=(20)]
+ │         │    └── variable: xy.y [type=int, outer=(20)]
  │         └── any-not-null [type=int, outer=(7)]
  │              └── variable: xy.x [type=int, outer=(7)]
  └── projections [outer=(7,21)]
