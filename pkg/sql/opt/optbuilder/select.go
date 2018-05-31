@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -119,9 +121,11 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(scope.cols) {
 				srcName := tree.ErrString(&tableAlias)
-				panic(errorf(
+				panic(builderError{pgerror.NewErrorf(
+					pgerror.CodeInvalidColumnReferenceError,
 					"source %q has %d columns available but %d columns specified",
-					srcName, aliasIdx, len(colAlias)))
+					srcName, aliasIdx, len(colAlias),
+				)})
 			}
 			if scope.cols[colIdx].hidden {
 				continue
@@ -207,13 +211,17 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		wrapped = stmt.Select
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
-				panic(errorf("multiple ORDER BY clauses not allowed"))
+				panic(builderError{pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
+				)})
 			}
 			orderBy = stmt.OrderBy
 		}
 		if stmt.Limit != nil {
 			if limit != nil {
-				panic(errorf("multiple LIMIT clauses not allowed"))
+				panic(builderError{pgerror.NewErrorf(
+					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
+				)})
 			}
 			limit = stmt.Limit
 		}
@@ -231,7 +239,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		outScope = b.buildValuesClause(t, inScope)
 
 	default:
-		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
+		panic(fmt.Errorf("unknown select statement: %T", stmt.Select))
 	}
 
 	if outScope.physicalProps.Ordering == nil && orderBy != nil {

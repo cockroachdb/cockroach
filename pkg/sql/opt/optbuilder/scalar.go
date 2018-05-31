@@ -126,10 +126,10 @@ func (b *Builder) buildScalarHelper(
 			// Non-grouping column was referenced. Note that a column that is part
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
-			panic(errorf(
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeGroupingError,
 				"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 				tree.ErrString(&t.name),
-			))
+			)})
 		}
 		return b.finishBuildScalarRef(t, label, inScope, outScope)
 
@@ -155,29 +155,23 @@ func (b *Builder) buildScalarHelper(
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.BinaryExpr:
+		// It's possible for an overload to be selected that expects different
+		// types than the TypedExpr arguments return:
+		//
+		//   ARRAY[1, 2] || NULL
+		//
+		// This is a tricky case, because the type checker selects []int as the
+		// type of the right argument, but then types it as unknown. This causes
+		// issues for the execbuilder, which doesn't have enough information to
+		// select the right overload. The solution is to wrap any mismatched
+		// arguments with a CastExpr that preserves the static type.
 		fn := binaryOpMap[t.Operator]
-		if fn != nil {
-			// It's possible for an overload to be selected that expects different
-			// types than the TypedExpr arguments return:
-			//
-			//   ARRAY[1, 2] || NULL
-			//
-			// This is a tricky case, because the type checker selects []int as the
-			// type of the right argument, but then types it as unknown. This causes
-			// issues for the execbuilder, which doesn't have enough information to
-			// select the right overload. The solution is to wrap any mismatched
-			// arguments with a CastExpr that preserves the static type.
-			left, _ := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
-			right, _ := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
-			out = fn(b.factory,
-				b.buildScalarHelper(left, "", inScope, nil),
-				b.buildScalarHelper(right, "", inScope, nil),
-			)
-		} else if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
-		} else {
-			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
-		}
+		left, _ := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
+		right, _ := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
+		out = fn(b.factory,
+			b.buildScalarHelper(left, "", inScope, nil),
+			b.buildScalarHelper(right, "", inScope, nil),
+		)
 
 	case *tree.CaseExpr:
 		var condType types.T
@@ -229,9 +223,7 @@ func (b *Builder) buildScalarHelper(
 			right := b.buildScalarHelper(t.TypedRight(), "", inScope, nil)
 
 			// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
-			// and All to various formulations of the opt Exists operator. For now,
-			// avoid an 'unused' linter complaint.
-			_ = tree.NewTypedComparisonExprWithSubOp
+			// and All to various formulations of the opt Exists operator.
 
 			fn := comparisonOpMap[t.Operator]
 			if fn != nil {

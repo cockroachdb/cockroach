@@ -288,7 +288,8 @@ func renameSource(
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(src.info.SourceColumns) {
 				srcName := tree.ErrString(&tableAlias)
-				return planDataSource{}, errors.Errorf(
+				return planDataSource{}, pgerror.NewErrorf(
+					pgerror.CodeInvalidColumnReferenceError,
 					"source %q has %d columns available but %d columns specified",
 					srcName, aliasIdx, len(colAlias))
 			}

@@ -142,7 +142,7 @@ SELECT (1, 2) = ALL(SELECT 1, 2)
 ----
 true
 
-query error subquery must return only one column, found 2
+query error pgcode 42601 subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
 
 query error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
@@ -233,7 +233,7 @@ SELECT * FROM xyz
 statement error value type tuple{int, int} doesn't match type INT of column "z"
 UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
 
-statement error subquery must return 2 columns, found 1
+statement error pgcode 42601 subquery must return 2 columns, found 1
 UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
 
 #regression, see #6852

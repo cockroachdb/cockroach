@@ -91,7 +91,7 @@ sort
 build
 SELECT DISTINCT c FROM t ORDER BY b DESC
 ----
-error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select list
 
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
@@ -362,7 +362,7 @@ limit
 build
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 ----
-error: multiple ORDER BY clauses not allowed
+error (42601): multiple ORDER BY clauses not allowed
 
 build
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
@@ -372,22 +372,22 @@ error: incompatible value type: expected c to be of type int, found type bool
 build
 SELECT * FROM t ORDER BY 0
 ----
-error: ORDER BY position 0 is not in select list
+error (42P10): ORDER BY position 0 is not in select list
 
 build
 SELECT * FROM t ORDER BY true
 ----
-error: non-integer constant in ORDER BY: true
+error (42601): non-integer constant in ORDER BY: true
 
 build
 SELECT * FROM t ORDER BY 'a'
 ----
-error: non-integer constant in ORDER BY: 'a'
+error (42601): non-integer constant in ORDER BY: 'a'
 
 build
 SELECT * FROM t ORDER BY 2.5
 ----
-error: non-integer constant in ORDER BY: 2.5
+error (42601): non-integer constant in ORDER BY: 2.5
 
 build
 SELECT * FROM t ORDER BY foo
@@ -908,3 +908,8 @@ project
  └── scan abcd
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       └── ordering: +1,+2,+3
+
+build
+SELECT ARRAY[a] FROM abcd ORDER BY 1
+----
+error (0A000): can't order by column type int[]
