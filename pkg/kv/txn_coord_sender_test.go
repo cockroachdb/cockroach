@@ -745,10 +745,10 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	defer s.Stop()
 
 	// Set heartbeat interval to 1ms for testing.
-	tc := s.DB.GetSender().(*TxnCoordSender)
-	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
+	s.DB.GetFactory().(*TxnCoordSenderFactory).heartbeatInterval = 1 * time.Millisecond
 
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	tc := txn.Sender().(*TxnCoordSender)
 	if err := txn.Put(context.TODO(), key, value); err != nil {
 		t.Fatal(err)
 	}
@@ -762,10 +762,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	}()
 
 	// Now, advance clock past the default client timeout.
-	// Locking the TxnCoordSender to prevent a data race.
-	tc.mu.Lock()
 	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
-	tc.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
