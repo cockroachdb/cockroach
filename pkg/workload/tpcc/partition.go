@@ -25,16 +25,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func configureZone(db *gosql.DB, table, partition string, constraint int) {
+// configureZone sets up zone configs for previously created partitions. By default it adds constraints
+// in terms of racks, but if the zones flag is passed into tpcc, it will set the constraints based on the
+// geographic zones provided.
+func configureZone(db *gosql.DB, table, partition string, constraint int, zones []string) {
+	var constraints string
+	if len(zones) > 0 {
+		constraints = fmt.Sprintf("[+zone=%s]", zones[constraint])
+	} else {
+		constraints = fmt.Sprintf("[+rack=%d]", constraint)
+	}
+
 	sql := fmt.Sprintf(
-		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [+rack=%d]'`,
-		partition, table, constraint)
+		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: %s'`,
+		partition, table, constraints)
 	if _, err := db.Exec(sql); err != nil {
 		panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
 	}
 }
 
-func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int) {
+func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE warehouse PARTITION BY RANGE (w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -50,11 +60,11 @@ func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, "warehouse", fmt.Sprintf("p%d", i), i)
+		configureZone(db, "warehouse", fmt.Sprintf("p%d", i), i, zones)
 	}
 }
 
-func partitionDistrict(db *gosql.DB, wIDs []int, partitions int) {
+func partitionDistrict(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE district PARTITION BY RANGE (d_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -70,11 +80,11 @@ func partitionDistrict(db *gosql.DB, wIDs []int, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, "district", fmt.Sprintf("p%d", i), i)
+		configureZone(db, "district", fmt.Sprintf("p%d", i), i, zones)
 	}
 }
 
-func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int) {
+func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE new_order PARTITION BY RANGE (no_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -90,11 +100,11 @@ func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, "new_order", fmt.Sprintf("p%d", i), i)
+		configureZone(db, "new_order", fmt.Sprintf("p%d", i), i, zones)
 	}
 }
 
-func partitionOrder(db *gosql.DB, wIDs []int, partitions int) {
+func partitionOrder(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	targets := []string{
 		`TABLE "order"`,
 		`INDEX "order"@order_idx`,
@@ -119,12 +129,12 @@ func partitionOrder(db *gosql.DB, wIDs []int, partitions int) {
 
 	for i := 0; i < partitions; i++ {
 		for j := range targets {
-			configureZone(db, `"order"`, fmt.Sprintf("p%d_%d", j, i), i)
+			configureZone(db, `"order"`, fmt.Sprintf("p%d_%d", j, i), i, zones)
 		}
 	}
 }
 
-func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int) {
+func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	data := []struct {
 		target string
 		column string
@@ -151,12 +161,12 @@ func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int) {
 
 	for i := 0; i < partitions; i++ {
 		for j := range data {
-			configureZone(db, `order_line`, fmt.Sprintf("p%d_%d", j, i), i)
+			configureZone(db, `order_line`, fmt.Sprintf("p%d_%d", j, i), i, zones)
 		}
 	}
 }
 
-func partitionStock(db *gosql.DB, wIDs []int, partitions int) {
+func partitionStock(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE stock PARTITION BY RANGE (s_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -194,12 +204,12 @@ func partitionStock(db *gosql.DB, wIDs []int, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, "stock", fmt.Sprintf("p%d", i), i)
-		configureZone(db, "stock", fmt.Sprintf("p1_%d", i), i)
+		configureZone(db, "stock", fmt.Sprintf("p%d", i), i, zones)
+		configureZone(db, "stock", fmt.Sprintf("p1_%d", i), i, zones)
 	}
 }
 
-func partitionCustomer(db *gosql.DB, wIDs []int, partitions int) {
+func partitionCustomer(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	targets := []string{
 		`TABLE customer`,
 		`INDEX customer@customer_idx`,
@@ -223,12 +233,12 @@ func partitionCustomer(db *gosql.DB, wIDs []int, partitions int) {
 
 	for i := 0; i < partitions; i++ {
 		for j := range targets {
-			configureZone(db, `customer`, fmt.Sprintf("p%d_%d", j, i), i)
+			configureZone(db, `customer`, fmt.Sprintf("p%d_%d", j, i), i, zones)
 		}
 	}
 }
 
-func partitionHistory(db *gosql.DB, wIDs []int, partitions int) {
+func partitionHistory(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	const maxVal = math.MaxUint64
 	temp := make([]byte, 16)
 	rowids := make([]uuid.UUID, partitions+1)
@@ -286,14 +296,14 @@ func partitionHistory(db *gosql.DB, wIDs []int, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, `history`, fmt.Sprintf("p%d", i), i)
+		configureZone(db, `history`, fmt.Sprintf("p%d", i), i, zones)
 		for j := range data {
-			configureZone(db, `history`, fmt.Sprintf("p%d_%d", j, i), i)
+			configureZone(db, `history`, fmt.Sprintf("p%d_%d", j, i), i, zones)
 		}
 	}
 }
 
-func partitionItem(db *gosql.DB, partitions int) {
+func partitionItem(db *gosql.DB, partitions int, zones []string) {
 	const nItems = 100000
 	iIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
@@ -316,26 +326,26 @@ func partitionItem(db *gosql.DB, partitions int) {
 	}
 
 	for i := 0; i < partitions; i++ {
-		configureZone(db, "item", fmt.Sprintf("p%d", i), i)
+		configureZone(db, "item", fmt.Sprintf("p%d", i), i, zones)
 	}
 }
 
-func partitionTables(db *gosql.DB, warehouses, partitions int) {
+func partitionTables(db *gosql.DB, warehouses, partitions int, zones []string) {
 	wIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
 		wIDs[i] = i * (warehouses / partitions)
 	}
 	wIDs[partitions] = warehouses
 
-	partitionWarehouse(db, wIDs, partitions)
-	partitionDistrict(db, wIDs, partitions)
-	partitionNewOrder(db, wIDs, partitions)
-	partitionOrder(db, wIDs, partitions)
-	partitionOrderLine(db, wIDs, partitions)
-	partitionStock(db, wIDs, partitions)
-	partitionCustomer(db, wIDs, partitions)
-	partitionHistory(db, wIDs, partitions)
-	partitionItem(db, partitions)
+	partitionWarehouse(db, wIDs, partitions, zones)
+	partitionDistrict(db, wIDs, partitions, zones)
+	partitionNewOrder(db, wIDs, partitions, zones)
+	partitionOrder(db, wIDs, partitions, zones)
+	partitionOrderLine(db, wIDs, partitions, zones)
+	partitionStock(db, wIDs, partitions, zones)
+	partitionCustomer(db, wIDs, partitions, zones)
+	partitionHistory(db, wIDs, partitions, zones)
+	partitionItem(db, partitions, zones)
 }
 
 func isTableAlreadyPartitioned(db *gosql.DB) (bool, error) {

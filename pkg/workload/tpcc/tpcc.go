@@ -60,6 +60,7 @@ type tpcc struct {
 
 	partitions        int
 	affinityPartition int
+	zones             []string
 
 	usePostgres  bool
 	serializable bool
@@ -105,6 +106,7 @@ var tpccMeta = workload.Meta{
 			`split`:              {RuntimeOnly: true},
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
+			`zones`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
@@ -129,6 +131,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
+		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		return g
@@ -158,15 +161,19 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			if w.affinityPartition != -1 && w.partitions == 0 {
-				return errors.Errorf(`--affinityPartition requires --partitions`)
+				return errors.Errorf(`--partition-affinity requires --partitions`)
 			}
 
 			if w.affinityPartition < -1 {
-				return errors.Errorf(`--affinityPartition should be greater than or equal to 0`)
+				return errors.Errorf(`--partition-affinity should be greater than or equal to 0`)
 			}
 
 			if w.affinityPartition > w.partitions-1 {
-				return errors.Errorf(`--affinityPartition should be less than the total number of partitions.`)
+				return errors.Errorf(`--partition-affinity should be less than the total number of partitions.`)
+			}
+
+			if len(w.zones) > 0 && (len(w.zones) != w.partitions) {
+				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
 
 			if w.serializable {
@@ -374,7 +381,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			splitTables(dbs[0], w.warehouses)
 
 			if w.partitions > 0 {
-				partitionTables(dbs[0], w.warehouses, w.partitions)
+				partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
 			}
 		}
 	} else {
