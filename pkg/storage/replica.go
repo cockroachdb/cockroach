@@ -3425,6 +3425,9 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 			log.Infof(ctx, "unquiescing: waking leader")
 		}
 		r.mu.quiescent = false
+		r.store.unquiescedReplicas.Lock()
+		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+		r.store.unquiescedReplicas.Unlock()
 		r.maybeCampaignOnWakeLocked(ctx)
 		// Propose an empty command which will wake the leader.
 		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommandV1(makeIDKey(), nil))
