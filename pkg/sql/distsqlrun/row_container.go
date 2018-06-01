@@ -17,9 +17,13 @@ package distsqlrun
 import (
 	"container/heap"
 	"context"
+	"fmt"
+	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -230,3 +234,135 @@ func (i memRowIterator) Row() (sqlbase.EncDatumRow, error) {
 
 // Close implements the rowIterator interface.
 func (i memRowIterator) Close() {}
+
+// fallbackRowContainer is a sortableRowContainer that uses a memRowContainer to
+// store rows and falls back to disk automatically if memory usage exceeds a
+// given budget.
+type fallbackRowContainer struct {
+	// src is the current sortableRowContainer that is being used to store rows.
+	// All the sortableRowContainer methods are redefined rather than delegating
+	// to an embedded struct because of how defer works:
+	// 	frc.init(...)
+	//	defer frc.Close(ctx)
+	// The Close will call memRowContainer.Close(ctx) even after falling back to
+	// disk.
+	src sortableRowContainer
+	// The following fields are used to create a diskRowContainer when falling
+	// back to disk.
+	engine      engine.Engine
+	diskMonitor *mon.BytesMonitor
+
+	// fallbackEnabled specifies whether the fallbackRowContainer should fall back
+	// to disk when encountering a memory limit.
+	fallbackEnabled bool
+}
+
+var _ sortableRowContainer = &fallbackRowContainer{}
+
+// init initializes a fallbackRowContainer.
+// Arguments:
+//	- ordering is the output ordering; the order in which rows should be sorted.
+//	- types is the schema of rows that will be added to this container.
+//	- evalCtx defines the context in which to evaluate comparisons, only used
+//    when storing rows in memory.
+//	- engine is the store used for rows when falling back to disk.
+//	- memoryMonitor is used to monitor the fallbackRowContainer's memory usage.
+//    If this monitor denies an allocation, the fallbackRowContainer will fall
+//    back to disk.
+//	- diskMonitor is used to monitor the fallbackRowContainer's disk usage if
+//    and when it falls back to disk.
+func (f *fallbackRowContainer) init(
+	ordering sqlbase.ColumnOrdering,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	engine engine.Engine,
+	memoryMonitor *mon.BytesMonitor,
+	diskMonitor *mon.BytesMonitor,
+) {
+	mrc := memRowContainer{}
+	mrc.initWithMon(ordering, types, evalCtx, memoryMonitor)
+	f.src = &mrc
+	f.engine = engine
+	f.diskMonitor = diskMonitor
+	f.fallbackEnabled = true
+}
+
+func (f *fallbackRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if err := f.src.AddRow(ctx, row); err != nil {
+		// Return the error only if it is not an out of memory error or fallback is
+		// disabled.
+		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) ||
+			!f.fallbackEnabled {
+			return err
+		}
+		if err := f.fallbackToDisk(ctx); err != nil {
+			return err
+		}
+		log.VEventf(ctx, 2, "fell back to disk")
+		// Add the row that caused the memory error.
+		return f.src.AddRow(ctx, row)
+	}
+	return nil
+}
+
+func (f *fallbackRowContainer) Sort(ctx context.Context) {
+	f.src.Sort(ctx)
+}
+
+func (f *fallbackRowContainer) NewIterator(ctx context.Context) rowIterator {
+	return f.src.NewIterator(ctx)
+}
+
+func (f *fallbackRowContainer) Close(ctx context.Context) {
+	f.src.Close(ctx)
+}
+
+// DisableFallback disables the default behavior of falling back to disk when
+// a memory limit is hit. If already disabled, this call is a noop.
+func (f *fallbackRowContainer) DisableFallback() {
+	f.fallbackEnabled = false
+}
+
+// EnableFallback enables the default behavior of falling back to disk when a
+// memory limit is hit. If already enabled, this call is a noop.
+func (f *fallbackRowContainer) EnableFallback() {
+	f.fallbackEnabled = true
+}
+
+// UsingDisk returns whether or not the fallbackRowContainer is currently using
+// disk.
+func (f *fallbackRowContainer) UsingDisk() bool {
+	if _, ok := f.src.(*diskRowContainer); ok {
+		return true
+	}
+	return false
+}
+
+func (f *fallbackRowContainer) fallbackToDisk(ctx context.Context) error {
+	mrc, ok := f.src.(*memRowContainer)
+	if !ok {
+		return fmt.Errorf(
+			"unexpected underlying row container %v", reflect.TypeOf(f.src),
+		)
+	}
+	drc := makeDiskRowContainer(f.diskMonitor, mrc.types, mrc.ordering, f.engine)
+	i := mrc.NewIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		memRow, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if err := drc.AddRow(ctx, memRow); err != nil {
+			return err
+		}
+	}
+	mrc.Close(ctx)
+	f.src = &drc
+	return nil
+}
