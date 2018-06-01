@@ -256,7 +256,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.LeaseInfoRequest:
 			case *roachpb.PushTxnRequest:
 			case *roachpb.QueryTxnRequest:
-			case *roachpb.DeprecatedRangeLookupRequest:
 			case *roachpb.ResolveIntentRequest:
 			case *roachpb.ResolveIntentRangeRequest:
 			case *roachpb.MergeRequest:
