@@ -9,24 +9,15 @@
 package importccl
 
 import (
-	"bytes"
-	"context"
 	gosql "database/sql"
-	"encoding/csv"
-	"encoding/hex"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -201,7 +192,7 @@ func getMysqlOutfileTestdata(t *testing.T) ([]testRow, []dumpCfg) {
 				HasEscape:      true,
 				Escape:         '"',
 			},
-			null: `\N`,
+			null: `"N`,
 		},
 	}
 
@@ -219,120 +210,4 @@ func getMysqlOutfileTestdata(t *testing.T) ([]testRow, []dumpCfg) {
 		writeMysqlOutfileTestdata(t, testRows, configs)
 	}
 	return testRows, configs
-}
-
-func TestMysqlOutfileReader(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testRows, configs := getMysqlOutfileTestdata(t)
-	ctx := context.TODO()
-	for _, config := range configs {
-		t.Run(config.name, func(t *testing.T) {
-			converter := newMysqloutfileReader(nil, config.opts, &sqlbase.TableDescriptor{}, nil)
-			converter.expectedCols = 3
-			// unblock batch chan sends
-			converter.csvInputReader.recordCh = make(chan csvRecord, 4)
-			converter.csvInputReader.batchSize = 10
-
-			in, err := os.Open(config.filename)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer in.Close()
-			if err := converter.readFile(ctx, in, 1, config.name, func(_ bool) error { return nil }); err != nil {
-				t.Fatal(err)
-			}
-			converter.inputFinished(ctx)
-
-			csvVersion := filepath.Join(filepath.Dir(config.filename), `test.out.csv`)
-			csvOut, err := os.Create(csvVersion)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer csvOut.Close()
-			w := csv.NewWriter(csvOut)
-
-			var res [][]string
-			var batches int
-			for b := range converter.csvInputReader.recordCh {
-				batches++
-				for _, r := range b.r {
-					if len(r) != 3 {
-						t.Fatalf("bad row len for %v", r)
-					}
-					// If the csv writing part of our conversion encodes as hex, we can
-					// round-trip bytes though the go csv parser.
-					orig := r[2]
-					r[2] = hex.EncodeToString([]byte(r[2]))
-					if err := w.Write(r); err != nil {
-						t.Fatal(err)
-					}
-					r[2] = orig
-					res = append(res, r)
-				}
-			}
-			if expected := 3; batches != expected {
-				t.Fatalf("expected %d batches got %d", expected, batches)
-			}
-			w.Flush()
-
-			if len(res) != len(testRows) {
-				t.Fatalf("expected %d rows, got %d: %v", len(testRows), len(res), res)
-			}
-
-			csvIn, err := os.Open(csvVersion)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer csvIn.Close()
-			rt := csv.NewReader(csvIn)
-			csvRows, err := rt.ReadAll()
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			for i, row := range testRows {
-				expected, actual := row.s, res[i][1]
-				if expected == injectNull {
-					expected = config.null
-				}
-				if expected != actual {
-					t.Fatalf("row %d (i %d=%s): expected:\n%q\ngot:\n%q\n", i, row.i, res[i][0], expected, actual)
-				}
-
-				// go csv reader normalizes \r\n to \n even inside fields.
-				expected = strings.Replace(expected, "\r\n", "\n", -1)
-				if csvVal := csvRows[i][1]; expected != csvVal {
-					t.Fatalf("row %d: expected value to round-trip though csv row %s, expected\n%q, got\n%q", row.i, csvRows[i][0], expected, csvVal)
-				}
-			}
-
-			for i, row := range testRows {
-
-				if expected, actual := row.i, res[i][0]; strconv.Itoa(expected) != actual {
-					t.Fatalf("row %d expected i = %q got %s", i, expected, actual)
-				}
-
-				expected := row.b
-				if expected == nil {
-					expected = []byte(config.null)
-				}
-
-				actual := []byte(res[i][2])
-				if !bytes.Equal(expected, actual) {
-					t.Fatalf("row %d (i %d=%s): expected:\n%q\ngot:\n%q\n", i, row.i, res[i][0], expected, actual)
-				}
-
-				csvVal, err := hex.DecodeString(csvRows[i][2])
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !bytes.Equal(expected, csvVal) {
-					t.Fatalf("row %d: expected bytes value to round-trip via csv expected %d bytes:\n%q, got %d:\n%q",
-						row.i, len(expected), expected, len(csvVal), csvVal)
-				}
-			}
-
-		})
-	}
 }

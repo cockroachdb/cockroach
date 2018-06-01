@@ -382,7 +382,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	case roachpb.IOFileFormat_CSV:
 		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, evalCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
-		conv = newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, evalCtx)
+		c, err := newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, evalCtx)
+		if err != nil {
+			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
+			return
+		}
+		conv = c
 	case roachpb.IOFileFormat_Mysqldump:
 		c, err := newMysqldumpReader(kvCh, &cp.tableDesc, evalCtx)
 		if err != nil {
