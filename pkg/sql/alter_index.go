@@ -95,8 +95,9 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
-	} else if descriptorChanged {
-		err = n.tableDesc.SetUpVersion()
+	} else if !descriptorChanged {
+		// Nothing to be done
+		return nil
 	}
 	if err != nil {
 		return err
