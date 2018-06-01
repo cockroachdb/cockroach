@@ -112,6 +112,7 @@ test      pg_catalog          pg_rewrite                         public  SELECT
 test      pg_catalog          pg_roles                           public  SELECT
 test      pg_catalog          pg_sequence                        public  SELECT
 test      pg_catalog          pg_settings                        public  SELECT
+test      pg_catalog          pg_stat_activity                   public  SELECT
 test      pg_catalog          pg_tables                          public  SELECT
 test      pg_catalog          pg_tablespace                      public  SELECT
 test      pg_catalog          pg_trigger                         public  SELECT

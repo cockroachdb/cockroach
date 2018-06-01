@@ -90,6 +90,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogTriggerTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
+		pgCatalogStatActivityTable,
 	},
 	// Postgres's catalogs are ill-defined when there is no current
 	// database set. Simply reject any attempts to use them in that
@@ -1887,6 +1888,36 @@ CREATE TABLE pg_catalog.pg_user_mapping (
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// This table stores the mapping to foreign server users.
 		// Foreign servers are not supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW
+var pgCatalogStatActivityTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_stat_activity (
+	datid OID,
+	datname NAME,
+	pid INTEGER,
+	usesysid OID,
+	username NAME,
+	application_name TEXT,
+	client_addr INET,
+	client_hostname TEXT,
+	client_port INTEGER,
+	backend_start TIMESTAMPTZ,
+	xact_start TIMESTAMPTZ,
+	query_start TIMESTAMPTZ,
+	state_change TIMESTAMPTZ,
+	wait_event_type TEXT,
+	wait_event TEXT,
+	state TEXT,
+	backend_xid INTEGER,
+	backend_xmin INTEGER,
+	query TEXT
+)
+`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
