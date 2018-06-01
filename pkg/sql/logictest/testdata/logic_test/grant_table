@@ -72,8 +72,10 @@ test      information_schema  columns                            public  SELECT
 test      information_schema  constraint_column_usage            public  SELECT
 test      information_schema  enabled_roles                      public  SELECT
 test      information_schema  key_column_usage                   public  SELECT
+test      information_schema  parameters                         public  SELECT
 test      information_schema  referential_constraints            public  SELECT
 test      information_schema  role_table_grants                  public  SELECT
+test      information_schema  routines                           public  SELECT
 test      information_schema  schema_privileges                  public  SELECT
 test      information_schema  schemata                           public  SELECT
 test      information_schema  sequences                          public  SELECT
