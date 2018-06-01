@@ -127,14 +127,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	if err := params.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
+	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
 		return err
 	}
 
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogCreateIndex,
@@ -150,12 +150,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			n.n.Table.TableName().FQString(), n.n.Name.String(), n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
-	); err != nil {
-		return err
-	}
-	params.p.notifySchemaChange(n.tableDesc, mutationID)
-
-	return nil
+	)
 }
 
 func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }

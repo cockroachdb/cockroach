@@ -651,9 +651,12 @@ func (p *planner) notifySchemaChange(
 	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
-// writeTableDesc effectively writes a table descriptor to the
-// database within the current planner transaction.
-func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+// writeSchemaChange effectively writes a table descriptor to the
+// database within the current planner transaction, and queues up
+// a schema changer for future processing.
+func (p *planner) writeSchemaChange(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) error {
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: virtual descriptors cannot be stored, found: %v", tableDesc)
@@ -677,7 +680,11 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
-	return p.txn.Put(ctx, descKey, descVal)
+	if err := p.txn.Put(ctx, descKey, descVal); err != nil {
+		return err
+	}
+	p.notifySchemaChange(tableDesc, mutationID)
+	return nil
 }
 
 // bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.

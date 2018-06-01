@@ -147,9 +147,8 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, err
 	}
 
-	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
+	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return newZeroNode(nil /* columns */), nil
 }
