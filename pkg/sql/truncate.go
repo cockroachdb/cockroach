@@ -214,10 +214,9 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		if err := table.SetUpVersion(); err != nil {
 			return err
 		}
-		if err := p.writeTableDesc(ctx, table); err != nil {
+		if err := p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
-		p.notifySchemaChange(table, sqlbase.InvalidMutationID)
 	}
 
 	// Reassign all self references.
@@ -250,7 +249,6 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
 		return err
 	}
-	p.notifySchemaChange(&newTableDesc, sqlbase.InvalidMutationID)
 
 	// Copy the zone config.
 	b = &client.Batch{}

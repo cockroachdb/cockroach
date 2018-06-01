@@ -187,9 +187,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			return err
 		}
 	}
-	if desc.Adding() {
-		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
-	}
 
 	params.p.Tables().addCreatedTable(id)
 
@@ -713,11 +710,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := td.ValidateTable(p.EvalContext().Settings); err != nil {
 		return err
 	}
-	if err := p.writeTableDesc(ctx, td); err != nil {
-		return err
-	}
-	p.notifySchemaChange(td, sqlbase.InvalidMutationID)
-	return nil
+	return p.writeSchemaChange(ctx, td, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) addInterleave(

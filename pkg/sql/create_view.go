@@ -176,9 +176,6 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if desc.Adding() {
-		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
-	}
 	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
 		return err
 	}
