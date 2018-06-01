@@ -2129,12 +2129,12 @@ func (r *Replica) adminScatter(
 		for re := retry.StartWithCtx(ctx, retryOpts); re.Next() && replicasAdded < replicasToAdd; {
 			requeue, err := rq.processOneChange(ctx, r, sysCfg, func() bool { return false } /* canTransferLease */, false /* dryRun */, true /* disableStatsBasedRebalancing */, true /* forceAddReplica */)
 			if err != nil {
-				if IsSnapshotError(err) {
+				if IsSnapshotError(err) || IsThrottledStoresError(err) {
 					// TODO: remove
-					log.Infof(ctx, "encountered snapshot error when adding replica for scatter: %s", err)
+					log.Infof(ctx, "encountered retriable error when adding replica for scatter: %s", err)
 					continue
 				}
-				log.Warningf(ctx, "encountered error when adding replica for scatter: %s", err)
+				log.Warningf(ctx, "encountered non-retriable error when adding replica for scatter: %s", err)
 				break
 			}
 			replicasAdded++
@@ -2160,7 +2160,7 @@ func (r *Replica) adminScatter(
 				log.Infof(ctx, "encountered snapshot error from replicate queue during scatter: %s", err)
 				continue
 			}
-			log.Warningf(ctx, "encountered error from replicate queue during scatter: %s", err)
+			log.Warningf(ctx, "encountered non-retriable error from replicate queue during scatter: %s", err)
 			break
 		}
 		if !requeue {

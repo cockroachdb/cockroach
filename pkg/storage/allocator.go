@@ -150,6 +150,21 @@ func (*allocatorError) purgatoryErrorMarker() {}
 
 var _ purgatoryError = &allocatorError{}
 
+type throttledStoresError struct {
+	numThrottledStores int
+}
+
+func (t *throttledStoresError) Error() string {
+	return fmt.Sprintf("%d matching stores are currently throttled", t.numThrottledStores)
+}
+
+// IsThrottledStoresError returns true iff the error indicates the allocator
+// couldn't take action because too many stores were throttled.
+func IsThrottledStoresError(err error) bool {
+	_, ok := err.(*throttledStoresError)
+	return ok
+}
+
 // allocatorRand pairs a rand.Rand with a mutex.
 // NOTE: Allocator is typically only accessed from a single thread (the
 // replication queue), but this assumption is broken in tests which force
@@ -361,7 +376,7 @@ func (a *Allocator) AllocateTarget(
 	// When there are throttled stores that do match, we shouldn't send
 	// the replica to purgatory.
 	if throttledStoreCount > 0 {
-		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+		return nil, "", &throttledStoresError{numThrottledStores: throttledStoreCount}
 	}
 	return nil, "", &allocatorError{
 		constraints:     zone.Constraints,
