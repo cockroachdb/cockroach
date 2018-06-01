@@ -415,7 +415,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS hlc.Timestamp
 	for i := 0; i < 3; i++ {
 		testutils.SucceedsSoon(t, func() error {
-			txn, pErr := getTxn(s.DB, initialTxn.Proto())
+			txn, pErr := getTxn(context.Background(), initialTxn)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -463,19 +463,21 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *client.DB, txn *roachpb.Transaction) (*roachpb.Transaction, *roachpb.Error) {
+func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
+			Key: txn.Proto().Key,
 		},
 	}
-	reply, pErr := client.SendWrappedWith(context.Background(), db.GetSender(), roachpb.Header{
-		Txn: txn,
-	}, hb)
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: txn.Proto()}
+	ba.Add(hb)
+
+	br, pErr := txn.Send(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	return reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
+	return br.Txn, nil
 }
 
 func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
@@ -529,7 +531,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		// The transaction was pushed at least to conflictTxn's timestamp (but
 		// it could have been pushed more - the push takes a timestamp off the
 		// HLC).
-		pusheeTxn, pErr := getTxn(s.DB, txn.Proto())
+		pusheeTxn, pErr := getTxn(context.TODO(), txn)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
