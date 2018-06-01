@@ -308,9 +308,6 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
-			DisableMigrations: true,
-		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -879,9 +876,6 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
-		},
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
-			DisableMigrations: true,
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
