@@ -7,10 +7,32 @@ import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, storeSources } = props;
+  const { nodeIDs, nodesSummary, storeSources, tooltipSelection } = props;
 
   return [
-    <LineGraph title="Ranges" sources={storeSources}>
+    <LineGraph 
+    title="Ranges" 
+    sources={storeSources}
+    tooltip={(
+        <div>
+          {`Range information for ${tooltipSelection}:`}
+          <dl>
+            <dt>Ranges</dt>
+            <dd>Total number of ranges</dd>
+            <dt>Leaders</dt>
+            <dd>The number of ranges with leaders</dd>
+            <dt>Lease Holders</dt>
+            <dd>The number of ranges that have leases</dd>
+            <dt>Leaders w/o Lease</dt>
+            <dd>The number of Raft leaders without leases</dd>
+            <dt>Unavailable</dt>
+            <dd>The number of unavailable ranges</dd>
+            <dt>Under-replicated</dt>
+            <dd>The number of under-replicated ranges</dd>
+          </dl>
+        </div>
+      )}
+    >
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
         <Metric name="cr.store.replicas.leaders" title="Leaders" />
@@ -72,14 +94,14 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Replica Quiescence" sources={storeSources}>
+    <LineGraph title="Replica Quiescence" sources={storeSources} tooltip={`The total number of replicas and quiesced replicas. Quiesced replicas are ones that have not been accessed in a while.`}>
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
         <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Range Operations" sources={storeSources}>
+    <LineGraph title="Range Operations" sources={storeSources} tooltip={`Total ranges with split, add, or remove operations.`}>
       <Axis label="ranges">
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
         <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
@@ -87,7 +109,25 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Snapshots" sources={storeSources}>
+    <LineGraph
+    title="Snapshots" 
+    sources={storeSources} 
+    tooltip={(
+        <div>
+          {`When a node is far behind the log file for a range, the cluster can send it a snapshot of the range and it can start following the log from there.`}
+          <dl>
+            <dt>Generated</dt>
+            <dd>The number of snapshots created per second</dd>
+            <dt>Applied (Raft-initiated)</dt>
+            <dd>The number of snapshots applied to nodes per second that were initiated within Raft</dd>
+            <dt>Applied (Preemptive)</dt>
+            <dd>The number of snapshots applied to nodes per second that were anticipated ahead of time</dd>
+            <dt>Reserved</dt>
+            <dd>The number of slots reserved per second for incoming snapshots that will be sent to a node</dd>
+          </dl>
+        </div>
+      )}
+    >
       <Axis label="snapshots">
         <Metric name="cr.store.range.snapshots.generated" title="Generated" nonNegativeRate />
         <Metric name="cr.store.range.snapshots.normal-applied" title="Applied (Raft-initiated)" nonNegativeRate />
