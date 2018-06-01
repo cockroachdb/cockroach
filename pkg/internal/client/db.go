@@ -172,6 +172,14 @@ type DBContext struct {
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
 	NodeID *base.NodeIDContainer
+	// UseNonCancelableCtxForTxn, when set, means that db.Txn() doesn't signal
+	// transaction completion to the TxnCoordSender through context cancelation.
+	// This means that the TxnCoordSender will consider a transaction to be
+	// abandoned based on a timeout.
+	// TODO(andrei): This is only used by a few tests dealing with the timeout.
+	// Remove it once the TxnCoordSender is no longer concerned with abandoned
+	// transactions.
+	UseTimeoutTxnAbandonment bool
 }
 
 // DefaultDBContext returns (a copy of) the default options for
@@ -504,8 +512,11 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 
 	// TODO(andrei): revisit this when TxnSender is moved to the client
 	// (https://github.com/cockroachdb/cockroach/issues/10511).
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	if !db.ctx.UseTimeoutTxnAbandonment {
+		var cancel func()
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+	}
 	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
