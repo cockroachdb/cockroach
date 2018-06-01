@@ -116,7 +116,13 @@ func (b *Builder) buildScalarHelper(
 		// Change this to generate the string once for the top-level expression and
 		// check the relevant slice for this subexpression.
 		if col, ok := inScope.groupby.groupStrs[symbolicExprStr(scalar)]; ok {
-			return b.finishBuildScalarRef(col, label, inScope, outScope)
+			// We pass aggOutScope as the input scope because it contains all of
+			// the aggregates and grouping columns that are available for projection.
+			// finishBuildScalarRef wraps projected columns in a variable expression
+			// with a new column ID if they are not contained in the input scope, so
+			// passing in aggOutScope ensures we don't create new column IDs when not
+			// necessary.
+			return b.finishBuildScalarRef(col, label, inScope.groupby.aggOutScope, outScope)
 		}
 	}
 

@@ -201,7 +201,8 @@ func (b *Builder) finishBuildScalar(
 // is nil, then finishBuildScalarRef returns a Variable expression that refers
 // to the column. This expression can be nested within the larger expression
 // being constructed. If outScope is not nil, then finishBuildScalarRef adds the
-// column as a passthrough column to outScope.
+// column to outScope, either as a passthrough column (if it already exists in
+// the input scope), or a variable expression.
 //
 // col     Column containing the scalar expression that's been referenced.
 // label   If passthrough column is added, it will optionally be labeled with
@@ -216,6 +217,23 @@ func (b *Builder) finishBuildScalarRef(
 	// a Variable expression that can be embedded in outer expression(s).
 	if outScope == nil {
 		return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+	}
+
+	// Outer columns must be wrapped in a variable expression and assigned a new
+	// column id before projection.
+	if inScope.isOuterColumn(col.id) {
+		// Avoid synthesizing a new column if possible.
+		existing := outScope.findExistingCol(col)
+		if existing == nil {
+			if label == "" {
+				label = string(col.name)
+			}
+			group := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+			b.synthesizeColumn(outScope, label, col.typ, col, group)
+			return group
+		}
+
+		col = existing
 	}
 
 	// Project the column, which has the side effect of making it visible.
