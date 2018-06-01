@@ -221,13 +221,13 @@ func (p *planner) dropIndexByName(
 	if err != nil {
 		return err
 	}
-	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
+	if err := p.writeSchemaChange(ctx, tableDesc, mutationID); err != nil {
 		return err
 	}
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
+	return MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		ctx,
 		p.txn,
 		EventLogDropIndex,
@@ -242,10 +242,5 @@ func (p *planner) dropIndexByName(
 			CascadeDroppedViews []string
 		}{tn.FQString(), string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
 			droppedViews},
-	); err != nil {
-		return err
-	}
-	p.notifySchemaChange(tableDesc, mutationID)
-
-	return nil
+	)
 }
