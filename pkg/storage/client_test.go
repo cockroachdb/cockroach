@@ -444,7 +444,9 @@ func (t *multiTestContextKVTransport) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
+func (t *multiTestContextKVTransport) SendNext(
+	ctx context.Context,
+) (*roachpb.BatchResponse, error) {
 	rep := t.replicas[t.idx]
 	t.idx++
 	t.setPending(rep.ReplicaID, true)
@@ -464,52 +466,52 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 	t.mtc.mu.RLock()
 	s := t.mtc.stoppers[nodeIndex]
 	t.mtc.mu.RUnlock()
-	if s == nil || s.RunAsyncTask(ctx, "storage.multiTestContextKVTransport: calling next replica", func(ctx context.Context) {
-		t.mtc.mu.RLock()
-		sender := t.mtc.senders[nodeIndex]
-		t.mtc.mu.RUnlock()
-		// Make a copy and clone txn of batch args for sending.
-		baCopy := t.args
-		baCopy.Replica = rep.ReplicaDescriptor
-		if txn := baCopy.Txn; txn != nil {
-			txnClone := baCopy.Txn.Clone()
-			baCopy.Txn = &txnClone
-		}
-		br, pErr := sender.Send(ctx, baCopy)
-		if br == nil {
-			br = &roachpb.BatchResponse{}
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(sender, br))
-		}
-		br.Error = pErr
+	if s == nil {
+		t.setPending(rep.ReplicaID, false)
+		return nil, roachpb.NewSendError("store is stopped")
+	}
 
-		// On certain errors, we must expire leases to ensure that the
-		// next attempt has a chance of succeeding.
-		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.NotLeaseHolderError:
-			if leaseHolder := tErr.LeaseHolder; leaseHolder != nil {
-				t.mtc.mu.RLock()
-				leaseHolderStore := t.mtc.stores[leaseHolder.NodeID-1]
-				t.mtc.mu.RUnlock()
-				if leaseHolderStore == nil {
-					// The lease holder is known but down, so expire its lease.
-					t.mtc.advanceClock(ctx)
-				}
-			} else {
-				// stores has the range, is *not* the lease holder, but the
-				// lease holder is not known; this can happen if the lease
-				// holder is removed from the group. Move the manual clock
-				// forward in an attempt to expire the lease.
+	t.mtc.mu.RLock()
+	sender := t.mtc.senders[nodeIndex]
+	t.mtc.mu.RUnlock()
+	// Make a copy and clone txn of batch args for sending.
+	baCopy := t.args
+	baCopy.Replica = rep.ReplicaDescriptor
+	if txn := baCopy.Txn; txn != nil {
+		txnClone := baCopy.Txn.Clone()
+		baCopy.Txn = &txnClone
+	}
+	br, pErr := sender.Send(ctx, baCopy)
+	if br == nil {
+		br = &roachpb.BatchResponse{}
+	}
+	if br.Error != nil {
+		panic(roachpb.ErrorUnexpectedlySet(sender, br))
+	}
+	br.Error = pErr
+
+	// On certain errors, we must expire leases to ensure that the
+	// next attempt has a chance of succeeding.
+	switch tErr := pErr.GetDetail().(type) {
+	case *roachpb.NotLeaseHolderError:
+		if leaseHolder := tErr.LeaseHolder; leaseHolder != nil {
+			t.mtc.mu.RLock()
+			leaseHolderStore := t.mtc.stores[leaseHolder.NodeID-1]
+			t.mtc.mu.RUnlock()
+			if leaseHolderStore == nil {
+				// The lease holder is known but down, so expire its lease.
 				t.mtc.advanceClock(ctx)
 			}
+		} else {
+			// stores has the range, is *not* the lease holder, but the
+			// lease holder is not known; this can happen if the lease
+			// holder is removed from the group. Move the manual clock
+			// forward in an attempt to expire the lease.
+			t.mtc.advanceClock(ctx)
 		}
-		t.setPending(rep.ReplicaID, false)
-		done <- kv.BatchCall{Reply: br, Err: nil}
-	}) != nil {
-		t.setPending(rep.ReplicaID, false)
-		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
 	}
+	t.setPending(rep.ReplicaID, false)
+	return br, nil
 }
 
 func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {

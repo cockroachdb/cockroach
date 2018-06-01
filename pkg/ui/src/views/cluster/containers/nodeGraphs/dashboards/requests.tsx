@@ -6,15 +6,9 @@ import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources, nodeSources } = props;
+  const { storeSources } = props;
 
   return [
-    <LineGraph title="Slow Distsender Requests" sources={nodeSources}>
-      <Axis label="requests">
-        <Metric name="cr.node.requests.slow.distsender" title="Slow Distsender Requests" nonNegativeRate />
-      </Axis>
-    </LineGraph>,
-
     <LineGraph title="Slow Raft Proposals" sources={storeSources}>
       <Axis label="proposals">
         <Metric name="cr.store.requests.slow.raft" title="Slow Raft Proposals" nonNegativeRate />

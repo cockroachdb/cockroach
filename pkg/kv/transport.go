@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -50,14 +50,6 @@ type batchClient struct {
 	deadline   time.Time
 }
 
-// BatchCall contains a response and an RPC error (note that the
-// response contains its own roachpb.Error, which is separate from
-// BatchCall.Err), and is analogous to the net/rpc.Call struct.
-type BatchCall struct {
-	Reply *roachpb.BatchResponse
-	Err   error
-}
-
 // TransportFactory encapsulates all interaction with the RPC
 // subsystem, allowing it to be mocked out for testing. The factory
 // function returns a Transport object which is used to send the given
@@ -83,14 +75,12 @@ type Transport interface {
 	// GetPending returns the replica(s) to which requests are still pending.
 	GetPending() []roachpb.ReplicaDescriptor
 
-	// SendNext sends the rpc (captured at creation time) to the next
-	// replica. May panic if the transport is exhausted. Should not
-	// block; the transport is responsible for starting other goroutines
-	// as needed.
+	// SendNext synchronously sends the rpc (captured at creation time) to the
+	// next replica. May panic if the transport is exhausted.
 	//
 	// SendNext is also in charge of importing the remotely collected spans (if
 	// any) into the local trace.
-	SendNext(context.Context, chan<- BatchCall)
+	SendNext(context.Context) (*roachpb.BatchResponse, error)
 
 	// NextReplica returns the replica descriptor of the replica to be tried in
 	// the next call to SendNext. MoveToFront will cause the return value to
@@ -195,35 +185,18 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
+func (gt *grpcTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
 
 	gt.setState(client.args.Replica, true /* pending */, false /* retryable */)
-
-	// Fast path for case of a single replica; don't set cancellation
-	// on context or launch in a goroutine.
-	if len(gt.orderedClients) == 1 {
-		reply, err := gt.send(ctx, client)
-		done <- BatchCall{Reply: reply, Err: err}
-		return
-	}
 
 	{
 		var cancel func()
 		ctx, cancel = context.WithCancel(ctx)
 		gt.cancels = append(gt.cancels, cancel)
 	}
-	// Even though the transport may launch multiple goroutines which may
-	// overlap in activity, we trace everything to the master context. This is
-	// kosher because we make the caller wait for all activity to subside when
-	// they close the context, so there is no danger of use-after-finish.
-	gt.closeWG.Add(1)
-	go func() {
-		defer gt.closeWG.Done()
-		reply, err := gt.send(ctx, client)
-		done <- BatchCall{Reply: reply, Err: err}
-	}()
+	return gt.send(ctx, client)
 }
 
 func (gt *grpcTransport) send(
@@ -401,7 +374,7 @@ func (s *senderTransport) GetPending() []roachpb.ReplicaDescriptor {
 	return []roachpb.ReplicaDescriptor{s.args.Replica}
 }
 
-func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
+func (s *senderTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	if s.called {
 		panic("called an exhausted transport")
 	}
@@ -433,7 +406,7 @@ func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 		}
 	}
 
-	done <- BatchCall{Reply: br}
+	return br, nil
 }
 
 func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
