@@ -458,12 +458,14 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		for _, test := range testCases {
 			t.Run(fmt.Sprintf("key=%s", test.key), func(t *testing.T) {
 				lookup := client.RangeLookup
+				rc := roachpb.READ_UNCOMMITTED
 				if legacy {
 					lookup = client.LegacyRangeLookup
+					rc = roachpb.INCONSISTENT
 				}
 
 				rs, preRs, err := lookup(context.Background(), store.TestSender(), test.key.AsRawKey(),
-					roachpb.INCONSISTENT, test.maxResults-1, true /* prefetchReverse */)
+					rc, test.maxResults-1, true /* prefetchReverse */)
 				if err != nil {
 					t.Fatalf("LookupRange error: %s", err)
 				}

@@ -339,12 +339,9 @@ message ScanOptions {
 message ScanRequest {
   option (gogoproto.equal) = true;
 
-  reserved 2;
+  reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // Replaced by the READ_UNCOMMITTED consistency level.
-  bool deprecated_return_intents = 3;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -364,12 +361,9 @@ message ScanResponse {
 message ReverseScanRequest {
   option (gogoproto.equal) = true;
 
-  reserved 2;
+  reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // Replaced by the READ_UNCOMMITTED consistency level.
-  bool deprecated_return_intents = 3;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
