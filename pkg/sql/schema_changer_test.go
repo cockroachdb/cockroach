@@ -2549,9 +2549,6 @@ func TestTruncateInternals(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 		},
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
-			DisableMigrations: true,
-		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)

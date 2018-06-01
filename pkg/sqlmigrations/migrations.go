@@ -48,8 +48,6 @@ var (
 
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
-	// DisableMigrations skips all migrations.
-	DisableMigrations bool
 	// DisableBackfillMigrations stops applying migrations once
 	// a migration with 'doesBackfill == true' is encountered.
 	// TODO(mberhault): we could skip only backfill migrations and dependencies
@@ -324,11 +322,6 @@ func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context) error {
-	if m.testingKnobs.DisableMigrations {
-		log.Info(ctx, "skipping all migrations due to testing knob")
-		return nil
-	}
-
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
