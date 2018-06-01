@@ -339,16 +339,22 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
+	txn := client.NewTxnWithProto(db, s.NodeID(), client.RootTxn, txnProto)
+
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-	txn := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	reply, err = client.SendWrappedWith(context.Background(), tds, roachpb.Header{Txn: &txn}, scan)
-	if err != nil {
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txnProto}
+	ba.Add(scan)
+	br, pErr := txn.Send(context.Background(), ba)
+	if pErr != nil {
 		t.Fatal(err)
 	}
-	sr := reply.(*roachpb.ScanResponse)
-	if txn := sr.Txn; txn == nil || txn.Name != "MyTxn" {
+	replyTxn := br.Txn
+	if replyTxn == nil || replyTxn.Name != "MyTxn" {
 		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}
+	sr := br.Responses[0].GetInner().(*roachpb.ScanResponse)
 	if rows := sr.Rows; len(rows) > 0 {
 		t.Fatalf("scan after delete returned rows: %v", rows)
 	}
