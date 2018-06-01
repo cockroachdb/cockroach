@@ -91,6 +91,8 @@ const (
 	PushTxn
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
+	// QueryIntent checks whether the specified intent exists.
+	QueryIntent
 	// DeprecatedRangeLookup looks up range descriptors, containing the
 	// locations of replicas for the range containing the specified key.
 	DeprecatedRangeLookup

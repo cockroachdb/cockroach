@@ -539,6 +539,9 @@ func (*PushTxnRequest) Method() Method { return PushTxn }
 func (*QueryTxnRequest) Method() Method { return QueryTxn }
 
 // Method implements the Request interface.
+func (*QueryIntentRequest) Method() Method { return QueryIntent }
+
+// Method implements the Request interface.
 func (*DeprecatedRangeLookupRequest) Method() Method { return DeprecatedRangeLookup }
 
 // Method implements the Request interface.
@@ -718,6 +721,12 @@ func (ptr *PushTxnRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (qtr *QueryTxnRequest) ShallowCopy() Request {
 	shallowCopy := *qtr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (pir *QueryIntentRequest) ShallowCopy() Request {
+	shallowCopy := *pir
 	return &shallowCopy
 }
 
@@ -1048,6 +1057,7 @@ func (*HeartbeatTxnRequest) flags() int          { return isWrite | isTxn }
 func (*GCRequest) flags() int                    { return isWrite | isRange }
 func (*PushTxnRequest) flags() int               { return isWrite | isAlone }
 func (*QueryTxnRequest) flags() int              { return isRead | isAlone }
+func (*QueryIntentRequest) flags() int           { return isRead | updatesReadTSCache }
 func (*DeprecatedRangeLookupRequest) flags() int { return isRead }
 func (*ResolveIntentRequest) flags() int         { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int    { return isWrite | isRange }

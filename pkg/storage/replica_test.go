@@ -1578,6 +1578,18 @@ func heartbeatArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
+func queryIntentArgs(
+	key []byte, txn enginepb.TxnMeta, behavior roachpb.QueryIntentRequest_IfMissingBehavior,
+) roachpb.QueryIntentRequest {
+	return roachpb.QueryIntentRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Txn:       txn,
+		IfMissing: behavior,
+	}
+}
+
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -5773,6 +5785,112 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	// the pushed record and propagated it.
 	if txn := pErr.GetTxn(); txn.Timestamp != pusher.Timestamp.Next() {
 		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.Timestamp, txn.Timestamp)
+	}
+}
+
+// TestQueryIntentRequest tests the different behaviors of QueryIntent requests.
+func TestQueryIntentRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, behavior := range []roachpb.QueryIntentRequest_IfMissingBehavior{
+		roachpb.QueryIntentRequest_DO_NOTHING,
+		roachpb.QueryIntentRequest_THROW_ERROR,
+		roachpb.QueryIntentRequest_PREVENT,
+	} {
+		t.Run(fmt.Sprintf("behavior=%s", behavior), func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.Start(t, stopper)
+
+			key1 := roachpb.Key("a")
+			key2 := roachpb.Key("b")
+			txn1 := newTransaction("test", key1, 1, enginepb.SERIALIZABLE, tc.Clock())
+			txn2 := newTransaction("test", key1, 1, enginepb.SERIALIZABLE, tc.Clock())
+
+			pArgs := putArgs(key1, []byte("value1"))
+			assignSeqNumsForReqs(txn1, &pArgs)
+			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn1}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+
+			queryIntent := func(
+				key []byte,
+				txnMeta enginepb.TxnMeta,
+				baTxn *roachpb.Transaction,
+				expectIntent bool,
+			) {
+				t.Helper()
+				qiArgs := queryIntentArgs(key, txnMeta, behavior)
+				qiRes, pErr := tc.SendWrappedWith(roachpb.Header{Txn: baTxn}, &qiArgs)
+				if behavior == roachpb.QueryIntentRequest_THROW_ERROR && !expectIntent {
+					if _, ok := pErr.GetDetail().(*roachpb.IntentMissingError); !ok {
+						t.Fatalf("expected IntentMissingError, found %v", pErr)
+					}
+				} else {
+					if pErr != nil {
+						t.Fatal(pErr)
+					}
+					if e, a := expectIntent, qiRes.(*roachpb.QueryIntentResponse).FoundIntent; e != a {
+						t.Fatalf("expected FoundIntent=%T but FoundIntent=%T", e, a)
+					}
+				}
+			}
+
+			// Query the intent with the correct txn meta. Should see intent regardless
+			// of whether we're inside the txn or not.
+			for _, baTxn := range []*roachpb.Transaction{nil, txn1} {
+				queryIntent(key1, txn1.TxnMeta, baTxn, true)
+			}
+
+			// Query an intent on a different key for the same transaction. Should not
+			// see an intent.
+			for _, baTxn := range []*roachpb.Transaction{nil, txn1} {
+				queryIntent(key2, txn1.TxnMeta, baTxn, false)
+			}
+
+			// Query the intent with a larger sequence number. Should not see an intent.
+			for _, baTxn := range []*roachpb.Transaction{nil, txn1} {
+				largerSeqMeta := txn1.TxnMeta
+				largerSeqMeta.Sequence++
+				queryIntent(key1, largerSeqMeta, baTxn, false)
+			}
+
+			// Query the intent with a larger epoch. Should not see an intent.
+			for _, baTxn := range []*roachpb.Transaction{nil, txn1} {
+				largerEpochMeta := txn1.TxnMeta
+				largerEpochMeta.Epoch++
+				queryIntent(key1, largerEpochMeta, baTxn, false)
+			}
+
+			// Query an intent on the same key for a different transaction. Should not
+			// see an intent.
+			for _, baTxn := range []*roachpb.Transaction{nil, txn1} {
+				queryIntent(key1, txn2.TxnMeta, baTxn, false)
+			}
+
+			// Perform a write at key2. Depending on the behavior of the queryIntent
+			// that queried that key, this write should have different results.
+			pArgs2 := putArgs(key2, []byte("value2"))
+			assignSeqNumsForReqs(txn1, &pArgs2)
+			ba := roachpb.BatchRequest{}
+			ba.Header = roachpb.Header{Txn: txn1}
+			ba.Add(&pArgs2)
+			br, pErr := tc.Sender().Send(context.Background(), ba)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			tsBumped := br.Txn.Timestamp != br.Txn.OrigTimestamp
+			if behavior == roachpb.QueryIntentRequest_PREVENT {
+				if !tsBumped {
+					t.Fatalf("transaction timestamp not bumped: %v", br.Txn)
+				}
+			} else {
+				if tsBumped {
+					t.Fatalf("unexpected transaction timestamp bumped: %v", br.Txn)
+				}
+			}
+		})
 	}
 }
 

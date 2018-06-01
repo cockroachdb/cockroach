@@ -2071,6 +2071,25 @@ func (r *Replica) updateTimestampCache(
 					start = resp.ResumeSpan.EndKey
 				}
 				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+			case *roachpb.QueryIntentRequest:
+				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
+					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
+					if !resp.FoundIntent {
+						// If the QueryIntent request has an "if missing" behavior
+						// of PREVENT and the intent is missing then we update the
+						// timestamp cache at the intent's key to the intent's
+						// transactional timestamp. This will prevent the intent
+						// from ever being written in the future. We use an empty
+						// transaction ID so that we block the intent regardless
+						// of whether it is part of the current batch's transaction
+						// or not.
+						//
+						// TODO DURING REVIEW: do we want to update the write timestamp
+						// cache instead so that we ensure that the WriteToOld flag
+						// is set on the eventual intent write?
+						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, readOnlyUseReadCache)
+					}
+				}
 			case *roachpb.RefreshRequest:
 				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			case *roachpb.RefreshRangeRequest:

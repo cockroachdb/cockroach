@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -669,3 +670,21 @@ func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
+
+// NewIntentMissingError creates a new IntentMissingError.
+func NewIntentMissingError(txn enginepb.TxnMeta, key Key) *IntentMissingError {
+	return &IntentMissingError{
+		Txn: txn,
+		Key: key,
+	}
+}
+
+func (e *IntentMissingError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IntentMissingError) message(_ *Error) string {
+	return fmt.Sprintf("intent missing at key %s for transaction %v", e.Key, e.Txn)
+}
+
+var _ ErrorDetailInterface = &IntentMissingError{}
