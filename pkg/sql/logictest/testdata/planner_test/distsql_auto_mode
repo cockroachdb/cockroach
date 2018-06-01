@@ -124,3 +124,10 @@ EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = 
 # Query with OID expression - don't distribute (#24423).
 statement error pq: OID expressions are not supported by distsql
 EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
+
+# Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
+# statistics.
+query T
+SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj71qxDAQhPs8xTH1QuxWVdprknCkCyoUazhMfF6zK-eHQ-8ebBUhReDKmZG-j71i1szHdKEjvKJHFCymA93Vtqo9OOYvhE4wzstatjoKBjUiXFHGMhEBL-lt4okp0-47CDJLGqcdu9h4Sfb98P4BgemnH4wph0OHWAW6ll-ql3QmQl_ldvOJvujs_CP9j9zVKGA-s13nutrAZ9Nh17T4tP_bi0wvbe1bOM5tqrHe_QQAAP__udhpqQ==

@@ -129,7 +129,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
+		json, url, err := distsqlrun.GeneratePlanDiagramURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
