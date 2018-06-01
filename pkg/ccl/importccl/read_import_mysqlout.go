@@ -17,10 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 )
 
 type mysqloutfileReader struct {
-	csvInputReader
+	conv rowConverter
 	opts roachpb.MySQLOutfileOptions
 }
 
@@ -31,26 +32,30 @@ func newMysqloutfileReader(
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
-) *mysqloutfileReader {
-	null := "NULL"
-	if opts.HasEscape {
-		null = `\N`
+) (*mysqloutfileReader, error) {
+	conv, err := newRowConverter(tableDesc, evalCtx, kvCh)
+	if err != nil {
+		return nil, err
 	}
-	csvOpts := roachpb.CSVOptions{NullEncoding: &null}
 	return &mysqloutfileReader{
-		csvInputReader: *newCSVInputReader(kvCh, csvOpts, tableDesc, evalCtx),
-		opts:           opts,
-	}
+		conv: *conv,
+		opts: opts,
+	}, nil
+}
+
+func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
+}
+
+func (d *mysqloutfileReader) inputFinished(ctx context.Context) {
+	close(d.conv.kvCh)
 }
 
 func (d *mysqloutfileReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
+	var count int64 = 1
 
-	var count int
-
-	// The current row being read.
-	var row []string
+	var row []tree.Datum
 	// the current field being read.
 	var field []byte
 
@@ -64,7 +69,43 @@ func (d *mysqloutfileReader) readFile(
 	// as indicated by the matching enclosing char.
 	var readingField bool
 
+	var gotNull bool
+
 	reader := bufio.NewReaderSize(input, 1024*64)
+	addField := func() error {
+		if len(row) >= len(d.conv.visibleCols) {
+			return makeRowErr(inputName, count, "too many columns, expected %d: %#v", len(d.conv.visibleCols), row)
+		}
+		if gotNull {
+			if len(field) != 0 {
+				return makeRowErr(inputName, count, "unexpected data after null encoding: %s", field)
+			}
+			row = append(row, tree.DNull)
+			gotNull = false
+		} else if !d.opts.HasEscape && string(field) == "NULL" {
+			row = append(row, tree.DNull)
+		} else {
+			datum, err := tree.ParseStringAs(d.conv.visibleColTypes[len(row)], string(field), d.conv.evalCtx)
+			if err != nil {
+				col := d.conv.visibleCols[len(row)]
+				return makeRowErr(inputName, count, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
+			}
+
+			row = append(row, datum)
+		}
+		field = field[:0]
+		return nil
+	}
+	addRow := func() error {
+		copy(d.conv.datums, row)
+		if err := d.conv.row(ctx, inputIdx, count); err != nil {
+			return makeRowErr(inputName, count, "%s", err)
+		}
+		count++
+
+		row = row[:0]
+		return nil
+	}
 
 	for {
 		c, w, err := reader.ReadRune()
@@ -73,23 +114,22 @@ func (d *mysqloutfileReader) readFile(
 		// First check that if we're done and everything looks good.
 		if finished {
 			if nextLiteral {
-				return makeRowErr(inputName, int64(count)+1, "unmatched literal")
+				return makeRowErr(inputName, count, "unmatched literal")
 			}
 			if readingField {
-				return makeRowErr(inputName, int64(count)+1, "unmatched field enclosure")
+				return makeRowErr(inputName, count, "unmatched field enclosure")
+			}
+			if len(field) > 0 {
+				if err := addField(); err != nil {
+					return err
+				}
 			}
 			// flush the last row if we have one.
 			if len(row) > 0 {
-				d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
+				if err := addRow(); err != nil {
+					return err
+				}
 			}
-		}
-
-		// Check if we need to flush due to capacity or finished.
-		if finished || len(d.csvInputReader.batch.r) > d.csvInputReader.batchSize {
-			if err := d.csvInputReader.flushBatch(ctx, finished, progressFn); err != nil {
-				return err
-			}
-			d.csvInputReader.batch.rowOffset = count
 		}
 
 		if finished {
@@ -130,7 +170,10 @@ func (d *mysqloutfileReader) readFile(
 				case 'Z':
 					field = append(field, byte(26))
 				case 'N':
-					field = append(field, '\\', 'N')
+					if gotNull {
+						return makeRowErr(inputName, count, "unexpected null encoding")
+					}
+					gotNull = true
 				default:
 					field = append(field, string(c)...)
 				}
@@ -154,16 +197,13 @@ func (d *mysqloutfileReader) readFile(
 
 		// Are we done with the field, or even the whole row?
 		if !readingField && (c == d.opts.FieldSeparator || c == d.opts.RowSeparator) {
-			row = append(row, string(field))
-			field = field[:0]
-
+			if err := addField(); err != nil {
+				return err
+			}
 			if c == d.opts.RowSeparator {
-				if expected := d.csvInputReader.expectedCols; expected != len(row) {
-					return makeRowErr(inputName, int64(count)+1, "expected %d columns, got %d: %#v", expected, len(row), row)
+				if err := addRow(); err != nil {
+					return err
 				}
-				d.csvInputReader.batch.r = append(d.csvInputReader.batch.r, row)
-				count++
-				row = make([]string, 0, len(row))
 			}
 			continue
 		}
@@ -171,5 +211,5 @@ func (d *mysqloutfileReader) readFile(
 		field = append(field, string(c)...)
 	}
 
-	return nil
+	return d.conv.sendBatch(ctx)
 }

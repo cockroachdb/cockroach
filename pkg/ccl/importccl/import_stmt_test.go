@@ -169,8 +169,8 @@ d
 			name:   "unexpected number of columns",
 			create: `i int`,
 			typ:    "MYSQLOUTFILE",
-			data:   "1\t2\n",
-			err:    "row 1: expected 1 columns, got 2",
+			data:   "1\t2",
+			err:    "row 1: too many columns, expected 1",
 		},
 		{
 			name:   "unmatched field enclosure",
@@ -187,6 +187,60 @@ d
 			typ:    "MYSQLOUTFILE",
 			data:   `\`,
 			err:    "row 1: unmatched literal",
+		},
+		{
+			name:   "weird escape char",
+			create: `s STRING`,
+			with:   `WITH fields_escaped_by = '@'`,
+			typ:    "MYSQLOUTFILE",
+			data:   "@N\nN@@\nNULL",
+			query: map[string][][]string{
+				`SELECT COALESCE(s, '(null)') from d.t`: {{"(null)"}, {"N@"}, {"NULL"}},
+			},
+		},
+		{
+			name:   `null and \N with escape`,
+			create: `s STRING`,
+			with:   `WITH fields_escaped_by = '\'`,
+			typ:    "MYSQLOUTFILE",
+			data:   "\\N\n\\\\N\nNULL",
+			query: map[string][][]string{
+				`SELECT COALESCE(s, '(null)') from d.t`: {{"(null)"}, {`\N`}, {"NULL"}},
+			},
+		},
+		{
+			name:   `\N with trailing char`,
+			create: `s STRING`,
+			with:   `WITH fields_escaped_by = '\'`,
+			typ:    "MYSQLOUTFILE",
+			data:   "\\N1",
+			err:    "row 1: unexpected data after null encoding",
+		},
+		{
+			name:   `double null`,
+			create: `s STRING`,
+			with:   `WITH fields_escaped_by = '\'`,
+			typ:    "MYSQLOUTFILE",
+			data:   "\\N\\N",
+			err:    "row 1: unexpected null encoding",
+		},
+		{
+			name:   `null and \N without escape`,
+			create: `s STRING`,
+			typ:    "MYSQLOUTFILE",
+			data:   "\\N\n\\\\N\nNULL",
+			query: map[string][][]string{
+				`SELECT COALESCE(s, '(null)') from d.t`: {{`\N`}, {`\\N`}, {"(null)"}},
+			},
+		},
+		{
+			name:   `bytes with escape`,
+			create: `b BYTES`,
+			typ:    "MYSQLOUTFILE",
+			data:   `\x`,
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{`\x`}},
+			},
 		},
 	}
 
@@ -206,13 +260,20 @@ d
 			dataString = tc.data
 			_, err := db.Exec(q, srv.URL)
 			if !testutils.IsError(err, tc.err) {
-				t.Errorf("unexpected: %v", err)
+				t.Fatalf("unexpected: %v", err)
 			}
 			for query, res := range tc.query {
 				sqlDB.CheckQueryResults(t, query, res)
 			}
 		})
 	}
+
+	t.Run("mysqlout multiple", func(t *testing.T) {
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
+		dataString = "1"
+		sqlDB.Exec(t, `IMPORT TABLE d.t (s STRING) MYSQLOUTFILE DATA ($1, $1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t`, [][]string{{"1"}, {"1"}})
+	})
 }
 
 // TODO(dt): switch to a helper in sampledataccl.
@@ -1249,10 +1310,6 @@ func TestImportMysqlOutfile(t *testing.T) {
 			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
 				expected, actual := testRows[idx].s, row[1]
 				if expected == injectNull {
-					expected = "NULL"
-				}
-				// TODO(dt): known limitation: even escaped `\N` becomes null.
-				if expected == `\N` {
 					expected = "NULL"
 				}
 
