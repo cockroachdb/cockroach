@@ -259,7 +259,7 @@ func NewTxnCoordSenderFactory(
 	}
 }
 
-// New is part of the TxnCoordSenderFactory interface.
+// New is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) New(
 	typ client.TxnType, txn *roachpb.Transaction,
 ) client.TxnSender {
@@ -282,7 +282,7 @@ func (tcf *TxnCoordSenderFactory) New(
 	return tcs
 }
 
-// WrappedSender is part of the TxnCoordSenderFactory interface.
+// WrappedSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) WrappedSender() client.Sender {
 	return tcf.wrapped
 }
@@ -308,11 +308,16 @@ func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
 }
 
 // AugmentMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AugmentMeta(meta roachpb.TxnCoordMeta) {
+func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot AugmentMeta on unbound TxnCoordSender. meta id: %s", meta.Txn.ID)
+	}
+
 	// Sanity check: don't combine if the meta is for a different txn ID.
-	if tc.mu.meta.Txn.ID != (uuid.UUID{}) && tc.mu.meta.Txn.ID != meta.Txn.ID {
+	if tc.mu.meta.Txn.ID != meta.Txn.ID {
 		return
 	}
 	tc.mu.meta.Txn.Update(&meta.Txn)
@@ -382,6 +387,10 @@ func (tc *TxnCoordSender) Send(
 	startNS := tc.clock.PhysicalNow()
 
 	if ba.Txn != nil {
+		if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
+			log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
+		}
+
 		ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
 		if log.V(2) {
 			ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
@@ -422,10 +431,6 @@ func (tc *TxnCoordSender) Send(
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
 
-			if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
-				// Ensure that the txn is bound.
-				tc.mu.meta.Txn = ba.Txn.Clone()
-			}
 			if ba.Txn.Writing {
 				if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
 					return pErr
@@ -1013,7 +1018,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	// raced here. That's fine (and probably better than the alternative, which
 	// is missing new intents sometimes). Note that the txn may be uninitialized
 	// here if a failure occurred before the first write succeeded.
-	if txn.Status != roachpb.PENDING || txn.ID == (uuid.UUID{}) {
+	if txn.Status != roachpb.PENDING {
 		return
 	}
 

@@ -1156,12 +1156,12 @@ func TestTxnMultipleCoord(t *testing.T) {
 	// Verify it's an error to commit on the leaf txn node.
 	ba := txn2.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
-	if err := txn2.Run(context.TODO(), ba); !testutils.IsError(err, "cannot commit on a leaf transaction coordinator") {
+	if err := txn2.Run(ctx, ba); !testutils.IsError(err, "cannot commit on a leaf transaction coordinator") {
 		t.Fatalf("expected cannot commit on leaf coordinator error; got %v", err)
 	}
 
 	// Augment txn with txn2's meta & commit.
-	txn.AugmentTxnCoordMeta(txn2.GetTxnCoordMeta())
+	txn.AugmentTxnCoordMeta(ctx, txn2.GetTxnCoordMeta())
 	// Verify presence of both intents.
 	tc.mu.Lock()
 	if a, e := tc.mu.meta.Intents, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
@@ -1173,7 +1173,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	tc.mu.Unlock()
 	ba = txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
-	if err := txn.Run(context.TODO(), ba); err != nil {
+	if err := txn.Run(ctx, ba); err != nil {
 		t.Fatal(err)
 	}
 

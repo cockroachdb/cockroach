@@ -204,13 +204,16 @@ type DB struct {
 //
 // The Sender returned should not be used for sending transactional requests.
 // Use db.Txn() or db.NewTxn() for that.
-// TODO(andrei): Some tests do use it to send transactional requests, however.
-// They shouldn't.
 func (db *DB) GetSender() Sender {
-	// HACK: We pass nil for the txn here because we don't have a txn on hand.
+	// We pass nil for the txn here because we don't have a txn on hand.
 	// That's why this method says to not use the Sender for transactional
 	// requests, plus the fact that if a Sender is used directly, the caller needs
 	// to be mindful of the need to start a heartbeat loop when writing.
+	//
+	// Note that even non-transactional requests need to go through a
+	// TxnCoordSender because batches that get split need to be wrapped in
+	// transactions (and the TxnCoordSender handles that). So we can't simply
+	// return the wrapped handler here.
 	return db.factory.New(RootTxn, nil /* txn */)
 }
 

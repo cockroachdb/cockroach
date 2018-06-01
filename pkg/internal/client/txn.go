@@ -1106,11 +1106,11 @@ func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
 // information with the supplied meta. For use with GetTxnCoordMeta().
-func (txn *Txn) AugmentTxnCoordMeta(meta roachpb.TxnCoordMeta) {
+func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.mu.Proto.Update(&meta.Txn)
-	txn.mu.sender.AugmentMeta(meta)
+	txn.mu.sender.AugmentMeta(ctx, meta)
 }
 
 // UpdateStateOnRemoteRetryableErr updates the Txn, and the
