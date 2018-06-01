@@ -319,8 +319,8 @@ func (p *planner) dropTableImpl(
 func (p *planner) initiateDropTable(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
 ) error {
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return err
+	if tableDesc.Dropped() {
+		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
 
 	// If the table is not interleaved and the ClearRange feature is
@@ -360,7 +360,7 @@ func (p *planner) initiateDropTable(
 	// change manager, which is notified via a system config gossip.
 	// The schema change manager will properly schedule deletion of
 	// the underlying data when the GC deadline expires.
-	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
+	return p.writeDropTable(ctx, tableDesc)
 }
 
 func (p *planner) removeFKBackReference(

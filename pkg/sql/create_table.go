@@ -172,8 +172,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		if !foundExternalReference {
 			desc.State = sqlbase.TableDescriptor_PUBLIC
-			// No need to increment the version.
-			desc.UpVersion = false
 		}
 	}
 
@@ -460,9 +458,6 @@ func resolveFK(
 		// other table are updated to include the backref.
 		if mode == sqlbase.ConstraintValidity_Validated {
 			tbl.State = sqlbase.TableDescriptor_ADD
-			if err := tbl.SetUpVersion(); err != nil {
-				return err
-			}
 		}
 
 		// If we resolve the same table more than once, we only want to edit a
@@ -704,9 +699,6 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 }
 
 func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.TableDescriptor) error {
-	if err := td.SetUpVersion(); err != nil {
-		return err
-	}
 	if err := td.ValidateTable(p.EvalContext().Settings); err != nil {
 		return err
 	}

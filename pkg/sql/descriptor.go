@@ -146,7 +146,7 @@ func (p *planner) createDescriptorWithID(
 		return err
 	}
 	if ok && desc.Adding() {
-		p.notifySchemaChange(desc, sqlbase.InvalidMutationID)
+		p.queueSchemaChange(desc, sqlbase.InvalidMutationID)
 	}
 	return nil
 }

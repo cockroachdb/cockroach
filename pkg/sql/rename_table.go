@@ -122,10 +122,6 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	descID := tableDesc.GetID()
 	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
 		ParentID: prevDbDesc.ID,
 		Name:     oldTn.Table()}
