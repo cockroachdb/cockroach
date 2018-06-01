@@ -94,15 +94,13 @@ func (f *firstNErrorTransport) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (f *firstNErrorTransport) SendNext(_ context.Context, done chan<- BatchCall) {
-	call := BatchCall{
-		Reply: &roachpb.BatchResponse{},
-	}
+func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchResponse, error) {
+	var err error
 	if f.numSent < f.numErrors {
-		call.Err = roachpb.NewSendError("test")
+		err = roachpb.NewSendError("test")
 	}
 	f.numSent++
-	done <- call
+	return &roachpb.BatchResponse{}, err
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
