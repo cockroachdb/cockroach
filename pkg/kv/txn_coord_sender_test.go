@@ -1474,11 +1474,13 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 // be supplied a context with Done()==nil. Note that the returned
 // database will use a factory with ridiculously short client timeout
 // and heartbeat interval settings to make tests fast.
-func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
+func createNonCancelableDB(
+	db *client.DB, hbInterval time.Duration, clientTimeout time.Duration,
+) *client.DB {
 	// Create the single txn coord for this test.
-	tc := db.GetSender().(*TxnCoordSender)
-	tc.TxnCoordSenderFactory.heartbeatInterval = 2 * time.Millisecond
-	tc.TxnCoordSenderFactory.clientTimeout = 1 * time.Millisecond
+	tc := db.GetFactory().New(client.RootTxn).(*TxnCoordSender)
+	tc.heartbeatInterval = hbInterval
+	tc.clientTimeout = clientTimeout
 
 	// client.Txn supplies a non-cancelable context, which makes the
 	// transaction coordinator ignore timeout-based abandonment and use the
@@ -1489,7 +1491,7 @@ func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
 			return tc.Send(context.Background(), ba)
 		})
 	}
-	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock), tc
+	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock)
 }
 
 func TestTxnAbandonCount(t *testing.T) {
@@ -1504,7 +1506,9 @@ func TestTxnAbandonCount(t *testing.T) {
 	var count int
 	doneErr := errors.New("retry on abandoned successful; exiting")
 
-	db, tc := createNonCancelableDB(s.DB)
+	hbInterval := 2 * time.Millisecond
+	clientTimeout := 1 * time.Millisecond
+	db := createNonCancelableDB(s.DB, hbInterval, clientTimeout)
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		count++
@@ -1525,7 +1529,7 @@ func TestTxnAbandonCount(t *testing.T) {
 			// Note that we must bump the clock before every attempt (not just once)
 			// because otherwise there is a race in which we bump, a heartbeat happens
 			// at the new timestamp, and the transaction never expires.
-			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
+			manual.Increment(int64(clientTimeout + hbInterval*2))
 			err := checkTxnMetricsOnce(
 				t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0,
 			)
@@ -1559,7 +1563,11 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 	var count int
 	doneErr := errors.New("retry on abandoned successful; exiting")
-	db, tc := createNonCancelableDB(s.DB)
+
+	hbInterval := s.DB.GetFactory().(*TxnCoordSenderFactory).heartbeatInterval
+	clientTimeout := s.DB.GetFactory().(*TxnCoordSenderFactory).clientTimeout
+	db := createNonCancelableDB(s.DB, hbInterval, clientTimeout)
+
 	err := db.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 		count++
 		if count == 2 {
@@ -1577,7 +1585,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			// See #22762 for very similar code and an explanation.
-			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
+			manual.Increment(int64(clientTimeout + hbInterval*2))
 			err := checkTxnMetricsOnce(t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0)
 			if err == nil {
 				return nil
