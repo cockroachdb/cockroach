@@ -1,0 +1,262 @@
+# LogicTest: 5node-distsql 5node-distsql-opt 5node-distsql-metadata
+
+########################
+#  LOOKUP JOIN FORCED  #
+########################
+statement ok
+SET experimental_force_lookup_join = true;
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c, d FROM
+   GENERATE_SERIES(1, 10) AS A(a),
+   GENERATE_SERIES(1, 10) AS B(b),
+   GENERATE_SERIES(1, 10) AS C(c),
+   GENERATE_SERIES(1, 10) AS D(d)
+
+statement ok
+CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c));
+INSERT INTO distsql_lookup_test_1 VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
+
+statement ok
+CREATE TABLE distsql_lookup_test_2 (d INT, e INT, f INT, PRIMARY KEY (f, e));
+INSERT INTO distsql_lookup_test_2 VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
+----
+1  1  2  2     1  1
+2  1  1  2     1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b AND a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+# Filter right side of a lookup join with a restriction on an indexed column.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = a WHERE f > 1
+----
+2  1  1  1  1  2
+2  NULL  2  1  1  2
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b AND a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+# Test lookup join with selecting a subset of the columns.
+query III rowsort
+SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  1
+2  1  1
+2  1  2
+
+# Ensure join performs properly on input that has more than 100 rows.
+query I
+SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2
+----
+10000
+
+statement ok
+CREATE TABLE foo (a int, b int); INSERT INTO foo VALUES (0, 1), (0, 2), (1, 1)
+
+statement ok
+CREATE TABLE bar (a int PRIMARY KEY, c int); INSERT INTO bar VALUES (0, 1), (1, 2), (2, 1)
+
+query III rowsort
+SELECT * FROM foo NATURAL JOIN bar
+----
+0  1  1
+0  2  1
+1  1  2
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition));
+INSERT INTO books VALUES
+  ('SICP', 1, 2),
+  ('Intro to Algo', 1, 1),
+  ('Intro to Algo', 2, 1),
+  ('Intro to Algo', 3, 2),
+  ('Art of Computer Programming', 1, 2),
+  ('Art of Computer Programming', 2, 2)
+
+statement ok
+CREATE TABLE authors (name STRING, book STRING);
+INSERT INTO authors VALUES
+  ('Hal Abelson', 'SICP'),
+  ('Geral Jay Sussman', 'SICP'),
+  ('Thomas H Cormen', 'Intro to Algo'),
+  ('Charles E Leiserson', 'Intro to Algo'),
+  ('Ronald Rivest', 'Intro to Algo'),
+  ('Clifford Stein', 'Intro to Algo'),
+  ('Donald Knuth', 'Art of Computer Programming')
+
+query T rowsort
+SELECT DISTINCT(b1.title) FROM books as b1 JOIN books as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+Intro to Algo
+
+# Filter on a column that is not returned or in the equality columns.
+query T rowsort
+SELECT DISTINCT(b1.title) FROM books as b1 JOIN books as b2 USING(title) WHERE b1.shelf <> b2.shelf
+----
+Intro to Algo
+
+query T rowsort
+SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+Thomas H Cormen
+Charles E Leiserson
+Ronald Rivest
+Clifford Stein
+
+# Ensure lookup join preserves sort from the left side.
+query T rowsort
+SELECT DISTINCT(a.name) FROM (SELECT * FROM authors ORDER BY name) AS a JOIN books AS b1 ON a.book = b1.title
+----
+Charles E Leiserson
+Clifford Stein
+Ronald Rivest
+Thomas H Cormen
+Donald Knuth
+Geral Jay Sussman
+Hal Abelson
+
+statement ok
+CREATE TABLE players (id DECIMAL PRIMARY KEY, name STRING, team INT); INSERT INTO players VALUES (1.0, 'ready', 0)
+
+query B
+SELECT p1.team = p2.team FROM players p1 JOIN players p2 ON p1.id = p2.id;
+----
+true
+
+####################################
+#  LOOKUP JOIN ON SECONDARY INDEX  #
+####################################
+
+# Create a table with a secondary index which stores another column.
+statement ok
+CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE multiples SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE multiples TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate 10 rows.
+statement ok
+INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
+  GENERATE_SERIES(1, 10) AS A(x)
+
+# Lookup join on covering secondary index
+query II rowsort
+SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+2   3
+4   6
+6   9
+8   12
+10  15
+
+# Lookup join on non-covering secondary index
+# The index join should be subsumed by joinreader, which takes care of the
+# primary index lookups.
+query II rowsort
+SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+2   4
+4   8
+6   12
+8   16
+10  20
+
+############################
+#  LEFT OUTER LOOKUP JOIN  #
+############################
+statement ok
+create table t (a int primary key, b int, c int, d int, index bc (b, c));
+
+statement ok
+insert into t values
+  (1, 10, 100, 1000),
+  (2, 10, 200, 2000),
+  (3, 20, 300, 3000)
+
+# Left join against primary index
+query II rowsort
+SELECT x, b FROM (VALUES (2), (99)) AS v(x) LEFT JOIN t ON x = a
+----
+2 10
+99 NULL
+
+# Left join against covering secondary index
+query II rowsort
+SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
+----
+1 NULL
+10 100
+10 200
+
+# Left join against non-covering secondary index
+query II rowsort
+SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
+----
+1 NULL
+10 1000
+10 2000
+
+# Left join with ON filter on covering index
+query II rowsort
+SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 200
+----
+10 100
+20 NULL
+
+# Left join with ON filter on non-covering index
+query II rowsort
+SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 2000
+----
+10 1000
+20 NULL
+
+# Left join with ON filter and WHERE clause
+query II rowsort
+SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b WHERE d < 2000
+----
+10 1000

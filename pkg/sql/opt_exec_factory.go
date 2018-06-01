@@ -94,6 +94,7 @@ func (ef *execFactory) ConstructScan(
 		}
 	}
 	scan.props.ordering = reqOrder
+	scan.createdByOpt = true
 	return scan, nil
 }
 
