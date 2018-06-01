@@ -162,42 +162,46 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── filters [type=bool, outer=(1,2)]
       └── gt [type=bool, outer=(1,2)]
            ├── subquery [type=decimal, outer=(1,2)]
            │    └── max1-row
-           │         ├── columns: sum:8(decimal)
+           │         ├── columns: sum:10(decimal)
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
            │         └── project
-           │              ├── columns: sum:8(decimal)
+           │              ├── columns: sum:10(decimal)
            │              ├── outer: (1,2)
            │              ├── stats: [rows=700]
            │              └── group-by
-           │                   ├── columns: u:6(float) sum:8(decimal)
+           │                   ├── columns: u:6(float) sum:10(decimal)
            │                   ├── grouping columns: u:6(float)
            │                   ├── outer: (1,2)
            │                   ├── stats: [rows=700, distinct(6)=700]
            │                   ├── keys: weak(6)
            │                   ├── project
-           │                   │    ├── columns: x:1(int) u:6(float)
+           │                   │    ├── columns: x:9(int) u:6(float)
            │                   │    ├── outer: (1,2)
            │                   │    ├── stats: [rows=1000, distinct(6)=700]
-           │                   │    └── project
-           │                   │         ├── columns: y:2(int) u:6(float)
-           │                   │         ├── outer: (2)
-           │                   │         ├── stats: [rows=1000, distinct(6)=700]
-           │                   │         └── scan kuv
-           │                   │              ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │                   │              ├── stats: [rows=1000, distinct(6)=700]
-           │                   │              └── keys: (5)
-           │                   └── aggregations [outer=(1)]
-           │                        └── sum [type=decimal, outer=(1)]
-           │                             └── variable: xyzs.x [type=int, outer=(1)]
+           │                   │    ├── project
+           │                   │    │    ├── columns: y:8(int) u:6(float)
+           │                   │    │    ├── outer: (2)
+           │                   │    │    ├── stats: [rows=1000, distinct(6)=700]
+           │                   │    │    ├── scan kuv
+           │                   │    │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+           │                   │    │    │    ├── stats: [rows=1000, distinct(6)=700]
+           │                   │    │    │    └── keys: (5)
+           │                   │    │    └── projections [outer=(2,6)]
+           │                   │    │         └── variable: xyzs.y [type=int, outer=(2)]
+           │                   │    └── projections [outer=(1,6)]
+           │                   │         └── variable: xyzs.x [type=int, outer=(1)]
+           │                   └── aggregations [outer=(9)]
+           │                        └── sum [type=decimal, outer=(9)]
+           │                             └── variable: x [type=int, outer=(9)]
            └── const: 100 [type=decimal]
 
 # Calculate groupby cardinality.

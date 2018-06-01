@@ -176,6 +176,19 @@ func (s *scope) resolveAndRequireType(
 	return texpr
 }
 
+// isOuterColumn returns true if the given column is not present in the current
+// scope (it may or may not be present in an ancestor scope).
+func (s *scope) isOuterColumn(id opt.ColumnID) bool {
+	for i := range s.cols {
+		col := &s.cols[i]
+		if col.id == id {
+			return false
+		}
+	}
+
+	return true
+}
+
 // hasColumn returns true if the given column id is found within this scope.
 func (s *scope) hasColumn(id opt.ColumnID) bool {
 	// We only allow hidden columns in the current scope. Hidden columns
