@@ -18,10 +18,13 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/pkg/errors"
 )
 
 // sortableRowContainer is a container used to store rows and optionally sort
@@ -273,3 +276,121 @@ func (i memRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 
 // Close implements the rowIterator interface.
 func (i memRowFinalIterator) Close() {}
+
+// diskBackedRowContainer is a sortableRowContainer that uses a memRowContainer to
+// store rows and spills back to disk automatically if memory usage exceeds a
+// given budget.
+type diskBackedRowContainer struct {
+	// src is the current sortableRowContainer that is being used to store rows.
+	// All the sortableRowContainer methods are redefined rather than delegating
+	// to an embedded struct because of how defer works:
+	// 	rc.init(...)
+	//	defer rc.Close(ctx)
+	// The Close will call memRowContainer.Close(ctx) even after spilling to disk.
+	src sortableRowContainer
+
+	mrc *memRowContainer
+	drc *diskRowContainer
+
+	// The following fields are used to create a diskRowContainer when spilling
+	// to disk.
+	engine      engine.Engine
+	diskMonitor *mon.BytesMonitor
+}
+
+var _ sortableRowContainer = &diskBackedRowContainer{}
+
+// init initializes a diskBackedRowContainer.
+// Arguments:
+//  - ordering is the output ordering; the order in which rows should be sorted.
+//  - types is the schema of rows that will be added to this container.
+//  - evalCtx defines the context in which to evaluate comparisons, only used
+//    when storing rows in memory.
+//  - engine is the store used for rows when spilling to disk.
+//  - memoryMonitor is used to monitor the diskBackedRowContainer's memory usage.
+//    If this monitor denies an allocation, the diskBackedRowContainer will
+//    spill to disk.
+//  - diskMonitor is used to monitor the diskBackedRowContainer's disk usage if
+//    and when it spills to disk.
+func (f *diskBackedRowContainer) init(
+	ordering sqlbase.ColumnOrdering,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	engine engine.Engine,
+	memoryMonitor *mon.BytesMonitor,
+	diskMonitor *mon.BytesMonitor,
+) {
+	mrc := memRowContainer{}
+	mrc.initWithMon(ordering, types, evalCtx, memoryMonitor)
+	f.mrc = &mrc
+	f.src = &mrc
+	f.engine = engine
+	f.diskMonitor = diskMonitor
+}
+
+func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if err := f.src.AddRow(ctx, row); err != nil {
+		// Return the error only if it is not an out of memory error.
+		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+			return err
+		}
+		if spillErr := f.spillToDisk(ctx); spillErr != nil {
+			return spillErr
+		}
+		log.VEventf(ctx, 2, "spilled to disk: %v", err)
+		// Add the row that caused the memory error.
+		return f.src.AddRow(ctx, row)
+	}
+	return nil
+}
+
+func (f *diskBackedRowContainer) Sort(ctx context.Context) {
+	f.src.Sort(ctx)
+}
+
+func (f *diskBackedRowContainer) NewIterator(ctx context.Context) rowIterator {
+	return f.src.NewIterator(ctx)
+}
+
+func (f *diskBackedRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
+	return f.src.NewFinalIterator(ctx)
+}
+
+func (f *diskBackedRowContainer) Close(ctx context.Context) {
+	f.src.Close(ctx)
+}
+
+// Spilled returns whether or not the diskBackedRowContainer has spilled to
+// disk.
+func (f *diskBackedRowContainer) Spilled() bool {
+	return f.mrc == nil
+}
+
+func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
+	if f.Spilled() {
+		return errors.New("already spilled to disk")
+	}
+	drc := makeDiskRowContainer(f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	i := f.mrc.NewFinalIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		memRow, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if err := drc.AddRow(ctx, memRow); err != nil {
+			return err
+		}
+	}
+	f.mrc.Close(ctx)
+	f.mrc = nil
+
+	f.src = &drc
+	f.drc = &drc
+	return nil
+}

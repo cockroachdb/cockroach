@@ -21,9 +21,12 @@ import (
 
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -155,11 +158,13 @@ func TestRowContainerIterators(t *testing.T) {
 	// memRowContainer and can recreate an iterator.
 	t.Run("NewIterator", func(t *testing.T) {
 		for k := 0; k < 2; k++ {
-			i := mc.NewIterator(ctx)
-			if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
-				t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
-			}
-			i.Close()
+			func() {
+				i := mc.NewIterator(ctx)
+				defer i.Close()
+				if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+					t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
+				}
+			}()
 		}
 	})
 
@@ -168,11 +173,159 @@ func TestRowContainerIterators(t *testing.T) {
 	// memRowContainer.
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
+		defer i.Close()
 		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {
 			t.Fatal("memRowContainer is not empty")
+		}
+	})
+}
+
+func TestDiskBackedRowContainer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, err := engine.NewTempEngine(base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	// These monitors are started and stopped by subtests.
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+
+	const numRows = 10
+	const numCols = 1
+	rows := makeIntRows(numRows, numCols)
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+
+	newDiskBackedRowContainer := func() *diskBackedRowContainer {
+		rc := diskBackedRowContainer{}
+		rc.init(
+			ordering,
+			oneIntCol,
+			&evalCtx,
+			tempEngine,
+			&memoryMonitor,
+			&diskMonitor,
+		)
+		return &rc
+	}
+
+	// NormalRun adds rows to a diskBackedRowContainer, makes it spill to disk
+	// halfway through, keeps on adding rows, and then verifies that all rows
+	// were properly added to the diskBackedRowContainer.
+	t.Run("NormalRun", func(t *testing.T) {
+		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		defer memoryMonitor.Stop(ctx)
+		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		defer diskMonitor.Stop(ctx)
+
+		rc := newDiskBackedRowContainer()
+		defer rc.Close(ctx)
+
+		mid := len(rows) / 2
+		for i := 0; i < mid; i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if rc.Spilled() {
+			t.Fatal("unexpectedly using disk")
+		}
+		func() {
+			i := rc.NewIterator(ctx)
+			defer i.Close()
+			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
+				t.Fatalf("verifying memory rows failed with: %s", err)
+			}
+		}()
+		if err := rc.spillToDisk(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if !rc.Spilled() {
+			t.Fatal("unexpectedly using memory")
+		}
+		for i := mid; i < len(rows); i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		func() {
+			i := rc.NewIterator(ctx)
+			defer i.Close()
+			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
+				t.Fatalf("verifying disk rows failed with: %s", err)
+			}
+		}()
+	})
+
+	t.Run("AddRowOutOfMem", func(t *testing.T) {
+		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		defer memoryMonitor.Stop(ctx)
+		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		defer diskMonitor.Stop(ctx)
+
+		rc := newDiskBackedRowContainer()
+		defer rc.Close(ctx)
+
+		if err := rc.AddRow(ctx, rows[0]); err != nil {
+			t.Fatal(err)
+		}
+		if !rc.Spilled() {
+			t.Fatal("expected to have spilled to disk")
+		}
+		if diskMonitor.AllocBytes() == 0 {
+			t.Fatal("disk monitor reports no disk usage")
+		}
+		if memoryMonitor.AllocBytes() > 0 {
+			t.Fatal("memory monitor reports unexpected usage")
+		}
+	})
+
+	t.Run("AddRowOutOfDisk", func(t *testing.T) {
+		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		defer memoryMonitor.Stop(ctx)
+		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+
+		rc := newDiskBackedRowContainer()
+		defer rc.Close(ctx)
+
+		err := rc.AddRow(ctx, rows[0])
+		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
+			t.Fatalf(
+				"unexpected error %v, expected disk full error %s", err, pgerror.CodeDiskFullError,
+			)
+		}
+		if !rc.Spilled() {
+			t.Fatal("expected to have tried to spill to disk")
+		}
+		if diskMonitor.AllocBytes() != 0 {
+			t.Fatal("disk monitor reports unexpected usage")
+		}
+		if memoryMonitor.AllocBytes() != 0 {
+			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})
 }
