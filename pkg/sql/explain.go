@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 // Explain executes the explain statement, providing debugging and analysis
@@ -41,10 +42,15 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			return nil, err
 		}
 		return &explainDistSQLNode{
-			plan: plan,
+			plan:     plan,
+			analyze:  opts.Flags.Contains(tree.ExplainFlagAnalyze),
+			stmtType: n.Statement.StatementType(),
 		}, nil
 
 	case tree.ExplainPlan:
+		if opts.Flags.Contains(tree.ExplainFlagAnalyze) {
+			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
+		}
 		// We may want to show placeholder types, so allow missing values.
 		p.semaCtx.Placeholders.PermitUnassigned()
 		return p.makeExplainPlanNode(ctx, &opts, n.Statement)

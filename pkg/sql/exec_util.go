@@ -973,21 +973,24 @@ type SessionTracing struct {
 	lastRecording []traceRow
 }
 
-// getRecording returns the session trace. If we're not currently tracing, this
-// will be the last recorded trace. If we are currently tracing, we'll return
-// whatever was recorded so far.
-func (st *SessionTracing) getRecording() ([]traceRow, error) {
+// getSessionTrace returns the session trace. If we're not currently tracing,
+// this will be the last recorded trace. If we are currently tracing, we'll
+// return whatever was recorded so far.
+func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 	if !st.enabled {
 		return st.lastRecording, nil
 	}
 
+	return generateSessionTraceVTable(st.getRecording())
+}
+
+// getRecording returns the recorded spans of the current trace.
+func (st *SessionTracing) getRecording() []tracing.RecordedSpan {
 	var spans []tracing.RecordedSpan
 	if st.firstTxnSpan != nil {
 		spans = append(spans, tracing.GetRecording(st.firstTxnSpan)...)
 	}
-	spans = append(spans, tracing.GetRecording(st.connSpan)...)
-
-	return generateSessionTraceVTable(spans)
+	return append(spans, tracing.GetRecording(st.connSpan)...)
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
