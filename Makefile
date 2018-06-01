@@ -20,6 +20,8 @@
 # double-hash (##) comments throughout this Makefile. Please submit
 # improvements!
 
+-include build/defs.mk
+
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
 $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
 else
@@ -81,7 +83,12 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
-MAKEFLAGS += $(shell build/jflag.sh)
+ifeq "$(findstring -j,$(shell ps -o args= $$PPID))" ""
+ifdef NCPUS
+MAKEFLAGS += -j$(NCPUS)
+$(info Running make with -j$(NCPUS))
+endif
+endif
 
 help: ## Print help for targets with comments.
 	@echo "Usage:"
@@ -200,13 +207,14 @@ XGO     ?= xgo
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
-GOPATH := $(realpath $(shell $(GO) env GOPATH))
-ifeq ($(strip $(GOPATH)),)
-$(error GOPATH is not set and could not be automatically determined, build cannot continue)
-endif
-
+ifdef have-defs
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
 $(error GOPATHs with multiple entries are not supported)
+endif
+
+GOPATH := $(realpath $(GOPATH))
+ifeq "$(strip $(GOPATH))" ""
+$(error GOPATH is not set and could not be automatically determined)
 endif
 
 ifeq "$(filter $(GOPATH)%,$(CURDIR))" ""
@@ -217,9 +225,6 @@ ifeq "$(GOPATH)" "/"
 $(error GOPATH=/ is not supported)
 endif
 
-# Avoid printing twice if Make restarts (because a Makefile was changed) or is
-# called recursively from another Makefile.
-ifeq ($(MAKE_RESTARTS)$(MAKELEVEL),0)
 $(info GOPATH set to $(GOPATH))
 endif
 
@@ -249,8 +254,6 @@ ifeq ($(SHELL),)
 $(error bash is required)
 endif
 
-GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
-
 # Invocation of any NodeJS script should be prefixed by NODE_RUN. See the
 # comments within node-run.sh for rationale.
 NODE_RUN := build/node-run.sh
@@ -260,7 +263,6 @@ NODE_RUN := build/node-run.sh
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
-UNAME := $(shell uname)
 MACOS := $(findstring Darwin,$(UNAME))
 MINGW := $(findstring MINGW,$(UNAME))
 
@@ -284,16 +286,6 @@ term-reset = $(shell { tput sgr0 || tput me; } 2>/dev/null)
 $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
-
-# We used to check the Go version in a .PHONY target, but the error message, if
-# any, would get mixed in with noise from other targets when Make was executed
-# in parallel job mode. This check, by contrast, is guaranteed to print its
-# error message before any noisy output.
-IGNORE_GOVERS :=
-go-version-check := $(if $(IGNORE_GOVERS),,$(shell build/go-version-check.sh $(GO)))
-ifneq "$(go-version-check)" ""
-$(error $(go-version-check). Disable this check with IGNORE_GOVERS=1)
-endif
 
 # Print an error if the user specified any variables on the command line that
 # don't appear in this Makefile. The list of valid variables is automatically
@@ -321,7 +313,6 @@ ifneq ($(GIT_DIR),)
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
@@ -374,6 +365,39 @@ endif
 	mkdir -p $(@D)
 	touch $@
 
+IGNORE_GOVERS :=
+
+# defs.mk stores cached values of shell commands to avoid recomputing them on
+# every Make invocation. This has a small but noticeable effect, especially on
+# noop builds.
+build/defs.mk: Makefile build/defs.mk.sig
+ifndef IGNORE_GOVERS
+	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
+endif
+	@# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
+	@# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
+	@# to the host machine's actual macOS version works around this. See:
+	@# https://github.com/jemalloc/jemalloc/issues/494.
+	@echo "export MACOSX_DEPLOYMENT_TARGET ?= $$(sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')" > $@
+	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
+	@echo "GOEXE = $$($(GO) env GOEXE)" >> $@
+	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
+	@echo "UNAME = $$(uname)" >> $@
+	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@
+	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@
+	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@
+	@echo "have-defs = 1" >> $@
+	$(if $(have-defs),$(info Detected change in build system. Rebooting Make.))
+
+# defs.mk.sig attempts to capture common cases where defs.mk needs to be
+# recomputed, like when compiling for a different platform or using a different
+# Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
+# in place will go unnoticed, for example. Similar problems exist in all Make-
+# based build systems and are not worth solving.
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TYPE):$(IGNORE_GOVERS)
+build/defs.mk.sig: .ALWAYS_REBUILD
+	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
+
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
 # following forms:
@@ -386,7 +410,7 @@ endif
 # The special comments at the beginning are for Github/Go/Reviewable:
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
-build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile
+build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile build/defs.mk
 	@echo '# Code generated by Make. DO NOT EDIT.' > $@
 	@echo '# GENERATED FILE DO NOT EDIT' >> $@
 	@echo 'define VALID_VARS' >> $@
@@ -405,8 +429,6 @@ PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
-
-HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
 CONFIGURE_FLAGS :=
 CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
@@ -485,11 +507,19 @@ SNAPPY_DIR   := $(BUILD_DIR)/snappy
 LIBROACH_DIR := $(BUILD_DIR)/libroach
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
+
+LIBCRYPTOPP := $(CRYPTOPP_DIR)/libcryptopp.a
+LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
+LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
+LIBROCKSDB  := $(ROCKSDB_DIR)/librocksdb.a
+LIBSNAPPY   := $(SNAPPY_DIR)/libsnappy.a
+LIBROACH    := $(LIBROACH_DIR)/libroach.a
+LIBROACHCCL := $(LIBROACH_DIR)/libroachccl.a
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS_COMMON = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
-C_LIBS_OSS = $(C_LIBS_COMMON) libroach
-C_LIBS_CCL = $(C_LIBS_COMMON) libcryptopp libroachccl
+C_LIBS_COMMON = $(if $(USE_STDMALLOC),,$(LIBJEMALLOC)) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
+C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
+C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
@@ -505,9 +535,9 @@ NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
 #
 # Unsuffixed flags files (zcgo_flags.cgo) have the build constraint `!make`
 # and are only compiled when invoking the Go toolchain directly on a package--
-# i.e., when the `make` build tag is not specified. These files are rebuilt on
-# every Make invocation, and so reflect the target triple that Make was most
-# recently invoked with.
+# i.e., when the `make` build tag is not specified. These files are rebuilt
+# whenever the build signature changes (see build/defs.mk.sig), and so reflect
+# the target triple that Make was most recently invoked with.
 #
 # Suffixed flags files (e.g. zcgo_flags_arch_vendor_os_abi.go) have the build
 # constraint `arch_vendor_os_abi` and are built the first time a Make-driven
@@ -519,7 +549,7 @@ CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix ./pkg/,$(addsuffix /zcgo_flags.go,$(CG
 CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./pkg/,$(addsuffix /zcgo_flags_$(NATIVE_SPECIFIER_TAG).go,$(CGO_PKGS)))
 CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
-$(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
+$(CGO_UNSUFFIXED_FLAGS_FILES): build/defs.mk.sig
 
 $(CGO_FLAGS_FILES): Makefile
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
@@ -593,15 +623,15 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initial
 endif
 
 $(ROCKSDB_DIR)/Makefile: sse := $(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3)
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | bin/.submodules-initialized libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | bin/.submodules-initialized $(LIBSNAPPY) $(if $(USE_STDMALLOC),,$(LIBJEMALLOC))
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && CFLAGS+=" $(sse)" && CXXFLAGS+=" $(sse)" && cmake $(XCMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(BUILD_TYPE)),-DPORTABLE=ON) \
-	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
-	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
+	  -DSNAPPY_LIBRARIES=$(LIBSNAPPY) -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
+	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(LIBJEMALLOC) -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  -DCMAKE_BUILD_TYPE=$(if $(ENABLE_ROCKSDB_ASSERTIONS),Debug,Release)
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | bin/.submodules-initialized
@@ -621,62 +651,81 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | bin/.submodules-initi
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
 	cd $(LIBROACH_DIR) && cmake $(XCMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release \
-		-DPROTOBUF_LIB=$(PROTOBUF_DIR)/libprotobuf.a -DROCKSDB_LIB=$(ROCKSDB_DIR)/librocksdb.a \
-		-DJEMALLOC_LIB=$(JEMALLOC_DIR)/lib/libjemalloc.a -DSNAPPY_LIB=$(SNAPPY_DIR)/libsnappy.a \
-		-DCRYPTOPP_LIB=$(CRYPTOPP_DIR)/libcryptopp.a
+		-DPROTOBUF_LIB=$(LIBPROTOBUF) -DROCKSDB_LIB=$(LIBROCKSDB) \
+		-DJEMALLOC_LIB=$(LIBJEMALLOC) -DSNAPPY_LIB=$(LIBSNAPPY) \
+		-DCRYPTOPP_LIB=$(LIBCRYPTOPP)
 
-# We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
-# having to name the artifact (for .PHONY), which can vary by platform, and so
-# the child Makefile can determine whether the target is up to date (for both
-# .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
-# and we certainly don't want to duplicate them.
+# Most of our C and C++ dependencies use Makefiles that are generated by CMake,
+# which are rather slow, taking upwards of 500ms to determine that nothing has
+# changed. The no-op case is the common case, as C and C++ code is modified
+# rarely relative to Go code.
+#
+# So, for speed, we want to avoid invoking our C and C++ dependencies' build
+# systems when nothing has changed. We apply a very coarse heuristic that works
+# well in practice: if every file in a given library's source tree is older than
+# the compiled library, then the compiled library must be up-to-date.
+#
+# Normally, you'd accomplish this in Make itself by declaring a prerequisite for
+# every file in the library's source tree. For example, you'd have a rule like
+# this for protoc:
+#
+#     $(PROTOC): $(PROTOC_DIR)/Makefile $(shell find c-deps/protobuf)
+#       $(MAKE) -C $(PROTOC_DIR) protoc
+#
+# Note the prerequisite that shells out to the 'find' command. Unfortunately,
+# this winds up being as slow as unconditionally invoking the child build
+# system! The cost of repeated find invocations, one per command, adds up, plus
+# Make needs to stat all of the resulting files, and it seems to do so
+# sequentially.
+#
+# Instead, we unconditionally run the recipe for each C and C++ dependency, via
+# .ALWAYS_REBUILD, but condition the execution of the dependency's build system
+# on the output of uptodate, a Go binary of our own design. uptodate walks and
+# stats the directory tree in parallel, and can make the up-to-date
+# determination in under 20ms.
 
-$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD | libprotobuf
-	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
+$(PROTOC): $(PROTOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD | $(LIBPROTOBUF)
+	@uptodate $@ $(PROTOBUF_SRC_DIR) || $(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
-.PHONY: libcryptopp
-libcryptopp: $(CRYPTOPP_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
+$(LIBCRYPTOPP): $(CRYPTOPP_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(CRYPTOPP_SRC_DIR) || $(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
 
-.PHONY: libjemalloc
-libjemalloc: $(JEMALLOC_DIR)/Makefile
-	@set -o pipefail; $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static | { grep -v "Nothing to be done" || true; }
+$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(JEMALLOC_SRC_DIR) || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
-.PHONY: libprotobuf
-libprotobuf: $(PROTOBUF_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
+$(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(PROTOBUF_SRC_DIR) || $(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
 
-.PHONY: libsnappy
-libsnappy: $(SNAPPY_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
+$(LIBSNAPPY): $(SNAPPY_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(SNAPPY_SRC_DIR) || $(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
 
-.PHONY: librocksdb
-librocksdb: $(ROCKSDB_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
+$(LIBROCKSDB): $(ROCKSDB_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(ROCKSDB_SRC_DIR) || $(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
-.PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
+$(LIBROACH): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(LIBROACH_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
-.PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
+$(LIBROACHCCL): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(LIBROACH_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
+
+# Convenient names for maintainers. Not used by other targets in the Makefile.
+.PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy librocksdb libroach libroachccl
+protoc:      $(PROTOC)
+libcryptopp: $(LIBCRYPTOPP)
+libjemalloc: $(LIBJEMALLOC)
+libprotobuf: $(LIBPROTOBUF)
+libsnappy:   $(LIBSNAPPY)
+librocksdb:  $(LIBROCKSDB)
+libroach:    $(LIBROACH)
+libroachccl: $(LIBROACHCCL)
 
 PHONY: check-libroach
 check-libroach: ## Run libroach tests.
-check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy librocksdb libcryptopp
+check-libroach: $(LIBROACH_DIR)/Makefile $(LIBJEMALLOC) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB) $(LIBCRYPTOPP)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR)
 	cd $(LIBROACH_DIR) && ctest -V -R $(TESTS)
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
-
-# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
-# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
-# to the host machine's actual macOS version works around this. See:
-# https://github.com/jemalloc/jemalloc/issues/494.
-ifdef MACOS
-export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')
-endif
 
 # Some targets (protobuf) produce different results depending on the sort order;
 # set LC_COLLATE so this is consistent across systems.
@@ -684,7 +733,7 @@ export LC_COLLATE=C
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
-COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
+COCKROACH := ./cockroach$(SUFFIX)$(GOEXE)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
@@ -735,16 +784,20 @@ $(go-targets-ccl): $(C_LIBS_CCL)
 BUILDINFO = .buildinfo/tag .buildinfo/rev
 BUILD_TAGGED_RELEASE =
 
-# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS)
-$(go-targets): $(SQLPARSER_TARGETS) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS)
+$(go-targets): $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=$(TARGET_TRIPLE)" \
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)") \
 	$(if $(BUILD_TAGGED_RELEASE),-X "github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv=$(shell cat .buildinfo/tag)")
+
+# The build.utcTime format must remain in sync with TimeFormat in
+# pkg/build/info.go. It is not installed in tests to avoid busting the cache on
+# every rebuild.
+$(COCKROACH) build buildoss buildshort go-install: override LINKFLAGS += \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 
@@ -755,7 +808,7 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 .PHONY: build buildoss buildshort install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss buildshort go-install:
+$(COCKROACH) build buildoss buildshort go-install: $(DOCGEN_TARGETS)
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 ifndef XHOST_TRIPLE
 	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
@@ -1293,7 +1346,7 @@ unsafe-clean-c-deps:
 .PHONY: clean
 clean: ## Remove build artifacts.
 clean: clean-c-deps
-	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources
+	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
@@ -1331,6 +1384,7 @@ bins = \
   bin/returncheck \
   bin/roachtest \
   bin/teamcity-trigger \
+  bin/uptodate \
   bin/urlcheck \
   bin/workload \
   bin/zerosum
