@@ -155,13 +155,9 @@ func (l *legacyTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (l *legacyTransportAdapter) SendNext(ctx context.Context, done chan<- BatchCall) {
+func (l *legacyTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	l.called = true
-	br, err := l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
-	done <- BatchCall{
-		Reply: br,
-		Err:   err,
-	}
+	return l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
 }
 
 func (l *legacyTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
@@ -1953,7 +1949,10 @@ func TestSenderTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	transport.SendNext(context.Background(), make(chan BatchCall, 1))
+	_, err = transport.SendNext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !transport.IsExhausted() {
 		t.Fatalf("transport is not exhausted")
 	}
