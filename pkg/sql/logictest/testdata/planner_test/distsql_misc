@@ -1,5 +1,7 @@
 # LogicTest: 5node-distsql
 
+subtest scrub
+
 # Verify the index check execution plan uses a merge join.
 
 statement ok
@@ -49,3 +51,38 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJycklFrnTAUx9_3KcJ58nID1bi9BAYZbAWL0-G8T0PEmXNtqEskidBS_O7DCGstvRvdY345__wO5-QRtJFYdL_QAf8BCTQUJmt6dM7YFW0FmbwHHlNQepr9ihsKvbEI_BG88iMCh7r7OWKFnUR7FQMFib5TY3i2v1WjbLvZm1Zpifft-a5VsrV4bqfOovYiVECzUDCzf3I43w0IPFno__WR7PvYZKtaSdbe4YPYyEUxuyh-8s3aWIkW5c7VrMl_lbzS_Ve0A94YpdFesX339cOEnFyf8pyUp_pLRW7KrAAKI559JNiRivR4-GjVcOsjkRypYMcDULhWo0fLSRRFgpHsOynKmhSnPD-QsiKRSHfsQD4Vn0kk3gf6nHz4Q4BCOXtOREIFoyK9OL70LXur0E1GO3w5xldfjtfZoRxw24Uzs-3xmzV90GzHMuQCkOj8dsu2Q6bDVfhYz8PJG8LsZZj9NZzuwvHSLO9-BwAA__9_viDb
+
+subtest stats
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE data]
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s1 ON a FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lM-KszAUxfffU8hdfQOBJmr_ueosu5kO7ewGF6m5iIw1kkSYmeK7DyrSsbRRaGbpjSe_czjhnqGQAl_4CTVE78CAgA8EAiAQAoE5xARKJRPUWqrml06wFZ8QUQJZUVamGccEEqkQojOYzOQIEbzxY4575ALVjAIBgYZneYspVXbi6msjuOFAYFeZyNswiGsCsjKXK7XhKULEajIde-CnMkc1mw-R3fiQfWPkMUpp4-hguB3s3wVfeFUhlUCFYsCL67vWntNUYcqNVDNGp5v0_vuUescq-UCjn-5aDgaW2fSKmMOKRrB9RQvnFfnT8_oO845g-7xL53mD6XkDh3lHsH3elfO84fS8ocO8I9g-7_pPV84N8B51KQuNV6vn9s20WUkoUuz2l5aVSvBVyaTFdJ-7VtcOBGrTnbLuY1t0R43B32JmFfsDMbsW-3byCDqwqkO7OHzE99wqXtjJi0fIS6t4ZSevHiGv7V3RkWdif2TX7Lj-9xMAAP__kHfOZg==
