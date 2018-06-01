@@ -139,10 +139,6 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	// Rename the column in the indexes.
 	tableDesc.RenameColumnDescriptor(col, string(n.NewName))
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return nil, err
 	}

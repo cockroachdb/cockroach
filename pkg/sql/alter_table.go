@@ -597,15 +597,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 	}
 
 	mutationID := sqlbase.InvalidMutationID
-	var err error
 	if addedMutations {
+		var err error
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
-	} else {
-		err = n.tableDesc.SetUpVersion()
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {

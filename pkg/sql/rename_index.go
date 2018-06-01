@@ -81,10 +81,6 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, err
 	}
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return nil, err
 	}

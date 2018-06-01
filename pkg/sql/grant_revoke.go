@@ -112,9 +112,6 @@ func (p *planner) changePrivileges(
 			if err := d.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 				return nil, err
 			}
-			if err := d.SetUpVersion(); err != nil {
-				return nil, err
-			}
 			p.notifySchemaChange(d, sqlbase.InvalidMutationID)
 		}
 	}
