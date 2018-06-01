@@ -283,15 +283,6 @@ func (ds *DistSender) RangeLookup(
 	// know the correct answer, we lookup both the pre- and post- transaction
 	// values.
 	rc := roachpb.READ_UNCOMMITTED
-	if !ds.st.Version.IsActive(cluster.VersionReadUncommittedRangeLookups) {
-		// READ_UNCOMMITTED was unsupported before this version. RangeLookup
-		// will set the DeprecatedReturnIntents when scanning inconsistently,
-		// which will have the same effect of returning both committed and
-		// uncommitted values.
-		//
-		// TODO(nvanbenschoten): remove in version 2.1.
-		rc = roachpb.INCONSISTENT
-	}
 	// By using DistSender as the sender, we guarantee that even if the desired
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue

@@ -146,10 +146,11 @@ import (
 //   RangeMetaKey(existingSplitBoundary)
 //
 //
-// Lookups for range metadata keys usually want to read inconsistently, but some
-// callers need a consistent result; both are supported be specifying the
-// ReadConsistencyType. If the lookup is consistent, the Sender provided should
-// be a TxnCoordSender.
+// Lookups for range metadata keys usually want to perform reads at the
+// READ_UNCOMMITTED read consistency level read in order to observe intents as
+// well. However, some callers need a consistent result; both are supported be
+// specifying the ReadConsistencyType. If the lookup is consistent, the Sender
+// provided should be a TxnCoordSender.
 //
 // This method has an important optimization if the prefetchNum arg is larger
 // than 0: instead of just returning the request RangeDescriptor, it also
@@ -311,26 +312,6 @@ func lookupRangeFwdScan(
 	}
 	ba.Add(&roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
-		// NOTE (subtle): we want the scan to return intents as well as values
-		// when scanning inconsistently. The reason is because it's not clear
-		// whether the intent or the previous value points to the correct
-		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record co-located with a replica
-		// involved in the split. Since we cannot know the correct answer, we
-		// reply with both the pre- and post- transaction values.
-		//
-		// This does not count against a maximum range count (per the
-		// ReturnIntents contract) because they are possible versions of the
-		// same descriptor. In other words, both the current live descriptor and
-		// a potentially valid descriptor from observed intents could be
-		// returned.
-		//
-		// We don't need to set this when rc == roachpb.READ_UNCOMMITTED
-		// because all read_uncommitted requests will return intents, which
-		// is why this option is now deprecated.
-		//
-		// TODO(nvanbenschoten): remove in version 2.1.
-		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
@@ -400,8 +381,6 @@ func lookupRangeRevScan(
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
-		// See explanation above in lookupRangeFwdScan.
-		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
