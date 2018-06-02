@@ -34,6 +34,11 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 	rightScope := b.buildSelect(clause.Right, inScope)
 	outScope = leftScope
 
+	// Remove any hidden columns added by any "inner" ORDER BY clauses
+	// (which will be ignored).
+	leftScope.removeHiddenCols()
+	rightScope.removeHiddenCols()
+
 	// Check that the number of columns matches.
 	if len(leftScope.cols) != len(rightScope.cols) {
 		panic(builderError{pgerror.NewErrorf(
