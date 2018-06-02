@@ -48,6 +48,10 @@ type scope struct {
 	// type checking. This only applies to the top-level subqueries that are
 	// anchored directly to a relational expression.
 	columns int
+
+	// In cases like (SELECT x FROM xy ORDER BY y), the scope only
+	// contains x
+	orderScope *scope
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -656,6 +660,13 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // verify that the correct number of columns is returned.
 func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
 	outScope := s.builder.buildStmt(sub.Select, s)
+
+	// Treat the subquery result as an anonymous data source (i.e. column names
+	// are not qualified). Remove any hidden columns added by the subquery's
+	// ORDER BY clause.
+	outScope.setTableAlias("")
+	outScope.removeHiddenCols()
+
 	if desiredColumns > 0 && len(outScope.cols) != desiredColumns {
 		n := len(outScope.cols)
 		switch desiredColumns {
