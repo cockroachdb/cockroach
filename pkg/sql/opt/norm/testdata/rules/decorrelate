@@ -519,20 +519,24 @@ semi-join-apply
  │    │    ├── outer: (2)
  │    │    ├── keys: (6)
  │    │    ├── left-join
- │    │    │    ├── columns: x:6(int!null) y:7(int) v:9(int)
+ │    │    │    ├── columns: x:6(int!null) y:7(int) v:9(int) notnull:12(bool)
  │    │    │    ├── outer: (2)
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    └── keys: (6)
- │    │    │    ├── scan uv
- │    │    │    │    └── columns: v:9(int)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: notnull:12(bool!null) v:9(int)
+ │    │    │    │    ├── scan uv
+ │    │    │    │    │    └── columns: v:9(int)
+ │    │    │    │    └── projections [outer=(9)]
+ │    │    │    │         └── true [type=bool]
  │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
- │    │    └── aggregations [outer=(2,7,9)]
+ │    │    └── aggregations [outer=(7,9,12)]
  │    │         ├── sum [type=decimal, outer=(9)]
  │    │         │    └── variable: uv.v [type=int, outer=(9)]
- │    │         ├── count [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         ├── count [type=int, outer=(12)]
+ │    │         │    └── variable: notnull [type=bool, outer=(12)]
  │    │         └── any-not-null [type=int, outer=(7)]
  │    │              └── variable: xy.y [type=int, outer=(7)]
  │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
@@ -939,9 +943,9 @@ project
       │    │    │    │    │    └── columns: xy.y:7(int)
       │    │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │    └── aggregations [outer=(1-5)]
-      │    │    │         ├── count [type=int, outer=(1)]
-      │    │    │         │    └── variable: a.k [type=int, outer=(1)]
+      │    │    │    └── aggregations [outer=(2-5,7)]
+      │    │    │         ├── count [type=int, outer=(7)]
+      │    │    │         │    └── variable: xy.y [type=int, outer=(7)]
       │    │    │         ├── any-not-null [type=int, outer=(2)]
       │    │    │         │    └── variable: a.i [type=int, outer=(2)]
       │    │    │         ├── any-not-null [type=float, outer=(3)]
@@ -993,9 +997,9 @@ project
       │    │    │    └── keys: (6)
       │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │         └── a.k = uv.u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    └── aggregations [outer=(1-5)]
-      │         ├── count [type=int, outer=(1)]
-      │         │    └── variable: a.k [type=int, outer=(1)]
+      │    └── aggregations [outer=(2-6)]
+      │         ├── count [type=int, outer=(6)]
+      │         │    └── variable: uv.u [type=int, outer=(6)]
       │         ├── any-not-null [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
       │         ├── any-not-null [type=float, outer=(3)]
@@ -1015,10 +1019,10 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) exists_agg:9(bool)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) any_not_null:9(bool)
       ├── keys: (1)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) exists_agg:9(bool)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) any_not_null:9(bool)
       │    ├── grouping columns: k:1(int!null)
       │    ├── keys: (1)
       │    ├── left-join
@@ -1035,7 +1039,7 @@ project
       │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,8)]
-      │         ├── exists-agg [type=bool, outer=(8)]
+      │         ├── any-not-null [type=bool, outer=(8)]
       │         │    └── variable: true [type=bool, outer=(8)]
       │         ├── any-not-null [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
@@ -1046,7 +1050,7 @@ project
       │         └── any-not-null [type=jsonb, outer=(5)]
       │              └── variable: a.j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,9)]
-           └── (a.i = 1) OR exists_agg [type=bool, outer=(2,9)]
+           └── (a.i = 1) OR (any_not_null IS NOT NULL) [type=bool, outer=(2,9)]
 
 # Any with IS NULL.
 opt
@@ -1209,9 +1213,9 @@ project
  │    │    │    └── columns: xy.y:20(int)
  │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
  │    │         └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
- │    └── aggregations [outer=(1,7)]
- │         ├── count [type=int, outer=(1)]
- │         │    └── variable: a.k [type=int, outer=(1)]
+ │    └── aggregations [outer=(7,20)]
+ │         ├── count [type=int, outer=(20)]
+ │         │    └── variable: xy.y [type=int, outer=(20)]
  │         └── any-not-null [type=int, outer=(7)]
  │              └── variable: xy.x [type=int, outer=(7)]
  └── projections [outer=(7,21)]
@@ -1269,14 +1273,14 @@ SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 project
  ├── columns: "EXISTS (SELECT * FROM xy WHERE y = i)":8(bool)
  ├── group-by
- │    ├── columns: exists_agg:10(bool) rownum:11(int!null)
- │    ├── grouping columns: rownum:11(int!null)
- │    ├── keys: (11)
+ │    ├── columns: any_not_null:10(bool) rownum:12(int!null)
+ │    ├── grouping columns: rownum:12(int!null)
+ │    ├── keys: (12)
  │    ├── left-join
- │    │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:11(int!null)
+ │    │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
  │    │    ├── row-number
- │    │    │    ├── columns: i:2(int) rownum:11(int!null)
- │    │    │    ├── keys: (11)
+ │    │    │    ├── columns: i:2(int) rownum:12(int!null)
+ │    │    │    ├── keys: (12)
  │    │    │    └── scan a
  │    │    │         └── columns: i:2(int)
  │    │    ├── project
@@ -1288,10 +1292,10 @@ project
  │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
- │         └── exists-agg [type=bool, outer=(9)]
+ │         └── any-not-null [type=bool, outer=(9)]
  │              └── variable: true [type=bool, outer=(9)]
  └── projections [outer=(10)]
-      └── variable: exists_agg [type=bool, outer=(10)]
+      └── any_not_null IS NOT NULL [type=bool, outer=(10)]
 
 # Any in projection list.
 opt
@@ -1377,34 +1381,39 @@ SELECT s, x FROM a FULL JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 project
  ├── columns: s:4(string) x:6(int)
  └── full-join
-      ├── columns: k:1(int) s:4(string) x:6(int) exists_agg:11(bool)
+      ├── columns: k:1(int) s:4(string) x:6(int) exists:12(bool)
       ├── scan a
       │    ├── columns: k:1(int!null) s:4(string)
       │    └── keys: (1)
-      ├── group-by
-      │    ├── columns: x:6(int!null) exists_agg:11(bool)
-      │    ├── grouping columns: x:6(int!null)
+      ├── project
+      │    ├── columns: exists:12(bool) x:6(int!null)
       │    ├── keys: (6)
-      │    ├── left-join
-      │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) true:10(bool)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    └── keys: (6)
-      │    │    ├── project
-      │    │    │    ├── columns: true:10(bool!null) u:8(int!null)
-      │    │    │    ├── keys: (8)
-      │    │    │    ├── scan uv
-      │    │    │    │    ├── columns: u:8(int!null)
-      │    │    │    │    └── keys: (8)
-      │    │    │    └── projections [outer=(8)]
-      │    │    │         └── true [type=bool]
-      │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
-      │    │         └── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
-      │    └── aggregations [outer=(10)]
-      │         └── exists-agg [type=bool, outer=(10)]
-      │              └── variable: true [type=bool, outer=(10)]
-      └── filters [type=bool, outer=(1,6,11)]
-           └── exists_agg OR (a.k = xy.x) [type=bool, outer=(1,6,11)]
+      │    ├── group-by
+      │    │    ├── columns: x:6(int!null) any_not_null:11(bool)
+      │    │    ├── grouping columns: x:6(int!null)
+      │    │    ├── keys: (6)
+      │    │    ├── left-join
+      │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) true:10(bool)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    └── keys: (6)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: true:10(bool!null) u:8(int!null)
+      │    │    │    │    ├── keys: (8)
+      │    │    │    │    ├── scan uv
+      │    │    │    │    │    ├── columns: u:8(int!null)
+      │    │    │    │    │    └── keys: (8)
+      │    │    │    │    └── projections [outer=(8)]
+      │    │    │    │         └── true [type=bool]
+      │    │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │         └── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    └── aggregations [outer=(10)]
+      │    │         └── any-not-null [type=bool, outer=(10)]
+      │    │              └── variable: true [type=bool, outer=(10)]
+      │    └── projections [outer=(6,11)]
+      │         └── any_not_null IS NOT NULL [type=bool, outer=(11)]
+      └── filters [type=bool, outer=(1,6,12)]
+           └── exists OR (a.k = xy.x) [type=bool, outer=(1,6,12)]
 
 # Any in Join filter disjunction.
 opt
@@ -1506,7 +1515,7 @@ opt
 SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
- ├── columns: "(VALUES (EXISTS (SELECT * FROM xy WHERE x = k)))":12(bool)
+ ├── columns: "(VALUES (EXISTS (SELECT * FROM xy WHERE x = k)))":13(bool)
  ├── left-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool)
  │    ├── keys: (1)
@@ -1521,43 +1530,47 @@ project
  │    │         ├── columns: column1:8(bool)
  │    │         ├── outer: (1)
  │    │         └── inner-join-apply
- │    │              ├── columns: column1:8(bool) exists_agg:10(bool) rownum:11(int!null)
+ │    │              ├── columns: column1:8(bool) exists:11(bool)
  │    │              ├── outer: (1)
- │    │              ├── keys: (11)
- │    │              ├── group-by
- │    │              │    ├── columns: exists_agg:10(bool) rownum:11(int!null)
- │    │              │    ├── grouping columns: rownum:11(int!null)
+ │    │              ├── project
+ │    │              │    ├── columns: exists:11(bool)
  │    │              │    ├── outer: (1)
- │    │              │    ├── keys: (11)
- │    │              │    ├── left-join
- │    │              │    │    ├── columns: x:6(int) true:9(bool) rownum:11(int!null)
+ │    │              │    ├── group-by
+ │    │              │    │    ├── columns: any_not_null:10(bool) rownum:12(int!null)
+ │    │              │    │    ├── grouping columns: rownum:12(int!null)
  │    │              │    │    ├── outer: (1)
- │    │              │    │    ├── keys: weak(6)
- │    │              │    │    ├── row-number
- │    │              │    │    │    ├── columns: rownum:11(int!null)
- │    │              │    │    │    ├── cardinality: [1 - 1]
- │    │              │    │    │    ├── keys: (11)
- │    │              │    │    │    └── values
- │    │              │    │    │         ├── cardinality: [1 - 1]
- │    │              │    │    │         └── tuple [type=tuple{}]
- │    │              │    │    ├── project
- │    │              │    │    │    ├── columns: true:9(bool!null) x:6(int!null)
- │    │              │    │    │    ├── keys: (6)
- │    │              │    │    │    ├── scan xy
- │    │              │    │    │    │    ├── columns: x:6(int!null)
- │    │              │    │    │    │    └── keys: (6)
- │    │              │    │    │    └── projections [outer=(6)]
- │    │              │    │    │         └── true [type=bool]
- │    │              │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │              │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │              │    └── aggregations [outer=(9)]
- │    │              │         └── exists-agg [type=bool, outer=(9)]
- │    │              │              └── variable: true [type=bool, outer=(9)]
+ │    │              │    │    ├── keys: (12)
+ │    │              │    │    ├── left-join
+ │    │              │    │    │    ├── columns: x:6(int) true:9(bool) rownum:12(int!null)
+ │    │              │    │    │    ├── outer: (1)
+ │    │              │    │    │    ├── keys: weak(6)
+ │    │              │    │    │    ├── row-number
+ │    │              │    │    │    │    ├── columns: rownum:12(int!null)
+ │    │              │    │    │    │    ├── cardinality: [1 - 1]
+ │    │              │    │    │    │    ├── keys: (12)
+ │    │              │    │    │    │    └── values
+ │    │              │    │    │    │         ├── cardinality: [1 - 1]
+ │    │              │    │    │    │         └── tuple [type=tuple{}]
+ │    │              │    │    │    ├── project
+ │    │              │    │    │    │    ├── columns: true:9(bool!null) x:6(int!null)
+ │    │              │    │    │    │    ├── keys: (6)
+ │    │              │    │    │    │    ├── scan xy
+ │    │              │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │              │    │    │    │    │    └── keys: (6)
+ │    │              │    │    │    │    └── projections [outer=(6)]
+ │    │              │    │    │    │         └── true [type=bool]
+ │    │              │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              │    │    └── aggregations [outer=(9)]
+ │    │              │    │         └── any-not-null [type=bool, outer=(9)]
+ │    │              │    │              └── variable: true [type=bool, outer=(9)]
+ │    │              │    └── projections [outer=(10)]
+ │    │              │         └── any_not_null IS NOT NULL [type=bool, outer=(10)]
  │    │              ├── values
  │    │              │    ├── columns: column1:8(bool)
- │    │              │    ├── outer: (10)
+ │    │              │    ├── outer: (11)
  │    │              │    ├── cardinality: [1 - 1]
- │    │              │    └── (exists_agg) [type=tuple{bool}, outer=(10)]
+ │    │              │    └── (exists) [type=tuple{bool}, outer=(11)]
  │    │              └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]

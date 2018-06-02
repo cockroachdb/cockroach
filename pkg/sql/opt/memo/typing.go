@@ -133,10 +133,6 @@ func init() {
 		opt.MaxOp:        typeAsFirstArg,
 		opt.MinOp:        typeAsFirstArg,
 		opt.AnyNotNullOp: typeAsFirstArg,
-
-		// These aggregate functions are not part of SQL, and so are not part of
-		// the Builtins table that typeAsAggregate relies upon.
-		opt.ExistsAggOp: typeAsBool,
 	}
 
 	for _, op := range opt.BooleanOperators {

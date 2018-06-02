@@ -107,7 +107,8 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	logical.Relational.OutputCols = def.Cols
 
 	// Initialize not-NULL columns from the table schema.
-	addNotNullColsFromTable(logical.Relational, md, def.Table, def.Cols)
+	logical.Relational.NotNullCols = tableNotNullCols(md, def.Table)
+	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
 
 	// Initialize weak keys from the table schema.
 	logical.Relational.WeakKeys = md.TableWeakKeys(def.Table)
@@ -137,6 +138,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols()
 		if !constraintNotNullCols.Empty() {
 			logical.Relational.NotNullCols = logical.Relational.NotNullCols.Union(constraintNotNullCols)
+			logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
 		}
 	}
 
@@ -300,8 +302,11 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	// Lookup join output columns are stored in the definition.
 	logical.Relational.OutputCols = def.Cols
 
-	// Add not-NULL columns from the table schema.
-	addNotNullColsFromTable(logical.Relational, md, def.Table, def.Cols)
+	// Add not-NULL columns from the table schema, and filter out any not-NULL
+	// columns from the input that are not projected by the lookup join.
+	logical.Relational.NotNullCols = tableNotNullCols(md, def.Table)
+	logical.Relational.NotNullCols.IntersectionWith(inputProps.NotNullCols)
+	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
 
 	// Add weak keys from the table schema. There may already be some weak keys
 	// present from the input index.
@@ -686,19 +691,15 @@ func calcSetCardinality(ev ExprView, left, right props.Cardinality) props.Cardin
 	return card
 }
 
-// addNotNullColsFromTable adds not-NULL columns to the given relational props
-// from the given table schema.
-func addNotNullColsFromTable(
-	relational *props.Relational, md *opt.Metadata, tabID opt.TableID, cols opt.ColSet,
-) {
+// tableNotNullCols returns the set of not-NULL columns from the given table.
+func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
+	cs := opt.ColSet{}
 	tab := md.Table(tabID)
-
 	for i := 0; i < tab.ColumnCount(); i++ {
 		if !tab.Column(i).IsNullable() {
 			colID := md.TableColumn(tabID, i)
-			if cols.Contains(int(colID)) {
-				relational.NotNullCols.Add(int(colID))
-			}
+			cs.Add(int(colID))
 		}
 	}
+	return cs
 }
