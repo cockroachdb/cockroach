@@ -159,6 +159,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 		details = append(
 			details, fmt.Sprintf("IndexFilter: %s (right side only)", jr.IndexFilterExpr.Expr))
 	}
+	if jr.OnExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr.Expr))
+	}
 	return "JoinReader", details
 }
 
