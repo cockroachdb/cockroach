@@ -38,3 +38,23 @@ union             ·     ·
  └── render       ·     ·
       └── values  ·     ·
 ·                 size  3 columns, 6 rows
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
+----
+sort                 ·         ·            (a)     +a
+ │                   order     +a           ·       ·
+ └── union           ·         ·            (a)     ·
+      ├── render     ·         ·            (a)     ·
+      │    │         render 0  a            ·       ·
+      │    └── scan  ·         ·            (a, c)  ·
+      │              table     abc@primary  ·       ·
+      │              spans     ALL          ·       ·
+      └── render     ·         ·            (a)     ·
+           │         render 0  a            ·       ·
+           └── scan  ·         ·            (a, b)  ·
+·                    table     abc@primary  ·       ·
+·                    spans     ALL          ·       ·
