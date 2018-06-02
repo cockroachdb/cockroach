@@ -20,6 +20,10 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,6 +32,27 @@ import (
 
 const outboxBufRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
+
+var outboxBufRowsSetting = settings.RegisterValidatedIntSetting(
+	"sql.distsql.outbox_buf_rows",
+	"amount of rows to buffer in the outbox",
+	outboxBufRows,
+	func(i int64) error {
+		if i < 0 {
+			return fmt.Errorf("outbox_buf_rows must be non-negative")
+		}
+		if i > math.MaxInt32 {
+
+		}
+		return nil
+	},
+)
+
+var outboxFlushPeriodSetting = settings.RegisterNonNegativeDurationSetting(
+	"sql.distsql.outbox_flush_period",
+	"duration to wait before flushing an idle outbox",
+	outboxFlushPeriod,
+)
 
 // preferredEncoding is the encoding used for EncDatums that don't already have
 // an encoding available.
@@ -54,13 +79,16 @@ type outbox struct {
 
 	encoder StreamEncoder
 	// numRows is the number of rows that have been accumulated in the encoder.
-	numRows int
+	numRows int64
 
 	// flowCtxCancel is the cancellation function for this flow's ctx; context
 	// cancellation is used to stop processors on this flow. It is invoked
 	// whenever the consumer returns an error on the stream above. Set
 	// to a non-null value in start().
 	flowCtxCancel context.CancelFunc
+
+	bufRows     int64
+	flushPeriod time.Duration
 
 	err error
 }
@@ -71,6 +99,8 @@ var _ startable = &outbox{}
 func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
 	m := &outbox{flowCtx: flowCtx, addr: addr}
 	m.encoder.setHeaderFields(flowID, streamID)
+	m.bufRows = outboxBufRowsSetting.Get(&flowCtx.Settings.SV)
+	m.flushPeriod = outboxFlushPeriodSetting.Get(&flowCtx.Settings.SV)
 	return m
 }
 
@@ -122,7 +152,7 @@ func (m *outbox) addRow(
 	}
 	m.numRows++
 	var flushErr error
-	if m.numRows >= outboxBufRows || mustFlush {
+	if m.numRows >= m.bufRows || mustFlush {
 		flushErr = m.flush(ctx)
 	}
 	if encodingErr != nil {
@@ -240,8 +270,8 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				}
 				// If the message to add was metadata, a flush was already forced. If
 				// this is our first row, restart the flushTimer.
-				if m.numRows == 1 {
-					flushTimer.Reset(outboxFlushPeriod)
+				if m.numRows == 1 && m.flushPeriod > 0 {
+					flushTimer.Reset(m.flushPeriod)
 				}
 			}
 		case <-flushTimer.C:
