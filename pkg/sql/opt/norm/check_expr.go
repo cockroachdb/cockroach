@@ -24,19 +24,32 @@ import (
 // checkExpr does sanity checking on an Expr. This code is called from
 // onConstruct in testrace builds (which gives us test/CI coverage but elides
 // this code in regular builds).
-func (f *Factory) checkExpr(e memo.Expr) {
-	switch e.Operator() {
+func (f *Factory) checkExpr(ev memo.ExprView) {
+	// Check logical properties.
+	relational := ev.Logical().Relational
+	if relational != nil {
+		if !relational.NotNullCols.SubsetOf(relational.OutputCols) {
+			panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
+				relational.NotNullCols, relational.OutputCols))
+		}
+		if relational.OuterCols.Intersects(relational.OutputCols) {
+			panic(fmt.Sprintf("outer cols %s intersect output cols %s",
+				relational.OuterCols, relational.OutputCols))
+		}
+	}
+
+	switch ev.Operator() {
 	case opt.ProjectionsOp:
 		// Check that we aren't passing through columns in projection expressions.
-		n := e.ChildCount()
-		def := e.Private(f.mem).(*memo.ProjectionsOpDef)
+		n := ev.ChildCount()
+		def := ev.Private().(*memo.ProjectionsOpDef)
 		colList := def.SynthesizedCols
 		if len(colList) != n {
 			panic(fmt.Sprintf("%d projections but %d columns", n, len(colList)))
 		}
 		for i := 0; i < n; i++ {
-			if expr := f.mem.NormExpr(e.ChildGroup(f.mem, i)); expr.Operator() == opt.VariableOp {
-				if expr.Private(f.mem).(opt.ColumnID) == colList[i] {
+			if child := ev.Child(i); child.Operator() == opt.VariableOp {
+				if child.Private().(opt.ColumnID) == colList[i] {
 					panic(fmt.Sprintf("projection passes through column %d", colList[i]))
 				}
 			}
@@ -44,14 +57,14 @@ func (f *Factory) checkExpr(e memo.Expr) {
 
 	case opt.AggregationsOp:
 		// Check that we don't have any bare variables as aggregations.
-		n := e.ChildCount()
-		colList := e.Private(f.mem).(opt.ColList)
+		n := ev.ChildCount()
+		colList := ev.Private().(opt.ColList)
 		if len(colList) != n {
 			panic(fmt.Sprintf("%d aggregations but %d columns", n, len(colList)))
 		}
 		for i := 0; i < n; i++ {
-			if expr := f.mem.NormExpr(e.ChildGroup(f.mem, i)); expr.Operator() == opt.VariableOp {
-				if e.Operator() == opt.AggregationsOp {
+			if child := ev.Child(i); child.Operator() == opt.VariableOp {
+				if ev.Operator() == opt.AggregationsOp {
 					panic("aggregation contains bare variable")
 				}
 			}

@@ -184,7 +184,7 @@ func (f *Factory) canAggsIgnoreNulls(aggs memo.GroupID) bool {
 		switch f.mem.NormExpr(elem).Operator() {
 		case opt.AvgOp, opt.BoolAndOp, opt.BoolOrOp, opt.CountOp, opt.CountRowsOp,
 			opt.MaxOp, opt.MinOp, opt.SumIntOp, opt.SumOp, opt.SqrDiffOp,
-			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.ExistsAggOp, opt.AnyNotNullOp:
+			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.AnyNotNullOp:
 
 		default:
 			return false
@@ -214,7 +214,7 @@ func (f *Factory) canAggsIgnoreNulls(aggs memo.GroupID) bool {
 //   INNER JOIN LATERAL
 //   (
 //     SELECT COUNT(*), SUM(c) FROM input WHERE input.x = left.x
-//   )
+//   ) AS input
 //   ON left.y = 10
 //   =>
 //   SELECT ANY_NOT_NULL(left.x), ANY_NOT_NULL(left.y), COUNT(input.t), SUM(input.c)
@@ -384,14 +384,17 @@ func (r *subqueryHoister) input() memo.GroupID {
 //   SELECT *
 //   FROM xy
 //   WHERE
-//     (SELECT u FROM uv WHERE u=x LIMIT 1) IS NOT NULL OR
-//     EXISTS(SELECT * FROM jk WHERE j=x)
+//     (SELECT u FROM uv WHERE u=x LIMIT 1) IS NOT NULL
+//     OR EXISTS(SELECT * FROM jk WHERE j=x)
 //   =>
 //   SELECT xy.*
 //   FROM xy
 //   LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
 //   ON True
-//   INNER JOIN LATERAL (SELECT EXISTS_AGG(True) exists FROM jk WHERE j=x)
+//   INNER JOIN LATERAL
+//   (
+//     SELECT (ANY_NOT_NULL(True) IS NOT NULL) AS exists FROM jk WHERE j=x
+//   )
 //   ON True
 //   WHERE u IS NOT NULL OR exists
 //
@@ -404,7 +407,7 @@ func (r *subqueryHoister) input() memo.GroupID {
 //
 // See the comments for constructGroupByExists and constructGroupByAny for more
 // details on how EXISTS and ANY subqueries are hoisted, including usage of the
-// EXISTS_AGG function.
+// ANY_NOT_NULL function.
 func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 	// Match correlated subqueries.
 	ev := memo.MakeNormExprView(r.mem, root)
@@ -464,20 +467,23 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 //
 // into a scalar GroupBy expression that returns a one row, one column relation:
 //
-//   SELECT EXISTS_AGG(True) FROM (SELECT * FROM a WHERE a.x=b.x)
+//   SELECT (ANY_NOT_NULL(True) IS NOT NULL) AS exists
+//   FROM (SELECT * FROM a WHERE a.x=b.x)
 //
-// The expression uses an internally-defined EXISTS_AGG aggregation function for
-// brevity and easier implementation, but the above expression is equivalent to:
+// The expression uses an internally-defined ANY_NOT_NULL aggregation function,
+// since it's able to short-circuit on the first non-null it encounters. The
+// above expression is equivalent to:
 //
 //   SELECT COUNT(True) > 0 FROM (SELECT * FROM a WHERE a.x=b.x)
 //
-// EXISTS_AGG (and COUNT) always return exactly one boolean value in the context
-// of a scalar GroupBy expression. Because it's operand is always True, the only
-// way it can return False is if the input set is empty.
+// ANY_NOT_NULL (and COUNT) always return exactly one boolean value in the
+// context of a scalar GroupBy expression. Because its operand is always True,
+// the only way the final expression is False is when the input set is empty
+// (since ANY_NOT_NULL returns NULL, which IS NOT NULL maps to False).
 //
 // However, later on, the TryDecorrelateScalarGroupBy rule will push a left join
 // into the GroupBy, and null values produced by the join will flow into the
-// EXISTS_AGG. It's defined to ignore those nulls so that its result will be
+// ANY_NOT_NULL. It's defined to ignore those nulls so that its result will be
 // unaffected.
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
 	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
@@ -485,23 +491,32 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	pb.addSynthesized(r.f.ConstructTrue(), trueColID)
 	trueProjection := pb.buildProjections()
 
-	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
-
+	aggColID := r.f.Metadata().AddColumn("any_not_null", types.Bool)
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
-	return r.f.ConstructGroupBy(
-		r.f.ConstructProject(
-			subquery,
-			trueProjection,
-		),
-		r.f.ConstructAggregations(
-			r.f.internSingletonList(
-				r.f.ConstructExistsAgg(
-					r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
-				),
+	aggVar := r.f.ConstructVariable(r.f.InternColumnID(aggColID))
+
+	existsColID := r.f.Metadata().AddColumn("exists", types.Bool)
+	nullVal := r.f.ConstructNull(r.f.InternType(types.Unknown))
+	pb.addSynthesized(r.f.ConstructIsNot(aggVar, nullVal), existsColID)
+	existsProjection := pb.buildProjections()
+
+	return r.f.ConstructProject(
+		r.f.ConstructGroupBy(
+			r.f.ConstructProject(
+				subquery,
+				trueProjection,
 			),
-			aggCols,
+			r.f.ConstructAggregations(
+				r.f.internSingletonList(
+					r.f.ConstructAnyNotNull(
+						r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
+					),
+				),
+				aggCols,
+			),
+			r.f.InternColSet(opt.ColSet{}),
 		),
-		r.f.InternColSet(opt.ColSet{}),
+		existsProjection,
 	)
 }
 
