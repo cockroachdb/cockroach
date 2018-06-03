@@ -34,7 +34,7 @@ func TestRunDrain(t *testing.T) {
 
 	// A source with no rows and 2 ProducerMetadata messages.
 	src := &RowChannel{}
-	src.InitWithBufSize(nil, 10)
+	src.initWithBufSizeAndNumSenders(nil, 10, 1)
 	src.Push(nil /* row */, &ProducerMetadata{Err: fmt.Errorf("test")})
 	src.Push(nil /* row */, nil /* meta */)
 	src.Start(ctx)
@@ -62,7 +62,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].Init(oneIntCol)
+				rc[i].InitWithNumSenders(oneIntCol, 1)
 
 				go func(i int) {
 					defer wg.Done()
@@ -108,8 +108,8 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
-				mrc := &MultiplexedRowChannel{}
-				mrc.Init(senders, oneIntCol)
+				mrc := &RowChannel{}
+				mrc.InitWithNumSenders(oneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {
