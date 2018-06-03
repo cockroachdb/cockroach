@@ -219,6 +219,22 @@ func maybeInlineSideloadedRaftCommand(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading sideloaded data")
 	}
+
+	// RocksDB might have modified the on-disk copy's global sequence number. The
+	// sequence number was zero when the command was proposed through Raft, so
+	// zero it back out.
+	//
+	// If the Raft command has an empty GlobalSeqnoOffset, we're looking at an
+	// AddSSTable command that was persisted by an older version of CockroachDB.
+	// We don't know the offset of the sequence number, but that's OK because
+	// those older versions were careful to make a separate copy of the SST when
+	// necessary.
+	if off := command.ReplicatedEvalResult.AddSSTable.GlobalSeqnoOffset; off != 0 {
+		for i := uint64(0); i < 8; i++ { // seqno is 8 bytes
+			sideloadedData[off+i] = 0
+		}
+	}
+
 	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	{
 		data, err := protoutil.Marshal(&command)

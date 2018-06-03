@@ -272,10 +272,9 @@ type Engine interface {
 	NewSnapshot() Reader
 	// IngestExternalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree. May modify the files (including the underlying
-	// file in the case of hard-links) if allowFileModifications is passed as
-	// well. See additional comments in db.cc's IngestExternalFile explaining
-	// modification behavior.
-	IngestExternalFiles(ctx context.Context, paths []string, allowFileModifications bool) error
+	// file in the case of hard-links). See additional comments in db.cc's
+	// IngestExternalFile explaining modification behavior.
+	IngestExternalFiles(ctx context.Context, paths []string) error
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is

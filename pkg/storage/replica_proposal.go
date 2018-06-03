@@ -352,8 +352,6 @@ func addSSTablePreApply(
 		)
 	}
 
-	const modify, noModify = true, false
-
 	path, err := sideloaded.Filename(ctx, index, term)
 	if err != nil {
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
@@ -382,7 +380,8 @@ func addSSTablePreApply(
 			// pass it the path in the sideload store as it deletes the passed path on
 			// success.
 			if linkErr := os.Link(path, ingestPath); linkErr == nil {
-				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath}, noModify)
+				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+				fmt.Println(ingestErr)
 				if ingestErr == nil {
 					// Adding without modification succeeded, no copy necessary.
 					log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
@@ -423,7 +422,7 @@ func addSSTablePreApply(
 		copied = true
 	}
 
-	if err := eng.IngestExternalFiles(ctx, []string{path}, modify); err != nil {
+	if err := eng.IngestExternalFiles(ctx, []string{path}); err != nil {
 		log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)

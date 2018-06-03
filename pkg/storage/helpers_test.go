@@ -24,7 +24,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	leveldb "github.com/golang/leveldb/db"
+	"github.com/golang/leveldb/memfs"
+	"github.com/golang/leveldb/table"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -34,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -452,22 +454,31 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 func SetMockAddSSTable() (undo func()) {
 	prev, _ := batcheval.LookupCommand(roachpb.AddSSTable)
 
-	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
-	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
 		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
-		return result.Result{
-			Replicated: storagebase.ReplicatedEvalResult{
-				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
-					Data:  args.Data,
-					CRC32: util.CRC32(args.Data),
-				},
-			},
-		}, nil
+		// TODO(benesch): avoid copying this code from engineccl.NewNewSSTIterator.
+		fs := memfs.New()
+		const filename = "data.sst"
+		f, err := fs.Create(filename)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if _, err := f.Write(args.Data); err != nil {
+			return result.Result{}, err
+		}
+		if err := f.Close(); err != nil {
+			return result.Result{}, err
+		}
+		file, err := fs.Open(filename)
+		if err != nil {
+			return result.Result{}, err
+		}
+
+		return batcheval.MakeAddSSTableResult(ctx, args.Data, table.NewReader(file, &leveldb.Options{}))
 	}
 
 	batcheval.UnregisterCommand(roachpb.AddSSTable)

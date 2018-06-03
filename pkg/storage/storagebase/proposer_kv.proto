@@ -128,14 +128,21 @@ message ReplicatedEvalResult {
   // TODO(tschottdorf): additionally, after the crash, the node must not serve
   // traffic until the persisted committed log has fully applied. Otherwise, we
   // risk exposing data created through such a side effect whose corresponding
-  // Raft command hasn't committed yet. This isn't so much an issue with AddSSTable
-  // since these Ranges are not user-visible, but it is a general concern assuming
-  // other such side effects are added.
+  // Raft command hasn't committed yet. This isn't so much an issue with
+  // AddSSTable since these Ranges are not user-visible, but it is a general
+  // concern assuming other such side effects are added.
   message AddSSTable {
     option (gogoproto.equal) = true;
 
     bytes data = 1;
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
+
+    // The byte offset of the 64-bit global sequence number within the SST. The
+    // sequence number is always zero when the SST is proposed through Raft, but
+    // RocksDB might modify the on-disk copy when the SST is ingested. Storing
+    // the offset allows us to recover the original bytes when loading the Raft
+    // log. It is guaranteed that RocksDB will not otherwise modify the SST.
+    uint64 global_seqno_offset = 3;
   }
   reserved 16;
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];

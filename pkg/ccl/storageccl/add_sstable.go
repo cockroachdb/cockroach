@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -61,39 +59,32 @@ func evalAddSSTable(
 	}
 	ms.Subtract(existingStats)
 
+	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
+	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
+	// Next, we're also verifying each KV pair. We explicitly check the first key
+	// is >= start and then that we do not find a key after end.
+	dataIter, err := engineccl.NewMemSSTIterator(args.Data, true)
+	if err != nil {
+		return result.Result{}, err
+	}
+	defer dataIter.Close()
+
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, verify the key-value checksums, and compute the new
 	// MVCCStats.
 	stats, err := verifySSTable(
-		existingIter, args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		existingIter, dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "verifying sstable data")
 	}
 	ms.Add(stats)
 
-	return result.Result{
-		Replicated: storagebase.ReplicatedEvalResult{
-			AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
-				Data:  args.Data,
-				CRC32: util.CRC32(args.Data),
-			},
-		},
-	}, nil
+	return batcheval.MakeAddSSTableResult(ctx, args.Data, dataIter.Reader())
 }
 
 func verifySSTable(
-	existingIter engine.SimpleIterator, data []byte, start, end engine.MVCCKey, nowNanos int64,
+	existingIter, dataIter engine.SimpleIterator, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
-	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
-	// Next, we're also verifying each KV pair. We explicitly check the first key
-	// is >= start and then that we do not find a key after end.
-	dataIter, err := engineccl.NewMemSSTIterator(data, true)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	defer dataIter.Close()
-
 	// Check that the first key is in the expected range.
 	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
 	ok, err := dataIter.Valid()

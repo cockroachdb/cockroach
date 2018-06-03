@@ -25,7 +25,7 @@ var readerOpts = &db.Options{
 	Comparer: cockroachComparer{},
 }
 
-type sstIterator struct {
+type SSTIterator struct {
 	sst  *table.Reader
 	iter db.Iterator
 
@@ -45,25 +45,25 @@ type sstIterator struct {
 	verify bool
 }
 
-var _ engine.SimpleIterator = &sstIterator{}
+var _ engine.SimpleIterator = &SSTIterator{}
 
 // NewSSTIterator returns a SimpleIterator for a leveldb formatted sstable on
 // disk. It's compatible with sstables output by engine.RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewSSTIterator(path string) (engine.SimpleIterator, error) {
+func NewSSTIterator(path string) (*SSTIterator, error) {
 	file, err := db.DefaultFileSystem.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{sst: table.NewReader(file, readerOpts)}, nil
+	return &SSTIterator{sst: table.NewReader(file, readerOpts)}, nil
 }
 
 // NewMemSSTIterator returns a SimpleIterator for a leveldb format sstable in
 // memory. It's compatible with sstables output by engine.RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewMemSSTIterator(data []byte, verify bool) (engine.SimpleIterator, error) {
+func NewMemSSTIterator(data []byte, verify bool) (*SSTIterator, error) {
 	fs := memfs.New()
 	const filename = "data.sst"
 	f, err := fs.Create(filename)
@@ -81,11 +81,11 @@ func NewMemSSTIterator(data []byte, verify bool) (engine.SimpleIterator, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{fs: fs, sst: table.NewReader(file, readerOpts), verify: verify}, nil
+	return &SSTIterator{fs: fs, sst: table.NewReader(file, readerOpts), verify: verify}, nil
 }
 
 // Close implements the engine.SimpleIterator interface.
-func (r *sstIterator) Close() {
+func (r *SSTIterator) Close() {
 	if r.iter != nil {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
 	}
@@ -95,7 +95,7 @@ func (r *sstIterator) Close() {
 }
 
 // Seek implements the engine.SimpleIterator interface.
-func (r *sstIterator) Seek(key engine.MVCCKey) {
+func (r *SSTIterator) Seek(key engine.MVCCKey) {
 	if r.iter != nil {
 		if r.err = errors.Wrap(r.iter.Close(), "resetting sstable iterator"); r.err != nil {
 			return
@@ -106,12 +106,12 @@ func (r *sstIterator) Seek(key engine.MVCCKey) {
 }
 
 // Valid implements the engine.SimpleIterator interface.
-func (r *sstIterator) Valid() (bool, error) {
+func (r *SSTIterator) Valid() (bool, error) {
 	return r.valid && r.err == nil, r.err
 }
 
 // Next implements the engine.SimpleIterator interface.
-func (r *sstIterator) Next() {
+func (r *SSTIterator) Next() {
 	if r.valid = r.iter.Next(); !r.valid {
 		return
 	}
@@ -142,7 +142,7 @@ func (r *sstIterator) Next() {
 }
 
 // NextKey implements the engine.SimpleIterator interface.
-func (r *sstIterator) NextKey() {
+func (r *SSTIterator) NextKey() {
 	if !r.valid {
 		return
 	}
@@ -152,13 +152,17 @@ func (r *sstIterator) NextKey() {
 }
 
 // UnsafeKey implements the engine.SimpleIterator interface.
-func (r *sstIterator) UnsafeKey() engine.MVCCKey {
+func (r *SSTIterator) UnsafeKey() engine.MVCCKey {
 	return r.mvccKey
 }
 
 // UnsafeValue implements the engine.SimpleIterator interface.
-func (r *sstIterator) UnsafeValue() []byte {
+func (r *SSTIterator) UnsafeValue() []byte {
 	return r.iter.Value()
+}
+
+func (r *SSTIterator) Reader() *table.Reader {
+	return r.sst
 }
 
 type cockroachComparer struct{}

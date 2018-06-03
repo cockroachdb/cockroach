@@ -16,6 +16,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -746,33 +747,31 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 	tc.Start(t, stopper)
 
-	var ba roachpb.BatchRequest
-	ba.RangeID = tc.repl.RangeID
-
 	// Disable log truncation as we want to be sure that we get to create
 	// snapshots that have our sideloaded proposal in them.
 	tc.store.SetRaftLogQueueActive(false)
 
-	// Put a sideloaded proposal on the Range.
-	key, val := "don't", "care"
-	origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
-	{
-
-		var addReq roachpb.AddSSTableRequest
-		addReq.Data = origSSTData
-		addReq.Key = roachpb.Key(key)
-		addReq.EndKey = addReq.Key.Next()
-		ba.Add(&addReq)
-
-		_, pErr := tc.store.Send(ctx, ba)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
 	// Run a happy case snapshot. Check that it properly inlines the payload in
 	// the contained log entries.
-	inlinedEntry := func() raftpb.Entry {
+	checkHappyCase := func() (entry raftpb.Entry, seqno uint64) {
+		// Put a sideloaded proposal on the Range.
+		key, val := "don't", "care"
+		origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
+		{
+			var addReq roachpb.AddSSTableRequest
+			addReq.Data = origSSTData
+			addReq.Key = roachpb.Key(key)
+			addReq.EndKey = addReq.Key.Next()
+			var ba roachpb.BatchRequest
+			ba.RangeID = tc.repl.RangeID
+			ba.Add(&addReq)
+
+			_, pErr := tc.store.Send(ctx, ba)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
+
 		os, err := tc.repl.GetSnapshot(ctx, "testing-will-succeed")
 		if err != nil {
 			t.Fatal(err)
@@ -809,6 +808,8 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 					t.Fatalf("no AddSSTable found in sideloaded command %+v", cmd)
 				} else if len(as.Data) == 0 {
 					t.Fatalf("empty payload in sideloaded command: %+v", cmd)
+				} else if !bytes.Equal(as.Data, origSSTData) {
+					t.Fatalf("sideloaded payload in snapshot does not match original SST")
 				}
 				finalEnt = ent
 			}
@@ -816,9 +817,33 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		if finalEnt.Index == 0 {
 			t.Fatal("no sideloaded command found")
 		}
-		return finalEnt
-	}()
 
+		tc.repl.raftMu.Lock()
+		sstData, err := tc.repl.raftMu.sideloaded.Get(ctx, finalEnt.Index, finalEnt.Term)
+		tc.repl.raftMu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		seqnoOffset := cmd.ReplicatedEvalResult.AddSSTable.GlobalSeqnoOffset
+		if seqnoOffset > uint64(len(sstData)) {
+			t.Fatalf("seqno offset %d is outside of SST (len: %d)", seqnoOffset, len(sstData))
+		}
+		seqno = binary.LittleEndian.Uint64(sstData[seqnoOffset : seqnoOffset+8])
+		return finalEnt, seqno
+	}
+
+	if _, seqno := checkHappyCase(); seqno != 0 {
+		t.Fatalf("expected first AddSSTable seqno to be zero, but got %d", seqno)
+	}
+
+	// Run a second AddSSTable that overlaps with the first so that RocksDB
+	// mutates the SST on disk to install a global sequence number. This checks
+	// that the Raft machinery properly zeros the global sequence number out when
+	// loading the SST.
+	inlinedEntry, seqno := checkHappyCase()
+	if seqno == 0 {
+		t.Fatalf("expected second AddSSTable seqno to be non-zero, but got %d", seqno)
+	}
 	sideloadedIndex := inlinedEntry.Index
 
 	// This happens to be a good point in time to check the `entries()` method

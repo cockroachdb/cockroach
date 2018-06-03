@@ -642,8 +642,7 @@ DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
-DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
-                               bool allow_file_modifications) {
+DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files) {
   std::vector<std::string> paths_vec;
   for (size_t i = 0; i < len; i++) {
     paths_vec.push_back(paths[i]);
@@ -657,12 +656,6 @@ DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move
   // snapshot, a global sequence number is forced (see the allow_global_seqno
   // option).
   ingest_options.snapshot_consistency = true;
-  // If a file is ingested over existing data (including the range tombstones
-  // used by range snapshots) or if a RocksDB snapshot is outstanding when this
-  // ingest runs, then after moving/copying the file, RocksDB will edit it
-  // (overwrite some of the bytes) to have a global sequence number. If this is
-  // false, it will error in these cases instead.
-  ingest_options.allow_global_seqno = allow_file_modifications;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
   // and the ingest run. If false, an error is returned.
