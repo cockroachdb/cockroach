@@ -50,12 +50,18 @@ type copyMachine struct {
 	table         tree.TableExpr
 	columns       tree.NameList
 	resultColumns sqlbase.ResultColumns
-	buf           bytes.Buffer
-	rows          []*tree.Tuple
+	// buf is used to parse input data into rows. It also accumulates a partial
+	// row between protocol messages.
+	buf bytes.Buffer
+	// rows accumulates a batch of rows to be eventually inserted.
+	rows []*tree.Tuple
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
-	rowsMemAcc   mon.BoundAccount
+	// rowsMemAcc accounts for memory used by `rows`.
+	rowsMemAcc mon.BoundAccount
+	// bufMemAcc accounts for memory used by `buf`.
+	bufMemAcc mon.BoundAccount
 
 	// conn is the pgwire connection from which data is to be read.
 	conn pgwirebase.Conn
@@ -123,6 +129,7 @@ func newCopyMachine(
 		c.resultColumns[i] = sqlbase.ResultColumn{Typ: col.Type.ToDatumType()}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	return c, nil
 }
 
@@ -143,6 +150,7 @@ type copyTxnOpt struct {
 // in the database.
 func (c *copyMachine) run(ctx context.Context) error {
 	defer c.rowsMemAcc.Close(ctx)
+	defer c.bufMemAcc.Close(ctx)
 
 	// Send the message describing the columns to the client.
 	if err := c.conn.BeginCopyIn(ctx, c.resultColumns); err != nil {
@@ -167,12 +175,6 @@ Loop:
 				return err
 			}
 		case pgwirebase.ClientMsgCopyDone:
-			// If there's a line in the buffer without \n at EOL, add it here.
-			if c.buf.Len() > 0 {
-				if err := c.addRow(ctx, c.buf.Bytes()); err != nil {
-					return err
-				}
-			}
 			if err := c.processCopyData(
 				ctx, "" /* data */, c.p.EvalContext(), true, /* final */
 			); err != nil {
@@ -213,7 +215,16 @@ var (
 // final: If set, buffered data is written even if the buffer is not full.
 func (c *copyMachine) processCopyData(
 	ctx context.Context, data string, evalCtx *tree.EvalContext, final bool,
-) error {
+) (retErr error) {
+	// At the end, adjust the mem accounting to reflect what's left in the buffer.
+	defer func(oldSize int) {
+		if err := c.bufMemAcc.Resize(ctx, int64(oldSize), int64(c.buf.Len())); err != nil {
+			if retErr == nil {
+				retErr = err
+			}
+		}
+	}(c.buf.Len())
+
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyBatchRowSize = 100
 
@@ -223,6 +234,10 @@ func (c *copyMachine) processCopyData(
 		if err != nil {
 			if err != io.EOF {
 				return err
+			} else if !final {
+				// Put the incomplete row back in the buffer, to be processed next time.
+				c.buf.Write(line)
+				break
 			}
 		} else {
 			// Remove lineDelim from end.
