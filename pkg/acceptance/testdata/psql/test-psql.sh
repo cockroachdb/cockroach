@@ -79,5 +79,11 @@ psql -d testdb < import.sql
 psql -d testdb -c "select count(*) from large_strings" | grep "1"
 psql -d testdb -c "select length(s) from large_strings" | grep "10000"
 
+# Test that attempting to copy into a missing table returns the expected error
+# to the client. It didn't use to.
+echo 'Testing copy error'
+output="$(psql -d testdb -c 'copy missing from stdin' 2>&1 || true)"
+echo $output | grep 'relation "missing" does not exist'
+
 # Test that CREATE TABLE AS returns tag SELECT, not CREATE (#20227).
 psql -d testdb -c "CREATE TABLE ctas AS SELECT 1" | grep "SELECT"
