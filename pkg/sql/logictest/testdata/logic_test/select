@@ -88,6 +88,16 @@ SELECT a+b+c AS foo FROM abc
 foo
 6
 
+# Contradiction
+query III
+SELECT * FROM abc WHERE a > 5 AND a < 5
+----
+
+# Contradiction with remainder filter
+query III
+SELECT * FROM abc WHERE a > 5 AND a < 5 AND b>=100
+----
+
 statement ok
 INSERT INTO abc VALUES (0, 1, 2)
 
