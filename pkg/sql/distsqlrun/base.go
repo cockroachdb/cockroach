@@ -378,21 +378,32 @@ type RowChannel struct {
 
 	// dataChan is the same channel as C.
 	dataChan chan RowChannelMsg
+
+	// numSenders is an atomic counter that keeps track of how many senders have
+	// yet to call ProducerDone().
+	numSenders int32
 }
 
 var _ RowReceiver = &RowChannel{}
 var _ RowSource = &RowChannel{}
 
-// InitWithBufSize initializes the RowChannel with a given buffer size.
-func (rc *RowChannel) InitWithBufSize(types []sqlbase.ColumnType, chanBufSize int) {
+// InitWithNumSenders initializes the RowChannel with the default buffer size.
+// numSenders is the number of producers that will be pushing to this channel.
+// RowChannel will not be closed until it receives numSenders calls to
+// ProducerDone().
+func (rc *RowChannel) InitWithNumSenders(types []sqlbase.ColumnType, numSenders int) {
+	rc.initWithBufSizeAndNumSenders(types, rowChannelBufSize, numSenders)
+}
+
+// initWithBufSizeAndNumSenders initializes the RowChannel with a given buffer
+// size and number of senders.
+func (rc *RowChannel) initWithBufSizeAndNumSenders(
+	types []sqlbase.ColumnType, chanBufSize, numSenders int,
+) {
 	rc.types = types
 	rc.dataChan = make(chan RowChannelMsg, chanBufSize)
 	rc.C = rc.dataChan
-}
-
-// Init initializes the RowChannel with the default buffer size.
-func (rc *RowChannel) Init(types []sqlbase.ColumnType) {
-	rc.InitWithBufSize(types, rowChannelBufSize)
+	atomic.StoreInt32(&rc.numSenders, int32(numSenders))
 }
 
 // Push is part of the RowReceiver interface.
@@ -415,7 +426,13 @@ func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 
 // ProducerDone is part of the RowReceiver interface.
 func (rc *RowChannel) ProducerDone() {
-	close(rc.dataChan)
+	newVal := atomic.AddInt32(&rc.numSenders, -1)
+	if newVal < 0 {
+		panic("too many ProducerDone() calls")
+	}
+	if newVal == 0 {
+		close(rc.dataChan)
+	}
 }
 
 // OutputTypes is part of the RowSource interface.
@@ -444,87 +461,16 @@ func (rc *RowChannel) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (rc *RowChannel) ConsumerClosed() {
 	rc.consumerClosed("RowChannel")
-	// Read (at most) one message in case the producer is blocked trying to emit a
-	// row. Note that, if the producer is done, then it has also closed the
-	// channel this will not block. The producer might be neither blocked nor
-	// closed, though; hence the default case.
-	select {
-	case <-rc.dataChan:
-	default:
-	}
-}
-
-// MultiplexedRowChannel is a RowChannel wrapper which allows multiple row
-// producers to push rows on the same channel.
-type MultiplexedRowChannel struct {
-	rowChan RowChannel
-	// numSenders is an atomic counter that keeps track of how many senders have
-	// yet to call ProducerDone().
-	numSenders int32
-}
-
-var _ RowReceiver = &MultiplexedRowChannel{}
-var _ RowSource = &MultiplexedRowChannel{}
-
-// Init initializes the MultiplexedRowChannel with the default buffer size.
-func (mrc *MultiplexedRowChannel) Init(numSenders int, types []sqlbase.ColumnType) {
-	mrc.rowChan.Init(types)
-	atomic.StoreInt32(&mrc.numSenders, int32(numSenders))
-}
-
-// Push is part of the RowReceiver interface.
-func (mrc *MultiplexedRowChannel) Push(
-	row sqlbase.EncDatumRow, meta *ProducerMetadata,
-) ConsumerStatus {
-	return mrc.rowChan.Push(row, meta)
-}
-
-// ProducerDone is part of the RowReceiver interface.
-func (mrc *MultiplexedRowChannel) ProducerDone() {
-	newVal := atomic.AddInt32(&mrc.numSenders, -1)
-	if newVal < 0 {
-		panic("too many ProducerDone() calls")
-	}
-	if newVal == 0 {
-		mrc.rowChan.ProducerDone()
-	}
-}
-
-// OutputTypes is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) OutputTypes() []sqlbase.ColumnType {
-	return mrc.rowChan.types
-}
-
-// Start is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) Start(ctx context.Context) context.Context {
-	mrc.rowChan.Start(ctx)
-	return ctx
-}
-
-// Next is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta *ProducerMetadata) {
-	return mrc.rowChan.Next()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) ConsumerDone() {
-	mrc.rowChan.ConsumerDone()
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) ConsumerClosed() {
-	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&mrc.rowChan.consumerStatus)))
-	if status == ConsumerClosed {
-		panic("MultiplexedRowChannel already closed")
-	}
-	atomic.StoreUint32(
-		(*uint32)(&mrc.rowChan.consumerStatus), uint32(ConsumerClosed))
-	numSenders := atomic.LoadInt32(&mrc.numSenders)
+	numSenders := atomic.LoadInt32(&rc.numSenders)
 	// Drain (at most) numSenders messages in case senders are blocked trying to
 	// emit a row.
+	// Note that, if the producer is done, then it has also closed the
+	// channel this will not block. The producer might be neither blocked nor
+	// closed, though; hence the no data case.
 	for i := int32(0); i < numSenders; i++ {
-		if _, ok := <-mrc.rowChan.dataChan; !ok {
-			break
+		select {
+		case <-rc.dataChan:
+		default:
 		}
 	}
 }
