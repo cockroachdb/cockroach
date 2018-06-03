@@ -508,22 +508,7 @@ func (b *Builder) buildSort(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	ordering := ev.Physical().Ordering
-	colOrd := make(sqlbase.ColumnOrdering, len(ordering))
-	for i, col := range ordering {
-		ord := input.getColumnOrdinal(col.ID())
-		colOrd[i].ColIdx = int(ord)
-		if col.Descending() {
-			colOrd[i].Direction = encoding.Descending
-		} else {
-			colOrd[i].Direction = encoding.Ascending
-		}
-	}
-	node, err := b.factory.ConstructSort(input.root, colOrd)
-	if err != nil {
-		return execPlan{}, err
-	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	return b.buildSortedInput(input, ev.Physical().Ordering)
 }
 
 func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
@@ -549,7 +534,18 @@ func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
-	input, err := b.buildRelational(ev.Child(0))
+	// If lookup join child is a sort operator, then flip the order so that the
+	// sort is on top of the lookup join.
+	// TODO(radu): Remove this code once we have support for a more general
+	// lookup join operator.
+	var ordering props.Ordering
+	child := ev.Child(0)
+	if child.Operator() == opt.SortOp {
+		ordering = child.Physical().Ordering
+		child = child.Child(0)
+	}
+
+	input, err := b.buildRelational(child)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -562,10 +558,13 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 
 	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed)
 	if err != nil {
-		return execPlan{}, nil
+		return execPlan{}, err
 	}
 
 	res.root = node
+	if ordering != nil {
+		return b.buildSortedInput(res, ordering)
+	}
 	return res, nil
 }
 
@@ -680,4 +679,24 @@ func (b *Builder) buildShowTrace(ev memo.ExprView) (execPlan, error) {
 	// The subqueries are now owned by the explain node; remove them so they don't
 	// also show up in the final plan.
 	return ep, nil
+}
+
+// buildSortedInput is a helper method that can be reused to sort any input plan
+// by the given ordering.
+func (b *Builder) buildSortedInput(input execPlan, ordering props.Ordering) (execPlan, error) {
+	colOrd := make(sqlbase.ColumnOrdering, len(ordering))
+	for i, col := range ordering {
+		ord := input.getColumnOrdinal(col.ID())
+		colOrd[i].ColIdx = int(ord)
+		if col.Descending() {
+			colOrd[i].Direction = encoding.Descending
+		} else {
+			colOrd[i].Direction = encoding.Ascending
+		}
+	}
+	node, err := b.factory.ConstructSort(input.root, colOrd)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
