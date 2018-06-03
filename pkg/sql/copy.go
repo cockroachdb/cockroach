@@ -50,8 +50,11 @@ type copyMachine struct {
 	table         tree.TableExpr
 	columns       tree.NameList
 	resultColumns sqlbase.ResultColumns
-	buf           bytes.Buffer
-	rows          []*tree.Tuple
+	// buf is used to parse input data into rows. It also accumulates a partial
+	// row between protocol messages.
+	buf bytes.Buffer
+	// rows accumulates a batch of rows to be eventually inserted.
+	rows []*tree.Tuple
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
@@ -167,12 +170,6 @@ Loop:
 				return err
 			}
 		case pgwirebase.ClientMsgCopyDone:
-			// If there's a line in the buffer without \n at EOL, add it here.
-			if c.buf.Len() > 0 {
-				if err := c.addRow(ctx, c.buf.Bytes()); err != nil {
-					return err
-				}
-			}
 			if err := c.processCopyData(
 				ctx, "" /* data */, c.p.EvalContext(), true, /* final */
 			); err != nil {
@@ -223,6 +220,10 @@ func (c *copyMachine) processCopyData(
 		if err != nil {
 			if err != io.EOF {
 				return err
+			} else if !final {
+				// Put the incomplete row back in the buffer, to be processed next time.
+				c.buf.Write(line)
+				break
 			}
 		} else {
 			// Remove lineDelim from end.
