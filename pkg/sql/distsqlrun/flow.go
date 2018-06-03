@@ -338,23 +338,14 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 			var sync RowSource
 			switch is.Type {
 			case InputSyncSpec_UNORDERED:
-				if len(is.Streams) == 1 {
-					rowChan := &RowChannel{}
-					rowChan.Init(is.ColumnTypes)
-					if err := f.setupInboundStream(ctx, is.Streams[0], rowChan); err != nil {
+				mrc := &RowChannel{}
+				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
+				for _, s := range is.Streams {
+					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
 						return err
 					}
-					sync = rowChan
-				} else {
-					mrc := &MultiplexedRowChannel{}
-					mrc.Init(len(is.Streams), is.ColumnTypes)
-					for _, s := range is.Streams {
-						if err := f.setupInboundStream(ctx, s, mrc); err != nil {
-							return err
-						}
-					}
-					sync = mrc
 				}
+				sync = mrc
 			case InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
 				streams := make([]RowSource, len(is.Streams))
@@ -422,7 +413,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 				for inIdx, in := range ps.Input {
 					// Look for "simple" inputs: an unordered input (which, by definition,
 					// doesn't require an ordered synchronizer), with a single input stream
-					// (which doesn't require a MultiplexedRowChannel).
+					// (which doesn't require a multiplexed RowChannel).
 					if in.Type != InputSyncSpec_UNORDERED {
 						continue
 					}

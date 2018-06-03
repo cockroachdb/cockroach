@@ -108,8 +108,8 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
-				mrc := &MultiplexedRowChannel{}
-				mrc.Init(senders, oneIntCol)
+				mrc := &RowChannel{}
+				mrc.InitWithNumSenders(oneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {
