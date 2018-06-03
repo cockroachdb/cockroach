@@ -891,26 +891,22 @@ fooXraYXzaY
 query T
 SELECT regexp_replace(E'fooBa\nrbaz', 'b(..)', E'X\\&Y', 'gi')
 ----
-fooXBa
-YrXbazY
+fooXBa YrXbazY
 
 query T
 SELECT regexp_replace(E'fooBa\nrbaz', 'b(..)', E'X\\&Y', 'gmi')
 ----
-fooBa
-rXbazY
+fooBa rXbazY
 
 query T
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'gpi')
 ----
-fooBar
-XbazY
+fooBar XbazY
 
 query T
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'gwi')
 ----
-fooXBarY
-XbazY
+fooXBarY XbazY
 
 query T
 SELECT regexp_replace('foobarbaz', 'nope', 'NO')
@@ -923,41 +919,32 @@ SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 query T
 SELECT regexp_replace(E'Foo\nFoo', '^(foo)', 'BAR', 'i')
 ----
-BAR
-Foo
+BAR Foo
 
 query T
 SELECT regexp_replace(e'DOGGIE\ndog \nDOG', '^d.+', 'CAT', 's')
 ----
-DOGGIE
-dog
-DOG
+DOGGIE dog DOG
 
 query T
 SELECT regexp_replace(e'DOGGIE\ndog \nDOG', '^d.+', 'CAT', 'n');
 ----
-DOGGIE
-CAT
-DOG
+DOGGIE CAT DOG
 
 query T
 SELECT regexp_replace(e'DOGGIE\ndog \nDOG', '^D.+', 'CAT', 'p')
 ----
-CAT
-dog
-DOG
+CAT dog DOG
 
 query T
 SELECT regexp_replace(e'DOGGIE\ndog \nDOG', '^d.+', 'CAT', 'w')
 ----
-DOGGIE
-CAT
+DOGGIE CAT
 
 query T
 SELECT regexp_replace('abc', 'b', e'\n', 'w')
 ----
-a
-c
+a c
 
 query T
 SELECT regexp_replace('abc\', 'b', 'a', 'w')

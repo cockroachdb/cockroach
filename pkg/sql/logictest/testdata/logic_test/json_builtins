@@ -479,9 +479,7 @@ NULL
 query T
 SELECT jsonb_pretty('{"a": 1}')
 ----
-{
-    "a": 1
-}
+{ "a": 1 }
 
 query T
 SELECT '[1,2,3]'::JSON || '[4,5,6]'::JSON
