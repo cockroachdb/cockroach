@@ -334,6 +334,17 @@ func (r EncDatumRow) stringToBuf(types []ColumnType, a *DatumAlloc, b *bytes.Buf
 	b.WriteString("]")
 }
 
+// Copy makes a copy of this EncDatumRow. Convenient for tests. Use an
+// EncDatumRowAlloc in non-test code.
+func (r EncDatumRow) Copy() EncDatumRow {
+	if r == nil {
+		return nil
+	}
+	rCopy := make(EncDatumRow, len(r))
+	copy(rCopy, r)
+	return rCopy
+}
+
 func (r EncDatumRow) String(types []ColumnType) string {
 	var b bytes.Buffer
 	r.stringToBuf(types, &DatumAlloc{}, &b)

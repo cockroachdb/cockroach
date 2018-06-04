@@ -167,7 +167,7 @@ func TestTableReader(t *testing.T) {
 					if row == nil {
 						break
 					}
-					res = append(res, row)
+					res = append(res, row.Copy())
 				}
 				if result := res.String(tr.OutputTypes()); result != c.expected {
 					t.Errorf("invalid results: %s, expected %s'", result, c.expected)

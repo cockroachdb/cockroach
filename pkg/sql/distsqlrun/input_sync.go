@@ -84,7 +84,8 @@ type orderedSynchronizer struct {
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
-	alloc sqlbase.DatumAlloc
+	alloc    sqlbase.DatumAlloc
+	rowAlloc sqlbase.EncDatumRowAlloc
 
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.
@@ -197,6 +198,9 @@ func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadata
 			continue
 		}
 		if mode == stopOnRowOrError {
+			if row != nil {
+				row = s.rowAlloc.CopyRow(row)
+			}
 			src.row = row
 			return nil
 		}

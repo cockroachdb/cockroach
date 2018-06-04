@@ -423,7 +423,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				if row == nil {
 					break
 				}
-				res = append(res, row)
+				res = append(res, row.Copy())
 			}
 
 			if result := res.String(irj.OutputTypes()); result != tc.expected {
