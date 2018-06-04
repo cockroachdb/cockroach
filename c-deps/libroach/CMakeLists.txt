@@ -120,17 +120,10 @@ foreach(tsrc ${tests})
     set(tname ${dirname}_${filename})
   endif()
 
-  # Add a new executable and set includes/libraries/properties.
-  add_executable(${tname} ${tsrc} testutils.cc)
-  target_include_directories(${tname}
-    PRIVATE ../googletest/googletest/include
-    PRIVATE ../protobuf/src
-    PRIVATE ../rocksdb/include
-    PRIVATE protos
-  )
-
-  # Link `ccl/` tests against roachccl and CryptoPP.
   if(${tsrc} MATCHES "^ccl/")
+    # Link `ccl/` tests against roachccl and CryptoPP.
+		# Use ccl/testutils.
+    add_executable(${tname} ${tsrc} testutils.cc ccl/testutils.cc)
     target_link_libraries(${tname}
       roachccl
       ${CRYPTOPP_LIB}
@@ -139,7 +132,18 @@ foreach(tsrc ${tests})
       PRIVATE .. # CryptoPP headers are directly in the directory. Include .. to be able to include <cryptopp/....h>
       PRIVATE protosccl
     )
+  else()
+		# Use testutils.
+    add_executable(${tname} ${tsrc} testutils.cc)
   endif()
+
+	# Set includes/libraries/properties.
+  target_include_directories(${tname}
+    PRIVATE ../googletest/googletest/include
+    PRIVATE ../protobuf/src
+    PRIVATE ../rocksdb/include
+    PRIVATE protos
+  )
 
   # Add all other libraries.
   target_link_libraries(${tname}
