@@ -662,6 +662,10 @@ type logicQuery struct {
 	label string
 
 	checkResults bool
+	// valsPerLine is the number of values included in each line of the expected
+	// results. This can either be 1, or else it must match the number of expected
+	// columns (i.e. len(colTypes)).
+	valsPerLine int
 	// expectedResults indicates the expected sequence of text words
 	// when flattening a query's results.
 	expectedResults []string
@@ -1243,6 +1247,14 @@ func (t *logicTest) processSubtest(
 			} else {
 				// Parse "query <type-string> <options> <label>"
 				query.colTypes = fields[1]
+				if *bigtest {
+					// bigtests put each expected value on its own line.
+					query.valsPerLine = 1
+				} else {
+					// Otherwise, expect number of values to match expected type count.
+					query.valsPerLine = len(query.colTypes)
+				}
+
 				if len(fields) >= 3 {
 					query.rawOpts = fields[2]
 
@@ -1279,7 +1291,6 @@ func (t *logicTest) processSubtest(
 							if len(orderedCols) == 0 {
 								return errors.Errorf("%s: invalid sort mode: %s", query.pos, opt)
 							}
-
 							query.sorter = func(numCols int, values []string) {
 								partialSort(numCols, orderedCols, values)
 							}
@@ -1331,17 +1342,49 @@ func (t *logicTest) processSubtest(
 						query.checkResults = false
 					} else {
 						for {
+							// Normalize each expected row by discarding leading/trailing
+							// whitespace and by replacing each run of contiguous whitespace
+							// with a single space.
 							query.expectedResultsRaw = append(query.expectedResultsRaw, s.Text())
 							results := strings.Fields(s.Text())
 							if len(results) == 0 {
 								break
 							}
-							query.expectedResults = append(query.expectedResults, results...)
+
+							if query.sorter == nil {
+								// When rows don't need to be sorted, then always compare by
+								// tokens, regardless of where row/column boundaries are.
+								query.expectedResults = append(query.expectedResults, results...)
+							} else {
+								// It's important to know where row/column boundaries are in
+								// order to correctly perform sorting. Assume that boundaries
+								// are delimited by whitespace. This means that values cannot
+								// contain whitespace when there are multiple columns, since
+								// that would be interpreted as extra values:
+								//
+								//   foo bar baz
+								//
+								// If there are two expected columns, then it's not possible
+								// to know whether the expected results are ("foo bar", "baz")
+								// or ("foo", "bar baz"), so just error in that case.
+								if query.valsPerLine == 1 {
+									// Only one expected value per line, so never ambiguous,
+									// even if there is whitespace in the value.
+									query.expectedResults = append(query.expectedResults, strings.Join(results, " "))
+								} else {
+									// Don't error if --rewrite-results-in-testfiles is specified,
+									// since the expected results are ignored in that case.
+									if !*rewriteResultsInTestfiles && len(results) != len(query.colTypes) {
+										return errors.Errorf("expected results are invalid: unexpected column count")
+									}
+									query.expectedResults = append(query.expectedResults, results...)
+								}
+							}
+
 							if !s.Scan() {
 								break
 							}
 						}
-						query.expectedValues = len(query.expectedResults)
 					}
 				}
 			} else if query.label != "" {
@@ -1625,19 +1668,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		vals[i] = new(interface{})
 	}
 
-	var results []string
-	var resultLines [][]string
+	var actualResultsRaw []string
 	if query.colNames {
-		for _, col := range cols {
-			// We split column names on whitespace and append a separate "result"
-			// for each string. A bit unusual, but otherwise we can't match strings
-			// containing whitespace.
-			results = append(results, strings.Fields(col)...)
-		}
-		resultLines = append(resultLines, cols)
+		actualResultsRaw = append(actualResultsRaw, cols...)
 	}
 	for rows.Next() {
-		var resultLine []string
 		if err := rows.Scan(vals...); err != nil {
 			return err
 		}
@@ -1709,35 +1744,42 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				if val == "" {
 					val = "·"
 				}
-				// We split string results on whitespace and append a separate result
-				// for each string. A bit unusual, but otherwise we can't match strings
-				// containing whitespace.
-				valStr := fmt.Sprint(val)
-				results = append(results, strings.Fields(valStr)...)
-				resultLine = append(resultLine, valStr)
+				actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
 			} else {
-				results = append(results, "NULL")
-				resultLine = append(resultLine, "NULL")
+				actualResultsRaw = append(actualResultsRaw, "NULL")
 			}
 		}
-		resultLines = append(resultLines, resultLine)
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
+	// Normalize each row in the result by mapping each run of contiguous
+	// whitespace to a single space.
+	var actualResults []string
+	if actualResultsRaw != nil {
+		actualResults = make([]string, 0, len(actualResultsRaw))
+		for _, result := range actualResultsRaw {
+			if query.sorter == nil || query.valsPerLine != 1 {
+				actualResults = append(actualResults, strings.Fields(result)...)
+			} else {
+				actualResults = append(actualResults, strings.Join(strings.Fields(result), " "))
+			}
+		}
+	}
+
 	if query.sorter != nil {
-		query.sorter(len(cols), results)
+		query.sorter(len(cols), actualResults)
 		query.sorter(len(cols), query.expectedResults)
 	}
 
-	hash, err := t.hashResults(results)
+	hash, err := t.hashResults(actualResults)
 	if err != nil {
 		return err
 	}
 
 	if query.expectedHash != "" {
-		n := len(results)
+		n := len(actualResults)
 		if query.expectedValues != n {
 			return fmt.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
@@ -1758,39 +1800,25 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		if query.checkResults {
 			// If the results match, emit them the way they were originally
 			// formatted/ordered in the testfile. Otherwise, emit the actual results.
-			if reflect.DeepEqual(query.expectedResults, results) {
+			if reflect.DeepEqual(query.expectedResults, actualResults) {
 				for _, l := range query.expectedResultsRaw {
 					t.emit(l)
 				}
 			} else {
 				// Emit the actual results.
-				var buf bytes.Buffer
-				tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-				for _, resultLine := range resultLines {
-					for _, value := range resultLine {
-						fmt.Fprintf(tw, "%s\t", value)
-					}
-					fmt.Fprint(tw, "\n")
-				}
-				_ = tw.Flush()
-				// Split into lines and trim any trailing whitespace.
-				// Note that the last line will be empty (which is what we want).
-				for _, s := range strings.Split(buf.String(), "\n") {
-					t.emit(strings.TrimRight(s, " "))
+				for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+					t.emit(line)
 				}
 			}
 		}
 		return nil
 	}
 
-	if query.checkResults && !reflect.DeepEqual(query.expectedResults, results) {
+	if query.checkResults && !reflect.DeepEqual(query.expectedResults, actualResults) {
 		var buf bytes.Buffer
-		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
 		fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
-		for _, expectedResultRaw := range query.expectedResultsRaw {
-			fmt.Fprintf(tw, "    %s\n", expectedResultRaw)
+		for _, line := range query.expectedResultsRaw {
+			fmt.Fprintf(&buf, "    %s\n", line)
 		}
 		sortMsg := ""
 		if query.sorter != nil {
@@ -1801,14 +1829,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			sortMsg = " -> ignore the following ordering of rows"
 		}
 		fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
-		for _, resultLine := range resultLines {
-			fmt.Fprint(tw, "    ")
-			for _, value := range resultLine {
-				fmt.Fprintf(tw, "%s\t", value)
-			}
-			fmt.Fprint(tw, "\n")
+		for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+			fmt.Fprintf(&buf, "    %s\n", line)
 		}
-		_ = tw.Flush()
 		return errors.New(buf.String())
 	}
 
@@ -1824,6 +1847,27 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	t.finishOne("OK")
 	return nil
+}
+
+func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+
+	for line := 0; line < len(vals)/valsPerLine; line++ {
+		for i := 0; i < valsPerLine; i++ {
+			fmt.Fprintf(tw, "%s\t", vals[line*valsPerLine+i])
+		}
+		fmt.Fprint(tw, "\n")
+	}
+	_ = tw.Flush()
+
+	// Split into lines and trim any trailing whitespace.
+	// Note that the last line will be empty (which is what we want).
+	results := make([]string, 0, len(vals)/valsPerLine)
+	for _, s := range strings.Split(buf.String(), "\n") {
+		results = append(results, strings.TrimRight(s, " "))
+	}
+	return results
 }
 
 func (t *logicTest) success(file string) {

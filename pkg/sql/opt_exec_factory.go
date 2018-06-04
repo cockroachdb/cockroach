@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/pkg/errors"
 
@@ -375,7 +374,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		// zeroNode is possible when the scanNode had a contradiction constraint.
 		return newZeroNode(sqlbase.ResultColumnsFromColDescs(colDescs)), nil
 	default:
-		return nil, fmt.Errorf("%s not supported as input to lookup join", reflect.TypeOf(t))
+		return nil, fmt.Errorf("%T not supported as input to lookup join", t)
 	}
 
 	tableScan := ef.planner.Scan()
