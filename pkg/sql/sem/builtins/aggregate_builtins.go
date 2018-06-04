@@ -135,8 +135,10 @@ var Aggregates = map[string][]tree.Builtin{
 
 	"count_rows": {
 		{
-			Impure:        true,
-			Class:         tree.AggregateClass,
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+				Class:  tree.AggregateClass,
+			},
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
@@ -307,16 +309,18 @@ func makeAggBuiltinWithReturnType(
 	return tree.Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
-		Impure:        true,
-		Class:         tree.AggregateClass,
+		FunctionProperties: tree.FunctionProperties{
+			Impure:       true,
+			Class:        tree.AggregateClass,
+			NullableArgs: nullableArgs,
+		},
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
 			return newAggregateWindow(f(params, evalCtx))
 		},
-		Info:         info,
-		NullableArgs: nullableArgs,
+		Info: info,
 	}
 }
 

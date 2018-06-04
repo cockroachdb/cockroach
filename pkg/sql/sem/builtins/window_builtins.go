@@ -106,8 +106,10 @@ func makeWindowBuiltin(
 	in tree.ArgTypes, ret types.T, f func([]types.T, *tree.EvalContext) tree.WindowFunc,
 ) tree.Builtin {
 	return tree.Builtin{
-		Impure:     true,
-		Class:      tree.WindowClass,
+		FunctionProperties: tree.FunctionProperties{
+			Impure: true,
+			Class:  tree.WindowClass,
+		},
 		Types:      in,
 		ReturnType: tree.FixedReturnType(ret),
 		WindowFunc: f,
