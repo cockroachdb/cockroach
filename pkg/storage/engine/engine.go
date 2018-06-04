@@ -290,6 +290,10 @@ type Engine interface {
 	// DeleteFile deletes the file with the given filename from this RocksDB's env.
 	// If the file with given filename doesn't exist, return os.ErrNotExist.
 	DeleteFile(filename string) error
+	// DeleteDirAndFiles deletes the directory and any files it contains but
+	// not subdirectories from this RocksDB's env. If dir does not exist,
+	// DeleteDirAndFiles returns nil (no error).
+	DeleteDirAndFiles(dir string) error
 }
 
 // WithSSTables extends the Engine interface with a method to get info
