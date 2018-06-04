@@ -498,6 +498,7 @@ var (
 	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
 	errInvalidMinUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
 	errPrivateFunction      = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "function reserved for internal use")
+	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
 // TypeCheck implements the Expr interface.
@@ -560,8 +561,26 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		fnsStr := formatCandidates(expr.Func.String(), fns)
 		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
+	builtin := fns[0].(*Builtin)
 
-	if expr.WindowDef != nil {
+	// Check that the built-in is allowed for the current user.
+	// TODO(knz): this check can be moved to evaluation time pending #15363.
+	if builtin.Privileged && !ctx.privileged {
+		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
+	}
+
+	if expr.IsWindowFunctionApplication() {
+		// Make sure the window function application is of either a built-in window
+		// function or of a builtin aggregate function.
+		switch builtin.Class {
+		case AggregateClass:
+		case WindowClass:
+		default:
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"OVER specified, but %s() is neither a window function nor an aggregate function",
+				&expr.Func)
+		}
+
 		for i, partition := range expr.WindowDef.Partitions {
 			typedPartition, err := partition.TypeCheck(ctx, types.Any)
 			if err != nil {
@@ -579,55 +598,28 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			}
 			expr.WindowDef.OrderBy[i].Expr = typedOrderBy
 		}
-	}
-
-	if expr.Filter != nil {
-		typedFilter, err := typeCheckAndRequireBoolean(ctx, expr.Filter, "FILTER expression")
-		if err != nil {
-			return nil, err
-		}
-		expr.Filter = typedFilter
-	}
-
-	builtin := fns[0].(*Builtin)
-	if expr.IsWindowFunctionApplication() {
-		// Make sure the window function application is of either a built-in window
-		// function or of a builtin aggregate function.
-		switch builtin.Class {
-		case AggregateClass:
-		case WindowClass:
-		default:
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
-				"OVER specified, but %s() is neither a window function nor an aggregate function",
-				&expr.Func)
-		}
-
-		if expr.Filter != nil {
-			return nil, errFilterWithinWindow
-		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		switch builtin.Class {
-		case WindowClass:
+		if builtin.Class == WindowClass {
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
-		if builtin.Class != AggregateClass {
+		if expr.IsWindowFunctionApplication() {
+			return nil, errFilterWithinWindow
+		} else if builtin.Class != AggregateClass {
 			// Same error message as Postgres.
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"FILTER specified but %s() is not an aggregate function", &expr.Func)
 		}
 
-	}
-
-	// Check that the built-in is allowed for the current user.
-	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if builtin.Privileged && !ctx.privileged {
-		return nil, pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
-			"insufficient privilege to use %s", expr.Func)
+		typedFilter, err := typeCheckAndRequireBoolean(ctx, expr.Filter, "FILTER expression")
+		if err != nil {
+			return nil, err
+		}
+		expr.Filter = typedFilter
 	}
 
 	for i, subExpr := range typedSubExprs {
