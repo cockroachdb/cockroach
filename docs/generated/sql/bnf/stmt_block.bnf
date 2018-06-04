@@ -717,6 +717,7 @@ unreserved_keyword ::=
 	| 'KV'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
+	| 'LEASE'
 	| 'LESS'
 	| 'LEVEL'
 	| 'LIST'

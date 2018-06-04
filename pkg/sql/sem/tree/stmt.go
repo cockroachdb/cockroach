@@ -501,7 +501,12 @@ func (n *RenameTable) StatementTag() string {
 func (*Relocate) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Relocate) StatementTag() string { return "EXPERIMENTAL_RELOCATE" }
+func (n *Relocate) StatementTag() string {
+	if n.RelocateLease {
+		return "EXPERIMENTAL_RELOCATE LEASE"
+	}
+	return "EXPERIMENTAL_RELOCATE"
+}
 
 // StatementType implements the Statement interface.
 func (*Restore) StatementType() StatementType { return Rows }
