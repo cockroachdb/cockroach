@@ -8,22 +8,26 @@
   width 100%
   position absolute
   background-color white
-  border thin solid grey
 
-  &__info
+  .content
+    border thin solid $table-border-color
+    position relative
+
+  &__info.section
     width 486px
     display inline-block
     padding 24px
 
-  &__form
-    background-color grey
+  &__form.section
+    background-color $table-border-color
     width 486px
     display inline-block
     padding 108px 53px 138px
 
   .heading
     text-transform none
-    letter-spacing default
+    letter-spacing 1px
+    margin-bottom 24px
 
   .aside
     margin-top 12px
@@ -32,9 +36,36 @@
     color $body-color
     width 350px
 
+  .version
+    color $body-color
+    position absolute
+    left 12px
+    top 12px
+
+  .version-tag
+    color #54b30e
+
+  .logo
+    height 32px
+
+  .docs-link
+    display block
+    margin-top 32px
+    text-decoration none
+    color $link-color
+
+    &__icon
+      position relative
+      top 6px
+
+    &__text
+      font-size 17px
+      line-height 30px
+      margin-left 6px
+
   .input-text
     width 100%
-    letter-spacing 2px
+    font-size 14px
     line-height 17px
     padding 12px 18px
     vertical-align middle
@@ -42,6 +73,7 @@
     border-radius 3px
     margin 12px 0
     color $body-color
+    display block
 
     &--error
       border-color $alert-color
@@ -60,13 +92,8 @@
     color $background-color
     background-color $link-color
     cursor pointer
+    display block
 
   &__error
     color $alert-color
     margin 12px 0
-
-  .image-container
-    position fixed
-    height 38px
-    left 20px
-    bottom 20px
