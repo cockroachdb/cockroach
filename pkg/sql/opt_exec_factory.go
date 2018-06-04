@@ -94,6 +94,7 @@ func (ef *execFactory) ConstructScan(
 		}
 	}
 	scan.props.ordering = reqOrder
+	scan.createdByOpt = true
 	return scan, nil
 }
 
@@ -352,14 +353,7 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 func (ef *execFactory) ConstructLookupJoin(
 	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet,
 ) (exec.Node, error) {
-	// TODO(justin): this would be something besides a scanNode in the general
-	// case of a lookup join.
-	plan, ok := input.(*scanNode)
-	if !ok {
-		return nil, fmt.Errorf("only scanNode supported as input to lookup join")
-	}
 	tabDesc := table.(*optTable).desc
-	tableScan := ef.planner.Scan()
 	colCfg := scanColumnsConfig{
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
@@ -371,6 +365,21 @@ func (ef *execFactory) ConstructLookupJoin(
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 
+	// TODO(justin): this would be something besides a scanNode in the general
+	// case of a lookup join.
+	var scan *scanNode
+	switch t := input.(type) {
+	case *scanNode:
+		scan = t
+	case *zeroNode:
+		// zeroNode is possible when the scanNode had a contradiction constraint.
+		return newZeroNode(sqlbase.ResultColumnsFromColDescs(colDescs)), nil
+	default:
+		return nil, fmt.Errorf("%T not supported as input to lookup join", t)
+	}
+
+	tableScan := ef.planner.Scan()
+
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
@@ -380,11 +389,11 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan.run.isSecondaryIndex = false
 	tableScan.disableBatchLimit()
 
-	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, plan)
+	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, scan)
 	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc, tableScan.index.ID))
 
 	return &indexJoinNode{
-		index:             plan,
+		index:             scan,
 		table:             tableScan,
 		primaryKeyColumns: primaryKeyColumns,
 		cols:              colDescs,

@@ -6,7 +6,7 @@ CREATE TABLE uniontest (
   v INT
 )
 
-query TTT rowsort
+query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 union      ·      ·
@@ -17,7 +17,7 @@ union      ·      ·
 ·          table  uniontest@primary
 ·          spans  ALL
 
-query TTT rowsort
+query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 append     ·      ·

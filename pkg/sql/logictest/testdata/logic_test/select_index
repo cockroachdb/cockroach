@@ -437,6 +437,16 @@ SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
 5 6 7 8
 
+# Contradiction
+query IIII
+SELECT * FROM noncover WHERE b = 5 AND b <> 5
+----
+
+# Contradiction with remainder filter
+query IIII
+SELECT * FROM noncover WHERE b = 5 AND b <> 5 AND d>100
+----
+
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we
 # evaluate what parts of the filter we can using the columns in the index
@@ -467,10 +477,9 @@ INSERT INTO t2 VALUES
   (8, 3, 2, '32'),
   (9, 3, 3, '33')
 
-# TODO(justin): re-enable once we have execution support for lookup join.
-#query I rowsort
-#SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
-#----
-#4
-#5
-#6
+query I rowsort
+SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+----
+4
+5
+6
