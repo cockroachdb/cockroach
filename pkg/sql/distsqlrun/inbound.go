@@ -67,7 +67,9 @@ func processInboundStreamHelper(
 	}
 
 	if firstMsg != nil {
-		if res := processProducerMessage(
+		if b, ok := dst.(BatchRowReceiver); ok {
+			b.PushProducerMessage(firstMsg.Header.StreamID, firstMsg)
+		} else if res := processProducerMessage(
 			ctx, stream, dst, &sd, &draining, firstMsg,
 		); res.err != nil || res.consumerClosed {
 			sendErrToConsumer(res.err)
@@ -107,7 +109,9 @@ func processInboundStreamHelper(
 				return
 			}
 
-			if res := processProducerMessage(
+			if b, ok := dst.(BatchRowReceiver); ok {
+				b.PushProducerMessage(firstMsg.Header.StreamID, msg)
+			} else if res := processProducerMessage(
 				ctx, stream, dst, &sd, &draining, msg,
 			); res.err != nil || res.consumerClosed {
 				sendErrToConsumer(res.err)

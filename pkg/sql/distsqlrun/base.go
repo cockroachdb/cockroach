@@ -20,7 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 const rowChannelBufSize = 16
@@ -84,6 +85,13 @@ type RowReceiver interface {
 	// ProducerDone() cannot be called concurrently with Push(), and after it
 	// is called, no other method can be called.
 	ProducerDone()
+}
+
+// BatchRowReciever is a RowReceiver that can directly receive ProducerMessages
+// from an inbound stream.
+type BatchRowReceiver interface {
+	RowReceiver
+	PushProducerMessage(streamID StreamID, message *ProducerMessage) ConsumerStatus
 }
 
 // RowSource is any component of a flow that produces rows that can be consumed
@@ -476,6 +484,152 @@ func (rc *RowChannel) ConsumerClosed() {
 		select {
 		case <-rc.dataChan:
 		default:
+		}
+	}
+}
+
+// BatchRowChannel is a RowChannel that can accept ProducerMessages directly
+// from an inbound stream.
+type BatchRowChannel struct {
+	rowSourceBase
+
+	types []sqlbase.ColumnType
+
+	batchChan chan batchMsg
+
+	// numSenders is an atomic counter that keeps track of how many senders have
+	// yet to call ProducerDone().
+	numSenders int32
+
+	curDecoder *StreamDecoder
+	decoders   map[StreamID]*StreamDecoder
+}
+
+var _ RowReceiver = &BatchRowChannel{}
+var _ RowSource = &BatchRowChannel{}
+
+type batchMsg struct {
+	singleMsg RowChannelMsg
+	msg       *ProducerMessage
+	streamID  StreamID
+}
+
+// InitWithNumSenders initializes the BatchRowChannel with the default buffer
+// size. numSenders is the number of producers that will be pushing to this
+// channel. RowChannel will not be closed until it receives numSenders calls to
+// ProducerDone().
+func (rc *BatchRowChannel) InitWithNumSenders(types []sqlbase.ColumnType, numSenders int) {
+	rc.batchChan = make(chan batchMsg, rowChannelBufSize)
+	rc.decoders = make(map[StreamID]*StreamDecoder, numSenders)
+	rc.types = types
+	atomic.StoreInt32(&rc.numSenders, int32(numSenders))
+}
+
+// OutputTypes is part of the RowSource interface.
+func (rc *BatchRowChannel) OutputTypes() []sqlbase.ColumnType {
+	return rc.types
+}
+
+// Start is part of the RowSource interface.
+func (rc *BatchRowChannel) Start(ctx context.Context) context.Context {
+	return ctx
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (rc *BatchRowChannel) ConsumerDone() {
+	rc.consumerDone()
+}
+
+// PushProducerDone is part of the BatchRowReceiver interface.
+func (rc *BatchRowChannel) PushProducerMessage(
+	streamID StreamID, message *ProducerMessage,
+) ConsumerStatus {
+	consumerStatus := ConsumerStatus(
+		atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
+	switch consumerStatus {
+	case ConsumerClosed:
+		// If the consumer is gone, swallow all the rows.
+	default:
+		rc.batchChan <- batchMsg{msg: message, streamID: streamID}
+	}
+	return consumerStatus
+}
+
+// Push is part of the RowReceiver interface.
+func (rc *BatchRowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	consumerStatus := ConsumerStatus(
+		atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
+	switch consumerStatus {
+	case NeedMoreRows:
+		rc.batchChan <- batchMsg{singleMsg: RowChannelMsg{Row: row, Meta: meta}}
+	case DrainRequested:
+		// If we're draining, only forward metadata.
+		if meta != nil {
+			rc.batchChan <- batchMsg{singleMsg: RowChannelMsg{Row: nil, Meta: meta}}
+		}
+	case ConsumerClosed:
+		// If the consumer is gone, swallow all the rows.
+	}
+	return consumerStatus
+}
+
+// Next is part of the RowSource interface.
+func (rc *BatchRowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	for {
+		if rc.curDecoder != nil {
+			row, meta, err := rc.curDecoder.GetRow(nil)
+			if err != nil {
+				return nil, &ProducerMetadata{Err: err}
+			}
+			if !(row == nil && meta == nil) {
+				return row, meta
+			}
+			rc.curDecoder = nil
+		}
+
+		msg, ok := <-rc.batchChan
+		if !ok {
+			return nil, nil
+		}
+
+		if msg.msg == nil {
+			return msg.singleMsg.Row, msg.singleMsg.Meta
+		}
+
+		decoder, ok := rc.decoders[msg.streamID]
+		if !ok {
+			return nil, &ProducerMetadata{Err: errors.Errorf("stream id %d not found", msg.streamID)}
+		}
+		if err := decoder.AddMessage(msg.msg); err != nil {
+			return nil, &ProducerMetadata{Err: errors.Wrap(err, "decoding error")}
+		}
+		rc.curDecoder = decoder
+		continue
+	}
+}
+
+// ProducerDone is part of the RowSource interface.
+func (rc *BatchRowChannel) ProducerDone() {
+	newVal := atomic.AddInt32(&rc.numSenders, -1)
+	if newVal < 0 {
+		panic("too many ProducerDone() calls")
+	}
+	if newVal == 0 {
+		close(rc.batchChan)
+	}
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (rc *BatchRowChannel) ConsumerClosed() {
+	numSenders := atomic.LoadInt32(&rc.numSenders)
+	// Drain (at most) numSenders messages in case senders are blocked trying to
+	// emit a row.
+	// Note that, if the producer is done, then it has also closed the
+	// channel this will not block. The producer might be neither blocked nor
+	// closed, though; hence the no data case.
+	for i := int32(0); i < numSenders; i++ {
+		if _, ok := <-rc.batchChan; !ok {
+			break
 		}
 	}
 }
