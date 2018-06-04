@@ -91,7 +91,7 @@ func (m *outbox) init(types []sqlbase.ColumnType) {
 		// rows.
 		types = make([]sqlbase.ColumnType, 0)
 	}
-	m.RowChannel.Init(types)
+	m.RowChannel.InitWithNumSenders(types, 1)
 	m.encoder.init(types)
 }
 
