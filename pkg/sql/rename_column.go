@@ -139,24 +139,12 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	// Rename the column in the indexes.
 	tableDesc.RenameColumnDescriptor(col, string(n.NewName))
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+
+	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return nil, err
 	}
-	// TODO(vivek): the code above really should really be replaced by a call
-	// to writeTableDesc(). However if we do that then a couple of logic tests
-	// start failing. How can that be?
-	//
-	// if err := p.writeTableDesc(ctx, tableDesc); err != nil {
-	//	return nil, err
-	// }
-	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return newZeroNode(nil /* columns */), nil
 }

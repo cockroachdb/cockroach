@@ -337,10 +337,9 @@ func removeSequenceDependencies(
 				pgerror.CodeInternalError, "couldn't find reference from sequence to this column")
 		}
 		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
-		if err := params.p.writeTableDesc(params.ctx, &seqDesc); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, &seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
-		params.p.notifySchemaChange(&seqDesc, sqlbase.InvalidMutationID)
 	}
 	// Remove the reference from the column descriptor to the sequence descriptor.
 	col.UsesSequenceIds = []sqlbase.ID{}

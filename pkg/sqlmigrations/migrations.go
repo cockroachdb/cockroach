@@ -680,8 +680,7 @@ func upgradeDescsWithFn(
 						if upgraded, err := upgradeTableDescFn(table); err != nil {
 							return err
 						} else if upgraded {
-							// Though SetUpVersion typically bails out if the table is being
-							// dropped, it's safe to ignore the DROP state here and
+							// It's safe to ignore the DROP state here and
 							// unconditionally set UpVersion. For proof, see
 							// TestDropTableWhileUpgradingFormat.
 							//

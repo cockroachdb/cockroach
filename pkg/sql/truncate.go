@@ -211,13 +211,9 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 
 	for _, table := range tables {
-		if err := table.SetUpVersion(); err != nil {
+		if err := p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
-		if err := p.writeTableDesc(ctx, table); err != nil {
-			return err
-		}
-		p.notifySchemaChange(table, sqlbase.InvalidMutationID)
 	}
 
 	// Reassign all self references.
@@ -229,9 +225,6 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 
 	// Add new descriptor.
 	newTableDesc.State = sqlbase.TableDescriptor_ADD
-	if err := newTableDesc.SetUpVersion(); err != nil {
-		return err
-	}
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
 	for _, m := range newTableDesc.Mutations {
@@ -250,7 +243,6 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
 		return err
 	}
-	p.notifySchemaChange(&newTableDesc, sqlbase.InvalidMutationID)
 
 	// Copy the zone config.
 	b = &client.Batch{}

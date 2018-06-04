@@ -2066,9 +2066,6 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 // with addMutation() since the last time this function was called.
 // Future mutations will use a new ID.
 func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
-	if err := desc.SetUpVersion(); err != nil {
-		return InvalidMutationID, err
-	}
 	mutationID := desc.NextMutationID
 	desc.NextMutationID++
 	return mutationID, nil
@@ -2087,19 +2084,6 @@ func (desc *TableDescriptor) Adding() bool {
 // HasDrainingNames returns true if a draining name exists.
 func (desc *TableDescriptor) HasDrainingNames() bool {
 	return len(desc.DrainingNames) > 0
-}
-
-// SetUpVersion sets the up_version marker on the table descriptor (see the proto
-func (desc *TableDescriptor) SetUpVersion() error {
-	if desc.Dropped() {
-		// We don't allow the version to be incremented any more once a table
-		// has been deleted. This will block new mutations from being queued on the
-		// table; it'd be misleading to allow them to be queued, since the
-		// respective schema change will never run.
-		return fmt.Errorf("table %q is being dropped", desc.Name)
-	}
-	desc.UpVersion = true
-	return nil
 }
 
 // VisibleColumns returns all non hidden columns.
