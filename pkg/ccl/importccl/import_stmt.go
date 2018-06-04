@@ -511,6 +511,7 @@ func importPlanHook(
 					LegacySkip:    format.Csv.Skip,
 				}},
 			},
+			Progress: jobs.ImportProgress{},
 		})
 		if err != nil {
 			return err
@@ -567,9 +568,9 @@ func doDistributedCSVTransform(
 		// job progress to coerce out the correct error type. If the update succeeds
 		// then return the original error, otherwise return this error instead so
 		// it can be cleaned up at a higher level.
-		if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-			d := details.(*jobs.Payload_Import).Import
-			return d.Tables[0].Completed()
+		if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
+			d := details.(*jobs.Progress_Import).Import
+			return d.Completed()
 		}); err != nil {
 			return err
 		}
