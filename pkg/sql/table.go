@@ -616,6 +616,7 @@ func (p *planner) createSchemaChangeJob(
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
 		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
+		Progress:      jobs.SchemaChangeProgress{},
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {

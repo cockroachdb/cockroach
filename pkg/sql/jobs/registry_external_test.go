@@ -51,6 +51,7 @@ func TestRoundtripJob(t *testing.T) {
 		Username:      "robot",
 		DescriptorIDs: sqlbase.IDs{42},
 		Details:       jobs.RestoreDetails{},
+		Progress:      jobs.RestoreProgress{},
 	})
 	if err := storedJob.Created(ctx); err != nil {
 		t.Fatal(err)
@@ -142,7 +143,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	for i := 0; i < jobCount; i++ {
 		nodeid := roachpb.NodeID(i + 1)
-		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobs.BackupDetails{}})
+		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobs.BackupDetails{}, Progress: jobs.BackupProgress{}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -251,10 +252,17 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	progress, err := protoutil.Marshal(&jobs.Progress{
+		Details: jobs.WrapProgressDetails(jobs.BackupProgress{}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var id int64
 	sqlutils.MakeSQLRunner(sqlDB).QueryRow(t,
-		`INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id`,
-		jobs.StatusRunning, payload).Scan(&id)
+		`INSERT INTO system.jobs (status, payload, progress) VALUES ($1, $2, $3) RETURNING id`,
+		jobs.StatusRunning, payload, progress).Scan(&id)
 
 	if e, a := id, <-resumeCh; e != a {
 		t.Fatalf("expected job %d to be resumed, but got %d", e, a)

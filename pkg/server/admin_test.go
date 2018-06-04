@@ -1089,13 +1089,14 @@ func TestAdminAPIJobs(t *testing.T) {
 	existingIDs := getSystemJobIDs(t, sqlDB)
 
 	testJobs := []struct {
-		id      int64
-		status  jobs.Status
-		details jobs.Details
+		id       int64
+		status   jobs.Status
+		details  jobs.Details
+		progress jobs.ProgressDetails
 	}{
-		{1, jobs.StatusRunning, jobs.RestoreDetails{}},
-		{2, jobs.StatusRunning, jobs.BackupDetails{}},
-		{3, jobs.StatusSucceeded, jobs.BackupDetails{}},
+		{1, jobs.StatusRunning, jobs.RestoreDetails{}, jobs.RestoreProgress{}},
+		{2, jobs.StatusRunning, jobs.BackupDetails{}, jobs.BackupProgress{}},
+		{3, jobs.StatusSucceeded, jobs.BackupDetails{}, jobs.BackupProgress{}},
 	}
 	for _, job := range testJobs {
 		payload := jobs.Payload{Details: jobs.WrapPayloadDetails(job.details)}
@@ -1103,9 +1104,14 @@ func TestAdminAPIJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		progress := jobs.Progress{Details: jobs.WrapProgressDetails(job.progress)}
+		progressBytes, err := protoutil.Marshal(&progress)
+		if err != nil {
+			t.Fatal(err)
+		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
-			job.id, job.status, payloadBytes,
+			`INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)`,
+			job.id, job.status, payloadBytes, progressBytes,
 		)
 	}
 

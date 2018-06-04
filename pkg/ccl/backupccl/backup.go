@@ -1061,6 +1061,7 @@ func backupPlanHook(
 				URI:              to,
 				BackupDescriptor: descBytes,
 			},
+			Progress: jobs.BackupProgress{},
 		})
 		if err != nil {
 			return err

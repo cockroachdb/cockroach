@@ -1088,8 +1088,8 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}
 
 	// Ensure that partial progress has been recorded
-	partialProgress := jobutils.GetJobPayload(t, sqlDB, jobID)
-	if len(partialProgress.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress) == 0 {
+	partialProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
+	if len(partialProgress.Details.(*jobs.Progress_Import).Import.SpanProgress) == 0 {
 		t.Fatal("no partial import progress detected")
 	}
 

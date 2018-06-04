@@ -151,10 +151,12 @@ func changefeedPlanHook(
 				return sqlDescIDs
 			}(),
 			Details: jobs.ChangefeedDetails{
-				Highwater:  highwater,
 				TableDescs: tableDescs,
 				Opts:       opts,
 				SinkURI:    sinkURI,
+			},
+			Progress: jobs.ChangefeedProgress{
+				Highwater: highwater,
 			},
 		})
 		if err != nil {
@@ -402,7 +404,7 @@ func (b *changefeedResumer) Resume(
 	}
 	defer func() { _ = cf.Close() }()
 
-	highwater := details.Highwater
+	highwater := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed.Highwater
 	for {
 		nextHighwater := p.ExecCfg().Clock.Now()
 		// TODO(dan): nextHighwater should probably be some amount of time in
@@ -421,8 +423,8 @@ func (b *changefeedResumer) Resume(
 			return err
 		}
 
-		progressedFn := func(ctx context.Context, details jobs.Details) float32 {
-			cfDetails := details.(*jobs.Payload_Changefeed).Changefeed
+		progressedFn := func(ctx context.Context, details jobs.ProgressDetails) float32 {
+			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
 			cfDetails.Highwater = nextHighwater
 			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
 			return 0.0
