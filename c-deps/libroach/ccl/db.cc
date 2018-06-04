@@ -71,8 +71,8 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
 
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
-rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
-                           EnvManager* env_mgr) {
+rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                           const DBOptions db_opts, EnvManager* env_mgr) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();
