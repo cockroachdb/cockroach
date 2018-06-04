@@ -126,7 +126,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 type="submit"
                 className="submit-button"
                 disabled={this.props.loginState.inProgress}
-                value="Sign In"
+                value={this.props.loginState.inProgress ? "Signing in..." : "Sign In"}
               />
             </form>
           </section>
