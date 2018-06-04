@@ -35,8 +35,9 @@ func init() {
 	AllBuiltinNames = make([]string, 0, len(Builtins))
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	for name, def := range Builtins {
-		tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
-		if tree.FunDefs[name].Private {
+		fDef := tree.NewFunctionDefinition(name, &def.FunctionProperties, def.Overloads)
+		tree.FunDefs[name] = fDef
+		if fDef.Private {
 			// Avoid listing help for private functions.
 			continue
 		}
@@ -46,37 +47,43 @@ func init() {
 	// Generate missing categories.
 	for _, name := range AllBuiltinNames {
 		def := Builtins[name]
-		for i := range def {
-			if def[i].Category == "" {
-				def[i].Category = getCategory(&def[i])
-			}
+		if def.Category == "" {
+			def.Category = getCategory(def.Overloads)
+			Builtins[name] = def
 		}
 	}
 
 	sort.Strings(AllBuiltinNames)
 }
 
-func getCategory(b *tree.OverloadDefinition) string {
+func getCategory(b []tree.OverloadDefinition) string {
 	// If single argument attempt to categorize by the type of the argument.
-	switch typ := b.Types.(type) {
-	case tree.ArgTypes:
-		if len(typ) == 1 {
-			return categorizeType(typ[0].Typ)
+	for _, ovl := range b {
+		switch typ := ovl.Types.(type) {
+		case tree.ArgTypes:
+			if len(typ) == 1 {
+				return categorizeType(typ[0].Typ)
+			}
 		}
-	}
-	// Fall back to categorizing by return type.
-	if retType := b.FixedReturnType(); retType != nil {
-		return categorizeType(retType)
+		// Fall back to categorizing by return type.
+		if retType := ovl.FixedReturnType(); retType != nil {
+			return categorizeType(retType)
+		}
 	}
 	return ""
 }
 
 func collectOverloads(
-	f func(types.T) tree.OverloadDefinition, types ...types.T,
-) []tree.OverloadDefinition {
-	r := make([]tree.OverloadDefinition, len(types))
-	for i := range types {
-		r[i] = f(types[i])
+	props tree.FunctionProperties, types []types.T, gens ...func(types.T) tree.OverloadDefinition,
+) BuiltinDefinition {
+	r := make([]tree.OverloadDefinition, 0, len(types)*len(gens))
+	for _, f := range gens {
+		for _, t := range types {
+			r = append(r, f(t))
+		}
 	}
-	return r
+	return BuiltinDefinition{
+		FunctionProperties: props,
+		Overloads:          r,
+	}
 }

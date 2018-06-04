@@ -26,16 +26,16 @@ import (
 )
 
 func TestCategory(t *testing.T) {
-	if expected, actual := categoryString, Builtins["lower"][0].Category; expected != actual {
+	if expected, actual := categoryString, Builtins["lower"].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryString, Builtins["length"][0].Category; expected != actual {
+	if expected, actual := categoryString, Builtins["length"].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryDateAndTime, Builtins["now"][0].Category; expected != actual {
+	if expected, actual := categoryDateAndTime, Builtins["now"].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categorySystemInfo, Builtins["version"][0].Category; expected != actual {
+	if expected, actual := categorySystemInfo, Builtins["version"].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }

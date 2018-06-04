@@ -149,10 +149,10 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 			// any_not_null is treated as a special case.
 			continue
 		}
-		for i, overload := range overloads {
+		for i, overload := range overloads.Overloads {
 			// Check for basic ambiguity where two different aggregate function
 			// overloads both allow equivalent operand types.
-			for i2, overload2 := range overloads {
+			for i2, overload2 := range overloads.Overloads {
 				if i == i2 {
 					continue
 				}

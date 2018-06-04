@@ -521,22 +521,12 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		return nil, errors.Wrapf(err, "%s()", def.Name)
 	}
 
-	// Return NULL if at least one overload is possible and NULL is an argument.
-	if len(fns) > 0 {
-		// However, if any of the possible candidate functions can handle NULL
-		// arguments, we don't want to take the NULL argument fast-path.
-		handledNull := false
-		for _, fn := range fns {
-			if fn.(*OverloadDefinition).NullableArgs {
-				handledNull = true
-				break
-			}
-		}
-		if !handledNull {
-			for _, expr := range typedSubExprs {
-				if expr.ResolvedType() == types.Unknown {
-					return DNull, nil
-				}
+	// Return NULL if at least one overload is possible, no overload accepts
+	// NULL arguments, and NULL is given as an argument.
+	if !def.NullableArgs {
+		for _, expr := range typedSubExprs {
+			if expr.ResolvedType() == types.Unknown {
+				return DNull, nil
 			}
 		}
 	}
@@ -565,14 +555,14 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 
 	// Check that the built-in is allowed for the current user.
 	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if overloadImpl.Privileged && !ctx.privileged {
+	if def.Privileged && !ctx.privileged {
 		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
 	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		switch overloadImpl.Class {
+		switch def.Class {
 		case AggregateClass:
 		case WindowClass:
 		default:
@@ -600,7 +590,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		if overloadImpl.Class == WindowClass {
+		if def.Class == WindowClass {
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
@@ -609,7 +599,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if expr.Filter != nil {
 		if expr.IsWindowFunctionApplication() {
 			return nil, errFilterWithinWindow
-		} else if overloadImpl.Class != AggregateClass {
+		} else if def.Class != AggregateClass {
 			// Same error message as Postgres.
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"FILTER specified but %s() is not an aggregate function", &expr.Func)
@@ -626,6 +616,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		expr.Exprs[i] = subExpr
 	}
 	expr.fn = overloadImpl
+	expr.fnProps = &def.FunctionProperties
 	expr.typ = overloadImpl.returnType()(typedSubExprs)
 	return expr, nil
 }
@@ -1847,6 +1838,7 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		t.fn = CmpOp{}
 	case *FuncExpr:
 		t.fn = nil
+		t.fnProps = nil
 	}
 	return true, expr
 }

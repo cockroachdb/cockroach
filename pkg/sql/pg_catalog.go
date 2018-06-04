@@ -1284,7 +1284,7 @@ CREATE TABLE pg_catalog.pg_proc (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, func(db *DatabaseDescriptor) error {
 			nspOid := h.NamespaceOid(db, pgCatalogName)
-			for name, builtins := range builtins.Builtins {
+			for name, def := range builtins.Builtins {
 				// parser.Builtins contains duplicate uppercase and lowercase keys.
 				// Only return the lowercase ones for compatibility with postgres.
 				var first rune
@@ -1295,11 +1295,11 @@ CREATE TABLE pg_catalog.pg_proc (
 				if unicode.IsUpper(first) {
 					continue
 				}
-				for _, builtin := range builtins {
+				isAggregate := def.Class == tree.AggregateClass
+				isWindow := def.Class == tree.WindowClass
+				for _, builtin := range def.Overloads {
 					dName := tree.NewDName(name)
 					dSrc := tree.NewDString(name)
-					isAggregate := builtin.Class == tree.AggregateClass
-					isWindow := builtin.Class == tree.WindowClass
 
 					var retType tree.Datum
 					isRetSet := false
@@ -1361,22 +1361,22 @@ CREATE TABLE pg_catalog.pg_proc (
 					}
 					err := addRow(
 						h.BuiltinOid(name, &builtin), // oid
-						dName,                                       // proname
-						nspOid,                                      // pronamespace
-						tree.DNull,                                  // proowner
-						oidZero,                                     // prolang
-						tree.DNull,                                  // procost
-						tree.DNull,                                  // prorows
-						variadicType,                                // provariadic
-						tree.DNull,                                  // protransform
-						tree.MakeDBool(tree.DBool(isAggregate)),     // proisagg
-						tree.MakeDBool(tree.DBool(isWindow)),        // proiswindow
-						tree.DBoolFalse,                             // prosecdef
-						tree.MakeDBool(tree.DBool(!builtin.Impure)), // proleakproof
-						tree.DBoolFalse,                             // proisstrict
-						tree.MakeDBool(tree.DBool(isRetSet)),        // proretset
-						tree.DNull,                                  // provolatile
-						tree.DNull,                                  // proparallel
+						dName,                                   // proname
+						nspOid,                                  // pronamespace
+						tree.DNull,                              // proowner
+						oidZero,                                 // prolang
+						tree.DNull,                              // procost
+						tree.DNull,                              // prorows
+						variadicType,                            // provariadic
+						tree.DNull,                              // protransform
+						tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
+						tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
+						tree.DBoolFalse,                         // prosecdef
+						tree.MakeDBool(tree.DBool(!def.Impure)), // proleakproof
+						tree.DBoolFalse,                         // proisstrict
+						tree.MakeDBool(tree.DBool(isRetSet)),    // proretset
+						tree.DNull,                              // provolatile
+						tree.DNull,                              // proparallel
 						tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 						tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 						retType,                                         // prorettype
@@ -2264,7 +2264,7 @@ func (h oidHasher) RegProc(name string) tree.Datum {
 	if !ok {
 		return tree.DNull
 	}
-	return h.BuiltinOid(name, &builtin[0]).AsRegProc(name)
+	return h.BuiltinOid(name, &builtin.Overloads[0]).AsRegProc(name)
 }
 
 func (h oidHasher) UserOid(username string) *tree.DOid {

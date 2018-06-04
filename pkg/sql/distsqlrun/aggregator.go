@@ -52,7 +52,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	builtins := builtins.Aggregates[strings.ToLower(fn.String())]
+	builtins := builtins.Aggregates[strings.ToLower(fn.String())].Overloads
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {

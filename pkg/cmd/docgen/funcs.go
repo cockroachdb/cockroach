@@ -169,22 +169,23 @@ func generateOperators() []byte {
 // TODO(mjibson): use the exported value from sql/parser/pg_builtins.go.
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
-func generateFunctions(from map[string][]tree.OverloadDefinition, categorize bool) []byte {
+func generateFunctions(from map[string]builtins.BuiltinDefinition, categorize bool) []byte {
 	functions := make(map[string][]string)
 	seen := make(map[string]struct{})
 	md := markdown.New(markdown.XHTMLOutput(true), markdown.Nofollow(true))
-	for name, fns := range from {
-		// NB: funcs can appear more than once i.e. upper/lowercase varients for
+	for name, bdef := range from {
+		// NB: funcs can appear more than once i.e. upper/lowercase variants for
 		// faster lookups, so normalize to lowercase and de-dupe using a set.
 		name = strings.ToLower(name)
 		if _, ok := seen[name]; ok {
 			continue
 		}
 		seen[name] = struct{}{}
+		if bdef.Private {
+			continue
+		}
+		fns := bdef.Overloads
 		for _, fn := range fns {
-			if fn.Private {
-				continue
-			}
 			if fn.Info == notUsableInfo {
 				continue
 			}
@@ -193,9 +194,9 @@ func generateFunctions(from map[string][]tree.OverloadDefinition, categorize boo
 			}
 			args := fn.Types.String()
 			ret := fn.FixedReturnType().String()
-			cat := ret
-			if c := fn.Category; c != "" {
-				cat = c
+			cat := bdef.Category
+			if cat == "" {
+				cat = strings.ToUpper(ret)
 			}
 			if !categorize {
 				cat = ""

@@ -158,7 +158,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal", "pg_sleep":
 					continue
 				}
-				for _, builtin := range variations {
+				for _, builtin := range variations.Overloads {
 					select {
 					case <-done:
 						return

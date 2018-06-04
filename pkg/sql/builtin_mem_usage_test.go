@@ -105,26 +105,26 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 		args               tree.Datums
 		expectedAllocation int64
 	}{
-		{builtins.Builtins["repeat"][0],
+		{builtins.Builtins["repeat"].Overloads[0],
 			tree.Datums{
 				tree.NewDString("abc"),
 				tree.NewDInt(123),
 			},
 			int64(3 * 123)},
-		{builtins.Builtins["concat"][0],
+		{builtins.Builtins["concat"].Overloads[0],
 			tree.Datums{
 				tree.NewDString("abc"),
 				tree.NewDString("abc"),
 			},
 			int64(3 + 3)},
-		{builtins.Builtins["concat_ws"][0],
+		{builtins.Builtins["concat_ws"].Overloads[0],
 			tree.Datums{
 				tree.NewDString("!"),
 				tree.NewDString("abc"),
 				tree.NewDString("abc"),
 			},
 			int64(3 + 1 + 3)},
-		{builtins.Builtins["lower"][0],
+		{builtins.Builtins["lower"].Overloads[0],
 			tree.Datums{
 				tree.NewDString("ABC"),
 			},

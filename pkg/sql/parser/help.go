@@ -97,7 +97,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	msg := HelpMessage{
 		Function: f.String(),
 		HelpMessageBody: HelpMessageBody{
-			Category: "built-in functions",
+			Category: d.Category,
 			SeeAlso:  base.DocsURL("functions-and-operators.html"),
 		},
 	}
@@ -117,15 +117,11 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 				fmt.Fprintln(w, "---")
 			}
 			fmt.Fprintf(w, "\n%s\n\n", b.Info)
-			fmt.Fprintln(w, "Signature\tCategory")
+			fmt.Fprintln(w, "Signature")
 		}
 		lastInfo = b.Info
 
-		cat := b.Category
-		if cat != "" {
-			cat = "[" + cat + "]"
-		}
-		fmt.Fprintf(w, "%s%s\t%s\n", d.Name, b.Signature(), cat)
+		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature())
 	}
 	_ = w.Flush()
 	msg.Text = buf.String()

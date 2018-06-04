@@ -1105,7 +1105,8 @@ type FuncExpr struct {
 	EscapeSRF bool
 
 	typeAnnotation
-	fn *OverloadDefinition
+	fnProps *FunctionProperties
+	fn      *OverloadDefinition
 }
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
@@ -1116,6 +1117,7 @@ func NewTypedFuncExpr(
 	filter TypedExpr,
 	windowDef *WindowDef,
 	typ types.T,
+	props *FunctionProperties,
 	overload *OverloadDefinition,
 ) *FuncExpr {
 	f := &FuncExpr{
@@ -1126,6 +1128,7 @@ func NewTypedFuncExpr(
 		WindowDef:      windowDef,
 		typeAnnotation: typeAnnotation{typ: typ},
 		fn:             overload,
+		fnProps:        props,
 	}
 	for i, e := range exprs {
 		f.Exprs[i] = e
@@ -1180,12 +1183,12 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 // potentially returns a different value when called in the same statement with
 // the same parameters.
 func (node *FuncExpr) IsImpure() bool {
-	return node.fn != nil && node.fn.Impure
+	return node.fnProps != nil && node.fnProps.Impure
 }
 
 // IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlacklist() bool {
-	return node.fn != nil && node.fn.DistsqlBlacklist
+	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
 }
 
 type funcType int

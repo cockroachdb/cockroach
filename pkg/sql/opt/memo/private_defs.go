@@ -31,9 +31,10 @@ type PrivateID uint32
 // operator. It provides the name and return type of the function, as well as a
 // pointer to an already resolved builtin overload definition.
 type FuncOpDef struct {
-	Name     string
-	Type     types.T
-	Overload *tree.OverloadDefinition
+	Name       string
+	Type       types.T
+	Properties *tree.FunctionProperties
+	Overload   *tree.OverloadDefinition
 }
 
 func (f FuncOpDef) String() string {
