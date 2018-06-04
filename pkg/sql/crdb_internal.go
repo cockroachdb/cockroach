@@ -399,7 +399,7 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		query := `SELECT id, status, created, payload FROM system.jobs`
+		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, _ /* cols */, err :=
 			p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryWithSessionArgs(
 				ctx, "crdb-internal-jobs-table", p.txn, SessionArgs{User: p.SessionData().User}, query)
@@ -408,8 +408,12 @@ CREATE TABLE crdb_internal.jobs (
 		}
 
 		for _, r := range rows {
-			id, status, created, bytes := r[0], r[1], r[2], r[3]
-			payload, err := jobs.UnmarshalPayload(bytes)
+			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
+			payload, err := jobs.UnmarshalPayload(payloadBytes)
+			if err != nil {
+				return err
+			}
+			progress, err := jobs.UnmarshalProgress(progressBytes)
 			if err != nil {
 				return err
 			}
@@ -440,8 +444,8 @@ CREATE TABLE crdb_internal.jobs (
 				created,
 				tsOrNull(payload.StartedMicros),
 				tsOrNull(payload.FinishedMicros),
-				tsOrNull(payload.ModifiedMicros),
-				tree.NewDFloat(tree.DFloat(payload.FractionCompleted)),
+				tsOrNull(progress.ModifiedMicros),
+				tree.NewDFloat(tree.DFloat(progress.FractionCompleted)),
 				tree.NewDString(payload.Error),
 				leaseNode,
 			); err != nil {

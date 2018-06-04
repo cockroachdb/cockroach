@@ -1065,11 +1065,11 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}
 	// Fetch the new job ID and lease since we know it's running now.
 	var jobID int64
-	originalLease := &jobs.Payload{}
+	originalLease := &jobs.Progress{}
 	{
 		var expectedLeaseBytes []byte
 		sqlDB.QueryRow(
-			t, `SELECT id, payload FROM system.jobs ORDER BY created DESC LIMIT 1`,
+			t, `SELECT id, progress FROM system.jobs ORDER BY created DESC LIMIT 1`,
 		).Scan(&jobID, &expectedLeaseBytes)
 		if err := protoutil.Unmarshal(expectedLeaseBytes, originalLease); err != nil {
 			t.Fatal(err)
@@ -1088,8 +1088,8 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}
 
 	// Ensure that partial progress has been recorded
-	partialProgress := jobutils.GetJobPayload(t, sqlDB, jobID)
-	if len(partialProgress.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress) == 0 {
+	partialProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
+	if len(partialProgress.Details.(*jobs.Progress_Import).Import.SpanProgress) == 0 {
 		t.Fatal("no partial import progress detected")
 	}
 
@@ -1100,10 +1100,10 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify that the job lease was updated
-	rescheduledLease := jobutils.GetJobPayload(t, sqlDB, jobID)
+	rescheduledLease := jobutils.GetJobProgress(t, sqlDB, jobID)
 	if rescheduledLease.ModifiedMicros <= originalLease.ModifiedMicros {
 		t.Fatalf("expecting rescheduled job to have a later modification time: %d vs %d",
-			rescheduledLease.StartedMicros, originalLease.StartedMicros)
+			rescheduledLease.ModifiedMicros, originalLease.ModifiedMicros)
 	}
 
 	// Verify that all expected rows are present after a stop/start cycle.
@@ -1113,6 +1113,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}
 
+	/* TODO(dt): uncomment when import progress migrates to progress.
 	// Verify that all write progress coalesced into a single span
 	// encompassing the entire table.
 	spans := rescheduledLease.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress
@@ -1125,6 +1126,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	if !tableSpan.EqualValue(spans[0]) {
 		t.Fatalf("expected entire table to be marked complete, had %s", spans[0])
 	}
+	*/
 }
 
 // TestImportLivenessWithLeniency tests that a temporary node liveness

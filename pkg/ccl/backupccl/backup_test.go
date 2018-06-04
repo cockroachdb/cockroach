@@ -677,23 +677,33 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	}
 }
 
-func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
+func createAndWaitForJob(
+	db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details, progress jobs.ProgressDetails,
+) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobs.Payload{
-		Username:       security.RootUser,
-		DescriptorIDs:  descriptorIDs,
-		StartedMicros:  now,
-		ModifiedMicros: now,
-		Details:        jobs.WrapPayloadDetails(details),
-		Lease:          &jobs.Lease{NodeID: 1},
+		Username:      security.RootUser,
+		DescriptorIDs: descriptorIDs,
+		StartedMicros: now,
+		Details:       jobs.WrapPayloadDetails(details),
+		Lease:         &jobs.Lease{NodeID: 1},
 	})
 	if err != nil {
 		return err
 	}
+
+	progressBytes, err := protoutil.Marshal(&jobs.Progress{
+		ModifiedMicros: now,
+		Details:        jobs.WrapProgressDetails(progress),
+	})
+	if err != nil {
+		return err
+	}
+
 	var jobID int64
 	if err := db.QueryRow(
-		`INSERT INTO system.jobs (created, status, payload) VALUES ($1, $2, $3) RETURNING id`,
-		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload,
+		`INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
+		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
 	).Scan(&jobID); err != nil {
 		return err
 	}
@@ -752,7 +762,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			EndTime:          tc.Servers[0].Clock().Now(),
 			URI:              "nodelocal:///backup",
 			BackupDescriptor: backupDesc,
-		}); err != nil {
+		}, jobs.BackupProgress{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -798,7 +808,8 @@ func TestBackupRestoreResume(t *testing.T) {
 					TableID:  restoreTableID,
 				},
 			},
-			URIs:         []string{restoreDir},
+			URIs: []string{restoreDir},
+		}, jobs.RestoreProgress{
 			LowWaterMark: restoreLowWaterMark,
 		}); err != nil {
 			t.Fatal(err)
@@ -820,18 +831,18 @@ func TestBackupRestoreResume(t *testing.T) {
 }
 
 func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
-	var payloadBytes []byte
+	var progressBytes []byte
 	if err := sqlDB.QueryRow(
-		`SELECT payload FROM system.jobs WHERE id = $1`, jobID,
-	).Scan(&payloadBytes); err != nil {
+		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
+	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}
-	var payload jobs.Payload
-	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
+	var payload jobs.Progress
+	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
 		return nil, err
 	}
 	switch d := payload.Details.(type) {
-	case *jobs.Payload_Restore:
+	case *jobs.Progress_Restore:
 		return d.Restore.LowWaterMark, nil
 	default:
 		return nil, errors.Errorf("unexpected job details type %T", d)
