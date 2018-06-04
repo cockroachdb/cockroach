@@ -15,6 +15,7 @@ import homeIcon from "!!raw-loader!assets/home.svg";
 import metricsIcon from "!!raw-loader!assets/metrics.svg";
 import databasesIcon from "!!raw-loader!assets/databases.svg";
 import jobsIcon from "!!raw-loader!assets/jobs.svg";
+import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
 
 interface IconLinkProps {
   icon: string;
@@ -70,7 +71,13 @@ function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
   }
 
   if (!loginState.loginEnabled()) {
-    return (<div className="login-indicator">Insecure mode</div>);
+    return (
+      <li className="login-indicator login-indicator--insecure">
+        <div className="image-container"
+             dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
+        <div>Insecure mode</div>
+      </li>
+    );
   }
 
   const user = loginState.loggedInUser();
