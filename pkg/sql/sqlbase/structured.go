@@ -652,7 +652,7 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON
+	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON || semanticType == ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -2289,6 +2289,9 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
 		}
+		if ptyp.FamilyEqual(types.FamTuple) {
+			return ColumnType_TUPLE, nil
+		}
 		if wrapper, ok := ptyp.(types.TOidWrapper); ok {
 			return DatumTypeToColumnSemanticType(wrapper.T)
 		}
@@ -2314,6 +2317,17 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}
+	case types.TTuple:
+		ctyp.SemanticType = ColumnType_TUPLE
+		ctyp.TupleContents = make([]ColumnType, len(t.Types))
+		for i, tc := range t.Types {
+			var err error
+			ctyp.TupleContents[i], err = DatumTypeToColumnType(tc)
+			if err != nil {
+				return ColumnType{}, err
+			}
+		}
+		return ctyp, nil
 	default:
 		semanticType, err := DatumTypeToColumnSemanticType(ptyp)
 		if err != nil {
@@ -2356,6 +2370,8 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 		return types.INet
 	case ColumnType_JSON:
 		return types.JSON
+	case ColumnType_TUPLE:
+		return types.FamTuple
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -2381,6 +2397,14 @@ func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
 		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
+	case ColumnType_TUPLE:
+		datums := types.TTuple{
+			Types: make([]types.T, len(c.TupleContents)),
+		}
+		for i := range c.TupleContents {
+			datums.Types[i] = c.TupleContents[i].ToDatumType()
+		}
+		return datums
 	default:
 		return columnSemanticTypeToDatumType(c, c.SemanticType)
 	}

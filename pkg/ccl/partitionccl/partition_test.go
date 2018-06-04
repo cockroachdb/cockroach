@@ -843,6 +843,10 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
+		// Tuples are not valid types for table creation
+		if semTypeID == int32(sqlbase.ColumnType_TUPLE) {
+			continue
+		}
 		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
 		colType := semTypeName
 		switch typ.SemanticType {

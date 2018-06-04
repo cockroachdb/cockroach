@@ -88,7 +88,7 @@ type PreparedPortal struct {
 
 // newPreparedPortal creates a new PreparedPortal.
 //
-// When no longer in use, the PrepatedPortal needs to be close()d.
+// When no longer in use, the PreparedPortal needs to be close()d.
 func (ex *connExecutor) newPreparedPortal(
 	ctx context.Context,
 	name string,

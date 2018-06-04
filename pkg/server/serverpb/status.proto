@@ -402,6 +402,10 @@ message Session {
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).
   bytes id = 9 [ (gogoproto.customname) = "ID" ];
+  // Number of currently allocated bytes in the session memory monitor.
+  int64 alloc_bytes = 10;
+  // High water mark of allocated bytes in the session memory monitor.
+  int64 max_alloc_bytes = 11;
 }
 
 // An error wrapper object for ListSessionsResponse.

@@ -428,6 +428,13 @@ func (mm *BytesMonitor) MaximumBytes() int64 {
 	return mm.mu.maxAllocated
 }
 
+// AllocBytes returns the current number of allocated bytes in this monitor.
+func (mm *BytesMonitor) AllocBytes() int64 {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	return mm.mu.curAllocated
+}
+
 // BoundAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes

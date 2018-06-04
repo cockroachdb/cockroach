@@ -4,9 +4,9 @@ package encoding
 
 import "strconv"
 
-const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrSentinelType"
+const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrSentinelTypeJSONTuple"
 
-var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 95}
+var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 95, 99, 104}
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_Type_index)-1) {
