@@ -17,6 +17,7 @@
 #include <libroach.h>
 #include <memory>
 #include <rocksdb/comparator.h>
+#include <rocksdb/env.h>
 #include <rocksdb/iterator.h>
 #include <rocksdb/status.h>
 #include <rocksdb/write_batch.h>
@@ -26,7 +27,8 @@ namespace cockroach {
 struct EnvManager;
 
 // DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts, EnvManager* env_ctx);
+rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                           const DBOptions opts, EnvManager* env_ctx);
 
 // ToDBSlice returns a DBSlice from a rocksdb::Slice
 inline DBSlice ToDBSlice(const rocksdb::Slice& s) {
