@@ -99,7 +99,7 @@ var _ = NormalClass
 
 // NewFunctionDefinition allocates a function definition corresponding
 // to the given built-in definition.
-func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
+func NewFunctionDefinition(name string, def []OverloadDefinition) *FunctionDefinition {
 	props := def[0].FunctionProperties
 	firstSig := def[0].Signature()
 	overloads := make([]overloadImpl, len(def))

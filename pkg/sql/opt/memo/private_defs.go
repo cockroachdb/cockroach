@@ -33,7 +33,7 @@ type PrivateID uint32
 type FuncOpDef struct {
 	Name     string
 	Type     types.T
-	Overload *tree.Builtin
+	Overload *tree.OverloadDefinition
 }
 
 func (f FuncOpDef) String() string {

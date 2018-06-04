@@ -55,7 +55,7 @@ func initGeneratorBuiltins() {
 
 // Generators is a map from name to slice of Builtins for all built-in
 // generators.
-var Generators = map[string][]tree.Builtin{
+var Generators = map[string][]tree.OverloadDefinition{
 	"generate_series": {
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorBuiltin(
@@ -169,14 +169,14 @@ var Generators = map[string][]tree.Builtin{
 
 func makeGeneratorBuiltin(
 	in tree.ArgTypes, ret types.TTable, g generatorFactory, info string,
-) tree.Builtin {
+) tree.OverloadDefinition {
 	return makeGeneratorBuiltinWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
 
 func makeGeneratorBuiltinWithReturnType(
 	in tree.ArgTypes, retType tree.ReturnTyper, g generatorFactory, info string,
-) tree.Builtin {
-	return tree.Builtin{
+) tree.OverloadDefinition {
+	return tree.OverloadDefinition{
 		FunctionProperties: tree.FunctionProperties{
 			Impure:   true,
 			Class:    tree.GeneratorClass,

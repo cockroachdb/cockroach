@@ -169,7 +169,7 @@ func generateOperators() []byte {
 // TODO(mjibson): use the exported value from sql/parser/pg_builtins.go.
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
-func generateFunctions(from map[string][]tree.Builtin, categorize bool) []byte {
+func generateFunctions(from map[string][]tree.OverloadDefinition, categorize bool) []byte {
 	functions := make(map[string][]string)
 	seen := make(map[string]struct{})
 	md := markdown.New(markdown.XHTMLOutput(true), markdown.Nofollow(true))

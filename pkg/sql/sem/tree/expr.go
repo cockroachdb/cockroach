@@ -1105,7 +1105,7 @@ type FuncExpr struct {
 	EscapeSRF bool
 
 	typeAnnotation
-	fn *Builtin
+	fn *OverloadDefinition
 }
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
@@ -1116,7 +1116,7 @@ func NewTypedFuncExpr(
 	filter TypedExpr,
 	windowDef *WindowDef,
 	typ types.T,
-	builtin *Builtin,
+	overload *OverloadDefinition,
 ) *FuncExpr {
 	f := &FuncExpr{
 		Func:           ref,
@@ -1125,7 +1125,7 @@ func NewTypedFuncExpr(
 		Filter:         filter,
 		WindowDef:      windowDef,
 		typeAnnotation: typeAnnotation{typ: typ},
-		fn:             builtin,
+		fn:             overload,
 	}
 	for i, e := range exprs {
 		f.Exprs[i] = e
@@ -1133,9 +1133,9 @@ func NewTypedFuncExpr(
 	return f
 }
 
-// ResolvedBuiltin returns the builtin definition; can only be called after
+// ResolvedOverload returns the builtin definition; can only be called after
 // Resolve (which happens during TypeCheck).
-func (node *FuncExpr) ResolvedBuiltin() *Builtin {
+func (node *FuncExpr) ResolvedOverload() *OverloadDefinition {
 	return node.fn
 }
 

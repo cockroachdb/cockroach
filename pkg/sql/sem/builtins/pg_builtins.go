@@ -102,8 +102,8 @@ func initPGBuiltins() {
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) []tree.Builtin {
-	return []tree.Builtin{
+func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) []tree.OverloadDefinition {
+	return []tree.OverloadDefinition{
 		{
 			Types:      argTypes,
 			ReturnType: tree.FixedReturnType(returnType),
@@ -119,9 +119,9 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) []tree.Builti
 // every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
 // and only supported because ORMs sometimes use their names to form a map for
 // client-side type encoding and decoding. See issue #12526 for more details.
-func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]tree.Builtin {
+func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]tree.OverloadDefinition {
 	typname := typ.String()
-	return map[string][]tree.Builtin{
+	return map[string][]tree.OverloadDefinition{
 		builtinPrefix + "send": makeTypeIOBuiltin(tree.ArgTypes{{typname, typ}}, types.Bytes),
 		// Note: PG takes type 2281 "internal" for these builtins, which we don't
 		// provide. We won't implement these functions anyway, so it shouldn't
@@ -146,8 +146,8 @@ var (
 )
 
 // Make a pg_get_viewdef function with the given arguments.
-func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
-	return tree.Builtin{
+func makePGGetViewDef(argTypes tree.ArgTypes) tree.OverloadDefinition {
+	return tree.OverloadDefinition{
 		FunctionProperties: tree.FunctionProperties{
 			DistsqlBlacklist: true,
 		},
@@ -172,8 +172,8 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 }
 
 // Make a pg_get_constraintdef function with the given arguments.
-func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
-	return tree.Builtin{
+func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.OverloadDefinition {
+	return tree.OverloadDefinition{
 		FunctionProperties: tree.FunctionProperties{
 			DistsqlBlacklist: true,
 		},
@@ -217,7 +217,7 @@ func makePGPrivilegeInquiryDef(
 	infoDetail string,
 	objSpecArgs argTypeOpts,
 	fn func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error),
-) []tree.Builtin {
+) []tree.OverloadDefinition {
 	// Collect the different argument type variations.
 	//
 	// 1. variants can begin with an optional "user" argument, which if used
@@ -249,7 +249,7 @@ func makePGPrivilegeInquiryDef(
 		argTypes[i] = append(argType, tree.ArgTypes{{"privilege", types.String}}...)
 	}
 
-	var variants []tree.Builtin
+	var variants []tree.OverloadDefinition
 	for _, argType := range argTypes {
 		withUser := argType[0].Name == "user"
 
@@ -258,7 +258,7 @@ func makePGPrivilegeInquiryDef(
 			infoFmt = "Returns whether or not the user has privileges for %s."
 		}
 
-		variants = append(variants, tree.Builtin{
+		variants = append(variants, tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				DistsqlBlacklist: true,
 			},
@@ -445,10 +445,10 @@ func evalPrivilegeCheck(
 	return tree.DBoolTrue, nil
 }
 
-var pgBuiltins = map[string][]tree.Builtin{
+var pgBuiltins = map[string][]tree.OverloadDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -460,7 +460,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 
 	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
 	"pg_encoding_to_char": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types: tree.ArgTypes{
 				{"encoding_id", types.Int},
 			},
@@ -482,7 +482,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 	// return the first argument directly. It also means we can ignore the second and
 	// optional third argument.
 	"pg_get_expr": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types: tree.ArgTypes{
 				{"pg_node_tree", types.String},
 				{"relation_oid", types.Oid},
@@ -493,7 +493,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 			},
 			Info: notUsableInfo,
 		},
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types: tree.ArgTypes{
 				{"pg_node_tree", types.String},
 				{"relation_oid", types.Oid},
@@ -518,7 +518,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				DistsqlBlacklist: true,
 			},
@@ -555,7 +555,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				NullableArgs: true,
 			},
@@ -568,7 +568,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"pg_get_userbyid": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				DistsqlBlacklist: true,
 			},
@@ -600,7 +600,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		// The real implementation returns a record; we fake it by returning a
 		// comma-delimited string enclosed by parentheses.
 		// TODO(jordan): convert this to return a record type once we support that.
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				DistsqlBlacklist: true,
 			},
@@ -629,7 +629,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"format_type": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				NullableArgs: true,
 			},
@@ -652,7 +652,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"col_description": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -662,7 +662,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"quote_ident": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"text", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -679,7 +679,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"obj_description": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -687,7 +687,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 			},
 			Info: notUsableInfo,
 		},
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -697,7 +697,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"oid": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -707,7 +707,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"shobj_description": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -717,7 +717,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"pg_try_advisory_lock": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -727,7 +727,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"pg_advisory_unlock": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
@@ -740,7 +740,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 	// that is part of the databases on the search path.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -759,7 +759,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"pg_sleep": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			FunctionProperties: tree.FunctionProperties{
 				// pg_sleep is marked as impure so it doesn't get executed during
 				// normalization.
@@ -1373,7 +1373,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 	//
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
 	"inet_client_addr": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1383,7 +1383,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"inet_client_port": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1393,7 +1393,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"inet_server_addr": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1403,7 +1403,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		},
 	},
 	"inet_server_port": {
-		tree.Builtin{
+		tree.OverloadDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

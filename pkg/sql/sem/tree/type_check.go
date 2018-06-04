@@ -527,7 +527,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		// arguments, we don't want to take the NULL argument fast-path.
 		handledNull := false
 		for _, fn := range fns {
-			if fn.(*Builtin).NullableArgs {
+			if fn.(*OverloadDefinition).NullableArgs {
 				handledNull = true
 				break
 			}
@@ -561,18 +561,18 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		fnsStr := formatCandidates(expr.Func.String(), fns)
 		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
-	builtin := fns[0].(*Builtin)
+	overloadImpl := fns[0].(*OverloadDefinition)
 
 	// Check that the built-in is allowed for the current user.
 	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if builtin.Privileged && !ctx.privileged {
+	if overloadImpl.Privileged && !ctx.privileged {
 		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
 	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		switch builtin.Class {
+		switch overloadImpl.Class {
 		case AggregateClass:
 		case WindowClass:
 		default:
@@ -600,7 +600,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		if builtin.Class == WindowClass {
+		if overloadImpl.Class == WindowClass {
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
@@ -609,7 +609,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if expr.Filter != nil {
 		if expr.IsWindowFunctionApplication() {
 			return nil, errFilterWithinWindow
-		} else if builtin.Class != AggregateClass {
+		} else if overloadImpl.Class != AggregateClass {
 			// Same error message as Postgres.
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
 				"FILTER specified but %s() is not an aggregate function", &expr.Func)
@@ -625,8 +625,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
 	}
-	expr.fn = builtin
-	expr.typ = builtin.returnType()(typedSubExprs)
+	expr.fn = overloadImpl
+	expr.typ = overloadImpl.returnType()(typedSubExprs)
 	return expr, nil
 }
 
