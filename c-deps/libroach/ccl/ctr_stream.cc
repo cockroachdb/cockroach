@@ -17,23 +17,6 @@ using namespace cockroach;
 
 namespace cockroach {
 
-rocksdb::Status BuildCipherStream(const enginepbccl::EncryptionSettings& settings,
-                                  const enginepbccl::SecretKey* key,
-                                  std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
-  // We should not be getting called for plaintext, and we only have AES.
-  if (settings.encryption_type() != enginepbccl::AES128_CTR &&
-      settings.encryption_type() != enginepbccl::AES192_CTR &&
-      settings.encryption_type() != enginepbccl::AES256_CTR) {
-    return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("unknown encryption type %d", settings.encryption_type()));
-  }
-
-  (*result) = std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>(
-      new CTRCipherStream(new AESCipher(key->key()), settings.nonce(), settings.counter()));
-
-  return rocksdb::Status::OK();
-}
-
 CTRCipherStreamCreator::~CTRCipherStreamCreator() {}
 
 rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
@@ -67,7 +50,8 @@ rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
     return rocksdb::Status::InvalidArgument("failed to serialize encryption settings");
   }
 
-  return BuildCipherStream(enc_settings, key.get(), result);
+  result->reset(new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
+  return rocksdb::Status::OK();
 }
 
 // Create a cipher stream given encryption settings.
@@ -91,29 +75,37 @@ rocksdb::Status CTRCipherStreamCreator::CreateCipherStreamFromSettings(
         "key_manager does not have a key with ID %s", enc_settings.key_id().c_str()));
   }
 
-  return BuildCipherStream(enc_settings, key.get(), result);
+  result->reset(new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
+  return rocksdb::Status::OK();
 }
 
 enginepb::EnvType CTRCipherStreamCreator::GetEnvType() { return env_type_; }
 
-CTRCipherStream::CTRCipherStream(rocksdb_utils::BlockCipher* c, const std::string& nonce,
-                                 uint32_t counter)
-    : cipher_(c), nonce_(nonce), counter_(counter) {
-  assert(iv_.size() == (cipher_->BlockSize() - 4));
-}
+CTRCipherStream::CTRCipherStream(std::unique_ptr<enginepbccl::SecretKey> key,
+                                 const std::string& nonce, uint32_t counter)
+    : key_(std::move(key)), nonce_(nonce), counter_(counter) {}
 
 CTRCipherStream::~CTRCipherStream() {}
 
-size_t CTRCipherStream::BlockSize() { return cipher_->BlockSize(); }
+rocksdb::Status
+CTRCipherStream::InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const {
+  // We should not be getting called for plaintext, and we only have AES.
+  if (key_->info().encryption_type() != enginepbccl::AES128_CTR &&
+      key_->info().encryption_type() != enginepbccl::AES192_CTR &&
+      key_->info().encryption_type() != enginepbccl::AES256_CTR) {
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("unknown encryption type %d", key_->info().encryption_type()));
+  }
 
-void CTRCipherStream::AllocateScratch(std::string& scratch) {
-  auto blockSize = cipher_->BlockSize();
-  scratch.reserve(blockSize);
+  cipher->reset(new AESCipher(key_->key()));
+  return rocksdb::Status::OK();
 }
 
-rocksdb::Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, char* scratch) {
+rocksdb::Status CTRCipherStream::EncryptBlock(rocksdb_utils::BlockCipher* cipher,
+                                              uint64_t blockIndex, char* data,
+                                              char* scratch) const {
   // Create IV = nonce + counter
-  auto blockSize = cipher_->BlockSize();
+  auto blockSize = cipher->BlockSize();
   auto nonce_size = blockSize - 4;
   // Write the nonce at the beginning of the scratch space.
   memcpy(scratch, nonce_.data(), nonce_size);
@@ -124,7 +116,7 @@ rocksdb::Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, c
   memcpy(scratch + nonce_size, &block_counter, 4);
 
   // Encrypt nonce+counter
-  auto status = cipher_->Encrypt(scratch);
+  auto status = cipher->Encrypt(scratch);
   if (!status.ok()) {
     return status;
   }
@@ -140,9 +132,11 @@ rocksdb::Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, c
 
 // Decrypt a block of data at the given block index.
 // Length of data is equal to BlockSize();
-rocksdb::Status CTRCipherStream::DecryptBlock(uint64_t blockIndex, char* data, char* scratch) {
+rocksdb::Status CTRCipherStream::DecryptBlock(rocksdb_utils::BlockCipher* cipher,
+                                              uint64_t blockIndex, char* data,
+                                              char* scratch) const {
   // For CTR decryption & encryption are the same
-  return EncryptBlock(blockIndex, data, scratch);
+  return EncryptBlock(cipher, blockIndex, data, scratch);
 }
 
 }  // namespace cockroach

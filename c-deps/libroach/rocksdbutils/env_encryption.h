@@ -41,37 +41,6 @@ class CipherStreamCreator;
 rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, cockroach::FileRegistry* file_registry,
                               CipherStreamCreator* creator);
 
-// BlockAccessCipherStream is the base class for any cipher stream that
-// supports random access at block level (without requiring data from other blocks).
-// E.g. CTR (Counter operation mode) supports this requirement.
-class BlockAccessCipherStream {
- public:
-  virtual ~BlockAccessCipherStream() {}
-
-  // BlockSize returns the size of each block supported by this cipher stream.
-  virtual size_t BlockSize() = 0;
-
-  // Encrypt one or more (partial) blocks of data at the file offset.
-  // Length of data is given in dataSize.
-  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize);
-
-  // Decrypt one or more (partial) blocks of data at the file offset.
-  // Length of data is given in dataSize.
-  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize);
-
- protected:
-  // Allocate scratch space which is passed to EncryptBlock/DecryptBlock.
-  virtual void AllocateScratch(std::string&) = 0;
-
-  // Encrypt a block of data at the given block index.
-  // Length of data is equal to BlockSize();
-  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
-
-  // Decrypt a block of data at the given block index.
-  // Length of data is equal to BlockSize();
-  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
-};
-
 // BlockCipher
 class BlockCipher {
  public:
@@ -87,6 +56,37 @@ class BlockCipher {
   // Decrypt a block of data.
   // Length of data is equal to BlockSize().
   virtual rocksdb::Status Decrypt(char* data) = 0;
+};
+
+// BlockAccessCipherStream is the base class for any cipher stream that
+// supports random access at block level (without requiring data from other blocks).
+// E.g. CTR (Counter operation mode) supports this requirement.
+class BlockAccessCipherStream {
+ public:
+  virtual ~BlockAccessCipherStream() {}
+
+  // Encrypt one or more (partial) blocks of data at the file offset.
+  // Length of data is given in dataSize.
+  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize) const;
+
+  // Decrypt one or more (partial) blocks of data at the file offset.
+  // Length of data is given in dataSize.
+  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize) const;
+
+ protected:
+  // Initialize a new cipher object. A Cipher is not thread-safe but can be used for any
+  // number of EncryptBlock/DecryptBlock calls.
+  virtual rocksdb::Status InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const = 0;
+
+  // Encrypt a block of data at the given block index.
+  // Length of data is equal to cipher.BlockSize();
+  virtual rocksdb::Status EncryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
+                                       char* data, char* scratch) const = 0;
+
+  // Decrypt a block of data at the given block index.
+  // Length of data is equal to cipher.BlockSize();
+  virtual rocksdb::Status DecryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
+                                       char* data, char* scratch) const = 0;
 };
 
 // CipherStreamCreator is the abstract class used by EncryptedEnv.
