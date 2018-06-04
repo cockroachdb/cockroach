@@ -168,11 +168,11 @@ func VerifySystemJob(
 	return nil
 }
 
-// GetJobPayload loads the Payload message associated with the job.
-func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Payload {
-	ret := &jobs.Payload{}
+// GetJobProgress loads the Progress message associated with the job.
+func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Progress {
+	ret := &jobs.Progress{}
 	var buf []byte
-	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}

@@ -628,7 +628,7 @@ func backup(
 	progressLogger := jobs.ProgressLogger{
 		Job:           job,
 		TotalChunks:   len(spans),
-		StartFraction: job.Payload().FractionCompleted,
+		StartFraction: job.FractionCompleted(),
 	}
 
 	// We're already limiting these on the server-side, but sending all the
@@ -1061,6 +1061,7 @@ func backupPlanHook(
 				URI:              to,
 				BackupDescriptor: descBytes,
 			},
+			Progress: jobs.BackupProgress{},
 		})
 		if err != nil {
 			return err

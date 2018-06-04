@@ -421,15 +421,15 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-				d := details.(*jobs.Payload_Import).Import
+			return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
+				d := details.(*jobs.Progress_Import).Import
 				slotpct := pct * cp.progress.Contribution
-				if len(d.Tables[0].SamplingProgress) > 0 {
-					d.Tables[0].SamplingProgress[cp.progress.Slot] = slotpct
+				if len(d.SamplingProgress) > 0 {
+					d.SamplingProgress[cp.progress.Slot] = slotpct
 				} else {
-					d.Tables[0].ReadProgress[cp.progress.Slot] = slotpct
+					d.ReadProgress[cp.progress.Slot] = slotpct
 				}
-				return d.Tables[0].Completed()
+				return d.Completed()
 			})
 		}
 
@@ -459,8 +459,11 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		if err != nil {
 			return err
 		}
-		if details, ok := job.Payload().Details.(*jobs.Payload_Import); ok {
-			completedSpans.Add(details.Import.Tables[0].SpanProgress...)
+		progress := job.Progress()
+		if details, ok := progress.Details.(*jobs.Progress_Import); ok {
+			completedSpans.Add(details.Import.SpanProgress...)
+		} else {
+			return errors.Errorf("unexpected progress type %T", progress)
 		}
 
 		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}

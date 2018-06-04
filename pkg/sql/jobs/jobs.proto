@@ -41,6 +41,10 @@ message BackupDetails {
   bytes backup_descriptor = 4;
 }
 
+message BackupProgress {
+
+}
+
 message RestoreDetails {
   message TableRewrite {
     uint32 table_id = 1 [
@@ -52,7 +56,7 @@ message RestoreDetails {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
   }
-  bytes low_water_mark = 1;
+  reserved 1;
   util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
   map<uint32, TableRewrite> table_rewrites = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
@@ -62,6 +66,10 @@ message RestoreDetails {
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 }
 
+message RestoreProgress {
+  bytes low_water_mark = 1;
+}
+
 message ImportDetails {
   message Table {
     sqlbase.TableDescriptor desc = 1;
@@ -69,13 +77,12 @@ message ImportDetails {
     roachpb.IOFileFormat format = 18 [(gogoproto.nullable) = false];
     roachpb.CSVOptions legacy_csv_options = 3;
     string backup_path = 4;
-    repeated float sampling_progress = 5;
-    repeated float read_progress = 6;
-    repeated float write_progress = 7;
+    reserved 5, 6, 7;
     uint32 parent_id = 8 [
       (gogoproto.customname) = "ParentID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
+
     int32 legacy_comma = 9;
     int32 legacy_comment = 10;
     message Nullif {
@@ -92,12 +99,19 @@ message ImportDetails {
     repeated bytes samples = 15;
     // Skip the first N lines of the input (e.g. to ignore column headers)
     uint32 legacy_skip = 16;
-    // The spans of split keys which have had their SSTable's generated.
-    // This allows us to skip the shuffle stage for already-completed
-    // spans when resuming an import job.
-    repeated roachpb.Span span_progress = 17 [(gogoproto.nullable) = false];
+    reserved 17;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
+}
+
+message ImportProgress {
+  repeated float sampling_progress = 1;
+  repeated float read_progress = 2;
+  repeated float write_progress = 3;
+  // The spans of split keys which have had their SSTable's generated.
+  // This allows us to skip the shuffle stage for already-completed
+  // spans when resuming an import job.
+  repeated roachpb.Span span_progress = 4 [(gogoproto.nullable) = false];
 }
 
 message ResumeSpanList {
@@ -115,11 +129,19 @@ message SchemaChangeDetails {
   repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
 }
 
+message SchemaChangeProgress {
+
+}
+
 message ChangefeedDetails {
-  util.hlc.Timestamp highwater = 1 [(gogoproto.nullable) = false];
+  reserved 1;
   repeated sqlbase.TableDescriptor table_descs = 2 [(gogoproto.nullable) = false];
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
+}
+
+message ChangefeedProgress {
+  util.hlc.Timestamp highwater = 1 [(gogoproto.nullable) = false];
 }
 
 message Payload {
@@ -130,12 +152,12 @@ message Payload {
   // precision, and use microsecond integers directly.
   int64 started_micros = 3;
   int64 finished_micros = 4;
-  int64 modified_micros = 5;
+  reserved 5;
   repeated uint32 descriptor_ids = 6 [
     (gogoproto.customname) = "DescriptorIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
-  float fraction_completed = 7;
+  reserved 7;
   string error = 8;
   // ID 9 is intentionally reserved for lease information.
   Lease lease = 9;
@@ -145,6 +167,19 @@ message Payload {
     SchemaChangeDetails schemaChange = 12;
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
+  }
+}
+
+message Progress {
+  float fraction_completed = 1;
+  int64 modified_micros = 2;
+
+  oneof details {
+    BackupProgress backup = 10;
+    RestoreProgress restore = 11;
+    SchemaChangeProgress schemaChange = 12;
+    ImportProgress import = 13;
+    ChangefeedProgress changefeed = 14;
   }
 }
 

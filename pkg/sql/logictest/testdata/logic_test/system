@@ -146,6 +146,7 @@ id       INT        false  unique_rowid()  {"primary","jobs_status_created_idx"}
 status   STRING     false  NULL            {"jobs_status_created_idx"}
 created  TIMESTAMP  false  now()           {"jobs_status_created_idx"}
 payload  BYTES      false  NULL            {}
+progress BYTES      true   NULL            {}
 
 query TTBTT
 SHOW COLUMNS FROM system.settings

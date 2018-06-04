@@ -48,8 +48,6 @@ var (
 
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
-	// DisableMigrations skips all migrations.
-	DisableMigrations bool
 	// DisableBackfillMigrations stops applying migrations once
 	// a migration with 'doesBackfill == true' is encountered.
 	// TODO(mberhault): we could skip only backfill migrations and dependencies
@@ -185,6 +183,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:             "create default databases",
 		workFn:           createDefaultDbs,
 		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
+	},
+	{
+		// Introduced in v2.1.
+		// TODO(dt): Bake into v2.2.
+		name:   "add progress to system.jobs",
+		workFn: addJobsProgress,
 	},
 }
 
@@ -324,11 +328,6 @@ func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context) error {
-	if m.testingKnobs.DisableMigrations {
-		log.Info(ctx, "skipping all migrations due to testing knob")
-		return nil
-	}
-
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
@@ -785,4 +784,38 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 		}
 	}
 	return err
+}
+
+func addJobsProgress(ctx context.Context, r runner) error {
+	// Ideally to add a column progress, we'd just run a query like:
+	//  ALTER TABLE system.jobs ADD COLUMN progress BYTES CREATE FAMLIY progress;
+	// However SQL-managed schema changes use jobs tracking internally, which will
+	// fail if the jobs table's schema has not been migrated. Rather than add very
+	// significant complexity to the jobs code to try to handle pre- and post-
+	// migration schemas, we can dodge the chicken-and-egg problem by doing our
+	// schema change manually.
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, keys.JobsTableID)
+		if err != nil {
+			return err
+		}
+		if _, err := desc.FindActiveColumnByName("progress"); err == nil {
+			return nil
+		}
+		desc.AddColumn(sqlbase.ColumnDescriptor{
+			Name:     "progress",
+			Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+			Nullable: true,
+		})
+		if err := desc.AddColumnToFamilyMaybeCreate("progress", "progress", true, false); err != nil {
+			return err
+		}
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc))
+	})
 }

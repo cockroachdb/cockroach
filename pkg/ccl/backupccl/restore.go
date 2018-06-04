@@ -1020,7 +1020,7 @@ func restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	lowWaterMark := job.Record.Details.(jobs.RestoreDetails).LowWaterMark
+	lowWaterMark := job.Progress().Details.(*jobs.Progress_Restore).Restore.LowWaterMark
 	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
@@ -1034,10 +1034,10 @@ func restore(
 	progressLogger := jobs.ProgressLogger{
 		Job:           job,
 		TotalChunks:   len(importSpans),
-		StartFraction: job.Payload().FractionCompleted,
-		ProgressedFn: func(progressedCtx context.Context, details jobs.Details) {
+		StartFraction: job.FractionCompleted(),
+		ProgressedFn: func(progressedCtx context.Context, details jobs.ProgressDetails) {
 			switch d := details.(type) {
-			case *jobs.Payload_Restore:
+			case *jobs.Progress_Restore:
 				mu.Lock()
 				if mu.lowWaterMark >= 0 {
 					d.Restore.LowWaterMark = importSpans[mu.lowWaterMark].Key
@@ -1337,6 +1337,7 @@ func doRestorePlan(
 			TableDescs:    tables,
 			OverrideDB:    opts[restoreOptIntoDB],
 		},
+		Progress: jobs.RestoreProgress{},
 	})
 	if err != nil {
 		return err

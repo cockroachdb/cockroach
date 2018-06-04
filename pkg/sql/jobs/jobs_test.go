@@ -56,10 +56,11 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	var statusString string
 	var created time.Time
 	var payloadBytes []byte
+	var progressBytes []byte
 	if err := expected.DB.QueryRow(
-		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, id,
+		`SELECT status, created, payload, progress FROM system.jobs WHERE id = $1`, id,
 	).Scan(
-		&statusString, &created, &payloadBytes,
+		&statusString, &created, &payloadBytes, &progressBytes,
 	); err != nil {
 		return err
 	}
@@ -68,17 +69,28 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
 		return err
 	}
+	var progress jobs.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		return err
+	}
 
 	// Verify the upstream-provided fields.
 	details, err := payload.UnwrapDetails()
 	if err != nil {
 		return err
 	}
+
+	progressDetail, err := progress.UnwrapDetails()
+	if err != nil {
+		return err
+	}
+
 	if e, a := expected.Record, (jobs.Record{
 		Description:   payload.Description,
 		Details:       details,
 		DescriptorIDs: payload.DescriptorIDs,
 		Username:      payload.Username,
+		Progress:      progressDetail,
 	}); !reflect.DeepEqual(e, a) {
 		diff := strings.Join(pretty.Diff(e, a), "\n")
 		return errors.Errorf("Records do not match:\n%s", diff)
@@ -92,7 +104,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if e, a := expected.Type, payload.Type(); e != a {
 		return errors.Errorf("expected type %v, got type %v", e, a)
 	}
-	if e, a := expected.FractionCompleted, payload.FractionCompleted; e != a {
+	if e, a := expected.FractionCompleted, progress.FractionCompleted; e != a {
 		return errors.Errorf("expected fraction completed %f, got %f", e, a)
 	}
 
@@ -111,6 +123,20 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return errors.Errorf("expected error %q, got %q", e, a)
 	}
 	return nil
+}
+
+func TestJobsTableProgressFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	var table, schema string
+	sqlutils.MakeSQLRunner(db).QueryRow(t, `SHOW CREATE TABLE system.jobs`).Scan(&table, &schema)
+	if !strings.Contains(schema, `FAMILY progress (progress)`) {
+		t.Fatalf("expected progress family, got %q", schema)
+	}
 }
 
 func TestRegistryLifecycle(t *testing.T) {
@@ -141,6 +167,8 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	var lock syncutil.Mutex
 	var e, a Counters
+
+	mockJob := jobs.Record{Details: jobs.ImportDetails{}, Progress: jobs.ImportProgress{}}
 
 	check := func(t *testing.T) {
 		t.Helper()
@@ -226,7 +254,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("normal success", func(t *testing.T) {
 		clear()
-		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		_, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -243,7 +271,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("pause", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		job, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -269,7 +297,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		job, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -292,7 +320,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	// Verify that pause and cancel in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		job, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -397,7 +425,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("failed running", func(t *testing.T) {
 		clear()
-		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		_, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -417,7 +445,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		clear()
 		successErr = jobErr
 		defer func() { successErr = nil }()
-		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		_, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -440,7 +468,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		successErr = jobErr
 		failErr = jobErr
 		defer func() { failErr = nil }()
-		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		_, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -468,7 +496,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("fail marking failed", func(t *testing.T) {
 		clear()
 		failErr = jobErr
-		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		_, _, err := registry.StartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -521,7 +549,8 @@ func TestJobLifecycle(t *testing.T) {
 	defaultRecord := jobs.Record{
 		// Job does not accept an empty Details field, so arbitrarily provide
 		// ImportDetails.
-		Details: jobs.ImportDetails{},
+		Details:  jobs.ImportDetails{},
+		Progress: jobs.ImportProgress{},
 	}
 
 	createDefaultJob := func() (*jobs.Job, expectation) {
@@ -566,6 +595,7 @@ func TestJobLifecycle(t *testing.T) {
 			Username:      "Woody Pride",
 			DescriptorIDs: []sqlbase.ID{1, 2, 3},
 			Details:       jobs.RestoreDetails{},
+			Progress:      jobs.RestoreProgress{},
 		})
 
 		if err := woodyJob.Created(ctx); err != nil {
@@ -602,13 +632,13 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.Progressed(ctx, func(_ context.Context, details jobs.Details) float32 {
-			details.(*jobs.Payload_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+		if err := woodyJob.Progressed(ctx, func(_ context.Context, details jobs.ProgressDetails) float32 {
+			details.(*jobs.Progress_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
 			return 1.0
 		}); err != nil {
 			t.Fatal(err)
 		}
-		woodyExp.Record.Details = jobs.RestoreDetails{LowWaterMark: roachpb.Key("mariana")}
+		woodyExp.Record.Progress = jobs.RestoreProgress{LowWaterMark: roachpb.Key("mariana")}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
@@ -638,6 +668,8 @@ func TestJobLifecycle(t *testing.T) {
 		// Test modifying the job details before calling `Created`.
 		buzzJob.Record.Details = jobs.BackupDetails{}
 		buzzExp.Record.Details = jobs.BackupDetails{}
+		buzzJob.Record.Progress = jobs.BackupProgress{}
+		buzzExp.Record.Progress = jobs.BackupProgress{}
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -678,6 +710,7 @@ func TestJobLifecycle(t *testing.T) {
 			Username:      "Sid Phillips",
 			DescriptorIDs: []sqlbase.ID{6, 6, 6},
 			Details:       jobs.RestoreDetails{},
+			Progress:      jobs.RestoreProgress{},
 		})
 
 		if err := sidJob.Created(ctx); err != nil {
@@ -984,12 +1017,13 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("set details works", func(t *testing.T) {
 		job, exp := createJob(jobs.Record{
-			Details: jobs.RestoreDetails{},
+			Details:  jobs.RestoreDetails{},
+			Progress: jobs.RestoreProgress{},
 		})
 		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
-		newDetails := jobs.RestoreDetails{LowWaterMark: []byte{42}}
+		newDetails := jobs.RestoreDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
 		if err := job.SetDetails(ctx, newDetails); err != nil {
 			t.Fatal(err)
@@ -999,9 +1033,28 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("set progress works", func(t *testing.T) {
+		job, exp := createJob(jobs.Record{
+			Details:  jobs.RestoreDetails{},
+			Progress: jobs.RestoreProgress{},
+		})
+		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+			t.Fatal(err)
+		}
+		newDetails := jobs.RestoreProgress{LowWaterMark: []byte{42}}
+		exp.Record.Progress = newDetails
+		if err := job.SetProgress(ctx, newDetails); err != nil {
+			t.Fatal(err)
+		}
+		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("cannot pause or resume schema changes", func(t *testing.T) {
 		job, _ := createJob(jobs.Record{
-			Details: jobs.SchemaChangeDetails{},
+			Details:  jobs.SchemaChangeDetails{},
+			Progress: jobs.SchemaChangeProgress{},
 		})
 		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
 			t.Fatalf("unexpected %v", err)
@@ -1024,6 +1077,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	mockJob := jobs.Record{Details: jobs.BackupDetails{}, Progress: jobs.BackupProgress{}}
 	tests := []struct {
 		name   string
 		status jobs.Status
@@ -1045,7 +1099,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			jobs.StatusSucceeded, "",
 			func(_ context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
-				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				job := registry.NewJob(mockJob)
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
@@ -1057,7 +1111,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			jobs.StatusFailed, "in-job error",
 			func(_ context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
-				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				job := registry.NewJob(mockJob)
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
@@ -1073,7 +1127,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			jobs.StatusSucceeded, "",
 			func(ctx context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
-				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				job := registry.NewJob(mockJob)
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
@@ -1088,7 +1142,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			jobs.StatusFailed, "in-job error",
 			func(ctx context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
-				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				job := registry.NewJob(mockJob)
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
