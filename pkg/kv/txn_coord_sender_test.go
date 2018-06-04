@@ -415,7 +415,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS hlc.Timestamp
 	for i := 0; i < 3; i++ {
 		testutils.SucceedsSoon(t, func() error {
-			txn, pErr := getTxn(s.DB, initialTxn.Proto())
+			txn, pErr := getTxn(context.Background(), initialTxn)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -463,19 +463,21 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *client.DB, txn *roachpb.Transaction) (*roachpb.Transaction, *roachpb.Error) {
+func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
+			Key: txn.Proto().Key,
 		},
 	}
-	reply, pErr := client.SendWrappedWith(context.Background(), db.GetSender(), roachpb.Header{
-		Txn: txn,
-	}, hb)
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: txn.Proto()}
+	ba.Add(hb)
+
+	br, pErr := txn.Send(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	return reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
+	return br.Txn, nil
 }
 
 func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
@@ -529,7 +531,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		// The transaction was pushed at least to conflictTxn's timestamp (but
 		// it could have been pushed more - the push takes a timestamp off the
 		// HLC).
-		pusheeTxn, pErr := getTxn(s.DB, txn.Proto())
+		pusheeTxn, pErr := getTxn(context.TODO(), txn)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -1468,28 +1470,17 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	checkTxnMetrics(t, metrics, "commit 1PC txn", 1, 1 /* 1PC */, 0, 0, 0)
 }
 
-// createNonCancelableDB returns a client DB and a sender. The sender
-// will be used for every transaction sent through the DB, so use with
-// care. The point is that every invocation of TxnCoordSender.Send will
-// be supplied a context with Done()==nil.
-func createNonCancelableDB(
-	db *client.DB, hbInterval time.Duration, clientTimeout time.Duration,
+// createTimeoutDB returns a DB whose txns are considered abandoned by the
+// TxnCoordSender after a given timeout.
+func createTimeoutDB(
+	db *client.DB, dbCtx client.DBContext, hbInterval time.Duration, clientTimeout time.Duration,
 ) *client.DB {
-	// Create the single txn coord for this test.
-	tc := db.GetFactory().New(client.RootTxn).(*TxnCoordSender)
-	tc.heartbeatInterval = hbInterval
-	tc.clientTimeout = clientTimeout
-
-	// client.Txn supplies a non-cancelable context, which makes the
-	// transaction coordinator ignore timeout-based abandonment and use the
-	// context's lifetime instead. In this test, we are testing timeout-based
-	// abandonment, so we need to supply a non-cancelable context.
-	var factory client.TxnSenderFactoryFunc = func(_ client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return tc.Send(context.Background(), ba)
-		})
-	}
-	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock)
+	origFactory := db.GetFactory().(*TxnCoordSenderFactory)
+	factory := *origFactory
+	factory.heartbeatInterval = hbInterval
+	factory.clientTimeout = clientTimeout
+	dbCtx.UseTimeoutTxnAbandonment = true
+	return client.NewDBWithContext(&factory, factory.clock, dbCtx)
 }
 
 func TestTxnAbandonCount(t *testing.T) {
@@ -1506,7 +1497,7 @@ func TestTxnAbandonCount(t *testing.T) {
 
 	hbInterval := 2 * time.Millisecond
 	clientTimeout := 1 * time.Millisecond
-	db := createNonCancelableDB(s.DB, hbInterval, clientTimeout)
+	db := createTimeoutDB(s.DB, *s.DBContext, hbInterval, clientTimeout)
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		count++
@@ -1564,7 +1555,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 	hbInterval := s.DB.GetFactory().(*TxnCoordSenderFactory).heartbeatInterval
 	clientTimeout := s.DB.GetFactory().(*TxnCoordSenderFactory).clientTimeout
-	db := createNonCancelableDB(s.DB, hbInterval, clientTimeout)
+	db := createTimeoutDB(s.DB, *s.DBContext, hbInterval, clientTimeout)
 
 	err := db.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 		count++
