@@ -51,7 +51,17 @@ type scope struct {
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
-// grouping column in an aggOutScope scope that projects that expression.
+// grouping column in an aggOutScope scope that projects that expression. It
+// is used to enforce scoping rules, since any non-aggregate, variable
+// expression in the SELECT list must be a GROUP BY expression or be composed
+// of GROUP BY expressions. For example, this query is legal:
+//
+//   SELECT COUNT(*), k + v FROM kv GROUP by k, v
+//
+// but this query is not:
+//
+//   SELECT COUNT(*), k + v FROM kv GROUP BY k - v
+//
 type groupByStrSet map[string]*scopeColumn
 
 // exists is a 0-byte dummy value used in a map that's being used to track
@@ -62,8 +72,8 @@ var exists = struct{}{}
 // case when the builder is building expressions in a SELECT list, and
 // aggregates, GROUP BY, or HAVING are present. This is also true when the
 // builder is building expressions inside the HAVING clause. When
-// inGroupingContext returns true, varsUsed will be utilized to enforce scoping
-// rules. See the comment above varsUsed for more details.
+// inGroupingContext returns true, groupByStrSet will be utilized to enforce
+// scoping rules. See the comment above groupByStrSet for more details.
 func (s *scope) inGroupingContext() bool {
 	return s.groupby.aggInScope != nil
 }
