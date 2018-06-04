@@ -67,6 +67,17 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.table, needed)
 		setNeededColumns(n.index, n.primaryKeyColumns)
 
+		// These will always line up with the columns in the table, since this
+		// function is only used by the heuristic planner, and it plans such that
+		// things line up that way.
+		for i, colNeeded := range needed {
+			if colNeeded {
+				n.resultColumns[i].Omitted = false
+			} else {
+				n.resultColumns[i].Omitted = true
+			}
+		}
+
 	case *unionNode:
 		if !n.emitAll {
 			// For UNION (as opposed to UNION ALL) we have to check for

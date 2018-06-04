@@ -293,6 +293,18 @@ SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 1  NULL
 1  1
 
+statement ok
+CREATE TABLE ef (e INT, f INT, INDEX(f))
+
+statement ok
+INSERT INTO ef VALUES (NULL, 1), (1, 1)
+
+query I rowsort
+SELECT e FROM ef WHERE f > 0 AND f < 2 ORDER BY f
+----
+NULL
+1
+
 query II
 SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
