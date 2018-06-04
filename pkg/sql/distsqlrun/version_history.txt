@@ -62,3 +62,6 @@
     - Enhancements to lookup joins. They now support joining against secondary
       indexes as well as left outer joins. Left join support required two
       additional fields on JoinReaderSpec: index_filter_expr and type.
+- Version: 15 (MinAcceptedVersion: 6)
+    - Add support for processing queries with tuples in DistSQL. Old versions
+      would not recognize the new tuple field in the proto.

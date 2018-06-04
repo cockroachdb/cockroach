@@ -251,7 +251,7 @@ SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
 ----
 4 5 6 7
 
-query T
+query T rowsort
 SELECT (x,y) FROM xyzw
 ----
 (1,2)

@@ -765,7 +765,9 @@ CREATE TABLE crdb_internal.%s (
   last_active_query  STRING,         -- the query that finished last on this session as SQL
   session_start      TIMESTAMP,      -- the time when the session was opened
   oldest_query_start TIMESTAMP,      -- the time when the oldest query in the session was started
-  kv_txn             STRING          -- the ID of the current KV transaction
+  kv_txn             STRING,         -- the ID of the current KV transaction
+  alloc_bytes        INT,            -- the number of bytes allocated by the session
+  max_alloc_bytes    INT             -- the high water mark of bytes allocated by the session
 );
 `
 
@@ -841,6 +843,8 @@ func populateSessionsTable(
 			tree.MakeDTimestamp(session.Start, time.Microsecond),
 			oldestStartDatum,
 			kvTxnIDDatum,
+			tree.NewDInt(tree.DInt(session.AllocBytes)),
+			tree.NewDInt(tree.DInt(session.MaxAllocBytes)),
 		); err != nil {
 			return err
 		}

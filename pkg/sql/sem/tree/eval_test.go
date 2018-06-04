@@ -588,6 +588,8 @@ func TestEval(t *testing.T) {
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`},
 		{`CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END`, `2`},
 		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 5 END`, `5`},
+		// Row
+		{`ROW()`, `()`},
 		// Row (tuple) comparisons.
 		{`ROW(1) = ROW(1)`, `true`},
 		{`ROW(1, true) = (1, NOT false)`, `true`},
