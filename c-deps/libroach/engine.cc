@@ -293,9 +293,28 @@ DBStatus DBImpl::EnvSyncFile(rocksdb::WritableFile* file) {
   return ToDBStatus(status);
 }
 
-// EnvDelete deletes the file with the given filename.
+// EnvDeleteFile deletes the file with the given filename.
 DBStatus DBImpl::EnvDeleteFile(DBSlice path) {
   rocksdb::Status status = this->rep->GetEnv()->DeleteFile(ToString(path));
+  if (status.IsNotFound()) {
+    return FmtStatus("No such file or directory");
+  }
+  return ToDBStatus(status);
+}
+
+// EnvDeleteDir deletes the directory with the given dir name.
+DBStatus DBImpl::EnvDeleteDir(DBSlice dir) {
+  rocksdb::Status status;
+
+  std::vector<std::string> files;
+  status = this->rep->GetEnv()->GetChildren(ToString(dir), &files);
+  for (auto& file : files) {
+    if (file != "." && file != "..") {
+      this->rep->GetEnv()->DeleteFile(ToString(dir) + "/" + file);
+    }
+  }
+
+  status = this->rep->GetEnv()->DeleteDir(ToString(dir));
   if (status.IsNotFound()) {
     return FmtStatus("No such file or directory");
   }

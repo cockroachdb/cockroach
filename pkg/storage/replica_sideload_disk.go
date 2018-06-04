@@ -124,7 +124,7 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) e
 }
 
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
-	err := os.RemoveAll(ss.dir)
+	err := ss.eng.DeleteDir(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }

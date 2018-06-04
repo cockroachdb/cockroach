@@ -202,8 +202,6 @@ type multiTestContext struct {
 	dbs         []*client.DB
 	gossips     []*gossip.Gossip
 	storePools  []*storage.StorePool
-	dirCleanups []func()
-	caches      []engine.RocksDBCache
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
@@ -340,14 +338,6 @@ func (m *multiTestContext) Stop() {
 			}
 		}
 		m.transportStopper.Stop(context.TODO())
-
-		for _, cleanup := range m.dirCleanups {
-			cleanup()
-		}
-
-		for _, cache := range m.caches {
-			cache.Release()
-		}
 
 		for _, s := range m.engineStoppers {
 			s.Stop(context.TODO())
@@ -703,20 +693,7 @@ func (m *multiTestContext) addStore(idx int) {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-
-		dir, cleanup := testutils.TempDir(m.t)
-		cache := engine.NewRocksDBCache(1 << 20)
-		var err error
-		eng, err = engine.NewRocksDB(engine.RocksDBConfig{
-			Dir:       dir,
-			MustExist: false,
-		}, cache)
-		if err != nil {
-			m.t.Fatal(err)
-		}
-
-		m.dirCleanups = append(m.dirCleanups, cleanup)
-		m.caches = append(m.caches, cache)
+		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true

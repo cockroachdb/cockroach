@@ -2660,6 +2660,15 @@ func (r *RocksDB) DeleteFile(filename string) error {
 	return nil
 }
 
+// DeleteDir deletes the directory and any children it contains. If dir does
+// not exist, DeleteDir returns nil(no error).
+func (r *RocksDB) DeleteDir(dir string) error {
+	if err := statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(dir)))); err != nil && notFoundErrOrDefault(err) != os.ErrNotExist {
+		return err
+	}
+	return nil
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
