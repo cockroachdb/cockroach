@@ -64,6 +64,34 @@ func (node *TestingRelocate) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Rows)
 }
 
+// TestingRelocateLease represents an
+// `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE LEASE ..` statement.
+type TestingRelocateLease struct {
+	// Only one of Table and Index can be set.
+	// TODO(XXX): It's not great that this (and TestingRelocate) can only work on
+	// ranges that are part of a currently valid table or index.
+	Table *NormalizableTableName
+	Index *TableNameWithIndex
+	// Each row contains an array with a store id and values for the columns in the
+	// PK or index (or a prefix of the columns).
+	// See TestingRelocate and its explanation in docs/RFCS/sql_split_syntax.md.
+	Rows *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *TestingRelocateLease) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
+	if node.Index != nil {
+		ctx.WriteString("INDEX ")
+		ctx.FormatNode(node.Index)
+	} else {
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(node.Table)
+	}
+	ctx.WriteString(" EXPERIMENTAL_RELOCATE LEASE ")
+	ctx.FormatNode(node.Rows)
+}
+
 // Scatter represents an `ALTER TABLE/INDEX .. SCATTER ..`
 // statement.
 type Scatter struct {

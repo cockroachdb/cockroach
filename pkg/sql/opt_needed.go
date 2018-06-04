@@ -200,6 +200,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *testingRelocateNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
+	case *testingRelocateLeaseNode:
+		setNeededColumns(n.rows, allColumns(n.rows))
+
 	case *rowCountNode:
 		// The sub-node is a DELETE, INSERT, UPDATE etc. and will decide which columns it needs.
 		setNeededColumns(n.source, nil)

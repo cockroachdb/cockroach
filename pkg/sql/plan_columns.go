@@ -97,6 +97,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sqlbase.ExplainDistSQLColumns)
 	case *testingRelocateNode:
 		return n.getColumns(mut, relocateNodeColumns)
+	case *testingRelocateLeaseNode:
+		return n.getColumns(mut, relocateNodeColumns)
 	case *scatterNode:
 		return n.getColumns(mut, scatterNodeColumns)
 	case *showZoneConfigNode:
