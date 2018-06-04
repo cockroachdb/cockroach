@@ -43,7 +43,7 @@ func (p *planner) showStateMachineSetting(
 	// immediately while at the same time guaranteeing that a node reporting a certain version has
 	// also processed the corresponding Gossip update (which is important as only then does the node
 	// update its persisted state; see #22796).
-	retryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	retryCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	tBegin := timeutil.Now()
 	// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
