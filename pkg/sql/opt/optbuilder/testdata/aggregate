@@ -2557,3 +2557,74 @@ sort
            └── div [type=decimal]
                 ├── variable: mk1 [type=int]
                 └── const: 5 [type=int]
+
+# Grouping columns cannot be reused inside an aggregate input expression
+# because the aggregate input expressions and grouping expressions are
+# built as part of the same projection. 
+build
+SELECT MAX((k+v)/(k-v)), (k+v)*(k-v) FROM kv GROUP BY k+v, k-v
+----
+project
+ ├── columns: max:8(decimal) "(k + v) * (k - v)":9(int)
+ ├── group-by
+ │    ├── columns: column5:5(int) column6:6(int) max:8(decimal)
+ │    ├── grouping columns: column5:5(int) column6:6(int)
+ │    ├── project
+ │    │    ├── columns: column5:5(int) column6:6(int) column7:7(decimal)
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    └── projections
+ │    │         ├── plus [type=int]
+ │    │         │    ├── variable: kv.k [type=int]
+ │    │         │    └── variable: kv.v [type=int]
+ │    │         ├── minus [type=int]
+ │    │         │    ├── variable: kv.k [type=int]
+ │    │         │    └── variable: kv.v [type=int]
+ │    │         └── div [type=decimal]
+ │    │              ├── plus [type=int]
+ │    │              │    ├── variable: kv.k [type=int]
+ │    │              │    └── variable: kv.v [type=int]
+ │    │              └── minus [type=int]
+ │    │                   ├── variable: kv.k [type=int]
+ │    │                   └── variable: kv.v [type=int]
+ │    └── aggregations
+ │         └── max [type=decimal]
+ │              └── variable: column7 [type=decimal]
+ └── projections
+      └── mult [type=int]
+           ├── variable: column5 [type=int]
+           └── variable: column6 [type=int]
+
+build
+SELECT MAX((k+v)/(k-v)), (k+v)*(k-v) FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
+----
+project
+ ├── columns: max:8(decimal) "(k + v) * (k - v)":7(int)
+ └── group-by
+      ├── columns: column5:5(int) column6:6(decimal) column7:7(int) max:8(decimal)
+      ├── grouping columns: column5:5(int) column6:6(decimal) column7:7(int)
+      ├── project
+      │    ├── columns: column5:5(int) column6:6(decimal) column7:7(int)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    └── projections
+      │         ├── plus [type=int]
+      │         │    ├── variable: kv.k [type=int]
+      │         │    └── variable: kv.v [type=int]
+      │         ├── div [type=decimal]
+      │         │    ├── plus [type=int]
+      │         │    │    ├── variable: kv.k [type=int]
+      │         │    │    └── variable: kv.v [type=int]
+      │         │    └── minus [type=int]
+      │         │         ├── variable: kv.k [type=int]
+      │         │         └── variable: kv.v [type=int]
+      │         └── mult [type=int]
+      │              ├── plus [type=int]
+      │              │    ├── variable: kv.k [type=int]
+      │              │    └── variable: kv.v [type=int]
+      │              └── minus [type=int]
+      │                   ├── variable: kv.k [type=int]
+      │                   └── variable: kv.v [type=int]
+      └── aggregations
+           └── max [type=decimal]
+                └── variable: column6 [type=decimal]

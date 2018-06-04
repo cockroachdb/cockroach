@@ -110,6 +110,9 @@ func (b *Builder) buildScalarHelper(
 ) (out memo.GroupID) {
 	// If we are in a grouping context and this expression corresponds to a
 	// GROUP BY expression, return a reference to the GROUP BY column.
+	// Note that GROUP BY columns cannot be reused inside an aggregate input
+	// expression (when inAgg=true) because the aggregate input expressions and
+	// grouping expressions are built as part of the same projection.
 	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg
 	if inGroupingContext {
 		// TODO(rytaft): This currently regenerates a string for each subexpression.
