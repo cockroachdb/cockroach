@@ -14,6 +14,7 @@ import homeIcon from "!!raw-loader!assets/home.svg";
 import metricsIcon from "!!raw-loader!assets/metrics.svg";
 import databasesIcon from "!!raw-loader!assets/databases.svg";
 import jobsIcon from "!!raw-loader!assets/jobs.svg";
+import queriesIcon from "!!raw-loader!assets/queries.svg";
 
 interface IconLinkProps {
   icon: string;
@@ -112,6 +113,7 @@ export default class Sidebar extends React.Component {
           <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
+          <IconLink to={"/queries"} icon={queriesIcon} title={"Queries"} />
         </ul>
         <div className="logged-in-user">
           <LoginIndicatorConnected />
