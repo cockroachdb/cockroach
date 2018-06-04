@@ -495,7 +495,6 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HIGH HISTOGRAM HOUR
 
-
 %token <str> IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
@@ -507,7 +506,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> KEY KEYS KV
 
 %token <str> LATERAL LC_CTYPE LC_COLLATE
-%token <str> LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
+%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH
@@ -594,6 +593,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_rename_table_stmt
 %type <tree.Statement> alter_scatter_stmt
 %type <tree.Statement> alter_relocate_stmt
+%type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
 
 // ALTER DATABASE
@@ -609,6 +609,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_split_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
+%type <tree.Statement> alter_relocate_index_lease_stmt
 %type <tree.Statement> alter_zone_index_stmt
 
 // ALTER VIEW
@@ -1134,6 +1135,7 @@ alter_ddl_stmt:
 alter_table_stmt:
   alter_onetable_stmt
 | alter_relocate_stmt
+| alter_relocate_lease_stmt
 | alter_split_stmt
 | alter_scatter_stmt
 | alter_zone_table_stmt
@@ -1216,6 +1218,7 @@ alter_range_stmt:
 alter_index_stmt:
   alter_oneindex_stmt
 | alter_relocate_index_stmt
+| alter_relocate_index_lease_stmt
 | alter_split_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
@@ -1256,6 +1259,10 @@ alter_split_index_stmt:
     $$.val = &tree.Split{Index: $3.newTableWithIdx(), Rows: $6.slct()}
   }
 
+relocate_kw:
+  TESTING_RELOCATE
+| EXPERIMENTAL_RELOCATE
+
 alter_relocate_stmt:
   ALTER TABLE table_name relocate_kw select_stmt
   {
@@ -1263,15 +1270,25 @@ alter_relocate_stmt:
     $$.val = &tree.Relocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $5.slct()}
   }
 
-relocate_kw:
-  TESTING_RELOCATE
-| EXPERIMENTAL_RELOCATE
-
 alter_relocate_index_stmt:
   ALTER INDEX table_name_with_index relocate_kw select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.Relocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
+  }
+
+alter_relocate_lease_stmt:
+  ALTER TABLE table_name relocate_kw LEASE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Relocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $6.slct(), RelocateLease: true}
+  }
+
+alter_relocate_index_lease_stmt:
+  ALTER INDEX table_name_with_index relocate_kw LEASE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Relocate{Index: $3.newTableWithIdx(), Rows: $6.slct(), RelocateLease: true}
   }
 
 alter_zone_range_stmt:
@@ -8126,6 +8143,7 @@ unreserved_keyword:
 | KV
 | LC_COLLATE
 | LC_CTYPE
+| LEASE
 | LESS
 | LEVEL
 | LIST

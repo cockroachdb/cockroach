@@ -42,12 +42,15 @@ func (node *Split) Format(ctx *FmtCtx) {
 // statement.
 type Relocate struct {
 	// Only one of Table and Index can be set.
+	// TODO(a-robinson): It's not great that this can only work on ranges that
+	// are part of a currently valid table or index.
 	Table *NormalizableTableName
 	Index *TableNameWithIndex
 	// Each row contains an array with store ids and values for the columns in the
 	// PK or index (or a prefix of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
-	Rows *Select
+	Rows          *Select
+	RelocateLease bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -61,6 +64,9 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Table)
 	}
 	ctx.WriteString(" EXPERIMENTAL_RELOCATE ")
+	if node.RelocateLease {
+		ctx.WriteString("LEASE ")
+	}
 	ctx.FormatNode(node.Rows)
 }
 

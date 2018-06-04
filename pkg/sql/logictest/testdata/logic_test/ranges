@@ -23,6 +23,9 @@ NULL       /1       1         {1}       1
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 1, 12)
 
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 1, 12)
+
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE t
 ----
@@ -50,6 +53,9 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 
 
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3,4], 4)
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (1, 5, 1), (5, 5, 2)
 
 query TTTI colnames
 SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
@@ -223,6 +229,15 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 'foo')
 
 statement error EXPERIMENTAL_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES ('foo', 1)
+
+statement error too many columns in EXPERIMENTAL_RELOCATE LEASE data
+ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 1, 2, 3)
+
+statement error could not parse "foo" as type int
+ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 'foo')
+
+statement error could not parse "foo" as type int
+ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES ('foo', 1)
 
 # Create and drop things to produce interesting data for crdb_internal.ranges.
 

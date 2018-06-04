@@ -34,15 +34,16 @@ import (
 type relocateNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	rows      planNode
+	relocateLease bool
+	tableDesc     *sqlbase.TableDescriptor
+	index         *sqlbase.IndexDescriptor
+	rows          planNode
 
 	run relocateRun
 }
 
-// Relocate moves ranges to specific stores
-// (`ALTER TABLE/INDEX ... EXPERIMENTAL_RELOCATE ...` statement)
+// Relocate moves ranges and/or leases to specific stores.
+// (`ALTER TABLE/INDEX ... EXPERIMENTAL_RELOCATE [LEASE] ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
@@ -51,11 +52,16 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 	}
 
 	// Calculate the desired types for the select statement:
-	//  - int array (list of stores)
+	//  - int array (list of stores) if relocating a range, or just int (target
+	//    storeID) if relocating a lease
 	//  - column values; it is OK if the select statement returns fewer columns
-	//  (the relevant prefix is used).
+	//    (the relevant prefix is used).
 	desiredTypes := make([]types.T, len(index.ColumnIDs)+1)
-	desiredTypes[0] = types.TArray{Typ: types.Int}
+	if n.RelocateLease {
+		desiredTypes[0] = types.Int
+	} else {
+		desiredTypes[0] = types.TArray{Typ: types.Int}
+	}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -70,30 +76,38 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 		return nil, err
 	}
 
+	cmdName := "EXPERIMENTAL_RELOCATE"
+	if n.RelocateLease {
+		cmdName += " LEASE"
+	}
 	cols := planColumns(rows)
 	if len(cols) < 2 {
-		return nil, errors.Errorf("less than two columns in EXPERIMENTAL_RELOCATE data")
+		return nil, errors.Errorf("less than two columns in %s data", cmdName)
 	}
 	if len(cols) > len(index.ColumnIDs)+1 {
-		return nil, errors.Errorf("too many columns in EXPERIMENTAL_RELOCATE data")
+		return nil, errors.Errorf("too many columns in %s data", cmdName)
 	}
 	for i := range cols {
 		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
 			colName := "relocation array"
+			if n.RelocateLease {
+				colName = "target leaseholder"
+			}
 			if i > 0 {
 				colName = index.ColumnNames[i-1]
 			}
 			return nil, errors.Errorf(
-				"EXPERIMENTAL_RELOCATE data column %d (%s) must be of type %s, not type %s",
-				i+1, colName, desiredTypes[i], cols[i].Typ,
+				"%s data column %d (%s) must be of type %s, not type %s",
+				cmdName, i+1, colName, desiredTypes[i], cols[i].Typ,
 			)
 		}
 	}
 
 	return &relocateNode{
-		tableDesc: tableDesc,
-		index:     index,
-		rows:      rows,
+		relocateLease: n.RelocateLease,
+		tableDesc:     tableDesc,
+		index:         index,
+		rows:          rows,
 		run: relocateRun{
 			storeMap: make(map[roachpb.StoreID]roachpb.NodeID),
 		},
@@ -129,44 +143,56 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 		return ok, err
 	}
 
-	// First column is the relocation string; the rest of the columns indicate the
-	// table/index row.
+	// First column is the relocation string or target leaseholder; the rest of
+	// the columns indicate the table/index row.
 	data := n.rows.Values()
 
-	if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
-		return false, errors.Errorf(
-			"expected int array in the first EXPERIMENTAL_RELOCATE data column; got %s",
-			data[0].ResolvedType(),
-		)
-	}
-	relocation := data[0].(*tree.DArray)
-	if len(relocation.Array) == 0 {
-		return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
-	}
-
-	// Create an array of the desired replication targets.
-	targets := make([]roachpb.ReplicationTarget, len(relocation.Array))
-	for i, d := range relocation.Array {
-		storeID := roachpb.StoreID(*d.(*tree.DInt))
-		nodeID, ok := n.run.storeMap[storeID]
-		if !ok {
-			// Lookup the store in gossip.
-			var storeDesc roachpb.StoreDescriptor
-			gossipStoreKey := gossip.MakeStoreKey(storeID)
-			if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
-				gossipStoreKey, &storeDesc,
-			); err != nil {
-				return false, errors.Wrapf(err, "error looking up store %d", storeID)
-			}
-			nodeID = storeDesc.Node.NodeID
-			n.run.storeMap[storeID] = nodeID
+	var relocationTargets []roachpb.ReplicationTarget
+	var leaseStoreID roachpb.StoreID
+	if n.relocateLease {
+		leaseStoreID = roachpb.StoreID(tree.MustBeDInt(data[0]))
+		if leaseStoreID <= 0 {
+			return false, errors.Errorf("invalid target leaseholder store ID %d for EXPERIMENTAL_RELOCATE LEASE", leaseStoreID)
 		}
-		targets[i] = roachpb.ReplicationTarget{NodeID: nodeID, StoreID: storeID}
+	} else {
+		if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
+			return false, errors.Errorf(
+				"expected int array in the first EXPERIMENTAL_RELOCATE data column; got %s",
+				data[0].ResolvedType(),
+			)
+		}
+		relocation := data[0].(*tree.DArray)
+		if len(relocation.Array) == 0 {
+			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
+		}
+
+		// Create an array of the desired replication targets.
+		relocationTargets = make([]roachpb.ReplicationTarget, len(relocation.Array))
+		for i, d := range relocation.Array {
+			storeID := roachpb.StoreID(*d.(*tree.DInt))
+			nodeID, ok := n.run.storeMap[storeID]
+			if !ok {
+				// Lookup the store in gossip.
+				var storeDesc roachpb.StoreDescriptor
+				gossipStoreKey := gossip.MakeStoreKey(storeID)
+				if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
+					gossipStoreKey, &storeDesc,
+				); err != nil {
+					return false, errors.Wrapf(err, "error looking up store %d", storeID)
+				}
+				nodeID = storeDesc.Node.NodeID
+				n.run.storeMap[storeID] = nodeID
+			}
+			relocationTargets[i] = roachpb.ReplicationTarget{NodeID: nodeID, StoreID: storeID}
+		}
 	}
 
 	// Find the current list of replicas. This is inherently racy, so the
 	// implementation is best effort; in tests, the replication queues should be
 	// stopped to make this reliable.
+	// TODO(a-robinson): Get the lastRangeStartKey via the ReturnRangeInfo option
+	// on the BatchRequest Header. We can't do this until v2.2 because admin
+	// requests don't respect the option on versions earlier than v2.1.
 	rowKey, err := getRowKey(n.tableDesc, n.index, data[1:])
 	if err != nil {
 		return false, err
@@ -179,8 +205,14 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	if err := storage.RelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, targets); err != nil {
-		return false, err
+	if n.relocateLease {
+		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+			return false, err
+		}
+	} else {
+		if err := storage.RelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, relocationTargets); err != nil {
+			return false, err
+		}
 	}
 
 	return true, nil
