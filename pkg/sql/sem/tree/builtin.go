@@ -20,25 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// FunctionClass specifies the class of the builtin function.
-type FunctionClass int
-
-const (
-	// NormalClass is a standard builtin function.
-	NormalClass FunctionClass = iota
-	// AggregateClass is a builtin aggregate function.
-	AggregateClass
-	// WindowClass is a builtin window function.
-	WindowClass
-	// GeneratorClass is a builtin generator function.
-	GeneratorClass
-)
-
-// Avoid vet warning about unused enum value.
-var _ = NormalClass
-
 // Builtin is a built-in function.
 type Builtin struct {
+	FunctionProperties
+
 	Types      TypeList
 	ReturnType ReturnTyper
 
@@ -52,60 +37,12 @@ type Builtin struct {
 	// after consultation with @knz @nvanbenschoten.
 	PreferredOverload bool
 
-	// Impure is set to true when a function potentially returns a
-	// different value when called in the same statement with the same
-	// parameters. e.g.: random(), clock_timestamp(). Some functions
-	// like now() return the same value in the same statement, but
-	// different values in separate statements, and should not be marked
-	// as impure.
-	Impure bool
-
-	// DistsqlBlacklist is set to true when a function depends on
-	// members of the EvalContext that are not marshaled by DistSQL
-	// (e.g. planner). Currently used for DistSQL to determine if
-	// expressions can be evaluated on a different node without sending
-	// over the EvalContext.
-	//
-	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
-	// get rid of this blacklist.
-	DistsqlBlacklist bool
-
-	// NullableArgs is set to true when a function's definition can
-	// handle NULL arguments. When set, the function will be given the
-	// chance to see NULL arguments. When not, the function will
-	// evaluate directly to NULL in the presence of any NULL arguments.
-	//
-	// NOTE: when set, a function should be prepared for any of its arguments to
-	// be NULL and should act accordingly.
-	NullableArgs bool
-
-	// NeedsRepeatedEvaluation is set to true when a function may change
-	// at every row whether or not it is applied to an expression that
-	// contains row-dependent variables. Used e.g. by `random` and
-	// aggregate functions.
-	NeedsRepeatedEvaluation bool
-
-	// Privileged is set to true when the built-in can only be used by
-	// security.RootUser.
-	Privileged bool
-
-	// Class is the kind of built-in function (normal/aggregate/window/etc.)
-	Class FunctionClass
-
-	// Category is used to generate documentation strings.
-	Category string
-
 	// Info is a description of the function, which is surfaced on the CockroachDB
 	// docs site on the "Functions and Operators" page. Descriptions typically use
 	// third-person with the function as an implicit subject (e.g. "Calculates
 	// infinity"), but should focus more on ease of understanding so other structures
 	// might be more appropriate.
 	Info string
-
-	// Private, when set to true, indicates the built-in function is not
-	// available for use by user queries. This is currently used by some
-	// aggregates due to issue #10495.
-	Private bool
 
 	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc

@@ -177,8 +177,11 @@ func makeGeneratorBuiltinWithReturnType(
 	in tree.ArgTypes, retType tree.ReturnTyper, g generatorFactory, info string,
 ) tree.Builtin {
 	return tree.Builtin{
-		Impure:     true,
-		Class:      tree.GeneratorClass,
+		FunctionProperties: tree.FunctionProperties{
+			Impure:   true,
+			Class:    tree.GeneratorClass,
+			Category: categoryCompatibility,
+		},
 		Types:      in,
 		ReturnType: retType,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -188,8 +191,7 @@ func makeGeneratorBuiltinWithReturnType(
 			}
 			return &tree.DTable{ValueGenerator: gen}, nil
 		},
-		Category: categoryCompatibility,
-		Info:     info,
+		Info: info,
 	}
 }
 

@@ -138,9 +138,11 @@ var Builtins = map[string][]tree.Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		tree.Builtin{
-			Types:        tree.VariadicType{VarType: types.String},
-			ReturnType:   tree.FixedReturnType(types.String),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
@@ -161,9 +163,11 @@ var Builtins = map[string][]tree.Builtin{
 
 	"concat_ws": {
 		tree.Builtin{
-			Types:        tree.VariadicType{VarType: types.String},
-			ReturnType:   tree.FixedReturnType(types.String),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
 					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, errInsufficientArgsFmtString, "concat_ws")
@@ -199,10 +203,12 @@ var Builtins = map[string][]tree.Builtin{
 
 	"gen_random_uuid": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryIDGeneration,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.UUID),
-			Category:   categoryIDGeneration,
-			Impure:     true,
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				uv := uuid.MakeV4()
 				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
@@ -538,9 +544,11 @@ var Builtins = map[string][]tree.Builtin{
 
 	"repeat": {
 		tree.Builtin{
-			Types:            tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
-			DistsqlBlacklist: true,
-			ReturnType:       tree.FixedReturnType(types.String),
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlacklist: true,
+			},
+			Types:      tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				s := string(tree.MustBeDString(args[0]))
 				count := int(tree.MustBeDInt(args[1]))
@@ -1014,10 +1022,12 @@ CockroachDB supports the following flags:
 
 	"random": {
 		tree.Builtin{
-			Types:                   tree.ArgTypes{},
-			ReturnType:              tree.FixedReturnType(types.Float),
-			Impure:                  true,
-			NeedsRepeatedEvaluation: true,
+			FunctionProperties: tree.FunctionProperties{
+				Impure:                  true,
+				NeedsRepeatedEvaluation: true,
+			},
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDFloat(tree.DFloat(rand.Float64())), nil
 			},
@@ -1027,10 +1037,12 @@ CockroachDB supports the following flags:
 
 	"unique_rowid": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryIDGeneration,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
-			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
 			},
@@ -1045,10 +1057,12 @@ CockroachDB supports the following flags:
 
 	"nextval": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySequences,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categorySequences,
-			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
 				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
@@ -1067,10 +1081,12 @@ CockroachDB supports the following flags:
 
 	"currval": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySequences,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categorySequences,
-			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
 				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
@@ -1089,10 +1105,12 @@ CockroachDB supports the following flags:
 
 	"lastval": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySequences,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categorySequences,
-			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				val, err := evalCtx.SessionData.SequenceState.GetLastValue()
 				if err != nil {
@@ -1108,10 +1126,12 @@ CockroachDB supports the following flags:
 	// See https://github.com/cockroachdb/cockroach/issues/21564
 	"setval": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySequences,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categorySequences,
-			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
 				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
@@ -1130,12 +1150,14 @@ CockroachDB supports the following flags:
 				"`value + Increment`",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySequences,
+				Impure:   true,
+			},
 			Types: tree.ArgTypes{
 				{"sequence_name", types.String}, {"value", types.Int}, {"is_called", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categorySequences,
-			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
 				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
@@ -1162,10 +1184,12 @@ CockroachDB supports the following flags:
 
 	"greatest": {
 		tree.Builtin{
-			Types:        tree.HomogeneousType{},
-			ReturnType:   tree.FirstNonNullReturnType(),
-			NullableArgs: true,
-			Category:     categoryComparison,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryComparison,
+				NullableArgs: true,
+			},
+			Types:      tree.HomogeneousType{},
+			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PickFromTuple(ctx, true /* greatest */, args)
 			},
@@ -1174,10 +1198,12 @@ CockroachDB supports the following flags:
 	},
 	"least": {
 		tree.Builtin{
-			Types:        tree.HomogeneousType{},
-			ReturnType:   tree.FirstNonNullReturnType(),
-			NullableArgs: true,
-			Category:     categoryComparison,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryComparison,
+				NullableArgs: true,
+			},
+			Types:      tree.HomogeneousType{},
+			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PickFromTuple(ctx, false /* greatest */, args)
 			},
@@ -1189,9 +1215,11 @@ CockroachDB supports the following flags:
 
 	"experimental_strftime": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"input", types.Timestamp}, {"extract_format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categoryDateAndTime,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[0].(*tree.DTimestamp).Time
 				format := string(tree.MustBeDString(args[1]))
@@ -1205,9 +1233,11 @@ CockroachDB supports the following flags:
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"input", types.Date}, {"extract_format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categoryDateAndTime,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := timeutil.Unix(int64(*args[0].(*tree.DDate))*tree.SecondsInDay, 0)
 				format := string(tree.MustBeDString(args[1]))
@@ -1223,7 +1253,9 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"input", types.TimestampTZ}, {"extract_format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categoryDateAndTime,
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[0].(*tree.DTimestampTZ).Time
 				format := string(tree.MustBeDString(args[1]))
@@ -1240,9 +1272,11 @@ CockroachDB supports the following flags:
 
 	"experimental_strptime": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"input", types.String}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Category:   categoryDateAndTime,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				toParse := string(tree.MustBeDString(args[0]))
 				format := string(tree.MustBeDString(args[1]))
@@ -1290,9 +1324,11 @@ CockroachDB supports the following flags:
 
 	"current_time": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimeTZ),
-			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetTxnTime(), nil
 			},
@@ -1306,19 +1342,23 @@ CockroachDB supports the following flags:
 
 	"statement_timestamp": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+			},
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
-			Impure:            true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 			Info: "Returns the start time of the current statement.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
-			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
@@ -1328,10 +1368,12 @@ CockroachDB supports the following flags:
 
 	"cluster_logical_timestamp": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Decimal),
-			Category:   categorySystemInfo,
-			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
@@ -1347,19 +1389,23 @@ may increase either contention or retry errors, or both.`,
 
 	"clock_timestamp": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+			},
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
-			Impure:            true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
 			},
 			Info: "Returns the current system time on one of the cluster nodes.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Impure: true,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
-			Impure:     true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
 			},
@@ -1369,9 +1415,11 @@ may increase either contention or retry errors, or both.`,
 
 	"extract": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
 				fromTS := args[1].(*tree.DTimestamp)
@@ -1383,9 +1431,11 @@ may increase either contention or retry errors, or both.`,
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
@@ -1397,9 +1447,11 @@ may increase either contention or retry errors, or both.`,
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1410,9 +1462,11 @@ may increase either contention or retry errors, or both.`,
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1422,9 +1476,11 @@ may increase either contention or retry errors, or both.`,
 				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTimeTZ := args[1].(*tree.DTimeTZ)
 				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
@@ -1438,9 +1494,11 @@ may increase either contention or retry errors, or both.`,
 
 	"extract_duration": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryDateAndTime,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
 				fromInterval := *args[1].(*tree.DInterval)
@@ -1509,9 +1567,11 @@ may increase either contention or retry errors, or both.`,
 	//
 	"date_trunc": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTS := args[1].(*tree.DTimestamp)
@@ -1527,9 +1587,11 @@ may increase either contention or retry errors, or both.`,
 				"millisecond, microsecond.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
@@ -1542,9 +1604,11 @@ may increase either contention or retry errors, or both.`,
 				"millisecond, microsecond.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
 			ReturnType: tree.FixedReturnType(types.Interval),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTime := args[1].(*tree.DTime)
@@ -1559,9 +1623,11 @@ may increase either contention or retry errors, or both.`,
 				"Compatible elements: hour, minute, second, millisecond, microsecond.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryDateAndTime,
+			},
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1987,6 +2053,9 @@ may increase either contention or retry errors, or both.`,
 
 	"to_english": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryString,
+			},
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2010,8 +2079,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.NewDString(buf.String()), nil
 			},
-			Category: categoryString,
-			Info:     "This function enunciates the value of its argument using English cardinals.",
+			Info: "This function enunciates the value of its argument using English cardinals.",
 		},
 	},
 
@@ -2019,10 +2087,12 @@ may increase either contention or retry errors, or both.`,
 
 	"string_to_array": {
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: types.String}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2034,10 +2104,12 @@ may increase either contention or retry errors, or both.`,
 			Info: "Split a string into components on a delimiter.",
 		},
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: types.String}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2053,29 +2125,37 @@ may increase either contention or retry errors, or both.`,
 
 	"array_to_string": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categoryArray,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.DNull, nil
+				}
 				arr := tree.MustBeDArray(args[0])
-				delimOrNil := stringOrNil(args[1])
-				return arrayToString(arr, delimOrNil, nil)
+				delim := string(tree.MustBeDString(args[1]))
+				return arrayToString(arr, delim, nil)
 			},
 			Info: "Join an array into a string with a delimiter.",
 		},
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
-			ReturnType:   tree.FixedReturnType(types.String),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
 				arr := tree.MustBeDArray(args[0])
-				delimOrNil := stringOrNil(args[1])
+				delim := string(tree.MustBeDString(args[1]))
 				nullStr := stringOrNil(args[2])
-				return arrayToString(arr, delimOrNil, nullStr)
+				return arrayToString(arr, delim, nullStr)
 			},
 			Info: "Join an array into a string with a delimiter, replacing NULLs with a null string.",
 		},
@@ -2083,9 +2163,11 @@ may increase either contention or retry errors, or both.`,
 
 	"array_length": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryArray,
+			},
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryArray,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
@@ -2099,9 +2181,11 @@ may increase either contention or retry errors, or both.`,
 
 	"array_lower": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryArray,
+			},
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryArray,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
@@ -2115,9 +2199,11 @@ may increase either contention or retry errors, or both.`,
 
 	"array_upper": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryArray,
+			},
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryArray,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
@@ -2131,10 +2217,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_append": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -2144,10 +2232,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_prepend": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -2157,10 +2247,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_cat": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.ConcatArrays(typ, args[0], args[1])
 			},
@@ -2170,10 +2262,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_remove": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2194,10 +2288,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_replace": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2222,10 +2318,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_position": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.Int),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2243,10 +2341,12 @@ may increase either contention or retry errors, or both.`,
 
 	"array_positions": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
-			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: types.Int}),
-			Category:     categoryArray,
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:     categoryArray,
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.Int}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2270,9 +2370,11 @@ may increase either contention or retry errors, or both.`,
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"version": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categorySystemInfo,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(build.GetInfo().Short()), nil
 			},
@@ -2283,9 +2385,11 @@ may increase either contention or retry errors, or both.`,
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_database": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(ctx.SessionData.Database) == 0 {
 					return tree.DNull, nil
@@ -2305,10 +2409,12 @@ may increase either contention or retry errors, or both.`,
 	// SQL client against a pg server.
 	"current_schema": {
 		tree.Builtin{
-			Types:            tree.ArgTypes{},
-			ReturnType:       tree.FixedReturnType(types.String),
-			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         categorySystemInfo,
+				DistsqlBlacklist: true,
+			},
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
@@ -2337,10 +2443,12 @@ may increase either contention or retry errors, or both.`,
 	// server.
 	"current_schemas": {
 		tree.Builtin{
-			Types:            tree.ArgTypes{{"include_pg_catalog", types.Bool}},
-			ReturnType:       tree.FixedReturnType(types.TArray{Typ: types.String}),
-			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         categorySystemInfo,
+				DistsqlBlacklist: true,
+			},
+			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
@@ -2371,9 +2479,11 @@ may increase either contention or retry errors, or both.`,
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_user": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(ctx.SessionData.User) == 0 {
 					return tree.DNull, nil
@@ -2387,9 +2497,11 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.node_executable_version": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
-			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				v := "unknown"
 				// TODO(tschottdorf): we should always have a Settings, but there
@@ -2406,9 +2518,11 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.cluster_id": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+			},
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.UUID),
-			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
@@ -2418,9 +2532,12 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.force_error": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				errCode := string(*args[0].(*tree.DString))
 				msg := string(*args[1].(*tree.DString))
@@ -2429,39 +2546,42 @@ may increase either contention or retry errors, or both.`,
 				}
 				return nil, pgerror.NewError(errCode, msg)
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
 	"crdb_internal.force_panic": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category:   categorySystemInfo,
+				Impure:     true,
+				Privileged: true,
+			},
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
-			Privileged: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				msg := string(*args[0].(*tree.DString))
 				panic(msg)
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
 	"crdb_internal.force_log_fatal": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category:   categorySystemInfo,
+				Impure:     true,
+				Privileged: true,
+			},
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
-			Privileged: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				msg := string(*args[0].(*tree.DString))
 				log.Fatal(ctx.Ctx(), msg)
 				return nil, nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
@@ -2472,10 +2592,13 @@ may increase either contention or retry errors, or both.`,
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category:   categorySystemInfo,
+				Impure:     true,
+				Privileged: true,
+			},
 			Types:      tree.ArgTypes{{"val", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
-			Privileged: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.Duration{
@@ -2486,35 +2609,38 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.DZero, nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
 	// Identity function which is marked as impure to avoid constant folding.
 	"crdb_internal.no_constant_folding": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categorySystemInfo,
+				Impure:   true,
+			},
 			Types:      tree.ArgTypes{{"input", types.Any}},
 			ReturnType: tree.IdentityReturnType(0),
-			Impure:     true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
 	"crdb_internal.set_vmodule": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category:   categorySystemInfo,
+				Impure:     true,
+				Privileged: true,
+			},
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
-			Privileged: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
 			},
-			Category: categorySystemInfo,
 			Info: "This function is used for internal debugging purposes. " +
 				"Incorrect use can severely impact performance.",
 		},
@@ -2522,6 +2648,9 @@ may increase either contention or retry errors, or both.`,
 
 	"lpad": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryString,
+			},
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2536,11 +2665,13 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.NewDString(ret), nil
 			},
-			Category: categoryString,
 			Info: "Pads `string` to `length` by adding ' ' to the left of `string`." +
 				"If `string` is longer than `length` it is truncated.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryString,
+			},
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2553,13 +2684,15 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.NewDString(ret), nil
 			},
-			Category: categoryString,
 			Info: "Pads `string` by adding `fill` to the left of `string` to make it `length`. " +
 				"If `string` is longer than `length` it is truncated.",
 		},
 	},
 	"rpad": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryString,
+			},
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2571,11 +2704,13 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.NewDString(ret), nil
 			},
-			Category: categoryString,
 			Info: "Pads `string` to `length` by adding ' ' to the right of string. " +
 				"If `string` is longer than `length` it is truncated.",
 		},
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				Category: categoryString,
+			},
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2588,7 +2723,6 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.NewDString(ret), nil
 			},
-			Category: categoryString,
 			Info: "Pads `string` to `length` by adding `fill` to the right of `string`. " +
 				"If `string` is longer than `length` it is truncated.",
 		},
@@ -2687,10 +2821,12 @@ var substringImpls = []tree.Builtin{
 }
 
 var uuidV4Impl = tree.Builtin{
+	FunctionProperties: tree.FunctionProperties{
+		Category: categoryIDGeneration,
+		Impure:   true,
+	},
 	Types:      tree.ArgTypes{},
 	ReturnType: tree.FixedReturnType(types.Bytes),
-	Category:   categoryIDGeneration,
-	Impure:     true,
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return tree.NewDBytes(tree.DBytes(uuid.MakeV4().GetBytes())), nil
 	},
@@ -2718,19 +2854,23 @@ var txnTSDoc = `Returns the time of the current transaction.` + txnTSContextDoc
 
 var txnTSImpl = []tree.Builtin{
 	{
+		FunctionProperties: tree.FunctionProperties{
+			Impure: true,
+		},
 		Types:             tree.ArgTypes{},
 		ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 		PreferredOverload: true,
-		Impure:            true,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestamp(time.Microsecond), nil
 		},
 		Info: txnTSDoc,
 	},
 	{
+		FunctionProperties: tree.FunctionProperties{
+			Impure: true,
+		},
 		Types:      tree.ArgTypes{},
 		ReturnType: tree.FixedReturnType(types.Timestamp),
-		Impure:     true,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 		},
@@ -2874,9 +3014,11 @@ var jsonTypeOfImpl = tree.Builtin{
 }
 
 var jsonBuildObjectImpl = tree.Builtin{
-	Types:        tree.VariadicType{VarType: types.Any},
-	ReturnType:   tree.FixedReturnType(types.JSON),
-	NullableArgs: true,
+	FunctionProperties: tree.FunctionProperties{
+		NullableArgs: true,
+	},
+	Types:      tree.VariadicType{VarType: types.Any},
+	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
 			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
@@ -2922,9 +3064,11 @@ var toJSONImpl = tree.Builtin{
 }
 
 var jsonBuildArrayImpl = tree.Builtin{
-	Types:        tree.VariadicType{VarType: types.Any},
-	ReturnType:   tree.FixedReturnType(types.JSON),
-	NullableArgs: true,
+	FunctionProperties: tree.FunctionProperties{
+		NullableArgs: true,
+	},
+	Types:      tree.VariadicType{VarType: types.Any},
+	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
@@ -3114,6 +3258,9 @@ func stringBuiltin1(
 	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
 ) tree.Builtin {
 	return tree.Builtin{
+		FunctionProperties: tree.FunctionProperties{
+			Category: categorizeType(types.String),
+		},
 		Types:      tree.ArgTypes{{"val", types.String}},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3130,9 +3277,11 @@ func stringBuiltin2(
 	info string,
 ) tree.Builtin {
 	return tree.Builtin{
+		FunctionProperties: tree.FunctionProperties{
+			Category: categorizeType(types.String),
+		},
 		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}},
 		ReturnType: tree.FixedReturnType(returnType),
-		Category:   categorizeType(types.String),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return f(evalCtx, string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1])))
 		},
@@ -3147,6 +3296,9 @@ func stringBuiltin3(
 	info string,
 ) tree.Builtin {
 	return tree.Builtin{
+		FunctionProperties: tree.FunctionProperties{
+			Category: categorizeType(types.String),
+		},
 		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}, {c, types.String}},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3160,6 +3312,9 @@ func bytesBuiltin1(
 	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
 ) tree.Builtin {
 	return tree.Builtin{
+		FunctionProperties: tree.FunctionProperties{
+			Category: categorizeType(types.Bytes),
+		},
 		Types:      tree.ArgTypes{{"val", types.Bytes}},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3189,9 +3344,11 @@ func feedHash(h hash.Hash, args tree.Datums) {
 func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{VarType: types.String},
-			ReturnType:   tree.FixedReturnType(types.String),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3200,9 +3357,11 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{VarType: types.Bytes},
-			ReturnType:   tree.FixedReturnType(types.String),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.Bytes},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3216,9 +3375,11 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{VarType: types.String},
-			ReturnType:   tree.FixedReturnType(types.Int),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3227,9 +3388,11 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{VarType: types.Bytes},
-			ReturnType:   tree.FixedReturnType(types.Int),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.Bytes},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3242,9 +3405,11 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{VarType: types.String},
-			ReturnType:   tree.FixedReturnType(types.Int),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3253,9 +3418,11 @@ func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{VarType: types.Bytes},
-			ReturnType:   tree.FixedReturnType(types.Int),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.VariadicType{VarType: types.Bytes},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -3706,11 +3873,7 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 // arrayToString implements the array_to_string builtin - arr is joined using
 // delim. If nullStr is non-nil, NULL values in the array will be replaced by
 // it.
-func arrayToString(arr *tree.DArray, delimPtr *string, nullStr *string) (tree.Datum, error) {
-	if delimPtr == nil {
-		return tree.DNull, nil
-	}
-
+func arrayToString(arr *tree.DArray, delim string, nullStr *string) (tree.Datum, error) {
 	f := tree.NewFmtCtxWithBuf(tree.FmtParseDatums)
 
 	for i := range arr.Array {
@@ -3723,7 +3886,7 @@ func arrayToString(arr *tree.DArray, delimPtr *string, nullStr *string) (tree.Da
 			f.FormatNode(arr.Array[i])
 		}
 		if i < len(arr.Array)-1 {
-			f.WriteString(*delimPtr)
+			f.WriteString(delim)
 		}
 	}
 	return tree.NewDString(f.CloseAndGetString()), nil
