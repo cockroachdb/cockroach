@@ -105,6 +105,9 @@ type scanNode struct {
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
 	noCopy util.NoCopy
+
+	// Set when the scanNode is crated via the exec factory.
+	createdByOpt bool
 }
 
 // scanVisibility represents which table columns should be included in a scan.
