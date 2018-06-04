@@ -148,9 +148,11 @@ var (
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 	return tree.Builtin{
-		Types:            argTypes,
-		DistsqlBlacklist: true,
-		ReturnType:       tree.FixedReturnType(types.String),
+		FunctionProperties: tree.FunctionProperties{
+			DistsqlBlacklist: true,
+		},
+		Types:      argTypes,
+		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			r, err := ctx.InternalExecutor.QueryRow(
 				ctx.Ctx(), "pg_get_viewdef",
@@ -172,9 +174,11 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 // Make a pg_get_constraintdef function with the given arguments.
 func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
 	return tree.Builtin{
-		Types:            argTypes,
-		DistsqlBlacklist: true,
-		ReturnType:       tree.FixedReturnType(types.String),
+		FunctionProperties: tree.FunctionProperties{
+			DistsqlBlacklist: true,
+		},
+		Types:      argTypes,
+		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			r, err := ctx.InternalExecutor.QueryRow(
 				ctx.Ctx(), "pg_get_constraintdef",
@@ -255,9 +259,11 @@ func makePGPrivilegeInquiryDef(
 		}
 
 		variants = append(variants, tree.Builtin{
-			Types:            argType,
-			DistsqlBlacklist: true,
-			ReturnType:       tree.FixedReturnType(types.Bool),
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlacklist: true,
+			},
+			Types:      argType,
+			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var user string
 				if withUser {
@@ -513,11 +519,13 @@ var pgBuiltins = map[string][]tree.Builtin{
 	// statement.
 	"pg_get_indexdef": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlacklist: true,
+			},
 			Types: tree.ArgTypes{
 				{"index_oid", types.Oid},
 			},
-			DistsqlBlacklist: true,
-			ReturnType:       tree.FixedReturnType(types.String),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "pg_get_indexdef",
@@ -548,9 +556,11 @@ var pgBuiltins = map[string][]tree.Builtin{
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": {
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"val", types.Any}},
-			NullableArgs: true,
-			ReturnType:   tree.FixedReturnType(types.String),
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"val", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().String()), nil
 			},
@@ -559,11 +569,13 @@ var pgBuiltins = map[string][]tree.Builtin{
 	},
 	"pg_get_userbyid": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlacklist: true,
+			},
 			Types: tree.ArgTypes{
 				{"role_oid", types.Oid},
 			},
-			DistsqlBlacklist: true,
-			ReturnType:       tree.FixedReturnType(types.String),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
 				t, err := ctx.InternalExecutor.QueryRow(
@@ -589,9 +601,11 @@ var pgBuiltins = map[string][]tree.Builtin{
 		// comma-delimited string enclosed by parentheses.
 		// TODO(jordan): convert this to return a record type once we support that.
 		tree.Builtin{
-			Types:            tree.ArgTypes{{"sequence_oid", types.Oid}},
-			DistsqlBlacklist: true,
-			ReturnType:       tree.FixedReturnType(types.String),
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlacklist: true,
+			},
+			Types:      tree.ArgTypes{{"sequence_oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "pg_sequence_parameters",
@@ -616,9 +630,11 @@ var pgBuiltins = map[string][]tree.Builtin{
 	},
 	"format_type": {
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
-			ReturnType:   tree.FixedReturnType(types.String),
-			NullableArgs: true,
+			FunctionProperties: tree.FunctionProperties{
+				NullableArgs: true,
+			},
+			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oidArg := args[0]
 				if oidArg == tree.DNull {
@@ -744,11 +760,13 @@ var pgBuiltins = map[string][]tree.Builtin{
 	},
 	"pg_sleep": {
 		tree.Builtin{
+			FunctionProperties: tree.FunctionProperties{
+				// pg_sleep is marked as impure so it doesn't get executed during
+				// normalization.
+				Impure: true,
+			},
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			// pg_sleep is marked as impure so it doesn't get executed during
-			// normalization.
-			Impure: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
 				dur := time.Duration(durationNanos)

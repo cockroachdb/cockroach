@@ -111,18 +111,21 @@ func TestStringToArrayAndBack(t *testing.T) {
 				t.Errorf("expected %v, got %v", tc.expected, result)
 			}
 
-			s, err := arrayToString(result.(*tree.DArray), tc.sep, tc.nullStr)
+			if tc.sep == nil {
+				return
+			}
+
+			s, err := arrayToString(result.(*tree.DArray), *tc.sep, tc.nullStr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.sep == nil {
-				if s != tree.DNull {
-					t.Errorf("expected null, found %s", s)
-				}
-				return
+			if s == tree.DNull {
+				t.Errorf("expected not null, found null")
 			}
-			fmt.Println(s)
-			if string(*s.(*tree.DString)) != tc.input {
+
+			ds := s.(*tree.DString)
+			fmt.Println(ds)
+			if string(*ds) != tc.input {
 				t.Errorf("original %s, roundtripped %s", tc.input, s)
 			}
 		})
