@@ -448,7 +448,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			for i := 0; i < 2; i++ {
-				chans[i].InitWithBufSize(nil /* no column types */, 1)
+				chans[i].initWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
 				recvs[i] = &chans[i]
 			}
 			router, wg := setupRouter(t, evalCtx, tc.spec, nil /* no columns */, recvs)
@@ -565,7 +565,7 @@ func TestRouterBlocks(t *testing.T) {
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			for i := 0; i < 2; i++ {
-				chans[i].InitWithBufSize(colTypes, 1)
+				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
 			}
 			router, err := makeRouter(&tc.spec, recvs)
@@ -687,7 +687,7 @@ func TestRangeRouterInit(t *testing.T) {
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			for i := 0; i < 2; i++ {
-				chans[i].InitWithBufSize(colTypes, 1)
+				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
 			}
 			_, err := makeRouter(&spec, recvs)
@@ -734,7 +734,7 @@ func BenchmarkRouter(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						input.Reset()
 						for i := 0; i < nOutputs; i++ {
-							chans[i].InitWithBufSize(colTypes, rowChannelBufSize)
+							chans[i].InitWithNumSenders(colTypes, 1)
 							recvs[i] = &chans[i]
 						}
 						r, wg := setupRouter(b, evalCtx, spec, colTypes, recvs)

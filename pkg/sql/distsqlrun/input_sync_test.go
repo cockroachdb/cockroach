@@ -144,8 +144,8 @@ func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	mrc := &MultiplexedRowChannel{}
-	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
+	mrc := &RowChannel{}
+	mrc.InitWithNumSenders([]sqlbase.ColumnType{columnTypeInt}, 5)
 	producerErr := make(chan error, 100)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
@@ -193,8 +193,8 @@ func TestUnorderedSync(t *testing.T) {
 	}
 
 	// Test case when one source closes with an error.
-	mrc = &MultiplexedRowChannel{}
-	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
+	mrc = &RowChannel{}
+	mrc.InitWithNumSenders([]sqlbase.ColumnType{columnTypeInt}, 5)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
