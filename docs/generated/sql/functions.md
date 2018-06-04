@@ -1,4 +1,4 @@
-### ANYELEMENT Functions
+### ANYELEMENT functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -9,7 +9,7 @@
 </span></td></tr></tbody>
 </table>
 
-### Array Functions
+### Array functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -240,7 +240,7 @@
 </span></td></tr></tbody>
 </table>
 
-### BOOL Functions
+### BOOL functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -255,7 +255,7 @@
 </span></td></tr></tbody>
 </table>
 
-### Comparison Functions
+### Comparison functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -266,7 +266,7 @@
 </span></td></tr></tbody>
 </table>
 
-### Date and Time Functions
+### Date and time functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -368,7 +368,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### ID Generation Functions
+### ID generation functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -383,7 +383,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### INET Functions
+### INET functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -416,7 +416,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### JSONB Functions
+### JSONB functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -463,7 +463,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### Math and Numeric Functions
+### Math and numeric functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -604,7 +604,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### STRING[] Functions
+### STRING[] functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -615,7 +615,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### Sequence Functions
+### Sequence functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -632,7 +632,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### String and Byte Functions
+### String and byte functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -832,7 +832,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### System Info Functions
+### System info functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -871,7 +871,7 @@ may increase either contention or retry errors, or both.</p>
 </span></td></tr></tbody>
 </table>
 
-### TIMETZ Functions
+### TIMETZ functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
@@ -883,7 +883,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
-### Compatibility Functions
+### Compatibility functions
 
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
