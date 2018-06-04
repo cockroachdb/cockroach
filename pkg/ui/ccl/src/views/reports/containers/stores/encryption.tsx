@@ -1,10 +1,7 @@
 import React from "react";
 
 import * as protos from "src/js/protos";
-
-interface EncryptionStatusProps {
-  store: protos.cockroach.server.serverpb.StoreDetails$Properties;
-}
+import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
 
 export default class EncryptionStatus extends React.Component<EncryptionStatusProps, {}> {
 

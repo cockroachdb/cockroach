@@ -239,7 +239,7 @@ func (ev ExprView) FormatString(flags opt.ExprFmtFlags) string {
 // format constructs a treeprinter view of this expression for testing and
 // debugging. The given flags control which properties are added.
 func (ev ExprView) format(f *opt.ExprFmtCtx, tp treeprinter.Node) {
-	if ExprFmtInterceptor(f, tp, ev) {
+	if ExprFmtInterceptor != nil && ExprFmtInterceptor(f, tp, ev) {
 		return
 	}
 	if ev.IsScalar() {

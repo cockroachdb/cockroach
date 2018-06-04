@@ -3,7 +3,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.ccl");
+const webpackConfig = require("./webpack.app")({dist: "ccl"});
 
 module.exports = function(config) {
   config.set({
@@ -34,8 +34,8 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      "dist/protos.dll.js",
-      "dist/vendor.dll.js",
+      "dist/protos.ccl.dll.js",
+      "dist/vendor.oss.dll.js",
       "src/polyfills.ts",
       "src/**/*.spec.*",
       "ccl/src/**/*.spec.*",

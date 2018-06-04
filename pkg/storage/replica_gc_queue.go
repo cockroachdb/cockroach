@@ -196,8 +196,8 @@ func (rgcq *replicaGCQueue) process(
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an inconsistent
 	// lookup in our own copy of the range.
-	rs, _, err := client.RangeLookupForVersion(ctx, rgcq.store.ClusterSettings(), rgcq.db.GetSender(),
-		desc.StartKey.AsRawKey(), roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+	rs, _, err := client.RangeLookup(ctx, rgcq.db.GetSender(), desc.StartKey.AsRawKey(),
+		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return err
 	}

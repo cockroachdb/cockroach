@@ -36,111 +36,120 @@ function shouldProxy(reqPath) {
 }
 
 // tslint:disable:object-literal-sort-keys
-module.exports = (distDir, ...additionalRoots) => ({
-  entry: ["./src/index.tsx"],
-  output: {
-    filename: "bundle.js",
-    path: path.resolve(__dirname, distDir),
-  },
+module.exports = (env) => {
+  let localRoots = [path.resolve(__dirname)];
+  if (env.dist === "ccl") {
+    // CCL modules shadow OSS modules.
+    localRoots.unshift(path.resolve(__dirname, "ccl"));
+  }
 
-  resolve: {
-    // Add resolvable extensions.
-    extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
-    // Resolve modules from src directory or node_modules.
-    // The "path.resolve" is used to make these into absolute paths, meaning
-    // that only the exact directory is checked. A relative path would follow
-    // the resolution behavior used by node.js for "node_modules", which checks
-    // for a "node_modules" child directory located in either the current
-    // directory *or in any parent directory*.
-    modules: [
-      ...additionalRoots,
-      path.resolve(__dirname),
-      path.resolve(__dirname, "node_modules"),
-    ],
-    alias: {oss: path.resolve(__dirname)},
-  },
+  return {
+    entry: ["./src/index.tsx"],
+    output: {
+      filename: "bundle.js",
+      path: path.resolve(__dirname, `dist${env.dist}`),
+    },
 
-  module: {
-    rules: [
-      { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
-      {
-        test: /\.styl$/,
-        use: [
-          "cache-loader",
-          "style-loader",
-          "css-loader",
-          {
-            loader: "stylus-loader",
-            options: {
-              use: [require("nib")()],
+    resolve: {
+      // Add resolvable extensions.
+      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
+      // First check for local modules, then for third-party modules from
+      // node_modules.
+      //
+      // These module roots are transformed into absolute paths, by
+      // path.resolve, to ensure that only the exact directory is checked.
+      // Relative paths would trigger the resolution behavior used by Node.js
+      // for "node_modules", i.e., checking for a "node_modules" directory in
+      // the current directory *or any parent directory*.
+      modules: [
+        ...localRoots,
+        path.resolve(__dirname, "node_modules"),
+      ],
+      alias: {oss: path.resolve(__dirname)},
+    },
+
+    module: {
+      rules: [
+        { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
+        {
+          test: /\.styl$/,
+          use: [
+            "cache-loader",
+            "style-loader",
+            "css-loader",
+            {
+              loader: "stylus-loader",
+              options: {
+                use: [require("nib")()],
+              },
             },
-          },
-        ],
-      },
-      {
-        test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-        loader: "url-loader",
-        options: {
-          limit: 10000,
+          ],
         },
-      },
-      { test: /\.html$/, loader: "file-loader" },
-      {
-        test: /\.js$/,
-        include: [...additionalRoots, path.resolve(__dirname, "src")],
-        use: ["cache-loader", "babel-loader"],
-      },
-      {
-        test: /\.tsx?$/,
-        include: [...additionalRoots, path.resolve(__dirname, "src")],
-        use: [
-          "cache-loader",
-          "babel-loader",
-          { loader: "ts-loader", options: { happyPackMode: true } },
-        ],
-      },
+        {
+          test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
+          loader: "url-loader",
+          options: {
+            limit: 10000,
+          },
+        },
+        { test: /\.html$/, loader: "file-loader" },
+        {
+          test: /\.js$/,
+          include: localRoots,
+          use: ["cache-loader", "babel-loader"],
+        },
+        {
+          test: /\.tsx?$/,
+          include: localRoots,
+          use: [
+            "cache-loader",
+            "babel-loader",
+            { loader: "ts-loader", options: { happyPackMode: true } },
+          ],
+        },
 
-      // All output ".js" files will have any sourcemaps re-processed by "source-map-loader".
-      { enforce: "pre", test: /\.js$/, loader: "source-map-loader" },
+        // All output ".js" files will have any sourcemaps re-processed by "source-map-loader".
+        { enforce: "pre", test: /\.js$/, loader: "source-map-loader" },
+      ],
+    },
+
+    plugins: [
+      new RemoveBrokenDependenciesPlugin(),
+      // See "DLLs for speedy builds" in the README for details.
+      new webpack.DllReferencePlugin({
+        manifest: require(`./protos.${env.dist}.manifest.json`),
+      }),
+      new webpack.DllReferencePlugin({
+        manifest: require("./vendor.oss.manifest.json"),
+      }),
+      new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
+      new DashboardPlugin(),
     ],
-  },
 
-  plugins: [
-    new RemoveBrokenDependenciesPlugin(),
-    // See "DLLs for speedy builds" in the README for details.
-    new webpack.DllReferencePlugin({
-      manifest: require("./protos-manifest.json"),
-    }),
-    new webpack.DllReferencePlugin({
-      manifest: require("./vendor-manifest.json"),
-    }),
-    new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
-    new DashboardPlugin(),
-  ],
+    // https://webpack.js.org/configuration/stats/
+    stats: {
+      colors: true,
+      chunks: false,
+    },
 
-  // https://webpack.js.org/configuration/stats/
-  stats: {
-    colors: true,
-    chunks: false,
-  },
-
-  devServer: {
-    contentBase: path.join(__dirname, distDir),
-    index: "",
-    proxy: {
-      // Note: this shouldn't require a custom bypass function to work;
-      // docs say that setting `index: ''` is sufficient to proxy `/`.
-      // However, that did not work, and may require upgrading to webpack 4.x.
-      "/": {
-        secure: false,
-        target: process.env.TARGET,
-        bypass: (req) => {
-          if (shouldProxy(req.path)) {
-            return false;
-          }
-          return req.path;
+    devServer: {
+      contentBase: path.join(__dirname, `dist${env.dist}`),
+      index: "",
+      proxy: {
+        // Note: this shouldn't require a custom bypass function to work;
+        // docs say that setting `index: ''` is sufficient to proxy `/`.
+        // However, that did not work, and may require upgrading to webpack 4.x.
+        "/": {
+          secure: false,
+          target: process.env.TARGET,
+          bypass: (req) => {
+            if (shouldProxy(req.path)) {
+              return false;
+            }
+            return req.path;
+          },
         },
       },
     },
-  },
-});
+  };
+};

@@ -339,12 +339,9 @@ message ScanOptions {
 message ScanRequest {
   option (gogoproto.equal) = true;
 
-  reserved 2;
+  reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // Replaced by the READ_UNCOMMITTED consistency level.
-  bool deprecated_return_intents = 3;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -364,12 +361,9 @@ message ScanResponse {
 message ReverseScanRequest {
   option (gogoproto.equal) = true;
 
-  reserved 2;
+  reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // Replaced by the READ_UNCOMMITTED consistency level.
-  bool deprecated_return_intents = 3;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -587,41 +581,6 @@ message AdminChangeReplicasRequest {
 
 message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// A DeprecatedRangeLookupRequest is arguments to the LegacyRangeLookup()
-// method. It has been deprecated in favor of using ScanRequest to perform the
-// lookup.
-//
-// A forward lookup request returns a range containing the requested key. A
-// reverse lookup request returns a range containing the previous key of the
-// requested key (e.g., if a requested key is the end key of range R, the
-// reverse lookup request returns R).
-//
-// DeprecatedRangeLookupRequest also specifies the maximum number of range
-// descriptors that should be returned, if there are additional consecutive
-// addressable ranges. Specify max_ranges > 1 to pre-fill the range descriptor
-// cache. The additional ranges are scanned in the same direction as lookup
-// (forward v.s. reverse).
-message DeprecatedRangeLookupRequest {
-  option (gogoproto.equal) = true;
-
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 max_ranges = 2;
-  reserved 3;
-  // Use a reverse scan to pre-fill the range descriptor cache instead
-  // of an ascending scan.
-  bool reverse = 4;
-}
-
-// A DeprecatedRangeLookupResponse is the return value from the
-// LegacyRangeLookup() method. It returns metadata for the range containing the
-// requested key, optionally returning the metadata for additional consecutive
-// ranges beyond the requested range to pre-fill the range descriptor cache.
-message DeprecatedRangeLookupResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
-  repeated RangeDescriptor prefetched_ranges = 3 [(gogoproto.nullable) = false];
 }
 
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
@@ -1247,7 +1206,7 @@ message RequestUnion {
   HeartbeatTxnRequest heartbeat_txn = 12;
   GCRequest gc = 13;
   PushTxnRequest push_txn = 14;
-  DeprecatedRangeLookupRequest deprecated_range_lookup = 15;
+  reserved 15;
   ResolveIntentRequest resolve_intent = 16;
   ResolveIntentRangeRequest resolve_intent_range = 17;
   MergeRequest merge = 18;
@@ -1300,7 +1259,7 @@ message ResponseUnion {
   HeartbeatTxnResponse heartbeat_txn = 12;
   GCResponse gc = 13;
   PushTxnResponse push_txn = 14;
-  DeprecatedRangeLookupResponse deprecated_range_lookup = 15;
+  reserved 15;
   ResolveIntentResponse resolve_intent = 16;
   ResolveIntentRangeResponse resolve_intent_range = 17;
   MergeResponse merge = 18;

@@ -619,8 +619,8 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rs, _, err := client.RangeLookupForVersion(context.Background(), ts.ClusterSettings(),
-		ts.DB().GetSender(), key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+	rs, _, err := client.RangeLookup(context.Background(), ts.DB().GetSender(),
+		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
 			"%q: lookup range unexpected error: %s", key, err)
