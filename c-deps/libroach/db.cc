@@ -57,6 +57,48 @@ DBKey ToDBKey(const rocksdb::Slice& s) {
   return key;
 }
 
+void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData> &sst,
+                                rocksdb::Slice start_key, rocksdb::Slice end_key,
+                                uint64_t target_size, std::vector<rocksdb::Range> *ranges) {
+  int prev = -1; // index of the last compacted sst
+  uint64_t size = 0;
+  for (int i = 0; i < sst.size(); ++i) {
+    size += sst[i].size;
+    if (size < target_size && (i + 1) < sst.size()) {
+      // We haven't reached the target size or the end of the sstables
+      // to compact.
+      continue;
+    }
+
+    rocksdb::Slice start;
+    if (prev == -1) {
+      // This is the first compaction.
+      start = start_key;
+    } else {
+      // This is a compaction in the middle or end of the requested
+      // key range. The start key for the compaction is the largest
+      // key from the previous compacted.
+      start = rocksdb::Slice(sst[prev].largestkey);
+    }
+
+    rocksdb::Slice end;
+    if ((i + 1) == sst.size()) {
+      // This is the last compaction.
+      end = end_key;
+    } else {
+      // This is a compaction at the start or in the middle of the
+      // requested key range. The end key is the largest key in the
+      // current sstable.
+      end = rocksdb::Slice(sst[i].largestkey);
+    }
+
+    ranges->emplace_back(rocksdb::Range(start, end));
+
+    prev = i;
+    size = 0;
+  }
+}
+
 }  // namespace cockroach
 
 namespace {
@@ -283,30 +325,21 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
               return a.smallestkey < b.smallestkey;
             });
 
-  // Walk over the bottom-most sstables in order and perform
-  // compactions every 128MB.
-  rocksdb::Slice last;
-  rocksdb::Slice* last_ptr = nullptr;
-  uint64_t size = 0;
+  // Batch the bottom-most sstables into compactions of ~128MB.
   const uint64_t target_size = 128 << 20;
-  for (int i = 0; i < sst.size(); ++i) {
-    size += sst[i].size;
-    if (size < target_size) {
-      continue;
-    }
-    rocksdb::Slice cur(sst[i].largestkey);
-    rocksdb::Status status = db->rep->CompactRange(options, last_ptr, &cur);
+  std::vector<rocksdb::Range> ranges;
+  BatchSSTablesForCompaction(sst, start_key, end_key, target_size, &ranges);
+
+  for (auto r : ranges) {
+    rocksdb::Status status = db->rep->CompactRange(
+        options,
+        r.start.empty() ? nullptr : &r.start,
+        r.limit.empty() ? nullptr : &r.limit);
     if (!status.ok()) {
       return ToDBStatus(status);
     }
-    last = cur;
-    last_ptr = &last;
-    size = 0;
   }
 
-  if (size > 0) {
-    return ToDBStatus(db->rep->CompactRange(options, last_ptr, nullptr));
-  }
   return kSuccess;
 }
 
