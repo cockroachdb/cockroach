@@ -266,6 +266,14 @@ override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 MACOS := $(findstring Darwin,$(UNAME))
 MINGW := $(findstring MINGW,$(UNAME))
 
+ifdef MACOS
+# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
+# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
+# to the host machine's actual macOS version works around this. See:
+# https://github.com/jemalloc/jemalloc/issues/494.
+export MACOSX_DEPLOYMENT_TARGET ?= $(macos-version)
+endif
+
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
@@ -374,11 +382,7 @@ build/defs.mk: Makefile build/defs.mk.sig
 ifndef IGNORE_GOVERS
 	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
 endif
-	@# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
-	@# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
-	@# to the host machine's actual macOS version works around this. See:
-	@# https://github.com/jemalloc/jemalloc/issues/494.
-	@echo "export MACOSX_DEPLOYMENT_TARGET ?= $$(sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')" > $@
+	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@
 	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
 	@echo "GOEXE = $$($(GO) env GOEXE)" >> $@
 	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
