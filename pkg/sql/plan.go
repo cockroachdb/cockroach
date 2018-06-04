@@ -189,6 +189,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
 var _ planNode = &relocateNode{}
+var _ planNode = &relocateLeaseNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
@@ -709,6 +710,8 @@ func (p *planner) newPlan(
 		return p.newPlan(ctx, n.Select, desiredTypes)
 	case *tree.Relocate:
 		return p.Relocate(ctx, n)
+	case *tree.RelocateLease:
+		return p.RelocateLease(ctx, n)
 	case *tree.RenameColumn:
 		return p.RenameColumn(ctx, n)
 	case *tree.RenameDatabase:
@@ -909,6 +912,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.Split(ctx, n)
 	case *tree.Relocate:
 		return p.Relocate(ctx, n)
+	case *tree.RelocateLease:
+		return p.RelocateLease(ctx, n)
 	case *tree.Scatter:
 		return p.Scatter(ctx, n)
 	case *tree.Update:

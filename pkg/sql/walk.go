@@ -351,6 +351,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *relocateNode:
 		v.visit(n.rows)
 
+	case *relocateLeaseNode:
+		v.visit(n.rows)
+
 	case *insertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
@@ -589,6 +592,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&projectSetNode{}):           "project set",
 	reflect.TypeOf(&relocateNode{}):             "relocate",
+	reflect.TypeOf(&relocateLeaseNode{}):        "relocateLease",
 	reflect.TypeOf(&renderNode{}):               "render",
 	reflect.TypeOf(&rowCountNode{}):             "count",
 	reflect.TypeOf(&scanNode{}):                 "scan",
