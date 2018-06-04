@@ -8961,7 +8961,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	ba.Header.Txn = txn
 	ba.Add(&btArgs)
 	assignSeqNumsForReqs(txn, &btArgs)
-	if _, pErr := s.DB().GetSender().Send(context.TODO(), ba); pErr != nil {
+	if _, pErr := s.DB().GetFactory().WrappedSender().Send(context.TODO(), ba); pErr != nil {
 		t.Fatal(pErr.GoError())
 	}
 

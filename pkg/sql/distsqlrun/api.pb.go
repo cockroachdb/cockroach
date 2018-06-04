@@ -60,6 +60,7 @@
 		InterleavedReaderJoinerSpec
 		InputStats
 		TableReaderStats
+		HashJoinerStats
 */
 package distsqlrun
 
