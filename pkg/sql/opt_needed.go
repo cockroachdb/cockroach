@@ -60,12 +60,25 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// Currently all the needed result columns are provided by the
 		// table sub-source; from the index sub-source we only need the PK
 		// columns sufficient to configure the table sub-source.
+
+		// The columns in the underlying indexes will always line up with the
+		// columns in the indexJoinNode, since this plan was produced by the
+		// heuristic planner.
+
 		// TODO(radu/knz): see the comments at the start of index_join.go,
 		// perhaps this can be optimized to utilize the column values
 		// already provided by the index instead of re-retrieving them
 		// using the table scanNode.
 		setNeededColumns(n.table, needed)
 		setNeededColumns(n.index, n.primaryKeyColumns)
+
+		for i, colNeeded := range needed {
+			if colNeeded {
+				n.resultColumns[i].Omitted = false
+			} else {
+				n.resultColumns[i].Omitted = true
+			}
+		}
 
 	case *unionNode:
 		if !n.emitAll {

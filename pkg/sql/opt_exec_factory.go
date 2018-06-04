@@ -351,7 +351,7 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 
 // ConstructLookupJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructLookupJoin(
-	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet,
+	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := scanColumnsConfig{
@@ -401,6 +401,9 @@ func (ef *execFactory) ConstructLookupJoin(
 		run: indexJoinRun{
 			primaryKeyPrefix: primaryKeyPrefix,
 			colIDtoRowIndex:  colIDtoRowIndex,
+		},
+		props: physicalProps{
+			ordering: reqOrder,
 		},
 	}, nil
 }

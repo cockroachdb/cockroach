@@ -293,6 +293,18 @@ SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 1  NULL
 1  1
 
+statement ok
+CREATE TABLE ef (e INT, f INT, INDEX(f))
+
+statement ok
+INSERT INTO ef VALUES (NULL, 1), (1, 1)
+
+query I rowsort
+SELECT e FROM ef WHERE f > 0 AND f < 2 ORDER BY f
+----
+NULL
+1
+
 query II
 SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
@@ -483,3 +495,25 @@ SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a'
 4
 5
 6
+
+statement ok
+CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
+
+statement ok
+INSERT INTO t3 VALUES
+  (10, 50, 1),
+  (30, 40, 2),
+  (50, 30, 3),
+  (70, 20, 4),
+  (90, 10, 5),
+  (110, 0, 6),
+  (130, -10, 7)
+
+query I
+SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+----
+5
+4
+3
+2
+1
