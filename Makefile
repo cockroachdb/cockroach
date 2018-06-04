@@ -207,7 +207,8 @@ XGO     ?= xgo
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
-ifdef have-defs
+GOPATH := $(shell $(GO) env GOPATH)
+
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
 $(error GOPATHs with multiple entries are not supported)
 endif
@@ -226,7 +227,6 @@ $(error GOPATH=/ is not supported)
 endif
 
 $(info GOPATH set to $(GOPATH))
-endif
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
@@ -718,7 +718,6 @@ ifndef IGNORE_GOVERS
 	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
 endif
 	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@
-	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
 	@echo "GOEXE = $$($(XGO) env GOEXE)" >> $@
 	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
 	@echo "UNAME = $$(uname)" >> $@
