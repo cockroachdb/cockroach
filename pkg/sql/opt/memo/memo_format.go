@@ -296,6 +296,12 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			fmt.Fprintf(f.buf, " ordering=%s", t.Ordering)
 		}
 
+	case *GroupByDef:
+		fmt.Fprintf(f.buf, " cols=%s", t.GroupingCols.String())
+		if t.Ordering.Defined() {
+			fmt.Fprintf(f.buf, ",ordering=%s", t.Ordering)
+		}
+
 	case opt.ColumnID:
 		fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 

@@ -186,7 +186,7 @@
     (GroupBy
         $input:*
         $aggregations:*
-        $groupingCols:* & ^(IsScalarGroupBy $groupingCols)
+        $def:* & ^(IsScalarGroupBy $def)
     )
     (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
 )
@@ -198,7 +198,7 @@
             (Filters (ExtractBoundConditions $list $input))
         )
         $aggregations
-        $groupingCols
+        $def
     )
     (Filters (ExtractUnboundConditions $list $input))
 )

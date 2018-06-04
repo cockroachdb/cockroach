@@ -181,6 +181,12 @@ func (b physicalPropsBuilder) buildChildProps(
 			childProps.Ordering = ordering
 		}
 
+	case opt.GroupByOp:
+		if nth == 0 {
+			def := mexpr.Private(b.mem).(*memo.GroupByDef)
+			childProps.Ordering = def.Ordering
+		}
+
 	case opt.ExplainOp:
 		if nth == 0 {
 			childProps = b.mem.LookupPrivate(mexpr.AsExplain().Def()).(*memo.ExplainOpDef).Props

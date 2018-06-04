@@ -295,3 +295,59 @@ memo (optimized)
  ├── G8: (variable a.x)
  ├── G9: (variable a.y)
  └── G10: (const 1)
+
+memo
+SELECT ARRAY_AGG(x) FROM (SELECT * FROM a)
+----
+memo (optimized)
+ ├── G1: (group-by G2 G3 cols=())
+ │    └── "[presentation: array_agg:3]"
+ │         ├── best: (group-by G2 G3 cols=())
+ │         └── cost: 1000.00
+ ├── G2: (scan a,cols=(1))
+ │    └── ""
+ │         ├── best: (scan a,cols=(1))
+ │         └── cost: 1000.00
+ ├── G3: (aggregations G4)
+ ├── G4: (array-agg G5)
+ └── G5: (variable a.x)
+
+memo
+SELECT ARRAY_AGG(x) FROM (SELECT * FROM a) GROUP BY y
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: array_agg:3]"
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (group-by G4 G5 cols=(2))
+ │    └── ""
+ │         ├── best: (group-by G4 G5 cols=(2))
+ │         └── cost: 1000.00
+ ├── G3: (projections array_agg)
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (aggregations G6)
+ ├── G6: (array-agg G7)
+ └── G7: (variable a.x)
+
+memo
+SELECT ARRAY_AGG(x) FROM (SELECT * FROM a ORDER BY y)
+----
+memo (optimized)
+ ├── G1: (group-by G2 G3 cols=(),ordering=+2)
+ │    └── "[presentation: array_agg:3]"
+ │         ├── best: (group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
+ │         └── cost: 1099.66
+ ├── G2: (scan a,cols=(1))
+ │    ├── ""
+ │    │    ├── best: (scan a,cols=(1))
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G2)
+ │         └── cost: 1099.66
+ ├── G3: (aggregations G4)
+ ├── G4: (array-agg G5)
+ └── G5: (variable a.x)

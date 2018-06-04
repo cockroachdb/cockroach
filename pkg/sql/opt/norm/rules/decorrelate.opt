@@ -186,10 +186,11 @@
         (GroupBy
             $input:*
             $aggregations:*
-            $groupingCols:*
+            $def:*
         ) &
-        (IsScalarGroupBy $groupingCols) &
-        (CanAggsIgnoreNulls $aggregations)
+        (IsScalarGroupBy $def) &
+        (CanAggsIgnoreNulls $aggregations) &
+        (IsUnorderedGroupBy $def)
     $on:*
 )
 =>

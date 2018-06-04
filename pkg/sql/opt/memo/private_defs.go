@@ -123,6 +123,13 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering
 	return true
 }
 
+// GroupByDef defines the value of the Def private field of the GroupBy
+// operator.
+type GroupByDef struct {
+	GroupingCols opt.ColSet
+	Ordering     props.Ordering
+}
+
 // LookupJoinDef defines the value of the Def private field of the LookupJoin
 // operator.
 type LookupJoinDef struct {
