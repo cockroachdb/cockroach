@@ -28,7 +28,7 @@ case "${cmd}" in
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
-           --scopes "default,cloud-platform"
+           --scopes "cloud-platform"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # Retry while vm and sshd to start up.

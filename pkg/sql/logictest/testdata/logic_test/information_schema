@@ -1522,7 +1522,7 @@ DROP DATABASE other_db CASCADE
 
 #Verify  information_schema.user_privileges
 
-query TTTT colnames rowsort
+query TTTT colnames,rowsort
 SELECT * FROM information_schema.user_privileges ORDER BY grantee,privilege_type
 ----
 grantee  table_catalog  privilege_type  is_grantable
