@@ -14,14 +14,16 @@
 
 package tree
 
-import "fmt"
-
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
 type FunctionDefinition struct {
 	// Name is the short name of the function.
 	Name string
+
 	// Definition is the set of overloads for this function name.
+	// We use []overloadImpl here although all the uses of this struct
+	// could actually write a []OverloadDefinition, because we want to share
+	// the code with typeCheckOverloadedExprs().
 	Definition []overloadImpl
 
 	// FunctionProperties are the properties common to all overloads.
@@ -99,23 +101,17 @@ var _ = NormalClass
 
 // NewFunctionDefinition allocates a function definition corresponding
 // to the given built-in definition.
-func NewFunctionDefinition(name string, def []OverloadDefinition) *FunctionDefinition {
-	props := def[0].FunctionProperties
-	firstSig := def[0].Signature()
+func NewFunctionDefinition(
+	name string, props *FunctionProperties, def []OverloadDefinition,
+) *FunctionDefinition {
 	overloads := make([]overloadImpl, len(def))
 	for i := range def {
 		overloads[i] = &def[i]
-		if def[i].FunctionProperties != props {
-			panic(fmt.Sprintf(
-				"programming error: inconsistent function properties for %s()\n%s: %+v\n%s: %+v\n",
-				name,
-				firstSig, props, def[i].Signature(), def[i].FunctionProperties))
-		}
 	}
 	return &FunctionDefinition{
 		Name:               name,
 		Definition:         overloads,
-		FunctionProperties: props,
+		FunctionProperties: *props,
 	}
 }
 

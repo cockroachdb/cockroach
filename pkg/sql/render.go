@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -576,7 +575,7 @@ func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (bool, string, error)
 	if err != nil {
 		return false, "", err
 	}
-	if _, ok := builtins.Generators[fd.Name]; ok {
+	if fd.Class == tree.GeneratorClass {
 		return true, fd.Name, nil
 	}
 	return false, "", nil

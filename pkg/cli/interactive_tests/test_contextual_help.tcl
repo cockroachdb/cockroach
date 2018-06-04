@@ -108,7 +108,7 @@ start_test "Check that a ?? in a function call context prints help about that fu
 send "select count(??\r"
 eexpect "Function: "
 eexpect "count"
-eexpect "built-in functions"
+eexpect "number of selected elements"
 eexpect "Signature"
 eexpect "See also"
 eexpect root@
@@ -116,7 +116,7 @@ eexpect root@
 send "select count(??\t"
 eexpect "Function: "
 eexpect "count"
-eexpect "built-in functions"
+eexpect "number of selected elements"
 eexpect "Signature"
 eexpect "See also"
 eexpect "select count(??"

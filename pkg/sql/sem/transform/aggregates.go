@@ -15,7 +15,6 @@
 package transform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -42,7 +41,7 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := builtins.Aggregates[fd.Name]; ok {
+		if fd.Class == tree.AggregateClass {
 			v.Aggregated = true
 			return false, expr
 		}

@@ -40,14 +40,11 @@ package optbuilder
 //   post-projection: 1 + col3
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -413,13 +410,11 @@ func (b *Builder) buildAggregateFunction(
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
-	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
-	return ok
+	return def.Class == tree.AggregateClass
 }
 
 func isGenerator(def *tree.FunctionDefinition) bool {
-	_, ok := builtins.Generators[strings.ToLower(def.Name)]
-	return ok
+	return def.Class == tree.GeneratorClass
 }
 
 var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
