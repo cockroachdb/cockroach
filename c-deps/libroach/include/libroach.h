@@ -387,6 +387,10 @@ DBStatus DBEnvCloseFile(DBEngine* db, DBWritableFile file);
 // DBEnvDeleteFile deletes the file with the given filename in the given engine.
 DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path);
 
+// DBEnvDeleteDirAndFiles deletes the directory with the given dir name and any
+// files it contains but not subdirectories in the given engine.
+DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir);
+
 // DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
 typedef void* DBFileLock;
 

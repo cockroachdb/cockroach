@@ -79,4 +79,8 @@ DBStatus DBSnapshot::EnvDeleteFile(DBSlice path) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBSnapshot::EnvDeleteDirAndFiles(DBSlice dir) {
+  return FmtStatus("unsupported");
+}
+
 }  // namespace cockroach

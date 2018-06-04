@@ -61,8 +61,8 @@ func newDiskSideloadStorage(
 	return ss, nil
 }
 
-func (ss *diskSideloadStorage) createDir(dir string) error {
-	err := os.MkdirAll(dir, 0755)
+func (ss *diskSideloadStorage) createDir() error {
+	err := os.MkdirAll(ss.dir, 0755)
 	ss.dirCreated = ss.dirCreated || err == nil
 	return err
 }
@@ -83,9 +83,9 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		pieces := strings.Split(filename, "/")
-		dir := strings.Join(pieces[:len(pieces)-1], "/")
-		if err := ss.createDir(dir); err != nil {
+		// createDir() ensures ss.dir exists but will not create any subdirectories
+		// within ss.dir because filename() does not make subdirectories in ss.dir.
+		if err := ss.createDir(); err != nil {
 			return err
 		}
 		continue
@@ -124,7 +124,7 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) e
 }
 
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
-	err := os.RemoveAll(ss.dir)
+	err := ss.eng.DeleteDirAndFiles(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }
