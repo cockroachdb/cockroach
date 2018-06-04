@@ -70,13 +70,13 @@ const errInsufficientArgsFmtString = "unknown signature: %s()"
 const (
 	categoryComparison    = "Comparison"
 	categoryCompatibility = "Compatibility"
-	categoryDateAndTime   = "Date and Time"
-	categoryIDGeneration  = "ID Generation"
+	categoryDateAndTime   = "Date and time"
+	categoryIDGeneration  = "ID generation"
 	categorySequences     = "Sequence"
-	categoryMath          = "Math and Numeric"
-	categoryString        = "String and Byte"
+	categoryMath          = "Math and numeric"
+	categoryString        = "String and byte"
 	categoryArray         = "Array"
-	categorySystemInfo    = "System Info"
+	categorySystemInfo    = "System info"
 )
 
 func categorizeType(t types.T) string {

@@ -231,7 +231,7 @@ func generateFunctions(from map[string][]tree.Builtin, categorize bool) []byte {
 	b := new(bytes.Buffer)
 	for _, cat := range cats {
 		if categorize {
-			fmt.Fprintf(b, "### %s Functions\n\n", cat)
+			fmt.Fprintf(b, "### %s functions\n\n", cat)
 		}
 		b.WriteString("<table>\n<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>\n")
 		b.WriteString("<tbody>\n")
