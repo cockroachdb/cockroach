@@ -6,9 +6,14 @@ import { withRouter, WithRouterProps } from "react-router";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
+import { getDataFromServer } from "src/util/dataFromServer";
 import docsURL from "src/util/docs";
 import { trustIcon } from "src/util/trust";
-import { cockroachIcon } from "src/views/shared/components/icons";
+
+import logo from "assets/crdb.png";
+import docsIcon from "!!raw-loader!assets/docs.svg";
+
+const version = getDataFromServer().Tag || "UNKNOWN";
 
 import "./loginPage.styl";
 
@@ -84,41 +89,48 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         <Helmet>
           <title>Login</title>
         </Helmet>
-        <div className="image-container"
-             dangerouslySetInnerHTML={trustIcon(cockroachIcon)}/>
-        <section className="section login-page__info">
-          <p className="aside">
-            Please contact your database administrator for
-            account access and password restoration.
-          </p>
-          <p className="aside">
-            <a href={docsURL("admin-ui-overview.html")}>Read the documentation</a>.
-          </p>
-        </section>
-        <section className="section login-page__form">
-          <h1 className="heading">Sign in to the Console</h1>
-          {this.renderError()}
-          <form onSubmit={this.handleSubmit}>
-            <input
-              type="text"
-              className={inputClasses}
-              onChange={this.handleUpdateUsername}
-              value={this.state.username}
-            /><br />
-            <input
-              type="password"
-              className={inputClasses}
-              onChange={this.handleUpdatePassword}
-              value={this.state.password}
-            /><br />
-            <input
-              type="submit"
-              className="submit-button"
-              disabled={this.props.loginState.inProgress}
-              value="Sign In"
-            />
-          </form>
-        </section>
+        <div className="content">
+          <section className="section login-page__info">
+            <p className="version">
+              Version: <span className="version-tag">{ version }</span>
+            </p>
+            <img className="logo" alt="CockroachDB" src={logo} />
+            <p className="aside">
+              Please contact your database administrator for
+              account access and password restoration.
+            </p>
+            <p className="aside">
+              <a href={docsURL("admin-ui-overview.html")} className="docs-link">
+                <span className="docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
+                <span className="docs-link__text">Read the documentation</span>
+              </a>
+            </p>
+          </section>
+          <section className="section login-page__form">
+            <h1 className="heading">Sign in to the Console</h1>
+            {this.renderError()}
+            <form onSubmit={this.handleSubmit}>
+              <input
+                type="text"
+                className={inputClasses}
+                onChange={this.handleUpdateUsername}
+                value={this.state.username}
+              />
+              <input
+                type="password"
+                className={inputClasses}
+                onChange={this.handleUpdatePassword}
+                value={this.state.password}
+              />
+              <input
+                type="submit"
+                className="submit-button"
+                disabled={this.props.loginState.inProgress}
+                value="Sign In"
+              />
+            </form>
+          </section>
+        </div>
       </div>
     );
   }
