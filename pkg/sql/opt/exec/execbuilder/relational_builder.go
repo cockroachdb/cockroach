@@ -215,14 +215,7 @@ func (*Builder) getColumns(
 	return needed, output
 }
 
-func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
-	def := ev.Private().(*memo.ScanOpDef)
-	md := ev.Metadata()
-	tab := md.Table(def.Table)
-
-	needed, output := b.getColumns(md, def.Cols, def.Table)
-	res := execPlan{outputCols: output}
-
+func (b *Builder) makeSQLOrdering(res execPlan, ev memo.ExprView) sqlbase.ColumnOrdering {
 	var reqOrder sqlbase.ColumnOrdering
 	if reqProps := ev.Physical(); len(reqProps.Ordering) > 0 {
 		reqOrder = make(sqlbase.ColumnOrdering, len(reqProps.Ordering))
@@ -235,6 +228,19 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 			}
 		}
 	}
+
+	return reqOrder
+}
+
+func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.ScanOpDef)
+	md := ev.Metadata()
+	tab := md.Table(def.Table)
+
+	needed, output := b.getColumns(md, def.Cols, def.Table)
+	res := execPlan{outputCols: output}
+
+	reqOrder := b.makeSQLOrdering(res, ev)
 
 	root, err := b.factory.ConstructScan(
 		tab,
@@ -556,7 +562,11 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	needed, output := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
-	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed)
+	reqOrder := b.makeSQLOrdering(res, ev)
+
+	needed.UnionWith(ev.Physical().Ordering.ColSet())
+
+	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed, reqOrder)
 	if err != nil {
 		return execPlan{}, err
 	}

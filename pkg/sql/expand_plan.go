@@ -703,6 +703,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *indexJoinNode:
 		n.index.props.trim(usefulOrdering)
+		n.props.trim(usefulOrdering)
 		n.table.props = physicalProps{}
 
 	case *unionNode:
