@@ -1,0 +1,285 @@
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+// strictTableUpserter implements the conflict-intolerant path for an upsert. See
+// tableUpserter for the general case.
+
+type strictTableUpserter struct {
+	twb         tableWriterBase
+	ri          sqlbase.RowInserter
+	alloc       *sqlbase.DatumAlloc
+	collectRows bool
+
+	// Rows returned if collectRows is true.
+	rowsUpserted *sqlbase.RowContainer
+	// rowTemplate is used to prepare rows to add to rowsUpserted.
+	rowTemplate tree.Datums
+	// rowIdxToRetIdx maps the indices in the inserted rows
+	// back to indices in rowTemplate.
+	rowIdxToRetIdx []int
+	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
+	// collectRows is set, counted separately otherwise.
+	resultCount int
+
+	// internal state
+	conflictIndexes []sqlbase.IndexDescriptor
+	insertRows      sqlbase.RowContainer
+	indexKeyPrefix  []byte
+}
+
+func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
+	tu.twb.init(txn)
+	tableDesc := tu.tableDesc()
+
+	tu.getUniqueIndexes()
+
+	tu.resultCount = 0
+
+	if tu.collectRows {
+		tu.rowsUpserted = sqlbase.NewRowContainer(
+			evalCtx.Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
+			tu.insertRows.Len(),
+		)
+
+		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
+	}
+
+	colIDToRetIndex := map[sqlbase.ColumnID]int{}
+	for i, col := range tableDesc.Columns {
+		colIDToRetIndex[col.ID] = i
+	}
+
+	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
+	for i, col := range tu.ri.InsertCols {
+		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+	}
+
+	tu.insertRows.Init(
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+	)
+
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+
+	return nil
+}
+
+// row is part of the tableWriter interface.
+func (tu *strictTableUpserter) row(
+	ctx context.Context, row tree.Datums, traceKV bool,
+) (tree.Datums, error) {
+	tu.twb.batchSize++
+	return tu.insertRows.AddRow(ctx, row)
+}
+
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (tu *strictTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+	tu.insertRows.Clear(ctx)
+	return tu.twb.flushAndStartNewBatch(ctx, tu.tableDesc())
+}
+
+// fkSpanCollector is part of the tableWriter interface.
+func (tu *strictTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
+	return tu.ri.Fks
+}
+
+// tableDesc is part of the tableWriter interface.
+func (tu *strictTableUpserter) tableDesc() *sqlbase.TableDescriptor {
+	return tu.ri.Helper.TableDesc
+}
+
+// atBatchEnd is part of the extendedTableWriter interface.
+func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
+	tableDesc := tu.tableDesc()
+
+	conflictingRows, err := tu.getConflictingRows(ctx, false)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		insertRow := tu.insertRows.At(i)
+
+		// Has this insert row been marked as conflicting? If so, skip.
+		if _, ok := conflictingRows[i]; ok {
+			continue
+		}
+
+		if err := tu.ri.InsertRow(ctx, tu.twb.b, insertRow, true, sqlbase.CheckFKs, traceKV); err != nil {
+			return err
+		}
+
+		// for ... RETURNING clause
+		resultRow := tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
+		tu.resultCount++
+
+		if tu.collectRows {
+			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if tu.collectRows {
+		// If we have populate rowsUpserted, the consumer
+		// will want to know exactly how many rows there in there.
+		// Use that as final resultCount. This overrides any
+		// other value computed in the main loop above.
+		tu.resultCount = tu.rowsUpserted.Len()
+	}
+
+	return nil
+}
+
+// get all unique indexes
+func (tu *strictTableUpserter) getUniqueIndexes() (err error) {
+	tableDesc := tu.tableDesc()
+	indexes := tableDesc.Indexes
+	for _, index := range indexes {
+		if index.Unique {
+			tu.conflictIndexes = append(tu.conflictIndexes, index)
+		}
+	}
+	return nil
+}
+
+// getConflictingRows returns all of the the rows that are in conflict.
+//
+// The return value is a set of all the rows (by their place in tu.InsertRows)
+// that are in conflict with either an existing row in the table or another insert row.
+func (tu *strictTableUpserter) getConflictingRows(ctx context.Context, _ bool) (
+	conflictingRows map[int]struct{},
+	err error,
+) {
+	tableDesc := tu.tableDesc()
+
+	conflictingRows = make(map[int]struct{})
+
+	seenKeys := make(map[string]struct{})
+
+	b := tu.twb.txn.NewBatch()
+
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		row := tu.insertRows.At(i)
+
+		// Get the primary key of the insert row.
+		upsertRowPK, _, err := sqlbase.EncodeIndexKey(
+			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
+		if err != nil {
+			return nil, err
+		}
+
+		upsertRowPK = keys.MakeFamilyKey(upsertRowPK, 0)
+
+		// If the primary key of the insert row has already been seen among the insert rows,
+		// mark this row as conflicting.
+		if _, ok := seenKeys[string(upsertRowPK)]; ok {
+			conflictingRows[i] = struct{}{}
+		}
+
+		b.Get(roachpb.Key(upsertRowPK))
+		seenKeys[string(upsertRowPK)] = struct{}{}
+
+		// Otherwise, check the primary key against the table.
+
+		// For each secondary index that has a unique constraint, do something similar:
+		// check if the secondary index key has already been seen among the insert rows,
+		// and if not, mark the key to be checked against the table.
+		for _, idx := range tu.conflictIndexes {
+			entries, err := sqlbase.EncodeSecondaryIndex(
+				tableDesc, &idx, tu.ri.InsertColIDtoRowIndex, row)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, entry := range entries {
+				if _, ok := seenKeys[string(entry.Key)]; ok {
+					conflictingRows[i] = struct{}{}
+				}
+				b.Get(entry.Key)
+				seenKeys[string(entry.Key)] = struct{}{}
+			}
+		}
+	}
+
+	// Run a transaction to see if any of the rows conflict with any existing rows in the table or with other insert rows.
+	if err := tu.twb.txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+
+	for i, result := range b.Results {
+		// There are (1 + len(tu.conflictIndexes)) * len(tu.InsertRows) results.
+		// All the results that correspond to a particular insertRow are next to each other.
+		// By this logic, the division computes the insertRow that is being queried for.
+		insertRowIndex := i / (1 + len(tu.conflictIndexes))
+
+		for _, row := range result.Rows {
+			// If any of the result values are not nil, then that means that the insert row is in conflict and should be marked as such.
+			log.Warningf(context.TODO(), "row.Key = %s, row.Value = %s", row.Key, row.Value)
+			if row.Value != nil {
+				conflictingRows[insertRowIndex] = struct{}{}
+			}
+		}
+	}
+
+	return conflictingRows, nil
+}
+
+// batchedCount is part of the batchedTableWriter interface.
+func (tu *strictTableUpserter) batchedCount() int { return tu.resultCount }
+
+// batchedValues is part of the batchedTableWriter interface.
+func (tu *strictTableUpserter) batchedValues(rowIdx int) tree.Datums {
+	return tu.rowsUpserted.At(rowIdx)
+}
+
+// finalize is part of the tableWriter interface.
+func (tu *strictTableUpserter) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+) (*sqlbase.RowContainer, error) {
+	return nil, tu.twb.finalize(ctx, autoCommit, tu.tableDesc())
+}
+
+// walkExprs is part of the tableWriter interface.
+func (tu *strictTableUpserter) walkExprs(walk func(desc string, index int, expr tree.TypedExpr)) {}
+
+// close is part of the tableWriter interface.
+func (tu *strictTableUpserter) close(ctx context.Context) {
+	tu.insertRows.Close(ctx)
+	if tu.rowsUpserted != nil {
+		tu.rowsUpserted.Close(ctx)
+	}
+}
+
+func (tu *strictTableUpserter) makeResultFromInsertRow(
+	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
+) tree.Datums {
+	resultRow := insertRow
+	if len(resultRow) < len(cols) {
+		resultRow = make(tree.Datums, len(cols))
+		// Pre-fill with NULLs.
+		for i := range resultRow {
+			resultRow[i] = tree.DNull
+		}
+		// Fill the other values from insertRow.
+		for i, val := range insertRow {
+			resultRow[tu.rowIdxToRetIdx[i]] = val
+		}
+	}
+	return resultRow
+}
+
+func (tu *strictTableUpserter) curBatchSize() int { return tu.insertRows.Len() }
+
+var _ batchedTableWriter = (*strictTableUpserter)(nil)
+var _ tableWriter = (*strictTableUpserter)(nil)
