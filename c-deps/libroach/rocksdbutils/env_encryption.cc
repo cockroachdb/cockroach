@@ -600,15 +600,26 @@ rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, FileRegistry* file_registr
 
 // Encrypt one or more (partial) blocks of data at the file offset.
 // Length of data is given in dataSize.
-rocksdb::Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t dataSize) {
+rocksdb::Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data,
+                                                 size_t dataSize) const {
+  if (dataSize == 0) {
+    return rocksdb::Status::OK();
+  }
+
+  std::unique_ptr<rocksdb_utils::BlockCipher> cipher;
+  auto status = InitCipher(&cipher);
+  if (!status.ok()) {
+    return status;
+  }
+
   // Calculate block index
-  auto blockSize = BlockSize();
+  auto blockSize = cipher->BlockSize();
   uint64_t blockIndex = fileOffset / blockSize;
   size_t blockOffset = fileOffset % blockSize;
   std::unique_ptr<char[]> blockBuffer;
 
   std::string scratch;
-  AllocateScratch(scratch);
+  scratch.reserve(blockSize);
 
   // Encrypt individual blocks.
   while (1) {
@@ -625,7 +636,7 @@ rocksdb::Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data
       // Copy plain data to block buffer
       memmove(block + blockOffset, data, n);
     }
-    auto status = EncryptBlock(blockIndex, block, (char*)scratch.data());
+    auto status = EncryptBlock(cipher.get(), blockIndex, block, (char*)scratch.data());
     if (!status.ok()) {
       return status;
     }
@@ -645,15 +656,26 @@ rocksdb::Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data
 
 // Decrypt one or more (partial) blocks of data at the file offset.
 // Length of data is given in dataSize.
-rocksdb::Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t dataSize) {
+rocksdb::Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data,
+                                                 size_t dataSize) const {
+  if (dataSize == 0) {
+    return rocksdb::Status::OK();
+  }
+
+  std::unique_ptr<rocksdb_utils::BlockCipher> cipher;
+  auto status = InitCipher(&cipher);
+  if (!status.ok()) {
+    return status;
+  }
+
   // Calculate block index
-  auto blockSize = BlockSize();
+  auto blockSize = cipher->BlockSize();
   uint64_t blockIndex = fileOffset / blockSize;
   size_t blockOffset = fileOffset % blockSize;
   std::unique_ptr<char[]> blockBuffer;
 
   std::string scratch;
-  AllocateScratch(scratch);
+  scratch.reserve(blockSize);
 
   // Decrypt individual blocks.
   while (1) {
@@ -670,7 +692,7 @@ rocksdb::Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data
       // Copy encrypted data to block buffer
       memmove(block + blockOffset, data, n);
     }
-    auto status = DecryptBlock(blockIndex, block, (char*)scratch.data());
+    auto status = DecryptBlock(cipher.get(), blockIndex, block, (char*)scratch.data());
     if (!status.ok()) {
       return status;
     }

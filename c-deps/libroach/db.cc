@@ -41,7 +41,8 @@ using namespace cockroach;
 namespace cockroach {
 
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
-__attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts,
+__attribute__((weak)) rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log,
+                                                 const std::string& db_dir, const DBOptions opts,
                                                  EnvManager* env_ctx) {
   if (opts.extra_options.len != 0) {
     return rocksdb::Status::InvalidArgument(
@@ -199,7 +200,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   // Call hooks to handle db_opts.extra_options.
-  auto hook_status = DBOpenHook(db_dir, db_opts, env_ctx.get());
+  auto hook_status = DBOpenHook(options.info_log, db_dir, db_opts, env_ctx.get());
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }
@@ -473,9 +474,7 @@ DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile file, DBSlice contents) {
   return db->EnvAppendFile((rocksdb::WritableFile*)file, contents);
 }
 
-DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) {
-  return db->EnvDeleteFile(path);
-}
+DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) { return db->EnvDeleteFile(path); }
 
 DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
   rocksdb::ReadOptions opts;

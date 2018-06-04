@@ -44,28 +44,30 @@ class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {
   // - a block cipher (takes ownership)
   // - nonce of size 'cipher.BlockSize - sizeof(counter)' (eg: 16-4 = 12 bytes for AES)
   // - counter
-  CTRCipherStream(rocksdb_utils::BlockCipher* c, const std::string& nonce, uint32_t counter);
+  CTRCipherStream(std::unique_ptr<enginepbccl::SecretKey> key, const std::string& nonce,
+                  uint32_t counter);
   virtual ~CTRCipherStream();
 
-  // BlockSize returns the size of each block supported by this cipher stream.
-  virtual size_t BlockSize() override;
-
  protected:
-  // Allocate scratch space which is passed to EncryptBlock/DecryptBlock.
-  virtual void AllocateScratch(std::string&) override;
+  // Initialize a new cipher object. A Cipher is not thread-safe but can be used for any
+  // number of EncryptBlock/DecryptBlock calls.
+  virtual rocksdb::Status
+  InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const override;
 
   // Encrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
+  virtual rocksdb::Status EncryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
+                                       char* data, char* scratch) const override;
 
   // Decrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
+  virtual rocksdb::Status DecryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
+                                       char* data, char* scratch) const override;
 
  private:
-  std::unique_ptr<rocksdb_utils::BlockCipher> cipher_;
-  std::string nonce_;
-  uint32_t counter_;
+  const std::unique_ptr<enginepbccl::SecretKey> key_;
+  const std::string nonce_;
+  const uint32_t counter_;
 };
 
 }  // namespace cockroach
