@@ -998,7 +998,8 @@ func TestServeIndexHTML(t *testing.T) {
 		expected := fmt.Sprintf(
 			htmlTemplate,
 			fmt.Sprintf(
-				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Version":"%s"}`,
+				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+				build.GetInfo().Tag,
 				build.VersionPrefix(),
 			),
 		)
@@ -1028,14 +1029,16 @@ func TestServeIndexHTML(t *testing.T) {
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s"}`,
+					build.GetInfo().Tag,
 					build.VersionPrefix(),
 				),
 			},
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					build.GetInfo().Tag,
 					build.VersionPrefix(),
 				),
 			},
