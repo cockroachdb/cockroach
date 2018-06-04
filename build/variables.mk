@@ -163,6 +163,7 @@ define VALID_VARS
   langgen-package
   logictest-package
   logictestccl-package
+  macos-version
   optgen-defs
   optgen-norm-rules
   optgen-package
