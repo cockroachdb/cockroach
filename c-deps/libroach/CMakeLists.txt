@@ -150,7 +150,6 @@ foreach(tsrc ${tests})
     roach
     gtest_main
     pthread
-    rt
     ${ROCKSDB_LIB}
     ${PROTOBUF_LIB}
     ${JEMALLOC_LIB}

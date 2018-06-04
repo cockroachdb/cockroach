@@ -51,22 +51,23 @@ class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {
  protected:
   // Initialize a new cipher object. A Cipher is not thread-safe but can be used for any
   // number of EncryptBlock/DecryptBlock calls.
-  virtual rocksdb::Status InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) override;
+  virtual rocksdb::Status
+  InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const override;
 
   // Encrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
   virtual rocksdb::Status EncryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
-                                       char* data, char* scratch) override;
+                                       char* data, char* scratch) const override;
 
   // Decrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
   virtual rocksdb::Status DecryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
-                                       char* data, char* scratch) override;
+                                       char* data, char* scratch) const override;
 
  private:
-  std::unique_ptr<enginepbccl::SecretKey> key_;
-  std::string nonce_;
-  uint32_t counter_;
+  const std::unique_ptr<enginepbccl::SecretKey> key_;
+  const std::string nonce_;
+  const uint32_t counter_;
 };
 
 }  // namespace cockroach

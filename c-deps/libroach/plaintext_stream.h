@@ -24,24 +24,25 @@ class PlaintextStream final : public rocksdb_utils::BlockAccessCipherStream {
   PlaintextStream() {}
   virtual ~PlaintextStream() {}
 
-  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize) override {
+  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize) const override {
     return rocksdb::Status::OK();
   }
-  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize) override {
+  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize) const override {
     return rocksdb::Status::OK();
   }
 
  protected:
-  virtual rocksdb::Status InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) override {
+  virtual rocksdb::Status
+  InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const override {
     return rocksdb::Status::InvalidArgument("InitCipher cannot be called on a PlaintextStream");
   }
 
   virtual rocksdb::Status EncryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
-                                       char* data, char* scratch) override {
+                                       char* data, char* scratch) const override {
     return rocksdb::Status::InvalidArgument("EncryptBlock cannot be called on a PlaintextStream");
   }
   virtual rocksdb::Status DecryptBlock(rocksdb_utils::BlockCipher* cipher, uint64_t blockIndex,
-                                       char* data, char* scratch) override {
+                                       char* data, char* scratch) const override {
     return rocksdb::Status::InvalidArgument("DecryptBlock cannot be called on a PlaintextStream");
   }
 };

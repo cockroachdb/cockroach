@@ -87,7 +87,8 @@ CTRCipherStream::CTRCipherStream(std::unique_ptr<enginepbccl::SecretKey> key,
 
 CTRCipherStream::~CTRCipherStream() {}
 
-rocksdb::Status CTRCipherStream::InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) {
+rocksdb::Status
+CTRCipherStream::InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher) const {
   // We should not be getting called for plaintext, and we only have AES.
   if (key_->info().encryption_type() != enginepbccl::AES128_CTR &&
       key_->info().encryption_type() != enginepbccl::AES192_CTR &&
@@ -101,7 +102,8 @@ rocksdb::Status CTRCipherStream::InitCipher(std::unique_ptr<rocksdb_utils::Block
 }
 
 rocksdb::Status CTRCipherStream::EncryptBlock(rocksdb_utils::BlockCipher* cipher,
-                                              uint64_t blockIndex, char* data, char* scratch) {
+                                              uint64_t blockIndex, char* data,
+                                              char* scratch) const {
   // Create IV = nonce + counter
   auto blockSize = cipher->BlockSize();
   auto nonce_size = blockSize - 4;
@@ -131,7 +133,8 @@ rocksdb::Status CTRCipherStream::EncryptBlock(rocksdb_utils::BlockCipher* cipher
 // Decrypt a block of data at the given block index.
 // Length of data is equal to BlockSize();
 rocksdb::Status CTRCipherStream::DecryptBlock(rocksdb_utils::BlockCipher* cipher,
-                                              uint64_t blockIndex, char* data, char* scratch) {
+                                              uint64_t blockIndex, char* data,
+                                              char* scratch) const {
   // For CTR decryption & encryption are the same
   return EncryptBlock(cipher, blockIndex, data, scratch);
 }

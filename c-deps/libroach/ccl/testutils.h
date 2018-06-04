@@ -21,7 +21,6 @@ enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env);
 
 // MemKeyManager is a simple key manager useful for tests.
 // It holds a single key. ie: there is only an active key, no old keys.
-// The key ID is the actual key.
 class MemKeyManager : public KeyManager {
  public:
   explicit MemKeyManager(enginepbccl::SecretKey* key) : key_(key) {}
