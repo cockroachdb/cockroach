@@ -134,7 +134,7 @@ func TestDistinct(t *testing.T) {
 			}
 			var res sqlbase.EncDatumRows
 			for {
-				row := out.NextNoMeta(t)
+				row := out.NextNoMeta(t).Copy()
 				if row == nil {
 					break
 				}

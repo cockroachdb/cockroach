@@ -28,16 +28,17 @@ import (
 type distinct struct {
 	processorBase
 
-	input        RowSource
-	types        []sqlbase.ColumnType
-	lastGroupKey sqlbase.EncDatumRow
-	arena        stringarena.Arena
-	seen         map[string]struct{}
-	orderedCols  []uint32
-	distinctCols util.FastIntSet
-	memAcc       mon.BoundAccount
-	datumAlloc   sqlbase.DatumAlloc
-	scratch      []byte
+	input            RowSource
+	types            []sqlbase.ColumnType
+	haveLastGroupKey bool
+	lastGroupKey     sqlbase.EncDatumRow
+	arena            stringarena.Arena
+	seen             map[string]struct{}
+	orderedCols      []uint32
+	distinctCols     util.FastIntSet
+	memAcc           mon.BoundAccount
+	datumAlloc       sqlbase.DatumAlloc
+	scratch          []byte
 }
 
 // sortedDistinct is a specialized distinct that can be used when all of the
@@ -100,6 +101,8 @@ func newDistinct(
 		}); err != nil {
 		return nil, err
 	}
+	d.lastGroupKey = d.out.rowAlloc.AllocRow(len(d.types))
+	d.haveLastGroupKey = false
 
 	if allSorted {
 		// We can use the faster sortedDistinct processor.
@@ -148,7 +151,7 @@ func (d *sortedDistinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
-	if d.lastGroupKey == nil {
+	if !d.haveLastGroupKey {
 		return false, nil
 	}
 	for _, colIdx := range d.orderedCols {
@@ -231,7 +234,8 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// distinct keys in the 'seen' set will never be seen again. This allows
 			// us to keep the current arena block and overwrite strings previously
 			// allocated on it, which implies that UnsafeReset() is safe to call here.
-			d.lastGroupKey = row
+			copy(d.lastGroupKey, row)
+			d.haveLastGroupKey = true
 			if err := d.arena.UnsafeReset(d.ctx); err != nil {
 				d.moveToDraining(err)
 				break
@@ -281,7 +285,8 @@ func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			continue
 		}
 
-		d.lastGroupKey = row
+		d.haveLastGroupKey = true
+		copy(d.lastGroupKey, row)
 
 		if outRow := d.processRowHelper(row); outRow != nil {
 			return outRow, nil

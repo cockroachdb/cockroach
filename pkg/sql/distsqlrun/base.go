@@ -64,7 +64,9 @@ type RowReceiver interface {
 	// ProducerDone() needs to be called (after draining is done, if draining was
 	// requested).
 	//
-	// The sender must not modify the row after calling this function.
+	// Unless specifically permitted by the underlying implementation, (see
+	// copyingRowReceiver, for example), the sender must not modify the row
+	// after calling this function.
 	//
 	// After DrainRequested is returned, it is expected that all future calls only
 	// carry metadata (however that is not enforced and implementations should be
@@ -112,6 +114,9 @@ type RowSource interface {
 	// values will be non-empty. Both of them can be empty when the RowSource has
 	// been exhausted - no more records are coming and any further method calls
 	// will be no-ops.
+	//
+	// EncDatumRows returned by Next() are only valid until the next call to
+	// Next(), although the EncDatums inside them stay valid forever.
 	//
 	// A ProducerMetadata record may contain an error. In that case, this
 	// interface is oblivious about the semantics: implementers may continue
@@ -207,7 +212,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 			)
 		}
 
-		switch dst.Push(row, meta) {
+		switch dst.Push(nil /* row */, meta) {
 		case ConsumerClosed:
 			src.ConsumerClosed()
 			return
@@ -636,6 +641,18 @@ func (rb *RowBuffer) ConsumerClosed() {
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}
+}
+
+type copyingRowReceiver struct {
+	RowReceiver
+	alloc sqlbase.EncDatumRowAlloc
+}
+
+func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	if row != nil {
+		row = r.alloc.CopyRow(row)
+	}
+	return r.RowReceiver.Push(row, meta)
 }
 
 // String implements fmt.Stringer.

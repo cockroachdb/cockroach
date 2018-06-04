@@ -65,12 +65,14 @@ type ProcOutputHelper struct {
 	// outputCols can be set.
 	outputCols []uint32
 
+	outputRow sqlbase.EncDatumRow
+
 	// outputTypes is the schema of the rows produced by the processor after
 	// post-processing (i.e. the rows that are pushed through a router).
 	//
 	// If renderExprs is set, these types correspond to the types of those
 	// expressions.
-	// If outpuCols is set, these types correspond to the types of
+	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
 	outputTypes []sqlbase.ColumnType
@@ -136,6 +138,10 @@ func (h *ProcOutputHelper) Init(
 		}
 	} else {
 		h.outputTypes = types
+	}
+	if h.outputCols != nil || h.renderExprs != nil {
+		// We're rendering or projecting, so allocate an output row.
+		h.outputRow = h.rowAlloc.AllocRow(len(h.outputTypes))
 	}
 
 	h.offset = post.Offset
@@ -303,7 +309,8 @@ func (h *ProcOutputHelper) EmitRow(
 }
 
 // ProcessRow sends the invoked row through the post-processing stage and returns
-// the post-processed row.
+// the post-processed row. Results from ProcessRow aren't safe past the next call
+// to ProcessRow.
 //
 // The moreRowsOK retval is true if more rows can be processed, false if the
 // limit has been reached (if there's a limit). Upon seeing a false value, the
@@ -337,31 +344,27 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, true, nil
 	}
 
-	var outRow sqlbase.EncDatumRow
 	if h.renderExprs != nil {
 		// Rendering.
-		outRow = h.rowAlloc.AllocRow(len(h.renderExprs))
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
 			if err != nil {
 				return nil, false, err
 			}
-			outRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
+			h.outputRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.
-		outRow = h.rowAlloc.AllocRow(len(h.outputCols))
 		for i, col := range h.outputCols {
-			outRow[i] = row[col]
+			h.outputRow[i] = row[col]
 		}
 	} else {
 		// No rendering or projection.
-		outRow = h.rowAlloc.AllocRow(len(row))
-		copy(outRow, row)
+		return row, h.rowIdx < h.maxRowIdx, nil
 	}
 
 	// If this row satisfies the limit, the caller is told to drain.
-	return outRow, h.rowIdx < h.maxRowIdx, nil
+	return h.outputRow, h.rowIdx < h.maxRowIdx, nil
 }
 
 // Close signals to the output that there will be no more rows.
