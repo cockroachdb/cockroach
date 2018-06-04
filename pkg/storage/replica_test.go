@@ -153,7 +153,9 @@ func (tc *testContext) Clock() *hlc.Clock {
 // Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
-	tc.manualClock = hlc.NewManualClock(123)
+	if tc.manualClock == nil {
+		tc.manualClock = hlc.NewManualClock(123)
+	}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	tc.StartWithStoreConfig(t, stopper, cfg)
 }
