@@ -10,7 +10,7 @@
 (GroupBy
     $input:*
     $aggregations:* & (HasNoCols $aggregations)
-    $groupingCols:* & (ColsAreKey $groupingCols $input)
+    $def:* & (ColsAreKey $def $input)
 )
 =>
 $input
@@ -22,11 +22,11 @@ $input
 (GroupBy
     $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
     $aggregations:*
-    $groupingCols:*
+    $def:*
 )
 =>
 (GroupBy
     $innerInput
     $aggregations
-    $groupingCols
+    $def
 )

@@ -155,7 +155,7 @@ func (b *rulePropsBuilder) buildLookupJoinProps(ev memo.ExprView) {
 func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
-	groupingColSet := ev.Private().(opt.ColSet)
+	groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols
 
 	// Grouping columns can't be pruned, because they were used to group rows.
 	// However, aggregation columns can potentially be pruned.

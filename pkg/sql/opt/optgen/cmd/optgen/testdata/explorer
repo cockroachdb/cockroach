@@ -74,7 +74,7 @@ define And {
     (GroupBy
         $input:(InnerJoin|Join $left:* $right:* $on:*)
         $aggregations:*
-        $groupingCols:*
+        $def:*
     )
     $filter:* & ^(IsCorrelated $filter $right)
 )
@@ -84,7 +84,7 @@ define And {
         (GroupBy
             $left
             $aggregations
-            $groupingCols
+            $def
         )
         $filter
     )
@@ -239,7 +239,7 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 						right := _expr.ChildGroup(_e.mem, 1)
 						on := _expr.ChildGroup(_e.mem, 2)
 						aggregations := _groupByExpr.Aggregations()
-						groupingCols := _groupByExpr.GroupingCols()
+						def := _groupByExpr.GroupingCols()
 						filter := _rootExpr.Filter()
 						if !_e.isCorrelated(filter, right) {
 							if _e.o.matchedRule == nil || _e.o.matchedRule(opt.PushDownGroupBy) {
@@ -248,7 +248,7 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 										_e.f.ConstructGroupBy(
 											left,
 											aggregations,
-											groupingCols,
+											def,
 										),
 										filter,
 									),

@@ -883,3 +883,45 @@ render               ·            ·            (m)                 ·
            └── scan  ·            ·            (a, b)              ·
 ·                    table        foo@primary  ·                   ·
 ·                    spans        ALL          ·                   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY_AGG(v) FROM (SELECT * FROM kv ORDER BY v)
+----
+group           ·            ·             (array_agg)  ·
+ │              aggregate 0  array_agg(v)  ·            ·
+ └── sort       ·            ·             (v)          +v
+      │         order        +v            ·            ·
+      └── scan  ·            ·             (v)          ·
+·               table        kv@primary    ·            ·
+·               spans        ALL           ·            ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
+----
+render          ·         ·           (k)     ·
+ │              render 0  k           ·       ·
+ └── sort       ·         ·           (k, s)  +s
+      │         order     +s          ·       ·
+      └── scan  ·         ·           (k, s)  ·
+·               table     kv@primary  ·       ·
+·               spans     ALL         ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+group      ·            ·              (concat_agg)  ·
+ │         aggregate 0  concat_agg(s)  ·             ·
+ └── scan  ·            ·              (k, s)        +k
+·          table        kv@primary     ·             ·
+·          spans        ALL            ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY_AGG(k) FROM (SELECT k FROM kv ORDER BY s)
+----
+group           ·            ·             (array_agg)  ·
+ │              aggregate 0  array_agg(k)  ·            ·
+ └── sort       ·            ·             (k, s)       +s
+      │         order        +s            ·            ·
+      └── scan  ·            ·             (k, s)       ·
+·               table        kv@primary    ·            ·
+·               spans        ALL           ·            ·
