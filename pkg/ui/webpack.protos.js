@@ -4,13 +4,13 @@ const path = require("path");
 const webpack = require("webpack");
 
 // tslint:disable:object-literal-sort-keys
-module.exports = {
+module.exports = (env) => ({
   entry: {
-    protos: ["./src/js/protos"],
+    protos: [env.dist === "ccl" ? "./ccl/src/js/protos" : "./src/js/protos"],
   },
 
   output: {
-    filename: "protos.dll.js",
+    filename: `protos.${env.dist}.dll.js`,
     path: path.resolve(__dirname, "dist"),
     library: "[name]_[hash]",
   },
@@ -27,7 +27,7 @@ module.exports = {
   plugins: [
     new webpack.DllPlugin({
       name: "[name]_[hash]",
-      path: path.resolve(__dirname, "protos-manifest.json"),
+      path: path.resolve(__dirname, `protos.${env.dist}.manifest.json`),
     }),
   ],
-};
+});

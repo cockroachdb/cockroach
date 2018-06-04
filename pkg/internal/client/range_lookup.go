@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -146,10 +145,11 @@ import (
 //   RangeMetaKey(existingSplitBoundary)
 //
 //
-// Lookups for range metadata keys usually want to read inconsistently, but some
-// callers need a consistent result; both are supported be specifying the
-// ReadConsistencyType. If the lookup is consistent, the Sender provided should
-// be a TxnCoordSender.
+// Lookups for range metadata keys usually want to perform reads at the
+// READ_UNCOMMITTED read consistency level read in order to observe intents as
+// well. However, some callers need a consistent result; both are supported be
+// specifying the ReadConsistencyType. If the lookup is consistent, the Sender
+// provided should be a TxnCoordSender.
 //
 // This method has an important optimization if the prefetchNum arg is larger
 // than 0: instead of just returning the request RangeDescriptor, it also
@@ -311,26 +311,6 @@ func lookupRangeFwdScan(
 	}
 	ba.Add(&roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
-		// NOTE (subtle): we want the scan to return intents as well as values
-		// when scanning inconsistently. The reason is because it's not clear
-		// whether the intent or the previous value points to the correct
-		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record co-located with a replica
-		// involved in the split. Since we cannot know the correct answer, we
-		// reply with both the pre- and post- transaction values.
-		//
-		// This does not count against a maximum range count (per the
-		// ReturnIntents contract) because they are possible versions of the
-		// same descriptor. In other words, both the current live descriptor and
-		// a potentially valid descriptor from observed intents could be
-		// returned.
-		//
-		// We don't need to set this when rc == roachpb.READ_UNCOMMITTED
-		// because all read_uncommitted requests will return intents, which
-		// is why this option is now deprecated.
-		//
-		// TODO(nvanbenschoten): remove in version 2.1.
-		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
@@ -400,8 +380,6 @@ func lookupRangeRevScan(
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
-		// See explanation above in lookupRangeFwdScan.
-		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
@@ -422,101 +400,6 @@ func lookupRangeRevScan(
 		return nil, nil, err
 	}
 	return append(fwdDescs, revDescs...), append(fwdIntentDescs, revIntentDescs...), nil
-}
-
-// LegacyRangeLookup performs the same operation as RangeLookup, but does so
-// using a DeprecatedRangeLookupRequest. This request type does not support
-// split meta2 splits, and as such, should not be used unless
-// cluster.VersionMeta2Splits is active. It is used for compatibility on
-// clusters that do not have that version active and therefore cannot perform
-// RangeLookup scans with ScanRequests because ScanRequest.ReturnIntents was not
-// available yet.
-//
-// LegacyRangeLookup does not work in all cases with split meta2 ranges. This is
-// because a DeprecatedRangeLookupRequest can return no matching
-// RangeDescriptors when meta2 ranges split. Remember that the range addressing
-// keys are generated from the end key of a range descriptor, not the start key.
-// With this in mind, consider the scenario:
-//
-//   range 1 [/meta2/a, /meta2/d):
-//     b -> [a, b)
-//     c -> [b, c)
-//   range 2 [/meta2/d, /meta2/f):
-//     d -> [c, d)
-//     e -> [d, e)
-//
-// Now consider looking up the range containing key `c`. The RangeDescriptorDB
-// routing logic would send the RangeLookup request to range 1 since `/meta2/c`
-// lies within the bounds of that range. But notice that the range descriptor
-// containing `d` lies in range 2. This means that no matching RangeDescriptors
-// will be found on range 1 and returned from the first RangeLookup. In fact, a
-// RangeLookup for any key between ['c','d') will create this scenario.
-//
-// Our solution (RangeLookup) is to deprecate RangeLookupRequest and instead use
-// a ScanRequest over the entire MetaScanBounds. DistSender will properly scan
-// across range boundaries when it doesn't find a descriptor at first, which
-// avoids meta2 split complications.
-//
-// See #16266 and #17565 for further discussion. Notably, it is not possible to
-// pick meta2 boundaries such that we will never run into this issue. The only
-// way to avoid this completely would be to store RangeDescriptors at
-// RangeMetaKey(desc.StartKey) and only allow meta2 split boundaries at
-// RangeMetaKey(existingSplitBoundary).
-//
-// TODO(nvanbenschoten): remove in version 2.1.
-func LegacyRangeLookup(
-	ctx context.Context,
-	sender Sender,
-	key roachpb.Key,
-	rc roachpb.ReadConsistencyType,
-	prefetchNum int64,
-	prefetchReverse bool,
-) (rs, preRs []roachpb.RangeDescriptor, err error) {
-	rkey, err := addrForDir(prefetchReverse)(key)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ba := roachpb.BatchRequest{}
-	ba.ReadConsistency = rc
-	ba.Add(&roachpb.DeprecatedRangeLookupRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: keys.RangeMetaKey(rkey).AsRawKey(),
-		},
-		MaxRanges: int32(prefetchNum + 1),
-		Reverse:   prefetchReverse,
-	})
-
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, nil, pErr.GoError()
-	}
-	if br.Error != nil {
-		return nil, nil, br.Error.GoError()
-	}
-	resp := br.Responses[0].GetInner().(*roachpb.DeprecatedRangeLookupResponse)
-	return resp.Ranges, resp.PrefetchedRanges, nil
-}
-
-// RangeLookupForVersion performs the same operation as RangeLookup, but does so
-// using either RangeLookup or LegacyRangeLookup, depending on the provided
-// cluster version.
-//
-// TODO(nvanbenschoten): remove in version 2.1.
-func RangeLookupForVersion(
-	ctx context.Context,
-	st *cluster.Settings,
-	sender Sender,
-	key roachpb.Key,
-	rc roachpb.ReadConsistencyType,
-	prefetchNum int64,
-	prefetchReverse bool,
-) (rs, preRs []roachpb.RangeDescriptor, err error) {
-	fn := RangeLookup
-	if !st.Version.IsActive(cluster.VersionMeta2Splits) {
-		fn = LegacyRangeLookup
-	}
-	return fn(ctx, sender, key, rc, prefetchNum, prefetchReverse)
 }
 
 // addrForDir determines the key addressing function to use for a RangeLookup

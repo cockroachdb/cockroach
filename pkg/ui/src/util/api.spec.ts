@@ -449,7 +449,7 @@ describe("rest api", function() {
 
       return api.getHealth(new protos.cockroach.server.serverpb.HealthRequest()).then((result) => {
         assert.lengthOf(fetchMock.calls(healthUrl), 1);
-        assert.deepEqual(result.toJSON(), new protos.cockroach.server.serverpb.HealthResponse().toJSON());
+        assert.deepEqual(result, new protos.cockroach.server.serverpb.HealthResponse());
       });
     });
 

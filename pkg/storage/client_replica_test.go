@@ -454,40 +454,33 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 
-	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
-		for _, test := range testCases {
-			t.Run(fmt.Sprintf("key=%s", test.key), func(t *testing.T) {
-				lookup := client.RangeLookup
-				if legacy {
-					lookup = client.LegacyRangeLookup
-				}
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("key=%s", test.key), func(t *testing.T) {
+			rs, preRs, err := client.RangeLookup(context.Background(), store.TestSender(),
+				test.key.AsRawKey(), roachpb.READ_UNCOMMITTED, test.maxResults-1, true /* prefetchReverse */)
+			if err != nil {
+				t.Fatalf("LookupRange error: %s", err)
+			}
 
-				rs, preRs, err := lookup(context.Background(), store.TestSender(), test.key.AsRawKey(),
-					roachpb.INCONSISTENT, test.maxResults-1, true /* prefetchReverse */)
-				if err != nil {
-					t.Fatalf("LookupRange error: %s", err)
-				}
-
-				// Checks the results count.
-				if rsLen, preRsLen := len(rs), len(preRs); int64(rsLen+preRsLen) != test.maxResults {
-					t.Fatalf("returned results count, expected %d, but got %d+%d", test.maxResults, rsLen, preRsLen)
-				}
-				// Checks the range descriptors.
-				for _, rngSlice := range []struct {
-					expect, reply []roachpb.RangeDescriptor
-				}{
-					{test.expected, rs},
-					{test.expectedPre, preRs},
-				} {
-					for i, rng := range rngSlice.expect {
-						if !(rng.StartKey.Equal(rngSlice.reply[i].StartKey) && rng.EndKey.Equal(rngSlice.reply[i].EndKey)) {
-							t.Fatalf("returned range is not correct, expected %v, but got %v", rng, rngSlice.reply[i])
-						}
+			// Checks the results count.
+			if rsLen, preRsLen := len(rs), len(preRs); int64(rsLen+preRsLen) != test.maxResults {
+				t.Fatalf("returned results count, expected %d, but got %d+%d", test.maxResults, rsLen, preRsLen)
+			}
+			// Checks the range descriptors.
+			for _, rngSlice := range []struct {
+				expect, reply []roachpb.RangeDescriptor
+			}{
+				{test.expected, rs},
+				{test.expectedPre, preRs},
+			} {
+				for i, rng := range rngSlice.expect {
+					if !(rng.StartKey.Equal(rngSlice.reply[i].StartKey) && rng.EndKey.Equal(rngSlice.reply[i].EndKey)) {
+						t.Fatalf("returned range is not correct, expected %v, but got %v", rng, rngSlice.reply[i])
 					}
 				}
-			})
-		}
-	})
+			}
+		})
+	}
 }
 
 type leaseTransferTest struct {

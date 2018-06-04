@@ -32,7 +32,11 @@ import (
 func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope *scope) {
 	leftScope := b.buildSelect(clause.Left, inScope)
 	rightScope := b.buildSelect(clause.Right, inScope)
-	outScope = leftScope
+
+	// Remove any hidden columns added by any "inner" ORDER BY clauses
+	// (which will be ignored).
+	leftScope.removeHiddenCols()
+	rightScope.removeHiddenCols()
 
 	// Check that the number of columns matches.
 	if len(leftScope.cols) != len(rightScope.cols) {
@@ -42,6 +46,9 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 			clause.Type, len(leftScope.cols), len(rightScope.cols),
 		)})
 	}
+
+	outScope = inScope.push()
+	outScope.appendColumns(leftScope)
 
 	// newColsNeeded indicates whether or not we need to synthesize output
 	// columns. This is always required for a UNION, because the output columns
@@ -60,7 +67,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 	newColsNeeded := clause.Type == tree.UnionOp
 	if newColsNeeded {
 		// Create a new scope to hold the new synthesized columns.
-		outScope = leftScope.push()
+		outScope = outScope.push()
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 	}
 

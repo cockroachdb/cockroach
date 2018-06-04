@@ -782,3 +782,57 @@ union
       ├── columns: a:4(string) b:5(string!null) c:6(string!null)
       └── scan abc
            └── columns: a:4(string) b:5(string!null) c:6(string!null) abc.rowid:7(int!null)
+
+build
+(SELECT a FROM abc ORDER BY b) UNION ALL (SELECT b FROM abc) ORDER BY a
+----
+sort
+ ├── columns: a:9(string)
+ ├── ordering: +9
+ └── union-all
+      ├── columns: a:9(string)
+      ├── left columns: abc.a:1(string)
+      ├── right columns: abc.b:6(string)
+      ├── project
+      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    └── scan abc
+      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      └── project
+           ├── columns: abc.b:6(string!null)
+           └── scan abc
+                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+
+build
+(SELECT a FROM abc ORDER BY b) UNION ALL (SELECT a FROM abc ORDER BY c) ORDER BY a
+----
+sort
+ ├── columns: a:9(string)
+ ├── ordering: +9
+ └── union-all
+      ├── columns: a:9(string)
+      ├── left columns: abc.a:1(string)
+      ├── right columns: abc.a:5(string)
+      ├── project
+      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    └── scan abc
+      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      └── project
+           ├── columns: abc.a:5(string) abc.c:7(string!null)
+           └── scan abc
+                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+
+build
+(SELECT a FROM abc ORDER BY b) EXCEPT (SELECT b FROM abc ORDER BY c, b, a)
+----
+except
+ ├── columns: a:1(string)
+ ├── left columns: abc.a:1(string)
+ ├── right columns: abc.b:6(string)
+ ├── project
+ │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+ │    └── scan abc
+ │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+ └── project
+      ├── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null)
+      └── scan abc
+           └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)

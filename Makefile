@@ -1042,14 +1042,17 @@ GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 PBJS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbjs
 PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
 
-JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
+# Unlike the protobuf compiler for Go and C++, the protobuf compiler for
+# JavaScript only needs the entrypoint protobufs to be listed. It automatically
+# compiles any protobufs the entrypoints depend upon.
+JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
 UI_JS_CCL := pkg/ui/ccl/src/js/protos.js
 UI_TS_CCL := pkg/ui/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS := pkg/ui/src/js/protos.js
-UI_TS := pkg/ui/src/js/protos.d.ts
-UI_PROTOS := $(UI_JS) $(UI_TS)
+UI_JS_OSS := pkg/ui/src/js/protos.js
+UI_TS_OSS := pkg/ui/src/js/protos.d.ts
+UI_PROTOS_OSS := $(UI_JS) $(UI_TS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/file_registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./pkg,$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.h))
@@ -1100,29 +1103,18 @@ bin/.cpp_ccl_protobuf_sources: $(PROTOC) $(CPP_PROTOS_CCL)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS_CCL) $(CPP_SOURCES_CCL)
 	touch $@
 
-.SECONDARY: $(UI_JS)
-$(UI_JS): $(GO_PROTOS) pkg/ui/yarn.installed
+.SECONDARY: $(UI_JS_OSS) $(UI_JS_CCL)
+$(UI_JS_CCL): $(JS_PROTOS_CCL)
+$(UI_JS_OSS) $(UI_JS_CCL): $(GW_PROTOS) pkg/ui/yarn.installed
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$^) >> $@
 
-.SECONDARY: $(UI_TS)
-$(UI_TS): $(UI_JS) pkg/ui/yarn.installed
+.SECONDARY: $(UI_TS_OSS) $(UI_TS_CCL)
+protos%.d.ts: protos%.js pkg/ui/yarn.installed
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBTS) $(UI_JS) >> $@
-
-.SECONDARY: $(UI_JS_CCL)
-$(UI_JS_CCL): $(JS_PROTOS_CCL) pkg/ui/yarn.installed
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) $(JS_PROTOS_CCL) >> $@
-
-.SECONDARY: $(UI_TS_CCL)
-$(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.installed
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBTS) $(UI_JS_CCL) >> $@
+	$(PBTS) $< >> $@
 
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
@@ -1136,7 +1128,7 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 ui-generate: pkg/ui/distccl/bindata.go
 
 .PHONY: ui-lint
-ui-lint: pkg/ui/yarn.installed $(UI_PROTOS) $(UI_PROTOS_CCL)
+ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json -p tsconfig.json
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
@@ -1146,40 +1138,49 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_DLLS := pkg/ui/dist/protos.dll.js pkg/ui/dist/vendor.dll.js
-UI_MANIFESTS := pkg/ui/protos-manifest.json pkg/ui/vendor-manifest.json
+UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js pkg/ui/dist/vendor.oss.dll.js
+UI_CCL_MANIFESTS := pkg/ui/protos.ccl.manifest.json pkg/ui/vendor.oss.manifest.json
+UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
+UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 
-# (Ab)use a pattern rule to teach Make that this one command produces two files.
-# Normally, it would run the recipe twice if dist/FOO.js and FOO-manifest.js
-# were both out-of-date. [0]
+# (Ab)use pattern rules to teach Make that this one Webpack command produces two
+# files. Normally, Make would run the recipe twice if dist/FOO.js and
+# FOO-manifest.js were both out-of-date. [0]
 #
-# XXX: Ideally we'd scope the dependency on $(UI_PROTOS) to the protos DLL, but
-# Make v3.81 has a bug that causes the dependency to be ignored [1]. We're stuck
-# with this workaround until Apple decides to update the version of Make they
-# ship with macOS or we require a newer version of Make. Such a requirement
-# would need to be strictly enforced, as the way this fails is extremely subtle
-# and doesn't present until the web UI is loaded in the browser.
+# XXX: Ideally we'd scope the dependency on $(UI_PROTOS*) to the appropriate
+# protos DLLs, but Make v3.81 has a bug that causes the dependency to be ignored
+# [1]. We're stuck with this workaround until Apple decides to update the
+# version of Make they ship with macOS or we require a newer version of Make.
+# Such a requirement would need to be strictly enforced, as the way this fails
+# is extremely subtle and doesn't present until the web UI is loaded in the
+# browser.
 #
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
-.SECONDARY: $(UI_DLLS) $(UI_MANIFESTS)
-pkg/ui/dist/%.dll.js pkg/ui/%-manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS) $(UI_PROTOS_CCL)
-	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js
+.SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
+
+pkg/ui/dist/%.oss.dll.js pkg/ui/%.oss.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_OSS)
+	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
+
+pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_CCL)
+	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
 
 .PHONY: ui-test
-ui-test: $(UI_DLLS) $(UI_MANIFESTS)
+ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start
 
 .PHONY: ui-test-watch
-ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
+ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
 
-pkg/ui/dist%/bindata.go: pkg/ui/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_JS_CCL) $(UI_MANIFESTS) $(shell find pkg/ui/ccl pkg/ui/src pkg/ui/styl -type f)
-	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
-	rm -f pkg/ui/embedded.go
+pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
+pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f)
 	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
-	set -e; for dll in $(notdir $(UI_DLLS)); do ln -s ../dist/$$dll pkg/ui/dist$*/$$dll; done
-	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.$*.js
+	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
+	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
+	done
+	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
 	gofmt -s -w $@
@@ -1202,7 +1203,7 @@ ui-watch ui-watch-secure: $(UI_DLLS) pkg/ui/yarn.opt.installed
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	find pkg/ui/dist* -mindepth 1 -not -name dist*.go -delete
-	rm -f $(UI_DLLS)
+	rm -f pkg/ui/*manifest.json
 
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
@@ -1359,7 +1360,7 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS) $(UI_PROTOS_CCL)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -283,47 +282,11 @@ func (ds *DistSender) RangeLookup(
 	// know the correct answer, we lookup both the pre- and post- transaction
 	// values.
 	rc := roachpb.READ_UNCOMMITTED
-	if !ds.st.Version.IsActive(cluster.VersionReadUncommittedRangeLookups) {
-		// READ_UNCOMMITTED was unsupported before this version. RangeLookup
-		// will set the DeprecatedReturnIntents when scanning inconsistently,
-		// which will have the same effect of returning both committed and
-		// uncommitted values.
-		//
-		// TODO(nvanbenschoten): remove in version 2.1.
-		rc = roachpb.INCONSISTENT
-	}
 	// By using DistSender as the sender, we guarantee that even if the desired
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
 	return client.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
-}
-
-// legacyRangeLookup implements the legacyRangeDescriptorDB interface. The
-// method dispatches a DeprecatedRangeLookupRequest with the range metadata key
-// for the given key to the replicas of the given range. Note that we allow
-// inconsistent reads when doing range lookups for efficiency. Getting stale
-// data is not a correctness problem but instead may infrequently result in
-// additional latency as additional range lookups may be required. Note also
-// that rangeLookup bypasses the DistSender's Send() method, so there is no
-// error inspection and retry logic here; this is not an issue since the lookup
-// performs a single inconsistent read only.
-//
-// TODO(nvanbenschoten): remove in version 2.1.
-func (ds *DistSender) legacyRangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	sender := client.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		replicas := NewReplicaSlice(ds.gossip, desc)
-		shuffle.Shuffle(replicas)
-		br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		return br, nil
-	})
-	return client.LegacyRangeLookup(ctx, sender, key.AsRawKey(),
-		roachpb.INCONSISTENT, rangeLookupPrefetchCount, useReverseScan)
 }
 
 // FirstRange implements the RangeDescriptorDB interface.

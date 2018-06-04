@@ -1569,6 +1569,20 @@ project
                                                    ├── variable: t.public.kv.k [type=int]
                                                    └── variable: db1.public.kv.k [type=int]
 
+build
+SELECT (SELECT k FROM kv ORDER BY v)
+----
+project
+ ├── columns: "(SELECT k FROM kv ORDER BY v)":3(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: k:1(int!null) v:2(string)
+                └── scan kv
+                     └── columns: k:1(int!null) v:2(string)
+
 exec-ddl
 CREATE TABLE t1 (a INT)
 ----
