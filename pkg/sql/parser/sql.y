@@ -4252,8 +4252,8 @@ index_elem:
   {
     $$.val = tree.IndexElem{Column: tree.Name($1), Direction: $3.dir()}
   }
-| func_expr_windowless opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem func expr") }
-| '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem a_expr") }
+| func_expr_windowless opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem func expr (computed indexes)") }
+| '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem a_expr (computed indexes)") }
 
 opt_collate:
   COLLATE collation_name { return unimplementedWithIssue(sqllex, 16619) }
