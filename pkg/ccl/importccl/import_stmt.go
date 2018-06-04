@@ -49,6 +49,9 @@ const (
 
 	importOptionTransform = "transform"
 	importOptionSSTSize   = "sstsize"
+
+	pgCopyDelimiter = "delimiter"
+	pgCopyNull      = "nullif"
 )
 
 var importOptionExpectValues = map[string]bool{
@@ -387,6 +390,22 @@ func importPlanHook(
 			}
 		case "MYSQLDUMP":
 			format.Format = roachpb.IOFileFormat_Mysqldump
+		case "PGCOPY":
+			format.Format = roachpb.IOFileFormat_PgCopy
+			format.PgCopy = roachpb.PgCopyOptions{
+				Delimiter: '\t',
+				Null:      `\N`,
+			}
+			if override, ok := opts[pgCopyDelimiter]; ok {
+				c, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %q value", pgCopyDelimiter)
+				}
+				format.PgCopy.Delimiter = c
+			}
+			if override, ok := opts[pgCopyNull]; ok {
+				format.PgCopy.Null = override
+			}
 		default:
 			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 		}
