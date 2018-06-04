@@ -626,16 +626,20 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange notifies that an outstanding schema change
-// exists for the table.
+// notifySchemaChange sets the UpVersion bit and queues up a schema
+// changer.
 func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
-	if !tableDesc.UpVersion {
-		// If a version change has not been requested there is no pending
-		// schema change to be executed.
-		return
-	}
+	tableDesc.UpVersion = true
+	p.queueSchemaChange(tableDesc, mutationID)
+}
+
+// queueSchemaChange queues up a schema changer to process an outstanding
+// schema change for the table.
+func (p *planner) queueSchemaChange(
+	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) {
 	sc := SchemaChanger{
 		tableID:              tableDesc.GetID(),
 		mutationID:           mutationID,
@@ -651,9 +655,26 @@ func (p *planner) notifySchemaChange(
 	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
-// writeTableDesc effectively writes a table descriptor to the
-// database within the current planner transaction.
-func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+// writeSchemaChange effectively writes a table descriptor to the
+// database within the current planner transaction, and queues up
+// a schema changer for future processing.
+func (p *planner) writeSchemaChange(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) error {
+	if tableDesc.Dropped() {
+		// We don't allow schema changes on a dropped table.
+		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+	}
+	return p.writeTableDesc(ctx, tableDesc, mutationID)
+}
+
+func (p *planner) writeDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+	return p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID)
+}
+
+func (p *planner) writeTableDesc(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) error {
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: virtual descriptors cannot be stored, found: %v", tableDesc)
@@ -663,6 +684,9 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 		if err := runSchemaChangesInTxn(ctx, p.txn, p.Tables(), p.execCfg, p.EvalContext(), tableDesc); err != nil {
 			return err
 		}
+	} else {
+		// Schedule a schema changer for later.
+		p.notifySchemaChange(tableDesc, mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
@@ -677,6 +701,7 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
+
 	return p.txn.Put(ctx, descKey, descVal)
 }
 

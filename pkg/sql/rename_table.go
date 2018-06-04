@@ -122,15 +122,11 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	descID := tableDesc.GetID()
 	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
 		ParentID: prevDbDesc.ID,
 		Name:     oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
-	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
+	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return nil, err
 	}
 
@@ -151,7 +147,6 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		}
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
 	return newZeroNode(nil /* columns */), nil
 }

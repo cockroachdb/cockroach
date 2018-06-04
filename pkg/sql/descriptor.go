@@ -137,11 +137,18 @@ func (p *planner) createDescriptorWithID(
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
+	desc, ok := descriptor.(*sqlbase.TableDescriptor)
+	if ok {
 		p.Tables().addUncommittedTable(*desc)
 	}
 
-	return p.txn.Run(ctx, b)
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+	if ok && desc.Adding() {
+		p.queueSchemaChange(desc, sqlbase.InvalidMutationID)
+	}
+	return nil
 }
 
 // getDescriptor looks up the descriptor for `plainKey`, validates it,

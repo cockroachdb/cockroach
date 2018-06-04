@@ -319,8 +319,8 @@ func (p *planner) dropTableImpl(
 func (p *planner) initiateDropTable(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
 ) error {
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return err
+	if tableDesc.Dropped() {
+		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
 
 	// If the table is not interleaved and the ClearRange feature is
@@ -354,19 +354,13 @@ func (p *planner) initiateDropTable(
 			Name:     tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
-	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
-		return err
-	}
-
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema
 	// change manager, which is notified via a system config gossip.
 	// The schema change manager will properly schedule deletion of
 	// the underlying data when the GC deadline expires.
-	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
-
-	return nil
+	return p.writeDropTable(ctx, tableDesc)
 }
 
 func (p *planner) removeFKBackReference(

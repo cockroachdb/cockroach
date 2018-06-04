@@ -132,10 +132,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				for _, changedSeqDesc := range changedSeqDescs {
-					if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
+					if err := params.p.writeSchemaChange(params.ctx, changedSeqDesc, sqlbase.InvalidMutationID); err != nil {
 						return err
 					}
-					params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
 				}
 			}
 
@@ -598,25 +597,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 	}
 
 	mutationID := sqlbase.InvalidMutationID
-	var err error
 	if addedMutations {
+		var err error
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
-	} else {
-		err = n.tableDesc.SetUpVersion()
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
-	if err := params.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
+	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
 		return err
 	}
 
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogAlterTable,
@@ -630,13 +627,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			CascadeDroppedViews []string
 		}{n.n.Table.TableName().FQString(), n.n.String(),
 			params.SessionData().User, uint32(mutationID), droppedViews},
-	); err != nil {
-		return err
-	}
-
-	params.p.notifySchemaChange(n.tableDesc, mutationID)
-
-	return nil
+	)
 }
 
 func (p *planner) setAuditMode(
@@ -755,10 +746,9 @@ func applyColumnMutation(
 				return err
 			}
 			for _, changedSeqDesc := range changedSeqDescs {
-				if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
+				if err := params.p.writeSchemaChange(params.ctx, changedSeqDesc, sqlbase.InvalidMutationID); err != nil {
 					return err
 				}
-				params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
 			}
 		}
 

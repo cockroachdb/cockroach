@@ -597,8 +597,6 @@ func runSchemaChangesInTxn(
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-	tableDesc.UpVersion = false
-
 	if len(tableDesc.DrainingNames) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.

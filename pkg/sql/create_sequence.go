@@ -96,9 +96,6 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	if desc.Adding() {
-		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
-	}
 	if err := desc.Validate(params.ctx, params.p.txn, params.extendedEvalCtx.Settings); err != nil {
 		return err
 	}
