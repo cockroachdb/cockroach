@@ -378,7 +378,9 @@ endif
 	@# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
 	@# to the host machine's actual macOS version works around this. See:
 	@# https://github.com/jemalloc/jemalloc/issues/494.
+ifdef MACOS
 	@echo "export MACOSX_DEPLOYMENT_TARGET ?= $$(sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')" > $@
+endif
 	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
 	@echo "GOEXE = $$($(GO) env GOEXE)" >> $@
 	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
