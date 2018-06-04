@@ -375,33 +375,6 @@ endif
 
 IGNORE_GOVERS :=
 
-# defs.mk stores cached values of shell commands to avoid recomputing them on
-# every Make invocation. This has a small but noticeable effect, especially on
-# noop builds.
-build/defs.mk: Makefile build/defs.mk.sig
-ifndef IGNORE_GOVERS
-	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
-endif
-	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@
-	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
-	@echo "GOEXE = $$($(GO) env GOEXE)" >> $@
-	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
-	@echo "UNAME = $$(uname)" >> $@
-	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@
-	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@
-	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@
-	@echo "have-defs = 1" >> $@
-	$(if $(have-defs),$(info Detected change in build system. Rebooting Make.))
-
-# defs.mk.sig attempts to capture common cases where defs.mk needs to be
-# recomputed, like when compiling for a different platform or using a different
-# Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
-# in place will go unnoticed, for example. Similar problems exist in all Make-
-# based build systems and are not worth solving.
-build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TYPE):$(IGNORE_GOVERS)
-build/defs.mk.sig: .ALWAYS_REBUILD
-	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
-
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
 # following forms:
@@ -736,6 +709,33 @@ override TAGS += make $(NATIVE_SPECIFIER_TAG)
 export LC_COLLATE=C
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
+
+# defs.mk stores cached values of shell commands to avoid recomputing them on
+# every Make invocation. This has a small but noticeable effect, especially on
+# noop builds.
+build/defs.mk: Makefile build/defs.mk.sig
+ifndef IGNORE_GOVERS
+	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
+endif
+	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@
+	@echo "export GOPATH ?= $$($(GO) env GOPATH)" >> $@
+	@echo "GOEXE = $$($(XGO) env GOEXE)" >> $@
+	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
+	@echo "UNAME = $$(uname)" >> $@
+	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@
+	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@
+	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@
+	@echo "have-defs = 1" >> $@
+	$(if $(have-defs),$(info Detected change in build system. Rebooting Make.))
+
+# defs.mk.sig attempts to capture common cases where defs.mk needs to be
+# recomputed, like when compiling for a different platform or using a different
+# Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
+# in place will go unnoticed, for example. Similar problems exist in all Make-
+# based build systems and are not worth solving.
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(XGO):$(GOPATH):$(CC):$(CXX):$(TYPE):$(IGNORE_GOVERS)
+build/defs.mk.sig: .ALWAYS_REBUILD
+	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
 COCKROACH := ./cockroach$(SUFFIX)$(GOEXE)
 
