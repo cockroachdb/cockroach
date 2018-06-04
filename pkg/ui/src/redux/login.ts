@@ -100,7 +100,7 @@ export const selectLoginState = createSelector(
     },
 );
 
-function shouldRedirect(location) {
+function shouldRedirect(location: Location) {
   if (!location) {
     return false;
   }
@@ -112,7 +112,7 @@ function shouldRedirect(location) {
   return true;
 }
 
-export function getLoginPage(location) {
+export function getLoginPage(location: Location) {
   const query = !shouldRedirect(location) ? undefined : {
     redirectTo: createPath({
       pathname: location.pathname,
@@ -165,10 +165,10 @@ function loginSuccess(loggedInUser: string): LoginSuccessAction {
 
 interface LoginFailureAction extends Action {
   type: typeof LOGIN_FAILURE;
-  error: string;
+  error: Error;
 }
 
-function loginFailure(error: string): LoginFailureAction {
+function loginFailure(error: Error): LoginFailureAction {
   return {
     type: LOGIN_FAILURE,
     error,

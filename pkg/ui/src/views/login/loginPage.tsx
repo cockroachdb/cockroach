@@ -32,15 +32,15 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
     // TODO(vilterp): focus username field on mount
   }
 
-  handleUpdateUsername = (evt: React.FormEvent<any>) => {
+  handleUpdateUsername = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
-      username: evt.target.value,
+      username: evt.currentTarget.value,
     });
   }
 
-  handleUpdatePassword = (evt: React.FormEvent<any>) => {
+  handleUpdatePassword = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
-      password: evt.target.value,
+      password: evt.currentTarget.value,
     });
   }
 
@@ -86,17 +86,17 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         </Helmet>
         <div className="image-container"
              dangerouslySetInnerHTML={trustIcon(cockroachIcon)}/>
-        <section className="section">
-          <h1 className="heading">Sign in to the Console</h1>
+        <section className="section login-page__info">
           <p className="aside">
             Please contact your database administrator for
             account access and password restoration.
-
           </p>
           <p className="aside">
-            For more information, see{" "}
-            <a href={docsURL("admin-ui-overview.html")}>the documentation</a>.
+            <a href={docsURL("admin-ui-overview.html")}>Read the documentation</a>.
           </p>
+        </section>
+        <section className="section login-page__form">
+          <h1 className="heading">Sign in to the Console</h1>
           {this.renderError()}
           <form onSubmit={this.handleSubmit}>
             <input

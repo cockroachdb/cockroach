@@ -10,7 +10,7 @@ export const LOGIN_PAGE = "/login";
 export const LOGOUT_PAGE = "/logout";
 
 export default function(store: Store<AdminUIState>): JSX.Element {
-  function handleLogout(_nextState, replace) {
+  function handleLogout(_nextState: any, replace: (route: string) => {}) {
     const loginState = selectLoginState(store.getState());
 
     if (!loginState.loggedInUser()) {

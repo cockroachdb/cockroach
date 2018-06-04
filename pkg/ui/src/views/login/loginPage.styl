@@ -7,6 +7,19 @@
   height 100%
   width 100%
   position absolute
+  background-color white
+  border thin solid grey
+
+  &__info
+    width 486px
+    display inline-block
+    padding 24px
+
+  &__form
+    background-color grey
+    width 486px
+    display inline-block
+    padding 108px 53px 138px
 
   .heading
     text-transform none
@@ -20,12 +33,13 @@
     width 350px
 
   .input-text
+    width 100%
     letter-spacing 2px
     line-height 17px
-    padding 12px 24px
+    padding 12px 18px
     vertical-align middle
     border 1px solid $button-border-color
-    border-radius 4px
+    border-radius 3px
     margin 12px 0
     color $body-color
 
@@ -33,6 +47,7 @@
       border-color $alert-color
 
   .submit-button
+    width 100%
     text-transform uppercase
     font-size 14px
     letter-spacing 2px
@@ -40,10 +55,11 @@
     padding 12px 24px
     vertical-align middle
     border 0px none
-    border-radius 4px
+    border-radius 3px
     margin 24px 0
     color $background-color
     background-color $link-color
+    cursor pointer
 
   &__error
     color $alert-color
