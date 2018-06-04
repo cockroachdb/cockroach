@@ -3479,7 +3479,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if arg == DNull && !expr.fn.NullableArgs {
+		if arg == DNull && !expr.fnProps.NullableArgs {
 			return DNull, nil
 		}
 		args.D = append(args.D, arg)

@@ -32,46 +32,59 @@ import (
 
 func initAggregateBuiltins() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
-	for k, v := range Aggregates {
-		for i, a := range v {
-			if !a.Impure {
-				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
-			}
-			if a.Class != tree.AggregateClass {
-				panic(fmt.Sprintf("aggregate functions should be marked with the tree.AggregateClass "+
-					"function class, found %v", a))
-			}
+	for k, v := range aggregates {
+		if !v.props.Impure {
+			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
+		}
+		if v.props.Class != tree.AggregateClass {
+			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
+				"function class, found %v", k, v))
+		}
+		for _, a := range v.overloads {
 			if a.AggregateFunc == nil {
-				panic(fmt.Sprintf("aggregate functions should have tree.AggregateFunc constructors, "+
-					"found %v", a))
+				panic(fmt.Sprintf("%s: aggregate functions should have tree.AggregateFunc constructors, "+
+					"found %v", k, a))
 			}
 			if a.WindowFunc == nil {
-				panic(fmt.Sprintf("aggregate functions should have tree.WindowFunc constructors, "+
-					"found %v", a))
+				panic(fmt.Sprintf("%s: aggregate functions should have tree.WindowFunc constructors, "+
+					"found %v", k, a))
 			}
-
-			// The aggregate functions are considered "row dependent". This is
-			// because each aggregate function application receives the set of
-			// grouped rows as implicit parameter. It may have a different
-			// value in every group, so it cannot be considered constant in
-			// the context of a data source.
-			v[i].NeedsRepeatedEvaluation = true
 		}
 
-		Builtins[k] = v
+		// The aggregate functions are considered "row dependent". This is
+		// because each aggregate function application receives the set of
+		// grouped rows as implicit parameter. It may have a different
+		// value in every group, so it cannot be considered constant in
+		// the context of a data source.
+		v.props.NeedsRepeatedEvaluation = true
+
+		builtins[k] = v
 	}
 }
 
-// Aggregates are a special class of builtin functions that are wrapped
+func aggProps() tree.FunctionProperties {
+	return tree.FunctionProperties{Class: tree.AggregateClass, Impure: true}
+}
+
+func aggPropsNullableArgs() tree.FunctionProperties {
+	f := aggProps()
+	f.NullableArgs = true
+	return f
+}
+
+// aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
+//
 // See `aggregateFuncHolder` in the sql package.
+//
 // In particular they must not be simplified during normalization
 // (and thus must be marked as impure), even when they are given a
 // constant argument (e.g. SUM(1)). This is because aggregate
 // functions must return NULL when they are no rows in the source
 // table, so their evaluation must always be delayed until query
 // execution.
+//
 // Some aggregate functions must handle nullable arguments, since normalizing
 // an aggregate function call to NULL in the presence of a NULL argument may
 // not be correct. There are two cases where an aggregate function must handle
@@ -79,44 +92,48 @@ func initAggregateBuiltins() {
 // 1) the aggregate function does not skip NULLs (e.g., ARRAY_AGG); and
 // 2) the aggregate function does not return NULL when it aggregates no rows
 //		(e.g., COUNT).
-// Exported for use in documentation.
-var Aggregates = map[string][]tree.OverloadDefinition{
-	"array_agg": arrayBuiltin(func(t types.T) tree.OverloadDefinition {
-		return makeAggOverloadWithReturnType(
-			[]types.T{t},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
-					return types.TArray{Typ: t}
-				}
-				// Whenever possible, use the expression's type, so we can properly
-				// handle aliased types that don't explicitly have overloads.
-				return types.TArray{Typ: args[0].ResolvedType()}
-			},
-			newArrayAggregate,
-			"Aggregates the selected values into an array.",
-			true /* NullableArgs */)
-	}),
+//
+// For use in other packages, see AllAggregateBuiltinNames and
+// GetBuiltinProperties().
+// These functions are also identified with Class == tree.AggregateClass.
+// The properties are reachable via tree.FunctionDefinition.
+var aggregates = map[string]builtinDefinition{
+	"array_agg": setProps(aggPropsNullableArgs(),
+		arrayBuiltin(func(t types.T) tree.OverloadDefinition {
+			return makeAggOverloadWithReturnType(
+				[]types.T{t},
+				func(args []tree.TypedExpr) types.T {
+					if len(args) == 0 {
+						return types.TArray{Typ: t}
+					}
+					// Whenever possible, use the expression's type, so we can properly
+					// handle aliased types that don't explicitly have overloads.
+					return types.TArray{Typ: args[0].ResolvedType()}
+				},
+				newArrayAggregate,
+				"Aggregates the selected values into an array.")
+		})),
 
-	"avg": {
+	"avg": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
 		makeAggOverload([]types.T{types.Float}, types.Float, newFloatAvgAggregate,
 			"Calculates the average of the selected values."),
 		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
-	},
+	),
 
-	"bool_and": {
+	"bool_and": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Bool}, types.Bool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
-	},
+	),
 
-	"bool_or": {
+	"bool_or": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Bool}, types.Bool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
-	},
+	),
 
-	"concat_agg": {
+	"concat_agg": makeBuiltin(aggProps(),
 		// TODO(knz): When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
@@ -126,19 +143,15 @@ var Aggregates = map[string][]tree.OverloadDefinition{
 			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
-	},
+	),
 
-	"count": {
-		makeAggOverloadWithNullableArgs([]types.T{types.Any}, types.Int, newCountAggregate,
+	"count": makeBuiltin(aggPropsNullableArgs(),
+		makeAggOverload([]types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements."),
-	},
+	),
 
-	"count_rows": {
-		{
-			FunctionProperties: tree.FunctionProperties{
-				Impure: true,
-				Class:  tree.AggregateClass,
-			},
+	"count_rows": makeBuiltin(aggProps(),
+		tree.OverloadDefinition{
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
@@ -147,23 +160,26 @@ var Aggregates = map[string][]tree.OverloadDefinition{
 			},
 			Info: "Calculates the number of rows.",
 		},
-	},
+	),
 
-	"max": collectOverloads(func(t types.T) tree.OverloadDefinition {
-		return makeAggOverload([]types.T{t}, t, newMaxAggregate,
-			"Identifies the maximum selected value.")
-	}, types.AnyNonArray...),
-	"min": collectOverloads(func(t types.T) tree.OverloadDefinition {
-		return makeAggOverload([]types.T{t}, t, newMinAggregate,
-			"Identifies the minimum selected value.")
-	}, types.AnyNonArray...),
+	"max": collectOverloads(aggProps(), types.AnyNonArray,
+		func(t types.T) tree.OverloadDefinition {
+			return makeAggOverload([]types.T{t}, t, newMaxAggregate,
+				"Identifies the maximum selected value.")
+		}),
 
-	"sum_int": {
+	"min": collectOverloads(aggProps(), types.AnyNonArray,
+		func(t types.T) tree.OverloadDefinition {
+			return makeAggOverload([]types.T{t}, t, newMinAggregate,
+				"Identifies the minimum selected value.")
+		}),
+
+	"sum_int": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Int, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
-	},
+	),
 
-	"sum": {
+	"sum": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntSumAggregate,
 			"Calculates the sum of the selected values."),
 		makeAggOverload([]types.T{types.Float}, types.Float, newFloatSumAggregate,
@@ -172,16 +188,16 @@ var Aggregates = map[string][]tree.OverloadDefinition{
 			"Calculates the sum of the selected values."),
 		makeAggOverload([]types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
-	},
+	),
 
-	"sqrdiff": {
+	"sqrdiff": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
 		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
 		makeAggOverload([]types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-	},
+	),
 
 	// final_(variance|stddev) computes the global (variance|standard deviation)
 	// from an arbitrary collection of local sums of squared difference from the mean.
@@ -194,103 +210,93 @@ var Aggregates = map[string][]tree.OverloadDefinition{
 	// #10495.
 
 	// The input signature is: SQDIFF, SUM, COUNT
-	"final_variance": {
-		makePrivate(makeAggOverload(
+	"final_variance": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
 			[]types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
-		)),
-		makePrivate(makeAggOverload(
+		),
+		makeAggOverload(
 			[]types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
-		)),
-	},
+		),
+	)),
 
-	"final_stddev": {
-		makePrivate(makeAggOverload(
+	"final_stddev": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
 			[]types.T{types.Decimal,
 				types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
-		)),
-		makePrivate(makeAggOverload(
+		),
+		makeAggOverload(
 			[]types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
-		)),
-	},
+		),
+	)),
 
-	"variance": {
+	"variance": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
 		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
 			"Calculates the variance of the selected values."),
 		makeAggOverload([]types.T{types.Float}, types.Float, newFloatVarianceAggregate,
 			"Calculates the variance of the selected values."),
-	},
+	),
 
-	"stddev": {
+	"stddev": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 		makeAggOverload([]types.T{types.Float}, types.Float, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-	},
+	),
 
-	"xor_agg": {
+	"xor_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
 		makeAggOverload([]types.T{types.Int}, types.Int, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
-	},
+	),
 
-	"json_agg": {
-		makeAggOverloadWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
+	"json_agg": makeBuiltin(aggPropsNullableArgs(),
+		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
-	},
+	),
 
-	"jsonb_agg": {
-		makeAggOverloadWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
+	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
+		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
-	},
+	),
 
-	AnyNotNull: {
-		makePrivate(makeAggOverloadWithReturnType(
+	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
+		makeAggOverloadWithReturnType(
 			[]types.T{types.Any},
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
-			false, /* nullable args */
-		)),
-	},
+		))),
 }
 
 // AnyNotNull is the name of the aggregate returned by NewAnyNotNullAggregate.
 const AnyNotNull = "any_not_null"
 
-func makePrivate(b tree.OverloadDefinition) tree.OverloadDefinition {
-	b.Private = true
+func makePrivate(b builtinDefinition) builtinDefinition {
+	b.props.Private = true
 	return b
 }
 
 func makeAggOverload(
 	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
 ) tree.OverloadDefinition {
-	return makeAggOverloadWithReturnType(
-		in, tree.FixedReturnType(ret), f, info, false /* nullableArgs */)
-}
-
-func makeAggOverloadWithNullableArgs(
-	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
-) tree.OverloadDefinition {
-	return makeAggOverloadWithReturnType(
-		in, tree.FixedReturnType(ret), f, info, true /* nullableArgs */)
+	return makeAggOverloadWithReturnType(in, tree.FixedReturnType(ret), f, info)
 }
 
 func makeAggOverloadWithReturnType(
@@ -298,7 +304,6 @@ func makeAggOverloadWithReturnType(
 	retType tree.ReturnTyper,
 	f func([]types.T, *tree.EvalContext) tree.AggregateFunc,
 	info string,
-	nullableArgs bool,
 ) tree.OverloadDefinition {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -309,11 +314,6 @@ func makeAggOverloadWithReturnType(
 	return tree.OverloadDefinition{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
-		FunctionProperties: tree.FunctionProperties{
-			Impure:       true,
-			Class:        tree.AggregateClass,
-			NullableArgs: nullableArgs,
-		},
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,

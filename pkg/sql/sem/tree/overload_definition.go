@@ -22,8 +22,6 @@ import (
 
 // OverloadDefinition is one of the overloads of a built-in function.
 type OverloadDefinition struct {
-	FunctionProperties
-
 	Types      TypeList
 	ReturnType ReturnTyper
 

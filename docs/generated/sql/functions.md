@@ -1,14 +1,3 @@
-### ANYELEMENT functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><code>to_json(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
-</span></td></tr>
-<tr><td><code>to_jsonb(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
-</span></td></tr></tbody>
-</table>
-
 ### Array functions
 
 <table>
@@ -431,6 +420,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>json_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
+<tr><td><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
+</span></td></tr>
 <tr><td><code>json_remove_path(val: jsonb, path: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Remove the specified path from the JSON object.</p>
 </span></td></tr>
 <tr><td><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -451,6 +442,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>jsonb_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
+<tr><td><code>jsonb_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
+</span></td></tr>
 <tr><td><code>jsonb_pretty(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given JSON value as a STRING indented and with newlines.</p>
 </span></td></tr>
 <tr><td><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -460,6 +453,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>jsonb_strip_nulls(from_json: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns from_json with all object fields that have null values omitted. Other null values are untouched.</p>
 </span></td></tr>
 <tr><td><code>jsonb_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
+</span></td></tr>
+<tr><td><code>to_json(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
+</span></td></tr>
+<tr><td><code>to_jsonb(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -596,22 +593,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>tan(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the tangent of <code>val</code>.</p>
 </span></td></tr>
-<tr><td><code>to_hex(val: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> to its hexadecimal representation.</p>
-</span></td></tr>
 <tr><td><code>trunc(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Truncates the decimal values of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><code>trunc(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Truncates the decimal values of <code>val</code>.</p>
-</span></td></tr></tbody>
-</table>
-
-### STRING[] functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
-</span></td></tr>
-<tr><td><code>jsonb_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -629,6 +613,55 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. The next call to nextval will return <code>value + Increment</code></p>
 </span></td></tr>
 <tr><td><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>, is_called: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. If is_called is false, the next call to nextval will return <code>value</code>; otherwise <code>value + Increment</code>.</p>
+</span></td></tr></tbody>
+</table>
+
+### Set-returning functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>crdb_internal.unary_table() &rarr; setof tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
+<p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
+</span></td></tr>
+<tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
+<tr><td><code>generate_series(start: <a href="timestamp.html">timestamp</a>, end: <a href="timestamp.html">timestamp</a>, step: <a href="interval.html">interval</a>) &rarr; setof tuple{timestamp AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestamp values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
+<tr><td><code>generate_subscripts(array: anyelement[]) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
+</span></td></tr>
+<tr><td><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
+</span></td></tr>
+<tr><td><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>, reverse: <a href="bool.html">bool</a>) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
+<p>When reverse is true, the series is returned in reverse order.</p>
+</span></td></tr>
+<tr><td><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
+</span></td></tr>
+<tr><td><code>json_array_elements(input: jsonb) &rarr; setof tuple{jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td></tr>
+<tr><td><code>json_array_elements_text(input: jsonb) &rarr; setof tuple{string AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td></tr>
+<tr><td><code>json_each(input: jsonb) &rarr; setof tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td></tr>
+<tr><td><code>json_each_text(input: jsonb) &rarr; setof tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td></tr>
+<tr><td><code>json_object_keys(input: jsonb) &rarr; setof tuple{string AS json_object_keys}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
+</span></td></tr>
+<tr><td><code>jsonb_array_elements(input: jsonb) &rarr; setof tuple{jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td></tr>
+<tr><td><code>jsonb_array_elements_text(input: jsonb) &rarr; setof tuple{string AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td></tr>
+<tr><td><code>jsonb_each(input: jsonb) &rarr; setof tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td></tr>
+<tr><td><code>jsonb_each_text(input: jsonb) &rarr; setof tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td></tr>
+<tr><td><code>jsonb_object_keys(input: jsonb) &rarr; setof tuple{string AS json_object_keys}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
+</span></td></tr>
+<tr><td><code>pg_get_keywords() &rarr; setof tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
+</span></td></tr>
+<tr><td><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td></tr></tbody>
 </table>
 
@@ -821,6 +854,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>to_hex(val: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> to its hexadecimal representation.</p>
 </span></td></tr>
+<tr><td><code>to_hex(val: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> to its hexadecimal representation.</p>
+</span></td></tr>
 <tr><td><code>to_ip(val: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Converts the character string representation of an IP to its byte string representation.</p>
 </span></td></tr>
 <tr><td><code>to_uuid(val: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Converts the character string representation of a UUID to its byte string representation.</p>
@@ -888,23 +923,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>crdb_internal.unary_table() &rarr; setof tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
-<p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
 <tr><td><code>format_type(type_oid: oid, typemod: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the SQL name of a data type that is identified by its type OID and possibly a type modifier. Currently, the type modifier is ignored.</p>
-</span></td></tr>
-<tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
-</span></td></tr>
-<tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
-</span></td></tr>
-<tr><td><code>generate_series(start: <a href="timestamp.html">timestamp</a>, end: <a href="timestamp.html">timestamp</a>, step: <a href="interval.html">interval</a>) &rarr; setof tuple{timestamp AS generate_series}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestamp values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
-</span></td></tr>
-<tr><td><code>generate_subscripts(array: anyelement[]) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
-</span></td></tr>
-<tr><td><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
-</span></td></tr>
-<tr><td><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>, reverse: <a href="bool.html">bool</a>) &rarr; setof tuple{int AS generate_subscripts}</code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
-<p>When reverse is true, the series is returned in reverse order.</p>
 </span></td></tr>
 <tr><td><code>has_any_column_privilege(table: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for any column of table.</p>
 </span></td></tr>
@@ -1062,35 +1081,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>has_type_privilege(user: oid, type: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for type.</p>
 </span></td></tr>
-<tr><td><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
-</span></td></tr>
-<tr><td><code>json_array_elements(input: jsonb) &rarr; setof tuple{jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td></tr>
-<tr><td><code>json_array_elements_text(input: jsonb) &rarr; setof tuple{string AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td></tr>
-<tr><td><code>json_each(input: jsonb) &rarr; setof tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td></tr>
-<tr><td><code>json_each_text(input: jsonb) &rarr; setof tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td></tr>
-<tr><td><code>json_object_keys(input: jsonb) &rarr; setof tuple{string AS json_object_keys}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
-</span></td></tr>
-<tr><td><code>jsonb_array_elements(input: jsonb) &rarr; setof tuple{jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td></tr>
-<tr><td><code>jsonb_array_elements_text(input: jsonb) &rarr; setof tuple{string AS value}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td></tr>
-<tr><td><code>jsonb_each(input: jsonb) &rarr; setof tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td></tr>
-<tr><td><code>jsonb_each_text(input: jsonb) &rarr; setof tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td></tr>
-<tr><td><code>jsonb_object_keys(input: jsonb) &rarr; setof tuple{string AS json_object_keys}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
-</span></td></tr>
 <tr><td><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
-<tr><td><code>pg_get_keywords() &rarr; setof tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
-</span></td></tr>
 <tr><td><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
-</span></td></tr>
-<tr><td><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td></tr></tbody>
 </table>
 
