@@ -515,6 +515,11 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if def.Private {
 		return nil, errors.Wrapf(errPrivateFunction, "%s()", def.Name)
 	}
+	// Check that the built-in is allowed for the current user.
+	// TODO(knz): this check can be moved to evaluation time pending #15363.
+	if def.Privileged && !ctx.privileged {
+		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
+	}
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
@@ -552,12 +557,6 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
 	overloadImpl := fns[0].(*OverloadDefinition)
-
-	// Check that the built-in is allowed for the current user.
-	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if def.Privileged && !ctx.privileged {
-		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
-	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
