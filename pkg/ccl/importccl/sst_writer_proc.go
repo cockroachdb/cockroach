@@ -99,6 +99,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err != nil {
 			return err
 		}
+		samples := job.Payload().Details.(*jobs.Payload_Import).Import.Tables[0].Samples
 
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
@@ -250,16 +251,15 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// There's no direct way to return an error from the Progressed()
 			// callback when decoding the span.End key.
 			var progressErr error
-			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-				d := details.(*jobs.Payload_Import).Import
-				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
+				d := details.(*jobs.Progress_Import).Import
+				d.WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
 
 				// Fold the newly-completed span into existing progress.  Since
 				// we know what all of the sampling points are and that they're
 				// in sorted order, we can just find our known end-point and use
 				// the previous key as the span-start.
 				progressErr = func() error {
-					samples := d.Tables[0].Samples
 					// Binary-search for the index of span.End.
 					idx := sort.Search(len(samples), func(i int) bool {
 						key := roachpb.Key(samples[i])
@@ -280,12 +280,12 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						finished.Key = samples[idx-1]
 					}
 					var sg roachpb.SpanGroup
-					sg.Add(d.Tables[0].SpanProgress...)
+					sg.Add(d.SpanProgress...)
 					sg.Add(finished)
-					d.Tables[0].SpanProgress = sg.Slice()
+					d.SpanProgress = sg.Slice()
 					return nil
 				}()
-				return d.Tables[0].Completed()
+				return d.Completed()
 			}); err != nil {
 				return err
 			} else if progressErr != nil {
