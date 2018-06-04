@@ -101,7 +101,7 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		builtin            tree.Builtin
+		builtin            tree.OverloadDefinition
 		args               tree.Datums
 		expectedAllocation int64
 	}{

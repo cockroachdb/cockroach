@@ -142,7 +142,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 type namedBuiltin struct {
 	name    string
-	builtin tree.Builtin
+	builtin tree.OverloadDefinition
 }
 
 func TestRandomSyntaxFunctions(t *testing.T) {

@@ -56,7 +56,7 @@ func init() {
 	sort.Strings(AllBuiltinNames)
 }
 
-func getCategory(b *tree.Builtin) string {
+func getCategory(b *tree.OverloadDefinition) string {
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
 	case tree.ArgTypes:
@@ -71,8 +71,10 @@ func getCategory(b *tree.Builtin) string {
 	return ""
 }
 
-func collectBuiltins(f func(types.T) tree.Builtin, types ...types.T) []tree.Builtin {
-	r := make([]tree.Builtin, len(types))
+func collectOverloads(
+	f func(types.T) tree.OverloadDefinition, types ...types.T,
+) []tree.OverloadDefinition {
+	r := make([]tree.OverloadDefinition, len(types))
 	for i := range types {
 		r[i] = f(types[i])
 	}

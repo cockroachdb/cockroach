@@ -368,7 +368,7 @@ func (b *Builder) buildFunction(
 		panic(builderError{err})
 	}
 
-	funcDef := memo.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
+	funcDef := memo.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedOverload()}
 
 	if isAggregate(def) {
 		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)

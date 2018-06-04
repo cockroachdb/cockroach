@@ -2251,7 +2251,7 @@ func (h oidHasher) UniqueConstraintOid(
 	return h.getOid()
 }
 
-func (h oidHasher) BuiltinOid(name string, builtin *tree.Builtin) *tree.DOid {
+func (h oidHasher) BuiltinOid(name string, builtin *tree.OverloadDefinition) *tree.DOid {
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
