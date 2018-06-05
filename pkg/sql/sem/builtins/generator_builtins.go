@@ -39,56 +39,67 @@ var _ tree.ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
-	for k, v := range Generators {
-		for _, g := range v {
-			if !g.Impure {
-				panic(fmt.Sprintf("generator functions should all be impure, found %v", g))
-			}
-			if g.Class != tree.GeneratorClass {
-				panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
-					"function class, found %v", g))
-			}
+	for k, v := range generators {
+		if !v.props.Impure {
+			panic(fmt.Sprintf("generator functions should all be impure, found %v", v))
 		}
-		Builtins[k] = v
+		if v.props.Class != tree.GeneratorClass {
+			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
+				"function class, found %v", v))
+		}
+		builtins[k] = v
 	}
 }
 
-// Generators is a map from name to slice of Builtins for all built-in
+func genProps() tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Impure:   true,
+		Class:    tree.GeneratorClass,
+		Category: categoryGenerator,
+	}
+}
+
+// generators is a map from name to slice of Builtins for all built-in
 // generators.
-var Generators = map[string][]tree.Builtin{
-	"generate_series": {
+//
+// These functions are identified with Class == tree.GeneratorClass.
+// The properties are reachable via tree.FunctionDefinition.
+var generators = map[string]builtinDefinition{
+	"generate_series": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 		),
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Timestamp}, {"end", types.Timestamp}, {"step", types.Interval}},
 			seriesTSValueGeneratorType,
 			makeTSSeriesGenerator,
 			"Produces a virtual table containing the timestamp values from `start` to `end`, inclusive, by increment of `step`.",
 		),
-	},
-	"pg_get_keywords": {
+	),
+
+	"pg_get_keywords": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{},
 			keywordsValueGeneratorType,
 			makeKeywordsGenerator,
 			"Produces a virtual table containing the keywords known to the SQL parser.",
 		),
-	},
-	"unnest": {
+	),
+
+	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
-		makeGeneratorBuiltinWithReturnType(
+		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
 				if len(args) == 0 {
@@ -103,9 +114,10 @@ var Generators = map[string][]tree.Builtin{
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
 		),
-	},
-	"information_schema._pg_expandarray": {
-		makeGeneratorBuiltinWithReturnType(
+	),
+
+	"information_schema._pg_expandarray": makeBuiltin(genProps(),
+		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
 				if len(args) == 0 {
@@ -123,62 +135,63 @@ var Generators = map[string][]tree.Builtin{
 			makeExpandArrayGenerator,
 			"Returns the input array as a set of rows with an index",
 		),
-	},
-	"crdb_internal.unary_table": {
-		makeGeneratorBuiltin(
+	),
+
+	"crdb_internal.unary_table": makeBuiltin(genProps(),
+		makeGeneratorOverload(
 			tree.ArgTypes{},
 			unaryValueGeneratorType,
 			makeUnaryGenerator,
 			"Produces a virtual table containing a single row with no values.\n\n"+
 				"This function is used only by CockroachDB's developers for testing purposes.",
 		),
-	},
-	"generate_subscripts": {
+	),
+
+	"generate_subscripts": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
 		),
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
 		),
-		makeGeneratorBuiltin(
+		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}, {"reverse", types.Bool}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.\n\n"+
 				"When reverse is true, the series is returned in reverse order.",
 		),
-	},
-	"json_array_elements":       {jsonArrayElementsImpl},
-	"jsonb_array_elements":      {jsonArrayElementsImpl},
-	"json_array_elements_text":  {jsonArrayElementsTextImpl},
-	"jsonb_array_elements_text": {jsonArrayElementsTextImpl},
-	"json_object_keys":          {jsonObjectKeysImpl},
-	"jsonb_object_keys":         {jsonObjectKeysImpl},
-	"json_each":                 {jsonEachImpl},
-	"jsonb_each":                {jsonEachImpl},
-	"json_each_text":            {jsonEachTextImpl},
-	"jsonb_each_text":           {jsonEachTextImpl},
+	),
+
+	"json_array_elements":       makeBuiltin(genProps(), jsonArrayElementsImpl),
+	"jsonb_array_elements":      makeBuiltin(genProps(), jsonArrayElementsImpl),
+	"json_array_elements_text":  makeBuiltin(genProps(), jsonArrayElementsTextImpl),
+	"jsonb_array_elements_text": makeBuiltin(genProps(), jsonArrayElementsTextImpl),
+	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"json_each":                 makeBuiltin(genProps(), jsonEachImpl),
+	"jsonb_each":                makeBuiltin(genProps(), jsonEachImpl),
+	"json_each_text":            makeBuiltin(genProps(), jsonEachTextImpl),
+	"jsonb_each_text":           makeBuiltin(genProps(), jsonEachTextImpl),
 }
 
-func makeGeneratorBuiltin(
+func makeGeneratorOverload(
 	in tree.ArgTypes, ret types.TTable, g generatorFactory, info string,
-) tree.Builtin {
-	return makeGeneratorBuiltinWithReturnType(in, tree.FixedReturnType(ret), g, info)
+) tree.Overload {
+	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
 
-func makeGeneratorBuiltinWithReturnType(
+func makeGeneratorOverloadWithReturnType(
 	in tree.ArgTypes, retType tree.ReturnTyper, g generatorFactory, info string,
-) tree.Builtin {
-	return tree.Builtin{
-		Impure:     true,
-		Class:      tree.GeneratorClass,
+) tree.Overload {
+	return tree.Overload{
 		Types:      in,
 		ReturnType: retType,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -188,8 +201,7 @@ func makeGeneratorBuiltinWithReturnType(
 			}
 			return &tree.DTable{ValueGenerator: gen}, nil
 		},
-		Category: categoryCompatibility,
-		Info:     info,
+		Info: info,
 	}
 }
 
@@ -624,14 +636,14 @@ var (
 	errJSONDeconstructScalarAsObject = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "cannot deconstruct a scalar")
 )
 
-var jsonArrayElementsImpl = makeGeneratorBuiltin(
+var jsonArrayElementsImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonArrayGeneratorType,
 	makeJSONArrayAsJSONGenerator,
 	"Expands a JSON array to a set of JSON values.",
 )
 
-var jsonArrayElementsTextImpl = makeGeneratorBuiltin(
+var jsonArrayElementsTextImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonArrayTextGeneratorType,
 	makeJSONArrayAsTextGenerator,
@@ -729,7 +741,7 @@ func (g *jsonArrayGenerator) Values() tree.Datums {
 }
 
 // jsonObjectKeysImpl is a key generator of a JSON object.
-var jsonObjectKeysImpl = makeGeneratorBuiltin(
+var jsonObjectKeysImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonObjectKeysGeneratorType,
 	makeJSONObjectKeysGenerator,
@@ -790,14 +802,14 @@ func (g *jsonObjectKeysGenerator) Values() tree.Datums {
 	return tree.Datums{tree.NewDString(g.iter.Key())}
 }
 
-var jsonEachImpl = makeGeneratorBuiltin(
+var jsonEachImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonEachGeneratorType,
 	makeJSONEachImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs.",
 )
 
-var jsonEachTextImpl = makeGeneratorBuiltin(
+var jsonEachTextImpl = makeGeneratorOverload(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonEachTextGeneratorType,
 	makeJSONEachTextImplGenerator,

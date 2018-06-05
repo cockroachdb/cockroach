@@ -144,11 +144,12 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 //   2. The return type of overloads is fixed.
 //   3. The return type for min/max aggregates is same as type of argument.
 func TestTypingAggregateAssumptions(t *testing.T) {
-	for name, overloads := range builtins.Aggregates {
+	for _, name := range builtins.AllAggregateBuiltinNames {
 		if name == builtins.AnyNotNull {
 			// any_not_null is treated as a special case.
 			continue
 		}
+		_, overloads := builtins.GetBuiltinProperties(name)
 		for i, overload := range overloads {
 			// Check for basic ambiguity where two different aggregate function
 			// overloads both allow equivalent operand types.

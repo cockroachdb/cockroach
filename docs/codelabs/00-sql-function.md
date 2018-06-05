@@ -20,12 +20,13 @@ the type system and part of the logic test infrastructure.
 
 ### Built-ins
 
-The SQL code lies within the `pkg/sql` directory. The built-in functions reside
-in `pkg/sql/sem/builtins/builtins.go`. A function is described by a `Builtin`
-structure, in `pkg/sql/sem/tree/builtin.go`:
+The SQL code lies within the `pkg/sql` directory. The built-in
+functions reside in `pkg/sql/sem/builtins/builtins.go`. A function is
+described by a `Overload` structure, in
+`pkg/sql/sem/tree/overload_definition.go`:
 
 ```go
-type Builtin struct {
+type Overload struct {
   Types      TypeList
   ReturnType ReturnTyper
   ...
@@ -33,24 +34,32 @@ type Builtin struct {
 }
 ```
 
-`Builtin` contains a number of fields, reflecting the diversity of built-in
-functions. Three important fields for us to pay attention to our the argument
-types (`Types`), the return type (`ReturnType`) and the implementation function
-pointer (`Fn`).
+`Overload` contains a number of fields, reflecting the
+diversity of built-in functions. Three important fields for us to pay
+attention to our the argument types (`Types`), the return type
+(`ReturnType`) and the implementation function pointer (`Fn`).
 
-The SQL execution engine finds the `Builtin` structure given the name of a
-function using the `Builtins` map:
+Multiple function overloads are then grouped into a single "built-in
+definition" (`BuiltinDefinition` in `builtins/builtins.go`), and
+during CockroachDB initialization transformed into a
+`FunctionDefinition` (in `builtins/all_builtins.go`).
+
+For example, `abs` has an overload for each numeric type (`float`,
+`decimal`, and `int`). The type system takes care of selecting the
+correct version of a function given the name and the argument
+types.
+
+The SQL execution engine finds the `BuiltinDefinition` structure
+given the name of a function using the `Builtins` map:
 
 ```go
-var Builtins = map[string][]tree.Builtin{...}
+var Builtins = map[string]BuiltinDefinition{...}
 ```
 
-Notice that this is a map from `string` to a slice of `Builtin`. The slice is
-used to distinguish the "overloads" for a given function. For example, `abs` has
-an overload for each numeric type (`float`, `decimal`, and `int`). The type
-system takes care of selecting the correct version of a function given the name
-and the argument types. To add a new built-in we just have to decide on a name
-and some functionality.
+Notice that this is a map from `string` to `BuiltinDefinition`, which
+contains a slice of `Overload`s via the member field
+`Overloads`. The `Overloads` slice is used to distinguish the
+"overloads" for a given function. 
 
 ### What’s Your Name
 
@@ -64,16 +73,16 @@ organization is purely for readability. We can add our function anywhere, so
 let’s add it right at the top of the definition for simplicity:
 
 ```go
-var Builtins = map[string][]tree.Builtin{
-  "whois": {
-    tree.Builtin{
+var Builtins = map[string]BuiltinDefinition{
+  "whois": makeBuiltin(defProps(),
+    tree.Overload{
       Types:      tree.VariadicType{VarType: types.String},
       ReturnType: tree.FixedReturnType(types.String),
       Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
         return tree.DNull, fmt.Errorf("nothing to see here")
       },
     },
-  },
+  ),
   ...
 ```
 
@@ -337,8 +346,8 @@ check your solution against ours.
   -->
 
   ```diff
-    "whois": {
-      tree.Builtin{
+    "whois": makeBuiltin(defProps(),
+      tree.Overload{
         Types:      tree.VariadicType{VarType: types.String},
         ReturnType: tree.FixedReturnType(types.TypeString),
         Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -370,7 +379,7 @@ check your solution against ours.
           return tree.NewDString(buf.String()), nil
         },
       },
-    },
+    ),
     ...
   ```
   </p>

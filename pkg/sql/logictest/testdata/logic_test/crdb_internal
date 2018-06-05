@@ -292,16 +292,16 @@ node_id  store_id  attrs  used
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
-query error pq: insufficient privilege
+query error insufficient privilege
 select crdb_internal.force_retry(interval '0s')
 
-query error pq: insufficient privilege
+query error insufficient privilege
 select crdb_internal.force_panic('foo')
 
-query error pq: insufficient privilege
+query error insufficient privilege
 select crdb_internal.force_log_fatal('foo')
 
-query error pq: insufficient privilege
+query error insufficient privilege
 select crdb_internal.set_vmodule('')
 
 query error pq: only superusers are allowed to access the node runtime information

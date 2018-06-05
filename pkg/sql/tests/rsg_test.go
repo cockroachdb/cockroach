@@ -182,7 +182,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 type namedBuiltin struct {
 	name    string
-	builtin tree.Builtin
+	builtin tree.Overload
 }
 
 func TestRandomSyntaxFunctions(t *testing.T) {
@@ -193,11 +193,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	namedBuiltinChan := make(chan namedBuiltin)
 	go func() {
 		for {
-			for name, variations := range builtins.Builtins {
+			for _, name := range builtins.AllBuiltinNames {
 				switch strings.ToLower(name) {
 				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal", "pg_sleep":
 					continue
 				}
+				_, variations := builtins.GetBuiltinProperties(name)
 				for _, builtin := range variations {
 					select {
 					case <-done:

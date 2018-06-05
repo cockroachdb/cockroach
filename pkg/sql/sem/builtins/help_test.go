@@ -26,7 +26,7 @@ import (
 
 func TestHelpFunctions(t *testing.T) {
 	// This test checks that all the built-in functions receive contextual help.
-	for f := range Builtins {
+	for f := range builtins {
 		if unicode.IsUpper(rune(f[0])) {
 			continue
 		}

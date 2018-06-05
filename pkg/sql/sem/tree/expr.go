@@ -1105,7 +1105,8 @@ type FuncExpr struct {
 	EscapeSRF bool
 
 	typeAnnotation
-	fn *Builtin
+	fnProps *FunctionProperties
+	fn      *Overload
 }
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
@@ -1116,7 +1117,8 @@ func NewTypedFuncExpr(
 	filter TypedExpr,
 	windowDef *WindowDef,
 	typ types.T,
-	builtin *Builtin,
+	props *FunctionProperties,
+	overload *Overload,
 ) *FuncExpr {
 	f := &FuncExpr{
 		Func:           ref,
@@ -1125,7 +1127,8 @@ func NewTypedFuncExpr(
 		Filter:         filter,
 		WindowDef:      windowDef,
 		typeAnnotation: typeAnnotation{typ: typ},
-		fn:             builtin,
+		fn:             overload,
+		fnProps:        props,
 	}
 	for i, e := range exprs {
 		f.Exprs[i] = e
@@ -1133,9 +1136,9 @@ func NewTypedFuncExpr(
 	return f
 }
 
-// ResolvedBuiltin returns the builtin definition; can only be called after
+// ResolvedOverload returns the builtin definition; can only be called after
 // Resolve (which happens during TypeCheck).
-func (node *FuncExpr) ResolvedBuiltin() *Builtin {
+func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
 }
 
@@ -1180,12 +1183,12 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 // potentially returns a different value when called in the same statement with
 // the same parameters.
 func (node *FuncExpr) IsImpure() bool {
-	return node.fn != nil && node.fn.Impure
+	return node.fnProps != nil && node.fnProps.Impure
 }
 
 // IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlacklist() bool {
-	return node.fn != nil && node.fn.DistsqlBlacklist
+	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
 }
 
 type funcType int

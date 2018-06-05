@@ -179,10 +179,11 @@ func TestInternFuncOpDef(t *testing.T) {
 
 	ttuple1 := types.TTuple{Types: []types.T{types.Int}}
 	ttuple2 := types.TTuple{Types: []types.T{types.Decimal}}
-	funcDef1 := &FuncOpDef{Name: "foo", Type: ttuple1, Overload: &builtins.Builtins["now"][0]}
-	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple2, Overload: &builtins.Builtins["now"][0]}
+	nowProps, nowOvls := builtins.GetBuiltinProperties("now")
+	funcDef1 := &FuncOpDef{Name: "foo", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[0]}
+	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[0]}
 	test(funcDef1, funcDef2, true)
-	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple2, Overload: &builtins.Builtins["now"][1]}
+	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
 	test(funcDef2, funcDef3, false)
 }
 
@@ -431,10 +432,12 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	colList := opt.ColList{3, 2, 1}
 	ordering := props.Ordering{1, -2, 3}
 	op := opt.PlusOp
+	concatProps, concatOvls := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
-		Name:     "concat",
-		Type:     types.String,
-		Overload: &builtins.Builtins["concat"][0],
+		Name:       "concat",
+		Type:       types.String,
+		Properties: concatProps,
+		Overload:   &concatOvls[0],
 	}
 	projectionsOpDef := &ProjectionsOpDef{
 		SynthesizedCols: colList,
@@ -473,10 +476,12 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	colList := opt.ColList{3, 2, 1}
 	ordering := props.Ordering{1, -2, 3}
 	op := opt.PlusOp
+	props, overloads := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
-		Name:     "concat",
-		Type:     types.String,
-		Overload: &builtins.Builtins["concat"][0],
+		Name:       "concat",
+		Type:       types.String,
+		Properties: props,
+		Overload:   &overloads[0],
 	}
 	projectionsOpDef := &ProjectionsOpDef{
 		SynthesizedCols: colList,
