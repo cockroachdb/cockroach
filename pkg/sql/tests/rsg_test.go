@@ -22,8 +22,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,14 +36,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
-	flagRSGTime       = flag.Duration("rsg", 0, "random syntax generator test duration")
-	flagRSGGoRoutines = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGTime        = flag.Duration("rsg", 0, "random syntax generator test duration")
+	flagRSGGoRoutines  = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
 )
 
 func parseStatementList(sql string) (tree.StatementList, error) {
@@ -74,15 +76,56 @@ func verifyFormat(sql string) error {
 type verifyFormatDB struct {
 	db              *gosql.DB
 	verifyFormatErr error
+	mu              struct {
+		syncutil.Mutex
+		// active holds the currently executing statements.
+		active map[string]int
+	}
 }
 
-func (db *verifyFormatDB) exec(sql string) error {
+// Incr records sql in the active map and returns a func to decrement it.
+func (db *verifyFormatDB) Incr(sql string) func() {
+	db.mu.Lock()
+	if db.mu.active == nil {
+		db.mu.active = make(map[string]int)
+	}
+	db.mu.active[sql]++
+	db.mu.Unlock()
+
+	return func() {
+		db.mu.Lock()
+		db.mu.active[sql]--
+		if db.mu.active[sql] == 0 {
+			delete(db.mu.active, sql)
+		}
+		db.mu.Unlock()
+	}
+}
+
+func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 	if err := verifyFormat(sql); err != nil {
 		db.verifyFormatErr = err
 		return err
 	}
-	_, err := db.db.Exec(sql)
-	return err
+
+	defer db.Incr(sql)()
+
+	funcdone := make(chan error, 1)
+	go func() {
+		_, err := db.db.ExecContext(ctx, sql)
+		funcdone <- err
+	}()
+	select {
+	case err := <-funcdone:
+		return errors.Wrap(err, sql)
+	case <-time.After(*flagRSGExecTimeout):
+		db.mu.Lock()
+		defer db.mu.Unlock()
+		b := make([]byte, 1024*1024)
+		n := runtime.Stack(b, true)
+		fmt.Printf("%s\n", b[:n])
+		panic(errors.Errorf("timeout: %q. currently executing: %v", sql, db.mu.active))
+	}
 }
 
 func TestRandomSyntaxGeneration(t *testing.T) {
@@ -90,7 +133,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -100,9 +143,6 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "BEGIN") || strings.HasPrefix(s, "START") {
 			return errors.New("transactions are unsupported")
 		}
-		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
-			return errors.New("TODO(mjibson): figure out why these run slowly, may be a bug")
-		}
 		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
 			return errors.New("setting session characteristics is unsupported")
 		}
@@ -111,10 +151,10 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
-		if err := db.exec(`CREATE DATABASE IF NOT EXISTS ident`); err != nil {
-			panic(err)
+		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
+			return err
 		}
-		return db.exec(s)
+		return db.exec(ctx, s)
 	})
 }
 
@@ -123,9 +163,9 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, func(db *verifyFormatDB) error {
-		return db.exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
-	}, func(db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, func(ctx context.Context, db *verifyFormatDB) error {
+		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 30)
 		var where, from string
 		// Only generate complex clauses half the time.
@@ -136,7 +176,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 			from = "FROM ident"
 		}
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
-		return db.exec(s)
+		return db.exec(ctx, s)
 	})
 }
 
@@ -169,7 +209,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		}
 	}()
 
-	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
@@ -208,16 +248,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			limit = " LIMIT 100"
 		}
 		s := fmt.Sprintf("SELECT %s(%s) %s", nb.name, strings.Join(args, ", "), limit)
-		funcdone := make(chan error, 1)
-		go func() {
-			funcdone <- db.exec(s)
-		}()
-		select {
-		case err := <-funcdone:
-			return err
-		case <-time.After(time.Second * 10):
-			panic(fmt.Sprintf("func exec timeout: %s", s))
-		}
+		return db.exec(ctx, s)
 	})
 }
 
@@ -226,10 +257,10 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
-		return db.exec(s)
+		return db.exec(ctx, s)
 	})
 }
 
@@ -239,22 +270,25 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 // if the statement executed successfully. This is used to verify that at
 // least 1 success occurs (otherwise it is likely a bad test).
 func testRandomSyntax(
-	t *testing.T, setup func(*verifyFormatDB) error, fn func(*verifyFormatDB, *rsg.RSG) error,
+	t *testing.T,
+	setup func(context.Context, *verifyFormatDB) error,
+	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
 	}
+	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "ident"
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	s, rawDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 
 	if setup != nil {
-		err := setup(db)
+		err := setup(ctx, db)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -273,20 +307,41 @@ func testRandomSyntax(
 	time.AfterFunc(*flagRSGTime, func() {
 		close(done)
 	})
-	var wg sync.WaitGroup
 	var countsMu struct {
 		syncutil.Mutex
 		total, success int
 	}
-	worker := func() {
-		defer wg.Done()
+	ctx, cancel := context.WithCancel(ctx)
+	// Print status updates. We want this go routine to continue until all the
+	// workers are done, even if their ctx has been canceled, so the ctx for
+	// this func is a separate one with its own cancel.
+	go func(ctx context.Context) {
+		start := timeutil.Now()
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
 				return
+			case <-time.After(5 * time.Second):
+			}
+			countsMu.Lock()
+			fmt.Printf("%v of %v: %d executions, %d successful\n",
+				timeutil.Since(start).Round(time.Second),
+				*flagRSGTime,
+				countsMu.total,
+				countsMu.success,
+			)
+			countsMu.Unlock()
+		}
+	}(ctx)
+	ctx, timeoutCancel := context.WithTimeout(ctx, *flagRSGTime)
+	err = ctxgroup.GroupWorkers(ctx, *flagRSGGoRoutines, func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
 			default:
 			}
-			err := fn(db, r)
+			err := fn(ctx, db, r)
 			countsMu.Lock()
 			countsMu.total++
 			if err == nil {
@@ -294,16 +349,18 @@ func testRandomSyntax(
 			}
 			countsMu.Unlock()
 		}
-	}
-	wg.Add(*flagRSGGoRoutines)
-	for i := 0; i < *flagRSGGoRoutines; i++ {
-		go worker()
-	}
-	wg.Wait()
+	})
+	timeoutCancel()
+	// cancel the timer printing's ctx
+	cancel()
 	t.Logf("%d executions, %d successful", countsMu.total, countsMu.success)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if countsMu.success == 0 {
 		t.Fatal("0 successful executions")
-	} else if db.verifyFormatErr != nil {
+	}
+	if db.verifyFormatErr != nil {
 		t.Fatal(db.verifyFormatErr)
 	}
 }
