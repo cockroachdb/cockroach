@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -347,7 +346,7 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		jsonKeyRaw := make([]interface{}, len(keyColumns))
 		jsonValueRaw := make(map[string]interface{}, len(row))
 		for i := range row {
-			jsonValueRaw[tableDesc.Columns[i].Name], err = builtins.AsJSON(row[i])
+			jsonValueRaw[tableDesc.Columns[i].Name], err = tree.AsJSON(row[i])
 			if err != nil {
 				return err
 			}

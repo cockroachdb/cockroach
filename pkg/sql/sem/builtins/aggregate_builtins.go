@@ -1502,7 +1502,7 @@ func newJSONAggregate(params []types.T, evalCtx *tree.EvalContext) tree.Aggregat
 
 // Add accumulates the transformed json into the JSON array.
 func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
-	j, err := AsJSON(datum)
+	j, err := tree.AsJSON(datum)
 	if err != nil {
 		return err
 	}
