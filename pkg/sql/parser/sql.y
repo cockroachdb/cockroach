@@ -475,7 +475,8 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
 
-%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
+%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
+%token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
 %token <str> GIN GRANT GRANTS GREATEST GROUP GROUPING
@@ -511,7 +512,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE READ REAL RECURSIVE REF REFERENCES
+%token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str> REMOVE_PATH RENAME REPEATABLE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
@@ -2839,12 +2840,29 @@ show_histogram_stmt:
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL
-// %Text: SHOW BACKUP <location>
+// %Text: SHOW BACKUP [FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
   SHOW BACKUP string_or_placeholder
   {
-    $$.val = &tree.ShowBackup{Path: $3.expr()}
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupDefaultDetails,
+      Path:    $3.expr(),
+    }
+  }
+| SHOW BACKUP RANGES string_or_placeholder
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupRangeDetails,
+      Path:    $4.expr(),
+    }
+  }
+| SHOW BACKUP FILES string_or_placeholder
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupFileDetails,
+      Path:    $4.expr(),
+    }
   }
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
@@ -7921,6 +7939,7 @@ unreserved_keyword:
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
 | EXPORT
+| FILES
 | FILTER
 | FIRST
 | FLOAT4
@@ -7997,6 +8016,7 @@ unreserved_keyword:
 | QUERIES
 | QUERY
 | RANGE
+| RANGES
 | READ
 | RECURSIVE
 | REF
