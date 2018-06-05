@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE xyz (

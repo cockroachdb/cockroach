@@ -1,4 +1,4 @@
-# LogicTest: 5node 5node-distsql-opt
+# LogicTest: 5node-local 5node-dist-opt
 
 statement ok
 CREATE TABLE t (k1 INT, k2 INT, v INT, w INT, PRIMARY KEY (k1, k2))

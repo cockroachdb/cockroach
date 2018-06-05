@@ -1,4 +1,4 @@
-# LogicTest: default opt
+# LogicTest: local local-opt
 
 # Verify information_schema database handles mutation statements correctly.
 

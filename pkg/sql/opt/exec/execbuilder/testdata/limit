@@ -1,4 +1,4 @@
-# LogicTest: opt
+# LogicTest: local-opt
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))

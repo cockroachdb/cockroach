@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 subtest generate_series
 

@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale

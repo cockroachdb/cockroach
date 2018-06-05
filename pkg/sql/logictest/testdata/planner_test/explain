@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE

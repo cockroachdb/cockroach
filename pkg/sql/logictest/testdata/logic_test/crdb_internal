@@ -1,4 +1,4 @@
-# LogicTest: default opt distsql distsql-opt distsql-metadata
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal

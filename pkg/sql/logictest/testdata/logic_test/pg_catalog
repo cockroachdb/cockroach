@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts
 
 # Verify pg_catalog database handles mutation statements correctly.
 
