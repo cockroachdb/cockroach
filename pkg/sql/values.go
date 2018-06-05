@@ -64,6 +64,14 @@ func (p *planner) Values(
 
 	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
+
+	// Ensure there are no special functions in the clause.
+	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
+
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
 			return nil, newValuesListLenErr(e, a)
@@ -74,16 +82,12 @@ func (p *planner) Values(
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				expr, "VALUES", p.SessionData().SearchPath,
-			); err != nil {
-				return nil, err
-			}
-
 			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
+
+			// Clear the properties so we can check them below.
 			typedExpr, err := p.analyzeExpr(ctx, expr, nil, tree.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
