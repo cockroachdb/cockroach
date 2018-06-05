@@ -7,7 +7,13 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "testutils.h"
+#include <experimental/filesystem>
+#include <gtest/gtest.h>
+#include <stdlib.h>
+#include <string.h>
 #include "crypto_utils.h"
+
+namespace testutils {
 
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
   int64_t now;
@@ -38,3 +44,37 @@ std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::GetKey(const std::string&
   }
   return nullptr;
 }
+
+TempDirHandler::TempDirHandler() {}
+
+TempDirHandler::~TempDirHandler() {
+  if (tmp_dir_ == "") {
+    return;
+  }
+  std::experimental::filesystem::remove_all(tmp_dir_);
+}
+
+bool TempDirHandler::Init() {
+  auto fs_dir = std::experimental::filesystem::temp_directory_path() / "tmpccl.XXXXXX";
+
+  // mkdtemp needs a []char to modify.
+  char* tmpl = new char[strlen(fs_dir.c_str())];
+  strcpy(tmpl, fs_dir.c_str());
+
+  auto tmp_c_dir = mkdtemp(tmpl);
+  if (tmp_c_dir != NULL) {
+    tmp_dir_ = std::string(tmp_c_dir);
+  } else {
+    std::cerr << "Error creating temp directory" << std::endl;
+  }
+
+  delete tmpl;
+  return (tmp_c_dir != NULL);
+}
+
+std::string TempDirHandler::Path(const std::string& subpath) {
+  auto fullpath = std::experimental::filesystem::path(tmp_dir_) / subpath;
+  return fullpath.string();
+}
+
+}  // namespace testutils

@@ -15,6 +15,8 @@
 
 namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
+namespace testutils {
+
 // MakeAES<size>Key creates a SecretKeyObject with a key of the specified size.
 // It needs an Env for the current time.
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env);
@@ -32,3 +34,25 @@ class MemKeyManager : public KeyManager {
  private:
   std::unique_ptr<enginepbccl::SecretKey> key_;
 };
+
+// TempDirHandler will create a temporary directory at initialization time
+// and destroy it and all its contents at destruction time.
+class TempDirHandler {
+ public:
+  // Directory name will be /tmp/tmp-ccl-XXXXXX
+  TempDirHandler();
+  ~TempDirHandler();
+
+  // Initialize the temp directory. Returns true on success.
+  // Must be called and checked before any other uses of this class.
+  bool Init();
+
+  // Path takes a file or directory name and returns its full path
+  // inside the tmp directory.
+  std::string Path(const std::string& subpath);
+
+ private:
+  std::string tmp_dir_;
+};
+
+}  // namespace testutils

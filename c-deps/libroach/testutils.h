@@ -71,4 +71,12 @@ class FakeTimeEnv : public rocksdb::EnvWrapper {
     EXPECT_TRUE(s.ok()) << s.getState();\
   }
 
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp full match).
+#define ASSERT_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg)); \
+    ASSERT_TRUE(s.ok()) << s.getState();\
+  }
+
 // clang-format on

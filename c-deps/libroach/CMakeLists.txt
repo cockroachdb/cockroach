@@ -93,6 +93,7 @@ set(tests
   file_registry_test.cc
   merge_test.cc
   ccl/db_test.cc
+  ccl/encrypted_env_test.cc
   ccl/key_manager_test.cc
 )
 
@@ -127,6 +128,7 @@ foreach(tsrc ${tests})
     add_executable(${tname} ${tsrc} testutils.cc ccl/testutils.cc)
     target_link_libraries(${tname}
       roachccl
+      stdc++fs
       ${CRYPTOPP_LIB}
     )
     target_include_directories(${tname}
