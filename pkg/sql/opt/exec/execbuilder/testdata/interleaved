@@ -1,4 +1,4 @@
-# LogicTest: opt
+# LogicTest: local-opt
 
 # ------------------------------------------------------------------------------
 # Test index selection for deeply interleaved tables.

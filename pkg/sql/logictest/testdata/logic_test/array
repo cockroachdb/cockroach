@@ -1,4 +1,4 @@
-# LogicTest: default opt distsql distsql-metadata distsql-opt
+# LogicTest: local local-opt fakedist fakedist-metadata fakedist-opt
 
 # array construction
 

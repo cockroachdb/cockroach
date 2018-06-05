@@ -1,4 +1,4 @@
-# LogicTest: opt
+# LogicTest: local-opt
 
 statement ok
 CREATE TABLE uniontest (

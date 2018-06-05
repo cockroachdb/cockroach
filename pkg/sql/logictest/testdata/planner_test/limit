@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))

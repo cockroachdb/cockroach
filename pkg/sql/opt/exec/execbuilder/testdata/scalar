@@ -1,4 +1,4 @@
-# LogicTest: opt
+# LogicTest: local-opt
 #
 # This file tests that we build scalar expressions correctly. We do this by
 # putting expressions inside projections and checking that they roundtrip

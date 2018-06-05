@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts
 
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY, b INT)

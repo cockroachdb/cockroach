@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 statement ok
 CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)

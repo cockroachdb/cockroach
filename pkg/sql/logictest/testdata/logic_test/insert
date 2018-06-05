@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts
 
 statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')

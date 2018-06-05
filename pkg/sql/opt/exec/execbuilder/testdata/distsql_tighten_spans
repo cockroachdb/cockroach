@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql-opt
+# LogicTest: 5node-dist-opt
 
 # This test verifies that we correctly tighten spans during index selection as
 # well as after partitioning spans in distsql.
