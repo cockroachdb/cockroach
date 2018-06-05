@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/golang/protobuf/jsonpb"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -477,6 +478,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   flags               STRING NOT NULL,
   key                 STRING NOT NULL,
   anonymized          STRING,
+  most_recent_plan    STRING,
   count               INT NOT NULL,
   first_attempt_count INT NOT NULL,
   max_retries         INT NOT NULL,
@@ -518,6 +520,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		sqlStats.Unlock()
 		sort.Strings(appNames)
 
+		marshaller := jsonpb.Marshaler{}
+
 		// Now retrieve the application stats proper.
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
@@ -546,12 +550,22 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if s.data.LastErr != "" {
 					errString = tree.NewDString(s.data.LastErr)
 				}
+
+				// serialize most recent plan
+				mrp := s.data.MostRecentPlan
+				// TODO(vilterp): use the JSON type and JSON datum builder instead?
+				planJSON, mErr := marshaller.MarshalToString(&mrp)
+				if mErr != nil {
+					return mErr
+				}
+
 				err := addRow(
 					nodeID,
 					tree.NewDString(appName),
 					tree.NewDString(stmtKey.flags()),
 					tree.NewDString(stmtKey.stmt),
 					anonymized,
+					tree.NewDString(planJSON),
 					tree.NewDInt(tree.DInt(s.data.Count)),
 					tree.NewDInt(tree.DInt(s.data.FirstAttemptCount)),
 					tree.NewDInt(tree.DInt(s.data.MaxRetries)),
@@ -577,6 +591,79 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 		return nil
 	},
+}
+
+type planNodeStack struct {
+	stack []*roachpb.PlanNode
+}
+
+func (ns *planNodeStack) push(node *roachpb.PlanNode) {
+	ns.stack = append(ns.stack, node)
+}
+
+func (ns *planNodeStack) pop() *roachpb.PlanNode {
+	if len(ns.stack) == 0 {
+		return nil
+	}
+	stackTop := ns.stack[len(ns.stack)-1]
+	ns.stack = ns.stack[0 : len(ns.stack)-1]
+	return stackTop
+}
+
+func (ns *planNodeStack) peek() *roachpb.PlanNode {
+	if len(ns.stack) == 0 {
+		return nil
+	}
+	return ns.stack[len(ns.stack)-1]
+}
+
+func (ns *planNodeStack) len() int {
+	return len(ns.stack)
+}
+
+func getPlanTree(ctx context.Context, top planTop) *roachpb.PlanNode {
+	nodeStack := planNodeStack{}
+
+	observer := planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			nodeStack.push(&roachpb.PlanNode{
+				Name: nodeName,
+			})
+			return true, nil
+		},
+		expr: func(nodeName, fieldName string, n int, expr tree.Expr) {
+			fmt.Println("EXPR: nodeName", nodeName, "fieldName", fieldName, "n", n, "expr", expr)
+			if expr == nil {
+				return
+			}
+			stackTop := nodeStack.peek()
+			stackTop.Attrs = append(stackTop.Attrs, &roachpb.PlanNode_Attr{
+				Key:   fieldName,
+				Value: expr.String(),
+			})
+		},
+		attr: func(nodeName, fieldName, attr string) {
+			stackTop := nodeStack.peek()
+			stackTop.Attrs = append(stackTop.Attrs, &roachpb.PlanNode_Attr{
+				Key:   fieldName,
+				Value: attr,
+			})
+		},
+		leaveNode: func(nodeName string, plan planNode) error {
+			if nodeStack.len() == 1 {
+				return nil
+			}
+			poppedNode := nodeStack.pop()
+			newStackTop := nodeStack.peek()
+			newStackTop.Children = append(newStackTop.Children, poppedNode)
+			return nil
+		},
+	}
+	// TODO(vilterp): subqueries
+	if err := walkPlan(ctx, top.plan, observer); err != nil {
+		panic(fmt.Sprintf("error while walking plan to save it to statement stats: %s", err.Error()))
+	}
+	return nodeStack.peek()
 }
 
 // crdbInternalSessionTraceTable exposes the latest trace collected on this

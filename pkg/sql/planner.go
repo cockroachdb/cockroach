@@ -552,6 +552,7 @@ type sqlStatsCollector interface {
 	// RecordStatement record stats for one statement.
 	RecordStatement(
 		stmt Statement,
+		plan planTop,
 		distSQLUsed bool,
 		automaticRetryCount int,
 		numRows int,
