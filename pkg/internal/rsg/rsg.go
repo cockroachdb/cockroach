@@ -43,15 +43,17 @@ type RSG struct {
 
 // NewRSG creates a random syntax generator from the given random seed and
 // yacc file.
-func NewRSG(seed int64, y string) (*RSG, error) {
+func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 	tree, err := yacc.Parse("sql", y)
 	if err != nil {
 		return nil, err
 	}
 	rsg := RSG{
 		src:   rand.New(rand.NewSource(seed)),
-		seen:  make(map[string]bool),
 		prods: make(map[string][]*yacc.ExpressionNode),
+	}
+	if !allowDuplicates {
+		rsg.seen = make(map[string]bool)
 	}
 	for _, prod := range tree.Productions {
 		rsg.prods[prod.Name] = prod.Expressions
@@ -65,25 +67,30 @@ func NewRSG(seed int64, y string) (*RSG, error) {
 // goroutines. If Generate is called more times than it can generate unique
 // output, it will block forever.
 func (r *RSG) Generate(root string, depth int) string {
-	for {
+	for i := 0; i < 100000; i++ {
 		s := strings.Join(r.generate(root, depth), " ")
-		r.lock.Lock()
-		if !r.seen[s] {
-			r.seen[s] = true
-		} else {
-			s = ""
+		if r.seen != nil {
+			r.lock.Lock()
+			if !r.seen[s] {
+				r.seen[s] = true
+			} else {
+				s = ""
+			}
+			r.lock.Unlock()
 		}
-		r.lock.Unlock()
 		if s != "" {
 			s = strings.Replace(s, "_LA", "", -1)
 			s = strings.Replace(s, " AS OF SYSTEM TIME \"string\"", "", -1)
 			return s
 		}
 	}
+	panic("couldn't find unique string")
 }
 
 func (r *RSG) generate(root string, depth int) []string {
-	var ret []string
+	// Initialize to an empty slice instead of nil because nil is the signal
+	// that the depth has been exceeded.
+	ret := make([]string, 0)
 	prods := r.prods[root]
 	if len(prods) == 0 {
 		return []string{root}
