@@ -1268,6 +1268,7 @@ CockroachDB supports the following flags:
 
 	"current_date": {
 		tree.Builtin{
+			Impure:     true,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Date),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
