@@ -87,6 +87,7 @@ func (p *planner) changePrivileges(
 
 	// First, update the descriptors. We want to catch all errors before
 	// we update them in KV below.
+	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return nil, err
@@ -107,21 +108,19 @@ func (p *planner) changePrivileges(
 			if err := d.Validate(); err != nil {
 				return nil, err
 			}
+			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
+			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 
 		case *sqlbase.TableDescriptor:
-			if err := d.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-				return nil, err
+			if !d.Dropped() {
+				if err := p.writeSchemaChangeToBatch(ctx, d, sqlbase.InvalidMutationID, b); err != nil {
+					return nil, err
+				}
 			}
-			p.notifySchemaChange(d, sqlbase.InvalidMutationID)
 		}
 	}
 
 	// Now update the descriptors transactionally.
-	b := p.txn.NewBatch()
-	for _, descriptor := range descriptors {
-		descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
-		b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
-	}
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}

@@ -669,12 +669,38 @@ func (p *planner) writeSchemaChange(
 	return p.writeTableDesc(ctx, tableDesc, mutationID)
 }
 
+func (p *planner) writeSchemaChangeToBatch(
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	mutationID sqlbase.MutationID,
+	b *client.Batch,
+) error {
+	if tableDesc.Dropped() {
+		// We don't allow schema changes on a dropped table.
+		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+	}
+	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b)
+}
+
 func (p *planner) writeDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	return p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) writeTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) error {
+	b := p.txn.NewBatch()
+	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
+		return err
+	}
+	return p.txn.Run(ctx, b)
+}
+
+func (p *planner) writeTableDescToBatch(
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	mutationID sqlbase.MutationID,
+	b *client.Batch,
 ) error {
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
@@ -703,7 +729,8 @@ func (p *planner) writeTableDesc(
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
 
-	return p.txn.Put(ctx, descKey, descVal)
+	b.Put(descKey, descVal)
+	return nil
 }
 
 // bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.
