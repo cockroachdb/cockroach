@@ -96,8 +96,21 @@ range_max_bytes: %d
 		// NB: workload init does not wait for upreplication after creating the
 		// schema but before populating it. This is ok because upreplication
 		// occurs much faster than we can actually create a large range.
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
-			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
+		//
+		// NB: the bespoke timeout mechanism below serves to diagnose #26109.
+		// We don't get the logs if the test fails due to GCE removing the
+		// hardware out from under us.
+		done := make(chan struct{})
+		go func() {
+			c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
+				"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Hour):
+			t.Fatal("test got stuck while initializing dataset")
+		}
 
 		t.Status("checking for single range")
 		rangeCount := func() int {
