@@ -27,120 +27,224 @@ import (
 var (
 	// Replica metrics.
 	metaReplicaCount = metric.Metadata{
-		Name: "replicas",
-		Help: "Number of replicas"}
+		Name:        "replicas",
+		Help:        "Number of replicas",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReservedReplicaCount = metric.Metadata{
-		Name: "replicas.reserved",
-		Help: "Number of replicas reserved for snapshots"}
+		Name:        "replicas.reserved",
+		Help:        "Number of replicas reserved for snapshots",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLeaderCount = metric.Metadata{
-		Name: "replicas.leaders",
-		Help: "Number of raft leaders"}
+		Name:        "replicas.leaders",
+		Help:        "Number of raft leaders",
+		Unit:        "Raft Leaders",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
-		Name: "replicas.leaders_not_leaseholders",
-		Help: "Number of replicas that are Raft leaders whose range lease is held by another store",
+		Name:        "replicas.leaders_not_leaseholders",
+		Help:        "Number of replicas that are Raft leaders whose range lease is held by another store",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
 	}
 	metaLeaseHolderCount = metric.Metadata{
-		Name: "replicas.leaseholders",
-		Help: "Number of lease holders"}
+		Name:        "replicas.leaseholders",
+		Help:        "Number of lease holders",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaQuiescentCount = metric.Metadata{
-		Name: "replicas.quiescent",
-		Help: "Number of quiesced replicas"}
+		Name:        "replicas.quiescent",
+		Help:        "Number of quiesced replicas",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Replica CommandQueue metrics. Max size metrics track the maximum value
 	// seen for all replicas during a single replica scan.
 	metaMaxCommandQueueSize = metric.Metadata{
-		Name: "replicas.commandqueue.maxsize",
-		Help: "Largest number of commands in any CommandQueue"}
+		Name:        "replicas.commandqueue.maxsize",
+		Help:        "Largest number of commands in any CommandQueue",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaMaxCommandQueueWriteCount = metric.Metadata{
-		Name: "replicas.commandqueue.maxwritecount",
-		Help: "Largest number of read-write commands in any CommandQueue"}
+		Name:        "replicas.commandqueue.maxwritecount",
+		Help:        "Largest number of read-write commands in any CommandQueue",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaMaxCommandQueueReadCount = metric.Metadata{
-		Name: "replicas.commandqueue.maxreadcount",
-		Help: "Largest number of read-only commands in any CommandQueue"}
+		Name:        "replicas.commandqueue.maxreadcount",
+		Help:        "Largest number of read-only commands in any CommandQueue",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaMaxCommandQueueTreeSize = metric.Metadata{
-		Name: "replicas.commandqueue.maxtreesize",
-		Help: "Largest number of intervals in any CommandQueue's interval tree"}
+		Name:        "replicas.commandqueue.maxtreesize",
+		Help:        "Largest number of intervals in any CommandQueue's interval tree",
+		Unit:        "Intervals",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaMaxCommandQueueOverlaps = metric.Metadata{
-		Name: "replicas.commandqueue.maxoverlaps",
-		Help: "Largest number of overlapping commands seen when adding to any CommandQueue"}
+		Name:        "replicas.commandqueue.maxoverlaps",
+		Help:        "Largest number of overlapping commands seen when adding to any CommandQueue",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaCombinedCommandQueueSize = metric.Metadata{
-		Name: "replicas.commandqueue.combinedqueuesize",
-		Help: "Number of commands in all CommandQueues combined"}
+		Name:        "replicas.commandqueue.combinedqueuesize",
+		Help:        "Number of commands in all CommandQueues combined",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaCombinedCommandWriteCount = metric.Metadata{
-		Name: "replicas.commandqueue.combinedwritecount",
-		Help: "Number of read-write commands in all CommandQueues combined"}
+		Name:        "replicas.commandqueue.combinedwritecount",
+		Help:        "Number of read-write commands in all CommandQueues combined",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaCombinedCommandReadCount = metric.Metadata{
-		Name: "replicas.commandqueue.combinedreadcount",
-		Help: "Number of read-only commands in all CommandQueues combined"}
+		Name:        "replicas.commandqueue.combinedreadcount",
+		Help:        "Number of read-only commands in all CommandQueues combined",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Range metrics.
 	metaRangeCount = metric.Metadata{
-		Name: "ranges",
-		Help: "Number of ranges"}
+		Name:        "ranges",
+		Help:        "Number of ranges",
+		Unit:        "Ranges",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaUnavailableRangeCount = metric.Metadata{
-		Name: "ranges.unavailable",
-		Help: "Number of ranges with fewer live replicas than needed for quorum"}
+		Name:        "ranges.unavailable",
+		Help:        "Number of ranges with fewer live replicas than needed for quorum",
+		Unit:        "Ranges",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaUnderReplicatedRangeCount = metric.Metadata{
-		Name: "ranges.underreplicated",
-		Help: "Number of ranges with fewer live replicas than the replication target"}
+		Name:        "ranges.underreplicated",
+		Help:        "Number of ranges with fewer live replicas than the replication target",
+		Unit:        "Ranges",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
-		Name: "leases.success",
-		Help: "Number of successful lease requests"}
+		Name:        "leases.success",
+		Help:        "Number of successful lease requests",
+		Unit:        "Lease Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaLeaseRequestErrorCount = metric.Metadata{
-		Name: "leases.error",
-		Help: "Number of failed lease requests"}
+		Name:        "leases.error",
+		Help:        "Number of failed lease requests",
+		Unit:        "Lease Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaLeaseTransferSuccessCount = metric.Metadata{
-		Name: "leases.transfers.success",
-		Help: "Number of successful lease transfers"}
+		Name:        "leases.transfers.success",
+		Help:        "Number of successful lease transfers",
+		Unit:        "Lease Transfers",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaLeaseTransferErrorCount = metric.Metadata{
-		Name: "leases.transfers.error",
-		Help: "Number of failed lease transfers"}
+		Name:        "leases.transfers.error",
+		Help:        "Number of failed lease transfers",
+		Unit:        "Lease Transfers",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaLeaseExpirationCount = metric.Metadata{
-		Name: "leases.expiration",
-		Help: "Number of replica leaseholders using expiration-based leases"}
+		Name:        "leases.expiration",
+		Help:        "Number of replica leaseholders using expiration-based leases",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaLeaseEpochCount = metric.Metadata{
-		Name: "leases.epoch",
-		Help: "Number of replica leaseholders using epoch-based leases"}
+		Name:        "leases.epoch",
+		Help:        "Number of replica leaseholders using epoch-based leases",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
-		Name: "livebytes",
-		Help: "Number of bytes of live data (keys plus values)"}
+		Name:        "livebytes",
+		Help:        "Number of bytes of live data (keys plus values)",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaKeyBytes = metric.Metadata{
-		Name: "keybytes",
-		Help: "Number of bytes taken up by keys"}
+		Name:        "keybytes",
+		Help:        "Number of bytes taken up by keys",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaValBytes = metric.Metadata{
-		Name: "valbytes",
-		Help: "Number of bytes taken up by values"}
+		Name:        "valbytes",
+		Help:        "Number of bytes taken up by values",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaTotalBytes = metric.Metadata{
-		Name: "totalbytes",
-		Help: "Total number of bytes taken up by keys and values including non-live data"}
+		Name:        "totalbytes",
+		Help:        "Total number of bytes taken up by keys and values including non-live data",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaIntentBytes = metric.Metadata{
-		Name: "intentbytes",
-		Help: "Number of bytes in intent KV pairs"}
+		Name:        "intentbytes",
+		Help:        "Number of bytes in intent KV pairs",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaLiveCount = metric.Metadata{
-		Name: "livecount",
-		Help: "Count of live keys"}
+		Name:        "livecount",
+		Help:        "Count of live keys",
+		Unit:        "Keys",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaKeyCount = metric.Metadata{
-		Name: "keycount",
-		Help: "Count of all keys"}
+		Name:        "keycount",
+		Help:        "Count of all keys",
+		Unit:        "Keys",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaValCount = metric.Metadata{
-		Name: "valcount",
-		Help: "Count of all values"}
+		Name:        "valcount",
+		Help:        "Count of all values",
+		Unit:        "MVCC Values",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaIntentCount = metric.Metadata{
-		Name: "intentcount",
-		Help: "Count of intent keys"}
+		Name:        "intentcount",
+		Help:        "Count of intent keys",
+		Unit:        "Keys",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaIntentAge = metric.Metadata{
-		Name: "intentage",
-		Help: "Cumulative age of intents in seconds"}
+		Name:        "intentage",
+		Help:        "Cumulative age of intents in seconds",
+		Unit:        "Age",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaGcBytesAge = metric.Metadata{
-		Name: "gcbytesage",
-		Help: "Cumulative age of non-live data in seconds"}
+		Name:        "gcbytesage",
+		Help:        "Cumulative age of non-live data in seconds",
+		Unit:        "Age",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaLastUpdateNanos = metric.Metadata{
-		Name: "lastupdatenanos",
-		Help: "Time in nanoseconds since Unix epoch at which bytes/keys/intents metrics were last updated"}
+		Name:        "lastupdatenanos",
+		Help:        "Time in nanoseconds since Unix epoch at which bytes/keys/intents metrics were last updated",
+		Unit:        "Last Update",
+		DisplayUnit: metric.DisplayUnit_TIMESTAMP,
+	}
 
 	// Disk usage diagram (CR=Cockroach):
 	//                            ---------------------------------
@@ -152,337 +256,645 @@ var (
 	//               "available":                         |=======|
 	// "usable" (computed in UI):               |=================|
 	metaCapacity = metric.Metadata{
-		Name: "capacity",
-		Help: "Total storage capacity"}
+		Name:        "capacity",
+		Help:        "Total storage capacity",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaAvailable = metric.Metadata{
-		Name: "capacity.available",
-		Help: "Available storage capacity"}
+		Name:        "capacity.available",
+		Help:        "Available storage capacity",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaUsed = metric.Metadata{
-		Name: "capacity.used",
-		Help: "Used storage capacity"}
+		Name:        "capacity.used",
+		Help:        "Used storage capacity",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 
 	metaReserved = metric.Metadata{
-		Name: "capacity.reserved",
-		Help: "Capacity reserved for snapshots"}
+		Name:        "capacity.reserved",
+		Help:        "Capacity reserved for snapshots",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaSysBytes = metric.Metadata{
-		Name: "sysbytes",
-		Help: "Number of bytes in system KV pairs"}
+		Name:        "sysbytes",
+		Help:        "Number of bytes in system KV pairs",
+		Unit:        "Storage",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaSysCount = metric.Metadata{
-		Name: "syscount",
-		Help: "Count of system KV pairs"}
+		Name:        "syscount",
+		Help:        "Count of system KV pairs",
+		Unit:        "Keys",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
 	metaAverageWritesPerSecond = metric.Metadata{
-		Name: "rebalancing.writespersecond",
-		Help: "Number of keys written (i.e. applied by raft) per second to the store, averaged over a large time period as used in rebalancing decisions"}
+		Name:        "rebalancing.writespersecond",
+		Help:        "Number of keys written (i.e. applied by raft) per second to the store, averaged over a large time period as used in rebalancing decisions",
+		Unit:        "Keys/Sec",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// RocksDB metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
-		Name: "rocksdb.block.cache.hits",
-		Help: "Count of block cache hits"}
+		Name:        "rocksdb.block.cache.hits",
+		Help:        "Count of block cache hits",
+		Unit:        "Cache Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbBlockCacheMisses = metric.Metadata{
-		Name: "rocksdb.block.cache.misses",
-		Help: "Count of block cache misses"}
+		Name:        "rocksdb.block.cache.misses",
+		Help:        "Count of block cache misses",
+		Unit:        "Cache Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbBlockCacheUsage = metric.Metadata{
-		Name: "rocksdb.block.cache.usage",
-		Help: "Bytes used by the block cache"}
+		Name:        "rocksdb.block.cache.usage",
+		Help:        "Bytes used by the block cache",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaRdbBlockCachePinnedUsage = metric.Metadata{
-		Name: "rocksdb.block.cache.pinned-usage",
-		Help: "Bytes pinned by the block cache"}
+		Name:        "rocksdb.block.cache.pinned-usage",
+		Help:        "Bytes pinned by the block cache",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaRdbBloomFilterPrefixChecked = metric.Metadata{
-		Name: "rocksdb.bloom.filter.prefix.checked",
-		Help: "Number of times the bloom filter was checked"}
+		Name:        "rocksdb.bloom.filter.prefix.checked",
+		Help:        "Number of times the bloom filter was checked",
+		Unit:        "Bloom Filter Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbBloomFilterPrefixUseful = metric.Metadata{
-		Name: "rocksdb.bloom.filter.prefix.useful",
-		Help: "Number of times the bloom filter helped avoid iterator creation"}
+		Name:        "rocksdb.bloom.filter.prefix.useful",
+		Help:        "Number of times the bloom filter helped avoid iterator creation",
+		Unit:        "Bloom Filter Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbMemtableTotalSize = metric.Metadata{
-		Name: "rocksdb.memtable.total-size",
-		Help: "Current size of memtable in bytes"}
+		Name:        "rocksdb.memtable.total-size",
+		Help:        "Current size of memtable in bytes",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaRdbFlushes = metric.Metadata{
-		Name: "rocksdb.flushes",
-		Help: "Number of table flushes"}
+		Name:        "rocksdb.flushes",
+		Help:        "Number of table flushes",
+		Unit:        "Flushes",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbCompactions = metric.Metadata{
-		Name: "rocksdb.compactions",
-		Help: "Number of table compactions"}
+		Name:        "rocksdb.compactions",
+		Help:        "Number of table compactions",
+		Unit:        "Compactions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbTableReadersMemEstimate = metric.Metadata{
-		Name: "rocksdb.table-readers-mem-estimate",
-		Help: "Memory used by index and filter blocks"}
+		Name:        "rocksdb.table-readers-mem-estimate",
+		Help:        "Memory used by index and filter blocks",
+		Unit:        "Memory",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	metaRdbReadAmplification = metric.Metadata{
-		Name: "rocksdb.read-amplification",
-		Help: "Number of disk reads per query"}
+		Name:        "rocksdb.read-amplification",
+		Help:        "Number of disk reads per query",
+		Unit:        "Disk Reads per Query",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRdbNumSSTables = metric.Metadata{
-		Name: "rocksdb.num-sstables",
-		Help: "Number of rocksdb SSTables"}
+		Name:        "rocksdb.num-sstables",
+		Help:        "Number of rocksdb SSTables",
+		Unit:        "SSTables",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Range event metrics.
 	metaRangeSplits = metric.Metadata{
-		Name: "range.splits",
-		Help: "Number of range splits"}
+		Name:        "range.splits",
+		Help:        "Number of range splits",
+		Unit:        "Range Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeAdds = metric.Metadata{
-		Name: "range.adds",
-		Help: "Number of range additions"}
+		Name:        "range.adds",
+		Help:        "Number of range additions",
+		Unit:        "Range Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeRemoves = metric.Metadata{
-		Name: "range.removes",
-		Help: "Number of range removals"}
+		Name:        "range.removes",
+		Help:        "Number of range removals",
+		Unit:        "Range Ops",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeSnapshotsGenerated = metric.Metadata{
-		Name: "range.snapshots.generated",
-		Help: "Number of generated snapshots"}
+		Name:        "range.snapshots.generated",
+		Help:        "Number of generated snapshots",
+		Unit:        "Snapshots",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeSnapshotsNormalApplied = metric.Metadata{
-		Name: "range.snapshots.normal-applied",
-		Help: "Number of applied snapshots"}
+		Name:        "range.snapshots.normal-applied",
+		Help:        "Number of applied snapshots",
+		Unit:        "Snapshots",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{
-		Name: "range.snapshots.preemptive-applied",
-		Help: "Number of applied pre-emptive snapshots"}
+		Name:        "range.snapshots.preemptive-applied",
+		Help:        "Number of applied pre-emptive snapshots",
+		Unit:        "Snapshots",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
-		Name: "range.raftleadertransfers",
-		Help: "Number of raft leader transfers"}
+		Name:        "range.raftleadertransfers",
+		Help:        "Number of raft leader transfers",
+		Unit:        "Leader Transfers",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
-		Name: "raft.ticks",
-		Help: "Number of Raft ticks queued"}
+		Name:        "raft.ticks",
+		Help:        "Number of Raft ticks queued",
+		Unit:        "Ticks",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
-		Name: "raft.process.workingnanos",
-		Help: "Nanoseconds spent in store.processRaft() working"}
+		Name:        "raft.process.workingnanos",
+		Help:        "Nanoseconds spent in store.processRaft() working",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaRaftTickingDurationNanos = metric.Metadata{
-		Name: "raft.process.tickingnanos",
-		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()"}
+		Name:        "raft.process.tickingnanos",
+		Help:        "Nanoseconds spent in store.processRaft() processing replica.Tick()",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaRaftCommandsApplied = metric.Metadata{
-		Name: "raft.commandsapplied",
-		Help: "Count of Raft commands applied"}
+		Name:        "raft.commandsapplied",
+		Help:        "Count of Raft commands applied",
+		Unit:        "Commands",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLogCommitLatency = metric.Metadata{
-		Name: "raft.process.logcommit.latency",
-		Help: "Latency histogram in nanoseconds for committing Raft log entries"}
+		Name:        "raft.process.logcommit.latency",
+		Help:        "Latency histogram in nanoseconds for committing Raft log entries",
+		Unit:        "Latency",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaRaftCommandCommitLatency = metric.Metadata{
-		Name: "raft.process.commandcommit.latency",
-		Help: "Latency histogram in nanoseconds for committing Raft commands"}
+		Name:        "raft.process.commandcommit.latency",
+		Help:        "Latency histogram in nanoseconds for committing Raft commands",
+		Unit:        "Latency",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
-		Name: "raft.rcvd.prop",
-		Help: "Number of MsgProp messages received by this store"}
+		Name:        "raft.rcvd.prop",
+		Help:        "Number of MsgProp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdApp = metric.Metadata{
-		Name: "raft.rcvd.app",
-		Help: "Number of MsgApp messages received by this store"}
+		Name:        "raft.rcvd.app",
+		Help:        "Number of MsgApp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdAppResp = metric.Metadata{
-		Name: "raft.rcvd.appresp",
-		Help: "Number of MsgAppResp messages received by this store"}
+		Name:        "raft.rcvd.appresp",
+		Help:        "Number of MsgAppResp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdVote = metric.Metadata{
-		Name: "raft.rcvd.vote",
-		Help: "Number of MsgVote messages received by this store"}
+		Name:        "raft.rcvd.vote",
+		Help:        "Number of MsgVote messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdVoteResp = metric.Metadata{
-		Name: "raft.rcvd.voteresp",
-		Help: "Number of MsgVoteResp messages received by this store"}
+		Name:        "raft.rcvd.voteresp",
+		Help:        "Number of MsgVoteResp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdPreVote = metric.Metadata{
-		Name: "raft.rcvd.prevote",
-		Help: "Number of MsgPreVote messages received by this store"}
+		Name:        "raft.rcvd.prevote",
+		Help:        "Number of MsgPreVote messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdPreVoteResp = metric.Metadata{
-		Name: "raft.rcvd.prevoteresp",
-		Help: "Number of MsgPreVoteResp messages received by this store"}
+		Name:        "raft.rcvd.prevoteresp",
+		Help:        "Number of MsgPreVoteResp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdSnap = metric.Metadata{
-		Name: "raft.rcvd.snap",
-		Help: "Number of MsgSnap messages received by this store"}
+		Name:        "raft.rcvd.snap",
+		Help:        "Number of MsgSnap messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdHeartbeat = metric.Metadata{
-		Name: "raft.rcvd.heartbeat",
-		Help: "Number of (coalesced, if enabled) MsgHeartbeat messages received by this store"}
+		Name:        "raft.rcvd.heartbeat",
+		Help:        "Number of (coalesced, if enabled) MsgHeartbeat messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdHeartbeatResp = metric.Metadata{
-		Name: "raft.rcvd.heartbeatresp",
-		Help: "Number of (coalesced, if enabled) MsgHeartbeatResp messages received by this store"}
+		Name:        "raft.rcvd.heartbeatresp",
+		Help:        "Number of (coalesced, if enabled) MsgHeartbeatResp messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdTransferLeader = metric.Metadata{
-		Name: "raft.rcvd.transferleader",
-		Help: "Number of MsgTransferLeader messages received by this store"}
+		Name:        "raft.rcvd.transferleader",
+		Help:        "Number of MsgTransferLeader messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdTimeoutNow = metric.Metadata{
-		Name: "raft.rcvd.timeoutnow",
-		Help: "Number of MsgTimeoutNow messages received by this store"}
+		Name:        "raft.rcvd.timeoutnow",
+		Help:        "Number of MsgTimeoutNow messages received by this store",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftRcvdDropped = metric.Metadata{
-		Name: "raft.rcvd.dropped",
-		Help: "Number of dropped incoming Raft messages"}
+		Name:        "raft.rcvd.dropped",
+		Help:        "Number of dropped incoming Raft messages",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftEnqueuedPending = metric.Metadata{
-		Name: "raft.enqueued.pending",
-		Help: "Number of pending outgoing messages in the Raft Transport queue"}
+		Name:        "raft.enqueued.pending",
+		Help:        "Number of pending outgoing messages in the Raft Transport queue",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftCoalescedHeartbeatsPending = metric.Metadata{
-		Name: "raft.heartbeats.pending",
-		Help: "Number of pending heartbeats and responses waiting to be coalesced"}
+		Name:        "raft.heartbeats.pending",
+		Help:        "Number of pending heartbeats and responses waiting to be coalesced",
+		Unit:        "Messages",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Raft log metrics.
 	metaRaftLogFollowerBehindCount = metric.Metadata{
-		Name: "raftlog.behind",
-		Help: "Number of Raft log entries followers on other stores are behind"}
+		Name:        "raftlog.behind",
+		Help:        "Number of Raft log entries followers on other stores are behind",
+		Unit:        "Log Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLogTruncated = metric.Metadata{
-		Name: "raftlog.truncated",
-		Help: "Number of Raft log entries truncated"}
+		Name:        "raftlog.truncated",
+		Help:        "Number of Raft log entries truncated",
+		Unit:        "Log Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Replica queue metrics.
 	metaGCQueueSuccesses = metric.Metadata{
-		Name: "queue.gc.process.success",
-		Help: "Number of replicas successfully processed by the GC queue"}
+		Name:        "queue.gc.process.success",
+		Help:        "Number of replicas successfully processed by the GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCQueueFailures = metric.Metadata{
-		Name: "queue.gc.process.failure",
-		Help: "Number of replicas which failed processing in the GC queue"}
+		Name:        "queue.gc.process.failure",
+		Help:        "Number of replicas which failed processing in the GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCQueuePending = metric.Metadata{
-		Name: "queue.gc.pending",
-		Help: "Number of pending replicas in the GC queue"}
+		Name:        "queue.gc.pending",
+		Help:        "Number of pending replicas in the GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCQueueProcessingNanos = metric.Metadata{
-		Name: "queue.gc.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the GC queue"}
+		Name:        "queue.gc.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the GC queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaRaftLogQueueSuccesses = metric.Metadata{
-		Name: "queue.raftlog.process.success",
-		Help: "Number of replicas successfully processed by the Raft log queue"}
+		Name:        "queue.raftlog.process.success",
+		Help:        "Number of replicas successfully processed by the Raft log queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLogQueueFailures = metric.Metadata{
-		Name: "queue.raftlog.process.failure",
-		Help: "Number of replicas which failed processing in the Raft log queue"}
+		Name:        "queue.raftlog.process.failure",
+		Help:        "Number of replicas which failed processing in the Raft log queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLogQueuePending = metric.Metadata{
-		Name: "queue.raftlog.pending",
-		Help: "Number of pending replicas in the Raft log queue"}
+		Name:        "queue.raftlog.pending",
+		Help:        "Number of pending replicas in the Raft log queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftLogQueueProcessingNanos = metric.Metadata{
-		Name: "queue.raftlog.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the Raft log queue"}
+		Name:        "queue.raftlog.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the Raft log queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaRaftSnapshotQueueSuccesses = metric.Metadata{
-		Name: "queue.raftsnapshot.process.success",
-		Help: "Number of replicas successfully processed by the Raft repair queue"}
+		Name:        "queue.raftsnapshot.process.success",
+		Help:        "Number of replicas successfully processed by the Raft repair queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftSnapshotQueueFailures = metric.Metadata{
-		Name: "queue.raftsnapshot.process.failure",
-		Help: "Number of replicas which failed processing in the Raft repair queue"}
+		Name:        "queue.raftsnapshot.process.failure",
+		Help:        "Number of replicas which failed processing in the Raft repair queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftSnapshotQueuePending = metric.Metadata{
-		Name: "queue.raftsnapshot.pending",
-		Help: "Number of pending replicas in the Raft repair queue"}
+		Name:        "queue.raftsnapshot.pending",
+		Help:        "Number of pending replicas in the Raft repair queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaRaftSnapshotQueueProcessingNanos = metric.Metadata{
-		Name: "queue.raftsnapshot.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the Raft repair queue"}
+		Name:        "queue.raftsnapshot.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the Raft repair queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaConsistencyQueueSuccesses = metric.Metadata{
-		Name: "queue.consistency.process.success",
-		Help: "Number of replicas successfully processed by the consistency checker queue"}
+		Name:        "queue.consistency.process.success",
+		Help:        "Number of replicas successfully processed by the consistency checker queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaConsistencyQueueFailures = metric.Metadata{
-		Name: "queue.consistency.process.failure",
-		Help: "Number of replicas which failed processing in the consistency checker queue"}
+		Name:        "queue.consistency.process.failure",
+		Help:        "Number of replicas which failed processing in the consistency checker queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaConsistencyQueuePending = metric.Metadata{
-		Name: "queue.consistency.pending",
-		Help: "Number of pending replicas in the consistency checker queue"}
+		Name:        "queue.consistency.pending",
+		Help:        "Number of pending replicas in the consistency checker queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaConsistencyQueueProcessingNanos = metric.Metadata{
-		Name: "queue.consistency.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the consistency checker queue"}
+		Name:        "queue.consistency.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the consistency checker queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaReplicaGCQueueSuccesses = metric.Metadata{
-		Name: "queue.replicagc.process.success",
-		Help: "Number of replicas successfully processed by the replica GC queue"}
+		Name:        "queue.replicagc.process.success",
+		Help:        "Number of replicas successfully processed by the replica GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicaGCQueueFailures = metric.Metadata{
-		Name: "queue.replicagc.process.failure",
-		Help: "Number of replicas which failed processing in the replica GC queue"}
+		Name:        "queue.replicagc.process.failure",
+		Help:        "Number of replicas which failed processing in the replica GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicaGCQueuePending = metric.Metadata{
-		Name: "queue.replicagc.pending",
-		Help: "Number of pending replicas in the replica GC queue"}
+		Name:        "queue.replicagc.pending",
+		Help:        "Number of pending replicas in the replica GC queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicaGCQueueProcessingNanos = metric.Metadata{
-		Name: "queue.replicagc.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the replica GC queue"}
+		Name:        "queue.replicagc.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the replica GC queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaReplicateQueueSuccesses = metric.Metadata{
-		Name: "queue.replicate.process.success",
-		Help: "Number of replicas successfully processed by the replicate queue"}
+		Name:        "queue.replicate.process.success",
+		Help:        "Number of replicas successfully processed by the replicate queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicateQueueFailures = metric.Metadata{
-		Name: "queue.replicate.process.failure",
-		Help: "Number of replicas which failed processing in the replicate queue"}
+		Name:        "queue.replicate.process.failure",
+		Help:        "Number of replicas which failed processing in the replicate queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicateQueuePending = metric.Metadata{
-		Name: "queue.replicate.pending",
-		Help: "Number of pending replicas in the replicate queue"}
+		Name:        "queue.replicate.pending",
+		Help:        "Number of pending replicas in the replicate queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaReplicateQueueProcessingNanos = metric.Metadata{
-		Name: "queue.replicate.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the replicate queue"}
+		Name:        "queue.replicate.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the replicate queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaReplicateQueuePurgatory = metric.Metadata{
-		Name: "queue.replicate.purgatory",
-		Help: "Number of replicas in the replicate queue's purgatory, awaiting allocation options"}
+		Name:        "queue.replicate.purgatory",
+		Help:        "Number of replicas in the replicate queue's purgatory, awaiting allocation options",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSplitQueueSuccesses = metric.Metadata{
-		Name: "queue.split.process.success",
-		Help: "Number of replicas successfully processed by the split queue"}
+		Name:        "queue.split.process.success",
+		Help:        "Number of replicas successfully processed by the split queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSplitQueueFailures = metric.Metadata{
-		Name: "queue.split.process.failure",
-		Help: "Number of replicas which failed processing in the split queue"}
+		Name:        "queue.split.process.failure",
+		Help:        "Number of replicas which failed processing in the split queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSplitQueuePending = metric.Metadata{
-		Name: "queue.split.pending",
-		Help: "Number of pending replicas in the split queue"}
+		Name:        "queue.split.pending",
+		Help:        "Number of pending replicas in the split queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSplitQueueProcessingNanos = metric.Metadata{
-		Name: "queue.split.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the split queue"}
+		Name:        "queue.split.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the split queue",
+		Unit:        "CPU Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaSplitQueuePurgatory = metric.Metadata{
-		Name: "queue.split.purgatory",
-		Help: "Number of replicas in the split queue's purgatory, waiting to become splittable"}
+		Name:        "queue.split.purgatory",
+		Help:        "Number of replicas in the split queue's purgatory, waiting to become splittable",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaTimeSeriesMaintenanceQueueSuccesses = metric.Metadata{
-		Name: "queue.tsmaintenance.process.success",
-		Help: "Number of replicas successfully processed by the time series maintenance queue"}
+		Name:        "queue.tsmaintenance.process.success",
+		Help:        "Number of replicas successfully processed by the time series maintenance queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaTimeSeriesMaintenanceQueueFailures = metric.Metadata{
-		Name: "queue.tsmaintenance.process.failure",
-		Help: "Number of replicas which failed processing in the time series maintenance queue"}
+		Name:        "queue.tsmaintenance.process.failure",
+		Help:        "Number of replicas which failed processing in the time series maintenance queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaTimeSeriesMaintenanceQueuePending = metric.Metadata{
-		Name: "queue.tsmaintenance.pending",
-		Help: "Number of pending replicas in the time series maintenance queue"}
+		Name:        "queue.tsmaintenance.pending",
+		Help:        "Number of pending replicas in the time series maintenance queue",
+		Unit:        "Replicas",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaTimeSeriesMaintenanceQueueProcessingNanos = metric.Metadata{
-		Name: "queue.tsmaintenance.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the time series maintenance queue"}
+		Name:        "queue.tsmaintenance.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the time series maintenance queue",
+		Unit:        "Processing Time",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 
 	// GCInfo cumulative totals.
 	metaGCNumKeysAffected = metric.Metadata{
-		Name: "queue.gc.info.numkeysaffected",
-		Help: "Number of keys with GC'able data"}
+		Name:        "queue.gc.info.numkeysaffected",
+		Help:        "Number of keys with GC'able data",
+		Unit:        "Keys",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCIntentsConsidered = metric.Metadata{
-		Name: "queue.gc.info.intentsconsidered",
-		Help: "Number of 'old' intents"}
+		Name:        "queue.gc.info.intentsconsidered",
+		Help:        "Number of 'old' intents",
+		Unit:        "Intents",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCIntentTxns = metric.Metadata{
-		Name: "queue.gc.info.intenttxns",
-		Help: "Number of associated distinct transactions"}
+		Name:        "queue.gc.info.intenttxns",
+		Help:        "Number of associated distinct transactions",
+		Unit:        "Txns",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCTransactionSpanScanned = metric.Metadata{
-		Name: "queue.gc.info.transactionspanscanned",
-		Help: "Number of entries in transaction spans scanned from the engine"}
+		Name:        "queue.gc.info.transactionspanscanned",
+		Help:        "Number of entries in transaction spans scanned from the engine",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCTransactionSpanGCAborted = metric.Metadata{
-		Name: "queue.gc.info.transactionspangcaborted",
-		Help: "Number of GC'able entries corresponding to aborted txns"}
+		Name:        "queue.gc.info.transactionspangcaborted",
+		Help:        "Number of GC'able entries corresponding to aborted txns",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCTransactionSpanGCCommitted = metric.Metadata{
-		Name: "queue.gc.info.transactionspangccommitted",
-		Help: "Number of GC'able entries corresponding to committed txns"}
+		Name:        "queue.gc.info.transactionspangccommitted",
+		Help:        "Number of GC'able entries corresponding to committed txns",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCTransactionSpanGCPending = metric.Metadata{
-		Name: "queue.gc.info.transactionspangcpending",
-		Help: "Number of GC'able entries corresponding to pending txns"}
+		Name:        "queue.gc.info.transactionspangcpending",
+		Help:        "Number of GC'able entries corresponding to pending txns",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCAbortSpanScanned = metric.Metadata{
-		Name: "queue.gc.info.abortspanscanned",
-		Help: "Number of transactions present in the AbortSpan scanned from the engine"}
+		Name:        "queue.gc.info.abortspanscanned",
+		Help:        "Number of transactions present in the AbortSpan scanned from the engine",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCAbortSpanConsidered = metric.Metadata{
-		Name: "queue.gc.info.abortspanconsidered",
-		Help: "Number of AbortSpan entries old enough to be considered for removal"}
+		Name:        "queue.gc.info.abortspanconsidered",
+		Help:        "Number of AbortSpan entries old enough to be considered for removal",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCAbortSpanGCNum = metric.Metadata{
-		Name: "queue.gc.info.abortspangcnum",
-		Help: "Number of AbortSpan entries fit for removal"}
+		Name:        "queue.gc.info.abortspangcnum",
+		Help:        "Number of AbortSpan entries fit for removal",
+		Unit:        "Txn Entries",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCPushTxn = metric.Metadata{
-		Name: "queue.gc.info.pushtxn",
-		Help: "Number of attempted pushes"}
+		Name:        "queue.gc.info.pushtxn",
+		Help:        "Number of attempted pushes",
+		Unit:        "Pushes",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCResolveTotal = metric.Metadata{
-		Name: "queue.gc.info.resolvetotal",
-		Help: "Number of attempted intent resolutions"}
+		Name:        "queue.gc.info.resolvetotal",
+		Help:        "Number of attempted intent resolutions",
+		Unit:        "Intent Resolutions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaGCResolveSuccess = metric.Metadata{
-		Name: "queue.gc.info.resolvesuccess",
-		Help: "Number of successful intent resolutions"}
+		Name:        "queue.gc.info.resolvesuccess",
+		Help:        "Number of successful intent resolutions",
+		Unit:        "Intent Resolutions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Slow request metrics.
 	metaSlowCommandQueueRequests = metric.Metadata{
-		Name: "requests.slow.commandqueue",
-		Help: "Number of requests that have been stuck for a long time in the command queue"}
+		Name:        "requests.slow.commandqueue",
+		Help:        "Number of requests that have been stuck for a long time in the command queue",
+		Unit:        "Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSlowLeaseRequests = metric.Metadata{
-		Name: "requests.slow.lease",
-		Help: "Number of requests that have been stuck for a long time acquiring a lease"}
+		Name:        "requests.slow.lease",
+		Help:        "Number of requests that have been stuck for a long time acquiring a lease",
+		Unit:        "Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaSlowRaftRequests = metric.Metadata{
-		Name: "requests.slow.raft",
-		Help: "Number of requests that have been stuck for a long time in raft"}
+		Name:        "requests.slow.raft",
+		Help:        "Number of requests that have been stuck for a long time in raft",
+		Unit:        "Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
-		Name: "requests.backpressure.split",
-		Help: "Number of backpressured writes waiting on a Range split"}
+		Name:        "requests.backpressure.split",
+		Help:        "Number of backpressured writes waiting on a Range split",
+		Unit:        "Writes",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 
 	// AddSSTable metrics.
 	metaAddSSTableProposals = metric.Metadata{
-		Name: "addsstable.proposals",
-		Help: "Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)"}
+		Name:        "addsstable.proposals",
+		Help:        "Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)",
+		Unit:        "Ingestions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaAddSSTableApplications = metric.Metadata{
-		Name: "addsstable.applications",
-		Help: "Number of SSTable ingestions applied (i.e. applied by Replicas)"}
+		Name:        "addsstable.applications",
+		Help:        "Number of SSTable ingestions applied (i.e. applied by Replicas)",
+		Unit:        "Ingestions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaAddSSTableApplicationCopies = metric.Metadata{
-		Name: "addsstable.copies",
-		Help: "number of SSTable ingestions that required copying files during application",
+		Name:        "addsstable.copies",
+		Help:        "number of SSTable ingestions that required copying files during application",
+		Unit:        "Ingestions",
+		DisplayUnit: metric.DisplayUnit_COUNT,
 	}
 )
 
