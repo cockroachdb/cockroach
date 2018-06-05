@@ -27,6 +27,7 @@ import (
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -147,6 +149,20 @@ func (s *adminServer) isNotFoundError(err error) bool {
 	// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
 	// more structured errors.
 	return err != nil && strings.HasSuffix(err.Error(), "does not exist")
+}
+
+// AllMetricMetadata returns all metrics' metadata.
+func (s *adminServer) AllMetricMetadata(
+	ctx context.Context, req *serverpb.MetricMetadataRequest,
+) (*serverpb.MetricMetadataResponse, error) {
+
+	resp := &serverpb.MetricMetadataResponse{
+		DisplayUnitKey: metric.DisplayUnit_name,
+		MetricTypeKey:  prometheusgo.MetricType_name,
+		Metadata:       s.server.recorder.GetMetricsMetadata(),
+	}
+
+	return resp, nil
 }
 
 // Databases is an endpoint that returns a list of databases.
