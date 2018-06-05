@@ -43,8 +43,10 @@ var informationSchema = virtualSchema{
 		informationSchemaConstraintColumnUsageTable,
 		informationSchemaEnabledRoles,
 		informationSchemaKeyColumnUsageTable,
+		informationSchemaParametersTable,
 		informationSchemaReferentialConstraintsTable,
 		informationSchemaRoleTableGrants,
+		informationSchemaRoutineTable,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
 		informationSchemaSequences,
@@ -466,6 +468,53 @@ CREATE TABLE information_schema.key_column_usage (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-parameters.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/parameters-table.html
+var informationSchemaParametersTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.parameters (
+	SPECIFIC_CATALOG STRING,
+	SPECIFIC_SCHEMA STRING,
+	SPECIFIC_NAME STRING,
+	ORDINAL_POSITION INT,
+	PARAMETER_MODE STRING,
+	IS_RESULT STRING,
+	AS_LOCATOR STRING,
+	PARAMETER_NAME STRING,
+	DATA_TYPE STRING,
+	CHARACTER_MAXIMUM_LENGTH INT,
+	CHARACTER_OCTET_LENGTH INT,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA STRING,
+	CHARACTER_SET_NAME STRING,
+	COLLATION_CATALOG STRING,
+	COLLATION_SCHEMA STRING,
+	COLLATION_NAME STRING,
+	NUMERIC_PRECISION INT,
+	NUMERIC_PRECISION_RADIX INT,
+	NUMERIC_SCALE INT,
+	DATETIME_PRECISION INT,
+	INTERVAL_TYPE STRING,
+	INTERVAL_PRECISION INT,
+	UDT_CATALOG STRING,
+	UDT_SCHEMA STRING,
+	UDT_NAME STRING,
+	SCOPE_CATALOG STRING,
+	SCOPE_SCHEMA STRING,
+	SCOPE_NAME STRING,
+	MAXIMUM_CARDINALITY INT,
+	DTD_IDENTIFIER STRING,
+	PARAMETER_DEFAULT STRING
+);
+`,
+	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
+	// not show tables with grants provided through PUBLIC, but table_privileges does.
+	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 var (
 	matchOptionFull    = tree.NewDString("FULL")
 	matchOptionPartial = tree.NewDString("PARTIAL")
@@ -577,6 +626,98 @@ CREATE TABLE information_schema.role_table_grants (
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
 	populate: populateTablePrivileges,
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-routines.html
+// MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
+var informationSchemaRoutineTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.routines (
+	SPECIFIC_CATALOG STRING,
+	SPECIFIC_SCHEMA STRING,
+	SPECIFIC_NAME STRING,
+	ROUTINE_CATALOG STRING,
+	ROUTINE_SCHEMA STRING,
+	ROUTINE_NAME STRING,
+	ROUTINE_TYPE STRING,
+	MODULE_CATALOG STRING,
+	MODULE_SCHEMA STRING,
+	MODULE_NAME STRING,
+	UDT_CATALOG STRING,
+	UDT_SCHEMA STRING,
+	UDT_NAME STRING,
+	DATA_TYPE STRING,
+	CHARACTER_MAXIMUM_LENGTH INT,
+	CHARACTER_OCTET_LENGTH INT,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA STRING,
+	CHARACTER_SET_NAME STRING,
+	COLLATION_CATALOG STRING,
+	COLLATION_SCHEMA STRING,
+	COLLATION_NAME STRING,
+	NUMERIC_PRECISION INT,
+	NUMERIC_PRECISION_RADIX INT,
+	NUMERIC_SCALE INT,
+	DATETIME_PRECISION INT,
+	INTERVAL_TYPE STRING,
+	INTERVAL_PRECISION STRING,
+	TYPE_UDT_CATALOG STRING,
+	TYPE_UDT_SCHEMA STRING,
+	TYPE_UDT_NAME STRING,
+	SCOPE_CATALOG STRING,
+	SCOPE_NAME STRING,
+	MAXIMUM_CARDINALITY INT,
+	DTD_IDENTIFIER STRING,
+	ROUTINE_BODY STRING,
+	ROUTINE_DEFINITION STRING,
+	EXTERNAL_NAME STRING,
+	EXTERNAL_LANGUAGE STRING,
+	PARAMETER_STYLE STRING,
+	IS_DETERMINSTIC STRING,
+	SQL_DATA_ACCESS STRING,
+	IS_NULL_CALL STRING,
+	SQL_PATH STRING,
+	SCHEMA_LEVEL_ROUTINE STRING,
+	MAX_DYNAMIC_RESULT_SETS INT,
+	IS_USER_DEFINED_CAST STRING,
+	IS_IMPLICITLY_INVOCABLE STRING,
+	SECURITY_TYPE STRING,
+	TO_SQL_SPECIFIC_CATALOG STRING,
+	TO_SQL_SPECIFIC_SCHEMA STRING,
+	TO_SQL_SPECIFIC_NAME STRING,
+	AS_LOCATOR STRING,
+	CREATED  TIMESTAMPTZ,
+	LAST_ALTERED TIMESTAMPTZ,
+	NEW_SAVEPOINT_LEVEL  STRING,
+	IS_UDT_DEPENDENT STRING,
+	RESULT_CAST_FROM_DATA_TYPE STRING,
+	RESULT_CAST_AS_LOCATOR STRING,
+	RESULT_CAST_CHAR_MAX_LENGTH  INT,
+	RESULT_CAST_CHAR_OCTET_LENGTH STRING,
+	RESULT_CAST_CHAR_SET_CATALOG STRING,
+	RESULT_CAST_CHAR_SET_SCHEMA  STRING,
+	RESULT_CAST_CHAR_SET_NAME STRING,
+	RESULT_CAST_COLLATION_CATALOG STRING,
+	RESULT_CAST_COLLATION_SCHEMA STRING,
+	RESULT_CAST_COLLATION_NAME STRING,
+	RESULT_CAST_NUMERIC_PRECISION INT,
+	RESULT_CAST_NUMERIC_PRECISION_RADIX INT,
+	RESULT_CAST_NUMERIC_SCALE INT,
+	RESULT_CAST_DATETIME_PRECISION STRING,
+	RESULT_CAST_INTERVAL_TYPE STRING,
+	RESULT_CAST_INTERVAL_PRECISION INT,
+	RESULT_CAST_TYPE_UDT_CATALOG STRING,
+	RESULT_CAST_TYPE_UDT_SCHEMA  STRING,
+	RESULT_CAST_TYPE_UDT_NAME STRING,
+	RESULT_CAST_SCOPE_CATALOG STRING,
+	RESULT_CAST_SCOPE_SCHEMA STRING,
+	RESULT_CAST_SCOPE_NAME STRING,
+	RESULT_CAST_MAXIMUM_CARDINALITY INT,
+	RESULT_CAST_DTD_IDENTIFIER STRING
+); `,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-schemata.html

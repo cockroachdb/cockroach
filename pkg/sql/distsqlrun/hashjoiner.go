@@ -172,13 +172,6 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	pushTrailingMeta := func(ctx context.Context) {
-		// TODO(asubiotto): Once hashJoiner implements RowSource, set
-		// processorBase.finishTrace = h.outputStatsToTrace.
-		h.outputStatsToTrace()
-		sendTraceData(ctx, h.out.output)
-	}
-
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
 	h.startInternal(ctx, hashJoinerProcName)
@@ -263,7 +256,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// the consumer.
 			log.Infof(ctx, "buffer phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
+		DrainAndClose(ctx, h.out.output, err /* cause */, h.pushTrailingMeta, h.leftSource, h.rightSource)
 		return
 	}
 
@@ -280,7 +273,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// the consumer.
 			log.Infof(ctx, "build phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
+		DrainAndClose(ctx, h.out.output, err /* cause */, h.pushTrailingMeta, h.leftSource, h.rightSource)
 		return
 	}
 	defer storedRows.Close(ctx)
@@ -292,7 +285,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if row != nil {
 		if err := storedRows.AddRow(ctx, row); err != nil {
 			log.Infof(ctx, "unable to add row to disk %s", err)
-			DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
+			DrainAndClose(ctx, h.out.output, err /* cause */, h.pushTrailingMeta, h.leftSource, h.rightSource)
 			return
 		}
 	}
@@ -313,7 +306,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// point.
 			log.Infof(ctx, "probe phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, srcToClose)
+		DrainAndClose(ctx, h.out.output, err /* cause */, h.pushTrailingMeta, srcToClose)
 	}
 }
 
@@ -699,8 +692,7 @@ func (h *hashJoiner) probePhase(
 		}
 	}
 
-	h.outputStatsToTrace()
-	sendTraceData(ctx, h.out.output)
+	h.pushTrailingMeta(ctx)
 	h.out.Close()
 	return false, nil
 }
@@ -749,6 +741,13 @@ func (h *hashJoiner) receiveRow(
 			return nil, true, err
 		}
 	}
+}
+
+func (h *hashJoiner) pushTrailingMeta(ctx context.Context) {
+	// TODO(asubiotto): Once hashJoiner implements RowSource, set
+	// processorBase.finishTrace = h.outputStatsToTrace.
+	h.outputStatsToTrace()
+	sendTraceData(ctx, h.out.output)
 }
 
 var _ DistSQLSpanStats = &HashJoinerStats{}
