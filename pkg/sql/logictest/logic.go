@@ -696,6 +696,7 @@ type logicQuery struct {
 type logicTest struct {
 	t        *testing.T
 	subtestT *testing.T
+	cfg      testClusterConfig
 	// the number of nodes in the cluster.
 	cluster serverutils.TestClusterInterface
 	// the index of the node (within the cluster) against which we run the test
@@ -841,6 +842,12 @@ func (t *logicTest) setUser(user string) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Enable the cost-based optimizer rather than the heuristic planner.
+	if optMode := t.cfg.overrideOptimizerMode; optMode != "" {
+		if _, err := db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", optMode)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.clients[user] = db
 	t.db = db
 	t.user = user
@@ -849,6 +856,7 @@ func (t *logicTest) setUser(user string) func() {
 }
 
 func (t *logicTest) setup(cfg testClusterConfig) {
+	t.cfg = cfg
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -952,13 +960,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 CREATE DATABASE test;
 `); err != nil {
 		t.Fatal(err)
-	}
-
-	// Enable the cost-based optimizer rather than the heuristic planner.
-	if cfg.overrideOptimizerMode != "" {
-		if _, err := t.db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", cfg.overrideOptimizerMode)); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", server.TestUser)); err != nil {
