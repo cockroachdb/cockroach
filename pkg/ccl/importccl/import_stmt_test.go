@@ -656,6 +656,15 @@ func TestImportCSVStmt(t *testing.T) {
 					t.Fatal("expected > 1 SST files")
 				}
 			}
+
+			// Verify spans don't have trailing '/0'.
+			ranges := sqlDB.QueryStr(t, `SHOW testing_ranges FROM TABLE t`)
+			for _, r := range ranges {
+				const end = `/0`
+				if strings.HasSuffix(r[0], end) || strings.HasSuffix(r[1], end) {
+					t.Errorf("bad span: %s - %s", r[0], r[1])
+				}
+			}
 		})
 	}
 
