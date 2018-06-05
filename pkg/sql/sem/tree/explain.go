@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -36,13 +37,26 @@ type Explain struct {
 func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
 	if len(node.Options) > 0 {
-		ctx.WriteByte('(')
-		for i, opt := range node.Options {
-			if i > 0 {
-				ctx.WriteString(", ")
+		// ANALYZE is a special case because it is a statement implemented as an
+		// option to EXPLAIN. We therefore create a buffer for all the options in
+		// case we hit an ANALYZE to add that right after the EXPLAIN.
+		var optsBuffer bytes.Buffer
+		for _, opt := range node.Options {
+			upperCaseOpt := strings.ToUpper(opt)
+			if upperCaseOpt == "ANALYZE" {
+				ctx.WriteString("ANALYZE ")
+			} else {
+				// If we have written to the options buffer, append a comma to separate
+				// the previous option from this one.
+				if optsBuffer.Len() > 0 {
+					optsBuffer.WriteString(", ")
+				}
+				optsBuffer.WriteString(upperCaseOpt)
 			}
-			ctx.WriteString(strings.ToUpper(opt))
 		}
+		// Write the options.
+		ctx.WriteByte('(')
+		ctx.Write(optsBuffer.Bytes())
 		ctx.WriteString(") ")
 	}
 	ctx.FormatNode(node.Statement)
