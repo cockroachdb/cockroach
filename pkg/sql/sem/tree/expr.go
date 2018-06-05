@@ -1106,7 +1106,7 @@ type FuncExpr struct {
 
 	typeAnnotation
 	fnProps *FunctionProperties
-	fn      *OverloadDefinition
+	fn      *Overload
 }
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
@@ -1118,7 +1118,7 @@ func NewTypedFuncExpr(
 	windowDef *WindowDef,
 	typ types.T,
 	props *FunctionProperties,
-	overload *OverloadDefinition,
+	overload *Overload,
 ) *FuncExpr {
 	f := &FuncExpr{
 		Func:           ref,
@@ -1138,7 +1138,7 @@ func NewTypedFuncExpr(
 
 // ResolvedOverload returns the builtin definition; can only be called after
 // Resolve (which happens during TypeCheck).
-func (node *FuncExpr) ResolvedOverload() *OverloadDefinition {
+func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
 }
 

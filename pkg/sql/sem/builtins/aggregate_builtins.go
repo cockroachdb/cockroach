@@ -99,7 +99,7 @@ func aggPropsNullableArgs() tree.FunctionProperties {
 // The properties are reachable via tree.FunctionDefinition.
 var aggregates = map[string]builtinDefinition{
 	"array_agg": setProps(aggPropsNullableArgs(),
-		arrayBuiltin(func(t types.T) tree.OverloadDefinition {
+		arrayBuiltin(func(t types.T) tree.Overload {
 			return makeAggOverloadWithReturnType(
 				[]types.T{t},
 				func(args []tree.TypedExpr) types.T {
@@ -151,7 +151,7 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"count_rows": makeBuiltin(aggProps(),
-		tree.OverloadDefinition{
+		tree.Overload{
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
@@ -163,13 +163,13 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"max": collectOverloads(aggProps(), types.AnyNonArray,
-		func(t types.T) tree.OverloadDefinition {
+		func(t types.T) tree.Overload {
 			return makeAggOverload([]types.T{t}, t, newMaxAggregate,
 				"Identifies the maximum selected value.")
 		}),
 
 	"min": collectOverloads(aggProps(), types.AnyNonArray,
-		func(t types.T) tree.OverloadDefinition {
+		func(t types.T) tree.Overload {
 			return makeAggOverload([]types.T{t}, t, newMinAggregate,
 				"Identifies the minimum selected value.")
 		}),
@@ -295,7 +295,7 @@ func makePrivate(b builtinDefinition) builtinDefinition {
 
 func makeAggOverload(
 	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
-) tree.OverloadDefinition {
+) tree.Overload {
 	return makeAggOverloadWithReturnType(in, tree.FixedReturnType(ret), f, info)
 }
 
@@ -304,14 +304,14 @@ func makeAggOverloadWithReturnType(
 	retType tree.ReturnTyper,
 	f func([]types.T, *tree.EvalContext) tree.AggregateFunc,
 	info string,
-) tree.OverloadDefinition {
+) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
 		argTypes[i].Name = fmt.Sprintf("arg%d", i+1)
 		argTypes[i].Typ = typ
 	}
 
-	return tree.OverloadDefinition{
+	return tree.Overload{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
 		Types:         argTypes,

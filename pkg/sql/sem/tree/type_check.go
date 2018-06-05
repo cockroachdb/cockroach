@@ -556,7 +556,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		fnsStr := formatCandidates(expr.Func.String(), fns)
 		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
-	overloadImpl := fns[0].(*OverloadDefinition)
+	overloadImpl := fns[0].(*Overload)
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window

@@ -22,7 +22,7 @@ type FunctionDefinition struct {
 
 	// Definition is the set of overloads for this function name.
 	// We use []overloadImpl here although all the uses of this struct
-	// could actually write a []OverloadDefinition, because we want to share
+	// could actually write a []Overload, because we want to share
 	// the code with typeCheckOverloadedExprs().
 	Definition []overloadImpl
 
@@ -102,7 +102,7 @@ var _ = NormalClass
 // NewFunctionDefinition allocates a function definition corresponding
 // to the given built-in definition.
 func NewFunctionDefinition(
-	name string, props *FunctionProperties, def []OverloadDefinition,
+	name string, props *FunctionProperties, def []Overload,
 ) *FunctionDefinition {
 	overloads := make([]overloadImpl, len(def))
 	for i := range def {

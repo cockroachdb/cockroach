@@ -184,14 +184,14 @@ var generators = map[string]builtinDefinition{
 
 func makeGeneratorOverload(
 	in tree.ArgTypes, ret types.TTable, g generatorFactory, info string,
-) tree.OverloadDefinition {
+) tree.Overload {
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
 
 func makeGeneratorOverloadWithReturnType(
 	in tree.ArgTypes, retType tree.ReturnTyper, g generatorFactory, info string,
-) tree.OverloadDefinition {
-	return tree.OverloadDefinition{
+) tree.Overload {
+	return tree.Overload{
 		Types:      in,
 		ReturnType: retType,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

@@ -34,7 +34,7 @@ type FuncOpDef struct {
 	Name       string
 	Type       types.T
 	Properties *tree.FunctionProperties
-	Overload   *tree.OverloadDefinition
+	Overload   *tree.Overload
 }
 
 func (f FuncOpDef) String() string {
