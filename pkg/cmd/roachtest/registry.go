@@ -30,6 +30,7 @@ func registerTests(r *registry) {
 	registerDecommission(r)
 	registerDiskUsage(r)
 	registerDrop(r)
+	registerElectionAfterRestart(r)
 	registerHotSpotSplits(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
