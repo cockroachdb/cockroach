@@ -54,8 +54,9 @@ func TestMysqldumpDataReader(t *testing.T) {
 
 	ctx := context.TODO()
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
+	tables := map[string]*sqlbase.TableDescriptor{"simple": table}
 
-	converter, err := newMysqldumpReader(make(chan kvBatch, 10), table, testEvalCtx)
+	converter, err := newMysqldumpReader(make(chan kvBatch, 10), tables, testEvalCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,17 +104,19 @@ func TestMysqldumpDataReader(t *testing.T) {
 	}
 }
 
+const expectedParent = 52
+
 func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescriptor {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tbl, err := readMysqlCreateTable(f, testEvalCtx, name)
+	tbl, err := readMysqlCreateTable(f, testEvalCtx, expectedParent, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tbl
+	return tbl[0]
 }
 
 func TestMysqldumpSchemaReader(t *testing.T) {
@@ -124,7 +127,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 			i INT PRIMARY KEY,
 			s text,
 			b bytea
-		)`, 52, 53)
+		)`, expectedParent, 53)
 
 	t.Run("simple", func(t *testing.T) {
 		expected := simpleTable
@@ -171,7 +174,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 				f17		FLOAT4,
 				f47		DOUBLE PRECISION,
 				f75		FLOAT4
-			)`, 52, 53)
+			)`, expectedParent, 53)
 
 		testdata := getEverythingMysqlDumpTestdata(t)
 		got := readMysqlCreateFrom(t, testdata, "")
