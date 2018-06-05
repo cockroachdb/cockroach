@@ -83,7 +83,7 @@ func valueEncodePartitionTuple(
 		}
 
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, cols[i].Type.ToDatumType(), "partition",
-			nil /* semaCtx */, evalCtx)
+			nil /* semaCtx */, evalCtx, false /* allowImpure */)
 		if err != nil {
 			return nil, err
 		}

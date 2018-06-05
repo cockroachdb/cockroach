@@ -583,6 +583,11 @@ func (p *planner) newUpsertHelper(
 	ivarHelper := tree.MakeIndexedVarHelper(helper,
 		len(helper.sourceInfo.SourceColumns)+len(helper.excludedSourceInfo.SourceColumns))
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer func(sp tree.ScalarProperties) { p.semaCtx.DerivedProperties = sp }(p.semaCtx.DerivedProperties)
+
 	// Start with evalExprs, which will contain all the RHS expressions
 	// of UPDATE SET clauses. Again, evalExprs will contain one entry
 	// per column in updateCols and untupledExprs.
@@ -593,6 +598,9 @@ func (p *planner) newUpsertHelper(
 		// We require the type from the column descriptor.
 		desiredType := updateCols[i].Type.ToDatumType()
 
+		// Clear the properties so we can check them below.
+		p.semaCtx.DerivedProperties.Clear()
+
 		// Resolve names, type and normalize.
 		normExpr, err := p.analyzeExpr(
 			ctx, expr, sources, ivarHelper, desiredType, true /* requireType */, "ON CONFLICT")
@@ -600,11 +608,10 @@ func (p *planner) newUpsertHelper(
 			return nil, err
 		}
 
-		// Make sure there are no aggregation/window functions in the
+		// Make sure there are no aggregation/window/generator functions in the
 		// expression (after subqueries have been expanded).
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			normExpr, "ON CONFLICT", p.SessionData().SearchPath,
-		); err != nil {
+		if err := p.assertNoSpecialFunctions("ON CONFLICT",
+			false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
 			return nil, err
 		}
 
@@ -613,6 +620,9 @@ func (p *planner) newUpsertHelper(
 
 	// If there's a conflict WHERE clause, analyze it.
 	if whereClause != nil {
+		// Clear the properties so we can check them below.
+		p.semaCtx.DerivedProperties.Clear()
+
 		// Resolve names, type and normalize.
 		whereExpr, err := p.analyzeExpr(
 			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true /* requireType */, "WHERE")
@@ -620,11 +630,10 @@ func (p *planner) newUpsertHelper(
 			return nil, err
 		}
 
-		// Make sure there are no aggregation/window functions in the filter
-		// (after subqueries have been expanded).
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			whereExpr, "ON CONFLICT...WHERE", p.SessionData().SearchPath,
-		); err != nil {
+		// Make sure there are no aggregation/window/generator functions in the
+		// expression (after subqueries have been expanded).
+		if err := p.assertNoSpecialFunctions("ON CONFLICT...WHERE",
+			false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
 			return nil, err
 		}
 

@@ -54,18 +54,24 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 		{"OFFSET", n.Offset, &res.offsetExpr},
 	}
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer func(sp tree.ScalarProperties) { p.semaCtx.DerivedProperties = sp }(p.semaCtx.DerivedProperties)
+
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				datum.src, datum.name, p.SessionData().SearchPath,
-			); err != nil {
-				return nil, err
-			}
-
+			p.semaCtx.DerivedProperties.Clear()
 			normalized, err := p.analyzeExpr(ctx, datum.src, nil, tree.IndexedVarHelper{}, types.Int, true, datum.name)
 			if err != nil {
 				return nil, err
 			}
+			// Make sure there are no aggregation/window/generator functions in the limit.
+			if err := p.assertNoSpecialFunctions(datum.name,
+				false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
+				return nil, err
+			}
+
 			*datum.dst = normalized
 		}
 	}

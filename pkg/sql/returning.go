@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,25 +58,34 @@ func (p *planner) Returning(
 		return &rowCountNode{source: source}, nil
 
 	case *tree.ReturningExprs:
-		for _, e := range *t {
-			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				e.Expr, "RETURNING", p.SessionData().SearchPath,
-			); err != nil {
-				return nil, err
-			}
-		}
-
 		serialized := &serializeNode{source: source}
 		info := sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(source))
 		r := &renderNode{
 			source:     planDataSource{info: info, plan: serialized},
 			sourceInfo: sqlbase.MultiSourceInfo{info},
 		}
+
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer func(sp tree.ScalarProperties) { p.semaCtx.DerivedProperties = sp }(p.semaCtx.DerivedProperties)
+		p.semaCtx.DerivedProperties.Clear()
+
 		r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
 		err := p.initTargets(ctx, r, tree.SelectExprs(*t), desiredTypes)
-		return r, err
+		if err != nil {
+			return nil, err
+		}
+
+		if err := p.assertNoSpecialFunctions("RETURNING",
+			false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
+			return nil, err
+		}
+
+		return r, nil
 
 	default:
-		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: unexpected ReturningClause type: %T", t)
 	}
 }

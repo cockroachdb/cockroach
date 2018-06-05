@@ -50,6 +50,38 @@ type SemaContext struct {
 	// the root user.
 	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
 	privileged bool
+
+	// DerivedProperties is populated during semantic analysis with
+	// properties from the expression being analyzed.
+	// The caller is responsible for re-initializing this when needed.
+	DerivedProperties ScalarProperties
+}
+
+// ScalarProperties contains the properties of the current scalar
+// expression discovered during semantic analysis. The properties
+// are collected prior to simplification, so some of the properties
+// may not hold any more by the time semantic analysis completes.
+type ScalarProperties struct {
+	// HasAggregate is set to true if the expression originally
+	// contained an aggregation.
+	HasAggregate bool
+
+	// HasWindowApplication is set to true if the expression originally
+	// contained a window function.
+	HasWindowApplication bool
+
+	// HasGenerator is set to true if the expression originally
+	// contained a SRF.
+	HasGenerator bool
+
+	// HasImpureFunctions is set to true if the expression originally
+	// contained an impure function.
+	HasImpure bool
+}
+
+// Clear resets the scalar properties to defaults.
+func (sp *ScalarProperties) Clear() {
+	*sp = ScalarProperties{}
 }
 
 // MakeSemaContext initializes a simple SemaContext suitable
@@ -524,6 +556,25 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s()", def.Name)
+	}
+
+	if ctx != nil {
+		// Collect the expression properties before any simplification.
+		if expr.IsWindowFunctionApplication() {
+			ctx.DerivedProperties.HasWindowApplication = true
+		} else {
+			// If it is an aggregate function *not used OVER a window*, then
+			// we have an aggregation.
+			if def.Class == AggregateClass {
+				ctx.DerivedProperties.HasAggregate = true
+			}
+		}
+		if def.Class == GeneratorClass {
+			ctx.DerivedProperties.HasGenerator = true
+		}
+		if def.Impure {
+			ctx.DerivedProperties.HasImpure = true
+		}
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts

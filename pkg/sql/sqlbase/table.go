@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -68,15 +67,32 @@ func SanitizeVarFreeExpr(
 	context string,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	allowImpure bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(evalCtx, expr) {
-		return nil, fmt.Errorf("%s expression '%s' may not contain variable sub-expressions",
-			context, expr)
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"variable sub-expressions are not allowed in %s", context)
 	}
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer func(sp tree.ScalarProperties) { semaCtx.DerivedProperties = sp }(semaCtx.DerivedProperties)
+	semaCtx.DerivedProperties.Clear()
+
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
+
+	// Make sure there are no aggregation/window/generator functions in the expression.
+	if err := AssertNoSpecialFunctions(context,
+		false /* agg */, false /* win */, false /* gen */, allowImpure,
+		semaCtx,
+	); err != nil {
+		return nil, err
+	}
+
 	actualType := typedExpr.ResolvedType()
 	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
 		// The expression must match the column type exactly unless it is a constant
@@ -201,27 +217,15 @@ func MakeColumnDefDescs(
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
-		// Verify the default expression type is compatible with the column type.
-		if _, err := SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, evalCtx,
+		// Verify the default expression type is compatible with the column type
+		// and does not contain invalid functions.
+		if typedExpr, err = SanitizeVarFreeExpr(
+			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, evalCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}
-		var t transform.ExprTransformContext
-		if err := t.AssertNoAggregationOrWindowing(
-			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
-		); err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Type check and simplify: this performs constant folding and reduces the expression.
-		typedExpr, err = tree.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if typedExpr, err = t.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, nil, err
-		}
+		// We keep the type checked expression so that the type annotation
+		// gets properly stored.
 		d.DefaultExpr.Expr = typedExpr
 
 		s := tree.Serialize(d.DefaultExpr.Expr)

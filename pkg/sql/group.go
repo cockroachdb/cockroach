@@ -67,6 +67,9 @@ type groupNode struct {
 // renderNode as its own data source; the data source can be changed later with
 // an equivalent one if the renderNode is optimized out.
 //
+// Note that this function clobbers the planner's semaCtx. The caller is responsible
+// for saving and restoring the DerivedProperties.
+//
 // The visible node from the consumer-side is a renderNode which renders
 // post-aggregation expressions:
 //
@@ -105,7 +108,7 @@ func (p *planner) groupBy(
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.txCtx.IsAggregate(n, p.SessionData().SearchPath); !isAggregate {
+	if n.Having == nil && !r.renderProps.HasAggregate {
 		return nil, nil, nil
 	}
 
@@ -164,26 +167,6 @@ func (p *planner) groupBy(
 			}
 			groupByExprs[i] = resolvedExpr
 		}
-
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			expr, "GROUP BY", p.SessionData().SearchPath,
-		); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	// Normalize and check the HAVING expression too if it exists.
-	var typedHaving tree.TypedExpr
-	if n.Having != nil {
-		if p.txCtx.WindowFuncInExpr(n.Having.Expr) {
-			return nil, nil, sqlbase.NewWindowingError("HAVING")
-		}
-		var err error
-		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, r.sourceInfo, r.ivarHelper,
-			types.Bool, true /* requireType */, "HAVING")
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
 	group := &groupNode{
@@ -209,6 +192,7 @@ func (p *planner) groupBy(
 	// extractAggregatesVisitor below.
 	groupStrs := make(groupByStrMap, len(groupByExprs))
 	for _, g := range groupByExprs {
+		p.semaCtx.DerivedProperties.Clear()
 		cols, exprs, hasStar, err := p.computeRenderAllowingStars(
 			ctx, tree.SelectExpr{Expr: g}, types.Any, r.sourceInfo, r.ivarHelper,
 			autoGenerateRenderOutputName)
@@ -216,6 +200,12 @@ func (p *planner) groupBy(
 			return nil, nil, err
 		}
 		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
+
+		// Check that GROUP BY does not contain any special function.
+		if err := p.assertNoSpecialFunctions("GROUP BY",
+			false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
+			return nil, nil, err
+		}
 
 		// GROUP BY (a, b) -> GROUP BY a, b
 		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
@@ -249,39 +239,46 @@ func (p *planner) groupBy(
 	//
 	// "Grouping expressions" - expressions that also show up under GROUP BY - are
 	// also treated as aggregate expressions (any_not_null aggregation).
-	if typedHaving != nil {
+	// Normalize and check the HAVING expression too if it exists.
+	if n.Having != nil {
 		havingNode = &filterNode{
 			source: planDataSource{plan: plan, info: &sqlbase.DataSourceInfo{}},
 		}
-		plan = havingNode
 		havingNode.ivarHelper = tree.MakeIndexedVarHelper(havingNode, 0)
+		plan = havingNode
 
-		aggVisitor := extractAggregatesVisitor{
-			ctx:        ctx,
-			planner:    p,
-			groupNode:  group,
-			preRender:  r,
-			ivarHelper: &havingNode.ivarHelper,
-			groupStrs:  groupStrs,
-		}
-		// havingExpr is the HAVING expression, where any aggregates or grouping
-		// expressions have been replaced with havingNode IndexedVars.
-		havingExpr, err := aggVisitor.extract(typedHaving)
-		if err != nil {
-			return nil, nil, err
-		}
-		// The group.columns have been updated; the sourceColumns in the node must
-		// also be updated (for IndexedVarResolvedType to work).
-		havingNode.source.info = sqlbase.NewSourceInfoForSingleTable(
-			sqlbase.AnonymousTable, group.columns,
-		)
-
+		// Semantically analyze the HAVING expression.
+		var err error
+		p.semaCtx.DerivedProperties.Clear()
 		havingNode.filter, err = p.analyzeExpr(
-			ctx, havingExpr, nil /* no source info */, havingNode.ivarHelper,
+			ctx, n.Having.Expr, nil /* no source info */, havingNode.ivarHelper,
 			types.Bool, true /* require type */, "HAVING",
 		)
 		if err != nil {
 			return nil, nil, err
+		}
+		// Make sure there are no window/generator functions in the HAVING clause.
+		if err := p.assertNoSpecialFunctions("HAVING",
+			true /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
+			return nil, nil, err
+		}
+
+		if p.semaCtx.DerivedProperties.HasAggregate {
+			// HAVING clause has an aggregate. Extract it.
+			aggVisitor := extractAggregatesVisitor{
+				ctx:        ctx,
+				planner:    p,
+				groupNode:  group,
+				preRender:  r,
+				ivarHelper: &havingNode.ivarHelper,
+				groupStrs:  groupStrs,
+			}
+			// havingExpr is the HAVING expression, where any aggregates or grouping
+			// expressions have been replaced with havingNode IndexedVars.
+			havingNode.filter, err = aggVisitor.extract(havingNode.filter)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -673,6 +670,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			case 1:
 				argExpr := t.Exprs[0].(tree.TypedExpr)
 
+				// TODO(knz): it's really a shame that we need to recurse
+				// through the sub-tree to determine whether the arguments
+				// don't contain invalid functions. This really would want to
+				// be checked on the return path of the recursion.
+				// See issue #26425.
 				if v.planner.txCtx.WindowFuncInExpr(argExpr) {
 					v.err = sqlbase.NewWindowInAggError()
 					return false, expr
@@ -710,12 +712,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			if t.Filter != nil {
 				filterExpr := t.Filter.(tree.TypedExpr)
 
-				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
-					filterExpr, "FILTER", v.planner.SessionData().SearchPath,
-				); err != nil {
-					v.err = err
-					return false, expr
-				}
+				// We need to save and restore the previous value of the field in
+				// semaCtx in case we are recursively called within a subquery
+				// context.
+				defer func(sp tree.ScalarProperties) { v.planner.semaCtx.DerivedProperties = sp }(v.planner.semaCtx.DerivedProperties)
+				v.planner.semaCtx.DerivedProperties.Clear()
 
 				col, renderExpr, err := v.planner.computeRender(
 					v.ctx,
@@ -726,6 +727,13 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					autoGenerateRenderOutputName,
 				)
 				if err != nil {
+					v.err = err
+					return false, expr
+				}
+				// Make sure there are no aggregate/window/generator functions
+				// in the FILTER clause.
+				if err := v.planner.assertNoSpecialFunctions("FILTER",
+					false /* agg */, false /* win */, false /* gen */, true /* impure */); err != nil {
 					v.err = err
 					return false, expr
 				}

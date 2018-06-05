@@ -192,11 +192,6 @@ func NewRangeUnavailableError(
 		rangeID, nodeIDs, origErr)
 }
 
-// NewWindowingError creates a windowing error.
-func NewWindowingError(in string) error {
-	return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", in)
-}
-
 // NewWindowInAggError creates an error for the case when a window function is
 // nested within an aggregate function.
 func NewWindowInAggError() error {
@@ -208,6 +203,45 @@ func NewWindowInAggError() error {
 // contained within another aggregate function.
 func NewAggInAggError() error {
 	return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+}
+
+// AssertNoSpecialFunction checks whether the last computed scalar
+// properties in semaCtx indicate there are forbidden functions.
+func AssertNoSpecialFunctions(
+	context string, allowAgg, allowWin, allowGen, allowImpure bool, semaCtx *tree.SemaContext,
+) error {
+	if !allowAgg && semaCtx.DerivedProperties.HasAggregate {
+		return NewInvalidFunctionUsageError(tree.AggregateClass, context)
+	}
+	if !allowWin && semaCtx.DerivedProperties.HasWindowApplication {
+		return NewInvalidFunctionUsageError(tree.WindowClass, context)
+	}
+	if !allowGen && semaCtx.DerivedProperties.HasGenerator {
+		return NewInvalidFunctionUsageError(tree.GeneratorClass, context)
+	}
+	if !allowImpure && semaCtx.DerivedProperties.HasImpure {
+		return pgerror.NewErrorf(pgerror.CodeInvalidColumnDefinitionError,
+			"impure functions are not allowed in %s", context)
+	}
+	return nil
+}
+
+// NewInvalidFunctionUsage creates a rejection for a special function.
+func NewInvalidFunctionUsageError(class tree.FunctionClass, context string) error {
+	var cat string
+	var code string
+	switch class {
+	case tree.AggregateClass:
+		cat = "aggregate"
+		code = pgerror.CodeGroupingError
+	case tree.WindowClass:
+		cat = "window"
+		code = pgerror.CodeWindowingError
+	case tree.GeneratorClass:
+		cat = "generator"
+		code = pgerror.CodeFeatureNotSupportedError
+	}
+	return pgerror.NewErrorf(code, "%s functions are not allowed in %s", cat, context)
 }
 
 // NewStatementCompletionUnknownError creates an error with the corresponding pg

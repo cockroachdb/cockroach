@@ -41,11 +41,12 @@ type valueGenerator struct {
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
 func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
-	if err := p.txCtx.AssertNoAggregationOrWindowing(
-		t, "FROM", p.SessionData().SearchPath,
-	); err != nil {
-		return nil, err
-	}
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer func(sp tree.ScalarProperties) { p.semaCtx.DerivedProperties = sp }(p.semaCtx.DerivedProperties)
+	// Clear the properties so we can check them below.
+	p.semaCtx.DerivedProperties.Clear()
 
 	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 	normalized, err := p.analyzeExpr(
@@ -55,6 +56,13 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 		return nil, err
 	}
 	isConst := (len(p.curPlan.subqueryPlans) == lastKnownSubqueryIndex)
+
+	// Make sure there are no aggregation/window/generator functions in the
+	// expression (after subqueries have been expanded).
+	if err := p.assertNoSpecialFunctions("FROM",
+		false /* agg */, false /* win */, true /* gen */, true /* impure */); err != nil {
+		return nil, err
+	}
 
 	if tType, ok := normalized.ResolvedType().(types.TTable); ok {
 		// Set-generating functions: generate_series() etc.
