@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -46,14 +46,17 @@ func showBackupPlanHook(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	header := sqlbase.ResultColumns{
-		{Name: "database", Typ: types.String},
-		{Name: "table", Typ: types.String},
-		{Name: "start_time", Typ: types.Timestamp},
-		{Name: "end_time", Typ: types.Timestamp},
-		{Name: "size_bytes", Typ: types.Int},
-		{Name: "rows", Typ: types.Int},
+
+	var shower backupShower
+	switch backup.Details {
+	case tree.BackupRangeDetails:
+		shower = backupShowerRanges
+	case tree.BackupFileDetails:
+		shower = backupShowerFiles
+	default:
+		shower = backupShowerDefault
 	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -67,6 +70,30 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+
+		shower.fn(desc, resultsCh)
+		return nil
+	}
+
+	return fn, shower.header, nil, nil
+}
+
+type backupShower struct {
+	header sqlbase.ResultColumns
+	fn     func(BackupDescriptor, chan<- tree.Datums)
+}
+
+var backupShowerDefault = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "database", Typ: types.String},
+		{Name: "table", Typ: types.String},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
+	},
+
+	fn: func(desc BackupDescriptor, resultsCh chan<- tree.Datums) {
 		descs := make(map[sqlbase.ID]string)
 		for _, descriptor := range desc.Descriptors {
 			if database := descriptor.GetDatabase(); database != nil {
@@ -107,9 +134,53 @@ func showBackupPlanHook(
 				}
 			}
 		}
-		return nil
-	}
-	return fn, header, nil, nil
+	},
+}
+
+var backupShowerRanges = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "start_pretty", Typ: types.String},
+		{Name: "end_pretty", Typ: types.String},
+		{Name: "start_key", Typ: types.Bytes},
+		{Name: "end_key", Typ: types.Bytes},
+	},
+
+	fn: func(desc BackupDescriptor, resultsCh chan<- tree.Datums) {
+		for _, span := range desc.Spans {
+			resultsCh <- tree.Datums{
+				tree.NewDString(span.Key.String()),
+				tree.NewDString(span.EndKey.String()),
+				tree.NewDBytes(tree.DBytes(span.Key)),
+				tree.NewDBytes(tree.DBytes(span.EndKey)),
+			}
+		}
+	},
+}
+
+var backupShowerFiles = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "path", Typ: types.String},
+		{Name: "start_pretty", Typ: types.String},
+		{Name: "end_pretty", Typ: types.String},
+		{Name: "start_key", Typ: types.Bytes},
+		{Name: "end_key", Typ: types.Bytes},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
+	},
+
+	fn: func(desc BackupDescriptor, resultsCh chan<- tree.Datums) {
+		for _, file := range desc.Files {
+			resultsCh <- tree.Datums{
+				tree.NewDString(file.Path),
+				tree.NewDString(file.Span.Key.String()),
+				tree.NewDString(file.Span.EndKey.String()),
+				tree.NewDBytes(tree.DBytes(file.Span.Key)),
+				tree.NewDBytes(tree.DBytes(file.Span.EndKey)),
+				tree.NewDInt(tree.DInt(file.EntryCounts.DataSize)),
+				tree.NewDInt(tree.DInt(file.EntryCounts.Rows)),
+			}
+		}
+	},
 }
 
 func init() {

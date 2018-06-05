@@ -49,14 +49,33 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.Name)
 }
 
+// BackupDetails represents the type of details to display for a SHOW BACKUP
+// statement.
+type BackupDetails int
+
+const (
+	// BackupDefaultDetails identifies a bare SHOW BACKUP statement.
+	BackupDefaultDetails BackupDetails = iota
+	// BackupRangeDetails identifies a SHOW BACKUP RANGES statement.
+	BackupRangeDetails
+	// BackupFileDetails identifies a SHOW BACKUP FILES statement.
+	BackupFileDetails
+)
+
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path Expr
+	Path    Expr
+	Details BackupDetails
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowBackup) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW BACKUP ")
+	if node.Details == BackupRangeDetails {
+		ctx.WriteString("RANGES ")
+	} else if node.Details == BackupFileDetails {
+		ctx.WriteString("FILES ")
+	}
 	ctx.FormatNode(node.Path)
 }
 
