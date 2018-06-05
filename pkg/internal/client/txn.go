@@ -318,9 +318,8 @@ func (txn *Txn) OrigTimestamp() hlc.Timestamp {
 
 // CommitTimestamp returns the transaction's start timestamp.
 // The start timestamp can get pushed but the use of this
-// method will guarantee that the caller of this method sees
-// the push and thus calls this method again to receive the new
-// timestamp.
+// method will guarantee that if a timestamp push is needed
+// the commit will fail with a retryable error.
 func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
