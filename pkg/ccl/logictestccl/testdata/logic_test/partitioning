@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 statement error syntax
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST ()

@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql-opt
+# LogicTest: 5node-dist-opt
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
