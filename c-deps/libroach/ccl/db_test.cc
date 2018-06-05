@@ -16,6 +16,7 @@
 #include "testutils.h"
 
 using namespace cockroach;
+using namespace testutils;
 
 TEST(LibroachCCL, DBOpenHook) {
   DBOptions db_opts;
@@ -81,66 +82,4 @@ TEST(LibroachCCL, DBOpen) {
 
     DBClose(db);
   }
-}
-
-TEST(LibroachCCL, EncryptedEnv) {
-  // This test creates a standalone encrypted env (as opposed to a full
-  // rocksdb instance) and verifies that what goes in comes out.
-  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
-  auto key_manager = new MemKeyManager(MakeAES128Key(env.get()));
-  auto stream = new CTRCipherStreamCreator(key_manager, enginepb::Data);
-
-  auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env.get(), "/"));
-  EXPECT_OK(file_registry->Load());
-
-  std::unique_ptr<rocksdb::Env> encrypted_env(
-      rocksdb_utils::NewEncryptedEnv(env.get(), file_registry.get(), stream));
-
-  std::string filename("/foo");
-  std::string contents("this is the string stored inside the file!");
-  size_t kContentsLength = 42;
-  ASSERT_EQ(kContentsLength, contents.size());
-
-  // Write the file.
-  EXPECT_OK(
-      rocksdb::WriteStringToFile(encrypted_env.get(), contents, filename, false /* should_sync */));
-
-  // Read the file using the mem env (no encryption).
-  std::string result_plain;
-  EXPECT_OK(rocksdb::ReadFileToString(env.get(), filename, &result_plain));
-  EXPECT_STRNE(contents.c_str(), result_plain.c_str());
-
-  // Read the file back using the encrypted env.
-  std::string result_encrypted;
-  EXPECT_OK(rocksdb::ReadFileToString(encrypted_env.get(), filename, &result_encrypted));
-  EXPECT_STREQ(contents.c_str(), result_encrypted.c_str());
-
-  // Open as a random access file.
-  std::unique_ptr<rocksdb::RandomAccessFile> file;
-  EXPECT_OK(encrypted_env->NewRandomAccessFile(filename, &file, rocksdb::EnvOptions()));
-
-  // Reader thread. Captures all useful variables.
-  auto read_file = [&]() {
-    //    ThreadArg* arg = reinterpret_cast<ThreadArg*>(p);
-
-    char scratch[kContentsLength];  // needs to be at least len(contents).
-    rocksdb::Slice result_read;
-
-    for (int i = 0; i < 100; i++) {
-      EXPECT_OK(file->Read(0, kContentsLength, &result_read, scratch));
-      EXPECT_EQ(kContentsLength, result_read.size());
-      // We need to go through Slice.ToString as .data() does not have a null terminator.
-      EXPECT_STREQ(contents.c_str(), result_read.ToString().c_str());
-    }
-  };
-
-  // Call it once by itself.
-  read_file();
-
-  // Run two at the same time. We're not using rocksdb thread utilities as they don't support
-  // lambda functions with variable capture, everything has to done through args.
-  auto t1 = std::thread(read_file);
-  auto t2 = std::thread(read_file);
-  t1.join();
-  t2.join();
 }

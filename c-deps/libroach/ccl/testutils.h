@@ -15,6 +15,8 @@
 
 namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
+namespace testutils {
+
 // MakeAES<size>Key creates a SecretKeyObject with a key of the specified size.
 // It needs an Env for the current time.
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env);
@@ -29,6 +31,11 @@ class MemKeyManager : public KeyManager {
   virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
   virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
+  // Replace the key with the passed-in one. Takes ownership.
+  void set_key(enginepbccl::SecretKey* key);
+
  private:
   std::unique_ptr<enginepbccl::SecretKey> key_;
 };
+
+}  // namespace testutils

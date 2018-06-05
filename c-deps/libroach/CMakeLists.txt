@@ -93,6 +93,7 @@ set(tests
   file_registry_test.cc
   merge_test.cc
   ccl/db_test.cc
+  ccl/encrypted_env_test.cc
   ccl/key_manager_test.cc
 )
 
@@ -151,6 +152,7 @@ foreach(tsrc ${tests})
     roach
     gtest_main
     pthread
+    stdc++fs
     ${ROCKSDB_LIB}
     ${PROTOBUF_LIB}
     ${JEMALLOC_LIB}
