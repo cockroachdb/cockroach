@@ -399,12 +399,12 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
+	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
 	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "Off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "On"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
+	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
 }
 
 // An index in the above slice.
