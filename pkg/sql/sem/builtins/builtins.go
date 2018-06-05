@@ -20,8 +20,6 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -45,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -617,21 +616,15 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
-				switch format {
-				case "hex":
-					var buf bytes.Buffer
-					lex.HexEncodeString(&buf, string(data))
-					return tree.NewDString(buf.String()), nil
-				case "escape":
-					return tree.NewDString(encodeEscape([]byte(data))), nil
-				case "base64":
-					enc := base64.StdEncoding.EncodeToString([]byte(data))
-					return tree.NewDString(enc), nil
-				default:
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for ENCODE")
+				be, ok := sessiondata.BytesEncodeFormatFromString(format)
+				if !ok {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+						"only 'hex', 'escape', and 'base64' formats are supported for ENCODE")
 				}
+				return tree.NewDString(lex.EncodeByteArrayToRawBytes(
+					string(data), be, true /* skipHexPrefix */)), nil
 			},
-			Info: "Encodes `data` in the text format specified by `format` (only \"hex\", \"escape\", and \"base64\" are supported).",
+			Info: "Encodes `data` using `format` (`hex` / `escape` / `base64`).",
 		},
 	),
 
@@ -641,30 +634,18 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				switch format {
-				case "hex":
-					decoded, err := hex.DecodeString(data)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDBytes(tree.DBytes(decoded)), nil
-				case "escape":
-					decoded, err := decodeEscape(data)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDBytes(tree.DBytes(decoded)), nil
-				case "base64":
-					decoded, err := base64.StdEncoding.DecodeString(data)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDBytes(tree.DBytes(decoded)), nil
-				default:
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for DECODE")
+				be, ok := sessiondata.BytesEncodeFormatFromString(format)
+				if !ok {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+						"only 'hex', 'escape', and 'base64' formats are supported for DECODE")
 				}
+				res, err := lex.DecodeRawBytesToByteArray(data, be)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
-			Info: "Decodes `data` as the format specified by `format` (only \"hex\", \"escape\", and \"base64\" are supported).",
+			Info: "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
 		},
 	),
 

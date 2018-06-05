@@ -16,7 +16,6 @@ package pgwire
 
 import (
 	"context"
-	"encoding/hex"
 	"math"
 	"math/big"
 	"net"
@@ -24,16 +23,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 // pgType contains type metadata used in RowDescription messages.
@@ -64,7 +66,9 @@ func pgTypeForParserType(t types.T) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionLoc *time.Location) {
+func (b *writeBuffer) writeTextDatum(
+	ctx context.Context, d tree.Datum, sessionLoc *time.Location, be sessiondata.BytesEncodeFormat,
+) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
@@ -98,15 +102,9 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		b.writeLengthPrefixedDatum(v)
 
 	case *tree.DBytes:
-		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
-		// Code cribbed from github.com/lib/pq.
-		result := make([]byte, 2+hex.EncodedLen(len(*v)))
-		result[0] = '\\'
-		result[1] = 'x'
-		hex.Encode(result[2:], []byte(*v))
-
+		result := lex.EncodeByteArrayToRawBytes(string(*v), be, false /* skipHexPrefix */)
 		b.putInt32(int32(len(result)))
-		b.write(result)
+		b.write([]byte(result))
 
 	case *tree.DUuid:
 		b.writeLengthPrefixedString(v.UUID.String())
