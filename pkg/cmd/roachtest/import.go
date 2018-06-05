@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 const (
@@ -42,7 +43,18 @@ func registerImportTPCC(r *registry) {
 			c.Run(ctx, c.Node(1), cmd)
 			return nil
 		})
-		m.Wait()
+		// To diagnose #26132.
+		done := make(chan struct{})
+		go func() {
+			m.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Hour):
+			t.Fatal("timed out making fixture")
+		}
 	}
 
 	const warehouses = 1000
