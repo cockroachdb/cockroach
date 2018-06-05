@@ -799,7 +799,17 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) erro
 		}
 
 		if result := n.recorder.CheckHealth(ctx, *nodeStatus); len(result.Alerts) != 0 {
-			log.Warningf(ctx, "health alerts detected: %+v", result)
+			var numNodes int
+			if err := n.storeCfg.Gossip.IterateInfos(gossip.KeyNodeIDPrefix, func(k string, info gossip.Info) error {
+				numNodes++
+				return nil
+			}); err != nil {
+				log.Warning(ctx, err)
+			}
+			if numNodes > 1 {
+				// Avoid this warning on single-node clusters, which require special UX.
+				log.Warningf(ctx, "health alerts detected: %+v", result)
+			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
 				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, alertTTL,
 			); err != nil {
