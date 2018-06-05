@@ -106,7 +106,7 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 	_, lowerFns := builtins.GetBuiltinProperties("lower")
 
 	testData := []struct {
-		builtin            tree.OverloadDefinition
+		builtin            tree.Overload
 		args               tree.Datums
 		expectedAllocation int64
 	}{

@@ -22,11 +22,11 @@ the type system and part of the logic test infrastructure.
 
 The SQL code lies within the `pkg/sql` directory. The built-in
 functions reside in `pkg/sql/sem/builtins/builtins.go`. A function is
-described by a `OverloadDefinition` structure, in
+described by a `Overload` structure, in
 `pkg/sql/sem/tree/overload_definition.go`:
 
 ```go
-type OverloadDefinition struct {
+type Overload struct {
   Types      TypeList
   ReturnType ReturnTyper
   ...
@@ -34,7 +34,7 @@ type OverloadDefinition struct {
 }
 ```
 
-`OverloadDefinition` contains a number of fields, reflecting the
+`Overload` contains a number of fields, reflecting the
 diversity of built-in functions. Three important fields for us to pay
 attention to our the argument types (`Types`), the return type
 (`ReturnType`) and the implementation function pointer (`Fn`).
@@ -57,7 +57,7 @@ var Builtins = map[string]BuiltinDefinition{...}
 ```
 
 Notice that this is a map from `string` to `BuiltinDefinition`, which
-contains a slice of `OverloadDefinition`s via the member field
+contains a slice of `Overload`s via the member field
 `Overloads`. The `Overloads` slice is used to distinguish the
 "overloads" for a given function. 
 
@@ -75,7 +75,7 @@ let’s add it right at the top of the definition for simplicity:
 ```go
 var Builtins = map[string]BuiltinDefinition{
   "whois": makeBuiltin(defProps(),
-    tree.OverloadDefinition{
+    tree.Overload{
       Types:      tree.VariadicType{VarType: types.String},
       ReturnType: tree.FixedReturnType(types.String),
       Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -347,7 +347,7 @@ check your solution against ours.
 
   ```diff
     "whois": makeBuiltin(defProps(),
-      tree.OverloadDefinition{
+      tree.Overload{
         Types:      tree.VariadicType{VarType: types.String},
         ReturnType: tree.FixedReturnType(types.TypeString),
         Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

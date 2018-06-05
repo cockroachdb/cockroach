@@ -65,7 +65,7 @@ func init() {
 	sort.Strings(AllAggregateBuiltinNames)
 }
 
-func getCategory(b []tree.OverloadDefinition) string {
+func getCategory(b []tree.Overload) string {
 	// If single argument attempt to categorize by the type of the argument.
 	for _, ovl := range b {
 		switch typ := ovl.Types.(type) {
@@ -83,9 +83,9 @@ func getCategory(b []tree.OverloadDefinition) string {
 }
 
 func collectOverloads(
-	props tree.FunctionProperties, types []types.T, gens ...func(types.T) tree.OverloadDefinition,
+	props tree.FunctionProperties, types []types.T, gens ...func(types.T) tree.Overload,
 ) builtinDefinition {
-	r := make([]tree.OverloadDefinition, 0, len(types)*len(gens))
+	r := make([]tree.Overload, 0, len(types)*len(gens))
 	for _, f := range gens {
 		for _, t := range types {
 			r = append(r, f(t))
