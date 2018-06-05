@@ -1,4 +1,4 @@
-# LogicTest: default opt
+# LogicTest: local local-opt
 
 query T colnames
 SELECT * FROM [SHOW client_encoding]

@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 statement ok
 CREATE TABLE d (

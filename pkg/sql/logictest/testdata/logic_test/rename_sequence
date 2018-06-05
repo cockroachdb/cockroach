@@ -1,4 +1,4 @@
-# LogicTest: default opt distsql distsql-opt distsql-metadata parallel-stmts
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
 
 # see also file `sequences`
 

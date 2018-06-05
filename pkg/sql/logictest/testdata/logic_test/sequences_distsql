@@ -1,4 +1,4 @@
-# LogicTest: distsql distsql-opt distsql-metadata
+# LogicTest: fakedist fakedist-opt fakedist-metadata
 
 
 # Test that sequence functions work in DistSQL queries.

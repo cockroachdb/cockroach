@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata distsql-disk
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
 
 # The join condition logic is tricky to get right with NULL
 # values. Simple implementations can deal well with NULLs on the first

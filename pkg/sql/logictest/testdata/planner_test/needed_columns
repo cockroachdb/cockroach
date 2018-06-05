@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 query TTTTT
 EXPLAIN (VERBOSE,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)

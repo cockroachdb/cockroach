@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 query TI colnames
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
