@@ -52,14 +52,23 @@ const (
 // Fully-qualified names for metrics.
 var (
 	MetaConns = metric.Metadata{
-		Name: "sql.conns",
-		Help: "Number of active sql connections"}
+		Name:        "sql.conns",
+		Help:        "Number of active sql connections",
+		Unit:        "Connections",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	MetaBytesIn = metric.Metadata{
-		Name: "sql.bytesin",
-		Help: "Number of sql bytes received"}
+		Name:        "sql.bytesin",
+		Help:        "Number of sql bytes received",
+		Unit:        "SQL Bytes",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 	MetaBytesOut = metric.Metadata{
-		Name: "sql.bytesout",
-		Help: "Number of sql bytes sent"}
+		Name:        "sql.bytesout",
+		Help:        "Number of sql bytes sent",
+		Unit:        "SQL Bytes",
+		DisplayUnit: metric.DisplayUnit_BYTES,
+	}
 )
 
 const (

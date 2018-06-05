@@ -63,14 +63,23 @@ const (
 // Metric names.
 var (
 	metaExecLatency = metric.Metadata{
-		Name: "exec.latency",
-		Help: "Latency in nanoseconds of batch KV requests executed on this node"}
+		Name:        "exec.latency",
+		Help:        "Latency in nanoseconds of batch KV requests executed on this node",
+		Unit:        "Latency",
+		DisplayUnit: metric.DisplayUnit_NANOSECONDS,
+	}
 	metaExecSuccess = metric.Metadata{
-		Name: "exec.success",
-		Help: "Number of batch KV requests executed successfully on this node"}
+		Name:        "exec.success",
+		Help:        "Number of batch KV requests executed successfully on this node",
+		Unit:        "Batch KV Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 	metaExecError = metric.Metadata{
-		Name: "exec.error",
-		Help: "Number of batch KV requests that failed to execute on this node"}
+		Name:        "exec.error",
+		Help:        "Number of batch KV requests that failed to execute on this node",
+		Unit:        "Batch KV Requests",
+		DisplayUnit: metric.DisplayUnit_COUNT,
+	}
 )
 
 type nodeMetrics struct {
