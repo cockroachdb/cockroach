@@ -184,13 +184,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 		if os.ImplicitTxn.Get() {
-			autoCommitErr := ex.handleAutoCommit(ctx, stmt.AST)
-			if autoCommitErr != nil {
-				retEv, retPayload = ex.makeErrEvent(autoCommitErr, stmt.AST)
-				return
-			}
-			retEv = eventTxnFinish{}
-			retPayload = eventTxnFinishPayload{commit: true}
+			retEv, retPayload = ex.handleAutoCommit(ctx, stmt.AST)
 			return
 		}
 	}()
@@ -430,6 +424,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	return nil, nil, nil
 }
 
+func (ex *connExecutor) checkTableLeaseVersion(ctx context.Context, tables []idVersion) error {
+	count, err := countLeases(ctx, ex.server.cfg.InternalExecutor, tables, ex.state.mu.txn.OrigTimestamp())
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		// Restart the transaction so that it is able to replay itself at a newer timestamp
+		// with the hope that the next time around there will be no leases at Version - 1.
+		ex.tableVersions = tables
+		return ex.state.mu.txn.GenerateForcedRetryableError(
+			"cannot increment descriptor version, (version - 1) is still leased",
+		)
+	}
+	return nil
+}
+
 // commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
 // transaction is committed and the statement result is written to res. res is
 // closed.
@@ -439,6 +449,32 @@ func (ex *connExecutor) commitSQLTransaction(
 	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
 		isRelease = true
+	}
+
+	if tables := ex.extraTxnState.tables.schemaChanges(); tables != nil {
+		if err := ex.checkTableLeaseVersion(ctx, tables); err != nil {
+			if ex.tableVersions != nil {
+				rc, canAutoRetry := ex.getRewindTxnCapability()
+				ev := eventTwoSchemaVersionViolationRetriableErr{
+					IsCommit:     fsm.FromBool(isCommit(stmt)),
+					CanAutoRetry: fsm.FromBool(canAutoRetry),
+				}
+				rwMode := tree.ReadWrite
+				if ex.state.readOnly {
+					rwMode = tree.ReadOnly
+				}
+				payload := eventTwoSchemaVersionViolationRetriableErrPayload{
+					err:    err,
+					rewCap: rc,
+					start: makeEventTxnStartPayload(
+						ex.state.isolation, ex.state.priority,
+						rwMode, ex.server.cfg.Clock.PhysicalTime(),
+						ex.transitionCtx),
+				}
+				return ev, payload
+			}
+			return ex.makeErrEvent(err, stmt)
+		}
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -1111,19 +1147,21 @@ func (ex *connExecutor) addActiveQuery(
 //
 // Args:
 // stmt: The statement that we just ran.
-func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statement) error {
+func (ex *connExecutor) handleAutoCommit(
+	ctx context.Context, stmt tree.Statement,
+) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
-		return nil
+		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
+
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
 		if err := knob(ctx, stmt.String()); err != nil {
-			return err
+			return ex.makeErrEvent(err, stmt)
 		}
 	}
-	err := txn.Commit(ctx)
-	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
-	return err
+
+	return ex.commitSQLTransaction(ctx, stmt)
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {

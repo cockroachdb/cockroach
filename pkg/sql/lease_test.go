@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1174,6 +1175,91 @@ CREATE TABLE t.test2 ();
 
 		return nil
 	})
+}
+
+// Check that the table version is incremented with every schema change.
+// The test also verifies that when a lease is in use, the first schema
+// change can proceed, but the next one will wait until the lease is
+// released.
+func TestIncrementTableVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Disable execution of schema changers after the schema change
+		// transaction commits. This is to prevent executing the default
+		// WaitForOneVersion() code that holds up a schema change
+		// transaction until the new version has been published to the
+		// entire cluster.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 1 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Grab a lease on the table.
+	if _, err := tx.Exec("INSERT INTO t.kv VALUES ('a', 'b');"); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg, wgFirst sync.WaitGroup
+	wg.Add(1)
+	wgFirst.Add(1)
+	go func() {
+		// Modify the table descriptor.
+		if _, err := sqlDB.Exec(`ALTER TABLE t.kv RENAME to t.kv1`); err != nil {
+			t.Error(err)
+		}
+		wgFirst.Done()
+
+		if _, err := sqlDB.Exec(`ALTER TABLE t.kv1 RENAME TO t.kv2`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// The first schema change will succeed and increment the version.
+	wgFirst.Wait()
+	// Give the second schema change some time to execute.
+	time.Sleep(10 * time.Millisecond)
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 2 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	// Transaction successfully used the old version.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Wait()
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 3 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
 }
 
 func TestModificationTimeTxnOrdering(testingT *testing.T) {

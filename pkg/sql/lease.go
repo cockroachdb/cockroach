@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -266,7 +267,13 @@ func (s LeaseStore) WaitForOneVersion(
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.execCfg.Clock.Now()
-		count, err := s.countLeases(ctx, tableDesc.ID, tableDesc.Version-1, now.GoTime())
+		tables := []idVersion{
+			{
+				id:      tableDesc.ID,
+				version: tableDesc.Version - 1,
+			},
+		}
+		count, err := countLeases(ctx, s.execCfg.InternalExecutor, tables, now)
 		if err != nil {
 			return 0, err
 		}
@@ -277,6 +284,20 @@ func (s LeaseStore) WaitForOneVersion(
 			tableDesc.ID, tableDesc.Name, tableDesc.Version-1, count)
 	}
 	return tableDesc.Version, nil
+}
+
+func incrementVersion(ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn) {
+	tableDesc.Version++
+	// We need to set ModificationTime to the transaction's commit
+	// timestamp. Since this is a SERIALIZABLE transaction, that
+	// will be OrigTimestamp. However, once we've used the
+	// timestamp, it's rather essential that we have a guarantee
+	// that the txn will commit at that exact timestamp. Using
+	// CommitTimestamp() provides this guarantee.
+	modTime := txn.CommitTimestamp()
+	tableDesc.ModificationTime = modTime
+	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
+		tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
 }
 
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
@@ -341,17 +362,7 @@ func (s LeaseStore) Publish(
 					tableDesc.Version, version)
 			}
 
-			tableDesc.Version++
-			// We need to set ModificationTime to the transaction's commit
-			// timestamp. Since this is a SERIALIZABLE transaction, that
-			// will be OrigTimestamp. However, once we've used the
-			// timestamp, it's rather essential that we have a guarantee
-			// that the txn will commit at that exact timestamp. Using
-			// CommitTimestamp() provides this guarantee.
-			modTime := txn.CommitTimestamp()
-			tableDesc.ModificationTime = modTime
-			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+			incrementVersion(ctx, tableDesc, txn)
 			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
 				return err
 			}
@@ -394,15 +405,29 @@ func (s LeaseStore) Publish(
 	panic("not reached")
 }
 
-// countLeases returns the number of unexpired leases for a particular version
-// of a descriptor.
-func (s LeaseStore) countLeases(
-	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
+type idVersion struct {
+	id      sqlbase.ID
+	version sqlbase.DescriptorVersion
+}
+
+// countLeases returns the number of unexpired leases for a number of tables
+// each at a particular version at a particular time.
+func countLeases(
+	ctx context.Context, executor *InternalExecutor, tables []idVersion, at hlc.Timestamp,
 ) (int, error) {
-	const countLeases = `SELECT count(version) FROM system.lease ` +
-		`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
-	values, err := s.execCfg.InternalExecutor.QueryRow(
-		ctx, "count-leases", nil /* txn */, countLeases, descID, int(version), expiration,
+	var whereClauses []string
+	for _, t := range tables {
+		whereClauses = append(whereClauses,
+			fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+				t.id, t.version),
+		)
+	}
+
+	stmt := fmt.Sprintf(`SELECT COUNT(version) FROM system.lease AS OF SYSTEM TIME %d.%d WHERE `,
+		at.WallTime, at.Logical) +
+		strings.Join(whereClauses, " OR ")
+	values, err := executor.QueryRow(
+		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
 	)
 	if err != nil {
 		return 0, err

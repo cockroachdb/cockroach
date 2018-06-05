@@ -853,6 +853,9 @@ type connExecutor struct {
 	curStmt tree.Statement
 
 	sessionID ClusterWideID
+
+	// table versions to be checked to move forward.
+	tableVersions []idVersion
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1015,6 +1018,8 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 
 	var draining bool
 	for {
+		// Check to see if there are any table descriptor versions to wait on
+
 		ex.curStmt = nil
 		if err := ctx.Err(); err != nil {
 			return err
@@ -1521,8 +1526,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 			panic(fmt.Sprintf("retriable error in unexpected state: %#v",
 				ex.machine.CurState()))
 		}
-	}
-	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),

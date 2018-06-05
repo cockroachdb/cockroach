@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/pkg/errors"
 	// We dot-import fsm to use common names such as fsm.True/False. State machine
 	// implementations using that library are weird beasts intimately inter-twined
 	// with that package; therefor this file should stay as small as possible.
@@ -199,6 +200,31 @@ func (p eventRetriableErrPayload) errorCause() error {
 // eventRetriableErrPayload implements payloadWithError.
 var _ payloadWithError = eventRetriableErrPayload{}
 
+type eventTwoSchemaVersionViolationRetriableErr struct {
+	CanAutoRetry Bool
+	IsCommit     Bool
+}
+
+// eventTwoSchemaVersionViolationRetriableErrPayload represents the payload for eventTwoSchemaVersionViolationErr.
+type eventTwoSchemaVersionViolationRetriableErrPayload struct {
+	// err is the error that caused the event
+	err error
+	// rewCap must be set if CanAutoRetry is set on the event. It will be passed
+	// back to the connExecutor to perform the rewind.
+	rewCap rewindCapability
+	// This retriable error restarts the transaction and needs the start payload
+	// parameters.
+	start eventTxnStartPayload
+}
+
+// errorCause implements the payloadWithError interface.
+func (p eventTwoSchemaVersionViolationRetriableErrPayload) errorCause() error {
+	return p.err
+}
+
+// eventTwoSchemaVersionViolationRetriableErrPayload implements payloadWithError.
+var _ payloadWithError = eventTwoSchemaVersionViolationRetriableErrPayload{}
+
 // eventTxnReleased is generated after a successful RELEASE SAVEPOINT
 // cockroach_restart. It moves the state to CommitWait.
 type eventTxnReleased struct{}
@@ -208,13 +234,14 @@ type payloadWithError interface {
 	errorCause() error
 }
 
-func (eventRetryIntentSet) Event()  {}
-func (eventTxnStart) Event()        {}
-func (eventTxnFinish) Event()       {}
-func (eventTxnRestart) Event()      {}
-func (eventNonRetriableErr) Event() {}
-func (eventRetriableErr) Event()    {}
-func (eventTxnReleased) Event()     {}
+func (eventRetryIntentSet) Event()                        {}
+func (eventTxnStart) Event()                              {}
+func (eventTxnFinish) Event()                             {}
+func (eventTxnRestart) Event()                            {}
+func (eventNonRetriableErr) Event()                       {}
+func (eventRetriableErr) Event()                          {}
+func (eventTwoSchemaVersionViolationRetriableErr) Event() {}
+func (eventTxnReleased) Event()                           {}
 
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
@@ -295,9 +322,45 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateOpen{ImplicitTxn: Var("implicitTxn"), RetryIntent: Var("retryIntent")},
 			Action: func(args Args) error {
 				// The caller will call rewCap.rewindAndUnlock().
+				payload := args.Payload.(eventRetriableErrPayload)
 				args.Extended.(*txnState).setAdvanceInfo(
 					rewind,
-					args.Payload.(eventRetriableErrPayload).rewCap,
+					payload.rewCap,
+					txnRestart)
+				return nil
+			},
+		},
+		eventTwoSchemaVersionViolationRetriableErr{CanAutoRetry: True, IsCommit: Any}: {
+			// We leave the transaction in Open. In particular, we don't move to
+			// RestartWait, as there'd be nothing to move us back from RestartWait to
+			// Open.
+			// Note: Preparing the KV txn for restart has already happened by this
+			// point.
+			Description: "Two schema version retriable err; will auto-retry",
+			Next:        stateOpen{ImplicitTxn: Var("implicitTxn"), RetryIntent: Var("retryIntent")},
+			Action: func(args Args) error {
+				// The caller will call rewCap.rewindAndUnlock().
+				payload := args.Payload.(eventTwoSchemaVersionViolationRetriableErrPayload)
+				ts := args.Extended.(*txnState)
+				ts.mu.txn.CleanupOnError(ts.Ctx, errors.New("restarting for wait for schema version"))
+				ts.finishSQLTxn(args.Ctx)
+
+				// Note that we pass the connection's context here, not args.Ctx which
+				// was the previous txn's context.
+				start := payload.start
+				ts.resetForNewSQLTxn(
+					ts.connCtx,
+					explicitTxn,
+					start.txnSQLTimestamp,
+					start.iso,
+					start.pri,
+					start.readOnly,
+					nil, /* txn */
+					start.tranCtx,
+				)
+				args.Extended.(*txnState).setAdvanceInfo(
+					rewind,
+					payload.rewCap,
 					txnRestart)
 				return nil
 			},
