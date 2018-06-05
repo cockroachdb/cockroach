@@ -206,8 +206,10 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	if err != nil {
 		return err
 	}
-	if err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
+	if changed, err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
 		return err
+	} else if changed {
+		newTableDesc.State = sqlbase.TableDescriptor_ADD
 	}
 
 	for _, table := range tables {
@@ -217,14 +219,14 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 
 	// Reassign all self references.
-	if err := reassignReferencedTables(
+	if changed, err := reassignReferencedTables(
 		[]*sqlbase.TableDescriptor{&newTableDesc}, tableDesc.ID, newID,
 	); err != nil {
 		return err
+	} else if changed {
+		newTableDesc.State = sqlbase.TableDescriptor_ADD
 	}
 
-	// Add new descriptor.
-	newTableDesc.State = sqlbase.TableDescriptor_ADD
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
 	for _, m := range newTableDesc.Mutations {
@@ -243,6 +245,8 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
 		return err
 	}
+
+	p.Tables().addCreatedTable(newID)
 
 	// Copy the zone config.
 	b = &client.Batch{}
@@ -288,23 +292,29 @@ func (p *planner) findAllReferences(
 }
 
 // reassign all the references from oldID to newID.
-func reassignReferencedTables(tables []*sqlbase.TableDescriptor, oldID, newID sqlbase.ID) error {
+func reassignReferencedTables(
+	tables []*sqlbase.TableDescriptor, oldID, newID sqlbase.ID,
+) (bool, error) {
+	changed := false
 	for _, table := range tables {
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			for j, a := range index.Interleave.Ancestors {
 				if a.TableID == oldID {
 					index.Interleave.Ancestors[j].TableID = newID
+					changed = true
 				}
 			}
 			for j, c := range index.InterleavedBy {
 				if c.Table == oldID {
 					index.InterleavedBy[j].Table = newID
+					changed = true
 				}
 			}
 
 			if index.ForeignKey.IsSet() {
 				if to := index.ForeignKey.Table; to == oldID {
 					index.ForeignKey.Table = newID
+					changed = true
 				}
 			}
 
@@ -313,17 +323,19 @@ func reassignReferencedTables(tables []*sqlbase.TableDescriptor, oldID, newID sq
 			for _, ref := range origRefs {
 				if ref.Table == oldID {
 					ref.Table = newID
+					changed = true
 				}
 				index.ReferencedBy = append(index.ReferencedBy, ref)
 			}
 			return nil
 		}); err != nil {
-			return err
+			return false, err
 		}
 
 		for i, dest := range table.DependsOn {
 			if dest == oldID {
 				table.DependsOn[i] = newID
+				changed = true
 			}
 		}
 		origRefs := table.DependedOnBy
@@ -331,11 +343,12 @@ func reassignReferencedTables(tables []*sqlbase.TableDescriptor, oldID, newID sq
 		for _, ref := range origRefs {
 			if ref.ID == oldID {
 				ref.ID = newID
+				changed = true
 			}
 			table.DependedOnBy = append(table.DependedOnBy, ref)
 		}
 	}
-	return nil
+	return changed, nil
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
