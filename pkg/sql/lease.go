@@ -286,6 +286,23 @@ func (s LeaseStore) WaitForOneVersion(
 	return tableDesc.Version, nil
 }
 
+func incrementVersion(ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn) {
+	tableDesc.Version++
+	// We need to set ModificationTime to the transaction's commit
+	// timestamp. Using CommitTimestamp() guarantees that the
+	// transaction will commit at the CommitTimestamp().
+	//
+	// TODO(vivek): Stop needing to do this by deprecating the
+	// ModificationTime. A Descriptor modification time can be
+	// the mvcc timestamp of the descriptor. This requires moving the
+	// schema change lease out of the descriptor making the
+	// descriptor truely immutable at a version.
+	modTime := txn.CommitTimestamp()
+	tableDesc.ModificationTime = modTime
+	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
+		tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+}
+
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 
 // Publish updates a table descriptor. It also maintains the invariant that
@@ -348,17 +365,7 @@ func (s LeaseStore) Publish(
 					tableDesc.Version, version)
 			}
 
-			tableDesc.Version++
-			// We need to set ModificationTime to the transaction's commit
-			// timestamp. Since this is a SERIALIZABLE transaction, that
-			// will be OrigTimestamp. However, once we've used the
-			// timestamp, it's rather essential that we have a guarantee
-			// that the txn will commit at that exact timestamp. Using
-			// CommitTimestamp() provides this guarantee.
-			modTime := txn.CommitTimestamp()
-			tableDesc.ModificationTime = modTime
-			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+			incrementVersion(ctx, tableDesc, txn)
 			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
 				return err
 			}
