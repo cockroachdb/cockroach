@@ -134,13 +134,7 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 			return false, expr
 		}
 
-		if fd.HasOverloadsNeedingRepeatedEvaluation {
-			// TODO(knz): this property should really be an attribute of the
-			// individual overloads. By looking at the name-level property
-			// indicator, we are marking a function as row-dependent as
-			// soon as one overload is, even if the particular overload
-			// that would be selected by type checking for this FuncExpr
-			// is constant. This could be more fine-grained.
+		if fd.NeedsRepeatedEvaluation {
 			v.foundDependentVars = true
 		}
 

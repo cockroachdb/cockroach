@@ -24,14 +24,72 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Overload is one of the overloads of a built-in function.
+// Each FunctionDefinition may contain one or more overloads.
+type Overload struct {
+	Types      TypeList
+	ReturnType ReturnTyper
+
+	// PreferredOverload determines overload resolution as follows.
+	// When multiple overloads are eligible based on types even after all of of
+	// the heuristics to pick one have been used, if one of the overloads is a
+	// Overload with the `PreferredOverload` flag set to true it can be selected
+	// rather than returning a no-such-method error.
+	// This should generally be avoided -- avoiding introducing ambiguous
+	// overloads in the first place is a much better solution -- and only done
+	// after consultation with @knz @nvanbenschoten.
+	PreferredOverload bool
+
+	// Info is a description of the function, which is surfaced on the CockroachDB
+	// docs site on the "Functions and Operators" page. Descriptions typically use
+	// third-person with the function as an implicit subject (e.g. "Calculates
+	// infinity"), but should focus more on ease of understanding so other structures
+	// might be more appropriate.
+	Info string
+
+	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
+	WindowFunc    func([]types.T, *EvalContext) WindowFunc
+	Fn            func(*EvalContext, Datums) (Datum, error)
+}
+
+// params implements the overloadImpl interface.
+func (b Overload) params() TypeList { return b.Types }
+
+// returnType implements the overloadImpl interface.
+func (b Overload) returnType() ReturnTyper { return b.ReturnType }
+
+// preferred implements the overloadImpl interface.
+func (b Overload) preferred() bool { return b.PreferredOverload }
+
+// FixedReturnType returns a fixed type that the function returns, returning Any
+// if the return type is based on the function's arguments.
+func (b Overload) FixedReturnType() types.T {
+	if b.ReturnType == nil {
+		return nil
+	}
+	return returnTypeToFixedType(b.ReturnType)
+}
+
+// Signature returns a human-readable signature.
+func (b Overload) Signature() string {
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
+}
+
 // overloadImpl is an implementation of an overloaded function. It provides
 // access to the parameter type list  and the return type of the implementation.
+//
+// This is a more general type than Overload defined above, because it also
+// works with the built-in binary and unary operators.
 type overloadImpl interface {
 	params() TypeList
 	returnType() ReturnTyper
 	// allows manually resolving preference between multiple compatible overloads
 	preferred() bool
 }
+
+var _ overloadImpl = &Overload{}
+var _ overloadImpl = UnaryOp{}
+var _ overloadImpl = BinOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
 // overloadImpl.

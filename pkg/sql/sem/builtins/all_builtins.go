@@ -26,55 +26,73 @@ import (
 // deterministic walk through the Builtins map.
 var AllBuiltinNames []string
 
+// AllAggregateBuiltinNames is an array containing the subset of
+// AllBuiltinNames that corresponds to aggregate functions.
+var AllAggregateBuiltinNames []string
+
 func init() {
 	initAggregateBuiltins()
 	initWindowBuiltins()
 	initGeneratorBuiltins()
 	initPGBuiltins()
 
-	AllBuiltinNames = make([]string, 0, len(Builtins))
+	AllBuiltinNames = make([]string, 0, len(builtins))
+	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
-	for name, def := range Builtins {
-		tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
-		if tree.FunDefs[name].Private {
+	for name, def := range builtins {
+		fDef := tree.NewFunctionDefinition(name, &def.props, def.overloads)
+		tree.FunDefs[name] = fDef
+		if fDef.Private {
 			// Avoid listing help for private functions.
 			continue
 		}
 		AllBuiltinNames = append(AllBuiltinNames, name)
+		if def.props.Class == tree.AggregateClass {
+			AllAggregateBuiltinNames = append(AllAggregateBuiltinNames, name)
+		}
 	}
 
 	// Generate missing categories.
 	for _, name := range AllBuiltinNames {
-		def := Builtins[name]
-		for i := range def {
-			if def[i].Category == "" {
-				def[i].Category = getCategory(&def[i])
-			}
+		def := builtins[name]
+		if def.props.Category == "" {
+			def.props.Category = getCategory(def.overloads)
+			builtins[name] = def
 		}
 	}
 
 	sort.Strings(AllBuiltinNames)
+	sort.Strings(AllAggregateBuiltinNames)
 }
 
-func getCategory(b *tree.Builtin) string {
+func getCategory(b []tree.Overload) string {
 	// If single argument attempt to categorize by the type of the argument.
-	switch typ := b.Types.(type) {
-	case tree.ArgTypes:
-		if len(typ) == 1 {
-			return categorizeType(typ[0].Typ)
+	for _, ovl := range b {
+		switch typ := ovl.Types.(type) {
+		case tree.ArgTypes:
+			if len(typ) == 1 {
+				return categorizeType(typ[0].Typ)
+			}
 		}
-	}
-	// Fall back to categorizing by return type.
-	if retType := b.FixedReturnType(); retType != nil {
-		return categorizeType(retType)
+		// Fall back to categorizing by return type.
+		if retType := ovl.FixedReturnType(); retType != nil {
+			return categorizeType(retType)
+		}
 	}
 	return ""
 }
 
-func collectBuiltins(f func(types.T) tree.Builtin, types ...types.T) []tree.Builtin {
-	r := make([]tree.Builtin, len(types))
-	for i := range types {
-		r[i] = f(types[i])
+func collectOverloads(
+	props tree.FunctionProperties, types []types.T, gens ...func(types.T) tree.Overload,
+) builtinDefinition {
+	r := make([]tree.Overload, 0, len(types)*len(gens))
+	for _, f := range gens {
+		for _, t := range types {
+			r = append(r, f(t))
+		}
 	}
-	return r
+	return builtinDefinition{
+		props:     props,
+		overloads: r,
+	}
 }

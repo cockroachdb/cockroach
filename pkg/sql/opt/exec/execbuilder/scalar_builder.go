@@ -223,6 +223,7 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 		nil, /* filter */
 		nil, /* windowDef */
 		ev.Logical().Scalar.Type,
+		funcDef.Properties,
 		funcDef.Overload,
 	), nil
 }

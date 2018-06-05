@@ -931,12 +931,12 @@ CREATE TABLE crdb_internal.builtin_functions (
 `,
 	populate: func(ctx context.Context, _ *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames {
-			overloads := builtins.Builtins[name]
+			props, overloads := builtins.GetBuiltinProperties(name)
 			for _, f := range overloads {
 				if err := addRow(
 					tree.NewDString(name),
 					tree.NewDString(f.Signature()),
-					tree.NewDString(f.Category),
+					tree.NewDString(props.Category),
 					tree.NewDString(f.Info),
 				); err != nil {
 					return err

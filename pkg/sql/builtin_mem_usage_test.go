@@ -100,31 +100,36 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 func TestBuiltinsAccountForMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	_, repeatFns := builtins.GetBuiltinProperties("repeat")
+	_, concatFns := builtins.GetBuiltinProperties("concat")
+	_, concatwsFns := builtins.GetBuiltinProperties("concat_ws")
+	_, lowerFns := builtins.GetBuiltinProperties("lower")
+
 	testData := []struct {
-		builtin            tree.Builtin
+		builtin            tree.Overload
 		args               tree.Datums
 		expectedAllocation int64
 	}{
-		{builtins.Builtins["repeat"][0],
+		{repeatFns[0],
 			tree.Datums{
 				tree.NewDString("abc"),
 				tree.NewDInt(123),
 			},
 			int64(3 * 123)},
-		{builtins.Builtins["concat"][0],
+		{concatFns[0],
 			tree.Datums{
 				tree.NewDString("abc"),
 				tree.NewDString("abc"),
 			},
 			int64(3 + 3)},
-		{builtins.Builtins["concat_ws"][0],
+		{concatwsFns[0],
 			tree.Datums{
 				tree.NewDString("!"),
 				tree.NewDString("abc"),
 				tree.NewDString("abc"),
 			},
 			int64(3 + 1 + 3)},
-		{builtins.Builtins["lower"][0],
+		{lowerFns[0],
 			tree.Datums{
 				tree.NewDString("ABC"),
 			},

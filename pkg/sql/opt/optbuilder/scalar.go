@@ -371,14 +371,19 @@ func (b *Builder) buildFunction(
 		panic(builderError{err})
 	}
 
-	funcDef := memo.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
+	funcDef := memo.FuncOpDef{
+		Name:       def.Name,
+		Type:       f.ResolvedType(),
+		Properties: &def.FunctionProperties,
+		Overload:   f.ResolvedOverload(),
+	}
 
 	if isAggregate(def) {
 		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)
 	}
 
 	// TODO(andyk): Re-enable impure functions once we can properly handle them.
-	if funcDef.Overload.Impure && !b.AllowImpureFuncs {
+	if def.Impure && !b.AllowImpureFuncs {
 		panic(unimplementedf("impure functions are not supported"))
 	}
 

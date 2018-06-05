@@ -167,7 +167,7 @@ type ColumnOrdinalSet = util.FastIntSet
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {
 	FuncName   string
-	Builtin    *tree.Builtin
+	Builtin    *tree.Overload
 	ResultType types.T
 	ArgCols    []ColumnOrdinal
 }

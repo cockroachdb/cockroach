@@ -26,16 +26,16 @@ import (
 )
 
 func TestCategory(t *testing.T) {
-	if expected, actual := categoryString, Builtins["lower"][0].Category; expected != actual {
+	if expected, actual := categoryString, builtins["lower"].props.Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryString, Builtins["length"][0].Category; expected != actual {
+	if expected, actual := categoryString, builtins["length"].props.Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryDateAndTime, Builtins["now"][0].Category; expected != actual {
+	if expected, actual := categoryDateAndTime, builtins["now"].props.Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categorySystemInfo, Builtins["version"][0].Category; expected != actual {
+	if expected, actual := categorySystemInfo, builtins["version"].props.Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }
@@ -111,18 +111,21 @@ func TestStringToArrayAndBack(t *testing.T) {
 				t.Errorf("expected %v, got %v", tc.expected, result)
 			}
 
-			s, err := arrayToString(result.(*tree.DArray), tc.sep, tc.nullStr)
+			if tc.sep == nil {
+				return
+			}
+
+			s, err := arrayToString(result.(*tree.DArray), *tc.sep, tc.nullStr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.sep == nil {
-				if s != tree.DNull {
-					t.Errorf("expected null, found %s", s)
-				}
-				return
+			if s == tree.DNull {
+				t.Errorf("expected not null, found null")
 			}
-			fmt.Println(s)
-			if string(*s.(*tree.DString)) != tc.input {
+
+			ds := s.(*tree.DString)
+			fmt.Println(ds)
+			if string(*ds) != tc.input {
 				t.Errorf("original %s, roundtripped %s", tc.input, s)
 			}
 		})
@@ -227,16 +230,6 @@ func TestLPadRPad(t *testing.T) {
 		}
 		if out != tc.expected {
 			t.Errorf("expected %s, found %s", tc.expected, out)
-		}
-	}
-}
-
-func TestAllTypesAsJSON(t *testing.T) {
-	for _, typ := range types.AnyNonArray {
-		d := tree.SampleDatum(typ)
-		_, err := AsJSON(d)
-		if err != nil {
-			t.Errorf("couldn't convert %s to JSON: %s", d, err)
 		}
 	}
 }

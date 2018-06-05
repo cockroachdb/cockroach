@@ -80,9 +80,9 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
 
 // FindAggregateOverload finds an aggregate function overload that matches the
 // given aggregate function expression. It panics if no match can be found.
-func FindAggregateOverload(ev ExprView) (name string, overload *tree.Builtin) {
+func FindAggregateOverload(ev ExprView) (name string, overload *tree.Overload) {
 	name = opt.AggregateOpReverseMap[ev.Operator()]
-	overloads := builtins.Aggregates[name]
+	_, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
 		matches := true
