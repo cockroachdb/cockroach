@@ -867,6 +867,19 @@ func (c *cluster) ExternalPGUrl(ctx context.Context, node nodeListOption) []stri
 	return c.pgURL(ctx, node, true /* external */)
 }
 
+func addrToAdminUIAddr(c *cluster, addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	webPort, err := strconv.Atoi(port)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	// Roachprod makes Admin UI's port to be node's port + 1.
+	return fmt.Sprintf("%s:%d", host, webPort+1)
+}
+
 func urlToAddr(c *cluster, pgURL string) string {
 	u, err := url.Parse(pgURL)
 	if err != nil {
@@ -881,6 +894,16 @@ func addrToIP(c *cluster, addr string) string {
 		c.t.Fatal(err)
 	}
 	return host
+}
+
+// InternalAdminUIAddr returns the internal Admin UI address in the form host:port
+// for the specified node.
+func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
+	var addrs []string
+	for _, u := range c.InternalAddr(ctx, node) {
+		addrs = append(addrs, addrToAdminUIAddr(c, u))
+	}
+	return addrs
 }
 
 // InternalAddr returns the internal address in the form host:port for the
