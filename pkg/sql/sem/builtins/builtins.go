@@ -2970,7 +2970,7 @@ var jsonBuildObjectImpl = tree.OverloadDefinition{
 				return nil, err
 			}
 
-			val, err := AsJSON(args[i+1])
+			val, err := tree.AsJSON(args[i+1])
 			if err != nil {
 				return nil, err
 			}
@@ -2987,7 +2987,7 @@ var toJSONImpl = tree.OverloadDefinition{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		j, err := AsJSON(args[0])
+		j, err := tree.AsJSON(args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -3002,7 +3002,7 @@ var jsonBuildArrayImpl = tree.OverloadDefinition{
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
-			j, err := AsJSON(arg)
+			j, err := tree.AsJSON(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -3031,7 +3031,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := AsJSON(arr.Array[i+1])
+				val, err := tree.AsJSON(arr.Array[i+1])
 				if err != nil {
 					return nil, err
 				}
@@ -3062,7 +3062,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := AsJSON(values.Array[i])
+				val, err := tree.AsJSON(values.Array[i])
 				if err != nil {
 					return nil, err
 				}
@@ -3923,54 +3923,6 @@ func truncateTimestamp(
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
-}
-
-// AsJSON converts a datum into our standard json representation.
-func AsJSON(d tree.Datum) (json.JSON, error) {
-	switch t := d.(type) {
-	case *tree.DBool:
-		return json.FromBool(bool(*t)), nil
-	case *tree.DInt:
-		return json.FromInt(int(*t)), nil
-	case *tree.DFloat:
-		return json.FromFloat64(float64(*t))
-	case *tree.DDecimal:
-		return json.FromDecimal(t.Decimal), nil
-	case *tree.DString:
-		return json.FromString(string(*t)), nil
-	case *tree.DCollatedString:
-		return json.FromString(t.Contents), nil
-	case *tree.DJSON:
-		return t.JSON, nil
-	case *tree.DArray:
-		builder := json.NewArrayBuilder(t.Len())
-		for _, e := range t.Array {
-			j, err := AsJSON(e)
-			if err != nil {
-				return nil, err
-			}
-			builder.Add(j)
-		}
-		return builder.Build(), nil
-	case *tree.DTuple:
-		builder := json.NewObjectBuilder(len(t.D))
-		for i, e := range t.D {
-			j, err := AsJSON(e)
-			if err != nil {
-				return nil, err
-			}
-			builder.Add(fmt.Sprintf("f%d", i+1), j)
-		}
-		return builder.Build(), nil
-	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime, *tree.DTimeTZ:
-		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
-	default:
-		if d == tree.DNull {
-			return json.NullJSONValue, nil
-		}
-
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for AsJSON", d)
-	}
 }
 
 // Converts a scalar Datum to its string representation

@@ -2346,6 +2346,54 @@ func MustBeDJSON(e Expr) DJSON {
 	return *i
 }
 
+// AsJSON converts a datum into our standard json representation.
+func AsJSON(d Datum) (json.JSON, error) {
+	switch t := d.(type) {
+	case *DBool:
+		return json.FromBool(bool(*t)), nil
+	case *DInt:
+		return json.FromInt(int(*t)), nil
+	case *DFloat:
+		return json.FromFloat64(float64(*t))
+	case *DDecimal:
+		return json.FromDecimal(t.Decimal), nil
+	case *DString:
+		return json.FromString(string(*t)), nil
+	case *DCollatedString:
+		return json.FromString(t.Contents), nil
+	case *DJSON:
+		return t.JSON, nil
+	case *DArray:
+		builder := json.NewArrayBuilder(t.Len())
+		for _, e := range t.Array {
+			j, err := AsJSON(e)
+			if err != nil {
+				return nil, err
+			}
+			builder.Add(j)
+		}
+		return builder.Build(), nil
+	case *DTuple:
+		builder := json.NewObjectBuilder(len(t.D))
+		for i, e := range t.D {
+			j, err := AsJSON(e)
+			if err != nil {
+				return nil, err
+			}
+			builder.Add(fmt.Sprintf("f%d", i+1), j)
+		}
+		return builder.Build(), nil
+	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ:
+		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
+	default:
+		if d == DNull {
+			return json.NullJSONValue, nil
+		}
+
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for AsJSON", d)
+	}
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() types.T {
 	return types.JSON
