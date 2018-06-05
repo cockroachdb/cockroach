@@ -83,7 +83,7 @@ type windowNode struct {
 //                            ^^^^^^^^^^^^^^^^^^
 // - named window specification:
 //     a named window provided at the end of a SELECT clause in the WINDOW clause that
-//     can be referenced by the window definition of of one or more window function
+//     can be referenced by the window definition of one or more window function
 //     applications. This window can be used directly as a window definition, or can be
 //     overridden in a window definition.
 //     Ex. used directly: SELECT avg(x) OVER w FROM y WINDOW w AS (ORDER BY z)
@@ -118,7 +118,6 @@ func (p *planner) window(
 	}
 
 	window.replaceIndexVarsAndAggFuncs(s)
-
 	acc := p.EvalContext().Mon.MakeBoundAccount()
 	window.run.wrappedRenderVals = sqlbase.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
@@ -430,11 +429,15 @@ func constructWindowDef(
 //    (for clarity, we ignore grouping rules)
 //
 //   After extractWindowFunctions is run:
-//    source plan's renders: [a, max(b), d, f]
+//    source plan's renders: [a, max(b), e]
+//    window plan's renders: [nil, nil, c + max(d) + first_value(@3) OVER (PARTITION BY f)]
+//
+//   After constructWindowDefinitions is run:
+//    source plan's renders: [a, max(b), e, f]
 //    window plan's renders: [nil, nil, c + max(d) + first_value(@3) OVER (PARTITION BY @4)]
 //
 //   After replaceIndexVarsAndAggFuncs is run:
-//    source plan's renders: [a, max(b), d, f, c, max(d)]
+//    source plan's renders: [a, max(b), e, f, c, max(d)]
 //    window plan's renders: [nil, nil, @5 + @6 + first_value(@3) OVER (PARTITION BY @4)]
 //
 func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
