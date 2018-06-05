@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -46,14 +46,17 @@ func showBackupPlanHook(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	header := sqlbase.ResultColumns{
-		{Name: "database", Typ: types.String},
-		{Name: "table", Typ: types.String},
-		{Name: "start_time", Typ: types.Timestamp},
-		{Name: "end_time", Typ: types.Timestamp},
-		{Name: "size_bytes", Typ: types.Int},
-		{Name: "rows", Typ: types.Int},
+
+	var shower backupShower
+	switch backup.Details {
+	case tree.BackupRangeDetails:
+		shower = backupShowerRanges
+	case tree.BackupFileDetails:
+		shower = backupShowerFiles
+	default:
+		shower = backupShowerDefault
 	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -67,6 +70,36 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+
+		for _, row := range shower.fn(desc) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case resultsCh <- row:
+			}
+		}
+		return nil
+	}
+
+	return fn, shower.header, nil, nil
+}
+
+type backupShower struct {
+	header sqlbase.ResultColumns
+	fn     func(BackupDescriptor) []tree.Datums
+}
+
+var backupShowerDefault = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "database", Typ: types.String},
+		{Name: "table", Typ: types.String},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
+	},
+
+	fn: func(desc BackupDescriptor) []tree.Datums {
 		descs := make(map[sqlbase.ID]string)
 		for _, descriptor := range desc.Descriptors {
 			if database := descriptor.GetDatabase(); database != nil {
@@ -94,22 +127,70 @@ func showBackupPlanHook(
 		if desc.StartTime.WallTime != 0 {
 			start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
 		}
+		var rows []tree.Datums
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
-				resultsCh <- tree.Datums{
+				rows = append(rows, tree.Datums{
 					tree.NewDString(dbName),
 					tree.NewDString(table.Name),
 					start,
 					tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
 					tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
 					tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
-				}
+				})
 			}
 		}
-		return nil
-	}
-	return fn, header, nil, nil
+		return rows
+	},
+}
+
+var backupShowerRanges = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "start_pretty", Typ: types.String},
+		{Name: "end_pretty", Typ: types.String},
+		{Name: "start_key", Typ: types.Bytes},
+		{Name: "end_key", Typ: types.Bytes},
+	},
+
+	fn: func(desc BackupDescriptor) (rows []tree.Datums) {
+		for _, span := range desc.Spans {
+			rows = append(rows, tree.Datums{
+				tree.NewDString(span.Key.String()),
+				tree.NewDString(span.EndKey.String()),
+				tree.NewDBytes(tree.DBytes(span.Key)),
+				tree.NewDBytes(tree.DBytes(span.EndKey)),
+			})
+		}
+		return rows
+	},
+}
+
+var backupShowerFiles = backupShower{
+	header: sqlbase.ResultColumns{
+		{Name: "path", Typ: types.String},
+		{Name: "start_pretty", Typ: types.String},
+		{Name: "end_pretty", Typ: types.String},
+		{Name: "start_key", Typ: types.Bytes},
+		{Name: "end_key", Typ: types.Bytes},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
+	},
+
+	fn: func(desc BackupDescriptor) (rows []tree.Datums) {
+		for _, file := range desc.Files {
+			rows = append(rows, tree.Datums{
+				tree.NewDString(file.Path),
+				tree.NewDString(file.Span.Key.String()),
+				tree.NewDString(file.Span.EndKey.String()),
+				tree.NewDBytes(tree.DBytes(file.Span.Key)),
+				tree.NewDBytes(tree.DBytes(file.Span.EndKey)),
+				tree.NewDInt(tree.DInt(file.EntryCounts.DataSize)),
+				tree.NewDInt(tree.DInt(file.EntryCounts.Rows)),
+			})
+		}
+		return rows
+	},
 }
 
 func init() {
