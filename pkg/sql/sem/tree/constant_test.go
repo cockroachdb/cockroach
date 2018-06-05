@@ -140,7 +140,6 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 // as each of these types will either succeed or return a parse error.
 func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 	wantStringButCanBeAll := tree.StrValAvailAllParsable
-	wantBytesButCanBeString := tree.StrValAvailBytesString
 	wantBytes := tree.StrValAvailBytes
 
 	testCases := []struct {
@@ -152,11 +151,11 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 		{tree.NewStrVal("2010-09-28"), wantStringButCanBeAll},
 		{tree.NewStrVal("2010-09-28 12:00:00.1"), wantStringButCanBeAll},
 		{tree.NewStrVal("PT12H2M"), wantStringButCanBeAll},
-		{tree.NewBytesStrVal("abc 世界"), wantBytesButCanBeString},
-		{tree.NewBytesStrVal("t"), wantBytesButCanBeString},
-		{tree.NewBytesStrVal("2010-09-28"), wantBytesButCanBeString},
-		{tree.NewBytesStrVal("2010-09-28 12:00:00.1"), wantBytesButCanBeString},
-		{tree.NewBytesStrVal("PT12H2M"), wantBytesButCanBeString},
+		{tree.NewBytesStrVal("abc 世界"), wantBytes},
+		{tree.NewBytesStrVal("t"), wantBytes},
+		{tree.NewBytesStrVal("2010-09-28"), wantBytes},
+		{tree.NewBytesStrVal("2010-09-28 12:00:00.1"), wantBytes},
+		{tree.NewBytesStrVal("PT12H2M"), wantBytes},
 		{tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})), wantBytes},
 	}
 
@@ -306,7 +305,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
-			parseOptions: typeSet(types.Bytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 	}
 

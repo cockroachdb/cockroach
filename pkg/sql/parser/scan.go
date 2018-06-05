@@ -16,7 +16,6 @@ package parser
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -34,18 +33,17 @@ const errUnterminated = "unterminated string"
 const errInvalidUTF8 = "invalid UTF-8 byte sequence"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
+const identQuote = '"'
 
 // Scanner lexes SQL statements.
 type Scanner struct {
-	in          string
-	pos         int
-	tokBuf      sqlSymType
-	lastTok     sqlSymType
-	nextTok     *sqlSymType
-	lastError   *scanErr
-	stmts       []tree.Statement
-	identQuote  int8
-	stringQuote int8
+	in        string
+	pos       int
+	tokBuf    sqlSymType
+	lastTok   sqlSymType
+	nextTok   *sqlSymType
+	lastError *scanErr
+	stmts     []tree.Statement
 
 	initialized bool
 }
@@ -71,7 +69,6 @@ func (s *Scanner) init(str string) {
 	}
 	s.initialized = true
 	s.in = str
-	s.identQuote = '"'
 }
 
 // Tokens calls f on all tokens of the input until an EOF is encountered.
@@ -239,33 +236,26 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case int(s.identQuote):
+	case identQuote:
 		// "[^"]"
-		if s.scanString(lval, int(s.identQuote), false, true) {
+		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
 			lval.id = IDENT
 		}
 		return
 
 	case singleQuote:
 		// '[^']'
-		if s.scanString(lval, ch, false, true) {
-			lval.id = SCONST
-		}
-		return
-
-	case int(s.stringQuote):
-		// '[^']'
-		if s.scanString(lval, int(s.stringQuote), false, true) {
+		if s.scanString(lval, ch, false /* allowEscapes */, true /* requireUTF8 */) {
 			lval.id = SCONST
 		}
 		return
 
 	case 'b', 'B':
 		// Bytes?
-		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
+		if s.peek() == singleQuote {
 			// [bB]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true, false) {
+			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
 				lval.id = BCONST
 			}
 			return
@@ -279,10 +269,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case 'e', 'E':
 		// Escaped string?
-		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
+		if s.peek() == singleQuote {
 			// [eE]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true, true) {
+			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
 				lval.id = SCONST
 			}
 			return
@@ -292,12 +282,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case 'x', 'X':
 		// Hex literal?
-		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
+		if s.peek() == singleQuote {
 			// [xX]'[a-f0-9]'
 			s.pos++
-			if s.scanStringOrHex(lval, t, false, false, true) {
-				lval.id = BCONST
-			}
+			s.scanHexString(lval, singleQuote)
 			return
 		}
 		s.scanIdent(lval)
@@ -787,13 +775,66 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 	lval.id = PLACEHOLDER
 }
 
-func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
-	return s.scanStringOrHex(lval, ch, allowEscapes, requireUTF8, false)
+// scanHexString scans the content inside x'....'.
+func (s *Scanner) scanHexString(lval *sqlSymType, ch int) bool {
+	var buf []byte
+	var curbyte byte
+	bytep := 0
+	const errInvalidBytesLiteral = "invalid hexadecimal bytes literal"
+outer:
+	for {
+		b := s.next()
+		switch b {
+		case ch:
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
+				return false
+			}
+			// SQL allows joining adjacent strings separated by whitespace
+			// as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that
+			// is the standard.
+			if s.peek() == ch && newline {
+				s.pos++
+				continue
+			}
+			break outer
+
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			curbyte = (curbyte << 4) | byte(b-'0')
+		case 'a', 'b', 'c', 'd', 'e', 'f':
+			curbyte = (curbyte << 4) | byte(b-'a'+10)
+		case 'A', 'B', 'C', 'D', 'E', 'F':
+			curbyte = (curbyte << 4) | byte(b-'A'+10)
+		default:
+			lval.id = ERROR
+			lval.str = errInvalidBytesLiteral
+			return false
+		}
+		bytep++
+
+		if bytep > 1 {
+			buf = append(buf, curbyte)
+			bytep = 0
+			curbyte = 0
+		}
+	}
+
+	if bytep != 0 {
+		lval.id = ERROR
+		lval.str = errInvalidBytesLiteral
+		return false
+	}
+
+	lval.id = BCONST
+	lval.str = string(buf)
+	return true
 }
 
-func (s *Scanner) scanStringOrHex(
-	lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool, decodeHex bool,
-) bool {
+// scanString scans the content inside '...'. This is used for simple
+// string literals '...' but also e'....' and b'...'. For x'...', see
+// scanHexString().
+func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
 	var buf []byte
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
@@ -811,21 +852,20 @@ outer:
 				continue
 			}
 
-			if newline, ok := s.skipWhitespace(lval, false); !ok {
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
 				return false
-			} else if !newline {
-				break outer
 			}
-			// SQL allows joining adjacent strings separated by whitespace as long as
-			// that whitespace contains at least one newline. Kind of strange to
-			// require the newline, but that is the standard.
-			if s.peek() != ch {
-				break outer
+			// SQL allows joining adjacent strings separated by whitespace
+			// as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that
+			// is the standard.
+			if s.peek() == ch && newline {
+				s.pos++
+				start = s.pos
+				continue
 			}
-			s.pos++
-			start = s.pos
-
-			continue
+			break outer
 
 		case '\\':
 			t := s.peek()
@@ -880,19 +920,6 @@ outer:
 		}
 	}
 
-	var decB []byte
-	if decodeHex {
-		decB = make([]byte, len(buf)/2)
-		_, err := hex.Decode(decB, buf)
-		if err != nil {
-			// Either the string has an odd number of characters or contains one or
-			// more invalid bytes.
-			lval.id = ERROR
-			lval.str = "invalid hexadecimal bytes literal"
-			return false
-		}
-		buf = decB
-	}
 	if requireUTF8 && !utf8.Valid(buf) {
 		lval.id = ERROR
 		lval.str = errInvalidUTF8

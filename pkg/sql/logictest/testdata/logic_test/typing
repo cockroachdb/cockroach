@@ -65,14 +65,15 @@ SELECT * FROM s WHERE x > b'\x00'
 statement ok
 INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end')
 
-statement error value type bytes doesn't match type STRING of column "x"
+statement ok
 INSERT INTO s(x) VALUES (b'\xfffefd')
 
-query T rowsort
-SELECT * from s
+query IT rowsort
+SELECT length(x), encode(x::bytes, 'escape') from s
 ----
-qwe
-startend
+3 qwe
+8 startend
+5 \377fefd
 
 statement error incompatible COALESCE expressions: could not parse "foo" as type int
 INSERT INTO s VALUES (COALESCE(1, 'foo'))

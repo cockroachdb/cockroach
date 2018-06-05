@@ -23,6 +23,7 @@ SELECT * FROM [SHOW ALL]
 ----
 variable                        value
 application_name                ·
+bytea_output                    hex
 client_encoding                 UTF8
 client_min_messages             ·
 database                        test

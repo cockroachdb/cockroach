@@ -58,7 +58,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	switch t {
 	case types.Bytes:
-		return ParseDByte(s, true)
+		return ParseDByte(s)
 	default:
 		return ParseStringAs(t, s, evalCtx)
 	}

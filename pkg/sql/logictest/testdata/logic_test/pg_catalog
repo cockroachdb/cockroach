@@ -1191,6 +1191,7 @@ SELECT name, setting, category, short_desc, extra_desc, vartype FROM pg_catalog.
 ----
 name                            setting       category  short_desc  extra_desc  vartype
 application_name                ·             NULL      NULL        NULL        string
+bytea_output                    hex           NULL      NULL        NULL        string
 client_encoding                 UTF8          NULL      NULL        NULL        string
 client_min_messages             ·             NULL      NULL        NULL        string
 database                        test          NULL      NULL        NULL        string
@@ -1224,6 +1225,7 @@ SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catal
 ----
 name                            setting       unit  context  enumvals  boot_val      reset_val
 application_name                ·             NULL  user     NULL      ·             ·
+bytea_output                    hex           NULL  user     NULL      hex           hex
 client_encoding                 UTF8          NULL  user     NULL      UTF8          UTF8
 client_min_messages             ·             NULL  user     NULL      ·             ·
 database                        test          NULL  user     NULL      test          test
@@ -1257,6 +1259,7 @@ SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg
 ----
 name                            source  min_val  max_val  sourcefile  sourceline
 application_name                NULL    NULL     NULL     NULL        NULL
+bytea_output                    NULL    NULL     NULL     NULL        NULL
 client_encoding                 NULL    NULL     NULL     NULL        NULL
 client_min_messages             NULL    NULL     NULL     NULL        NULL
 database                        NULL    NULL     NULL     NULL        NULL

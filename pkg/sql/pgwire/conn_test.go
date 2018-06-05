@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -342,7 +343,7 @@ func sendResult(
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
 		for _, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, time.UTC /* sessionLoc */)
+			c.msgBuilder.writeTextDatum(ctx, col, time.UTC /* sessionLoc */, sessiondata.BytesEncodeHex)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
