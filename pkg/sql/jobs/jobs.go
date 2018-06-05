@@ -197,19 +197,21 @@ func FractionUpdater(f float32) ProgressedFn {
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
-		if *status != StatusRunning {
-			return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-		}
-		progress.FractionCompleted = progressedFn(ctx, progress.Details)
-		if progress.FractionCompleted < 0.0 || progress.FractionCompleted > 1.0 {
-			return false, errors.Errorf(
-				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				progress.FractionCompleted, j.id,
-			)
-		}
-		return true, nil
-	})
+	return j.updateRow(ctx, updateProgressOnly,
+		func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
+			if *status != StatusRunning {
+				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+			}
+			progress.FractionCompleted = progressedFn(ctx, progress.Details)
+			if progress.FractionCompleted < 0.0 || progress.FractionCompleted > 1.0 {
+				return false, errors.Errorf(
+					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
+					progress.FractionCompleted, j.id,
+				)
+			}
+			return true, nil
+		},
+	)
 }
 
 // DetailProgressed is similar to Progressed but also updates the job's Details.
@@ -354,10 +356,12 @@ func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
-	return j.update(ctx, func(_ *client.Txn, _ *Status, _ *Payload, progress *Progress) (bool, error) {
-		progress.Details = WrapProgressDetails(details)
-		return true, nil
-	})
+	return j.updateRow(ctx, updateProgressOnly,
+		func(_ *client.Txn, _ *Status, _ *Payload, progress *Progress) (bool, error) {
+			progress.Details = WrapProgressDetails(details)
+			return true, nil
+		},
+	)
 }
 
 // Payload returns the most recently sent Payload for this Job. Will return an
@@ -476,8 +480,17 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload, progress *
 }
 
 func (j *Job) update(
+	ctx context.Context, updateFn func(*client.Txn, *Status, *Payload, *Progress) (bool, error),
+) error {
+	return j.updateRow(ctx, updateProgressAndDetails, updateFn)
+}
+
+const updateProgressOnly, updateProgressAndDetails = true, false
+
+func (j *Job) updateRow(
 	ctx context.Context,
-	updateFn func(*client.Txn, *Status, *Payload, *Progress) (doUpdate bool, err error),
+	progressOnly bool,
+	updateFn func(*client.Txn, *Status, *Payload, *Progress) (bool, error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
@@ -515,11 +528,25 @@ func (j *Job) update(
 		}
 
 		progress.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		payloadBytes, err := protoutil.Marshal(payload)
+		progressBytes, err := protoutil.Marshal(progress)
 		if err != nil {
 			return err
 		}
-		progressBytes, err := protoutil.Marshal(progress)
+
+		if progressOnly {
+			const updateStmt = "UPDATE system.jobs SET progress = $1 WHERE id = $2"
+			updateArgs := []interface{}{progressBytes, *j.id}
+			n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return errors.Errorf("Job: expected exactly one row affected, but %d rows affected by job update", n)
+			}
+			return nil
+		}
+
+		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
