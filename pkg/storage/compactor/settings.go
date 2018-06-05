@@ -53,7 +53,7 @@ var enabled = settings.RegisterBoolSetting(
 var minInterval = settings.RegisterDurationSetting(
 	"compactor.min_interval",
 	"minimum time interval to wait before compacting",
-	2*time.Minute,
+	15*time.Second,
 )
 
 // thresholdBytes is the threshold in bytes of suggested
