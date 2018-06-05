@@ -1563,6 +1563,9 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 						return 1
 					}
 					return 2
+				case *roachpb.TxnAlreadyEncounteredErrorError:
+					// Another parallel stmt got an error that caused this one.
+					return 5
 				case *roachpb.TxnPrevAttemptError:
 					// Symptom of concurrent retry.
 					return 3

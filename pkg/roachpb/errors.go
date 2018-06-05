@@ -628,6 +628,16 @@ func (*TxnPrevAttemptError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &TxnPrevAttemptError{}
 
+func (e *TxnAlreadyEncounteredErrorError) Error() string {
+	return e.message(nil)
+}
+
+func (*TxnAlreadyEncounteredErrorError) message(_ *Error) string {
+	return "txn already encountered an error; cannot be used anymore"
+}
+
+var _ ErrorDetailInterface = &TxnAlreadyEncounteredErrorError{}
+
 func (e *IntegerOverflowError) Error() string {
 	return e.message(nil)
 }

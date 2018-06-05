@@ -798,14 +798,18 @@ func TestReadConsistencyTypes(t *testing.T) {
 		t.Run(rc.String(), func(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
-			factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
-				return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-					if ba.ReadConsistency != rc {
-						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
-					}
-					return ba.CreateReply(), nil
-				})
+			factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
+				return client.TxnSenderAdapter{
+					StartTrackingWrapped: func(context.Context) error { panic("unimplemented") },
+					Wrapped: func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+						if ba.ReadConsistency != rc {
+							return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+						}
+						return ba.CreateReply(), nil
+					},
+				}
 			})
+
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			db := client.NewDB(factory, clock)
 			ctx := context.TODO()
@@ -971,10 +975,13 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
-	factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return ba.CreateReply(), nil
-		})
+	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
+		return client.TxnSenderAdapter{
+			StartTrackingWrapped: func(context.Context) error { panic("unimplemented") },
+			Wrapped: func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				return ba.CreateReply(), nil
+			},
+		}
 	})
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

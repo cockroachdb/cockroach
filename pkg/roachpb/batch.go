@@ -404,6 +404,9 @@ func (ba BatchRequest) String() string {
 		req := arg.GetInner()
 		if _, ok := req.(*NoopRequest); ok {
 			str = append(str, req.Method().String())
+		} else if et, ok := req.(*EndTransactionRequest); ok {
+			h := req.Header()
+			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
 		} else {
 			h := req.Header()
 			str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))

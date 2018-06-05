@@ -100,6 +100,14 @@ const (
 type TxnCoordSender struct {
 	mu struct {
 		syncutil.Mutex
+
+		// tracking is set if the TxnCoordSender has a heartbeat loop running for
+		// the transaction record. It also means that the TxnCoordSender is
+		// accumulating intents for the transaction.
+		// tracking is set by the client just before a BeginTransaction request is
+		// sent. If set, an EndTransaction will also be sent eventually to clean up.
+		tracking bool
+
 		// meta contains all coordinator state which may be passed between
 		// distributed TxnCoordSenders via MetaRelease() and MetaAugment().
 		meta roachpb.TxnCoordMeta
@@ -259,17 +267,30 @@ func NewTxnCoordSenderFactory(
 	}
 }
 
-// New is part of the TxnCoordSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) New(typ client.TxnType) client.TxnSender {
+// New is part of the TxnSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) New(
+	typ client.TxnType, txn *roachpb.Transaction,
+) client.TxnSender {
 	tcs := &TxnCoordSender{
 		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.meta.RefreshValid = true
+
+	// If a transaction was passed in bind the TxnCoordSender to it.
+	// TODO(andrei): Ideally, if a transaction is not passed it, we should take
+	// that to mean that a TxnCoordSender is not needed and we should return the
+	// wrapped sender directly. However, there are tests that pass nil and still
+	// send transactional requests. That's why the TxnCoordSender is still
+	// littered with code handling the case where it is not yet bound to a
+	// transaction.
+	if txn != nil {
+		tcs.mu.meta.Txn = txn.Clone()
+	}
 	return tcs
 }
 
-// WrappedSender is part of the TxnCoordSenderFactory interface.
+// WrappedSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) WrappedSender() client.Sender {
 	return tcf.wrapped
 }
@@ -295,11 +316,16 @@ func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
 }
 
 // AugmentMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AugmentMeta(meta roachpb.TxnCoordMeta) {
+func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot AugmentMeta on unbound TxnCoordSender. meta id: %s", meta.Txn.ID)
+	}
+
 	// Sanity check: don't combine if the meta is for a different txn ID.
-	if tc.mu.meta.Txn.ID != (uuid.UUID{}) && tc.mu.meta.Txn.ID != meta.Txn.ID {
+	if tc.mu.meta.Txn.ID != meta.Txn.ID {
 		return
 	}
 	tc.mu.meta.Txn.Update(&meta.Txn)
@@ -343,15 +369,12 @@ func (tc *TxnCoordSender) OnFinish(onFinishFn func(error)) {
 	tc.mu.onFinishFn = onFinishFn
 }
 
-// Send implements the batch.Sender interface. If the request is part of a
-// transaction, the TxnCoordSender adds the transaction to a map of active
-// transactions and begins heartbeating it. Every subsequent request for the
-// same transaction updates the lastUpdate timestamp to prevent live
-// transactions from being considered abandoned and garbage collected.
+// Send implements the batch.Sender interface.
+//
 // Read/write mutating requests have their key or key range added to the
 // transaction's interval tree of key ranges for eventual cleanup via resolved
-// write intents; they're tagged to an outgoing EndTransaction request, with
-// the receiving replica in charge of resolving them.
+// write intents; they're tagged to an outgoing EndTransaction request, with the
+// receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -369,6 +392,10 @@ func (tc *TxnCoordSender) Send(
 	startNS := tc.clock.PhysicalNow()
 
 	if ba.Txn != nil {
+		if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
+			log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
+		}
+
 		ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
 		if log.V(2) {
 			ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
@@ -409,14 +436,24 @@ func (tc *TxnCoordSender) Send(
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
 
-			if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
-				// Ensure that the txn is bound.
-				tc.mu.meta.Txn = ba.Txn.Clone()
-			}
-			if ba.Txn.Writing {
-				if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
-					return pErr
-				}
+			// Copy a few fields from the request's txn. This is technically only
+			// required during the first send, as these fields are set before
+			// the first send and can't change afterwards. Keeping these fields in
+			// sync between the TxnCoordSender and the client.Txn is needed because,
+			// when the TxnCoordSender synthesizes TransactionAbortedErrors, it
+			// creates a new proto that it passes to the client.Txn and then these
+			// fields are used when creating that proto that will then be used for the
+			// client.Txn. On subsequent retries of the transaction, it's important
+			// for the values of these fields to have been preserved because that
+			// makes future calls to txn.SetIsolation() and such no-ops.
+			// If this makes no sense it's because the TxnCoordSender having a copy of
+			// the Transaction proto generally makes no sense.
+			tc.mu.meta.Txn.Name = ba.Txn.Name
+			tc.mu.meta.Txn.Isolation = ba.Txn.Isolation
+			tc.mu.meta.Txn.Priority = ba.Txn.Priority
+
+			if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
+				return pErr
 			}
 			tc.mu.meta.CommandCount += int32(len(ba.Requests))
 
@@ -851,24 +888,19 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 
 // validateTxn validates properties of a txn specified on a request.
 // The transaction is expected to be initialized by the time it reaches
-// the TxnCoordSender. Furthermore, no transactional writes are allowed
-// unless preceded by a begin transaction request within the same batch.
-// The exception is if the transaction is already in state txn.Writing=true.
+// the TxnCoordSender.
 func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return errors.Errorf("empty batch with txn")
 	}
 	ba.Txn.AssertInitialized(ctx)
 
-	// Check for a begin transaction to set txn key based on the key of
-	// the first transactional write. Also enforce that no transactional
-	// writes occur before a begin transaction.
 	var haveBeginTxn bool
 	for _, req := range ba.Requests {
 		args := req.GetInner()
 		if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
-			if haveBeginTxn || ba.Txn.Writing {
-				return errors.Errorf("begin transaction requested twice in the same txn: %s", ba.Txn)
+			if haveBeginTxn {
+				return errors.Errorf("begin transaction requested twice in the same batch: %s", ba.Txn)
 			}
 			if ba.Txn.Key == nil {
 				return errors.Errorf("transaction with BeginTxnRequest missing anchor key: %v", ba)
@@ -977,8 +1009,17 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			// then heartbeat loop ignores the timeout check and this case is
 			// responsible for client timeouts.
 			log.VEventf(ctx, 2, "transaction heartbeat stopped: %s", ctx.Err())
-			tc.tryAsyncAbort(ctx)
-			return
+
+			// Check if the closer channel had also been closed; in that case, that
+			// takes priority.
+			select {
+			case <-closer:
+				// Transaction finished normally.
+				return
+			default:
+				tc.tryAsyncAbort(ctx)
+				return
+			}
 		case <-tc.stopper.ShouldQuiesce():
 			return
 		}
@@ -1000,9 +1041,14 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	// raced here. That's fine (and probably better than the alternative, which
 	// is missing new intents sometimes). Note that the txn may be uninitialized
 	// here if a failure occurred before the first write succeeded.
-	if txn.Status != roachpb.PENDING || txn.ID == (uuid.UUID{}) {
+	if txn.Status != roachpb.PENDING {
 		return
 	}
+
+	// Update out status to Aborted, since we're about to send a rollback. Besides
+	// being sane, this prevents the heartbeat loop from incrementing an
+	// "Abandons" metric.
+	tc.mu.meta.Txn.Status = roachpb.ABORTED
 
 	// NB: use context.Background() here because we may be called when the
 	// caller's context has been canceled.
@@ -1134,6 +1180,39 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	tc.mu.Unlock()
 
 	return true
+}
+
+// StartTracking is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) StartTracking(ctx context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	tc.mu.tracking = true
+	tc.mu.firstUpdateNanos = tc.clock.PhysicalNow()
+
+	// Only heartbeat the txn record if we're the root transaction.
+	if tc.typ != client.RootTxn {
+		return nil
+	}
+
+	log.VEventf(ctx, 2, "coordinator spawns heartbeat loop")
+	// Create a channel to stop the heartbeat with the lock held
+	// to avoid a race between the async task and a subsequent commit.
+	tc.mu.txnEnd = make(chan struct{})
+	if err := tc.stopper.RunAsyncTask(
+		ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
+			tc.heartbeatLoop(ctx)
+		}); err != nil {
+		// The system is already draining and we can't start the
+		// heartbeat. We refuse new transactions for now because
+		// they're likely not going to have all intents committed.
+		// In principle, we can relax this as needed though.
+		tc.cleanupTxnLocked(ctx, aborted)
+		duration, restarts, status := tc.finalTxnStatsLocked()
+		tc.updateStats(duration, restarts, status, false /* onePC */)
+		return err
+	}
+	return nil
 }
 
 // updateState updates the transaction state in both the success and
@@ -1284,71 +1363,20 @@ func (tc *TxnCoordSender) updateState(
 	// a serializable retry error. We can use the set of read spans to
 	// avoid retrying the transaction if all the spans can be updated to
 	// the current transaction timestamp.
-	//
-	// A tricky edge case is that of a transaction which "fails" on the
-	// first writing request, but actually manages to write some intents
-	// (for example, due to being multi-range). In this case, there will
-	// be an error, but the transaction will be marked as Writing and the
-	// coordinator must track the state, for the client's retry will be
-	// performed with a Writing transaction which the coordinator rejects
-	// unless it is tracking it (on top of it making sense to track it;
-	// after all, it **has** laid down intents and only the coordinator
-	// can augment a potential EndTransaction call). See #3303.
-	//
-	// An extension of this case is that of a transaction which receives an
-	// ambiguous result error on its first writing request. Here, the
-	// transaction will not be marked as Writing, but still could have laid
-	// down intents (we don't know, it's ambiguous!). As with the other case,
-	// we still track the possible writes so they can be cleaned up cleanup
-	// to avoid dangling intents. However, since the Writing flag is not
-	// set in these cases, it may be possible that the request was read-only.
-	// This is ok, since the following block will be a no-op if the batch
-	// contained no transactional write requests.
-	_, ambiguousErr := pErr.GetDetail().(*roachpb.AmbiguousResultError)
-	if pErr == nil || ambiguousErr || newTxn.Writing {
+	if tc.mu.tracking {
 		// Adding the intents even on error reduces the likelihood of dangling
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
 		tc.appendAndCondenseIntentsLocked(ctx, ba, br)
-
-		// Initialize the first update time and maybe start the heartbeat.
-		if tc.mu.firstUpdateNanos == 0 && len(tc.mu.meta.Intents) > 0 {
-			// If the transaction is already over, there's no point in
-			// launching a one-off heartbeat which will shut down right
-			// away. If we ended up here with an error, we'll always start
-			// the coordinator - the transaction has laid down intents, so
-			// we expect it to be committed/aborted at some point in the
-			// future.
-			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-				log.Event(ctx, "coordinator spawns")
-				tc.mu.firstUpdateNanos = startNS
-
-				// Only heartbeat the txn record if we're the root transaction.
-				if tc.typ == client.RootTxn {
-					// Create a channel to stop the heartbeat with the lock held
-					// to avoid a race between the async task and a subsequent commit.
-					tc.mu.txnEnd = make(chan struct{})
-					if err := tc.stopper.RunAsyncTask(
-						ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
-							tc.heartbeatLoop(ctx)
-						}); err != nil {
-						// The system is already draining and we can't start the
-						// heartbeat. We refuse new transactions for now because
-						// they're likely not going to have all intents committed.
-						// In principle, we can relax this as needed though.
-						tc.cleanupTxnLocked(ctx, aborted)
-						duration, restarts, status := tc.finalTxnStatsLocked()
-						tc.updateStats(duration, restarts, status, false)
-						return roachpb.NewError(err)
-					}
-				}
-			} else {
-				// If this was a successful one phase commit, update stats
-				// directly as they won't otherwise be updated on heartbeat
-				// loop shutdown.
-				etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
-				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
-			}
+	} else {
+		// If this was a successful one phase commit, update stats
+		// directly as they won't otherwise be updated on heartbeat
+		// loop shutdown.
+		_, isBeginning := ba.GetArg(roachpb.BeginTransaction)
+		_, isEnding := ba.GetArg(roachpb.EndTransaction)
+		if pErr == nil && isBeginning && isEnding {
+			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
+			tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
 		}
 	}
 

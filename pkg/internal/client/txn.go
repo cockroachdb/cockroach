@@ -73,10 +73,7 @@ type Txn struct {
 		// txnAnchorKey is the key at which to anchor the transaction record. If
 		// unset, the first key written in the transaction will be used.
 		txnAnchorKey roachpb.Key
-		// writingTxnRecord is set when the Txn is in the middle of writing
-		// its transaction record. It is used to assure that even in the presence
-		// of concurrent requests, only one sends a BeginTxnRequest.
-		writingTxnRecord bool
+		state        txnState
 		// see IsFinalized()
 		finalized bool
 		// previousIDs holds the set of all previous IDs that the Txn's Proto has
@@ -98,6 +95,40 @@ type Txn struct {
 		sender TxnSender
 	}
 }
+
+// txnState represents states relating to whether Begin/EndTxn requests need to
+// be sent.
+type txnState int
+
+const (
+	// txnReadOnly means that the transaction never sent any writes. There's no
+	// transaction record, so an EndTxn does not need to be sent.
+	txnReadOnly txnState = iota
+	// txnWriting means that the transaction has sent some writes (and so it also
+	// sent a BeginTxn). An EndTransaction must be sent to resolve intents and/or
+	// to cleanup the txn record.
+	// txnWriting does not guarantee that the transaction record has been written.
+	// In case the BeginTxn batch encoutered an error, it might not have been. In
+	// this case, a rollback will get an error (ignored by SQL).
+	txnWriting
+	// txnWriteInOldEpoch means that the txn has been writing in an old epoch,
+	// but then restarted with a new epoch, and there have been no writes sent
+	// since then. This means that an EndTransaction(commit=false) needs to be
+	// sent to clean up intents. It also means that a BeginTransaction needs to be
+	// sent on the first write: the TransactionRestartError might have been
+	// received by the batch with the BeginTransaction in it, in which case there
+	// is no transaction record (and so it needs to be created).
+	// We could be smarter about not transitioning to this state if there's ever
+	// been a successful write (in which case we know that there is a txn record
+	// and a BeginTransaction is not necessary) but as of May 2018 we don't do
+	// that. Note that the server accepts a BeginTxn with a higher epoch if a
+	// transaction record already exists.
+	txnWriteInOldEpoch
+	// txnError means that the txn had performed some writes and then a batch got
+	// a non-retriable error. Further batches except EndTransaction(commit=false)
+	// will be rejected.
+	txnError
+)
 
 // NewTxn returns a new txn. The typ parameter specifies whether this
 // transaction is the top level (root), or one of potentially many
@@ -141,7 +172,7 @@ func NewTxnWithProto(
 	proto.AssertInitialized(context.TODO())
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.Proto = proto
-	txn.mu.sender = db.factory.New(typ)
+	txn.mu.sender = db.factory.New(typ, &proto)
 	return txn
 }
 
@@ -298,7 +329,7 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
+	if txn.mu.state != txnReadOnly {
 		return errors.Errorf("transaction anchor key already set")
 	}
 	txn.mu.txnAnchorKey = key
@@ -596,6 +627,14 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 }
 
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
+	// TODO(andrei): It's common for rollbacks to fail with
+	// TransactionStatusError: txn record not found (REASON_TXN_NOT_FOUND),
+	// in case the txn record was never written (e.g. if a 1PC failed). One would
+	// think that, depending on the error received by a 1PC batch, we'd know if a
+	// txn record was written and, if it wasn't, we could short-circuit the
+	// rollback. There's two tricky things about that, though: a) we'd need to
+	// know whether the DistSender has split what looked like a 1PC batch to the
+	// client and b) ambiguous errors.
 	log.VEventf(ctx, 2, "rolling back transaction")
 	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
 }
@@ -614,19 +653,16 @@ func (txn *Txn) OnFinish(onFinishFn func(error)) {
 	txn.mu.sender.OnFinish(onFinishFn)
 }
 
-// maybeFinishReadonly provides a fast-path for finishing a read-only
+// finishReadonlyLocked provides a fast-path for finishing a read-only
 // transaction without going through the overhead of creating an
 // EndTransactionRequest only to not send it.
 //
 // NB: The logic here must be kept in sync with the logic in txn.Send.
 //
 // TODO(andrei): Can we share this code with txn.Send?
-func (txn *Txn) maybeFinishReadonly(commit bool, deadline *hlc.Timestamp) (bool, *roachpb.Error) {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
-		return false, nil
-	}
+func (txn *Txn) finishReadonlyLocked(
+	ctx context.Context, commit bool, deadline *hlc.Timestamp,
+) *roachpb.Error {
 	txn.mu.finalized = true
 	// Check that read only transactions do not violate their deadline. This can NOT
 	// happen since the txn deadline is normally updated when it is about to expire
@@ -644,7 +680,7 @@ func (txn *Txn) maybeFinishReadonly(commit bool, deadline *hlc.Timestamp) (bool,
 		//     4. new timestamp violates deadline
 		//     5. txn retries the read
 		//     6. commit fails - only thanks to this code path?
-		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
 			"deadline exceeded before transaction finalization"), &txn.mu.Proto)
 	}
 	if commit {
@@ -652,18 +688,35 @@ func (txn *Txn) maybeFinishReadonly(commit bool, deadline *hlc.Timestamp) (bool,
 	} else {
 		txn.mu.Proto.Status = roachpb.ABORTED
 	}
-	return true, nil
+	return nil
 }
 
 func (txn *Txn) sendEndTxnReq(
 	ctx context.Context, commit bool, deadline *hlc.Timestamp,
 ) *roachpb.Error {
-	if ok, err := txn.maybeFinishReadonly(commit, deadline); ok || err != nil {
-		return err
+	txn.mu.Lock()
+	if txn.mu.state == txnReadOnly {
+		defer txn.mu.Unlock()
+		return txn.finishReadonlyLocked(ctx, commit, deadline)
 	}
+
+	var swallowErr bool
+	if txn.mu.state == txnWriteInOldEpoch && commit {
+		// If there was a write in an old epoch (and no writes in the current
+		// epoch), we need to send a rollback. We'll ignore the error from it; the
+		// commit is successful at this point.
+		log.VEventf(ctx, 2, "old epoch write turning commit into rollback")
+		commit = false
+		swallowErr = true
+	}
+	txn.mu.Unlock()
+
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
+	if swallowErr {
+		return nil
+	}
 	return pErr
 }
 
@@ -878,6 +931,14 @@ func (txn *Txn) Send(
 		txn.mu.Lock()
 		defer txn.mu.Unlock()
 
+		if txn.mu.state == txnError {
+			singleAbort := ba.IsSingleEndTransactionRequest() &&
+				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+			if !singleAbort {
+				return roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{})
+			}
+		}
+
 		sender = txn.mu.sender
 		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
 			return roachpb.NewErrorf(
@@ -899,14 +960,27 @@ func (txn *Txn) Send(
 			txn.mu.active = true
 		}
 
-		needBeginTxn = !(txn.mu.Proto.Writing || txn.mu.writingTxnRecord) && haveTxnWrite
-		needEndTxn := txn.mu.Proto.Writing || txn.mu.writingTxnRecord || haveTxnWrite
+		needBeginTxn = haveTxnWrite && (txn.mu.state != txnWriting)
+		// We need the EndTxn if we've ever written before or if we're writing now.
+		needEndTxn := haveTxnWrite || txn.mu.state != txnReadOnly
 		elideEndTxn = haveEndTxn && !needEndTxn
 
 		// If we're not yet writing in this txn, but intend to, insert a
 		// begin transaction request before the first write command and update
 		// transaction state accordingly.
 		if needBeginTxn {
+			// Unless it's a 1PC, ask the TxnCoordSender to track the transaction.
+			if txn.mu.state == txnReadOnly && !haveEndTxn {
+				if err := txn.mu.sender.StartTracking(ctx); err != nil {
+					return roachpb.NewError(err)
+				}
+			}
+			// We're about to send a BeginTxn, so move to the Writing state.
+			txn.mu.state = txnWriting
+			// From now on, all requests need to be checked against the AbortCache on
+			// the server side.
+			txn.mu.Proto.Writing = true
+
 			// Set txn key based on the key of the first transactional write if
 			// not already set. If the transaction already has a key (we're in a
 			// restart), make sure we keep the anchor key the same.
@@ -930,9 +1004,6 @@ func (txn *Txn) Send(
 			copy(ba.Requests, oldRequests[:firstWriteIdx])
 			ba.Requests[firstWriteIdx].MustSetInner(bt)
 			copy(ba.Requests[firstWriteIdx+1:], oldRequests[firstWriteIdx:])
-			// We're going to be writing the transaction record by sending the
-			// begin transaction request.
-			txn.mu.writingTxnRecord = true
 		}
 
 		if elideEndTxn {
@@ -976,9 +1047,7 @@ func (txn *Txn) Send(
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	// If we inserted a begin transaction request, remove it here. We also
-	// unset the flag writingTxnRecord flag in case another ever needs to
-	// be sent again (for instance, if we're aborted and need to restart).
+	// If we inserted a begin transaction request, remove it here.
 	if needBeginTxn {
 		if br != nil && br.Responses != nil {
 			br.Responses = append(br.Responses[:firstWriteIdx], br.Responses[firstWriteIdx+1:]...)
@@ -994,8 +1063,6 @@ func (txn *Txn) Send(
 				pErr.SetErrorIndex(idx - 1)
 			}
 		}
-
-		txn.mu.writingTxnRecord = false
 	}
 	if haveEndTxn {
 		if pErr == nil || !endTxnRequest.Commit {
@@ -1006,12 +1073,19 @@ func (txn *Txn) Send(
 		}
 	}
 
+	// If the request was part of a previous attempt, don't return any results.
+	if requestTxnID != txn.mu.Proto.ID || ba.Txn.Epoch != txn.mu.Proto.Epoch {
+		return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
+	}
+
 	if pErr != nil {
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
 		}
+		var retriable bool
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.HandledRetryableTxnError:
+			retriable = true
 			retryErr := t
 			if requestTxnID != retryErr.TxnID {
 				// KV should not return errors for transactions other than the one that sent
@@ -1019,30 +1093,31 @@ func (txn *Txn) Send(
 				log.Fatalf(ctx, "retryable error for the wrong txn. "+
 					"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 					requestTxnID, retryErr.TxnID, retryErr)
-			} else if requestTxnID == txn.mu.Proto.ID {
-				// Our requestTxnID still matches the proto, so update the state.
-				// If it doesn't match here, it means a concurrent request through
-				// this Txn object has already aborted and restarted the txn.
-				txn.updateStateOnRetryableErrLocked(ctx, retryErr)
 			}
+			txn.updateStateOnRetryableErrLocked(ctx, retryErr)
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to
 		// the root transactions, at the receiver.
-		if txn.typ == RootTxn && pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-			log.Fatalf(ctx,
-				"unexpected retryable error at the client.Txn level: (%T) %s",
-				pErr.GetDetail(), pErr)
+		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+			retriable = true
+			if txn.typ == RootTxn {
+				log.Fatalf(ctx,
+					"unexpected retryable error at the client.Txn level: (%T) %s",
+					pErr.GetDetail(), pErr)
+			}
 		}
+
+		if !retriable && txn.mu.state == txnWriting {
+			txn.mu.state = txnError
+		}
+
 		return nil, pErr
 	}
 
 	if br != nil {
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(txn.mu.sender, br))
-		}
-		if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
-			return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
 		}
 
 		// Only successful requests can carry an updated Txn in their response
@@ -1108,11 +1183,11 @@ func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
 // information with the supplied meta. For use with GetTxnCoordMeta().
-func (txn *Txn) AugmentTxnCoordMeta(meta roachpb.TxnCoordMeta) {
+func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.mu.Proto.Update(&meta.Txn)
-	txn.mu.sender.AugmentMeta(meta)
+	txn.mu.sender.AugmentMeta(ctx, meta)
 }
 
 // UpdateStateOnRemoteRetryableErr updates the Txn, and the
@@ -1167,9 +1242,11 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		// attempt. The txn inside pErr was correctly prepared for this by
 		// TxnCoordSender.
 		txn.mu.Proto = *newTxn
+		// We're starting a fresh transaction, with no state.
+		txn.mu.state = txnReadOnly
 
 		// Create a new txn sender.
-		txn.mu.sender = txn.db.factory.New(txn.typ)
+		txn.mu.sender = txn.db.factory.New(txn.typ, newTxn)
 	} else {
 		// Update the transaction proto with the one to be used for the next
 		// attempt. The txn inside pErr was correctly prepared for this by
@@ -1178,6 +1255,12 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		// we rely on the associativity of Transaction.Update to sort out this
 		// lack of ordering guarantee.
 		txn.mu.Proto.Update(newTxn)
+
+		// If we've been writing, we'll need to send a BeginTxn with the next
+		// request.
+		if txn.mu.state == txnWriting {
+			txn.mu.state = txnWriteInOldEpoch
+		}
 	}
 }
 
