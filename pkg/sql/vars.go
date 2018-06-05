@@ -399,6 +399,12 @@ var varGen = map[string]sessionVar{
 	},
 
 	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+	`max_identifier_length`: {
+		Get: func(evalCtx *extendedEvalContext) string { return "63" },
+	},
+
+	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
 	`max_index_keys`: {
 		Get: func(evalCtx *extendedEvalContext) string { return "32" },
