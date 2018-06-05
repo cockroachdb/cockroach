@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 # ------------------------------------------------------------------------------
 # Test index selection for deeply interleaved tables.

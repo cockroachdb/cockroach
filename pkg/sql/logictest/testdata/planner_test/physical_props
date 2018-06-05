@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: local
 
 statement ok
 CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT)

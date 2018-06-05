@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql 5node-distsql-opt 5node-distsql-metadata
+# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
 
 ########################
 #  LOOKUP JOIN FORCED  #

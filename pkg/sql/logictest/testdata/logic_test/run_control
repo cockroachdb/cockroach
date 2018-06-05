@@ -1,4 +1,4 @@
-# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 query error job with ID 1 does not exist
 PAUSE JOB 1

@@ -1,4 +1,4 @@
-# LogicTest: opt
+# LogicTest: local-opt
 
 # TODO(radu): enable once we support inverted indexes
 #

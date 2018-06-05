@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql
+# LogicTest: 5node-dist
 
 # First, we set up two data tables:
 #   - NumToSquare maps integers from 1 to 100 to their squares

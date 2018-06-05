@@ -1,4 +1,4 @@
-# LogicTest: opt distsql-opt
+# LogicTest: local-opt fakedist-opt
 
 # ------------------------------------------------------------------------------
 # Create a simple schema that models customers and orders. Each customer has an

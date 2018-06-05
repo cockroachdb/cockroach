@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql-opt
+# LogicTest: 5node-dist-opt
 
 # TODO(radu): enable once we support DISTINCT ON
 #

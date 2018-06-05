@@ -99,7 +99,7 @@ import (
 //
 // Logic tests can start with a directive as follows:
 //
-//   # LogicTest: default parallel-stmts distsql
+//   # LogicTest: local local-parallel-stmts fakedist
 //
 // This directive lists configurations; the test is run once in each
 // configuration (in separate subtests). The configurations are defined by
@@ -316,7 +316,7 @@ var (
 	logictestdata = flag.String("d", "", "glob that selects subset of files to run")
 	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
 	defaultConfig = flag.String(
-		"config", "default",
+		"config", "local",
 		"customizes the default test cluster configuration for files that lack LogicTest directives",
 	)
 
@@ -385,8 +385,8 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
-	{name: "default-v1.1@v1.0-noupgrade", numNodes: 1, overrideDistSQLMode: "Off",
+	{name: "local", numNodes: 1, overrideDistSQLMode: "Off"},
+	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1, overrideDistSQLMode: "Off",
 		bootstrapVersion: &cluster.ClusterVersion{
 			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
@@ -394,17 +394,17 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
-	{name: "opt", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "On"},
-	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
-	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
-	{name: "distsql-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
-	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
-	{name: "5node-distsql", numNodes: 5, overrideDistSQLMode: "On"},
-	{name: "5node-distsql-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "5node-distsql-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
+	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "On"},
+	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
+	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
+	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
+	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
+	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "Off"},
+	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "On"},
+	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
+	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
+	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
 }
 
 // An index in the above slice.
