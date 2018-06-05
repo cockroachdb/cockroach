@@ -602,6 +602,23 @@ func doDistributedCSVTransform(
 		})
 	}
 
+	// The returned spans are from the SSTs themselves, and so don't perfectly
+	// overlap. Sort the files so we can fix the spans to be correctly
+	// overlapping. This is needed because RESTORE splits at both the start
+	// and end of each SST, and so there are tiny ranges (like {NULL-/0/0} at
+	// the start) that get created. During non-transform IMPORT this isn't a
+	// problem because it only splits on the end key. Replicate that behavior
+	// here by copying the end key from each span to the start key of the next.
+	sort.Slice(backupDesc.Files, func(i, j int) bool {
+		return backupDesc.Files[i].Span.Key.Compare(backupDesc.Files[j].Span.Key) < 0
+	})
+	tableSpan := tableDesc.TableSpan()
+	backupDesc.Files[0].Span.Key = tableSpan.Key
+	for i := 1; i < len(backupDesc.Files); i++ {
+		backupDesc.Files[i].Span.Key = backupDesc.Files[i-1].Span.EndKey
+	}
+	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = tableSpan.EndKey
+
 	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
 		return err
