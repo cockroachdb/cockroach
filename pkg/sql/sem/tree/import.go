@@ -29,16 +29,21 @@ var _ Statement = &Import{}
 
 // Format implements the NodeFormatter interface.
 func (node *Import) Format(ctx *FmtCtx) {
-	ctx.WriteString("IMPORT TABLE ")
-	ctx.FormatNode(&node.Table)
+	ctx.WriteString("IMPORT ")
 
 	if node.Bundle {
-		ctx.WriteString(" FROM ")
+		if node.Table.TableNameReference != nil {
+			ctx.FormatNode(&node.Table)
+			ctx.WriteString(" FROM ")
+		}
 		ctx.WriteString(node.FileFormat)
 		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Files)
 		ctx.WriteString(")")
 	} else {
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(&node.Table)
+
 		if node.CreateFile != nil {
 			ctx.WriteString(" CREATE USING ")
 			ctx.FormatNode(node.CreateFile)

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -158,6 +159,7 @@ func LoadCSV(
 	phs PlanHookState,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
+	tables map[string]*sqlbase.TableDescriptor,
 	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
@@ -195,31 +197,38 @@ func LoadCSV(
 	})
 
 	// Setup common to both stages.
+	if len(tables) == 0 && tableDesc == nil {
+		return errors.Errorf("must specify table(s) to import")
+	}
 
 	// For each input file, assign it to a node.
-	csvSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
+	inputSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
 	for i, input := range from {
 		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
-			csvSpecs = append(csvSpecs, &distsqlrun.ReadImportDataSpec{
-				TableDesc: *tableDesc,
-				Format:    format,
+			spec := &distsqlrun.ReadImportDataSpec{
+				Tables: tables,
+				Format: format,
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
 				Uri: make(map[int32]string),
-			})
+			}
+			if tableDesc != nil {
+				spec.TableDesc = *tableDesc
+			}
+			inputSpecs = append(inputSpecs, spec)
 		}
 		n := i % len(nodes)
-		csvSpecs[n].Uri[int32(i)] = input
+		inputSpecs[n].Uri[int32(i)] = input
 	}
 
-	for _, rcs := range csvSpecs {
+	for i := range inputSpecs {
 		// TODO(mjibson): using the actual file sizes here would improve progress
 		// accuracy.
-		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
+		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
 	}
 
 	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
@@ -236,21 +245,28 @@ func LoadCSV(
 	// Determine if we need to run the sampling plan or not.
 
 	details := job.Record.Details.(jobs.ImportDetails)
-	samples := details.Tables[0].Samples
+	samples := details.Samples
 	if samples == nil {
 		var err error
-		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, csvSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
 	}
 
+	splits := make([][]byte, 0, 2+2*len(tables)+len(samples))
 	// Add the table keys to the spans.
-	tableSpan := tableDesc.TableSpan()
-	splits := make([][]byte, 0, 2+len(samples))
-	splits = append(splits, tableSpan.Key)
+	if tableDesc != nil {
+		tableSpan := tableDesc.TableSpan()
+		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
+	}
+	for _, desc := range tables {
+		tableSpan := desc.TableSpan()
+		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
+	}
+
 	splits = append(splits, samples...)
-	splits = append(splits, tableSpan.EndKey)
+	sort.Slice(splits, func(a, b int) bool { return roachpb.Key(splits[a]).Compare(splits[b]) < 0 })
 
 	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
@@ -280,7 +296,7 @@ func LoadCSV(
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
-	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(csvSpecs))
+	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
@@ -295,7 +311,7 @@ func LoadCSV(
 
 	stageID := p.NewStageID()
 	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
-	for i, rcs := range csvSpecs {
+	for i, rcs := range inputSpecs {
 		rcs.SampleSize = 0
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
@@ -366,11 +382,11 @@ func LoadCSV(
 		func(ctx context.Context, details jobs.Details, progress jobs.ProgressDetails) float32 {
 			prog := progress.(*jobs.Progress_Import).Import
 			prog.SamplingProgress = nil
-			prog.ReadProgress = make([]float32, len(csvSpecs))
+			prog.ReadProgress = make([]float32, len(inputSpecs))
 			prog.WriteProgress = make([]float32, len(p.ResultRouters))
 
 			d := details.(*jobs.Payload_Import).Import
-			d.Tables[0].Samples = samples
+			d.Samples = samples
 			return prog.Completed()
 		},
 	); err != nil {

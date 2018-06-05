@@ -558,8 +558,23 @@ message ReadImportDataSpec {
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
-  // table_desc is the table descriptor of the CSV file.
+
+  // table_desc is the table descriptor to use for input data.
+  // note: tables below may be used instead for multi-table input formats.
   optional sqlbase.TableDescriptor table_desc = 3 [(gogoproto.nullable) = false];
+
+  // tables is an alternative to table_desc for input formats that can read
+  // multiple tables. If it is non-empty, the keys specify the names of tables
+  // for which the processor should read and emit data (ignoring data for any
+  // other tables that is present in the input).
+  //
+  // TODO(dt): If a key has a nil value, the schema for that table should be
+  // determined from the input on-the-fly (e.g. by parsing a CREATE TABLE in a
+  // dump file) and the processor should emit a key/value for the generated
+  // TableDescriptor with the corresponding descriptor ID key. If tables is
+  // empty (and table_desc above is not specified), the processor should read
+  // all tables in the input, determining their schemas on the fly.
+  map<string, sqlbase.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
 
   // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.
