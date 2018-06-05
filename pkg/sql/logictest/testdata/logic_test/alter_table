@@ -433,13 +433,13 @@ INSERT INTO add_default (a) VALUES (3)
 statement error could not parse "foo" as type int
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'foo'
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT $1
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT c
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT (SELECT 1)
 
 statement ok

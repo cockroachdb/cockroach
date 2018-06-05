@@ -841,37 +841,6 @@ func IsConst(evalCtx *EvalContext, expr Expr) bool {
 	return v.run(expr)
 }
 
-type impureFunctionsVisitor struct {
-	fns []*FuncExpr
-}
-
-var _ Visitor = &impureFunctionsVisitor{}
-
-func (v *impureFunctionsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsImpure() {
-			v.fns = append(v.fns, t)
-			return true, expr
-		}
-	}
-	return true, expr
-}
-
-func (*impureFunctionsVisitor) VisitPost(expr Expr) Expr { return expr }
-
-func (v *impureFunctionsVisitor) run(expr Expr) []*FuncExpr {
-	WalkExprConst(v, expr)
-	return v.fns
-}
-
-// ImpureFunctions returns the impure functions in an expression. It does not
-// return any column references, which distinguishes it from IsConst.
-func ImpureFunctions(expr Expr) []*FuncExpr {
-	v := impureFunctionsVisitor{}
-	return v.run(expr)
-}
-
 // isVar returns true if the expression's value can vary during plan
 // execution.
 func isVar(evalCtx *EvalContext, expr Expr) bool {
