@@ -129,26 +129,47 @@ const (
 // Gossip metrics counter names.
 var (
 	MetaConnectionsIncomingGauge = metric.Metadata{
-		Name: "gossip.connections.incoming",
-		Help: "Number of active incoming gossip connections"}
+		Name:        "gossip.connections.incoming",
+		Help:        "Number of active incoming gossip connections",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaConnectionsOutgoingGauge = metric.Metadata{
-		Name: "gossip.connections.outgoing",
-		Help: "Number of active outgoing gossip connections"}
+		Name:        "gossip.connections.outgoing",
+		Help:        "Number of active outgoing gossip connections",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaConnectionsRefused = metric.Metadata{
-		Name: "gossip.connections.refused",
-		Help: "Number of refused incoming gossip connections"}
+		Name:        "gossip.connections.refused",
+		Help:        "Number of refused incoming gossip connections",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaInfosSent = metric.Metadata{
-		Name: "gossip.infos.sent",
-		Help: "Number of sent gossip Info objects"}
+		Name:        "gossip.infos.sent",
+		Help:        "Number of sent gossip Info objects",
+		Measurement: "Infos",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaInfosReceived = metric.Metadata{
-		Name: "gossip.infos.received",
-		Help: "Number of received gossip Info objects"}
+		Name:        "gossip.infos.received",
+		Help:        "Number of received gossip Info objects",
+		Measurement: "Infos",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaBytesSent = metric.Metadata{
-		Name: "gossip.bytes.sent",
-		Help: "Number of sent gossip bytes"}
+		Name:        "gossip.bytes.sent",
+		Help:        "Number of sent gossip bytes",
+		Measurement: "Gossip Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaBytesReceived = metric.Metadata{
-		Name: "gossip.bytes.received",
-		Help: "Number of received gossip bytes"}
+		Name:        "gossip.bytes.received",
+		Help:        "Number of received gossip bytes",
+		Measurement: "Gossip Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // KeyNotPresentError is returned by gossip when queried for a key that doesn't

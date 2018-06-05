@@ -135,56 +135,107 @@ const metricsSampleInterval = 10 * time.Second
 // Fully-qualified names for metrics.
 var (
 	MetaTxnBegin = metric.Metadata{
-		Name: "sql.txn.begin.count",
-		Help: "Number of SQL transaction BEGIN statements"}
+		Name:        "sql.txn.begin.count",
+		Help:        "Number of SQL transaction BEGIN statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaTxnCommit = metric.Metadata{
-		Name: "sql.txn.commit.count",
-		Help: "Number of SQL transaction COMMIT statements"}
+		Name:        "sql.txn.commit.count",
+		Help:        "Number of SQL transaction COMMIT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaTxnAbort = metric.Metadata{
-		Name: "sql.txn.abort.count",
-		Help: "Number of SQL transaction ABORT statements"}
+		Name:        "sql.txn.abort.count",
+		Help:        "Number of SQL transaction ABORT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaTxnRollback = metric.Metadata{
-		Name: "sql.txn.rollback.count",
-		Help: "Number of SQL transaction ROLLBACK statements"}
+		Name:        "sql.txn.rollback.count",
+		Help:        "Number of SQL transaction ROLLBACK statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSelect = metric.Metadata{
-		Name: "sql.select.count",
-		Help: "Number of SQL SELECT statements"}
+		Name:        "sql.select.count",
+		Help:        "Number of SQL SELECT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSQLExecLatency = metric.Metadata{
-		Name: "sql.exec.latency",
-		Help: "Latency in nanoseconds of SQL statement execution"}
+		Name:        "sql.exec.latency",
+		Help:        "Latency of SQL statement execution",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaSQLServiceLatency = metric.Metadata{
-		Name: "sql.service.latency",
-		Help: "Latency in nanoseconds of SQL request execution"}
+		Name:        "sql.service.latency",
+		Help:        "Latency of SQL request execution",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaDistSQLSelect = metric.Metadata{
-		Name: "sql.distsql.select.count",
-		Help: "Number of DistSQL SELECT statements"}
+		Name:        "sql.distsql.select.count",
+		Help:        "Number of DistSQL SELECT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaDistSQLExecLatency = metric.Metadata{
-		Name: "sql.distsql.exec.latency",
-		Help: "Latency in nanoseconds of DistSQL statement execution"}
+		Name:        "sql.distsql.exec.latency",
+		Help:        "Latency of DistSQL statement execution",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaDistSQLServiceLatency = metric.Metadata{
-		Name: "sql.distsql.service.latency",
-		Help: "Latency in nanoseconds of DistSQL request execution"}
+		Name:        "sql.distsql.service.latency",
+		Help:        "Latency of DistSQL request execution",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaUpdate = metric.Metadata{
-		Name: "sql.update.count",
-		Help: "Number of SQL UPDATE statements"}
+		Name:        "sql.update.count",
+		Help:        "Number of SQL UPDATE statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaInsert = metric.Metadata{
-		Name: "sql.insert.count",
-		Help: "Number of SQL INSERT statements"}
+		Name:        "sql.insert.count",
+		Help:        "Number of SQL INSERT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaDelete = metric.Metadata{
-		Name: "sql.delete.count",
-		Help: "Number of SQL DELETE statements"}
+		Name:        "sql.delete.count",
+		Help:        "Number of SQL DELETE statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaDdl = metric.Metadata{
-		Name: "sql.ddl.count",
-		Help: "Number of SQL DDL statements"}
+		Name:        "sql.ddl.count",
+		Help:        "Number of SQL DDL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaMisc = metric.Metadata{
-		Name: "sql.misc.count",
-		Help: "Number of other SQL statements"}
+		Name:        "sql.misc.count",
+		Help:        "Number of other SQL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaQuery = metric.Metadata{
-		Name: "sql.query.count",
-		Help: "Number of SQL queries"}
+		Name:        "sql.query.count",
+		Help:        "Number of SQL queries",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaFailure = metric.Metadata{
-		Name: "sql.failure.count",
-		Help: "Number of statements resulting in a planning or runtime error"}
+		Name:        "sql.failure.count",
+		Help:        "Number of statements resulting in a planning or runtime error",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // NodeInfo contains metadata about the executing node and cluster.

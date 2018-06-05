@@ -175,9 +175,12 @@ func (mr *MetricsRecorder) AddNode(
 
 	// Create node ID gauge metric with host as a label.
 	metadata := metric.Metadata{
-		Name: "node-id",
-		Help: "node ID with labels for advertised RPC and HTTP addresses",
+		Name:        "node-id",
+		Help:        "node ID with labels for advertised RPC and HTTP addresses",
+		Measurement: "Node ID",
+		Unit:        metric.Unit_CONST,
 	}
+
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
 	nodeIDGauge := metric.NewGauge(metadata)

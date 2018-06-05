@@ -50,6 +50,14 @@ type Iterable interface {
 	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
+	// GetMeasurement returns the label for the metric, which describes the entity
+	// it measures.
+	GetMeasurement() string
+	// GetUnit returns the unit that should be used to display the metric
+	// (e.g. in bytes).
+	GetUnit() Unit
+	// GetMetadata returns the metric's metadata, which can be used in charts.
+	GetMetadata() Metadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }
@@ -72,13 +80,6 @@ type PrometheusExportable interface {
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
-// Metadata holds metadata about a metric. It must be embedded in
-// each metric object.
-type Metadata struct {
-	Name, Help string
-	labels     []*prometheusgo.LabelPair
-}
-
 // GetName returns the metric's name.
 func (m *Metadata) GetName() string {
 	return m.Name
@@ -89,15 +90,33 @@ func (m *Metadata) GetHelp() string {
 	return m.Help
 }
 
-// GetLabels returns the metric's labels.
+// GetMeasurement returns the entity measured by the metric.
+func (m *Metadata) GetMeasurement() string {
+	return m.Measurement
+}
+
+// GetUnit returns the metric's unit of measurement.
+func (m *Metadata) GetUnit() Unit {
+	return m.Unit
+}
+
+// GetLabels returns the metric's labels. For rationale behind the conversion
+// from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
+// in pkg/util/metric/metric.proto.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	return m.labels
+	lps := make([]*prometheusgo.LabelPair, len(m.Labels))
+	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
+	var x []byte
+	for i, v := range m.Labels {
+		lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+	}
+	return lps
 }
 
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
-	m.labels = append(m.labels,
-		&prometheusgo.LabelPair{
+	m.Labels = append(m.Labels,
+		&LabelPair{
 			Name:  proto.String(exportedLabel(name)),
 			Value: proto.String(value),
 		})
@@ -286,6 +305,14 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (h *Histogram) GetMetadata() Metadata {
+	baseMetadata := h.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return baseMetadata
+}
+
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	Metadata
@@ -325,6 +352,14 @@ func (c *Counter) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
 		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Counter.Count()))},
 	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (c *Counter) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
 }
 
 // A Gauge atomically stores a single integer value.
@@ -395,6 +430,14 @@ func (g *Gauge) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (g *Gauge) GetMetadata() Metadata {
+	baseMetadata := g.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
@@ -424,6 +467,14 @@ func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
 		Gauge: &prometheusgo.Gauge{Value: proto.Float64(g.Value())},
 	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (g *GaugeFloat64) GetMetadata() Metadata {
+	baseMetadata := g.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
 }
 
 // A Rate is a exponential weighted moving average.
