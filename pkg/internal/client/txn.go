@@ -798,6 +798,9 @@ func (txn *Txn) Exec(
 	}
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err = fn(ctx, txn, &opt)
 
 		if err == nil && opt.AutoCommit {
