@@ -109,6 +109,14 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	}
 }
 
+// WriteMetricsMetadata writes metadata from all tracked metrics to the
+// parameter map.
+func (r *Registry) WriteMetricsMetadata(dest map[string]Metadata) {
+	for _, v := range r.tracked {
+		dest[v.GetName()] = v.GetMetadata()
+	}
+}
+
 // Each calls the given closure for all metrics.
 func (r *Registry) Each(f func(name string, val interface{})) {
 	r.Lock()
