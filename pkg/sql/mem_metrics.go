@@ -59,23 +59,41 @@ const log10int64times1000 = 19 * 1000
 func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetrics {
 	prefix := "sql.mem." + endpoint
 	MetaMemMaxBytes := metric.Metadata{
-		Name: prefix + ".max",
-		Help: "Memory usage per sql statement for " + endpoint}
+		Name:        prefix + ".max",
+		Help:        "Memory usage per sql statement for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaMemCurBytes := metric.Metadata{
-		Name: prefix + ".current",
-		Help: "Current sql statement memory usage for " + endpoint}
+		Name:        prefix + ".current",
+		Help:        "Current sql statement memory usage for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaMemMaxTxnBytes := metric.Metadata{
-		Name: prefix + ".txn.max",
-		Help: "Memory usage per sql transaction for " + endpoint}
+		Name:        prefix + ".txn.max",
+		Help:        "Memory usage per sql transaction for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaMemTxnCurBytes := metric.Metadata{
-		Name: prefix + ".txn.current",
-		Help: "Current sql transaction memory usage for " + endpoint}
+		Name:        prefix + ".txn.current",
+		Help:        "Current sql transaction memory usage for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaMemMaxSessionBytes := metric.Metadata{
-		Name: prefix + ".session.max",
-		Help: "Memory usage per sql session for " + endpoint}
+		Name:        prefix + ".session.max",
+		Help:        "Memory usage per sql session for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	MetaMemSessionCurBytes := metric.Metadata{
-		Name: prefix + ".session.current",
-		Help: "Current sql session memory usage for " + endpoint}
+		Name:        prefix + ".session.current",
+		Help:        "Current sql session memory usage for " + endpoint,
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	return MemoryMetrics{
 		MaxBytesHist:         metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount:        metric.NewGauge(MetaMemCurBytes),

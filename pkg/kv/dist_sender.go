@@ -46,26 +46,47 @@ const (
 
 var (
 	metaDistSenderBatchCount = metric.Metadata{
-		Name: "distsender.batches",
-		Help: "Number of batches processed"}
+		Name:        "distsender.batches",
+		Help:        "Number of batches processed",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
-		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed"}
+		Name:        "distsender.batches.partial",
+		Help:        "Number of partial batches processed",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent",
-		Help: "Number of RPCs sent"}
+		Name:        "distsender.rpc.sent",
+		Help:        "Number of RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportLocalSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent.local",
-		Help: "Number of local RPCs sent"}
+		Name:        "distsender.rpc.sent.local",
+		Help:        "Number of local RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderNextReplicaErrCount = metric.Metadata{
-		Name: "distsender.rpc.sent.nextreplicaerror",
-		Help: "Number of RPCs sent due to per-replica errors"}
+		Name:        "distsender.rpc.sent.nextreplicaerror",
+		Help:        "Number of RPCs sent due to per-replica errors",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
-		Name: "distsender.errors.notleaseholder",
-		Help: "Number of NotLeaseHolderErrors encountered"}
+		Name:        "distsender.errors.notleaseholder",
+		Help:        "Number of NotLeaseHolderErrors encountered",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSlowDistSenderRequests = metric.Metadata{
-		Name: "requests.slow.distsender",
-		Help: "Number of requests that have been stuck for a long time in the dist sender"}
+		Name:        "requests.slow.distsender",
+		Help:        "Number of requests that have been stuck for a long time in the dist sender",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
