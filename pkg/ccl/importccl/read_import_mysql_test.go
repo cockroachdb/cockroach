@@ -54,8 +54,9 @@ func TestMysqldumpDataReader(t *testing.T) {
 
 	ctx := context.TODO()
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
+	tables := map[string]*sqlbase.TableDescriptor{"simple": table}
 
-	converter, err := newMysqldumpReader(make(chan kvBatch, 10), table, testEvalCtx)
+	converter, err := newMysqldumpReader(make(chan kvBatch, 10), tables, testEvalCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescript
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tbl
+	return tbl[0]
 }
 
 func TestMysqldumpSchemaReader(t *testing.T) {

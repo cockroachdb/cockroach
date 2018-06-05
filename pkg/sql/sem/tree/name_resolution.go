@@ -364,17 +364,28 @@ func (t *TableName) ResolveTarget(
 
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGCatalog()
-	for scName, ok := iter(); ok; scName, ok = iter() {
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
-			if err == nil {
-				t.CatalogName = Name(curDb)
-				t.SchemaName = Name(scName)
-			}
-			break
-		}
+	found, scName, scMeta, err := ResolveCatalog(ctx, r, searchPath, curDb)
+	if found && err == nil {
+		t.CatalogName = Name(curDb)
+		t.SchemaName = scName
 	}
 	return found, scMeta, err
+}
+
+// ResolveCatalog resolves db name to a schema meta using a search path.
+func ResolveCatalog(
+	ctx context.Context, r TableNameTargetResolver, searchPath sessiondata.SearchPath, dbName string,
+) (bool, Name, SchemaMeta, error) {
+	iter := searchPath.IterWithoutImplicitPGCatalog()
+	for scName, ok := iter(); ok; scName, ok = iter() {
+		if found, scMeta, err := r.LookupSchema(ctx, dbName, scName); found || err != nil {
+			if err == nil {
+				return true, Name(scName), scMeta, nil
+			}
+			return false, "", nil, err
+		}
+	}
+	return false, "", nil, nil
 }
 
 // Resolve is used for table prefixes. This is adequate for table

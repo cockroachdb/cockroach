@@ -1644,7 +1644,11 @@ import_data_format:
 //
 // %SeeAlso: CREATE TABLE
 import_stmt:
- IMPORT TABLE table_name FROM import_bundle_format '(' string_or_placeholder ')'
+ IMPORT import_bundle_format '(' string_or_placeholder ')'
+  {
+    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}}
+  }
+| IMPORT TABLE table_name FROM import_bundle_format '(' string_or_placeholder ')'
   {
     $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}}
   }

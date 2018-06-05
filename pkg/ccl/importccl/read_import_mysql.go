@@ -33,27 +33,32 @@ import (
 )
 
 type mysqldumpReader struct {
-	conv     rowConverter
+	tables   map[string]*rowConverter
 	debugRow func(tree.Datums)
+	kvCh     chan kvBatch
 }
 
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan kvBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan kvBatch, tables map[string]*sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
-	conv, err := newRowConverter(table, evalCtx, kvCh)
-	if err != nil {
-		return nil, err
+	converters := make(map[string]*rowConverter, len(tables))
+	for name, table := range tables {
+		conv, err := newRowConverter(table, evalCtx, kvCh)
+		if err != nil {
+			return nil, err
+		}
+		converters[name] = conv
 	}
-	return &mysqldumpReader{conv: *conv}, err
+	return &mysqldumpReader{kvCh: kvCh, tables: converters}, nil
 }
 
 func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 }
 
 func (m *mysqldumpReader) inputFinished(ctx context.Context) {
-	close(m.conv.kvCh)
+	close(m.kvCh)
 }
 
 func (m *mysqldumpReader) readFile(
@@ -72,14 +77,14 @@ func (m *mysqldumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *mysql.Insert:
-
-			if expected, found := m.conv.tableDesc.Name, i.Table.Name.String(); expected != found {
-				// This row does not belong to the table being loaded. If we've already
-				// seen rows, we can assume we're done, otherwise keep reading.
-				if inserts > 0 {
-					break
-				}
+			name := i.Table.Name.String()
+			conv, ok := m.tables[name]
+			if !ok {
+				// not importing this table.
 				continue
+			}
+			if ok && conv == nil {
+				return errors.Errorf("missing schema info for requested table %q", name)
 			}
 			inserts++
 			rows, ok := i.Rows.(mysql.Values)
@@ -91,22 +96,22 @@ func (m *mysqldumpReader) readFile(
 			startingCount := count
 			for _, inputRow := range rows {
 				count++
-				if expected, got := len(m.conv.visibleCols), len(inputRow); expected != got {
+				if expected, got := len(conv.visibleCols), len(inputRow); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, inputRow)
 				}
 				for i, raw := range inputRow {
-					converted, err := mysqlToCockroach(raw, m.conv.visibleColTypes[i], m.conv.evalCtx)
+					converted, err := mysqlToCockroach(raw, conv.visibleColTypes[i], conv.evalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					m.conv.datums[i] = converted
+					conv.datums[i] = converted
 				}
-				if err := m.conv.row(ctx, inputIdx, count); err != nil {
+				if err := conv.row(ctx, inputIdx, count); err != nil {
 					return err
 				}
 				if m.debugRow != nil {
-					m.debugRow(m.conv.datums)
+					m.debugRow(conv.datums)
 				}
 			}
 		default:
@@ -116,7 +121,12 @@ func (m *mysqldumpReader) readFile(
 			continue
 		}
 	}
-	return m.conv.sendBatch(ctx)
+	for _, conv := range m.tables {
+		if err := conv.sendBatch(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mysqlToCockroach(
@@ -164,10 +174,11 @@ func mysqlToCockroach(
 
 func readMysqlCreateTable(
 	input io.Reader, evalCtx *tree.EvalContext, match string,
-) (*sqlbase.TableDescriptor, error) {
+) ([]*sqlbase.TableDescriptor, error) {
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 
+	var ret []*sqlbase.TableDescriptor
 	var found []string
 	for {
 		stmt, err := mysql.ParseNext(tokens)
@@ -175,7 +186,10 @@ func readMysqlCreateTable(
 			if match != "" {
 				return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(found, ", "))
 			}
-			return nil, errors.Errorf("no table definition found")
+			if ret == nil {
+				return nil, errors.Errorf("no table definition found")
+			}
+			return ret, nil
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "mysql parse error")
@@ -183,11 +197,17 @@ func readMysqlCreateTable(
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
 			name := i.NewName.Name.String()
 			if match != "" && match != name {
-				found = append(found, name)
 				continue
 			}
-			id := sqlbase.ID(int(defaultCSVTableID))
-			return mysqlTableToCockroach(evalCtx, id, name, i.TableSpec)
+			id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
+			tbl, err := mysqlTableToCockroach(evalCtx, id, name, i.TableSpec)
+			if err != nil {
+				return nil, err
+			}
+			if match == name {
+				return []*sqlbase.TableDescriptor{tbl}, nil
+			}
+			ret = append(ret, tbl)
 		}
 	}
 }
