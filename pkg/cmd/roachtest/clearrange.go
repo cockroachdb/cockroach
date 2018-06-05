@@ -55,6 +55,10 @@ func registerClearRange(r *registry) {
         'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=800,seed=1/bank'
 				WITH into_db = 'tinybank'"`)
 
+			// PREMERGE(benesch): fix the store dumps and the compaction queue.
+			t.Status(`waiting for in-built compactions`)
+			time.Sleep(75 * time.Minute)
+
 			t.Status()
 
 			m := newMonitor(ctx, c)
@@ -64,6 +68,10 @@ func registerClearRange(r *registry) {
 
 				t.WorkerStatus("dropping table")
 				defer t.WorkerStatus()
+
+				if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
+					return err
+				}
 
 				// Set a low TTL so that the ClearRange-based cleanup mechanism can kick in earlier.
 				// This could also be done after dropping the table.
@@ -79,7 +87,7 @@ func registerClearRange(r *registry) {
 				// above didn't brick the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 20
+				const minutes = 60
 				t.WorkerStatus("repeatedly running COUNT(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
