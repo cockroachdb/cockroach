@@ -779,6 +779,20 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// pg_is_in_recovery returns true if the Postgres database is currently in
+	// recovery.  This is not applicable so this can always return false.
+	// https://www.postgresql.org/docs/current/static/functions-admin.html#FUNCTIONS-RECOVERY-INFO-TABLE
+	"pg_is_in_recovery": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(*tree.EvalContext, tree.Datums) (tree.Datum, error) {
+				return tree.DBoolFalse, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// Access Privilege Inquiry Functions allow users to query object access
 	// privileges programmatically. Each function has a number of variants,
 	// which differ based on their function signatures. These signatures have
