@@ -421,22 +421,22 @@ func TestEngineMerge(t *testing.T) {
 			{
 				mvccKey("timeseriesmerged"),
 				[][]byte{
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{1, 1, 5, 5, 5},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{2, 1, 5, 5, 5},
 						{1, 2, 10, 7, 3},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{10, 1, 5, 5, 5},
 					}...),
-					timeSeries(testtime, 1000, []tsSample{
+					timeSeriesRow(testtime, 1000, []tsSample{
 						{5, 1, 5, 5, 5},
 						{3, 1, 5, 5, 5},
 					}...),
 				},
-				timeSeries(testtime, 1000, []tsSample{
+				timeSeriesRow(testtime, 1000, []tsSample{
 					{1, 2, 10, 7, 3},
 					{2, 1, 5, 5, 5},
 					{3, 1, 5, 5, 5},

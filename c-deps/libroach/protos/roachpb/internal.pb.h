@@ -151,16 +151,112 @@ class InternalTimeSeriesData : public ::google::protobuf::MessageLite /* @@proto
 
   // accessors -------------------------------------------------------
 
-  int samples_size() const;
-  void clear_samples();
-  static const int kSamplesFieldNumber = 3;
-  const ::cockroach::roachpb::InternalTimeSeriesSample& samples(int index) const;
-  ::cockroach::roachpb::InternalTimeSeriesSample* mutable_samples(int index);
-  ::cockroach::roachpb::InternalTimeSeriesSample* add_samples();
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR int samples_size() const;
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR void clear_samples();
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR static const int kSamplesFieldNumber = 3;
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR const ::cockroach::roachpb::InternalTimeSeriesSample& samples(int index) const;
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR ::cockroach::roachpb::InternalTimeSeriesSample* mutable_samples(int index);
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR ::cockroach::roachpb::InternalTimeSeriesSample* add_samples();
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
       mutable_samples();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
+  GOOGLE_PROTOBUF_DEPRECATED_ATTR const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
       samples() const;
+
+  // repeated int32 offset = 4 [packed = true];
+  int offset_size() const;
+  void clear_offset();
+  static const int kOffsetFieldNumber = 4;
+  ::google::protobuf::int32 offset(int index) const;
+  void set_offset(int index, ::google::protobuf::int32 value);
+  void add_offset(::google::protobuf::int32 value);
+  const ::google::protobuf::RepeatedField< ::google::protobuf::int32 >&
+      offset() const;
+  ::google::protobuf::RepeatedField< ::google::protobuf::int32 >*
+      mutable_offset();
+
+  // repeated double last = 5 [packed = true];
+  int last_size() const;
+  void clear_last();
+  static const int kLastFieldNumber = 5;
+  double last(int index) const;
+  void set_last(int index, double value);
+  void add_last(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      last() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_last();
+
+  // repeated uint32 count = 6 [packed = true];
+  int count_size() const;
+  void clear_count();
+  static const int kCountFieldNumber = 6;
+  ::google::protobuf::uint32 count(int index) const;
+  void set_count(int index, ::google::protobuf::uint32 value);
+  void add_count(::google::protobuf::uint32 value);
+  const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+      count() const;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+      mutable_count();
+
+  // repeated double sum = 7 [packed = true];
+  int sum_size() const;
+  void clear_sum();
+  static const int kSumFieldNumber = 7;
+  double sum(int index) const;
+  void set_sum(int index, double value);
+  void add_sum(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      sum() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_sum();
+
+  // repeated double max = 8 [packed = true];
+  int max_size() const;
+  void clear_max();
+  static const int kMaxFieldNumber = 8;
+  double max(int index) const;
+  void set_max(int index, double value);
+  void add_max(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      max() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_max();
+
+  // repeated double min = 9 [packed = true];
+  int min_size() const;
+  void clear_min();
+  static const int kMinFieldNumber = 9;
+  double min(int index) const;
+  void set_min(int index, double value);
+  void add_min(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      min() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_min();
+
+  // repeated double first = 10 [packed = true];
+  int first_size() const;
+  void clear_first();
+  static const int kFirstFieldNumber = 10;
+  double first(int index) const;
+  void set_first(int index, double value);
+  void add_first(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      first() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_first();
+
+  // repeated double variance = 11 [packed = true];
+  int variance_size() const;
+  void clear_variance();
+  static const int kVarianceFieldNumber = 11;
+  double variance(int index) const;
+  void set_variance(int index, double value);
+  void add_variance(double value);
+  const ::google::protobuf::RepeatedField< double >&
+      variance() const;
+  ::google::protobuf::RepeatedField< double >*
+      mutable_variance();
 
   bool has_start_timestamp_nanos() const;
   void clear_start_timestamp_nanos();
@@ -185,6 +281,22 @@ class InternalTimeSeriesData : public ::google::protobuf::MessageLite /* @@proto
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample > samples_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::int32 > offset_;
+  mutable int _offset_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > last_;
+  mutable int _last_cached_byte_size_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > count_;
+  mutable int _count_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > sum_;
+  mutable int _sum_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > max_;
+  mutable int _max_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > min_;
+  mutable int _min_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > first_;
+  mutable int _first_cached_byte_size_;
+  ::google::protobuf::RepeatedField< double > variance_;
+  mutable int _variance_cached_byte_size_;
   ::google::protobuf::int64 start_timestamp_nanos_;
   ::google::protobuf::int64 sample_duration_nanos_;
   friend struct ::protobuf_roachpb_2finternal_2eproto::TableStruct;
@@ -419,6 +531,246 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Interna
 InternalTimeSeriesData::samples() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.samples)
   return samples_;
+}
+
+// repeated int32 offset = 4 [packed = true];
+inline int InternalTimeSeriesData::offset_size() const {
+  return offset_.size();
+}
+inline void InternalTimeSeriesData::clear_offset() {
+  offset_.Clear();
+}
+inline ::google::protobuf::int32 InternalTimeSeriesData::offset(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.offset)
+  return offset_.Get(index);
+}
+inline void InternalTimeSeriesData::set_offset(int index, ::google::protobuf::int32 value) {
+  offset_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.offset)
+}
+inline void InternalTimeSeriesData::add_offset(::google::protobuf::int32 value) {
+  offset_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.offset)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::int32 >&
+InternalTimeSeriesData::offset() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.offset)
+  return offset_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::int32 >*
+InternalTimeSeriesData::mutable_offset() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.offset)
+  return &offset_;
+}
+
+// repeated double last = 5 [packed = true];
+inline int InternalTimeSeriesData::last_size() const {
+  return last_.size();
+}
+inline void InternalTimeSeriesData::clear_last() {
+  last_.Clear();
+}
+inline double InternalTimeSeriesData::last(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.last)
+  return last_.Get(index);
+}
+inline void InternalTimeSeriesData::set_last(int index, double value) {
+  last_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.last)
+}
+inline void InternalTimeSeriesData::add_last(double value) {
+  last_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.last)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::last() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.last)
+  return last_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_last() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.last)
+  return &last_;
+}
+
+// repeated uint32 count = 6 [packed = true];
+inline int InternalTimeSeriesData::count_size() const {
+  return count_.size();
+}
+inline void InternalTimeSeriesData::clear_count() {
+  count_.Clear();
+}
+inline ::google::protobuf::uint32 InternalTimeSeriesData::count(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.count)
+  return count_.Get(index);
+}
+inline void InternalTimeSeriesData::set_count(int index, ::google::protobuf::uint32 value) {
+  count_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.count)
+}
+inline void InternalTimeSeriesData::add_count(::google::protobuf::uint32 value) {
+  count_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.count)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+InternalTimeSeriesData::count() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.count)
+  return count_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+InternalTimeSeriesData::mutable_count() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.count)
+  return &count_;
+}
+
+// repeated double sum = 7 [packed = true];
+inline int InternalTimeSeriesData::sum_size() const {
+  return sum_.size();
+}
+inline void InternalTimeSeriesData::clear_sum() {
+  sum_.Clear();
+}
+inline double InternalTimeSeriesData::sum(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.sum)
+  return sum_.Get(index);
+}
+inline void InternalTimeSeriesData::set_sum(int index, double value) {
+  sum_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.sum)
+}
+inline void InternalTimeSeriesData::add_sum(double value) {
+  sum_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.sum)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::sum() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.sum)
+  return sum_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_sum() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.sum)
+  return &sum_;
+}
+
+// repeated double max = 8 [packed = true];
+inline int InternalTimeSeriesData::max_size() const {
+  return max_.size();
+}
+inline void InternalTimeSeriesData::clear_max() {
+  max_.Clear();
+}
+inline double InternalTimeSeriesData::max(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.max)
+  return max_.Get(index);
+}
+inline void InternalTimeSeriesData::set_max(int index, double value) {
+  max_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.max)
+}
+inline void InternalTimeSeriesData::add_max(double value) {
+  max_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.max)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::max() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.max)
+  return max_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_max() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.max)
+  return &max_;
+}
+
+// repeated double min = 9 [packed = true];
+inline int InternalTimeSeriesData::min_size() const {
+  return min_.size();
+}
+inline void InternalTimeSeriesData::clear_min() {
+  min_.Clear();
+}
+inline double InternalTimeSeriesData::min(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.min)
+  return min_.Get(index);
+}
+inline void InternalTimeSeriesData::set_min(int index, double value) {
+  min_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.min)
+}
+inline void InternalTimeSeriesData::add_min(double value) {
+  min_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.min)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::min() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.min)
+  return min_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_min() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.min)
+  return &min_;
+}
+
+// repeated double first = 10 [packed = true];
+inline int InternalTimeSeriesData::first_size() const {
+  return first_.size();
+}
+inline void InternalTimeSeriesData::clear_first() {
+  first_.Clear();
+}
+inline double InternalTimeSeriesData::first(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.first)
+  return first_.Get(index);
+}
+inline void InternalTimeSeriesData::set_first(int index, double value) {
+  first_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.first)
+}
+inline void InternalTimeSeriesData::add_first(double value) {
+  first_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.first)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::first() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.first)
+  return first_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_first() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.first)
+  return &first_;
+}
+
+// repeated double variance = 11 [packed = true];
+inline int InternalTimeSeriesData::variance_size() const {
+  return variance_.size();
+}
+inline void InternalTimeSeriesData::clear_variance() {
+  variance_.Clear();
+}
+inline double InternalTimeSeriesData::variance(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.variance)
+  return variance_.Get(index);
+}
+inline void InternalTimeSeriesData::set_variance(int index, double value) {
+  variance_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.variance)
+}
+inline void InternalTimeSeriesData::add_variance(double value) {
+  variance_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.variance)
+}
+inline const ::google::protobuf::RepeatedField< double >&
+InternalTimeSeriesData::variance() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.variance)
+  return variance_;
+}
+inline ::google::protobuf::RepeatedField< double >*
+InternalTimeSeriesData::mutable_variance() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.variance)
+  return &variance_;
 }
 
 // -------------------------------------------------------------------
