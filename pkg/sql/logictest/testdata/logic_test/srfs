@@ -84,7 +84,7 @@ SELECT * FROM GENERATE_SERIES(1, 1) WITH ORDINALITY AS c(x, y)
 x y
 1 1
 
-query error argument of LIMIT must be type int, not type setof
+query error generator functions are not allowed in LIMIT
 SELECT * FROM (VALUES (1)) LIMIT GENERATE_SERIES(1, 3)
 
 query I colnames

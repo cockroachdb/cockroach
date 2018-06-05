@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -943,26 +942,6 @@ func makeTableDescIfAs(
 	return desc, err
 }
 
-func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.Name) error {
-	if fns := tree.ImpureFunctions(e); len(fns) != 0 {
-		var errMsg bytes.Buffer
-		errMsg.WriteString(
-			fmt.Sprintf(
-				"computed column %q contains impure functions: ",
-				tree.ErrString(&colName),
-			),
-		)
-		for i, fn := range fns {
-			if i != 0 {
-				errMsg.WriteString(", ")
-			}
-			errMsg.WriteString(fn.String())
-		}
-		return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError, errMsg.String())
-	}
-	return nil
-}
-
 func dequalifyColumnRefs(
 	ctx context.Context, sources sqlbase.MultiSourceInfo, expr tree.Expr,
 ) (tree.Expr, error) {
@@ -1427,13 +1406,6 @@ func validateComputedColumn(
 		return err
 	}
 
-	var tCtx transform.ExprTransformContext
-	if err := tCtx.AssertNoAggregationOrWindowing(
-		d.Computed.Expr, "computed column expressions", semaCtx.SearchPath,
-	); err != nil {
-		return err
-	}
-
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
@@ -1463,10 +1435,9 @@ func validateComputedColumn(
 		return err
 	}
 
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, evalCtx,
-	)
-	if err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(
+		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, evalCtx, false, /* allowImpure */
+	); err != nil {
 		return err
 	}
 
@@ -1477,7 +1448,7 @@ func validateComputedColumn(
 		)
 	}
 
-	return validateComputedColumnHasNoImpureFunctions(typedExpr, d.Name)
+	return nil
 }
 
 // replaceVars replaces the occurrences of column names in an expression with
@@ -1541,13 +1512,8 @@ func makeCheckConstraint(
 		return nil, err
 	}
 
-	var t transform.ExprTransformContext
-	if err := t.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
-		return nil, err
-	}
-
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, evalCtx,
+		expr, types.Bool, "CHECK", semaCtx, evalCtx, true, /* allowImpure */
 	); err != nil {
 		return nil, err
 	}

@@ -583,6 +583,14 @@ func (p *planner) newUpsertHelper(
 	ivarHelper := tree.MakeIndexedVarHelper(helper,
 		len(helper.sourceInfo.SourceColumns)+len(helper.excludedSourceInfo.SourceColumns))
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
+
+	// Ensure there are no special functions in the clause.
+	p.semaCtx.Properties.Require("ON CONFLICT", tree.RejectSpecial)
+
 	// Start with evalExprs, which will contain all the RHS expressions
 	// of UPDATE SET clauses. Again, evalExprs will contain one entry
 	// per column in updateCols and untupledExprs.
@@ -600,31 +608,18 @@ func (p *planner) newUpsertHelper(
 			return nil, err
 		}
 
-		// Make sure there are no aggregation/window functions in the
-		// expression (after subqueries have been expanded).
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			normExpr, "ON CONFLICT", p.SessionData().SearchPath,
-		); err != nil {
-			return nil, err
-		}
-
 		helper.evalExprs[i] = normExpr
 	}
 
 	// If there's a conflict WHERE clause, analyze it.
 	if whereClause != nil {
+		p.semaCtx.Properties.Require("ON CONFLICT...WHERE", tree.RejectSpecial)
+
 		// Resolve names, type and normalize.
 		whereExpr, err := p.analyzeExpr(
-			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true /* requireType */, "WHERE")
+			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true, /* requireType */
+			"ON CONFLICT...WHERE")
 		if err != nil {
-			return nil, err
-		}
-
-		// Make sure there are no aggregation/window functions in the filter
-		// (after subqueries have been expanded).
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			whereExpr, "ON CONFLICT...WHERE", p.SessionData().SearchPath,
-		); err != nil {
 			return nil, err
 		}
 

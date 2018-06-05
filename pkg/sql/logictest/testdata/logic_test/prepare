@@ -83,13 +83,13 @@ EXECUTE a('foo', 1)
 query error expected EXECUTE parameter expression to have type int, but '3.5' has type decimal
 EXECUTE a(3.5, 1)
 
-query error aggregate functions are not allowed in EXECUTE parameters
+query error aggregate functions are not allowed in EXECUTE parameter
 EXECUTE a(max(3), 1)
 
-query error window functions are not allowed in EXECUTE parameters
+query error window functions are not allowed in EXECUTE parameter
 EXECUTE a(rank() over (partition by 3), 1)
 
-query error EXECUTE parameter expression '\(SELECT 3\)' may not contain variable sub-expressions
+query error variable sub-expressions are not allowed in EXECUTE parameter
 EXECUTE a((SELECT 3), 1)
 
 query error wrong number of parameters for prepared statement \"a\": expected 2, got 3

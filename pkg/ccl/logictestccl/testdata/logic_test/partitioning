@@ -355,19 +355,19 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (SELECT 1)
 )
 
-statement error PARTITION p1: partition expression '\(SELECT 1\)' may not contain variable sub-expressions
+statement error PARTITION p1: variable sub-expressions are not allowed in partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN ((SELECT 1))
 )
 
-statement error PARTITION p1: now\(\): partition values must be constant
+statement error PARTITION p1: impure functions are not allowed in partition
 CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (now())
 )
 
-statement error PARTITION p1: uuid_v4\(\) || 'foo': partition values must be constant
+statement error PARTITION p1: impure functions are not allowed in partition
 CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
-    PARTITION p1 VALUES IN (uuid_v4\(\) || 'foo')
+    PARTITION p1 VALUES IN (uuid_v4() || 'foo')
 )
 
 statement ok

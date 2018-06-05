@@ -56,6 +56,10 @@ type renderNode struct {
 	// windowNode also adds additional renders for the window functions.
 	render []tree.TypedExpr
 
+	// Common properties for all expressions mentioned as select target
+	// expressions (including DISTINCT ON) and ORDER BY.
+	renderProps tree.ScalarProperties
+
 	// renderStrings stores the symbolic representations of the expressions in
 	// render, in the same order. It's used to prevent recomputation of the
 	// symbolic representations.
@@ -177,6 +181,12 @@ func (p *planner) SelectClause(
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
+
 	r := &renderNode{}
 
 	resetter, err := p.initWith(ctx, with)
@@ -193,12 +203,16 @@ func (p *planner) SelectClause(
 
 	var where *filterNode
 	if parsed.Where != nil {
-		var err error
 		where, err = p.initWhere(ctx, r, parsed.Where.Expr)
 		if err != nil {
 			return nil, err
 		}
 	}
+
+	// We're going to collect scalar properties for the select target
+	// expressions and the DISTINCT ON expressions into r.renderProps
+	// below. Also we allow any function from here on.
+	p.semaCtx.Properties.Clear()
 
 	if err := p.initTargets(ctx, r, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
@@ -229,10 +243,13 @@ func (p *planner) SelectClause(
 	if err != nil {
 		return nil, err
 	}
+
 	sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
+
+	r.renderProps = p.semaCtx.Properties.Derived
 
 	// For DISTINCT ON expressions either one of the following must be
 	// satisfied:
@@ -366,6 +383,9 @@ func (p *planner) initFrom(
 	return nil
 }
 
+// initTargets loads up the given target expressions in the renderNode's render list.
+// This function clobbers the planner's semaCtx so the caller is responsible
+// for saving and restoring it.
 func (p *planner) initTargets(
 	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
@@ -715,6 +735,10 @@ func isUnarySource(src planDataSource) bool {
 	return ok && len(src.info.SourceColumns) == 0
 }
 
+// initWhere initializes the expression for a WHERE clause and
+// produces a filterNode. Note that this function clobbers the current
+// properties in the semantic context. The caller is responsible for
+// saving and restoring it.
 func (p *planner) initWhere(
 	ctx context.Context, r *renderNode, whereExpr tree.Expr,
 ) (*filterNode, error) {
@@ -722,18 +746,11 @@ func (p *planner) initWhere(
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].SourceColumns))
 
 	if whereExpr != nil {
+		p.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
 		var err error
 		f.filter, err = p.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
 			types.Bool, true, "WHERE")
 		if err != nil {
-			return nil, err
-		}
-
-		// Make sure there are no aggregation/window functions in the filter
-		// (after subqueries have been expanded).
-		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			f.filter, "WHERE", p.SessionData().SearchPath,
-		); err != nil {
 			return nil, err
 		}
 	}
