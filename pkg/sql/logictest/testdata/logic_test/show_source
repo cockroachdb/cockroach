@@ -48,6 +48,7 @@ integer_datetimes                    on
 intervalstyle                        postgres
 locality                             region=test,dc=dc1
 lock_timeout                         0
+max_identifier_length                128
 max_index_keys                       32
 node_id                              1
 reorder_joins_limit                  4
