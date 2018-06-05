@@ -251,7 +251,7 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	s.diskContainer = &diskContainer
 
 	// Transfer the rows from memory to disk. This frees up the memory taken up by s.rows.
-	i := s.rows.NewIterator(ctx)
+	i := s.rows.NewFinalIterator(ctx)
 	for i.Rewind(); ; i.Next() {
 		if ok, err := i.Valid(); err != nil {
 			return false, err
@@ -312,7 +312,7 @@ func (s *sortAllProcessor) fillWithContainer(
 	}
 	r.Sort(ctx)
 
-	s.i = r.NewIterator(ctx)
+	s.i = r.NewFinalIterator(ctx)
 	s.i.Rewind()
 
 	return true, nil, nil

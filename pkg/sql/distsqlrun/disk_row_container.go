@@ -212,6 +212,11 @@ func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
 }
 
+// NewFinalIterator is equivalent to NewIterator.
+func (d *diskRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
+	return d.NewIterator(ctx)
+}
+
 // Row returns the current row. The returned sqlbase.EncDatumRow is only valid
 // until the next call to Row().
 func (r diskRowIterator) Row() (sqlbase.EncDatumRow, error) {

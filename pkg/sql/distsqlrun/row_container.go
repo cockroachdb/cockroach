@@ -33,6 +33,10 @@ type sortableRowContainer interface {
 	// NewIterator returns a rowIterator that can be used to iterate over
 	// the rows.
 	NewIterator(context.Context) rowIterator
+	// NewFinalIterator returns a rowIterator that can be used to iterate over the
+	// rows, possibly freeing resources along the way. Subsequent calls to
+	// NewIterator or NewFinalIterator are not guaranteed to return any rows.
+	NewFinalIterator(context.Context) rowIterator
 
 	// Close frees up resources held by the sortableRowContainer.
 	Close(context.Context)
@@ -194,39 +198,78 @@ func (mc *memRowContainer) InitMaxHeap() {
 }
 
 // memRowIterator is a rowIterator that iterates over a memRowContainer. This
-// iterator doesn't iterate over a snapshot of memRowContainer and deletes rows
-// as soon as they are iterated over to free up memory eagerly.
+// iterator doesn't iterate over a snapshot of memRowContainer.
 type memRowIterator struct {
 	*memRowContainer
+	curIdx int
 }
 
-var _ rowIterator = memRowIterator{}
+var _ rowIterator = &memRowIterator{}
 
 // NewIterator returns an iterator that can be used to iterate over a
 // memRowContainer. Note that this iterator doesn't iterate over a snapshot
-// of memRowContainer and that it deletes rows as soon as they are iterated
-// over.
+// of memRowContainer.
 func (mc *memRowContainer) NewIterator(_ context.Context) rowIterator {
-	return memRowIterator{memRowContainer: mc}
+	return &memRowIterator{memRowContainer: mc}
 }
 
 // Rewind implements the rowIterator interface.
-func (i memRowIterator) Rewind() {}
+func (i *memRowIterator) Rewind() {
+	i.curIdx = 0
+}
 
 // Valid implements the rowIterator interface.
-func (i memRowIterator) Valid() (bool, error) {
+func (i *memRowIterator) Valid() (bool, error) {
+	return i.curIdx < i.Len(), nil
+}
+
+// Next implements the rowIterator interface.
+func (i *memRowIterator) Next() {
+	i.curIdx++
+}
+
+// Row implements the rowIterator interface.
+func (i *memRowIterator) Row() (sqlbase.EncDatumRow, error) {
+	return i.EncRow(i.curIdx), nil
+}
+
+// Close implements the rowIterator interface.
+func (i *memRowIterator) Close() {}
+
+// memRowFinalIterator is a rowIterator that iterates over a memRowContainer.
+// This iterator doesn't iterate over a snapshot of memRowContainer and deletes
+// rows as soon as they are iterated over to free up memory eagerly.
+type memRowFinalIterator struct {
+	*memRowContainer
+}
+
+// NewFinalIterator returns an iterator that can be used to iterate over a
+// memRowContainer. Note that this iterator doesn't iterate over a snapshot
+// of memRowContainer and that it deletes rows as soon as they are iterated
+// over.
+func (mc *memRowContainer) NewFinalIterator(_ context.Context) rowIterator {
+	return memRowFinalIterator{memRowContainer: mc}
+}
+
+var _ rowIterator = memRowFinalIterator{}
+
+// Rewind implements the rowIterator interface.
+func (i memRowFinalIterator) Rewind() {}
+
+// Valid implements the rowIterator interface.
+func (i memRowFinalIterator) Valid() (bool, error) {
 	return i.Len() > 0, nil
 }
 
 // Next implements the rowIterator interface.
-func (i memRowIterator) Next() {
+func (i memRowFinalIterator) Next() {
 	i.PopFirst()
 }
 
 // Row implements the rowIterator interface.
-func (i memRowIterator) Row() (sqlbase.EncDatumRow, error) {
+func (i memRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 	return i.EncRow(0), nil
 }
 
 // Close implements the rowIterator interface.
-func (i memRowIterator) Close() {}
+func (i memRowFinalIterator) Close() {}
