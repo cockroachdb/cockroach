@@ -60,6 +60,7 @@ author_aliases = {
     'songhao': "Song Hao",
     'solongordon': "Solon Gordon",
     'Amruta': "Amruta Ranade",
+    'yuzefovich': "Yahor Yuzefovich",
 }
 
 # FIXME(knz): This too.
