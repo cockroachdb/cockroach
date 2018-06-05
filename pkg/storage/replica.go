@@ -112,7 +112,7 @@ var txnAutoGC = true
 
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
-	"set to true to synchronize on Raft log writes to persistent storage",
+	"set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)",
 	true,
 )
 
