@@ -144,6 +144,24 @@ func TestNormalizeExpr(t *testing.T) {
 		{`s=lower('FOO')`, `s = 'foo'`},
 		{`lower(s)='foo'`, `lower(s) = 'foo'`},
 		{`random()`, `random()`},
+		{`gen_random_uuid()`, `gen_random_uuid()`},
+		{`current_date()`, `current_date()`},
+		{`current_time()`, `current_time()`},
+		{`clock_timestamp()`, `clock_timestamp()`},
+		{`now()`, `now()`},
+		{`current_timestamp()`, `current_timestamp()`},
+		{`transaction_timestamp()`, `transaction_timestamp()`},
+		{`statement_timestamp()`, `statement_timestamp()`},
+		{`cluster_logical_timestamp()`, `cluster_logical_timestamp()`},
+		{`clock_timestamp()`, `clock_timestamp()`},
+		{`crdb_internal.force_error('a', 'b')`, `crdb_internal.force_error('a', 'b')`},
+		{`crdb_internal.force_panic('a')`, `crdb_internal.force_panic('a')`},
+		{`crdb_internal.force_log_fatal('a')`, `crdb_internal.force_log_fatal('a')`},
+		{`crdb_internal.force_retry('1 day'::interval)`, `crdb_internal.force_retry('1d')`},
+		{`crdb_internal.no_constant_folding(123)`, `crdb_internal.no_constant_folding(123)`},
+		{`crdb_internal.set_vmodule('a')`, `crdb_internal.set_vmodule('a')`},
+		{`uuid_v4()`, `uuid_v4()`},
+		{`experimental_uuid_v4()`, `experimental_uuid_v4()`},
 		{`a=count('FOO') OVER ()`, `a = count('FOO') OVER ()`},
 		{`9223372036854775808`, `9223372036854775808`},
 		{`-9223372036854775808`, `-9223372036854775808`},
@@ -217,13 +235,15 @@ func TestNormalizeExpr(t *testing.T) {
 		{`j->s = jv`, `(j->s) = jv`},
 		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
 	}
+
+	semaCtx := tree.MakeSemaContext(true /* privileged */)
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
