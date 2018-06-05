@@ -69,7 +69,9 @@ func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, err
 var roleMembersTableName = tree.MakeTableName("system", "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the
-// role membership table.
+// role membership table. This is a short term hack until we figure out
+// how to not use the InternalExecutor when updating the RoleMembership
+// table data.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 	var tableDesc *TableDescriptor
 	var err error
@@ -81,5 +83,5 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
+	return p.writeSchemaChangeUpVersion(ctx, tableDesc)
 }

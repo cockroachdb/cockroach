@@ -460,6 +460,25 @@ func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
 	return ok
 }
 
+// returns all the idVersion pairs that have undergone a schema change.
+// Returns nil for no schema changes. The version returned for each
+// schema change is Version - 2, because that's the one that will be
+// used when checking for table descriptor two version invariance.
+func (tc *TableCollection) schemaChanges() []idVersion {
+	var tables []idVersion
+	for _, table := range tc.uncommittedTables {
+		if !tc.isCreatedTable(table.ID) {
+			tables = append(tables, idVersion{
+				id: table.ID,
+				// Used to check that there are no leases at Version - 2.
+				// Note the version has already been incremented.
+				version: table.Version - 2,
+			})
+		}
+	}
+	return tables
+}
+
 type dbAction bool
 
 const (
@@ -628,15 +647,6 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange sets the UpVersion bit and queues up a schema
-// changer.
-func (p *planner) notifySchemaChange(
-	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) {
-	tableDesc.UpVersion = true
-	p.queueSchemaChange(tableDesc, mutationID)
-}
-
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
 func (p *planner) queueSchemaChange(
@@ -670,6 +680,24 @@ func (p *planner) writeSchemaChange(
 	return p.writeTableDesc(ctx, tableDesc, mutationID)
 }
 
+// This is only used on code paths where a SQL transaction spins of
+// other SQL transaction using the InternalExecutor. This is needed
+// because the original transaction is not allowed to see the
+// txn.CommitTimestamp() when it also uses the InternalExecutor.
+// Seeing CommitTimestamp prevents it from being pushed.
+//
+// TODO(vivek): remove the use of the InternalExecutor from the grant/revoke
+// code path.
+func (p *planner) writeSchemaChangeUpVersion(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
+) error {
+	b := p.txn.NewBatch()
+	if err := p.writeTableDescToBatch(ctx, tableDesc, sqlbase.InvalidMutationID, b, false /*incrVersion*/); err != nil {
+		return err
+	}
+	return p.txn.Run(ctx, b)
+}
+
 func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.TableDescriptor,
@@ -680,7 +708,7 @@ func (p *planner) writeSchemaChangeToBatch(
 		// We don't allow schema changes on a dropped table.
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
-	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b)
+	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b, true /*incrVersion*/)
 }
 
 func (p *planner) writeDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
@@ -691,7 +719,7 @@ func (p *planner) writeTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) error {
 	b := p.txn.NewBatch()
-	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
+	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b, true /*incrVersion*/); err != nil {
 		return err
 	}
 	return p.txn.Run(ctx, b)
@@ -702,6 +730,7 @@ func (p *planner) writeTableDescToBatch(
 	tableDesc *sqlbase.TableDescriptor,
 	mutationID sqlbase.MutationID,
 	b *client.Batch,
+	incrVersion bool,
 ) error {
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
@@ -713,8 +742,19 @@ func (p *planner) writeTableDescToBatch(
 			return err
 		}
 	} else {
+		// Only increment the table descriptor version once in this transaction.
+		// If the descriptor version had been incremented before it would have
+		// been placed in the uncommitted tables list.
+		if p.Tables().getUncommittedTableByID(tableDesc.ID) == nil {
+			if incrVersion {
+				incrementVersion(ctx, tableDesc, p.txn)
+			} else {
+				tableDesc.UpVersion = true
+			}
+		}
+
 		// Schedule a schema changer for later.
-		p.notifySchemaChange(tableDesc, mutationID)
+		p.queueSchemaChange(tableDesc, mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {

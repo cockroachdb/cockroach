@@ -23,6 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -424,6 +427,71 @@ func (ex *connExecutor) execStmtInOpenState(
 	return nil, nil, nil
 }
 
+// checkTableTwoVersionInvariant checks whether any new table schema being
+// modified written at a version V only has valid leases at version = V - 1.
+// A transaction retry error is returned whenever the invariant is violated.
+// Before returning the retry error the current transaction is
+// rolled-back and the function waits until there are only outstanding
+// leases on the current version. This affords the retry to succeed in the
+// event that there are no other schema changes simultaneously contending with
+// this txn.
+func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
+	tables := ex.extraTxnState.tables.schemaChanges()
+	if tables == nil {
+		return nil
+	}
+	txn := ex.state.mu.txn
+	count, err := countLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		// Restart the transaction so that it is able to replay itself at a newer timestamp
+		// with the hope that the next time around there will be leases only at the current
+		// version.
+		retryErr := roachpb.NewHandledRetryableTxnError(
+			"cannot increment descriptor version to (V + 1), (V - 1) is still leased",
+			txn.ID(),
+			*txn.Proto(),
+		)
+		isolation := txn.Proto().Isolation
+		userPriority := txn.UserPriority()
+		txn.CleanupOnError(ctx, retryErr)
+
+		// Release leases held by the current transaction before waiting
+		// on cluster wide releases of old version leases.
+		ex.extraTxnState.tables.releaseLeases(ex.Ctx())
+
+		// Wait until all older version leases have been released or expired.
+		retryOptions := base.DefaultRetryOptions()
+		// Set max retries so that this doesn't retry forever.
+		retryOptions.MaxRetries = 500
+		for r := retry.Start(retryOptions); r.Next(); {
+			// Use the current clock time.
+			now := ex.server.cfg.Clock.Now()
+			count, err := countLeases(ctx, ex.server.cfg.InternalExecutor, tables, now)
+			if err != nil {
+				return err
+			}
+			if count == 0 {
+				break
+			}
+		}
+
+		// Create a new transaction to retry with, that has a timestamp ahead
+		// of the clock used above during the wait phase.
+		ex.state.mu.txn = client.NewTxn(ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
+		if err := ex.state.mu.txn.SetIsolation(isolation); err != nil {
+			return err
+		}
+		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
+			return err
+		}
+		return retryErr
+	}
+	return nil
+}
+
 // commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
 // transaction is committed and the statement result is written to res. res is
 // closed.
@@ -433,6 +501,10 @@ func (ex *connExecutor) commitSQLTransaction(
 	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
 		isRelease = true
+	}
+
+	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
+		return ex.makeErrEvent(err, stmt)
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -1112,6 +1184,7 @@ func (ex *connExecutor) handleAutoCommit(
 	if txn.IsCommitted() {
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
+
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
 		if err := knob(ctx, stmt.String()); err != nil {
 			return ex.makeErrEvent(err, stmt)

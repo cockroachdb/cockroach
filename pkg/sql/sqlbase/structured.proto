@@ -461,48 +461,25 @@ message TableDescriptor {
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
-  // Invariants:
-  // 1. not more than two subsequent versions of the table
-  // descriptor can be leased. This is to make the system
-  // easy to reason about, by permitting mutation state
-  // changes (reflected in the next version), only when the existing
-  // state (reflected in the current version) is present on all
-  // outstanding unexpired leases.
-  // 2. A schema change command (ALTER, RENAME, etc) never directly
-  // increments the version. This allows the command to execute without
-  // waiting for the entire cluster to converge to a single version
-  // preventing weird deadlock situations. For instance, a transaction
-  // with a schema change command might use a descriptor lease that is
-  // at version: v - 1, and therefore deadlock when it tries to wait
-  // for version: v, in the process of incrementing it to v + 1.
-  // Therefore, a schema change command never increments the version,
-  // and instead, sets the up_version boolean to notify the schema
-  // changer execution engine that runs a future transaction to
-  // increment the version.
+  // The design maintains two invariant:
+  // 1. Two safe versions: A transaction at a particular timestamp is
+  //    allowed to use one of two versions of a table descriptor:
+  //    the one that would be read from the store at that timestamp,
+  //    and the one behind it in version.
+  // 2. Two leased version: There can be valid leases on at most the 2
+  //    latest versions of a table in the cluster at any time. New leases
+  //    are only granted on the latest version.
   //
-  // The schema change commands must therefore make *safe* modifications
-  // to the table descriptor, such as scheduling long running schema
-  // changes through mutations for future execution, or making simple
-  // schema changes like RENAME that only modify the table descriptor in a
-  // single transaction.
+  // The database must maintain correctness in light of there being two
+  // versions of a descriptor that can be used.
   //
-  // Multiple schema changes in the same transaction set up_version.
-  // The actual schema change execution that follows a schema change
-  // command sees the up_version boolean set, and increments the
-  // table version after ensuring that there are no unexpired leases
-  // for version - 1. The schema change execution must increment
-  // the version before executing future state changes, to ensure
-  // that the scheduled mutations made by the original commands are
-  // visible on all leases. Multiple schema change mutations can be
-  // grouped together on a particular version increment.
-  //
-  // If schema change commands are safe to run without incrementing
-  // the version, why do it later on? We increment the version
-  // to ensure that all the nodes renew their leases with the new version
-  // and get to see what the schema change command has done quickly.
+  // Multiple schema change mutations can be grouped together on a
+  // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
-  // See comment above.
+
+  // Do not use. On the path to deprecation.
   optional bool up_version = 6 [(gogoproto.nullable) = false];
+
   // Last modification time of the table descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
