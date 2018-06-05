@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -460,6 +461,28 @@ func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
 	return ok
 }
 
+// returns all the idVersion pairs that have undergone a schema change.
+// Returns nil for no schema changes. The version returned for each
+// schema change is Version - 2, because that's the one that will be
+// used when checking for table descriptor two version invariance.
+// Also returns strings representing the new <name, version> pairs
+func (tc *TableCollection) getTablesWithNewVersion() ([]idVersion, []string) {
+	var tables []idVersion
+	var nameVersions []string
+	for _, table := range tc.uncommittedTables {
+		if !tc.isCreatedTable(table.ID) {
+			tables = append(tables, idVersion{
+				id: table.ID,
+				// Used to check that there are no leases at Version - 2.
+				// Note the version has already been incremented.
+				version: table.Version - 2,
+			})
+			nameVersions = append(nameVersions, fmt.Sprintf("(%s, %d)", table.Name, table.Version))
+		}
+	}
+	return tables, nameVersions
+}
+
 type dbAction bool
 
 const (
@@ -628,15 +651,6 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange sets the UpVersion bit and queues up a schema
-// changer.
-func (p *planner) notifySchemaChange(
-	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) {
-	tableDesc.UpVersion = true
-	p.queueSchemaChange(tableDesc, mutationID)
-}
-
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
 func (p *planner) queueSchemaChange(
@@ -713,8 +727,19 @@ func (p *planner) writeTableDescToBatch(
 			return err
 		}
 	} else {
+		// Only increment the table descriptor version once in this transaction.
+		// If the descriptor version had been incremented before it would have
+		// been placed in the uncommitted tables list.
+		if p.Tables().getUncommittedTableByID(tableDesc.ID) == nil {
+			if p.txn.Isolation() != enginepb.SERIALIZABLE {
+				return pgerror.NewErrorf(pgerror.CodeInvalidTransactionInitiationError,
+					"transaction needs to be SERIALIZABLE")
+			}
+			incrementVersion(ctx, tableDesc, p.txn)
+		}
+
 		// Schedule a schema changer for later.
-		p.notifySchemaChange(tableDesc, mutationID)
+		p.queueSchemaChange(tableDesc, mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
