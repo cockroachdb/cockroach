@@ -168,6 +168,10 @@ rocksdb::Status FileRegistry::MaybeRenameEntry(const std::string& src, const std
   std::string newSrc = TransformPath(src);
   std::string newTarget = TransformPath(target);
 
+  if (newSrc == newTarget) {
+    return rocksdb::Status::OK();
+  }
+
   std::unique_lock<std::mutex> l(mu_);
   assert(registry_ != nullptr);
 
@@ -209,6 +213,7 @@ rocksdb::Status FileRegistry::MaybeLinkEntry(const std::string& src, const std::
   auto target_key = registry_->files().find(newTarget);
   if ((src_key == registry_->files().cend()) && (target_key == registry_->files().cend())) {
     // Entries do not exist: do nothing.
+    return rocksdb::Status::OK();
   }
 
   // Make a copy of the registry.

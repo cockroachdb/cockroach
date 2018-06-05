@@ -36,8 +36,8 @@ inline DBOptions defaultDBOptions() {
 
 namespace testutils {
 
-rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg);
-rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg);
+rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg, bool partial);
+rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg, bool partial);
 
 // FakeTimeEnv is a simple wrapper around a rocksdb::Env that returns a fixed time
 // set through SetCurrentTime.
@@ -67,8 +67,32 @@ class FakeTimeEnv : public rocksdb::EnvWrapper {
 // 'err_msg' (regexp full match).
 #define EXPECT_ERR(status, err_msg)\
   {\
-    auto s(testutils::compareErrorMessage(status, err_msg)); \
+    auto s(testutils::compareErrorMessage(status, err_msg, false)); \
     EXPECT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp full match).
+#define ASSERT_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, false)); \
+    ASSERT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp partial match).
+#define EXPECT_PARTIAL_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, true)); \
+    EXPECT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp partial match).
+#define ASSERT_PARTIAL_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, true)); \
+    ASSERT_TRUE(s.ok()) << s.getState();\
   }
 
 // clang-format on

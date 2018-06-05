@@ -27,7 +27,7 @@ void __attribute__((weak)) rocksDBLog(char*, int) {}
 
 namespace testutils {
 
-rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg) {
+rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg, bool partial) {
   if (strcmp("", err_msg) == 0) {
     // Expected success.
     if (status.ok()) {
@@ -43,15 +43,25 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
         fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
   std::regex re(err_msg);
-  if (std::regex_match(status.getState(), re)) {
-    return rocksdb::Status::OK();
+  if (partial) {
+    // Partial regexp match.
+    std::cmatch cm;
+    if (std::regex_search(status.getState(), cm, re)) {
+      return rocksdb::Status::OK();
+    }
+  } else {
+    // Full regexp match.
+    if (std::regex_match(status.getState(), re)) {
+      return rocksdb::Status::OK();
+    }
   }
+
   return rocksdb::Status::InvalidArgument(
       fmt::StringPrintf("expected error \"%s\", got \"%s\"", err_msg, status.getState()));
 }
 
-rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg) {
-  return compareErrorMessage(status, err_msg.c_str());
+rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg, bool partial) {
+  return compareErrorMessage(status, err_msg.c_str(), partial);
 }
 
 }  // namespace testutils
