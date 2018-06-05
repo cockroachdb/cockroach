@@ -525,7 +525,7 @@ var _ KeyRange = &Replica{}
 //
 // Requires that both Replica.mu and Replica.raftMu are held.
 func (r *Replica) withRaftGroupLocked(
-	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
@@ -554,7 +554,9 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		r.maybeCampaignOnWakeLocked(ctx)
+		if mayCampaignOnWake {
+			r.maybeCampaignOnWakeLocked(ctx)
+		}
 	}
 
 	unquiesce, err := f(r.mu.internalRaftGroup)
@@ -568,13 +570,21 @@ func (r *Replica) withRaftGroupLocked(
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
 //
+// If mayCampaignOnWake is true, the replica may initiate a raft
+// election if it was previously in a dormant state. Most callers
+// should set this to true, because the prevote feature minimizes the
+// disruption from unnecessary elections. The exception is that we
+// should not initiate an election while handling incoming raft
+// messages (which may include MsgVotes from an election in progress,
+// and this election would be disrupted if we started our own).
+//
 // Requires that Replica.raftMu is held.
 func (r *Replica) withRaftGroup(
-	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(f)
+	return r.withRaftGroupLocked(mayCampaignOnWake, f)
 }
 
 func shouldCampaignOnWake(
@@ -1825,7 +1835,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
 		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
@@ -3341,7 +3351,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			return err
 		}
 
-		return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
@@ -3354,7 +3364,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		})
 	}
 
-	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		encode := encodeRaftCommandV1
 		if p.command.ReplicatedEvalResult.AddSSTable != nil {
 			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -3439,7 +3449,10 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
 func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	// We're processing an incoming raft message (from a batch that may
+	// include MsgVotes), so don't campaign if we wake up our raft
+	// group.
+	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
@@ -3519,7 +3532,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
 	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 
-	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
@@ -3828,7 +3841,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			r.mu.Unlock()
 
-			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+			if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
 			}); err != nil {
@@ -3849,7 +3862,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
 	const expl = "during advance"
-	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
 		return true, nil
 	}); err != nil {
@@ -4441,7 +4454,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica: fromReplica,
 		Message:     msg,
 	}) {
-		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
@@ -4486,7 +4499,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		snapStatus = raft.SnapshotFailure
 	}
 
-	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
 	}); err != nil {

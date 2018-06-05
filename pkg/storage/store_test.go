@@ -690,7 +690,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
-	if err := repl1.withRaftGroup(func(r *raft.RawNode) (bool, error) {
+	if err := repl1.withRaftGroup(true, func(r *raft.RawNode) (bool, error) {
 		return true, errors.Errorf("unexpectedly created a raft group")
 	}); err != nil {
 		t.Fatal(err)
