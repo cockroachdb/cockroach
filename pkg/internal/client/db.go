@@ -199,11 +199,22 @@ type DB struct {
 	ctx     DBContext
 }
 
-// GetSender returns a transaction-capable Sender instance. The same
-// sender must be used for the entirety of a transaction. Get a new
-// instance to start a new transaction.
+// GetSender returns a Sender that can be used to send requests through.
+// Note that a new Sender created; it is not shared.
+//
+// The Sender returned should not be used for sending transactional requests.
+// Use db.Txn() or db.NewTxn() for that.
 func (db *DB) GetSender() Sender {
-	return db.factory.New(RootTxn)
+	// We pass nil for the txn here because we don't have a txn on hand.
+	// That's why this method says to not use the Sender for transactional
+	// requests, plus the fact that if a Sender is used directly, the caller needs
+	// to be mindful of the need to start a heartbeat loop when writing.
+	//
+	// Note that even non-transactional requests need to go through a
+	// TxnCoordSender because batches that get split need to be wrapped in
+	// transactions (and the TxnCoordSender handles that). So we can't simply
+	// return the wrapped handler here.
+	return db.factory.New(RootTxn, nil /* txn */)
 }
 
 // GetFactory returns the DB's TxnSenderFactory.

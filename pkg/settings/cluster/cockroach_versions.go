@@ -53,6 +53,7 @@ const (
 	VersionRangeAppliedStateKey
 	VersionImportFormats
 	VersionSecondaryLookupJoins
+	VersionClientSideWritingFlag
 
 	// Add new versions here (step one of two).
 
@@ -217,6 +218,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionSecondaryLookupJoins is https://github.com/cockroachdb/cockroach/pull/25628.
 		Key:     VersionSecondaryLookupJoins,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 5},
+	},
+	{
+		// VersionClientsideWritingFlag is https://github.com/cockroachdb/cockroach/pull/25541.
+		// Before this version, the Transaction.Writing flag used to be set by the
+		// server. After, it is set only by the client.
+		Key:     VersionClientSideWritingFlag,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).
