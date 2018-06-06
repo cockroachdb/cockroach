@@ -87,22 +87,28 @@ type aggregateInfo struct {
 	args []memo.GroupID
 }
 
-func (b *Builder) needsAggregation(sel *tree.SelectClause) bool {
+func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy) bool {
 	// We have an aggregation if:
 	//  - we have a GROUP BY, or
 	//  - we have a HAVING clause, or
-	//  - we have aggregate functions in the select expressions.
-	return len(sel.GroupBy) > 0 || sel.Having != nil || b.hasAggregates(sel.Exprs)
+	//  - we have aggregate functions in the select and/or order by expressions.
+	return len(sel.GroupBy) > 0 || sel.Having != nil || b.hasAggregates(sel.Exprs, orderBy)
 }
 
 // hasAggregates determines if any of the given select expressions contain an
 // aggregate function.
-func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
+func (b *Builder) hasAggregates(selects tree.SelectExprs, orderBy tree.OrderBy) bool {
 	exprTransformCtx := transform.ExprTransformContext{}
 	for _, sel := range selects {
 		// TODO(rytaft): This function does not recurse into subqueries, so this
 		// will be incorrect for correlated subqueries.
 		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
+			return true
+		}
+	}
+
+	for _, ob := range orderBy {
+		if exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
