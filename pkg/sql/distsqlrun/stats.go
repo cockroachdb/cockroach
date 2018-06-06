@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -43,9 +44,11 @@ func NewInputStatCollector(input RowSource) *InputStatCollector {
 // Next implements the RowSource interface. It calls Next on the embedded
 // RowSource and collects stats.
 func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	start := timeutil.Now()
 	row, meta := isc.RowSource.Next()
 	if row != nil {
 		isc.NumRows++
 	}
+	isc.StallTime += timeutil.Since(start)
 	return row, meta
 }
