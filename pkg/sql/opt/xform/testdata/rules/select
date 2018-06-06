@@ -290,6 +290,7 @@ SELECT * FROM b WHERE v = 1
 lookup-join
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── table: b
+ ├── key columns: [1]
  ├── keys: (1) (3)
  └── scan b@v
       ├── columns: k:1(int!null) v:3(int)
@@ -300,11 +301,11 @@ memo
 SELECT * FROM b WHERE v = 1
 ----
 memo (optimized)
- ├── G1: (select G2 G3) (lookup-join G4 b,cols=(1-3))
+ ├── G1: (select G2 G3) (lookup-join G4 b,keyCols=[1],lookupCols=(2))
  │    └── "[presentation: k:1,u:2,v:3]"
- │         ├── best: (lookup-join G4 b,cols=(1-3))
+ │         ├── best: (lookup-join G4 b,keyCols=[1],lookupCols=(2))
  │         └── cost: 5.01
- ├── G2: (scan b) (lookup-join G5 b,cols=(1-3)) (lookup-join G6 b,cols=(1-3))
+ ├── G2: (scan b) (lookup-join G5 b,keyCols=[1],lookupCols=(3)) (lookup-join G6 b,keyCols=[1],lookupCols=(2))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1000.00
@@ -348,6 +349,7 @@ select
  ├── lookup-join
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── table: b
+ │    ├── key columns: [1]
  │    ├── keys: (1) weak(3)
  │    └── scan b@v
  │         ├── columns: k:1(int!null) v:3(int)
@@ -364,14 +366,14 @@ memo (optimized)
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (select G4 G5)
  │         └── cost: 5.02
- ├── G2: (scan b) (lookup-join G6 b,cols=(1-3)) (lookup-join G7 b,cols=(1-3))
+ ├── G2: (scan b) (lookup-join G6 b,keyCols=[1],lookupCols=(3)) (lookup-join G7 b,keyCols=[1],lookupCols=(2))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1000.00
  ├── G3: (filters G8 G10)
- ├── G4: (lookup-join G9 b,cols=(1-3))
+ ├── G4: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
  │    └── ""
- │         ├── best: (lookup-join G9 b,cols=(1-3))
+ │         ├── best: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
  │         └── cost: 5.01
  ├── G5: (filters G10)
  ├── G6: (scan b@u,cols=(1,2))

@@ -46,7 +46,7 @@ memo
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 memo (optimized)
- ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,cols=(1-4))
+ ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]"
  │    │    ├── best: (scan a@s_idx,cols=(1-4))
  │    │    └── cost: 1000.00
@@ -65,7 +65,7 @@ memo
 SELECT s, i, f FROM a ORDER BY f
 ----
 memo (optimized)
- ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
+ ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +3]"
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1099.66
@@ -81,7 +81,7 @@ memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
 ----
 memo (optimized)
- ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
+ ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1099.66
@@ -138,7 +138,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (project G2 G3)
  │         └── cost: 1000.00
- ├── G2: (scan abc,cols=(4)) (lookup-join G4 abc,cols=(4)) (lookup-join G5 abc,cols=(4))
+ ├── G2: (scan abc,cols=(4)) (lookup-join G4 abc,keyCols=[1 2 3],lookupCols=(4)) (lookup-join G5 abc,keyCols=[1 2 3],lookupCols=(4))
  │    └── ""
  │         ├── best: (scan abc,cols=(4))
  │         └── cost: 1000.00
@@ -162,12 +162,12 @@ memo (optimized)
  │    └── "[presentation: j:5]"
  │         ├── best: (project G2 G3)
  │         └── cost: 1.00
- ├── G2: (select G4 G5) (scan a@si_idx,cols=(4,5),constrained) (lookup-join G6 a,cols=(4,5))
+ ├── G2: (select G4 G5) (scan a@si_idx,cols=(4,5),constrained) (lookup-join G6 a,keyCols=[1],lookupCols=(5))
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
  │         └── cost: 1.00
  ├── G3: (projections a.j)
- ├── G4: (scan a,cols=(4,5)) (lookup-join G7 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ ├── G4: (scan a,cols=(4,5)) (lookup-join G7 a,keyCols=[1],lookupCols=(5)) (scan a@si_idx,cols=(4,5))
  │    └── ""
  │         ├── best: (scan a,cols=(4,5))
  │         └── cost: 1000.00
@@ -197,7 +197,7 @@ memo
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 memo (optimized)
- ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,cols=(1-4))
+ ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]"
  │    │    ├── best: (scan a,cols=(1-4))
  │    │    └── cost: 1000.00
@@ -226,7 +226,7 @@ memo
 SELECT s, j FROM a ORDER BY s
 ----
 memo (optimized)
- ├── G1: (scan a,cols=(4,5)) (lookup-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ ├── G1: (scan a,cols=(4,5)) (lookup-join G2 a,keyCols=[1],lookupCols=(5)) (scan a@si_idx,cols=(4,5))
  │    ├── "[presentation: s:4,j:5] [ordering: +4]"
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1099.66
