@@ -83,3 +83,63 @@ TEST(LibroachCCL, DBOpen) {
     DBClose(db);
   }
 }
+
+TEST(LibroachCCL, ReadOnly) {
+  // We need a real directory.
+  TempDirHandler dir;
+  ASSERT_TRUE(dir.Init());
+
+  {
+    // Write/read a single key.
+    DBEngine* db;
+    DBOptions db_opts = defaultDBOptions();
+
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    EXPECT_STREQ(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value")).data, NULL);
+    DBString value;
+    EXPECT_STREQ(DBGet(db, ToDBKey("foo"), &value).data, NULL);
+    EXPECT_STREQ(ToString(value).c_str(), "foo's value");
+
+    DBClose(db);
+  }
+
+  {
+    // Re-open read-only without encryption options.
+    DBEngine* db;
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.read_only = true;
+
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    // Read the previously-written key.
+    DBString ro_value;
+    EXPECT_STREQ(DBGet(db, ToDBKey("foo"), &ro_value).data, NULL);
+    EXPECT_STREQ(ToString(ro_value).c_str(), "foo's value");
+    // Try to write it again.
+    EXPECT_EQ(ToString(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value"))),
+              "Not implemented: Not supported operation in read only mode.");
+
+    DBClose(db);
+  }
+
+  {
+    // Re-open read-only with encryption options (plaintext-only).
+    DBEngine* db;
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.read_only = true;
+    db_opts.use_file_registry = true;
+    auto extra_opts = MakePlaintextExtraOptions();
+    ASSERT_NE(extra_opts, "");
+    db_opts.extra_options = ToDBSlice(extra_opts);
+
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    // Read the previously-written key.
+    DBString ro_value;
+    EXPECT_STREQ(DBGet(db, ToDBKey("foo"), &ro_value).data, NULL);
+    EXPECT_STREQ(ToString(ro_value).c_str(), "foo's value");
+    // Try to write it again.
+    EXPECT_EQ(ToString(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value"))),
+              "Not implemented: Not supported operation in read only mode.");
+
+    DBClose(db);
+  }
+}

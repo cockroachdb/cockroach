@@ -78,10 +78,10 @@ ScopedStats::~ScopedStats() {
   }
 }
 
-void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData> &sst,
+void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData>& sst,
                                 rocksdb::Slice start_key, rocksdb::Slice end_key,
-                                uint64_t target_size, std::vector<rocksdb::Range> *ranges) {
-  int prev = -1; // index of the last compacted sst
+                                uint64_t target_size, std::vector<rocksdb::Range>* ranges) {
+  int prev = -1;  // index of the last compacted sst
   uint64_t size = 0;
   for (int i = 0; i < sst.size(); ++i) {
     size += sst[i].size;
@@ -179,7 +179,8 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   // Create the file registry. It uses the base_env to access the registry file.
-  auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env_ctx->base_env, db_dir));
+  auto file_registry =
+      std::unique_ptr<FileRegistry>(new FileRegistry(env_ctx->base_env, db_dir, db_opts.read_only));
 
   if (db_opts.use_file_registry) {
     // We're using the file registry.
@@ -382,10 +383,8 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   BatchSSTablesForCompaction(sst, start_key, end_key, target_size, &ranges);
 
   for (auto r : ranges) {
-    rocksdb::Status status = db->rep->CompactRange(
-        options,
-        r.start.empty() ? nullptr : &r.start,
-        r.limit.empty() ? nullptr : &r.limit);
+    rocksdb::Status status = db->rep->CompactRange(options, r.start.empty() ? nullptr : &r.start,
+                                                   r.limit.empty() ? nullptr : &r.limit);
     if (!status.ok()) {
       return ToDBStatus(status);
     }
