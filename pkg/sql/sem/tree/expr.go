@@ -725,7 +725,7 @@ func (node *Placeholder) ResolvedType() types.T {
 // Tuple represents a parenthesized list of expressions.
 type Tuple struct {
 	Exprs  Exprs
-	Labels NameList
+	Labels []string
 	// Row indicates whether or not the tuple should be textually represented as
 	// ROW ( ... ).
 	Row bool
@@ -761,7 +761,12 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")
-		node.Labels.Format(ctx)
+		comma := ""
+		for i := range node.Labels {
+			ctx.WriteString(comma)
+			ctx.FormatNode((*Name)(&node.Labels[i]))
+			comma = ", "
+		}
 		ctx.WriteByte(')')
 	}
 }

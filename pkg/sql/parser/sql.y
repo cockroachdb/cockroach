@@ -6808,7 +6808,11 @@ d_expr:
 | '(' row AS name_list ')'
   {
     t := $2.tuple()
-    t.Labels = $4.nameList()
+    labels := $4.nameList()
+    t.Labels = make([]string, len(labels))
+    for i, l := range labels {
+      t.Labels[i] = string(l)
+    }
     $$.val = &t
   }
 
