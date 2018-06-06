@@ -12,8 +12,8 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <numeric>
 #include "merge.h"
+#include <numeric>
 #include <rocksdb/env.h>
 #include "db.h"
 #include "protos/roachpb/data.pb.h"
@@ -131,9 +131,8 @@ WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::stri
     // need to be re-sorted and de-duplicated.
     auto min_offset = std::min_element(right_ts.offset().begin(), right_ts.offset().end());
     auto first_unsorted_index = std::distance(
-      left_ts.offset().begin(),
-      std::lower_bound(left_ts.offset().begin(), left_ts.offset().end(), *min_offset)
-    );
+        left_ts.offset().begin(),
+        std::lower_bound(left_ts.offset().begin(), left_ts.offset().end(), *min_offset));
     left_ts.MergeFrom(right_ts);
     sortAndDeduplicateColumns(&left_ts, first_unsorted_index);
     SerializeTimeSeriesToValue(left, left_ts);
@@ -214,16 +213,15 @@ WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string* val, rocksdb::Lo
     sortAndDeduplicateColumns(&val_ts, 0);
   } else {
     std::stable_sort(val_ts.mutable_samples()->pointer_begin(),
-                    val_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
+                     val_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
 
     // Deduplicate values, keeping only the *last* sample merged with a given index.
     using sample = cockroach::roachpb::InternalTimeSeriesSample;
-    auto it = std::unique(val_ts.mutable_samples()->rbegin(),
-                          val_ts.mutable_samples()->rend(),
-                          [](const sample& a, const sample& b) {
-                            return a.offset() == b.offset();
-                          });
-    val_ts.mutable_samples()->DeleteSubrange(0, std::distance(val_ts.mutable_samples()->begin(), it.base()));
+    auto it =
+        std::unique(val_ts.mutable_samples()->rbegin(), val_ts.mutable_samples()->rend(),
+                    [](const sample& a, const sample& b) { return a.offset() == b.offset(); });
+    val_ts.mutable_samples()->DeleteSubrange(
+        0, std::distance(val_ts.mutable_samples()->begin(), it.base()));
   }
 
   // Serialize the new TimeSeriesData into the value's byte field.
@@ -309,7 +307,6 @@ class DBMergeOperator : public rocksdb::MergeOperator {
 
 }  // namespace
 
-
 // convertToColumnar detects time series data which is in the old row format,
 // converting the data within into the new columnar format.
 void convertToColumnar(cockroach::roachpb::InternalTimeSeriesData* data) {
@@ -337,16 +334,16 @@ void convertToColumnar(cockroach::roachpb::InternalTimeSeriesData* data) {
 // supplied data is often the result of merging an already-sorted collection
 // with a smaller unsorted collection, and thus only a portion of the end of the
 // data needs to be sorted.
-void sortAndDeduplicateColumns(cockroach::roachpb::InternalTimeSeriesData* data, int first_unsorted) {
+void sortAndDeduplicateColumns(cockroach::roachpb::InternalTimeSeriesData* data,
+                               int first_unsorted) {
   // Create an auxiliary array of array indexes, and sort that array according
   // to the corresponding offset value in the data.offset() collection. This
   // yields the permutation of the current array indexes that will place the
   // offsets into sorted order.
   auto order = std::vector<int>(data->offset_size() - first_unsorted);
   std::iota(order.begin(), order.end(), first_unsorted);
-  std::stable_sort(order.begin(), order.end(), [&](const int a, const int b) {
-    return data->offset(a) < data->offset(b);
-  });
+  std::stable_sort(order.begin(), order.end(),
+                   [&](const int a, const int b) { return data->offset(a) < data->offset(b); });
 
   // Remove any duplicates from the permutation, keeping the *last* element
   // merged for any given offset. Note the number of duplicates removed so that
@@ -444,7 +441,6 @@ void sortAndDeduplicateColumns(cockroach::roachpb::InternalTimeSeriesData* data,
     data->mutable_variance()->Truncate(new_size);
   }
 }
-
 
 WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata* left,
                                     const cockroach::storage::engine::enginepb::MVCCMetadata& right,
