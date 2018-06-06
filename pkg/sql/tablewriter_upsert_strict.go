@@ -71,7 +71,7 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 	}
 
-	// Create the map from insert rows to returning rows
+	// Create the map from insert rows to returning rows.
 	colIDToRetIndex := map[sqlbase.ColumnID]int{}
 	for i, col := range tableDesc.Columns {
 		colIDToRetIndex[col.ID] = i
@@ -81,7 +81,7 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 	}
 
-	// Initialize the insert rows
+	// Initialize the insert rows.
 	tu.insertRows.Init(
 		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
@@ -102,6 +102,9 @@ func (tu *strictTableUpserter) row(
 // flushAndStartNewBatch is part of the extendedTableWriter interface.
 func (tu *strictTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
 	tu.insertRows.Clear(ctx)
+	if tu.collectRows {
+		tu.rowsUpserted.Clear(ctx)
+	}
 	return tu.twb.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
 
@@ -158,7 +161,7 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 	return nil
 }
 
-// Get all unique indexes and store them in tu.ConflictIndexes
+// Get all unique indexes and store them in tu.ConflictIndexes.
 func (tu *strictTableUpserter) getUniqueIndexes() (err error) {
 	tableDesc := tu.tableDesc()
 	indexes := tableDesc.Indexes
@@ -233,11 +236,11 @@ func (tu *strictTableUpserter) getConflictingRows(
 		return nil, err
 	}
 
+	numIndexes := 1 + len(tu.conflictIndexes)
 	for i, result := range b.Results {
 		// There are (1 + len(tu.conflictIndexes)) * len(tu.InsertRows) results.
 		// All the results that correspond to a particular insertRow are next to each other.
 		// By this logic, the division computes the insertRow that is being queried for.
-		numIndexes := 1 + len(tu.conflictIndexes)
 		insertRowIndex := i / numIndexes
 
 		for _, row := range result.Rows {
