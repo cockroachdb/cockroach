@@ -485,7 +485,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
-	indexJoinDef := &LookupJoinDef{Table: 1, Cols: colSet}
+	indexJoinDef := &LookupJoinDef{Table: 1, KeyCols: colList, LookupCols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int

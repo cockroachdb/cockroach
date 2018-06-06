@@ -299,8 +299,9 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	md := ev.Metadata()
 	def := ev.Private().(*LookupJoinDef)
 
-	// Lookup join output columns are stored in the definition.
-	logical.Relational.OutputCols = def.Cols
+	// Lookup join output columns are the union between the input columns and the
+	// retrieved columns.
+	logical.Relational.OutputCols = inputProps.OutputCols.Union(def.LookupCols)
 
 	// Add not-NULL columns from the table schema, and filter out any not-NULL
 	// columns from the input that are not projected by the lookup join.
