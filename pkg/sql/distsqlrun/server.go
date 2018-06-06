@@ -537,6 +537,11 @@ type TestingKnobs struct {
 	// processors are planned, which send additional "RowNum" metadata that is
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
+
+	// OverrideStallTime instructs processors to report a stall time of 0s in
+	// reported execution statistics. This is used so that EXPLAIN ANALYZE plans
+	// stay the same across runs.
+	OverrideStallTime bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
