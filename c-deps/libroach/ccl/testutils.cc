@@ -7,7 +7,10 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "testutils.h"
+#include <gtest/gtest.h>
 #include "crypto_utils.h"
+
+namespace testutils {
 
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
   int64_t now;
@@ -29,7 +32,10 @@ enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
 MemKeyManager::~MemKeyManager() {}
 
 std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::CurrentKey() {
-  return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
+  if (key_ != nullptr) {
+    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
+  }
+  return nullptr;
 }
 
 std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::GetKey(const std::string& id) {
@@ -38,3 +44,7 @@ std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::GetKey(const std::string&
   }
   return nullptr;
 }
+
+void MemKeyManager::set_key(enginepbccl::SecretKey* key) { key_.reset(key); }
+
+}  // namespace testutils
