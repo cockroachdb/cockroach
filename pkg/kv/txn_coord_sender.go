@@ -530,6 +530,18 @@ func (tc *TxnCoordSender) Send(
 
 		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
 			log.VEventf(ctx, 2, "error: %s", pErr)
+
+			// On rollback error, stop the heartbeat loop. No more requests can come
+			// after a rollback, and there's nobody else to stop the heartbeat loop.
+			// The rollback success, like the commit success, is handled similarly
+			// below.
+			et, isEnding := ba.GetArg(roachpb.EndTransaction)
+			if isEnding && !et.(*roachpb.EndTransactionRequest).Commit {
+				tc.mu.Lock()
+				tc.cleanupTxnLocked(ctx, aborted)
+				tc.mu.Unlock()
+			}
+
 			return nil, pErr
 		}
 	}
@@ -979,6 +991,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			tc.mu.txnEnd = nil
 		}
 		duration, restarts, status := tc.finalTxnStatsLocked()
+		tc.mu.tracking = false
 		tc.mu.Unlock()
 		tc.updateStats(duration, restarts, status, false)
 	}()
@@ -1213,6 +1226,13 @@ func (tc *TxnCoordSender) StartTracking(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// IsTracking returns true if the heartbeat loop is running.
+func (tc *TxnCoordSender) IsTracking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.tracking
 }
 
 // updateState updates the transaction state in both the success and
