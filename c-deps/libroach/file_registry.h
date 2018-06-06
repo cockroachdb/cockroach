@@ -34,9 +34,10 @@ static const std::string kFileRegistryFilename = "COCKROACHDB_REGISTRY";
 // All paths given to FileRegistry should be absolute paths. It converts
 // paths within `db_dir` to relative paths internally.
 // Paths outside `db_dir` remain absolute.
+// If read-only is set, the registry can be used for a read-only DB, but cannot be modified.
 class FileRegistry {
  public:
-  FileRegistry(rocksdb::Env* env, const std::string& db_dir);
+  FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool read_only);
   ~FileRegistry() {}
 
   // Returns OK if the registry file does not exist.
@@ -77,6 +78,7 @@ class FileRegistry {
  private:
   rocksdb::Env* env_;
   std::string db_dir_;
+  bool read_only_;
   std::string registry_path_;
 
   // Write 'reg' to the registry file, and swap with registry_ if successful. mu_ is held.

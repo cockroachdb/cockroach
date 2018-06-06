@@ -266,7 +266,7 @@ TEST(DataKeyManager, LoadKeys) {
 
   // Test a missing file first.
   {
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_EQ(dkm.CurrentKey(), nullptr);
   }
@@ -274,7 +274,7 @@ TEST(DataKeyManager, LoadKeys) {
   // Now a file with random data.
   {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "blah blah", registry_path));
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "failed to parse key registry " + registry_path);
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -282,7 +282,7 @@ TEST(DataKeyManager, LoadKeys) {
   // Empty file.
   {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "", registry_path));
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -293,7 +293,7 @@ TEST(DataKeyManager, LoadKeys) {
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -307,7 +307,7 @@ TEST(DataKeyManager, LoadKeys) {
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
 
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "active store key foobar not found");
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -321,7 +321,7 @@ TEST(DataKeyManager, LoadKeys) {
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
 
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "active data key foobar not found");
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -342,7 +342,7 @@ TEST(DataKeyManager, LoadKeys) {
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
-    DataKeyManager dkm(env.get(), "", 0);
+    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
 
     auto k = dkm.CurrentKey();
@@ -492,7 +492,7 @@ TEST(DataKeyManager, SetStoreKey) {
           testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain"),
       }};
 
-  DataKeyManager dkm(env.get(), "", 0);
+  DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
   ASSERT_OK(dkm.LoadKeys());
 
   int test_num = 0;
@@ -532,7 +532,7 @@ TEST(DataKeyManager, SetStoreKey) {
     }
 
     // Initialize a new data key manager to load the file.
-    DataKeyManager tmp_dkm(env.get(), "", 0);
+    DataKeyManager tmp_dkm(env.get(), "", 0, false /* read-only */);
     ASSERT_OK(tmp_dkm.LoadKeys());
 
     if (status.ok()) {
@@ -599,7 +599,7 @@ TEST(DataKeyManager, RotateKey) {
       },
   };
 
-  DataKeyManager dkm(env.get(), "", 10 /* 10 second rotation period */);
+  DataKeyManager dkm(env.get(), "", 10 /* 10 second rotation period */, false /* read-only */);
   ASSERT_OK(dkm.LoadKeys());
 
   int test_num = 0;
@@ -616,5 +616,26 @@ TEST(DataKeyManager, RotateKey) {
     auto active_info = dkm.CurrentKey();
     ASSERT_NE(active_info, nullptr);
     EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), t.active_key));
+  }
+
+  {
+    // Now try a read-only data key manager.
+    DataKeyManager ro_dkm(env.get(), "", 10, true);
+    ASSERT_OK(ro_dkm.LoadKeys());
+    // Verify that the key matches the last test case.
+    auto tc = test_cases.back();
+    auto active_info = ro_dkm.CurrentKey();
+    ASSERT_NE(active_info, nullptr);
+    EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), tc.active_key));
+
+    // Increase time, check rotation failure, and check key again.
+    env->SetCurrentTime(tc.current_time + 100);
+    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
+        new enginepbccl::KeyInfo(keyInfoFromTestKey(tc.store_info)));
+    EXPECT_ERR(ro_dkm.SetActiveStoreKey(std::move(store_info)),
+               "key manager is read-only, keys cannot be rotated");
+    active_info = ro_dkm.CurrentKey();
+    ASSERT_NE(active_info, nullptr);
+    EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), tc.active_key));
   }
 }

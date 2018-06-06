@@ -111,7 +111,10 @@ class DataKeyManager : public KeyManager {
  public:
   // `env` is owned by the caller and should be an encrypted Env.
   // `db_dir` is the rocksdb directory.
-  explicit DataKeyManager(rocksdb::Env* env, const std::string& db_dir, int64_t rotation_period);
+  // If read-only is true, the DataKeyManager can be used to lookup keys but cannot
+  // change any keys (eg: SetActiveStoreKey will fail).
+  explicit DataKeyManager(rocksdb::Env* env, const std::string& db_dir, int64_t rotation_period,
+                          bool read_only);
 
   virtual ~DataKeyManager();
 
@@ -137,6 +140,7 @@ class DataKeyManager : public KeyManager {
   rocksdb::Env* env_;
   std::string registry_path_;
   int64_t rotation_period_;
+  bool read_only_;
 
   // The registry is read-only and can only be swapped for another one, it cannot be mutated in
   // place. mu_ must be held for any registry access.
