@@ -66,6 +66,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
+		pgCatalogSharedDescriptionTable,
 		pgCatalogEnumTable,
 		pgCatalogExtensionTable,
 		pgCatalogForeignDataWrapperTable,
@@ -795,6 +796,21 @@ CREATE TABLE pg_catalog.pg_description (
 	objoid OID,
 	classoid OID,
 	objsubid INT,
+	description STRING
+);
+`,
+	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Comments on database objects are not currently supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/current/static/catalog-pg-shdescription.html.
+var pgCatalogSharedDescriptionTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_shdescription (
+	objoid OID,
+	classoid OID,
 	description STRING
 );
 `,
