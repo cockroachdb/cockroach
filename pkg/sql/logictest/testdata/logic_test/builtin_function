@@ -1770,3 +1770,11 @@ query TT
 SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
 ----
 NULL  NULL
+
+subtest pg_is_in_recovery
+
+query B colnames
+SELECT pg_is_in_recovery()
+----
+pg_is_in_recovery
+false
