@@ -3,13 +3,13 @@
 statement error expected DEFAULT expression to have type int, but 'false' has type bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
 
-statement error DEFAULT expression .* may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in DEFAULT
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
 
 # Issue #14308: support tables with DEFAULT NULL columns.
@@ -17,11 +17,11 @@ statement ok
 CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
 
 # Aggregate function calls in CHECK are not ok.
-statement error aggregate functions are not allowed in DEFAULT expressions
+statement error aggregate functions are not allowed in DEFAULT
 CREATE TABLE bad (a INT DEFAULT COUNT(1))
 
 # Window function calls in CHECK are not ok.
-statement error window functions are not allowed in DEFAULT expressions
+statement error window functions are not allowed in DEFAULT
 CREATE TABLE bad (a INT DEFAULT COUNT(1) OVER ())
 
 statement ok

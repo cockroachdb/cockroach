@@ -278,12 +278,12 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error computed column "a" contains impure functions: now\(\)
+statement error impure functions are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED
 )
 
-statement error computed column "a" contains impure functions: now\(\), uuid_v4\(\)
+statement error impure functions are not allowed in computed column
 CREATE TABLE y (
   a STRING AS (CONCAT(now()::STRING, uuid_v4()::STRING)) STORED
 )
@@ -299,7 +299,7 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error aggregate functions are not allowed in computed column expressions
+statement error aggregate functions are not allowed in computed column
 CREATE TABLE y (
   b INT AS (COUNT(1)) STORED
 )
@@ -379,7 +379,7 @@ ALTER TABLE y ADD FOREIGN KEY (r) REFERENCES x (a)
 statement ok
 DROP TABLE y
 
-statement error computed column expression '\(SELECT 1\)' may not contain variable sub-expressions
+statement error variable sub-expressions are not allowed in computed column
 CREATE TABLE y (
   r INT AS ((SELECT 1)) STORED
 )

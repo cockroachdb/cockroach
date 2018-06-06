@@ -192,11 +192,6 @@ func NewRangeUnavailableError(
 		rangeID, nodeIDs, origErr)
 }
 
-// NewWindowingError creates a windowing error.
-func NewWindowingError(in string) error {
-	return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", in)
-}
-
 // NewWindowInAggError creates an error for the case when a window function is
 // nested within an aggregate function.
 func NewWindowInAggError() error {

@@ -50,6 +50,92 @@ type SemaContext struct {
 	// the root user.
 	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
 	privileged bool
+
+	Properties SemaProperties
+}
+
+// SemaProperties is a holder for required and derived properties
+// during semantic analysis. It provides scoping semantics via its
+// Restore() method, see below.
+type SemaProperties struct {
+	// required constraints type checking to only accept certain kinds
+	// of expressions. See SetConstraint
+	required semaRequirements
+
+	// Derived is populated during semantic analysis with properties
+	// from the expression being analyzed.  The caller is responsible
+	// for re-initializing this when needed.
+	Derived ScalarProperties
+}
+
+type semaRequirements struct {
+	// context is the name of the semantic anlysis context, for use in
+	// error messages.
+	context string
+
+	// The various reject flags reject specific forms of scalar
+	// expressions. The default for this struct with false everywhere
+	// ensures that anything is allowed.
+	rejectFlags SemaRejectFlags
+}
+
+// Clear resets the property requirements and derived properties.
+func (s *SemaProperties) Clear() {
+	s.Require("", AllowAll)
+}
+
+// Require resets the derived properties and sets required constraints.
+func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
+	s.required.context = context
+	s.required.rejectFlags = rejectFlags
+	s.Derived.Clear()
+}
+
+// Restore restores a copy of a SemaProperties. Use with:
+// defer semaCtx.Properties.Restore(semaCtx.Properties)
+func (s *SemaProperties) Restore(orig SemaProperties) {
+	*s = orig
+}
+
+// SemaRejectFlags contains flags to filter out certain kinds of
+// expressions.
+type SemaRejectFlags int
+
+// Valid values for SemaRejectFlags.
+const (
+	AllowAll         SemaRejectFlags = 0
+	RejectAggregates SemaRejectFlags = 1 << iota
+	RejectWindowApplications
+	RejectGenerators
+	RejectImpureFunctions
+	RejectSpecial SemaRejectFlags = RejectAggregates | RejectGenerators | RejectWindowApplications
+)
+
+// ScalarProperties contains the properties of the current scalar
+// expression discovered during semantic analysis. The properties
+// are collected prior to simplification, so some of the properties
+// may not hold anymore by the time semantic analysis completes.
+type ScalarProperties struct {
+	// SeenAggregate is set to true if the expression originally
+	// contained an aggregation.
+	SeenAggregate bool
+
+	// SeenWindowApplication is set to true if the expression originally
+	// contained a window function.
+	SeenWindowApplication bool
+
+	// SeenGenerator is set to true if the expression originally
+	// contained a SRF.
+	SeenGenerator bool
+
+	// SeenImpureFunctions is set to true if the expression originally
+	// contained an impure function.
+	SeenImpure bool
+}
+
+// Clear resets the scalar properties to defaults.
+func (sp *ScalarProperties) Clear() {
+	*sp = ScalarProperties{}
 }
 
 // MakeSemaContext initializes a simple SemaContext suitable
@@ -501,6 +587,75 @@ var (
 	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
+// NewInvalidFunctionUsageError creates a rejection for a special function.
+func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
+	var cat string
+	var code string
+	switch class {
+	case AggregateClass:
+		cat = "aggregate"
+		code = pgerror.CodeGroupingError
+	case WindowClass:
+		cat = "window"
+		code = pgerror.CodeWindowingError
+	case GeneratorClass:
+		cat = "generator"
+		code = pgerror.CodeFeatureNotSupportedError
+	}
+	return pgerror.NewErrorf(code, "%s functions are not allowed in %s", cat, context)
+}
+
+// checkFunctionUsage checks whether a given built-in function is
+// allowed in the current context.
+func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+	if def.Private {
+		return errors.Wrapf(errPrivateFunction, "%s()", def.Name)
+	}
+	// Check that the built-in is allowed for the current user.
+	// TODO(knz): this check can be moved to evaluation time pending #15363.
+	if def.Privileged && (sc == nil || !sc.privileged) {
+		return errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
+	}
+
+	if sc == nil {
+		// We can't check anything furgher. Give up.
+		return nil
+	}
+
+	if expr.IsWindowFunctionApplication() {
+		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
+			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
+		}
+		sc.Properties.Derived.SeenWindowApplication = true
+	} else {
+		// If it is an aggregate function *not used OVER a window*, then
+		// we have an aggregation.
+		if def.Class == AggregateClass {
+			if sc.Properties.required.rejectFlags&RejectAggregates != 0 {
+				return NewInvalidFunctionUsageError(AggregateClass, sc.Properties.required.context)
+			}
+			sc.Properties.Derived.SeenAggregate = true
+		}
+	}
+	if def.Class == GeneratorClass {
+		if sc.Properties.required.rejectFlags&RejectGenerators != 0 {
+			return NewInvalidFunctionUsageError(GeneratorClass, sc.Properties.required.context)
+		}
+		sc.Properties.Derived.SeenGenerator = true
+	}
+	if def.Impure {
+		if sc.Properties.required.rejectFlags&RejectImpureFunctions != 0 {
+			// The code FeatureNotSupported is a bit misleading here,
+			// because we probably can't support the feature at all. However
+			// this error code matches PostgreSQL's in the same conditions.
+			return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"impure functions are not allowed in %s", sc.Properties.required.context)
+		}
+		sc.Properties.Derived.SeenImpure = true
+	}
+	return nil
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var searchPath sessiondata.SearchPath
@@ -512,13 +667,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		return nil, err
 	}
 
-	if def.Private {
-		return nil, errors.Wrapf(errPrivateFunction, "%s()", def.Name)
-	}
-	// Check that the built-in is allowed for the current user.
-	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if def.Privileged && !ctx.privileged {
-		return nil, errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
+	if err := ctx.checkFunctionUsage(expr, def); err != nil {
+		return nil, err
 	}
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)

@@ -54,18 +54,20 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 		{"OFFSET", n.Offset, &res.offsetExpr},
 	}
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				datum.src, datum.name, p.SessionData().SearchPath,
-			); err != nil {
-				return nil, err
-			}
+			scalarProps.Require(datum.name, tree.RejectSpecial)
 
 			normalized, err := p.analyzeExpr(ctx, datum.src, nil, tree.IndexedVarHelper{}, types.Int, true, datum.name)
 			if err != nil {
 				return nil, err
 			}
+
 			*datum.dst = normalized
 		}
 	}

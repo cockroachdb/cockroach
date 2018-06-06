@@ -85,7 +85,7 @@ func TestSplitAt(t *testing.T) {
 			error: `index "not_present" does not exist`,
 		},
 		{
-			in:    "ALTER TABLE d.i SPLIT AT VALUES (avg(1))",
+			in:    "ALTER TABLE d.i SPLIT AT VALUES (avg(1::float))",
 			error: "aggregate functions are not allowed in VALUES",
 		},
 		{
