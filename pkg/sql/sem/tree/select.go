@@ -216,7 +216,9 @@ type TableExpr interface {
 func (*AliasedTableExpr) tableExpr() {}
 func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
-func (*FuncExpr) tableExpr()         {}
+func (*RowsFromExpr) tableExpr()     {}
+func (*Subquery) tableExpr()         {}
+func (*StatementSource) tableExpr()  {}
 
 // StatementSource encapsulates one of the other statements as a data source.
 type StatementSource struct {
@@ -229,8 +231,6 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 	ctx.WriteByte(']')
 }
-
-func (*StatementSource) tableExpr() {}
 
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
@@ -293,8 +293,6 @@ func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.As)
 	}
 }
-
-func (*Subquery) tableExpr() {}
 
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {
@@ -568,7 +566,7 @@ type WindowDef struct {
 
 // Format implements the NodeFormatter interface.
 func (node *WindowDef) Format(ctx *FmtCtx) {
-	ctx.WriteRune('(')
+	ctx.WriteByte('(')
 	needSpaceSeparator := false
 	if node.RefName != "" {
 		ctx.FormatNode(&node.RefName)
@@ -576,7 +574,7 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 	}
 	if node.Partitions != nil {
 		if needSpaceSeparator {
-			ctx.WriteRune(' ')
+			ctx.WriteByte(' ')
 		}
 		ctx.WriteString("PARTITION BY ")
 		ctx.FormatNode(&node.Partitions)
@@ -596,5 +594,17 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 	}
 	// TODO(nvanbenschoten): Support Window Frames.
 	// if node.Frame != nil {}
-	ctx.WriteRune(')')
+	ctx.WriteByte(')')
+}
+
+// RowsFromExpr represents a ROWS FROM(...) expression.
+type RowsFromExpr struct {
+	Items Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RowsFromExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("ROWS FROM (")
+	ctx.FormatNode(&node.Items)
+	ctx.WriteByte(')')
 }

@@ -80,6 +80,14 @@ func (p *planner) orderBy(
 		return nil, err
 	}
 
+	// We need to reject SRFs in the ORDER BY clause until they are
+	// properly handled.
+	seenGenerator := p.semaCtx.Properties.Derived.SeenGenerator
+	p.semaCtx.Properties.Derived.SeenGenerator = false
+	defer func() {
+		p.semaCtx.Properties.Derived.SeenGenerator = p.semaCtx.Properties.Derived.SeenGenerator || seenGenerator
+	}()
+
 	for _, o := range orderBy {
 		direction := encoding.Ascending
 		if o.Direction == tree.Descending {
@@ -194,6 +202,10 @@ func (p *planner) orderBy(
 		}
 		ordering = append(ordering,
 			sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
+	}
+
+	if p.semaCtx.Properties.Derived.SeenGenerator {
+		return nil, pgerror.Unimplemented("srf in order by", "generator functions are not yet supported in ORDER BY")
 	}
 
 	if ordering == nil {

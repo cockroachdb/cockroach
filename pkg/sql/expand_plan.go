@@ -347,6 +347,9 @@ func doExpandPlan(
 	case *controlJobsNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
+	case *projectSetNode:
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
@@ -374,7 +377,6 @@ func doExpandPlan(
 				break
 			}
 		}
-	case *valueGenerator:
 	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
@@ -701,6 +703,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 			n.plan = p.simplifyOrderings(n.plan, nil)
 		}
 
+	case *projectSetNode:
+		n.source = p.simplifyOrderings(n.source, nil)
+
 	case *indexJoinNode:
 		// Passing through usefulOrdering here is fine because indexJoinNodes
 		// produced by the heuristic planner always have the same schema as the
@@ -861,7 +866,6 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:
-	case *valueGenerator:
 	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:

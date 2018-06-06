@@ -288,6 +288,7 @@ pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_sequence
 pg_catalog          pg_settings
+pg_catalog          pg_shdescription
 pg_catalog          pg_stat_activity
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
@@ -408,6 +409,7 @@ pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
+pg_shdescription
 pg_stat_activity
 pg_tables
 pg_tablespace
@@ -535,6 +537,7 @@ system         pg_catalog          pg_rewrite                         SYSTEM VIE
 system         pg_catalog          pg_roles                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_sequence                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_settings                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_shdescription                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_stat_activity                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tables                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tablespace                      SYSTEM VIEW  NO                  1
@@ -1076,6 +1079,7 @@ NULL     public   system         pg_catalog          pg_rewrite                 
 NULL     public   system         pg_catalog          pg_roles                           SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_sequence                        SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_settings                        SELECT          NULL          NULL
+NULL     public   system         pg_catalog          pg_shdescription                   SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_stat_activity                   SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_tables                          SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_tablespace                      SELECT          NULL          NULL
@@ -1266,6 +1270,7 @@ NULL     public   system         pg_catalog          pg_rewrite                 
 NULL     public   system         pg_catalog          pg_roles                           SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_sequence                        SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_settings                        SELECT          NULL          NULL
+NULL     public   system         pg_catalog          pg_shdescription                   SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_stat_activity                   SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_tables                          SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_tablespace                      SELECT          NULL          NULL

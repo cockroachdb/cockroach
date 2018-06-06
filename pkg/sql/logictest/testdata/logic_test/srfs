@@ -3,7 +3,7 @@
 subtest generate_series
 
 query I colnames
-SELECT * FROM GENERATE_SERIES(1, 3)
+SELECT * FROM generate_series(1, 3)
 ----
 generate_series
 1
@@ -11,7 +11,7 @@ generate_series
 3
 
 query T colnames
-SELECT * FROM GENERATE_SERIES('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '1 hour')
+SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '1 hour')
 ----
 generate_series
 2017-11-11 00:00:00 +0000 +0000
@@ -20,7 +20,7 @@ generate_series
 2017-11-11 03:00:00 +0000 +0000
 
 query T colnames
-SELECT * FROM GENERATE_SERIES('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-11 00:00:00'::TIMESTAMP, '-1 hour')
+SELECT * FROM generate_series('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-11 00:00:00'::TIMESTAMP, '-1 hour')
 ----
 generate_series
 2017-11-11 03:00:00 +0000 +0000
@@ -29,12 +29,12 @@ generate_series
 2017-11-11 00:00:00 +0000 +0000
 
 query T colnames
-SELECT * FROM GENERATE_SERIES('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '-1 hour')
+SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '-1 hour')
 ----
 generate_series
 
 query II colnames
-SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
+SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 generate_series  generate_series
 1                1
@@ -43,7 +43,7 @@ generate_series  generate_series
 2                2
 
 query I colnames
-SELECT * FROM GENERATE_SERIES(3, 1, -1)
+SELECT * FROM generate_series(3, 1, -1)
 ----
 generate_series
 3
@@ -51,15 +51,15 @@ generate_series
 1
 
 query I colnames
-SELECT * FROM GENERATE_SERIES(3, 1)
+SELECT * FROM generate_series(3, 1)
 ----
 generate_series
 
 query error step cannot be 0
-SELECT * FROM GENERATE_SERIES(1, 3, 0)
+SELECT * FROM generate_series(1, 3, 0)
 
 query I colnames
-SELECT * FROM PG_CATALOG.GENERATE_SERIES(1, 3)
+SELECT * FROM PG_CATALOG.generate_series(1, 3)
 ----
 generate_series
 1
@@ -67,45 +67,47 @@ generate_series
 3
 
 query I colnames
-SELECT * FROM GENERATE_SERIES(1, 1) AS c(x)
+SELECT * FROM generate_series(1, 1) AS c(x)
 ----
 x
 1
 
 query II colnames
-SELECT * FROM GENERATE_SERIES(1, 1) WITH ORDINALITY
+SELECT * FROM generate_series(1, 1) WITH ORDINALITY
 ----
 generate_series  ordinality
 1                1
 
 query II colnames
-SELECT * FROM GENERATE_SERIES(1, 1) WITH ORDINALITY AS c(x, y)
+SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 ----
 x y
 1 1
 
 query error generator functions are not allowed in LIMIT
-SELECT * FROM (VALUES (1)) LIMIT GENERATE_SERIES(1, 3)
+SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
 
 query I colnames
-SELECT GENERATE_SERIES(1, 2)
+SELECT generate_series(1, 2)
 ----
 generate_series
 1
 2
 
 subtest multiple_SRFs
-# See #20511
 
-# query II colnames
-# SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
-# ----
-# generate_series             generate_series
-# 1                           3
-# 2                           4
+query II colnames
+SELECT generate_series(1, 2), generate_series(3, 4)
+----
+generate_series             generate_series
+1                           3
+2                           4
 
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
-SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
+query II
+SELECT generate_series(1, 2), generate_series(3, 4)
+----
+1  3
+2  4
 
 statement ok
 CREATE TABLE t (a string)
@@ -119,18 +121,12 @@ INSERT INTO t VALUES ('cat')
 statement ok
 INSERT INTO u VALUES ('bird')
 
-# The following two queries should have the same result. This exercises the
-# transformation that moves generator expressions in render positions to cross
-# joins.
-# query TTII colnames
-# SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
-# ----
-# a    b     generate_series generate_series
-# cat  bird  1               3
-# cat  bird  2               4
-
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
+query TTII colnames
 SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+----
+a    b     generate_series generate_series
+cat  bird  1               3
+cat  bird  2               4
 
 query TTII colnames
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
@@ -151,14 +147,14 @@ SELECT 3 + x FROM generate_series(1,2) AS a(x)
 query I colnames
 SELECT 3 + generate_series(1,2)
 ----
-3 + generate_series.generate_series
+3 + generate_series_0.generate_series
 4
 5
 
 query I colnames
 SELECT 3 + (3 * generate_series(1,3))
 ----
-3 + (3 * generate_series.generate_series)
+3 + (3 * generate_series_0.generate_series)
 6
 9
 12
@@ -172,34 +168,31 @@ unnest
 1
 2
 
-# Also see #20511
-# query IT colnames
-# SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
-# ----
-# unnest unnest
-# 1      a
-# 2      b
-
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "unnest\(ARRAY\['a', 'b'\]\)"
+query IT
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
+----
+1  a
+2  b
 
 query I colnames
 SELECT unnest(ARRAY[3,4]) - 2
 ----
-unnest.unnest - 2
+unnest_0.unnest - 2
 1
 2
 
-# Again #20511
-# query II colnames
-# SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
-# ----
-# generate_series unnest - 1
-# 1               1
-# 2               3
-
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "unnest\(ARRAY\[2, 4\]\)"
+query II colnames
 SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
+----
+1 + generate_series_0.generate_series  unnest_1.unnest - 1
+1                                      1
+2                                      3
+
+query II
+SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
+----
+1  1
+2  3
 
 query I colnames
 SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
@@ -212,11 +205,15 @@ ascii
 subtest nested_SRF
 # See #20511
 
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(generate_series.generate_series, 3\)"
+query error pq: unimplemented: nested set-returning functions
 SELECT generate_series(generate_series(1, 3), 3)
 
-query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(1, 3\)"
+query I
 SELECT generate_series(1, 3) + generate_series(1, 3)
+----
+2
+4
+6
 
 query error pq: column "generate_series" does not exist
 SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
@@ -238,7 +235,7 @@ unnest
 
 # Regression for #18021.
 query I colnames
-SELECT GENERATE_SERIES(9223372036854775807::int, -9223372036854775807::int, -9223372036854775807::int)
+SELECT generate_series(9223372036854775807::int, -9223372036854775807::int, -9223372036854775807::int)
 ----
 generate_series
 9223372036854775807
@@ -268,8 +265,8 @@ a  b  word  catcode  catdesc
 query TTT colnames
 SELECT 'a', pg_get_keywords(), 'c' LIMIT 1
 ----
-'a'  (pg_get_keywords.word, pg_get_keywords.catcode, pg_get_keywords.catdesc)  'c'
-a    ('abort','U','unreserved')                                                c
+'a'  pg_get_keywords             'c'
+a    ('abort','U','unreserved')  c
 
 query TTT colnames
 SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
@@ -319,7 +316,7 @@ SELECT * FROM information_schema._pg_expandarray(ARRAY[])
 query I colnames
 SELECT information_schema._pg_expandarray(ARRAY[]:::int[])
 ----
- ("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 
 query II colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY[]:::int[])
@@ -329,7 +326,7 @@ x  n
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY[100])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 (100,1)
 
 query II colnames
@@ -341,7 +338,7 @@ x   n
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY[2, 1])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 (2,1)
 (1,2)
 
@@ -355,7 +352,7 @@ x n
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY[3, 2, 1])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 (3,1)
 (2,2)
 (1,3)
@@ -371,7 +368,7 @@ x n
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['a'])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 ('a',1)
 
 query TI colnames
@@ -383,7 +380,7 @@ a 1
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 ('b',1)
 ('a',2)
 
@@ -397,7 +394,7 @@ a 2
 query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
 ----
-("information_schema._pg_expandarray".x, "information_schema._pg_expandarray".n)
+information_schema._pg_expandarray
 ('c',1)
 ('b',2)
 ('a',3)
@@ -468,7 +465,7 @@ n
 2
 3
 
-query error pq: column "information_schema._pg_expandarray.other" does not exist
+query error pq: could not identify column "other" in record data type
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 
 query T colnames
@@ -678,3 +675,32 @@ SELECT * FROM generate_subscripts(ARRAY[true], 1, true)
 ----
 generate_subscripts
 1
+
+subtest srf_errors
+
+query error generator functions are not yet supported in ORDER BY
+SELECT * FROM t ORDER BY generate_series(1, 3)
+
+query error generator functions are not allowed in WHERE
+SELECT * FROM t WHERE generate_series(1, 3) < 3
+
+query error generator functions are not allowed in HAVING
+SELECT * FROM t HAVING generate_series(1, 3) < 3
+
+query error generator functions are not allowed in LIMIT
+SELECT * FROM t LIMIT generate_series(1, 3)
+
+query error generator functions are not allowed in OFFSET
+SELECT * FROM t OFFSET generate_series(1, 3)
+
+query error generator functions are not allowed in VALUES
+VALUES (generate_series(1,3))
+
+statement error generator functions are not allowed in DEFAULT
+CREATE TABLE uu (x INT DEFAULT generate_series(1, 3))
+
+statement error generator functions are not allowed in CHECK
+CREATE TABLE uu (x INT CHECK (generate_series(1, 3) < 3))
+
+statement error generator functions are not allowed in computed column
+CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)

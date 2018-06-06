@@ -3011,57 +3011,6 @@ func (d *DArray) Append(v Datum) error {
 	return d.Validate()
 }
 
-// DTable is the table Datum. It is used for datums that hold an
-// entire table generator. See the comments in generator_builtins.go
-// for details.
-type DTable struct {
-	ValueGenerator
-}
-
-// AmbiguousFormat implements the Datum interface.
-func (*DTable) AmbiguousFormat() bool { return false }
-
-// Format implements the NodeFormatter interface.
-func (t *DTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("<generated>")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (t *DTable) ResolvedType() types.T {
-	return t.ValueGenerator.ResolvedType()
-}
-
-// Compare implements the Datum interface.
-func (t *DTable) Compare(ctx *EvalContext, other Datum) int {
-	if o, ok := other.(*DTable); ok {
-		if o.ValueGenerator == t.ValueGenerator {
-			return 0
-		}
-	}
-	return -1
-}
-
-// Prev implements the Datum interface.
-func (*DTable) Prev(_ *EvalContext) (Datum, bool) { return nil, false }
-
-// Next implements the Datum interface.
-func (*DTable) Next(_ *EvalContext) (Datum, bool) { return nil, false }
-
-// IsMax implements the Datum interface.
-func (*DTable) IsMax(_ *EvalContext) bool { return false }
-
-// IsMin implements the Datum interface.
-func (*DTable) IsMin(_ *EvalContext) bool { return false }
-
-// Max implements the Datum interface.
-func (*DTable) Max(_ *EvalContext) (Datum, bool) { return nil, false }
-
-// Min implements the Datum interface.
-func (*DTable) Min(_ *EvalContext) (Datum, bool) { return nil, false }
-
-// Size implements the Datum interface.
-func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
-
 // DOid is the Postgres OID datum. It can represent either an OID type or any
 // of the reg* types, such as regproc or regclass.
 type DOid struct {
@@ -3417,10 +3366,6 @@ func DatumTypeSize(t types.T) (uintptr, bool) {
 			variable = variable || typvariable
 		}
 		return sz, variable
-
-	case types.TTable:
-		sz, _ := DatumTypeSize(ty.Cols)
-		return sz, variableSize
 
 	case types.TArray:
 		// TODO(jordan,justin): This seems suspicious.

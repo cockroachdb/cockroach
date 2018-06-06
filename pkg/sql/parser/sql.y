@@ -427,6 +427,9 @@ func (u *sqlSymUnion) newNormalizableTableNameFromUnresolvedName() *tree.Normali
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
     return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
 }
+func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
+    return u.val.(*tree.RowsFromExpr)
+}
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -788,7 +791,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
-%type <tree.TableExprs> from_list
+%type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list
 %type <tree.NormalizableTableNames> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list
@@ -831,7 +834,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <empty> first_or_next
 
 %type <tree.Statement> insert_rest
-%type <tree.NameList> opt_conf_expr
+%type <tree.NameList> opt_conf_expr opt_col_def_list
 %type <*tree.OnConflict> on_conflict
 
 %type <tree.Statement> begin_transaction
@@ -864,7 +867,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem
-%type <tree.TableExpr> table_ref
+%type <tree.TableExpr> table_ref func_table
+%type <tree.Exprs> rowsfrom_list
+%type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedName> relation_expr
 %type <tree.TableExpr> relation_expr_opt_alias
@@ -5478,18 +5483,6 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
   }
-| func_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
-  {
-    $$.val = &tree.AliasedTableExpr{Expr: &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
-  }
-| LATERAL func_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
-| func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFuncRefFromName()) }
-| LATERAL func_name '(' error { return helpWithFunction(sqllex, $2.resolvableFuncRefFromName()) }
-| special_function opt_ordinality opt_alias_clause
-  {
-      $$.val = &tree.AliasedTableExpr{Expr: $1.expr().(tree.TableExpr), Ordinality: $2.bool(), As: $3.aliasClause() }
-  }
-| LATERAL special_function opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
@@ -5503,7 +5496,13 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.ParenTableExpr{Expr: $2.tblExpr()}, Ordinality: $4.bool(), As: $5.aliasClause()}
   }
-
+| func_table opt_ordinality opt_alias_clause
+  {
+    f := $1.tblExpr()
+    $$.val = &tree.AliasedTableExpr{Expr: f, Ordinality: $2.bool(), As: $3.aliasClause()}
+  }
+| LATERAL func_table opt_ordinality opt_alias_clause
+  { return unimplementedWithIssue(sqllex, 24560) }
 // The following syntax is a CockroachDB extension:
 //     SELECT ... FROM [ EXPLAIN .... ] WHERE ...
 //     SELECT ... FROM [ SHOW .... ] WHERE ...
@@ -5518,11 +5517,38 @@ table_ref:
 //   will know from the unusual choice that something rather different
 //   is going on and may be pushed by the unusual syntax to
 //   investigate further in the docs.
-
 | '[' explainable_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
+
+func_table:
+  func_expr_windowless
+  {
+    $$.val = &tree.RowsFromExpr{Items: tree.Exprs{$1.expr()}}
+  }
+| ROWS FROM '(' rowsfrom_list ')'
+  {
+    $$.val = &tree.RowsFromExpr{Items: $4.exprs()}
+  }
+
+rowsfrom_list:
+  rowsfrom_item
+  { $$.val = tree.Exprs{$1.expr()} }
+| rowsfrom_list ',' rowsfrom_item
+  { $$.val = append($1.exprs(), $3.expr()) }
+
+rowsfrom_item:
+  func_expr_windowless opt_col_def_list
+  {
+    $$.val = $1.expr()
+  }
+
+opt_col_def_list:
+  /* EMPTY */
+  { }
+| AS '(' error
+  { return unimplemented(sqllex, "ROWS FROM with col_def_list") }
 
 opt_tableref_col_list:
   /* EMPTY */               { $$.val = nil }
@@ -6782,7 +6808,11 @@ d_expr:
 | '(' row AS name_list ')'
   {
     t := $2.tuple()
-    t.Labels = $4.nameList()
+    labels := $4.nameList()
+    t.Labels = make([]string, len(labels))
+    for i, l := range labels {
+      t.Labels[i] = string(l)
+    }
     $$.val = &t
   }
 
@@ -6839,8 +6869,8 @@ func_expr:
 // expressions are not allowed, where needed to disambiguate the grammar
 // (e.g. in CREATE INDEX).
 func_expr_windowless:
-  func_application { return unimplemented(sqllex, "func_application") }
-| func_expr_common_subexpr { return unimplemented(sqllex, "func_expr_common_subexpr") }
+  func_application { $$.val = $1.expr() }
+| func_expr_common_subexpr { $$.val = $1.expr() }
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:

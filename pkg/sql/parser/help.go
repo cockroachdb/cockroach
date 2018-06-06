@@ -121,7 +121,8 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 		}
 		lastInfo = b.Info
 
-		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature())
+		simplifyRet := d.Class == tree.GeneratorClass
+		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature(simplifyRet))
 	}
 	_ = w.Flush()
 	msg.Text = buf.String()

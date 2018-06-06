@@ -120,7 +120,7 @@ SELECT * FROM tview
 query error pq: virtual tables are not supported
 SELECT id FROM crdb_internal.jobs
 
-query error pq: not yet implemented: table expr: \*tree\.FuncExpr
+query error pq: not yet implemented: table expr: \*tree\.RowsFromExpr
 SELECT * FROM GENERATE_SERIES(1, 3)
 
 query error pq: generator functions are not supported

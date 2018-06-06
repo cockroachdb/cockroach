@@ -80,6 +80,11 @@ type FunctionProperties struct {
 
 	// Category is used to generate documentation strings.
 	Category string
+
+	// ReturnLabels is used by transformSRF until the transform
+	// is properly migrated to a point past type checking.
+	// TODO(knz): remove this field once it becomes unneeded.
+	ReturnLabels []string
 }
 
 // FunctionClass specifies the class of the builtin function.

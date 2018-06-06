@@ -127,8 +127,8 @@ func (p *planner) getDataSource(
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
 		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
-	case *tree.FuncExpr:
-		return p.getGeneratorPlan(ctx, t, sqlbase.AnonymousTable)
+	case *tree.RowsFromExpr:
+		return p.getPlanForRowsFrom(ctx, sqlbase.AnonymousTable, t.Items...)
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)
@@ -266,9 +266,18 @@ func renameSource(
 		isAnonymousTable := (len(src.info.SourceAliases) == 0 ||
 			(len(src.info.SourceAliases) == 1 && src.info.SourceAliases[0].Name == sqlbase.AnonymousTable))
 		noColNameSpecified := len(colAlias) == 0
-		if vg, ok := src.plan.(*valueGenerator); ok && isAnonymousTable && noColNameSpecified {
-			if tType, ok := vg.expr.ResolvedType().(types.TTable); ok && len(tType.Cols.Types) == 1 {
-				colAlias = tree.NameList{as.Alias}
+
+		// A SRF uses projectSetNode.
+		if vg, ok := src.plan.(*projectSetNode); ok &&
+			isAnonymousTable && noColNameSpecified && len(vg.funcs) == 1 {
+			// And we only pluck the name if the projection is done over the
+			// unary table.
+			if _, ok := vg.source.(*unaryNode); ok {
+				// And there is just one column in the result.
+				if tType, ok := vg.funcs[0].ResolvedType().(types.TTuple); ok &&
+					len(tType.Types) == 1 {
+					colAlias = tree.NameList{as.Alias}
+				}
 			}
 		}
 
@@ -412,10 +421,11 @@ func (p *planner) getSubqueryPlan(
 	}, nil
 }
 
-func (p *planner) getGeneratorPlan(
-	ctx context.Context, t *tree.FuncExpr, srcName tree.TableName,
+// getPlanForRowsFrom builds the plan for a ROWS FROM(...) expression.
+func (p *planner) getPlanForRowsFrom(
+	ctx context.Context, srcName tree.TableName, exprs ...tree.Expr,
 ) (planDataSource, error) {
-	plan, err := p.makeGenerator(ctx, t)
+	plan, err := p.ProjectSet(ctx, &unaryNode{}, "ROWS FROM", exprs...)
 	if err != nil {
 		return planDataSource{}, err
 	}
