@@ -2628,3 +2628,24 @@ project
       └── aggregations
            └── max [type=decimal]
                 └── variable: column6 [type=decimal]
+
+# Regression test for #26419
+build
+SELECT 123 FROM kv ORDER BY max(v)
+----
+sort
+ ├── columns: "123":5(int!null)
+ ├── ordering: +6
+ └── project
+      ├── columns: "123":5(int!null) column6:6(int)
+      ├── group-by
+      │    ├── columns: column6:6(int)
+      │    ├── project
+      │    │    ├── columns: v:2(int)
+      │    │    └── scan kv
+      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.v [type=int]
+      └── projections
+           └── const: 123 [type=int]

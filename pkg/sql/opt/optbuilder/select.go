@@ -276,7 +276,7 @@ func (b *Builder) buildSelectClause(
 	outScope = fromScope
 
 	var projectionsScope *scope
-	if b.needsAggregation(sel) {
+	if b.needsAggregation(sel, orderBy) {
 		outScope, projectionsScope = b.buildAggregation(sel, orderBy, fromScope)
 	} else {
 		projectionsScope = fromScope.replace()
