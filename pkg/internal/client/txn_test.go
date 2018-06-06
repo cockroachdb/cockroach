@@ -88,7 +88,6 @@ func newTestTxnFactory(
 ) TxnSenderFactoryFunc {
 	return TxnSenderFactoryFunc(func(TxnType) TxnSender {
 		return TxnSenderAdapter{
-			StartTrackingWrapped: func(context.Context) error { return nil },
 			Wrapped: func(_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				if ba.UserPriority == 0 {
