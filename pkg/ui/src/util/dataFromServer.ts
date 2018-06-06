@@ -1,8 +1,10 @@
+// Corresponds to struct `IndexHTMLArgs` in pkg/ui.
 export interface DataFromServer {
   ExperimentalUseLogin: boolean;
   LoginEnabled: boolean;
   LoggedInUser: string;
   Version: string;
+  GatewayNodeID: number;
 }
 
 // Tell TypeScript about `window.dataFromServer`, which is set in a script

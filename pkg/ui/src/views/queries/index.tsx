@@ -2,6 +2,7 @@ import React from "react";
 import Helmet from "react-helmet";
 
 import Loader from "src/util/loader";
+import { getDataFromServer } from "src/util/dataFromServer";
 import { getQueries, QueriesResponseMessage } from "src/util/api";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
@@ -45,7 +46,7 @@ class QueriesPage extends React.Component<{}, QueriesPageState> {
           <title>Queries</title>
         </Helmet>
 
-        <h1 style={{ marginBottom: 20 }}>Queries</h1>
+        <h1 style={{ marginBottom: 20 }}>Queries for Node {getDataFromServer().GatewayNodeID}</h1>
 
         <QueriesLoader load={getQueries}>
           {(data, handleRefresh) => {
