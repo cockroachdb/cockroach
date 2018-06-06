@@ -204,27 +204,8 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	ctx, cleanup := tracing.EnsureContext(ctx, c.st.Tracer, "process suggested compactions")
 	defer cleanup()
 
-	// Collect all suggestions.
-	var suggestions []storagebase.SuggestedCompaction
-	var totalBytes int64
-	if err := c.eng.Iterate(
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
-		func(kv engine.MVCCKeyValue) (bool, error) {
-			var sc storagebase.SuggestedCompaction
-			var err error
-			sc.StartKey, sc.EndKey, err = keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
-			if err != nil {
-				return false, errors.Wrapf(err, "failed to decode suggested compaction key")
-			}
-			if err := protoutil.Unmarshal(kv.Value, &sc.Compaction); err != nil {
-				return false, err
-			}
-			suggestions = append(suggestions, sc)
-			totalBytes += sc.Bytes
-			return false, nil // continue iteration
-		},
-	); err != nil {
+	suggestions, totalBytes, err := c.fetchSuggestions(ctx)
+	if err != nil {
 		return false, err
 	}
 
@@ -299,6 +280,69 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// fetchSuggestions loads the persisted suggested compactions from the store.
+func (c *Compactor) fetchSuggestions(
+	ctx context.Context,
+) (suggestions []storagebase.SuggestedCompaction, totalBytes int64, err error) {
+	dataIter := c.eng.NewIterator(engine.IterOptions{
+		UpperBound: roachpb.KeyMax, // refined before every seek
+	})
+	defer dataIter.Close()
+
+	delBatch := c.eng.NewBatch()
+	defer delBatch.Close()
+
+	err = c.eng.Iterate(
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv engine.MVCCKeyValue) (bool, error) {
+			var sc storagebase.SuggestedCompaction
+			var err error
+			sc.StartKey, sc.EndKey, err = keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
+			if err != nil {
+				return false, errors.Wrapf(err, "failed to decode suggested compaction key")
+			}
+			if err := protoutil.Unmarshal(kv.Value, &sc.Compaction); err != nil {
+				return false, err
+			}
+
+			dataIter.SetUpperBound(sc.EndKey)
+			dataIter.Seek(engine.MakeMVCCMetadataKey(sc.StartKey))
+			if ok, err := dataIter.Valid(); err != nil {
+				return false, err
+			} else if ok && dataIter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(sc.EndKey)) {
+				// The suggested compaction span has live keys remaining. This is a
+				// strong indicator that compacting this range will be significantly
+				// more expensive than we expected when the compaction was suggested, as
+				// compactions are only suggested when a ClearRange request has removed
+				// all the keys in the span. Perhaps a replica was rebalanced away then
+				// back?
+				//
+				// Since we can't guarantee that this compaction will be an easy win,
+				// purge it to avoid bogging down the compaction queue.
+				log.Infof(ctx, "purging suggested compaction for range %s - %s that contains live data",
+					sc.StartKey, sc.EndKey)
+				if err := delBatch.Clear(kv.Key); err != nil {
+					log.Fatal(ctx, err) // should never happen on a batch
+				}
+				c.Metrics.BytesSkipped.Inc(sc.Bytes)
+			} else {
+				suggestions = append(suggestions, sc)
+				totalBytes += sc.Bytes
+			}
+
+			return false, nil // continue iteration
+		},
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := delBatch.Commit(true); err != nil {
+		log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
+	}
+	return suggestions, totalBytes, nil
 }
 
 // processCompaction sends CompactRange requests to the storage engine if the

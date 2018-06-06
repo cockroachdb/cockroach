@@ -193,6 +193,11 @@ func (s *Iterator) MVCCScan(
 	return s.i.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
 }
 
+// SetUpperBound is part of the engine.Iterator interface.
+func (s *Iterator) SetUpperBound(key roachpb.Key) {
+	s.i.SetUpperBound(key)
+}
+
 type spanSetReader struct {
 	r     engine.Reader
 	spans *SpanSet
