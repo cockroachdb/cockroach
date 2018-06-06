@@ -835,6 +835,18 @@ index-join  ·      ·            (x, y)              ·
 ·           table  xy@primary   ·                   ·
 
 query TTTTT
+EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
+----
+render           ·         ·            (x)                    ·
+ │               render 0  x            ·                      ·
+ └── index-join  ·         ·            (x, y, rowid[hidden])  +y
+      ├── scan   ·         ·            (y, rowid[hidden])     +y
+      │          table     xy@xy_y_idx  ·                      ·
+      │          spans     /1-/2        ·                      ·
+      └── scan   ·         ·            (x, y, rowid[hidden])  ·
+·                table     xy@primary   ·                      ·
+
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
 scan  ·       ·              (x, y)  ·
@@ -1217,3 +1229,18 @@ render           ·         ·           (a)        ·
       │          spans     /2-/3       ·          ·
       └── scan   ·         ·           (a, b, s)  ·
 ·                table     t2@primary  ·          ·
+
+statement ok
+CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+----
+render           ·         ·           (w)     ·
+ │               render 0  w           ·       ·
+ └── index-join  ·         ·           (v, w)  +v
+      ├── scan   ·         ·           (k, v)  +v
+      │          table     t3@v        ·       ·
+      │          spans     /1-/100     ·       ·
+      └── scan   ·         ·           (v, w)  ·
+·                table     t3@primary  ·       ·
