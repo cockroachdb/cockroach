@@ -260,6 +260,7 @@ create_ddl_stmt ::=
 	| create_table_as_stmt
 	| create_view_stmt
 	| create_sequence_stmt
+	| create_changefeed_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name
@@ -648,6 +649,7 @@ unreserved_keyword ::=
 	| 'CACHE'
 	| 'CANCEL'
 	| 'CASCADE'
+	| 'CHANGEFEED'
 	| 'CLUSTER'
 	| 'COLUMNS'
 	| 'COMMENT'
@@ -680,7 +682,6 @@ unreserved_keyword ::=
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
-	| 'EXPERIMENTAL_CHANGEFEED'
 	| 'EXPERIMENTAL_FINGERPRINTS'
 	| 'EXPERIMENTAL_RANGES'
 	| 'EXPERIMENTAL_RELOCATE'
@@ -905,6 +906,9 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+create_changefeed_stmt ::=
+	'CREATE' 'CHANGEFEED' 'FOR' targets 'INTO' string_or_placeholder opt_with_options
 
 statistics_name ::=
 	name
