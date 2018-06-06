@@ -20,6 +20,7 @@ import { Pick } from "src/util/pick";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import { PlanView } from "src/views/statements/planView";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
@@ -188,12 +189,19 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
     const statsByNode = this.props.statement.byNode;
+    const mostRecentPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan;
 
     return (
       <div className="content l-columns">
         <div className="l-columns__left">
           <section className="section">
             <SqlBox value={ statement } />
+          </section>
+          <section className="section">
+            <h3>Logical Plan</h3>
+            {mostRecentPlan
+              ? <PlanView plan={mostRecentPlan} />
+              : <p>No plan captured yet.</p>}
           </section>
           <section className="section">
             <h3>Execution Count</h3>
