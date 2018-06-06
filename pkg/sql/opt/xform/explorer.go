@@ -357,54 +357,47 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 	return e.exprs
 }
 
-// constrainLookupJoinIndexScan tries to push filters into Lookup Join index
-// scan operations as constraints. It is applied on a Select -> LookupJoin ->
-// Scan pattern. The scan operation is assumed to have no constraints.
+// isBoundBy returns true if all outer references in the source expression are
+// bound by the destination expression. For example:
 //
-// There are three cases, similar to constrainScan:
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Eq (Variable a.x) (Const 1))
+//   )
 //
-//  - if the filter can be completely converted to constraints, we return a
-//    constrained scan expression wrapped in a lookup join (to be added to the
-//    same group as the select operator).
-//
-//  - if the filter can be partially converted to constraints, we construct the
-//    constrained scan wrapped in a lookup join, and we return a select
-//    expression with the remaining filter (to be added to the same group as
-//    the select operator).
-//
-//  - if the filter cannot be converted to constraints, does and returns
-//    nothing.
-//
-// TODO(rytaft): In the future we want to do the following:
-// 1. push constraints in the scan.
-// 2. put whatever part of the remaining filter that uses just index columns
-//    into a select above the index scan (and below the lookup join).
-// 3. put what is left of the filter on top of the lookup join.
-func (e *explorer) constrainLookupJoinIndexScan(
-	filterGroup memo.GroupID, scanDef, lookupJoinDef memo.PrivateID,
-) []memo.Expr {
-	e.exprs = e.exprs[:0]
+// The (Eq) expression is fully bound by the (Scan a) expression because all of
+// its outer references are satisfied by the columns produced by the Scan.
+func (e *explorer) isBoundBy(src, dst memo.GroupID) bool {
+	return e.f.IsBoundBy(src, dst)
+}
 
-	newDef, remainingFilter, ok := e.constrainedScanOpDef(filterGroup, scanDef)
-	if !ok {
-		return nil
-	}
-	constrainedScan := e.f.ConstructScan(e.mem.InternScanOpDef(&newDef))
+// extractBoundConditions returns a new list containing only those expressions
+// from the given list that are fully bound by the given expression (i.e. all
+// outer references are satisfied by it). For example:
+//
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Filters [
+//       (Eq (Variable a.x) (Variable b.x))
+//       (Gt (Variable a.x) (Const 1))
+//     ])
+//   )
+//
+// Calling extractBoundConditions with the filter conditions list and the output
+// columns of (Scan a) would extract the (Gt) expression, since its outer
+// references only reference columns from a.
+func (e *explorer) extractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	return e.f.ExtractBoundConditions(list, group)
+}
 
-	if e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
-		// No remaining filter. Add the constrained lookup join index scan node to
-		// select's group.
-		lookupJoin := memo.MakeLookupJoinExpr(constrainedScan, lookupJoinDef)
-		e.exprs = append(e.exprs, memo.Expr(lookupJoin))
-	} else {
-		// We have a remaining filter. We create the constrained lookup join index
-		// scan in a new group and create a select node in the same group with the
-		// original select.
-		lookupJoin := e.f.ConstructLookupJoin(constrainedScan, lookupJoinDef)
-		newSelect := memo.MakeSelectExpr(lookupJoin, remainingFilter)
-		e.exprs = append(e.exprs, memo.Expr(newSelect))
-	}
-	return e.exprs
+// extractUnboundConditions is the inverse of extractBoundConditions. Instead of
+// extracting expressions that are bound by the given expression, it extracts
+// list expressions that have at least one outer reference that is *not* bound
+// by the given expression (i.e. it has a "free" variable).
+func (e *explorer) extractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	return e.f.ExtractUnboundConditions(list, group)
 }
 
 // ----------------------------------------------------------------------

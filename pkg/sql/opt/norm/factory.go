@@ -610,7 +610,7 @@ func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 	return f.outerCols(src).Intersects(f.outputCols(dst))
 }
 
-// isBoundBy returns true if all outer references in the source expression are
+// IsBoundBy returns true if all outer references in the source expression are
 // bound by the destination expression. For example:
 //
 //   (InnerJoin
@@ -621,11 +621,15 @@ func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 //
 // The (Eq) expression is fully bound by the (Scan a) expression because all of
 // its outer references are satisfied by the columns produced by the Scan.
-func (f *Factory) isBoundBy(src, dst memo.GroupID) bool {
+func (f *Factory) IsBoundBy(src, dst memo.GroupID) bool {
 	return f.outerCols(src).SubsetOf(f.outputCols(dst))
 }
 
-// extractBoundConditions returns a new list containing only those expressions
+func (f *Factory) isBoundBy(src, dst memo.GroupID) bool {
+	return f.IsBoundBy(src, dst)
+}
+
+// ExtractBoundConditions returns a new list containing only those expressions
 // from the given list that are fully bound by the given expression (i.e. all
 // outer references are satisfied by it). For example:
 //
@@ -641,7 +645,7 @@ func (f *Factory) isBoundBy(src, dst memo.GroupID) bool {
 // Calling extractBoundConditions with the filter conditions list and the output
 // columns of (Scan a) would extract the (Gt) expression, since its outer
 // references only reference columns from a.
-func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+func (f *Factory) ExtractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
 	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(list) {
 		if f.isBoundBy(item, group) {
@@ -651,11 +655,15 @@ func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) m
 	return lb.buildList()
 }
 
-// extractUnboundConditions is the inverse of extractBoundConditions. Instead of
+func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	return f.ExtractBoundConditions(list, group)
+}
+
+// ExtractUnboundConditions is the inverse of extractBoundConditions. Instead of
 // extracting expressions that are bound by the given expression, it extracts
 // list expressions that have at least one outer reference that is *not* bound
 // by the given expression (i.e. it has a "free" variable).
-func (f *Factory) extractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+func (f *Factory) ExtractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
 	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(list) {
 		if !f.isBoundBy(item, group) {
@@ -663,6 +671,10 @@ func (f *Factory) extractUnboundConditions(list memo.ListID, group memo.GroupID)
 		}
 	}
 	return lb.buildList()
+}
+
+func (f *Factory) extractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	return f.ExtractUnboundConditions(list, group)
 }
 
 // concatFilters creates a new Filters operator that contains conditions from

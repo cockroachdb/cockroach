@@ -879,14 +879,9 @@ scan  ·      ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
-filter           ·       ·                                                               (x, y)              ·
- │               filter  (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))  ·                   ·
- └── index-join  ·       ·                                                               (x, y)              ·
-      ├── scan   ·       ·                                                               (y, rowid[hidden])  ·
-      │          table   xy@xy_y_idx                                                     ·                   ·
-      │          spans   /1-/3                                                           ·                   ·
-      └── scan   ·       ·                                                               (x, y)              ·
-·                table   xy@primary                                                      ·                   ·
+scan  ·      ·          (x, y)  ·
+·     table  xy@xy_idx  ·       ·
+·     spans  /1/1-/1/3  ·       ·
 
 # ------------------------------------------------------------------------------
 # Non-covering index
@@ -1077,17 +1072,15 @@ SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
-filter           ·       ·
- │               filter  (c % 2) = 0
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2-/3
+ │          filter  (c % 2) = 0
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '21' and '23'.
-# TODO(justin): we need to push the c % 2 into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1095,36 +1088,26 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
 fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/primary/4 -> NULL
-fetched: /t2/primary/4/b -> 2
-fetched: /t2/primary/4/c -> 1
-fetched: /t2/primary/4/s -> '21'
 fetched: /t2/primary/5 -> NULL
 fetched: /t2/primary/5/b -> 2
 fetched: /t2/primary/5/c -> 2
 fetched: /t2/primary/5/s -> '22'
 output row: [5 2 2 '22']
-fetched: /t2/primary/6 -> NULL
-fetched: /t2/primary/6/b -> 2
-fetched: /t2/primary/6/c -> 3
-fetched: /t2/primary/6/s -> '23'
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----
-filter           ·       ·
- │               filter  c != b
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2/!NULL-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2/!NULL-/3
+ │          filter  c != b
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1137,10 +1120,6 @@ fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
 output row: [4 2 1 '21']
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
@@ -1148,7 +1127,6 @@ fetched: /t2/primary/6/s -> '23'
 output row: [6 2 3 '23']
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1160,10 +1138,6 @@ fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
@@ -1221,14 +1195,12 @@ output row: [9 3 3 '33']
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-render           ·         ·           (a)        ·
- │               render 0  a           ·          ·
- └── index-join  ·         ·           (a, b, s)  ·
-      ├── scan   ·         ·           (a, b)     ·
-      │          table     t2@bc       ·          ·
-      │          spans     /2-/3       ·          ·
-      └── scan   ·         ·           (a, b, s)  ·
-·                table     t2@primary  ·          ·
+render     ·         ·                                                                   (a)        ·
+ │         render 0  a                                                                   ·          ·
+ └── scan  ·         ·                                                                   (a, b, s)  ·
+·          table     t2@primary                                                          ·          ·
+·          spans     ALL                                                                 ·          ·
+·          filter    (b = 2) OR (((b >= 2) AND (b <= 1)) AND ((s != 'a') OR (s = 'a')))  ·          ·
 
 statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
