@@ -77,6 +77,14 @@ ignored = [
   name = "github.com/xwb1989/sqlparser"
   source = "https://github.com/dt/sqlparser"
 
+# The master version of go.uuid has an incompatible interface and (as
+# of 2018-06-06) a serious bug. Don't upgrade without making sure
+# that bug is fixed.
+# https://github.com/cockroachdb/cockroach/issues/26332
+[[constraint]]
+  name = "github.com/satori/go.uuid"
+  version = "v1.2.0"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
