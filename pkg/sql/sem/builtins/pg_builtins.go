@@ -40,6 +40,24 @@ import (
 
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
+// makeNotUsableFalseBuiltin creates a builtin that takes no arguments and
+// always returns a boolean with the value false.
+func makeNotUsableFalseBuiltin() builtinDefinition {
+	return builtinDefinition{
+		props: defProps(),
+		overloads: []tree.Overload{
+			{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.Bool),
+				Fn: func(*tree.EvalContext, tree.Datums) (tree.Datum, error) {
+					return tree.DBoolFalse, nil
+				},
+				Info: notUsableInfo,
+			},
+		},
+	}
+}
+
 // typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
 // builtins with underscores in between their type name and the i/o builtin
 // name, like date_in vs int8int. There seems to be no other way to
@@ -782,16 +800,14 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_is_in_recovery returns true if the Postgres database is currently in
 	// recovery.  This is not applicable so this can always return false.
 	// https://www.postgresql.org/docs/current/static/functions-admin.html#FUNCTIONS-RECOVERY-INFO-TABLE
-	"pg_is_in_recovery": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(*tree.EvalContext, tree.Datums) (tree.Datum, error) {
-				return tree.DBoolFalse, nil
-			},
-			Info: notUsableInfo,
-		},
-	),
+	"pg_is_in_recovery": makeNotUsableFalseBuiltin(),
+
+	// pg_is_xlog_replay_paused returns true if the Postgres database is currently
+	// in recovery but that recovery is paused.  This is not applicable so this
+	// can always return false.
+	// https://www.postgresql.org/docs/9.6/static/functions-admin.html#FUNCTIONS-RECOVERY-CONTROL-TABLE
+	// Note that this function was removed from Postgres in version 10.
+	"pg_is_xlog_replay_paused": makeNotUsableFalseBuiltin(),
 
 	// Access Privilege Inquiry Functions allow users to query object access
 	// privileges programmatically. Each function has a number of variants,
