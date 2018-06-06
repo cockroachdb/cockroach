@@ -32,6 +32,7 @@ import (
 // for an insert row on any of the indexes with unique key constraints, the insert is not done.
 type strictTableUpserter struct {
 	twb         tableWriterBase
+	tub         tableUpserterBase
 	ri          sqlbase.RowInserter
 	alloc       *sqlbase.DatumAlloc
 	collectRows bool
@@ -55,42 +56,16 @@ type strictTableUpserter struct {
 
 func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.twb.init(txn)
-	tableDesc := tu.tableDesc()
 
-	err := tu.getUniqueIndexes()
+	err := tu.tub.init(txn, evalCtx)
 	if err != nil {
 		return err
 	}
 
-	tu.resultCount = 0
-
-	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
-	if tu.collectRows {
-		tu.rowsUpserted = sqlbase.NewRowContainer(
-			evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
-			tu.insertRows.Len(),
-		)
-
-		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
+	err = tu.getUniqueIndexes()
+	if err != nil {
+		return err
 	}
-
-	// Create the map from insert rows to returning rows.
-	colIDToRetIndex := map[sqlbase.ColumnID]int{}
-	for i, col := range tableDesc.Columns {
-		colIDToRetIndex[col.ID] = i
-	}
-	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
-	for i, col := range tu.ri.InsertCols {
-		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
-	}
-
-	// Initialize the insert rows.
-	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
-	)
-
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 
 	return nil
 }
@@ -105,11 +80,7 @@ func (tu *strictTableUpserter) row(
 
 // flushAndStartNewBatch is part of the extendedTableWriter interface.
 func (tu *strictTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
-	tu.insertRows.Clear(ctx)
-	if tu.collectRows {
-		tu.rowsUpserted.Clear(ctx)
-	}
-	return tu.twb.flushAndStartNewBatch(ctx, tu.tableDesc())
+	return tu.tub.flushAndStartNewBatch(ctx)
 }
 
 // fkSpanCollector is part of the tableWriter interface.
@@ -119,7 +90,7 @@ func (tu *strictTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
 
 // tableDesc is part of the tableWriter interface.
 func (tu *strictTableUpserter) tableDesc() *sqlbase.TableDescriptor {
-	return tu.ri.Helper.TableDesc
+	return tu.tub.tableDesc()
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -278,28 +249,13 @@ func (tu *strictTableUpserter) walkExprs(walk func(desc string, index int, expr 
 
 // close is part of the tableWriter interface.
 func (tu *strictTableUpserter) close(ctx context.Context) {
-	tu.insertRows.Close(ctx)
-	if tu.rowsUpserted != nil {
-		tu.rowsUpserted.Close(ctx)
-	}
+	tu.tub.close(ctx)
 }
 
 func (tu *strictTableUpserter) makeResultFromInsertRow(
 	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
 ) tree.Datums {
-	resultRow := insertRow
-	if len(resultRow) < len(cols) {
-		resultRow = make(tree.Datums, len(cols))
-		// Pre-fill with NULLs.
-		for i := range resultRow {
-			resultRow[i] = tree.DNull
-		}
-		// Fill the other values from insertRow.
-		for i, val := range insertRow {
-			resultRow[tu.rowIdxToRetIdx[i]] = val
-		}
-	}
-	return resultRow
+	return tu.tub.makeResultFromInsertRow(insertRow, cols)
 }
 
 func (tu *strictTableUpserter) curBatchSize() int { return tu.insertRows.Len() }
