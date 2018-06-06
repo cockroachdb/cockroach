@@ -991,66 +991,57 @@ CREATE TABLE r (a INT PRIMARY KEY)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render          ·               ·           (a)     ·
- │              render 0        a           ·       ·
- └── join       ·               ·           (a, a)  ·
-      │         type            left outer  ·       ·
-      │         equality        (a) = (a)   ·       ·
-      │         mergeJoinOrder  +"(a=a)"    ·       ·
-      │         pred            a = a       ·       ·
-      ├── scan  ·               ·           (a)     +a
-      │         table           l@primary   ·       ·
-      │         spans           /3-/3/#     ·       ·
-      └── scan  ·               ·           (a)     +a
-·               table           r@primary   ·       ·
-·               spans           ALL         ·       ·
+render            ·         ·           (a)     ·
+ │                render 0  a           ·       ·
+ └── lookup-join  ·         ·           (a, a)  ·
+      │           type      left outer  ·       ·
+      │           pred      @1 = @2     ·       ·
+      ├── scan    ·         ·           (a)     ·
+      │           table     l@primary   ·       ·
+      │           spans     /3-/3/#     ·       ·
+      └── scan    ·         ·           (a)     ·
+·                 table     r@primary   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-join       ·               ·           (a, a)  ·
- │         type            left outer  ·       ·
- │         equality        (a) = (a)   ·       ·
- │         mergeJoinOrder  +"(a=a)"    ·       ·
- │         pred            a = a       ·       ·
- ├── scan  ·               ·           (a)     +a
- │         table           l@primary   ·       ·
- │         spans           /3-/3/#     ·       ·
- └── scan  ·               ·           (a)     +a
-·          table           r@primary   ·       ·
-·          spans           ALL         ·       ·
+lookup-join  ·      ·           (a, a)  ·
+ │           type   left outer  ·       ·
+ │           pred   @1 = @2     ·       ·
+ ├── scan    ·      ·           (a)     ·
+ │           table  l@primary   ·       ·
+ │           spans  /3-/3/#     ·       ·
+ └── scan    ·      ·           (a)     ·
+·            table  r@primary   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render          ·               ·            (a)     ·
- │              render 0        a            ·       ·
- └── join       ·               ·            (a, a)  ·
-      │         type            right outer  ·       ·
-      │         equality        (a) = (a)    ·       ·
-      │         mergeJoinOrder  +"(a=a)"     ·       ·
-      │         pred            a = a        ·       ·
-      ├── scan  ·               ·            (a)     +a
-      │         table           l@primary    ·       ·
-      │         spans           ALL          ·       ·
-      └── scan  ·               ·            (a)     +a
-·               table           r@primary    ·       ·
-·               spans           /3-/3/#      ·       ·
+render            ·         ·           (a)     ·
+ │                render 0  a           ·       ·
+ └── lookup-join  ·         ·           (a, a)  ·
+      │           type      left outer  ·       ·
+      │           pred      @2 = @1     ·       ·
+      ├── scan    ·         ·           (a)     ·
+      │           table     r@primary   ·       ·
+      │           spans     /3-/3/#     ·       ·
+      └── scan    ·         ·           (a)     ·
+·                 table     l@primary   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-join       ·               ·            (a, a)  ·
- │         type            right outer  ·       ·
- │         equality        (a) = (a)    ·       ·
- │         mergeJoinOrder  +"(a=a)"     ·       ·
- │         pred            a = a        ·       ·
- ├── scan  ·               ·            (a)     +a
- │         table           l@primary    ·       ·
- │         spans           ALL          ·       ·
- └── scan  ·               ·            (a)     +a
-·          table           r@primary    ·       ·
-·          spans           /3-/3/#      ·       ·
+render            ·         ·           (a, a)  ·
+ │                render 0  a           ·       ·
+ │                render 1  a           ·       ·
+ └── lookup-join  ·         ·           (a, a)  ·
+      │           type      left outer  ·       ·
+      │           pred      @2 = @1     ·       ·
+      ├── scan    ·         ·           (a)     ·
+      │           table     r@primary   ·       ·
+      │           spans     /3-/3/#     ·       ·
+      └── scan    ·         ·           (a)     ·
+·                 table     l@primary   ·       ·
 
 # Regression tests for #21243
 statement ok
