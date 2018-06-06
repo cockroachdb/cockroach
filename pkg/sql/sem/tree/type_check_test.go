@@ -228,11 +228,11 @@ func TestTypeCheckError(t *testing.T) {
 		},
 		{
 			`((1,2) AS a,a)`,
-			`duplicate tuple label: "a, a"`,
+			`duplicate tuple label: "a"`,
 		},
 		{
 			`((1,2,3) AS a,b,a)`,
-			`duplicate tuple label: "a, b, a"`,
+			`duplicate tuple label: "a"`,
 		},
 		{
 			`((ROW (1, '2') AS a,b)).x`,

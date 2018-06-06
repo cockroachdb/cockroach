@@ -23,6 +23,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1035,7 +1036,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 			for j := 0; j < i; j++ {
 				if expr.Labels[i] == expr.Labels[j] {
 					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-						"found duplicate tuple label: %q", ErrString(&expr.Labels),
+						"found duplicate tuple label: %q", ErrNameString(&expr.Labels[i]),
 					)
 				}
 			}
@@ -1043,7 +1044,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 
 		expr.types.Labels = make([]string, len(expr.Labels))
 		for i := range expr.Labels {
-			expr.types.Labels[i] = expr.Labels[i].Normalize()
+			expr.types.Labels[i] = lex.NormalizeName(expr.Labels[i])
 		}
 	}
 	return expr, nil
