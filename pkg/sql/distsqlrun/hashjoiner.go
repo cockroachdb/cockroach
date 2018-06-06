@@ -766,7 +766,9 @@ var _ DistSQLSpanStats = &HashJoinerStats{}
 func (hjs *HashJoinerStats) Stats() map[string]string {
 	return map[string]string{
 		"hashjoiner.left.input.rows":  fmt.Sprintf("%d", hjs.LeftInputStats.NumRows),
+		"hashjoiner.left.stalltime":   fmt.Sprintf("%v", hjs.LeftInputStats.RoundStallTime()),
 		"hashjoiner.right.input.rows": fmt.Sprintf("%d", hjs.RightInputStats.NumRows),
+		"hashjoiner.right.stalltime":  fmt.Sprintf("%v", hjs.RightInputStats.RoundStallTime()),
 		"hashjoiner.stored_side":      hjs.StoredSide,
 		"hashjoiner.mem.max":          humanizeutil.IBytes(hjs.MaxAllocatedMem),
 		"hashjoiner.disk.max":         humanizeutil.IBytes(hjs.MaxAllocatedDisk),
@@ -777,7 +779,9 @@ func (hjs *HashJoinerStats) Stats() map[string]string {
 func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
 	return []string{
 		fmt.Sprintf("left rows read: %d", hjs.LeftInputStats.NumRows),
+		fmt.Sprintf("left stall time: %v", hjs.LeftInputStats.RoundStallTime()),
 		fmt.Sprintf("right rows read: %d", hjs.RightInputStats.NumRows),
+		fmt.Sprintf("right stall time: %v", hjs.RightInputStats.RoundStallTime()),
 		fmt.Sprintf("stored side: %s", hjs.StoredSide),
 		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(hjs.MaxAllocatedMem)),
 		fmt.Sprintf("max disk used: %s", humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
@@ -798,6 +802,10 @@ func (h *hashJoiner) outputStatsToTrace() {
 	sp := opentracing.SpanFromContext(h.ctx)
 	if sp == nil {
 		return
+	}
+	if h.flowCtx.testingKnobs.OverrideStallTime {
+		lisc.StallTime = 0
+		risc.StallTime = 0
 	}
 	tracing.SetSpanStats(
 		sp,
