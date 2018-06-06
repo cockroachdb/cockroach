@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -116,42 +117,65 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		}
 	}
 
+	var rspan roachpb.RSpan
+	rspan.Key, err = keys.Addr(span.Key)
+	if err != nil {
+		return nil, err
+	}
+	rspan.EndKey, err = keys.Addr(span.EndKey)
+	if err != nil {
+		return nil, err
+	}
+
 	return &scatterNode{
 		run: scatterRun{
-			span: span,
+			span: rspan,
 		},
 	}, nil
 }
 
 // scatterRun contains the run-time state of scatterNode during local execution.
 type scatterRun struct {
-	span roachpb.Span
+	span roachpb.RSpan
 
-	rangeIdx int
-	ranges   []roachpb.AdminScatterResponse_Range
+	ri         *kv.RangeIterator
+	firstRange bool
 }
 
 func (n *scatterNode) startExec(params runParams) error {
-	db := params.p.ExecCfg().DB
-	req := &roachpb.AdminScatterRequest{
-		RequestHeader:   roachpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
-		RandomizeLeases: true,
-		// TODO: Require an additional option for this.
-		RandomizeReplicas: true,
-	}
-	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
-	if pErr != nil {
-		return pErr.GoError()
-	}
-	n.run.rangeIdx = -1
-	n.run.ranges = res.(*roachpb.AdminScatterResponse).Ranges
+	n.run.ri = kv.NewRangeIterator(params.p.ExecCfg().DistSender)
+	n.run.ri.Seek(params.ctx, n.run.span.Key, kv.Ascending)
+	n.run.firstRange = true
 	return nil
 }
 
 func (n *scatterNode) Next(params runParams) (bool, error) {
-	n.run.rangeIdx++
-	hasNext := n.run.rangeIdx < len(n.run.ranges)
-	return hasNext, nil
+	if !n.run.ri.Valid() {
+		return false, n.run.ri.Error().GoError()
+	}
+	if !n.run.ri.NeedAnother(n.run.span) {
+		return false, nil
+	}
+	if n.run.firstRange {
+		n.run.firstRange = false
+	} else {
+		n.run.ri.Next(params.ctx)
+	}
+	desc := n.run.ri.Desc()
+
+	db := params.p.ExecCfg().DB
+	req := &roachpb.AdminScatterRequest{
+		RequestHeader:   roachpb.RequestHeader{Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey()},
+		RandomizeLeases: true,
+		// TODO(XXX): Require an additional option for this?
+		RandomizeReplicas: true,
+	}
+	_, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
+	if pErr != nil {
+		return false, pErr.GoError()
+	}
+
+	return true, nil
 }
 
 var scatterNodeColumns = sqlbase.ResultColumns{
@@ -166,10 +190,10 @@ var scatterNodeColumns = sqlbase.ResultColumns{
 }
 
 func (n *scatterNode) Values() tree.Datums {
-	r := n.run.ranges[n.run.rangeIdx]
+	key := n.run.ri.Desc().StartKey
 	return tree.Datums{
-		tree.NewDBytes(tree.DBytes(r.Span.Key)),
-		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
+		tree.NewDBytes(tree.DBytes(key)),
+		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, key.AsRawKey())),
 	}
 }
 
