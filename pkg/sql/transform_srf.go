@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,9 +34,30 @@ type srfExtractionVisitor struct {
 	err        error
 	ctx        context.Context
 	p          *planner
-	r          *renderNode
 	searchPath sessiondata.SearchPath
-	seenSRF    bool
+
+	// origAliases are the known table/column aliases for the original
+	// source.  We only initialize sourceAliases below from this if SRFs
+	// are actually found.
+	origAliases sqlbase.SourceAliases
+
+	// srfs contains the SRFs collected so far. This list is processed
+	// at the end of the visit to generate a projectSetNode.
+	srfs tree.Exprs
+
+	// sourceAliases contains the extended source aliases. It contains
+	// unique names for each of the collected SRF expressions, so that
+	// columns from the same SRF function name occurring in multiple
+	// places can be disambiguated.
+	sourceAliases sqlbase.SourceAliases
+
+	// numColumns is the number of columns seen so far in the data
+	// source extended with the SRFs collected so far.
+	numColumns int
+
+	// seenSRF is a counter indicating the level of nesting of SRFs. We
+	// reject anything greated than 1 for now as unsupported.
+	seenSRF int
 }
 
 var _ tree.Visitor = &srfExtractionVisitor{}
@@ -66,6 +88,19 @@ func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode t
 		newCAE := *t
 		newCAE.Expr = &newFe
 		expr = &newCAE
+
+	case *tree.FuncExpr:
+		// For each SRF encountered on the way down, remember the nesting
+		// level. It will be decreased on the way up in VisitPost()
+		// below.
+		fd, err := v.lookupSRF(t)
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+		if fd != nil {
+			v.seenSRF++
+		}
 	}
 	return true, expr
 }
@@ -83,52 +118,55 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 				"programmer error: invalid Walk recursion on ColumnAccessExpr")
 			return expr
 		}
-		foundSRF, srfName, err := v.lookupSRF(fe)
+		fd, err := v.lookupSRF(fe)
 		if err != nil {
 			v.err = err
 			return expr
 		}
-		if !foundSRF {
+		if fd == nil {
 			v.err = pgerror.UnimplementedWithIssueErrorf(24866,
 				"composite-returning scalar functions: %q", tree.ErrString(t.Expr))
 			return expr
 		}
-		newExpr, err := v.transformSRF(srfName, fe, t)
+		newExpr, err := v.transformSRF(fe, fd, t)
 		if err != nil {
 			v.err = err
 			return expr
 		}
+		v.seenSRF--
 		return newExpr
+
 	case *tree.FuncExpr:
 		if t.EscapeSRF {
 			return expr
 		}
-		foundSRF, srfName, err := v.lookupSRF(t)
+		fd, err := v.lookupSRF(t)
 		if err != nil {
 			v.err = err
 			return expr
 		}
-		if foundSRF {
-			newExpr, err := v.transformSRF(srfName, t, nil /* columnAccess */)
+		if fd != nil {
+			newExpr, err := v.transformSRF(t, fd, nil /* columnAccess */)
 			if err != nil {
 				v.err = err
 				return expr
 			}
+			v.seenSRF--
 			return newExpr
 		}
 	}
 	return expr
 }
 
-func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (bool, string, error) {
+func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (*tree.FunctionDefinition, error) {
 	fd, err := t.Func.Resolve(v.searchPath)
 	if err != nil {
-		return false, "", err
+		return nil, err
 	}
-	if fd.Class == tree.GeneratorClass {
-		return true, fd.Name, nil
+	if fd.Class != tree.GeneratorClass {
+		fd = nil
 	}
-	return false, "", nil
+	return fd, nil
 }
 
 // rewriteSRFs creates data sources for any set-returning functions in the
@@ -137,9 +175,10 @@ func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (bool, string, error)
 // the set-returning function replaced by an IndexedVar that points at the new
 // data source.
 //
-// Expressions with more than one SRF require lateral correlated subqueries,
-// which are not yet supported. For now, this function returns an error if more
-// than one SRF is present in the render expression.
+// TODO(knz): this transform should really be done at the end of
+// logical planning, and not at the beginning. Also the implementation
+// is simple and does not support nested SRFs (the algorithm for that
+// is much more complicated, see issue #26234).
 func (p *planner) rewriteSRFs(
 	ctx context.Context, r *renderNode, targets tree.SelectExprs,
 ) (tree.SelectExprs, error) {
@@ -151,18 +190,18 @@ func (p *planner) rewriteSRFs(
 	// scalar subqueries, which may run this analysis too.
 	defer func(p *planner, prevV srfExtractionVisitor) { p.srfExtractionVisitor = prevV }(p, *v)
 	*v = srfExtractionVisitor{
-		err:        nil,
-		ctx:        ctx,
-		p:          p,
-		r:          r,
-		seenSRF:    false,
-		searchPath: p.SessionData().SearchPath,
+		ctx:         ctx,
+		p:           p,
+		searchPath:  p.SessionData().SearchPath,
+		origAliases: r.source.info.SourceAliases,
+		numColumns:  len(r.source.info.SourceColumns),
 	}
 
 	// Rewrite the SRFs, if any. We want to avoid re-allocating a targets
 	// array unless necessary.
 	var newTargets tree.SelectExprs
 	for i, target := range targets {
+		curSrfs := len(v.srfs)
 		newExpr, changed := tree.WalkExpr(v, target.Expr)
 		if v.err != nil {
 			return targets, v.err
@@ -180,51 +219,101 @@ func (p *planner) rewriteSRFs(
 		}
 		newTargets[i].Expr = newExpr
 		newTargets[i].As = target.As
+
+		if len(v.srfs) != curSrfs {
+			// If the transform is adding a SRF, the expression will have
+			// changed structure. To help the user (and for compatibility
+			// with pg) we need to ensure the column label is based off the
+			// original expression.
+			newLabel, err := simplifyRenderAlias(v.searchPath, target)
+			if err != nil {
+				return nil, err
+			}
+			newTargets[i].As = newLabel
+		}
 	}
+
+	if len(v.srfs) > 0 {
+		// Some SRFs were found. Create a projectSetNode to represent the
+		// relational operator.
+		projectPlan, err := p.ProjectSet(ctx, r.source.plan, "SELECT", v.srfs...)
+		if err != nil {
+			return nil, err
+		}
+
+		newInfo := *r.source.info
+		newInfo.SourceColumns = planColumns(projectPlan)
+		newInfo.SourceAliases = v.sourceAliases
+		r.source.info = &newInfo
+		r.sourceInfo[0] = r.source.info
+		r.source.plan = projectPlan
+	}
+
 	if newTargets != nil {
 		return newTargets, nil
 	}
 	return targets, nil
 }
 
-func (v *srfExtractionVisitor) transformSRF(
-	srfName string, srf *tree.FuncExpr, columnAccessExpr *tree.ColumnAccessExpr,
-) (tree.Expr, error) {
-	if v.seenSRF {
-		// TODO(knz/jordan): multiple SRFs in the same scalar expression
-		// should be migrated to a _single_ join operand in the FROM
-		// clause, that zip the values togethers into a single table
-		// (filling with NULLs where some SRFs produce fewer rows than
-		// others).
-		return nil, pgerror.UnimplementedWithIssueErrorf(20511,
-			"cannot use multiple set-returning functions in a single SELECT clause: %q",
-			tree.ErrString(srf))
-	}
-	v.seenSRF = true
-
-	// Transform the SRF. This must be done in any case, whether the SRF
-	// was used as scalar or whether a specific column was requested.
-	tblName := tree.MakeUnqualifiedTableName(tree.Name(srfName))
-	src, err := v.p.getPlanForRowsFrom(v.ctx, tblName, srf)
-	if err != nil {
-		return nil, err
+// simplifyRenderAliases creates a suitable AS clause for the target
+// expression, in case it is sufficiently simple. We cannot use the
+// regular getRenderColName() here because that also produces labels
+// for things containing stars, and we can't create an AS clause for a
+// star (that would be invalid).
+func simplifyRenderAlias(
+	searchPath sessiondata.SearchPath, target tree.SelectExpr,
+) (tree.UnrestrictedName, error) {
+	if target.As != "" {
+		return target.As, nil
 	}
 
-	// Save the SRF data source for later.
-	srfSource := src
+	switch t := target.Expr.(type) {
+	case *tree.ColumnItem:
+		return tree.UnrestrictedName(t.Column()), nil
 
-	// Do we already have something in the FROM clause?
-	if !isUnarySource(v.r.source) {
-		// The FROM clause specifies something. Replace with a cross-join (which is
-		// an inner join without a condition).
-		src, err = v.p.makeJoin(v.ctx, sqlbase.InnerJoin, v.r.source, src, nil)
+	case *tree.FuncExpr:
+		// Special case for rendering builtin functions: the column name for an
+		// otherwise un-named builtin output column is just the name of the builtin.
+		fd, err := t.Func.Resolve(searchPath)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
+		return tree.UnrestrictedName(fd.Name), nil
 	}
-	// Keep the remaining relational expression.
-	v.r.source = src
-	v.r.sourceInfo = sqlbase.MultiSourceInfo{src.info}
+
+	return "", nil
+}
+
+func (v *srfExtractionVisitor) transformSRF(
+	srf *tree.FuncExpr, fd *tree.FunctionDefinition, columnAccessExpr *tree.ColumnAccessExpr,
+) (tree.Expr, error) {
+	if v.seenSRF > 1 {
+		return nil, pgerror.UnimplementedWithIssueErrorf(26234, "nested set-returning functions")
+	}
+
+	// Create a unique name for this SRF. We need unique names so that
+	// we can properly handle the same function name used in multiple
+	// places.
+	srfSourceName := fmt.Sprintf("%s_%d", fd.Name, len(v.srfs))
+
+	// Remember the SRF for the end of the analysis.
+	v.srfs = append(v.srfs, srf)
+
+	// Create an alias definition so that the unique name created above
+	// becomes available for name resolution later in renderNode.
+	tblName := tree.MakeUnqualifiedTableName(tree.Name(srfSourceName))
+	if v.sourceAliases == nil {
+		v.sourceAliases = make(sqlbase.SourceAliases, len(v.origAliases))
+		copy(v.sourceAliases, v.origAliases)
+	}
+	sourceAlias := sqlbase.SourceAlias{
+		Name:      tblName,
+		ColumnSet: sqlbase.FillColumnRange(v.numColumns, v.numColumns+len(fd.ReturnLabels)-1),
+	}
+	v.sourceAliases = append(v.sourceAliases, sourceAlias)
+
+	// Bump the column count for the next SRF collected.
+	v.numColumns += len(fd.ReturnLabels)
 
 	// Now decide what to render.
 	if columnAccessExpr != nil {
@@ -233,34 +322,39 @@ func (v *srfExtractionVisitor) transformSRF(
 			// (tbl).*
 			// We want all the columns as separate renders. Let the star
 			// expansion that occurs later do the job.
-			return &tree.AllColumnsSelector{TableName: tree.MakeUnresolvedName(srfName)}, nil
+			return &tree.AllColumnsSelector{TableName: tree.MakeUnresolvedName(srfSourceName)}, nil
 		}
 		// (tbl).colname
-		// We just want one column. Render that.
+		// We just want one column. Render that. For user friendliness,
+		// check that the label exists.
+		found := false
+		for _, l := range fd.ReturnLabels {
+			if l == columnAccessExpr.ColName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"could not identify column %q in record data type",
+				tree.ErrNameString(&columnAccessExpr.ColName))
+		}
 		return tree.NewColumnItem(&tblName, tree.Name(columnAccessExpr.ColName)), nil
 	}
 
 	// Just the SRF name. Check whether we have just one column or more.
-	if len(srfSource.info.SourceColumns) == 1 {
+	if len(fd.ReturnLabels) == 1 {
 		// Just one column. Render that column exactly.
-		return tree.NewColumnItem(&tblName, tree.Name(srfSource.info.SourceColumns[0].Name)), nil
+		return tree.NewColumnItem(&tblName, tree.Name(fd.ReturnLabels[0])), nil
 	}
 	// More than one column.
 	// We want all the columns as a tuple. Render that.
-	// TODO(knz): This should be returned as a composite expression instead
-	// (tuple with labels). See #24866.
 	tExpr := &tree.Tuple{
-		Exprs: make(tree.Exprs, len(srfSource.info.SourceColumns)),
+		Exprs:  make(tree.Exprs, len(fd.ReturnLabels)),
+		Labels: fd.ReturnLabels,
 	}
-	for i, c := range srfSource.info.SourceColumns {
-		tExpr.Exprs[i] = tree.NewColumnItem(&tblName, tree.Name(c.Name))
+	for i, lbl := range fd.ReturnLabels {
+		tExpr.Exprs[i] = tree.NewColumnItem(&tblName, tree.Name(lbl))
 	}
 	return tExpr, nil
-}
-
-// A unary source is the special source used with empty FROM clauses:
-// a pseudo-table with zero columns and exactly one row.
-func isUnarySource(src planDataSource) bool {
-	_, ok := src.plan.(*unaryNode)
-	return ok && len(src.info.SourceColumns) == 0
 }
