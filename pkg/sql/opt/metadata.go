@@ -126,6 +126,22 @@ func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
 	return indexCols
 }
 
+// IndexColumnsList returns the list of columns in the given index. The columns
+// are returned in the same order as they appear in the index.
+// TODO(justin): cache this value in the table metadata.
+func (md *Metadata) IndexColumnsList(tableID TableID, indexOrdinal int) ColList {
+	tab := md.Table(tableID)
+	index := tab.Index(indexOrdinal)
+
+	indexCols := make(ColList, index.ColumnCount())
+	for i := range indexCols {
+		ord := index.Column(i).Ordinal
+		indexCols[i] = md.TableColumn(tableID, ord)
+	}
+
+	return indexCols
+}
+
 // ColumnLabel returns the label of the given column. It is used for pretty-
 // printing and debugging.
 func (md *Metadata) ColumnLabel(id ColumnID) string {

@@ -133,15 +133,40 @@ type GroupByDef struct {
 
 // LookupJoinDef defines the value of the Def private field of the LookupJoin
 // operator.
+//
+// Example 1: join between two tables
+//
+//    CREATE TABLE abc (a INT, b INT, c INT)
+//    CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x,y))
+//    SELECT * FROM abc JOIN xyz ON (a=x) AND (b=y)
+//
+//    Input: scan from table abc.
+//    Table: xyz
+//    KeyCols: a, b
+//    LookupCols: z
+//
+// Example 2: index join:
+//
+//    CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b))
+//    SELECT * FROM abc WHERE b=1
+//
+//    Input: scan on the index on b (returning columns a, b)
+//    Table: abc
+//    KeyCols: a
+//    LookupCols: c
+//
 type LookupJoinDef struct {
 	// Table identifies the table do to lookups in. The primary index is
 	// currently the only index used.
 	Table opt.TableID
 
-	// Cols is the set of columns the index join outputs. The set of columns
-	// which must be retrieved from the primary index is thus Cols minus the set
-	// of columns provided by the input.
-	Cols opt.ColSet
+	// KeyCols are the columns (produced by the input) used to create lookup keys;
+	// in the same order as the index columns (or a prefix of them).
+	KeyCols opt.ColList
+
+	// LookupCols is the set of columns retrieved from the index. The LookupJoin
+	// operator produces the columns in its input plus these columns.
+	LookupCols opt.ColSet
 }
 
 // ExplainOpDef defines the value of the Def private field of the Explain operator.

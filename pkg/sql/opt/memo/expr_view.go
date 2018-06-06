@@ -342,6 +342,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		def := ev.Private().(*LookupJoinDef)
 		tableID := def.Table
 		tp.Childf("table: %s", ev.Metadata().Table(tableID).TabName())
+		tp.Childf("key columns: %v", def.KeyCols)
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
