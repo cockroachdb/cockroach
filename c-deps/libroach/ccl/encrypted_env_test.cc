@@ -24,7 +24,8 @@ TEST(EncryptedEnv, ConcurrentAccess) {
   auto key_manager = new MemKeyManager(MakeAES128Key(env.get()));
   auto stream = new CTRCipherStreamCreator(key_manager, enginepb::Data);
 
-  auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env.get(), "/"));
+  auto file_registry =
+      std::unique_ptr<FileRegistry>(new FileRegistry(env.get(), "/", false /* read-only */));
   EXPECT_OK(file_registry->Load());
 
   std::unique_ptr<rocksdb::Env> encrypted_env(
@@ -138,7 +139,8 @@ TEST(EncryptedEnv, FileOps) {
   auto tmpdir = std::unique_ptr<TempDirHandler>(new TempDirHandler());
   ASSERT_TRUE(tmpdir->Init());
 
-  auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env, tmpdir->Path("")));
+  auto file_registry =
+      std::unique_ptr<FileRegistry>(new FileRegistry(env, tmpdir->Path(""), false /* read-only */));
   EXPECT_OK(file_registry->Load());
 
   std::unique_ptr<rocksdb::Env> encrypted_env(

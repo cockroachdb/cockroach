@@ -17,6 +17,9 @@ namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
 namespace testutils {
 
+// Generate the DBOptions.extra_options string for plaintext keys.
+std::string MakePlaintextExtraOptions();
+
 // MakeAES<size>Key creates a SecretKeyObject with a key of the specified size.
 // It needs an Env for the current time.
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env);
