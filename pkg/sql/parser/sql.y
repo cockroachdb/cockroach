@@ -478,7 +478,8 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
 
-%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
+%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
+%token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
 %token <str> GIN GRANT GRANTS GREATEST GROUP GROUPING
@@ -514,7 +515,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE READ REAL RECURSIVE REF REFERENCES
+%token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str> REMOVE_PATH RENAME REPEATABLE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
@@ -737,8 +738,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.AlterIndexCmd> alter_index_cmd
 %type <tree.AlterIndexCmds> alter_index_cmds
 
-%type <empty> opt_collate_clause
-
 %type <tree.DropBehavior> opt_drop_behavior
 %type <tree.DropBehavior> opt_interleave_drop_behavior
 
@@ -756,7 +755,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
-%type <empty> opt_collate
+%type <str> opt_collate
+%type <empty> opt_collate_unimpl
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
@@ -943,7 +943,6 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> relocate_kw ranges_kw
 
-%type <str> opt_alter_column_collate
 %type <tree.Expr> opt_alter_column_using
 
 // Precedence: lowest to highest
@@ -1409,7 +1408,7 @@ alter_table_cmd:
   //     [SET DATA] TYPE <typename>
   //     [ COLLATE collation ]
   //     [ USING <expression> ]
-| ALTER opt_column column_name opt_set_data TYPE typename opt_alter_column_collate opt_alter_column_using
+| ALTER opt_column column_name opt_set_data TYPE typename opt_collate opt_alter_column_using
   {
     $$.val = &tree.AlterTableAlterColumnType{
       ColumnKeyword: $2.bool(),
@@ -1507,12 +1506,6 @@ alter_column_default:
     $$.val = nil
   }
 
-// The opt_collate and opt_collate_clause rules are currently used to
-// block on various issues.
-opt_alter_column_collate:
-  COLLATE collation_name { $$ = $2 }
-| /* EMPTY */ { $$ = "" }
-
 opt_alter_column_using:
   USING a_expr { $$ = $2 }
 | /* EMPTY */ {}
@@ -1541,10 +1534,6 @@ opt_validate_behavior:
   {
     $$.val = tree.ValidationDefault
   }
-
-opt_collate_clause:
-  COLLATE collation_name { return unimplementedWithIssue(sqllex, 9851) }
-| /* EMPTY */ {}
 
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
@@ -2856,12 +2845,29 @@ show_histogram_stmt:
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL
-// %Text: SHOW BACKUP <location>
+// %Text: SHOW BACKUP [FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
   SHOW BACKUP string_or_placeholder
   {
-    $$.val = &tree.ShowBackup{Path: $3.expr()}
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupDefaultDetails,
+      Path:    $3.expr(),
+    }
+  }
+| SHOW BACKUP RANGES string_or_placeholder
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupRangeDetails,
+      Path:    $4.expr(),
+    }
+  }
+| SHOW BACKUP FILES string_or_placeholder
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupFileDetails,
+      Path:    $4.expr(),
+    }
   }
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
@@ -4253,14 +4259,18 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that's just a function call to be written without parens.
 index_elem:
-  column_name opt_collate opt_asc_desc
+  column_name opt_collate_unimpl opt_asc_desc
   {
     $$.val = tree.IndexElem{Column: tree.Name($1), Direction: $3.dir()}
   }
-| func_expr_windowless opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem func expr (computed indexes)") }
-| '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem a_expr (computed indexes)") }
+| func_expr_windowless opt_collate_unimpl opt_asc_desc { return unimplemented(sqllex, "index_elem func expr (computed indexes)") }
+| '(' a_expr ')' opt_collate_unimpl opt_asc_desc { return unimplemented(sqllex, "index_elem a_expr (computed indexes)") }
 
 opt_collate:
+  COLLATE collation_name { $$ = $2 }
+| /* EMPTY */ { $$ = "" }
+
+opt_collate_unimpl:
   COLLATE collation_name { return unimplementedWithIssue(sqllex, 16619) }
 | /* EMPTY */ {}
 
@@ -7959,6 +7969,7 @@ unreserved_keyword:
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
 | EXPORT
+| FILES
 | FILTER
 | FIRST
 | FLOAT4
@@ -8035,6 +8046,7 @@ unreserved_keyword:
 | QUERIES
 | QUERY
 | RANGE
+| RANGES
 | READ
 | RECURSIVE
 | REF

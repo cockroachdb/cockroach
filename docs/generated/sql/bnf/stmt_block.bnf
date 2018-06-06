@@ -440,6 +440,8 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUP' string_or_placeholder
+	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder
+	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name
@@ -680,6 +682,7 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPLAIN'
 	| 'EXPORT'
+	| 'FILES'
 	| 'FILTER'
 	| 'FIRST'
 	| 'FLOAT4'
@@ -756,6 +759,7 @@ unreserved_keyword ::=
 	| 'QUERIES'
 	| 'QUERY'
 	| 'RANGE'
+	| 'RANGES'
 	| 'READ'
 	| 'RECURSIVE'
 	| 'REF'
@@ -1769,7 +1773,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
 	| 'DROP' opt_column column_name opt_drop_behavior
-	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_alter_column_collate opt_alter_column_using
+	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using
 	| 'ADD' table_constraint opt_validate_behavior
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
@@ -1953,7 +1957,7 @@ opt_set_data ::=
 	'SET' 'DATA'
 	| 
 
-opt_alter_column_collate ::=
+opt_collate ::=
 	'COLLATE' collation_name
 	| 
 
