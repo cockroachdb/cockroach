@@ -26,6 +26,10 @@ import (
 
 // strictTableUpserter implements the conflict-intolerant path for an upsert. See
 // tableUpserter for the general case.
+//
+// strictTableUpserter is used for insert statements with the clause ON CONFLICT DO NOTHING
+// without any specified columns. In this case, whenever a conflict is detected
+// for an insert row on any of the indexes with unique key constraints, the insert is not done.
 type strictTableUpserter struct {
 	twb         tableWriterBase
 	ri          sqlbase.RowInserter
