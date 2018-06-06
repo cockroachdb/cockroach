@@ -559,14 +559,15 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	md := ev.Metadata()
 	def := ev.Private().(*memo.LookupJoinDef)
 
-	needed, output := b.getColumns(md, def.Cols, def.Table)
+	cols := ev.Child(0).Logical().Relational.OutputCols.Union(def.Cols)
+	needed, output := b.getColumns(md, cols, def.Table)
 	res := execPlan{outputCols: output}
 
 	reqOrder := b.makeSQLOrdering(res, ev)
 
 	needed.UnionWith(ev.Physical().Ordering.ColSet())
 
-	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed, reqOrder)
+	node, err := b.factory.ConstructIndexJoin(input.root, md.Table(def.Table), needed, reqOrder)
 	if err != nil {
 		return execPlan{}, err
 	}
