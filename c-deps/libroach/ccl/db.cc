@@ -116,8 +116,8 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   env_mgr->TakeEnvOwnership(store_keyed_env);
 
   // Initialize data key manager using the stored-keyed-env.
-  DataKeyManager* data_key_manager =
-      new DataKeyManager(store_keyed_env, db_dir, opts.data_key_rotation_period());
+  DataKeyManager* data_key_manager = new DataKeyManager(
+      store_keyed_env, db_dir, opts.data_key_rotation_period(), db_opts.read_only);
   status = data_key_manager->LoadKeys();
   if (!status.ok()) {
     delete data_key_manager;
@@ -139,11 +139,13 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
   assert(store_key != nullptr);
 
-  // Generate a new data key if needed by giving the active store key info to the data key
-  // manager.
-  status = data_key_manager->SetActiveStoreKey(std::move(store_key));
-  if (!status.ok()) {
-    return status;
+  if (!db_opts.read_only) {
+    // Generate a new data key if needed by giving the active store key info to the data key
+    // manager.
+    status = data_key_manager->SetActiveStoreKey(std::move(store_key));
+    if (!status.ok()) {
+      return status;
+    }
   }
 
   // Everything's ok: initialize a stats handler.

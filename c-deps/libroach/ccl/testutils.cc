@@ -8,9 +8,20 @@
 
 #include "testutils.h"
 #include <gtest/gtest.h>
+#include "ccl/baseccl/encryption_options.pb.h"
 #include "crypto_utils.h"
 
 namespace testutils {
+
+std::string MakePlaintextExtraOptions() {
+  cockroach::ccl::baseccl::EncryptionOptions opts;
+  opts.mutable_key_files()->set_current_key("plain");
+  opts.mutable_key_files()->set_old_key("plain");
+
+  std::string ret;
+  opts.SerializeToString(&ret);
+  return ret;
+}
 
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
   int64_t now;

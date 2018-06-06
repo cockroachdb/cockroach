@@ -20,8 +20,11 @@ using namespace cockroach;
 
 namespace cockroach {
 
-FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir)
-    : env_(env), db_dir_(db_dir), registry_path_(db_dir_ + "/" + kFileRegistryFilename) {}
+FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool read_only)
+    : env_(env),
+      db_dir_(db_dir),
+      read_only_(read_only),
+      registry_path_(db_dir_ + "/" + kFileRegistryFilename) {}
 
 rocksdb::Status FileRegistry::CheckNoRegistryFile() {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -233,6 +236,11 @@ rocksdb::Status FileRegistry::MaybeLinkEntry(const std::string& src, const std::
 }
 
 rocksdb::Status FileRegistry::PersistRegistryLocked(std::unique_ptr<enginepb::FileRegistry> reg) {
+  if (read_only_) {
+    return rocksdb::Status::InvalidArgument(
+        "file registry is read-only but registry modification attempted");
+  }
+
   // Serialize and write to file.
   std::string contents;
   if (!reg->SerializeToString(&contents)) {

@@ -192,10 +192,11 @@ std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::GetKey(const std::string
 DataKeyManager::~DataKeyManager() {}
 
 DataKeyManager::DataKeyManager(rocksdb::Env* env, const std::string& db_dir,
-                               int64_t rotation_period)
+                               int64_t rotation_period, bool read_only)
     : env_(env),
       registry_path_(db_dir + "/" + kKeyRegistryFilename),
-      rotation_period_(rotation_period) {}
+      rotation_period_(rotation_period),
+      read_only_(read_only) {}
 
 rocksdb::Status DataKeyManager::LoadKeysHelper(enginepbccl::DataKeysRegistry* registry) {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -359,6 +360,10 @@ DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::KeyInfo> store_in
 
 rocksdb::Status
 DataKeyManager::PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegistry> reg) {
+  if (read_only_) {
+    return rocksdb::Status::InvalidArgument("key manager is read-only, keys cannot be rotated");
+  }
+
   // Validate before writing.
   auto status = KeyManagerUtils::ValidateRegistry(reg.get());
   if (!status.ok()) {
