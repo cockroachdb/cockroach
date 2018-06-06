@@ -100,11 +100,11 @@ SELECT * FROM [SHOW INDEX FROM system.descriptor]
 Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
 descriptor  primary  true    1    id      ASC        false    false
 
-query TTTTT colnames
+query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 ----
-Table       Name     Type         Column(s)  Details
-descriptor  primary  PRIMARY KEY  id         NULL
+table       name     type         details               validated
+descriptor  primary  PRIMARY KEY  PRIMARY KEY (id ASC)  true
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]

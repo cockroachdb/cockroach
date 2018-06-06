@@ -170,10 +170,10 @@ SHOW INDEXES FROM information_schema.tables
 ----
 Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM information_schema.tables
 ----
-Table   Name     Type  Column(s)  Details
+table  name  type  details  validated
 
 query TTTTT colnames
 SHOW GRANTS ON information_schema.tables
