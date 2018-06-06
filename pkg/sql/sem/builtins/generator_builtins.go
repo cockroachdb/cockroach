@@ -43,15 +43,17 @@ func initGeneratorBuiltins() {
 			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
 		}
+
 		builtins[k] = v
 	}
 }
 
-func genProps() tree.FunctionProperties {
+func genProps(labels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:   true,
-		Class:    tree.GeneratorClass,
-		Category: categoryGenerator,
+		Impure:       true,
+		Class:        tree.GeneratorClass,
+		Category:     categoryGenerator,
+		ReturnLabels: labels,
 	}
 }
 
@@ -61,7 +63,7 @@ func genProps() tree.FunctionProperties {
 // These functions are identified with Class == tree.GeneratorClass.
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
-	"generate_series": makeBuiltin(genProps(),
+	"generate_series": makeBuiltin(genProps(seriesValueGeneratorLabels),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}},
@@ -83,7 +85,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"pg_get_keywords": makeBuiltin(genProps(),
+	"pg_get_keywords": makeBuiltin(genProps(keywordsValueGeneratorType.Labels),
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 		makeGeneratorOverload(
 			tree.ArgTypes{},
@@ -93,7 +95,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"unnest": makeBuiltin(genProps(),
+	"unnest": makeBuiltin(genProps(arrayValueGeneratorLabels),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
@@ -112,7 +114,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"information_schema._pg_expandarray": makeBuiltin(genProps(),
+	"information_schema._pg_expandarray": makeBuiltin(genProps(expandArrayValueGeneratorLabels),
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
@@ -130,7 +132,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"crdb_internal.unary_table": makeBuiltin(genProps(),
+	"crdb_internal.unary_table": makeBuiltin(genProps(nil /* no labels */),
 		makeGeneratorOverload(
 			tree.ArgTypes{},
 			unaryValueGeneratorType,
@@ -140,7 +142,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"generate_subscripts": makeBuiltin(genProps(),
+	"generate_subscripts": makeBuiltin(genProps(subscriptsValueGeneratorLabels),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
 		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}},
@@ -163,16 +165,16 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"json_array_elements":       makeBuiltin(genProps(), jsonArrayElementsImpl),
-	"jsonb_array_elements":      makeBuiltin(genProps(), jsonArrayElementsImpl),
-	"json_array_elements_text":  makeBuiltin(genProps(), jsonArrayElementsTextImpl),
-	"jsonb_array_elements_text": makeBuiltin(genProps(), jsonArrayElementsTextImpl),
-	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
-	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
-	"json_each":                 makeBuiltin(genProps(), jsonEachImpl),
-	"jsonb_each":                makeBuiltin(genProps(), jsonEachImpl),
-	"json_each_text":            makeBuiltin(genProps(), jsonEachTextImpl),
-	"jsonb_each_text":           makeBuiltin(genProps(), jsonEachTextImpl),
+	"json_array_elements":       makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"jsonb_array_elements":      makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"json_array_elements_text":  makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"jsonb_array_elements_text": makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"json_object_keys":          makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
+	"jsonb_object_keys":         makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
+	"json_each":                 makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
+	"jsonb_each":                makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
+	"json_each_text":            makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"jsonb_each_text":           makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
 }
 
 func makeGeneratorOverload(
@@ -265,14 +267,16 @@ type seriesValueGenerator struct {
 	genValue                            func(*seriesValueGenerator) tree.Datums
 }
 
+var seriesValueGeneratorLabels = []string{"generate_series"}
+
 var seriesValueGeneratorType = types.TTuple{
 	Types:  []types.T{types.Int},
-	Labels: []string{"generate_series"},
+	Labels: seriesValueGeneratorLabels,
 }
 
 var seriesTSValueGeneratorType = types.TTuple{
 	Types:  []types.T{types.Timestamp},
-	Labels: []string{"generate_series"},
+	Labels: seriesValueGeneratorLabels,
 }
 
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
@@ -635,14 +639,16 @@ var jsonArrayElementsTextImpl = makeGeneratorOverload(
 	"Expands a JSON array to a set of text values.",
 )
 
+var jsonArrayGeneratorLabels = []string{"value"}
+
 var jsonArrayGeneratorType = types.TTuple{
 	Types:  []types.T{types.JSON},
-	Labels: []string{"value"},
+	Labels: jsonArrayGeneratorLabels,
 }
 
 var jsonArrayTextGeneratorType = types.TTuple{
 	Types:  []types.T{types.String},
-	Labels: []string{"value"},
+	Labels: jsonArrayGeneratorLabels,
 }
 
 type jsonArrayGenerator struct {
@@ -727,9 +733,11 @@ var jsonObjectKeysImpl = makeGeneratorOverload(
 	"Returns sorted set of keys in the outermost JSON object.",
 )
 
+var jsonObjectKeysGeneratorLabels = []string{"json_object_keys"}
+
 var jsonObjectKeysGeneratorType = types.TTuple{
 	Types:  []types.T{types.String},
-	Labels: []string{"json_object_keys"},
+	Labels: jsonObjectKeysGeneratorLabels,
 }
 
 type jsonObjectKeysGenerator struct {
@@ -793,14 +801,16 @@ var jsonEachTextImpl = makeGeneratorOverload(
 		"The returned values will be of type text.",
 )
 
+var jsonEachGeneratorLabels = []string{"key", "value"}
+
 var jsonEachGeneratorType = types.TTuple{
 	Types:  []types.T{types.String, types.JSON},
-	Labels: []string{"key", "value"},
+	Labels: jsonEachGeneratorLabels,
 }
 
 var jsonEachTextGeneratorType = types.TTuple{
 	Types:  []types.T{types.String, types.String},
-	Labels: []string{"key", "value"},
+	Labels: jsonEachGeneratorLabels,
 }
 
 type jsonEachGenerator struct {
