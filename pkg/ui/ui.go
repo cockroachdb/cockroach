@@ -80,6 +80,8 @@ type IndexHTMLArgs struct {
 	LoginEnabled         bool
 	LoggedInUser         *string
 	Version              string
+	// ID of the node serving the UI.
+	GatewayNodeID int
 }
 
 func init() {

@@ -1184,7 +1184,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
 	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
 	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
-		s.authentication, serveUIAssets(fileServer, s.cfg),
+		// TODO(vilterp): move registration of this route until after node has ID?
+		// currently passing in pointer to node struct so we have it once it is initialized...
+		s.authentication, serveUIAssets(fileServer, s.cfg, s.node),
 	)
 	s.mux.Handle("/", maybeAuthMux)
 
@@ -1917,7 +1919,7 @@ func officialAddr(
 	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, port)), nil
 }
 
-func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
+func serveUIAssets(fileServer http.Handler, cfg Config, node *Node) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/" {
 			fileServer.ServeHTTP(writer, request)
@@ -1929,6 +1931,7 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         cfg.RequireWebSession(),
 			Version:              build.VersionPrefix(),
+			GatewayNodeID:        int(node.Descriptor.NodeID),
 		}
 		loggedInUser, ok := request.Context().Value(webSessionUserKey{}).(string)
 		if ok && loggedInUser != "" {
