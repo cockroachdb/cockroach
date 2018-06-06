@@ -95,6 +95,10 @@ type indexJoinNode struct {
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
+	// props contains the physical properties provided by this node.
+	// These are pre-computed at construction time.
+	props physicalProps
+
 	run indexJoinRun
 }
 
@@ -210,6 +214,11 @@ func (p *planner) makeIndexJoin(
 			primaryKeyPrefix: primaryKeyPrefix,
 			colIDtoRowIndex:  colIDtoRowIndex,
 		},
+		// We need to store the physical props in this node because they might be
+		// different from the underlying index scan in plans produced by the
+		// optimizer (though they will be the same in plans produced by the
+		// heuristic planner).
+		props: planPhysicalProps(indexScan),
 	}
 
 	return node, indexScan, nil

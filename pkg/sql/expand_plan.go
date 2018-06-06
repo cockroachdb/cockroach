@@ -702,7 +702,11 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *indexJoinNode:
+		// Passing through usefulOrdering here is fine because indexJoinNodes
+		// produced by the heuristic planner always have the same schema as the
+		// underlying table.
 		n.index.props.trim(usefulOrdering)
+		n.props.trim(usefulOrdering)
 		n.table.props = physicalProps{}
 
 	case *unionNode:
