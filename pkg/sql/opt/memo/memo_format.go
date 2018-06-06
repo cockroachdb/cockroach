@@ -306,7 +306,9 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
 	case *LookupJoinDef:
-		fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
+		fmt.Fprintf(
+			f.buf, " %s,keyCols=%v,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.KeyCols, t.Cols,
+		)
 
 	case *ExplainOpDef:
 		if mode == formatMemo {

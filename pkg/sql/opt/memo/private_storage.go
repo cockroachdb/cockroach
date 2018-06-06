@@ -238,6 +238,10 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeColList(def.KeyCols)
+	// Add a separator between the list and the set. Note that the column IDs
+	// cannot be 0.
+	ps.keyBuf.writeUvarint(0)
 	ps.keyBuf.writeColSet(def.Cols)
 	typ := (*LookupJoinDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {

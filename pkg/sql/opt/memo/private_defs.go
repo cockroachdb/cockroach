@@ -138,9 +138,12 @@ type LookupJoinDef struct {
 	// currently the only index used.
 	Table opt.TableID
 
-	// Cols is the set of columns the index join outputs. The set of columns
-	// which must be retrieved from the primary index is thus Cols minus the set
-	// of columns provided by the input.
+	// KeyCols are the columns (produced by the input) used to create lookup keys;
+	// they correspond to the index columns (or a prefix of them).
+	KeyCols opt.ColList
+
+	// Cols is the set of columns retrieved. The LookupJoin operator produces the
+	// columns in its input plus these columns.
 	Cols opt.ColSet
 }
 
