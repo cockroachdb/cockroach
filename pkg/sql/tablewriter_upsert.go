@@ -529,7 +529,7 @@ func (tu *tableUpserter) updateConflictingRow(
 // Outputs:
 // - resultRow is the row that was inserted, shaped in the order
 //   of the table descriptor. This may be different than the
-//   shape of insertRow if there are nullablec olumns.
+//   shape of insertRow if there are nullable columns.
 // Input/Outputs:
 // - existingRows is extended with resultRow to produce newExistingRows.
 // - pkToRowIdx is extended with the index of the new entry in existingRows.
