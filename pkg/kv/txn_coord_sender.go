@@ -83,20 +83,45 @@ const (
 	aborted
 )
 
-// A TxnCoordSender is an implementation of client.Sender which wraps
-// a lower-level Sender (either a storage.Stores or a DistSender) to
-// which it sends commands. It acts as a man-in-the-middle,
-// coordinating transaction state for clients. Unlike other senders,
-// the TxnCoordSender is stateful and holds information about an
-// ongoing transaction. Among other things, it records the intent
-// spans of keys mutated by the transaction for later
-// resolution.
+// A TxnCoordSender is the production implementation of client.TxnSender. It is
+// a Sender which wraps a lower-level Sender (a DistSender) to which it sends
+// commands. It works on behalf of the client to keep a transaction's state
+// (e.g. intents) and to perform periodic heartbeating of the transaction
+// required when necessary.  Unlike other senders, TxnCoordSender is not a
+// singleton - an instance is created for every transaction by the
+// TxnCoordSenderFactory.
 //
-// After a transaction has begun writing, the TxnCoordSender may start
-// sending periodic heartbeat messages to that transaction's txn
-// record, to keep it live. Note that heartbeating is done only from
-// the root transaction coordinator, in the event that multiple
+// Among the functions it performs are:
+// - Heartbeating of the transaction record. Note that heartbeating is done only
+// from the root transaction coordinator, in the event that multiple
 // coordinators are active (i.e. in a distributed SQL flow).
+// - Accumulating intent spans.
+// - Attaching intent spans to EndTransaction requests, for intent cleanup.
+// - Handles retriable errors by either bumping the transaction's epoch or, in
+// case of TransactionAbortedErrors, cleaning up the transaction (in this case,
+// the client.Txn is expected to create a new TxnCoordSender instance
+// transparently for the higher-level client).
+// - Ensures atomic execution for non-transactional (write) batches by transparently
+// wrapping them in transactions when the DistSender is forced to split them for
+// multiple ranges. For this reason, generally even non-transactional batches
+// need to be sent through a TxnCoordSender.
+//
+// Since it is stateful, the TxnCoordSender needs to understand when a
+// transaction is "finished" and the state can be destroyed. As such there's a
+// contract that the client.Txn needs obey. Read-only transactions don't matter
+// - they're stateless. For the others, once a BeginTransaction is sent by the
+// client, the TxnCoordSender considers the transactions completed in the
+// following situations:
+// - A batch containing an EndTransactions (commit or rollback) succeeds.
+// - A batch containing an EndTransaction(commit=false) succeeds or fails. I.e.
+// nothing is expected to follow a rollback attempt.
+// - A batch returns a TransactionAbortedError. As mentioned above, the client
+// is expected to create a new TxnCoordSender for the next transaction attempt.
+//
+// Note that "1PC" batches (i.e. batches containing both a Begin and an
+// EndTransaction) are no exception from the contract - if the batch fails, the
+// client is expected to send a rollback (or perform another transaction attempt
+// in case of retriable errors).
 type TxnCoordSender struct {
 	mu struct {
 		syncutil.Mutex
@@ -126,9 +151,9 @@ type TxnCoordSender struct {
 		// Analogous to lastUpdateNanos, this is the wall time at which the
 		// transaction was instantiated.
 		firstUpdateNanos int64
-		// txnEnd is closed when the transaction is aborted or committed,
+		// txnEnd is pinged when the transaction is aborted or committed,
 		// terminating the associated heartbeat instance.
-		txnEnd chan struct{}
+		txnEnd chan txnEndInfo
 		// state indicates the state of the transaction coordinator, which
 		// may briefly diverge from the state of the transaction record if
 		// the coordinator is aborted after a failed heartbeat, but before
@@ -148,6 +173,12 @@ type TxnCoordSender struct {
 }
 
 var _ client.TxnSender = &TxnCoordSender{}
+
+type txnEndInfo struct {
+	// onePCCommit is set if the transaction ended through a successful 1PC
+	// commit.
+	onePCCommit bool
+}
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
@@ -175,6 +206,9 @@ var (
 	metaCommitsRates = metric.Metadata{
 		Name: "txn.commits",
 		Help: "Number of committed KV transactions (including 1PC)"}
+	// NOTE: The 1PC rate is arguably not accurate because it counts batches
+	// containing both BeginTransaction and EndTransaction without caring if the
+	// DistSender had to split it for touching multiple ranges.
 	metaCommits1PCRates = metric.Metadata{
 		Name: "txn.commits1PC",
 		Help: "Number of committed one-phase KV transactions"}
@@ -412,6 +446,23 @@ func (tc *TxnCoordSender) Send(
 		txnIDStr := txnID.String()
 		sp.SetBaggageItem("txnID", txnIDStr)
 
+		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
+		if hasBegin {
+			// If there's a BeginTransaction, we need to start the heartbeat loop and
+			// intent tracking.
+			// Perhaps surprisingly, this needs to be done even if the batch has both
+			// a BeginTransaction and an EndTransaction. Although on batch success the
+			// heartbeat loop will be stopped right away, on error we might need both
+			// the intents and the heartbeat loop:
+			// - on retriable error, we need to keep around the intents for cleanup in
+			// subsequent epochs.
+			// - on non-retriable error, we need to keep around the intents as the
+			// client is expected to send an EndTransaction(commit=false) to cleanup.
+			if err := tc.startTracking(ctx); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+
 		var et *roachpb.EndTransactionRequest
 		var hasET bool
 		{
@@ -538,7 +589,7 @@ func (tc *TxnCoordSender) Send(
 			et, isEnding := ba.GetArg(roachpb.EndTransaction)
 			if isEnding && !et.(*roachpb.EndTransactionRequest).Commit {
 				tc.mu.Lock()
-				tc.cleanupTxnLocked(ctx, aborted)
+				tc.cleanupTxnLocked(ctx, aborted, txnEndInfo{})
 				tc.mu.Unlock()
 			}
 
@@ -580,7 +631,9 @@ func (tc *TxnCoordSender) Send(
 	if br.Txn.Status != roachpb.PENDING {
 		tc.mu.Lock()
 		tc.mu.meta.Txn = br.Txn.Clone()
-		tc.cleanupTxnLocked(ctx, done)
+		_, hasBT := ba.GetArg(roachpb.BeginTransaction)
+		onePC := br.Txn.Status == roachpb.COMMITTED && hasBT
+		tc.cleanupTxnLocked(ctx, done, txnEndInfo{onePCCommit: onePC})
 		tc.mu.Unlock()
 	}
 	return br, nil
@@ -925,7 +978,9 @@ func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.B
 
 // cleanupTxnLocked is called when a transaction ends. The heartbeat
 // goroutine is signaled to clean up the transaction gracefully.
-func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordState) {
+func (tc *TxnCoordSender) cleanupTxnLocked(
+	ctx context.Context, state txnCoordState, info txnEndInfo,
+) {
 	tc.mu.state = state
 	if tc.mu.onFinishFn != nil {
 		// rejectErr is guaranteed to be non-nil because state is done or
@@ -946,7 +1001,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordSt
 	}
 	// Trigger heartbeat shutdown.
 	log.VEvent(ctx, 2, "coordinator stops")
-	close(tc.mu.txnEnd)
+	tc.mu.txnEnd <- info
 	tc.mu.txnEnd = nil
 }
 
@@ -984,19 +1039,19 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 	defer sp.Finish()
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
+	var onePCCommit bool
 	defer func() {
 		tc.mu.Lock()
 		if tc.mu.txnEnd != nil {
-			close(tc.mu.txnEnd)
 			tc.mu.txnEnd = nil
 		}
 		duration, restarts, status := tc.finalTxnStatsLocked()
 		tc.mu.tracking = false
 		tc.mu.Unlock()
-		tc.updateStats(duration, restarts, status, false)
+		tc.updateStats(duration, restarts, status, onePCCommit)
 	}()
 
-	var closer <-chan struct{}
+	var closer <-chan txnEndInfo
 	{
 		tc.mu.Lock()
 		closer = tc.mu.txnEnd
@@ -1012,8 +1067,9 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			if !tc.heartbeat(ctx) {
 				return
 			}
-		case <-closer:
+		case info := <-closer:
 			// Transaction finished normally.
+			onePCCommit = info.onePCCommit
 			return
 		case <-ctx.Done():
 			// Note that if ctx is not cancelable, then ctx.Done() returns a nil
@@ -1026,8 +1082,9 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			// Check if the closer channel had also been closed; in that case, that
 			// takes priority.
 			select {
-			case <-closer:
+			case info := <-closer:
 				// Transaction finished normally.
+				onePCCommit = info.onePCCommit
 				return
 			default:
 				tc.tryAsyncAbort(ctx)
@@ -1047,7 +1104,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	defer tc.mu.Unlock()
 	// Clone the intents and the txn to avoid data races.
 	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
-	tc.cleanupTxnLocked(ctx, aborted)
+	tc.cleanupTxnLocked(ctx, aborted, txnEndInfo{})
 	txn := tc.mu.meta.Txn.Clone()
 
 	// Since we don't hold the lock continuously, it's possible that two aborts
@@ -1195,8 +1252,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	return true
 }
 
-// StartTracking is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) StartTracking(ctx context.Context) error {
+// startTracking starts a heartbeat loop and tracking of intents.
+func (tc *TxnCoordSender) startTracking(ctx context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -1211,7 +1268,7 @@ func (tc *TxnCoordSender) StartTracking(ctx context.Context) error {
 	log.VEventf(ctx, 2, "coordinator spawns heartbeat loop")
 	// Create a channel to stop the heartbeat with the lock held
 	// to avoid a race between the async task and a subsequent commit.
-	tc.mu.txnEnd = make(chan struct{})
+	tc.mu.txnEnd = make(chan txnEndInfo, 1)
 	if err := tc.stopper.RunAsyncTask(
 		ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
 			tc.heartbeatLoop(ctx)
@@ -1220,7 +1277,7 @@ func (tc *TxnCoordSender) StartTracking(ctx context.Context) error {
 		// heartbeat. We refuse new transactions for now because
 		// they're likely not going to have all intents committed.
 		// In principle, we can relax this as needed though.
-		tc.cleanupTxnLocked(ctx, aborted)
+		tc.cleanupTxnLocked(ctx, aborted, txnEndInfo{})
 		duration, restarts, status := tc.finalTxnStatsLocked()
 		tc.updateStats(duration, restarts, status, false /* onePC */)
 		return err
@@ -1388,16 +1445,6 @@ func (tc *TxnCoordSender) updateState(
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
 		tc.appendAndCondenseIntentsLocked(ctx, ba, br)
-	} else {
-		// If this was a successful one phase commit, update stats
-		// directly as they won't otherwise be updated on heartbeat
-		// loop shutdown.
-		_, isBeginning := ba.GetArg(roachpb.BeginTransaction)
-		_, isEnding := ba.GetArg(roachpb.EndTransaction)
-		if pErr == nil && isBeginning && isEnding {
-			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
-			tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
-		}
 	}
 
 	// Update our record of this transaction, even on error.

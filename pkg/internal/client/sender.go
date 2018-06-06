@@ -78,9 +78,6 @@ type TxnSender interface {
 	// if this method is invoked multiple times, the most recent callback
 	// is the only one which will be invoked.
 	OnFinish(func(error))
-
-	// StartTracking starts a heartbeat loop and tracking of intents.
-	StartTracking(ctx context.Context) error
 }
 
 // TxnSenderFactory is the interface used to create new instances
@@ -112,8 +109,7 @@ func (f SenderFunc) Send(
 // TxnSenders with GetMeta or AugmentMeta panicing with unimplemented. This is
 // a helper mechanism to facilitate testing.
 type TxnSenderAdapter struct {
-	Wrapped              func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-	StartTrackingWrapped func(context.Context) error
+	Wrapped func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
 // Send calls f(ctx, c).
@@ -131,14 +127,6 @@ func (f TxnSenderAdapter) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { p
 
 // OnFinish is part of the TxnSender interface.
 func (f TxnSenderAdapter) OnFinish(_ func(error)) { panic("unimplemented") }
-
-// StartTracking is part the TxnSender interface.
-func (f TxnSenderAdapter) StartTracking(ctx context.Context) error {
-	if f.StartTrackingWrapped != nil {
-		return f.StartTrackingWrapped(ctx)
-	}
-	panic("unimplemented")
-}
 
 // TxnSenderFactoryFunc is an adapter to allow the use of ordinary functions
 // as TxnSenderFactories. This is a helper mechanism to facilitate testing.
