@@ -49,6 +49,7 @@ struct DBEngine {
   virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file) = 0;
   virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file) = 0;
   virtual DBStatus EnvDeleteFile(DBSlice path) = 0;
+  virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir) = 0;
 
   DBSSTable* GetSSTables(int* n);
   DBString GetUserProperties();
@@ -92,6 +93,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
   virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
   virtual DBStatus EnvDeleteFile(DBSlice path);
+  virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir);
 };
 
 }  // namespace cockroach
