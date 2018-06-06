@@ -1238,7 +1238,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 }
 
 // makeRange creates a key range from the provided input. The range will start
-// at the provided key and will have an end key that is a determinstic function
+// at the provided key and will have an end key that is a deterministic function
 // of the provided key. This means that for a given input, the function will
 // always produce the same range.
 func makeRange(start int32) (from, to []byte) {
