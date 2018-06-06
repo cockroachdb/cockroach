@@ -15,6 +15,9 @@ if [[ "${cmd}" ]]; then
 fi
 
 case "${cmd}" in
+    gcloud)
+    gcloud "$@"
+    ;;
     create)
     echo -n "Enter your dev license key (if any): "
     read cr_dev_license
