@@ -259,7 +259,7 @@ DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
 // EnvReadFile reads the content of the given filename.
 DBStatus DBImpl::EnvReadFile(DBSlice path, DBSlice* contents) {
   rocksdb::Status status;
-  std::string data;  
+  std::string data;
 
   status = ReadFileToString(this->rep->GetEnv(), ToString(path), &data);
   if (!status.ok()) {
