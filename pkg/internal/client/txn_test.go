@@ -87,9 +87,8 @@ func newTestTxnFactory(
 	createReply func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) TxnSenderFactoryFunc {
 	return TxnSenderFactoryFunc(func(TxnType) TxnSender {
-		return TxnSenderAdapter{
-			StartTrackingWrapped: func(context.Context) error { return nil },
-			Wrapped: func(_ context.Context, ba roachpb.BatchRequest,
+		return TxnSenderFunc(
+			func(_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				if ba.UserPriority == 0 {
 					ba.UserPriority = 1
@@ -137,7 +136,7 @@ func newTestTxnFactory(
 				}
 				return br, pErr
 			},
-		}
+		)
 	})
 }
 
