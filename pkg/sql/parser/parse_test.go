@@ -983,10 +983,12 @@ func TestParse(t *testing.T) {
 		{`EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10`},
 		{`SET ROW (1, true, NULL)`},
 
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT TABLE foo TO 'sink'`},
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT TABLE foo TO 'sink' WITH topic_prefix = 'bar'`},
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE foo TO 'sink'`},
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT TABLE foo TO 'sink' AS OF SYSTEM TIME '1'`},
+		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
+		// TODO(dan): Implement.
+		// {`CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'`},
+		// {`CREATE CHANGEFEED FOR TABLE foo PARTITION bar, baz INTO 'sink'`},
+		{`CREATE CHANGEFEED FOR DATABASE foo INTO 'sink'`},
+		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'`},
 
 		// Regression for #15926
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
@@ -1335,8 +1337,8 @@ func TestParse2(t *testing.T) {
 		{`RESTORE DATABASE foo FROM bar`,
 			`RESTORE DATABASE foo FROM 'bar'`},
 
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE foo TO sink`,
-			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE foo TO 'sink'`},
+		{`CREATE CHANGEFEED FOR TABLE foo INTO sink`,
+			`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 
 		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
 
@@ -1406,8 +1408,7 @@ func TestParse2(t *testing.T) {
 		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
 			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 
-		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO 'sink'`,
-			`CREATE EXPERIMENTAL_CHANGEFEED EMIT TABLE foo TO 'sink'`},
+		{`CREATE CHANGEFEED FOR foo INTO 'sink'`, `CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 
 		{`GRANT SELECT ON foo TO root`,
 			`GRANT SELECT ON TABLE foo TO root`},
