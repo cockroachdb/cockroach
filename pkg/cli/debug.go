@@ -77,6 +77,11 @@ Create a ballast file to fill the store directory up to a given amount
 	RunE: runDebugBallast,
 }
 
+// PopulateRocksDBConfigHook is a callback set by CCL code.
+// It populates any needed fields in the RocksDBConfig.
+// It must do nothing in OSS code.
+var PopulateRocksDBConfigHook func(*engine.RocksDBConfig) error
+
 func parseRangeID(arg string) (roachpb.RangeID, error) {
 	rangeIDInt, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
@@ -95,19 +100,26 @@ func openExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engin
 	if err != nil {
 		return nil, err
 	}
-	db, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
-			Settings:     serverCfg.Settings,
-			Dir:          dir,
-			MaxOpenFiles: maxOpenFiles,
-			MustExist:    true,
-			ReadOnly:     readOnly,
-		},
-		cache,
-	)
+
+	cfg := engine.RocksDBConfig{
+		Settings:     serverCfg.Settings,
+		Dir:          dir,
+		MaxOpenFiles: maxOpenFiles,
+		MustExist:    true,
+		ReadOnly:     readOnly,
+	}
+
+	if PopulateRocksDBConfigHook != nil {
+		if err := PopulateRocksDBConfigHook(&cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	db, err := engine.NewRocksDB(cfg, cache)
 	if err != nil {
 		return nil, err
 	}
+
 	stopper.AddCloser(db)
 	return db, nil
 }
@@ -850,6 +862,7 @@ as 'ldb'.
 https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb-tool
 `,
 	// LDB does its own flag parsing.
+	// TODO(mberhault): support encrypted stores.
 	DisableFlagParsing: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		engine.RunLDB(args)
@@ -1097,23 +1110,28 @@ func init() {
 		"only write to the WAL, not to sstables")
 }
 
-var debugCmds = []*cobra.Command{
-	debugBallastCmd,
+// DebugCmdsForRocksDB lists debug commands that access rocksdb.
+var DebugCmdsForRocksDB = []*cobra.Command{
+	debugCheckStoreCmd,
+	debugCompactCmd,
+	debugGCCmd,
 	debugKeysCmd,
+	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
-	debugDecodeKeyCmd,
-	debugRaftLogCmd,
-	debugGCCmd,
-	debugCheckStoreCmd,
-	debugRocksDBCmd,
-	debugCompactCmd,
 	debugSSTablesCmd,
+}
+
+// All other debug commands go here.
+var debugCmds = append(DebugCmdsForRocksDB,
+	debugBallastCmd,
+	debugDecodeKeyCmd,
+	debugRocksDBCmd,
 	debugGossipValuesCmd,
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
-}
+)
 
 var debugCmd = &cobra.Command{
 	Use:   "debug [command]",
