@@ -69,6 +69,7 @@ func TestJoinReader(t *testing.T) {
 		input           [][]tree.Datum
 		lookupCols      columns
 		indexFilterExpr Expression
+		joinType        sqlbase.JoinType
 		outputTypes     []sqlbase.ColumnType
 		expected        string
 	}{
@@ -187,6 +188,55 @@ func TestJoinReader(t *testing.T) {
 			outputTypes:     oneIntCol,
 			expected:        "[[3]]",
 		},
+		{
+			description: "Test left outer lookup join on primary index",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(100), bFn(100)},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftOuterJoin,
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [10 0 NULL]]",
+		},
+		{
+			description: "Test left outer lookup join on covering secondary index",
+			indexIdx:    1,
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 5},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(2), tree.DNull},
+				{tree.NewDInt(10), tree.DNull},
+			},
+			lookupCols:      []uint32{0},
+			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			joinType:        sqlbase.LeftOuterJoin,
+			outputTypes:     []sqlbase.ColumnType{intType, strType},
+			expected:        "[[2 'one-two'] [10 NULL]]",
+		},
+		{
+			description: "Test left outer lookup join on non-covering secondary index",
+			indexIdx:    1,
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 4},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(2), tree.DNull},
+				{tree.NewDInt(10), tree.DNull},
+			},
+			lookupCols:      []uint32{0},
+			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			joinType:        sqlbase.LeftOuterJoin,
+			outputTypes:     []sqlbase.ColumnType{intType, intType},
+			expected:        "[[2 3] [10 NULL]]",
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
@@ -219,6 +269,7 @@ func TestJoinReader(t *testing.T) {
 					LookupColumns:   c.lookupCols,
 					OnExpr:          Expression{Expr: c.onExpr},
 					IndexFilterExpr: c.indexFilterExpr,
+					Type:            c.joinType,
 				},
 				in,
 				&c.post,
