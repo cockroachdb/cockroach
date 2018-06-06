@@ -361,6 +361,13 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *projectSetNode:
+		// TODO(knz): we can propagate the part of the filter that applies
+		// to the source columns.
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -379,7 +386,6 @@ func (p *planner) propagateFilters(
 	case *dropSequenceNode:
 	case *DropUserNode:
 	case *hookFnNode:
-	case *valueGenerator:
 	case *valuesNode:
 	case *sequenceSelectNode:
 	case *setVarNode:

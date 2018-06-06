@@ -725,7 +725,7 @@ func (node *Placeholder) ResolvedType() types.T {
 // Tuple represents a parenthesized list of expressions.
 type Tuple struct {
 	Exprs  Exprs
-	Labels NameList
+	Labels []string
 	// Row indicates whether or not the tuple should be textually represented as
 	// ROW ( ... ).
 	Row bool
@@ -761,7 +761,12 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")
-		node.Labels.Format(ctx)
+		comma := ""
+		for i := range node.Labels {
+			ctx.WriteString(comma)
+			ctx.FormatNode((*Name)(&node.Labels[i]))
+			comma = ", "
+		}
 		ctx.WriteByte(')')
 	}
 }
@@ -1174,7 +1179,12 @@ func typesOfExprs(exprs Exprs) []types.T {
 	return types
 }
 
-// IsWindowFunctionApplication returns if the function is being applied as a window function.
+// IsGeneratorApplication returns true iff the function applied is a generator (SRF).
+func (node *FuncExpr) IsGeneratorApplication() bool {
+	return node.fn != nil && node.fn.Generator != nil
+}
+
+// IsWindowFunctionApplication returns true iff the function is being applied as a window function.
 func (node *FuncExpr) IsWindowFunctionApplication() bool {
 	return node.WindowDef != nil
 }
@@ -1549,7 +1559,6 @@ func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
-func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }

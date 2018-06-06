@@ -688,16 +688,16 @@ query error pq: mismatch in tuple definition: 1 expressions, 2 labels
 SELECT (ROW(1) AS a, b)
 
 # Tuple labels must be different
-query error pq: found duplicate tuple label: "a, a"
+query error pq: found duplicate tuple label: "a"
 SELECT ((1, '2') AS a, a)
 
-query error pq: found duplicate tuple label: "a, a, b"
+query error pq: found duplicate tuple label: "a"
 SELECT ((1, '2', true) AS a, a, b)
 
-query error pq: found duplicate tuple label: "a, b, a"
+query error pq: found duplicate tuple label: "a"
 SELECT ((1, '2', true) AS a, b, a)
 
-query error pq: found duplicate tuple label: "b, a, a"
+query error pq: found duplicate tuple label: "a"
 SELECT ((1, '2', true) AS b, a, a)
 
 # But inner tuples can reuse labels
@@ -743,7 +743,7 @@ query error pq: type tuple{int, int, int} is not composite
 SELECT ((1,2,3)).*
 
 # Non unique labels
-query error pq: found duplicate tuple label: "a, b, a"
+query error pq: found duplicate tuple label: "a"
 SELECT (((1,'2',true) AS a,b,a)).a
 
 ## The following are all cases that will be addressed in future work

@@ -309,10 +309,6 @@ func TestInternType(t *testing.T) {
 		types.TTuple{Types: []types.T{types.Decimal, types.Int}},
 		false,
 	)
-
-	// TTable type ignores labels as part of key.
-	ttuple := types.TTuple{Types: []types.T{types.Bytes, types.JSON}}
-	test(types.TTable{Cols: ttuple, Labels: []string{"a"}}, types.TTable{Cols: ttuple}, true)
 }
 
 func TestInternColType(t *testing.T) {

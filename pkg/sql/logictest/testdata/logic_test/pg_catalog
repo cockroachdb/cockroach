@@ -41,6 +41,7 @@ pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
+pg_shdescription
 pg_stat_activity
 pg_tables
 pg_tablespace
@@ -102,6 +103,7 @@ pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
+pg_shdescription
 pg_stat_activity
 pg_tables
 pg_tablespace
@@ -1135,6 +1137,13 @@ query OOIT colnames
 SELECT objoid, classoid, objsubid, description FROM pg_catalog.pg_description
 ----
 objoid  classoid  objsubid  description
+
+## pg_catalog.pg_shdescription
+
+query OOT colnames
+SELECT objoid, classoid, description FROM pg_catalog.pg_shdescription
+----
+objoid  classoid  description
 
 ## pg_catalog.pg_enum
 

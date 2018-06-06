@@ -112,8 +112,6 @@ var (
 	FamTuple T = TTuple{}
 	// FamArray is the type family of a DArray. CANNOT be compared with ==.
 	FamArray T = TArray{}
-	// FamTable is the type family of a DTable. CANNOT be compared with ==.
-	FamTable T = TTable{}
 	// FamPlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	FamPlaceholder T = TPlaceholder{}
@@ -478,40 +476,6 @@ func (a TArray) SQLName() string {
 // IsAmbiguous implements the T interface.
 func (a TArray) IsAmbiguous() bool {
 	return a.Typ == nil || a.Typ.IsAmbiguous()
-}
-
-// TTable is the type of a DTable.
-// See the comments at the start of generator_builtins.go for details.
-type TTable struct {
-	Cols   TTuple
-	Labels []string
-}
-
-func (a TTable) String() string { return "setof " + a.Cols.String() }
-
-// Equivalent implements the T interface.
-func (a TTable) Equivalent(other T) bool {
-	if u, ok := UnwrapType(other).(TTable); ok {
-		return a.Cols.Equivalent(u.Cols)
-	}
-	return false
-}
-
-// FamilyEqual implements the T interface.
-func (TTable) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TTable)
-	return ok
-}
-
-// Oid implements the T interface.
-func (TTable) Oid() oid.Oid { return oid.T_anyelement }
-
-// SQLName implements the T interface.
-func (TTable) SQLName() string { return "anyelement" }
-
-// IsAmbiguous implements the T interface.
-func (a TTable) IsAmbiguous() bool {
-	return a.Cols.Types == nil || a.Cols.IsAmbiguous()
 }
 
 type tAny struct{}
