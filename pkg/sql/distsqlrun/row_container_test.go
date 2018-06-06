@@ -19,6 +19,8 @@ import (
 	"math"
 	"testing"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -27,6 +29,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
+
+// verifyRows verifies that the rows read with the given rowIterator match up
+// with  the given rows. evalCtx and ordering are used to compare rows.
+func verifyRows(
+	ctx context.Context,
+	i rowIterator,
+	expectedRows sqlbase.EncDatumRows,
+	evalCtx *tree.EvalContext,
+	ordering sqlbase.ColumnOrdering,
+) error {
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if cmp, err := compareRows(
+			oneIntCol, row, expectedRows[0], evalCtx, &sqlbase.DatumAlloc{}, ordering,
+		); err != nil {
+			return err
+		} else if cmp != 0 {
+			return fmt.Errorf("unexpected row %v, expected %v", row, expectedRows[0])
+		}
+		expectedRows = expectedRows[1:]
+	}
+	if len(expectedRows) != 0 {
+		return fmt.Errorf("iterator missed %d row(s)", len(expectedRows))
+	}
+	return nil
+}
 
 // TestRowContainerReplaceMax verifies that MaybeReplaceMax correctly adjusts
 // the memory accounting.
@@ -86,4 +122,57 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	for mc.Len() > 0 {
 		mc.PopFirst()
 	}
+}
+
+func TestRowContainerIterators(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	const numRows = 10
+	const numCols = 1
+	rows := makeIntRows(numRows, numCols)
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+
+	var mc memRowContainer
+	mc.init(
+		ordering,
+		oneIntCol,
+		evalCtx,
+	)
+	defer mc.Close(ctx)
+
+	for _, row := range rows {
+		if err := mc.AddRow(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// NewIterator verifies that we read the expected rows from the
+	// memRowContainer and can recreate an iterator.
+	t.Run("NewIterator", func(t *testing.T) {
+		for k := 0; k < 2; k++ {
+			i := mc.NewIterator(ctx)
+			if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+				t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
+			}
+			i.Close()
+		}
+	})
+
+	// NewFinalIterator verifies that we read the expected rows from the
+	// memRowContainer and as we do so, these rows are deleted from the
+	// memRowContainer.
+	t.Run("NewFinalIterator", func(t *testing.T) {
+		i := mc.NewFinalIterator(ctx)
+		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+			t.Fatal(err)
+		}
+		if mc.Len() != 0 {
+			t.Fatal("memRowContainer is not empty")
+		}
+	})
 }

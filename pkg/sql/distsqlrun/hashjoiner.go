@@ -469,7 +469,7 @@ func (h *hashJoiner) buildPhase(
 	}
 
 	// Transfer rows from memory.
-	i := h.rows[h.storedSide].NewIterator(ctx)
+	i := h.rows[h.storedSide].NewFinalIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
 		if err := h.cancelChecker.Check(); err != nil {
@@ -636,7 +636,7 @@ func (h *hashJoiner) probePhase(
 		src = h.rightSource
 	}
 	// First process the rows that were already buffered.
-	probeIterator := h.rows[side].NewIterator(ctx)
+	probeIterator := h.rows[side].NewFinalIterator(ctx)
 	defer probeIterator.Close()
 	for probeIterator.Rewind(); ; probeIterator.Next() {
 		if ok, err := probeIterator.Valid(); err != nil {
