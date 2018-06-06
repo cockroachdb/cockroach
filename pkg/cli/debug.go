@@ -57,7 +57,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var debugKeysCmd = &cobra.Command{
+// DebugKeysCmd dumps keys.
+var DebugKeysCmd = &cobra.Command{
 	Use:   "keys <directory>",
 	Short: "dump all the keys in a store",
 	Long: `
@@ -77,6 +78,11 @@ Create a ballast file to fill the store directory up to a given amount
 	RunE: runDebugBallast,
 }
 
+// PopulateRocksDBConfigHook is a callback set by CCL code.
+// It populates any needed fields in the RocksDBConfig.
+// It must do nothing in OSS code.
+var PopulateRocksDBConfigHook func(*engine.RocksDBConfig) error
+
 func parseRangeID(arg string) (roachpb.RangeID, error) {
 	rangeIDInt, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
@@ -95,19 +101,26 @@ func openExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engin
 	if err != nil {
 		return nil, err
 	}
-	db, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
-			Settings:     serverCfg.Settings,
-			Dir:          dir,
-			MaxOpenFiles: maxOpenFiles,
-			MustExist:    true,
-			ReadOnly:     readOnly,
-		},
-		cache,
-	)
+
+	cfg := engine.RocksDBConfig{
+		Settings:     serverCfg.Settings,
+		Dir:          dir,
+		MaxOpenFiles: maxOpenFiles,
+		MustExist:    true,
+		ReadOnly:     readOnly,
+	}
+
+	if PopulateRocksDBConfigHook != nil {
+		if err := PopulateRocksDBConfigHook(&cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	db, err := engine.NewRocksDB(cfg, cache)
 	if err != nil {
 		return nil, err
 	}
+
 	stopper.AddCloser(db)
 	return db, nil
 }
@@ -219,7 +232,8 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugRangeDataCmd = &cobra.Command{
+// DebugRangeDataCmd dumps data for a range.
+var DebugRangeDataCmd = &cobra.Command{
 	Use:   "range-data <directory> <range id>",
 	Short: "dump all the data in a range",
 	Long: `
@@ -268,7 +282,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugRangeDescriptorsCmd = &cobra.Command{
+// DebugRangeDescriptorsCmd prints range descriptors.
+var DebugRangeDescriptorsCmd = &cobra.Command{
 	Use:   "range-descriptors <directory>",
 	Short: "print all range descriptors in a store",
 	Long: `
@@ -526,7 +541,8 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 	},
 }
 
-var debugRaftLogCmd = &cobra.Command{
+// DebugRaftLogCmd prints raft log entries.
+var DebugRaftLogCmd = &cobra.Command{
 	Use:   "raft-log <directory> <range id>",
 	Short: "print the raft log for a range",
 	Long: `
@@ -607,7 +623,8 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	return db.Iterate(start, end, printRaftLogEntry)
 }
 
-var debugGCCmd = &cobra.Command{
+// DebugGCCmd print GC information.
+var DebugGCCmd = &cobra.Command{
 	Use:   "estimate-gc <directory> [range id]",
 	Short: "find out what a GC run would do",
 	Long: `
@@ -693,7 +710,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugCheckStoreCmd = &cobra.Command{
+// DebugCheckStoreCmd checks store consistency.
+var DebugCheckStoreCmd = &cobra.Command{
 	Use:   "check-store <directory>",
 	Short: "consistency check for a single store",
 	Long: `
@@ -850,6 +868,7 @@ as 'ldb'.
 https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb-tool
 `,
 	// LDB does its own flag parsing.
+	// TODO(mberhault): support encrypted stores.
 	DisableFlagParsing: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		engine.RunLDB(args)
@@ -869,7 +888,8 @@ Output environment variables that influence configuration.
 	},
 }
 
-var debugCompactCmd = &cobra.Command{
+// DebugCompactCmd compacts sstables.
+var DebugCompactCmd = &cobra.Command{
 	Use:   "compact <directory>",
 	Short: "compact the sstables in a store",
 	Long: `
@@ -910,7 +930,8 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugSSTablesCmd = &cobra.Command{
+// DebugSSTablesCmd lists sstables.
+var DebugSSTablesCmd = &cobra.Command{
 	Use:   "sstables <directory>",
 	Short: "list the sstables in a store",
 	Long: `
@@ -1097,23 +1118,28 @@ func init() {
 		"only write to the WAL, not to sstables")
 }
 
-var debugCmds = []*cobra.Command{
+// DebugCmdsForRocksDB lists debug commands that access rocksdb.
+var DebugCmdsForRocksDB = []*cobra.Command{
+	DebugCheckStoreCmd,
+	DebugCompactCmd,
+	DebugGCCmd,
+	DebugKeysCmd,
+	DebugRaftLogCmd,
+	DebugRangeDataCmd,
+	DebugRangeDescriptorsCmd,
+	DebugSSTablesCmd,
+}
+
+// All other debug commands go here.
+var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
-	debugKeysCmd,
-	debugRangeDataCmd,
-	debugRangeDescriptorsCmd,
 	debugDecodeKeyCmd,
-	debugRaftLogCmd,
-	debugGCCmd,
-	debugCheckStoreCmd,
 	debugRocksDBCmd,
-	debugCompactCmd,
-	debugSSTablesCmd,
 	debugGossipValuesCmd,
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
-}
+)
 
 var debugCmd = &cobra.Command{
 	Use:   "debug [command]",
