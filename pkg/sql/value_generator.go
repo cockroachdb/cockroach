@@ -41,11 +41,13 @@ type valueGenerator struct {
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
 func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
-	if err := p.txCtx.AssertNoAggregationOrWindowing(
-		t, "FROM", p.SessionData().SearchPath,
-	); err != nil {
-		return nil, err
-	}
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
+
+	// Ensure there are no aggregate or window functions in the clause.
+	p.semaCtx.Properties.Require("FROM", tree.RejectAggregates|tree.RejectWindowApplications)
 
 	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 	normalized, err := p.analyzeExpr(

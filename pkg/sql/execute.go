@@ -19,7 +19,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -72,20 +71,17 @@ func fillInPlaceholders(
 	}
 
 	qArgs := make(tree.QueryArguments, len(params))
-	var t transform.ExprTransformContext
+	var semaCtx tree.SemaContext
 	for i, e := range params {
 		idx := strconv.Itoa(i + 1)
+
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 			e, ps.TypeHints[idx], "EXECUTE parameter", /* context */
-			nil /* semaCtx */, nil /* evalCtx */)
+			&semaCtx, nil /* evalCtx */, true /* allowImpure */)
 		if err != nil {
 			return nil, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := t.AssertNoAggregationOrWindowing(
-			typedExpr, "EXECUTE parameters", searchPath,
-		); err != nil {
-			return nil, err
-		}
+
 		qArgs[idx] = typedExpr
 	}
 	return &tree.PlaceholderInfo{

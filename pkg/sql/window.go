@@ -97,7 +97,7 @@ func (p *planner) window(
 	// renders to determine this because window functions may be added to the
 	// renderNode by an ORDER BY clause.
 	// For instance: SELECT x FROM y ORDER BY avg(x) OVER ().
-	if containsWindowFn := p.txCtx.WindowFuncInExprs(s.render); !containsWindowFn {
+	if !s.renderProps.SeenWindowApplication {
 		return nil, nil
 	}
 

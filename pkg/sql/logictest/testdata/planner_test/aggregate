@@ -856,3 +856,21 @@ render                    ·            ·                          ("1")       
                 └── scan  ·            ·                          (k[omitted], v, w, s[omitted])  k!=NULL; key(k)
 ·                         table        kv@primary                 ·                               ·
 ·                         spans        ALL                        ·                               ·
+
+# Regression test for #26419
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 123 FROM kv ORDER BY max(v)
+----
+sort                      ·            ·                 ("123")                                  "123"=CONST
+ │                        order        +max              ·                                        ·
+ └── render               ·            ·                 ("123", max)                             "123"=CONST
+      │                   render 0     123               ·                                        ·
+      │                   render 1     agg0              ·                                        ·
+      └── group           ·            ·                 (agg0)                                   ·
+           │              aggregate 0  max(v)            ·                                        ·
+           └── render     ·            ·                 (v)                                      v!=NULL
+                │         render 0     test.public.kv.v  ·                                        ·
+                └── scan  ·            ·                 (k[omitted], v, w[omitted], s[omitted])  k!=NULL; v!=NULL; key(k)
+·                         table        kv@primary        ·                                        ·
+·                         spans        ALL               ·                                        ·
+·                         filter       v IS NOT NULL     ·                                        ·

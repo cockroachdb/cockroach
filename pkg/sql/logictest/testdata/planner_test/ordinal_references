@@ -21,9 +21,9 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 group           ·            ·                  (m)                                     ·
- │              aggregate 0  min(a)             ·                                       ·
+ │              aggregate 0  min(@1)            ·                                       ·
  │              group by     @1                 ·                                       ·
- └── render     ·            ·                  (a)                                     ·
+ └── render     ·            ·                  ("@1")                                  ·
       │         render 0     test.public.foo.a  ·                                       ·
       └── scan  ·            ·                  (a, b[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
 ·               table        foo@primary        ·                                       ·
@@ -35,7 +35,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 group           ·            ·                  (m)                            ·
  │              aggregate 0  min(a)             ·                              ·
  │              group by     @1                 ·                              ·
- └── render     ·            ·                  (b, a)                         ·
+ └── render     ·            ·                  ("@2", a)                      ·
       │         render 0     test.public.foo.b  ·                              ·
       │         render 1     test.public.foo.a  ·                              ·
       └── scan  ·            ·                  (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)

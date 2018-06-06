@@ -319,7 +319,7 @@ func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 		}
 	}
 
-	panic(fmt.Errorf("aggregate function is not allowed in this context"))
+	panic(unimplementedf("woops the aggregate semantic analysis is incomplete"))
 }
 
 // endAggFunc is called when the builder finishes building an aggregate

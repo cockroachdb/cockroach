@@ -15,7 +15,6 @@
 package transform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -48,6 +47,10 @@ func (t *ExprTransformContext) NormalizeExpr(
 }
 
 // AggregateInExpr determines if an Expr contains an aggregate function.
+// TODO(knz/radu): this is not the right way to go about checking
+// these things. Instead whatever analysis occurs prior on the expression
+// should collect scalar properties (see tree.ScalarProperties) and
+// then the collected properties should be tested directly.
 func (t *ExprTransformContext) AggregateInExpr(
 	expr tree.Expr, searchPath sessiondata.SearchPath,
 ) bool {
@@ -61,61 +64,12 @@ func (t *ExprTransformContext) AggregateInExpr(
 	return t.isAggregateVisitor.Aggregated
 }
 
-// IsAggregate determines if the given SelectClause contains an
-// aggregate function.
-func (t *ExprTransformContext) IsAggregate(
-	n *tree.SelectClause, searchPath sessiondata.SearchPath,
-) bool {
-	if n.Having != nil || len(n.GroupBy) > 0 {
-		return true
-	}
-
-	t.isAggregateVisitor.searchPath = searchPath
-	defer t.isAggregateVisitor.Reset()
-	// Check SELECT expressions.
-	for _, target := range n.Exprs {
-		tree.WalkExprConst(&t.isAggregateVisitor, target.Expr)
-		if t.isAggregateVisitor.Aggregated {
-			return true
-		}
-	}
-	// Check DISTINCT ON expressions too.
-	for _, expr := range n.DistinctOn {
-		tree.WalkExprConst(&t.isAggregateVisitor, expr)
-		if t.isAggregateVisitor.Aggregated {
-			return true
-		}
-	}
-	return false
-}
-
-// AssertNoAggregationOrWindowing checks if the provided expression contains either
-// aggregate functions or window functions, returning an error in either case.
-func (t *ExprTransformContext) AssertNoAggregationOrWindowing(
-	expr tree.Expr, op string, searchPath sessiondata.SearchPath,
-) error {
-	if t.AggregateInExpr(expr, searchPath) {
-		return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op)
-	}
-	if t.WindowFuncInExpr(expr) {
-		return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op)
-	}
-	return nil
-}
-
 // WindowFuncInExpr determines if an Expr contains a window function, using
 // the Parser's embedded visitor.
+// TODO(knz/radu): this is not the right way to go about checking
+// these things. Instead whatever analysis occurs prior on the expression
+// should collect scalar properties (see tree.ScalarProperties) and
+// then the collected properties should be tested directly.
 func (t *ExprTransformContext) WindowFuncInExpr(expr tree.Expr) bool {
 	return t.containsWindowVisitor.ContainsWindowFunc(expr)
-}
-
-// WindowFuncInExprs determines if any of the provided TypedExpr contains a
-// window function, using the Parser's embedded visitor.
-func (t *ExprTransformContext) WindowFuncInExprs(exprs []tree.TypedExpr) bool {
-	for _, expr := range exprs {
-		if t.WindowFuncInExpr(expr) {
-			return true
-		}
-	}
-	return false
 }

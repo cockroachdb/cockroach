@@ -1126,3 +1126,9 @@ SELECT v, ARRAY_AGG('a') FROM kv GROUP BY v
 2     {"a","a","a"}
 4     {"a","a"}
 NULL  {"a"}
+
+# Regression test for #26419
+query I
+SELECT 123 FROM kv ORDER BY max(v)
+----
+123
