@@ -214,41 +214,38 @@
 # ############################
 # #  LEFT OUTER LOOKUP JOIN  #
 # ############################
-# statement ok
-# create table t (a int primary key, b int, c int, d int, index bc (b, c));
-# 
 # # Left join against primary index
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, a FROM (VALUES (1), (3)) AS v(x) LEFT JOIN t ON x = a]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.b, t2.a FROM multiples t1 LEFT JOIN multiples t2 ON t1.b = t2.a]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUUE9LwzAUv_spwjspBNYWTzkVYULHWKVUL9JDaB4zrssL-QOO0e8uaQ46YaK3vN_L7987gyGFO3lED-IVShg4WEcjek8uQflDoz5AFBy0sTEkeOAwkkMQZwg6TAgCXuQU0a8K4KAwSD0tivfsgd1WbHyL5uDvYJg5UAxfKj7IPYIoZv53pw1p06FU6FblpVt_sijYdv3Ys_a5X3ds0zY7SJX0UbpTHYDDlugQLXsnbRgZweqk0caQXryurkYs_xOxQ2_JeLyId738wAHVHvPBPUU34pOjcbHJY7vwFkChD3lb5qExeZUCfieXv5KrH-RhvvkMAAD__w9jqsA=
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF-Lm0AUxd_7KeQ-T1lHTTY7T3nZQpYlKSF9Kj5Y57LYmrnDzAhdFr97UUujIR2FCD7On-PveM5wP0CRxH12RgviO3BgEAGDGBgkwGAFKQNtKEdryTRXOsFO_gYRMiiUrlyznTLIySCID3CFKxEEnLIfJR4xk2geQmAg0WVF2WK0Kc6Zed-eq9IVukQLDA6VE8E2grRmQJW7fNe67A1B8JpNZ79Qof6iV0P06V2jCF6fv5yCw7fT8zF4Oez2wG5aeiX6VengJxUqICWCLf_nkzOP1ei_Vi8OK0VGokE5sJfWN35mT59JP_Dw6uZtdjxg8-kV8bkrGmH3KlovXVE0PaZo7phG2L2YHpeOKZ4eUzx3TCPsXkybpWNKpseUzB3TCLsX09PSMY2M8CNaTcripKkXNnMT5Rt2Q9ZSZXL8aihvMd3y0OraDYnWdae8W-xUd9QY7Iu5VxwNxPxaHPnJI-jYq0784uQe3yuveO0nr-8hP3rFGz95cw_5yd9VOPJM_I_smp3Wn_4EAAD__6ZdGew=
 # 
 # # Left join against covering secondary index
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9Lw0AUxO9-imVOCgttSk97CkKFlNJIiF4kh7j7qLFxX9g_oJR8d0n2oBUqets3b38zs3uCZUP79o081BMyNBKDY03es5ukdKEw71BLic4OMUxyI6HZEdQJoQs9QeGx7SP5xRIShkLb9bPjWtyK65XQL9Ee_Q2aUYJj-HLxoT0Q1HKUf0_acmcrag25RXaeVn8MpMRuc1eL8qHeVGJbFntIPOs8QGLHfIyDeOXOCrZK5BNexjCdZL6-2C77T7uK_MDW01mzy-9uJMgcKP215-g03TvWc0way5mbBUM-pG2WhsKm1VTwO5z9Cq9-wM149RkAAP__EYCogw==
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlF9r2zAUxd_3Kcx91qhlO2mqp7x0kFKSEbKn4QfXuhRvjq6QZFgp_u7D9ljtkMiGGNJH_Tn-HZ8j7jsokrjNjmhB_AQODCJgEAODBBgsIGWgDeVoLZnmSifYyD8gQgaF0pVrtlMGORkE8Q6ucCWCgEP2UuIeM4nmLgQGEl1WlC1Gm-KYmbf1sSpdoUu0wGBXORGsY0hrBlS5j-9al70iCF6z6ewnKtQ_9GKIPrxpFMHz47dDsPtxeNwHT7vNFhi85AM3z0S_Kx38okIFpESw5v8tcrZOLrqMLrr8MFcpMhINyoGztD7zH1v6SvqOhyc3z7PjAZtPb4fP3c4Iu9fO8obtRNMTiuZOaITdS-j-hgnF0xOK505ohN1LaHXDhJLpCSVzJzTC7iX08Elm4BmXe7SalMVJEy5sZiTKV-wGqqXK5PjdUN5iuuWu1bUbEq3rTnm32KjuqDHYF3OvOBqI-ak48pNH0LFXnfjFyTW-F17x0k9eXkO-94pXfvLqGvKDv6tw5Jn4H9kpO62__A0AAP__DxgOwA==
 # 
 # # Left join against non-covering secondary index
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9Lw0AUxO9-imVOCgttil72FIQKKaWREL1IDnH3UWPjvrB_QCn57pLsQStU9LZv3v5mZvcIy4Z27Rt5qCdkaCQGx5q8ZzdJ6UJh3qGWEp0dYpjkRkKzI6gjQhd6gsJj20fyiyUkDIW262fHa3ErLldCv0R78FdoRgmO4cvFh3ZPUMtR_j1pw52tqDXkFtlpWv0xkBLb9V0tyod6XYlNWewg8azzAIkt8yEO4pU7K9gqkU94GcN0kvnN2XbZf9pV5Ae2nk6anX93I0FmT-mvPUen6d6xnmPSWM7cLBjyIW2zNBQ2raaC3-HsV3j1A27Gi88AAAD__xJ9qIQ=
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlF9r2zAUxd_3Kcx91qhlO2mqp7x0kFKSEbKn4QfXuhRvjq6QZFgp_u7D9ljtkMiGGNJH_Tn-HZ8j7jsokrjNjmhB_AQODCJgEAODBBgsIGWgDeVoLZnmSifYyD8gQgaF0pVrtlMGORkE8Q6ucCWCgEP2UuIeM4nmLgQGEl1WlC1Gm-KYmbf1sSpdoUu0wGBXORGsY0hrBlS5j-9al70iCF6z6ewnKtQ_9GKIPrxpFMHz47dDsPtxeNwHT7vNFhi85AM3z0S_Kx38okIFpESw5v8tcrZeXHQZXXT5Ya5SZCQalANnaX3mP7b0lfQdD09unmfHAzaf3g6fu50Rdq-d5Q3biaYnFM2d0Ai7l9D9DROKpycUz53QCLuX0OqGCSXTE0rmTmiE3Uvo4ZPMwDMu92g1KYuTJlzYzEiUr9gNVEuVyfG7obzFdMtdq2s3JFrXnfJusVHdUWOwL-ZecTQQ81Nx5CePoGOvOvGLk2t8L7zipZ-8vIZ87xWv_OTVNeQHf1fhyDPxP7JTdlp_-RsAAP__KqEOxQ==
 # 
 # # Left join with ON filter on covering index
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 300]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.c < 20]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9r4zAQxe_7KYY5JSCInOSkk1lIwCHES_DuZeuDKw2JGldj9AcSQr57sX1oU0hpj_NGv_f0pCs6NrRrXimg-o8Z1gI7z5pCYN9L44HCnFFJgdZ1KfZyLVCzJ1RXjDa2hAr_NW2iMJMo0FBsbDs4LuE3TOagj8mdwhTrm0BO8d0lxOZAqORNfD9pw9btqTHkZ9l9WnXpSMF2ta6g_Fut9rApix0KfNZ5RIFb5lPq4IWtA3YK8h4vnKHz2raRvIJ8AU9JyoWGhZRKqWJXwcTbwzFCsIaAXXuZosAyxR4X-fJhpewnlfYUOnaB7uo8fqxaIJkDjR8UOHlNfzzrIWYcy4EbBEMhjttsHAo3rvoLfoSzL-H5J7i-_XoLAAD__xfiuIc=
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlc9r2zAUx-_7K8Q7baBR_0qa6pRLCy4lGcE7bT641iPT5ugZSYaGkv99OB6rHVrZkFxytK2vP-99npBeQZPEVbFDC-IHhMAhAg4xcEiAwwxyDrWhEq0l0y7pAql8ARFwULpuXPs651CSQRCv4JSrEARkxXOFGywkmpsAOEh0haqOmNqoXWH2y11TOVVXaIHDunGCLWPIDxyocW__ta7YIojwwKezH0npf-jZEJ3taxTs6f4hY-vv2f2GPa7TFXB4LgfVPBH9aWr2m5RmpAVbtmZSLfHlQVUOTVsq-9kEQVyyKBBCpKuMfTZq-8sxqyQy0tX-y_-2Qr5MPuws-rCzt4YaTUaiQTnoJj-80_uKvlJ9EwYnK99nxwN2OH2i4aUnOsLuTXR-ZRONpluNLm11hN2zentlVuPpVuNLWx1h96wursxqMt1qcmmrI-ye1bsrszpyW23Q1qQtTjqxg_bMR7nF7oKw1JgSvxkqj5jucX3MHV9ItK77GnYPqe4-tQX2w6E3HA3C4Wk48pNH0LE3nfjDyTl1z7zhuZ88P4d86w0v_OTFOeQ7_6yCkW3i32Sn7Pzw6W8AAAD__16RXd8=
 # 
 # # Left join with ON filter on non-covering index
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 3000]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.d < 30]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9rwkAQxe_9FMOcFBbcqL3sKRQUImKKpL20OaTZQbemO2H_gCJ-95Lk0FqwtMd5s7_39u2e0bKmTfVBHtULJlgKbB3X5D27ThoOZPqISgo0to2hk0uBNTtCdcZgQkOo8LlqIvmJRIGaQmWa3nEODzCaQr2P9uDHWF4EcgxfLj5UO0IlL-LvSSs2dkuVJjdJrtOKU0sK1otlAflTsdjCKs82KPCtTgMKXDMfYgvvbCywVZB2eGY1HZemCeQUpHN4jVLOaphJKZVS2aaAkTO7fQBvNAHb5jRGgXkMHS_S-5udkv902pJv2Xq66nP7tUqBpHc0_JDn6Gp6dFz3McOY91wvaPJh2CbDkNlh1V3wO5z8Ck9_wOXl7jMAAP__qcy4uQ==
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlUFvmzAUx-_7FNY7bZKnYiBp6hOXVqKqkilip40DxU-ZN2Ij20iNqnz3iTCtELUGKblwxPafn9_vWfYrKC1wXezRAv8BDCiEQCECCjFQWEBOoTa6RGu1aZd0gVS8AA8oSFU3rh3OKZTaIPBXcNJVCByy4rnCLRYCzU0AFAS6QlYnTG3kvjCHZN9UTtYVWqCwaRwnSQT5kYJu3Nt_rSt2CJwd6XT2o5bqH3oxRGeHGjl5un_IyOZ7dr8lj5t0DRSey8FunrT-09Tkt5aKaMVJ0ppJlcCXB1k5NJwkMfnZBEFUkijgnKfrjHw2cvfLESsFEq2qw5f_ZTGaLD6sLPywsreCGqWNQINiUE1-fKf2tf6q6xsWnK18nx0N2Gx6R9m1OzrC7nV0ObOOhtOthte2OsLuWb2dmdVoutXo2lZH2D2rq5lZjadbja9tdYTds3o3M6sjr9UWba2VxUk3dtDe-Sh22D0QVjemxG9GlydM97k55U4DAq3rZln3kapuqt1gP8y84XAQZufh0E8eQUfedOwPx5fse-ENL_3k5SXkW2945SevLiHf-XsVjBwT_yE7Z-fHT38DAAD__7jtXe4=
 # 
 # # Left join with ON filter and WHERE clause
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b WHERE d < 2000]
+# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHERE t2.d < 30]
 # ----
-# https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9Lw0AQxe9-iuWdFBa6qfaypyC0kFIaKdGL5hA3Q42NO2H_gFLy3SXJQStU9Dhv5vfeY_cIyzVtqzfy0I9IUEp0jg15z26QpoOsfodWEo3tYhjkUsKwI-gjQhNagsZD1UbyMwWJmkLVtKPjjbgVl3NhXqI9-CuUvQTH8OXiQ7UnaNXLvyetubE7qmpys-Q0rfjoSIvNclWI_L5Y7sQ6z7aQeDZpgMSG-RA78cqNFWy1SAd81bSBnBbpQjxFpa6NmCultNbZtoBEHsNwKNPF2fLJf8rvyHdsPZ0UP_8spQTVe5q-wnN0hu4cmzFmGvORG4WafJi2yTRkdloNBb_Dya_w_Adc9hefAQAA__-6pLCL
+# https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlUtr20AQx-_9FMuct0Srh-PsSZcEHIJdjHpqdVCkIaiVNcs-oCH4uxdZpZFMshLYBx338ddv9jfL6g1aqnBbHNCA_AECOITAIQIOMXBIIOegNJVoDOluSx_YVH9ABhzqVjnbTeccStII8g1sbRsECVnx3OAeiwr1TQAcKrRF3ZwwSteHQr-mB9fYWjVogMPOWcnSCPIjB3L2_bvGFi8IUhz5fPYj1e0_dDJGZ68KJXu6f8jY7nt2v2ePu80WODyXo2qeiH47xX5R3TJqJUs7Mw91Y1FLlibspwuCqGRRIKXcbLP_9QueJp8eIfz0CO-Vu5Z0hRqrUdn58YNDbukrqRsRnO38mB2N2GJ-68S1WzfBHrRutdTWhfP1hdfWN8Ee6Ltdqr5ovr7o2vom2AN966Xqi-fri6-tb4I90He3VH0Tv449GkWtwVmvatC9y1i9YP-IG3K6xG-ayhOmH-5OudNEhcb2q6IfbNp-qStwGBbecDgKi_Nw6CdPoCNvOvaH40vqTrzhlZ-8uoR86w2v_eT1JeQ7f6-CiWviv2Tn7Pz45W8AAAD__4bONQ0=
