@@ -20,6 +20,8 @@
 #include <string>
 #include "include/libroach.h"
 
+namespace testutils {
+
 // Returns initialized DBOptions with reasonable values for unittests.
 inline DBOptions defaultDBOptions() {
   return DBOptions{
@@ -33,11 +35,6 @@ inline DBOptions defaultDBOptions() {
       DBSlice(),  // extra_options
   };
 }
-
-namespace testutils {
-
-rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg);
-rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg);
 
 // FakeTimeEnv is a simple wrapper around a rocksdb::Env that returns a fixed time
 // set through SetCurrentTime.
@@ -55,6 +52,29 @@ class FakeTimeEnv : public rocksdb::EnvWrapper {
   int64_t fake_time_;
 };
 
+// TempDirHandler will create a temporary directory at initialization time
+// and destroy it and all its contents at destruction time.
+class TempDirHandler {
+ public:
+  // Directory name will be /tmp/tmp-ccl-XXXXXX
+  TempDirHandler();
+  ~TempDirHandler();
+
+  // Initialize the temp directory. Returns true on success.
+  // Must be called and checked before any other uses of this class.
+  bool Init();
+
+  // Path takes a file or directory name and returns its full path
+  // inside the tmp directory.
+  std::string Path(const std::string& subpath);
+
+ private:
+  std::string tmp_dir_;
+};
+
+rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg, bool partial);
+rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg, bool partial);
+
 }  // namespace testutils
 
 // clang-format isn't so great for macros.
@@ -67,8 +87,32 @@ class FakeTimeEnv : public rocksdb::EnvWrapper {
 // 'err_msg' (regexp full match).
 #define EXPECT_ERR(status, err_msg)\
   {\
-    auto s(testutils::compareErrorMessage(status, err_msg)); \
+    auto s(testutils::compareErrorMessage(status, err_msg, false)); \
     EXPECT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp full match).
+#define ASSERT_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, false)); \
+    ASSERT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp partial match).
+#define EXPECT_PARTIAL_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, true)); \
+    EXPECT_TRUE(s.ok()) << s.getState();\
+  }
+
+// If err_msg is empty, status must be ok. Otherwise, the status message must match
+// 'err_msg' (regexp partial match).
+#define ASSERT_PARTIAL_ERR(status, err_msg)\
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg, true)); \
+    ASSERT_TRUE(s.ok()) << s.getState();\
   }
 
 // clang-format on

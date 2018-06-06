@@ -18,6 +18,7 @@
 #include "testutils.h"
 
 using namespace cockroach;
+using namespace testutils;
 
 TEST(Libroach, DBOpenHook) {
   DBOptions db_opts;
@@ -64,15 +65,9 @@ TEST(Libroach, BatchSSTablesForCompaction) {
   };
 
   struct TestCase {
-    TestCase(const std::vector<rocksdb::SstFileMetaData>& s,
-             const std::string& start, const std::string& end,
-             uint64_t target, const std::string& expected)
-        : sst(s),
-          start_key(start),
-          end_key(end),
-          target_size(target),
-          expected_ranges(expected) {
-    }
+    TestCase(const std::vector<rocksdb::SstFileMetaData>& s, const std::string& start,
+             const std::string& end, uint64_t target, const std::string& expected)
+        : sst(s), start_key(start), end_key(end), target_size(target), expected_ranges(expected) {}
     std::vector<rocksdb::SstFileMetaData> sst;
     std::string start_key;
     std::string end_key;
@@ -81,28 +76,18 @@ TEST(Libroach, BatchSSTablesForCompaction) {
   };
 
   std::vector<TestCase> testCases = {
-    TestCase({ sst("a", "b", 10) },
-             "", "", 10, "-"),
-    TestCase({ sst("a", "b", 10) },
-             "a", "", 10, "a-"),
-    TestCase({ sst("a", "b", 10) },
-             "", "b", 10, "-b"),
-    TestCase({ sst("a", "b", 10) },
-             "a", "b", 10, "a-b"),
-    TestCase({ sst("c", "d", 10) },
-             "a", "b", 10, "a-b"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10) },
-             "a", "c", 10, "a-b,b-c"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10) },
-             "a", "c", 100, "a-c"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10) },
-             "", "c", 10, "-b,b-c"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10) },
-             "a", "", 10, "a-b,b-"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10), sst("c", "d", 10) },
-             "a", "d", 10, "a-b,b-c,c-d"),
-    TestCase({ sst("a", "b", 10), sst("b", "c", 10), sst("c", "d", 10) },
-             "a", "d", 20, "a-c,c-d"),
+      TestCase({sst("a", "b", 10)}, "", "", 10, "-"),
+      TestCase({sst("a", "b", 10)}, "a", "", 10, "a-"),
+      TestCase({sst("a", "b", 10)}, "", "b", 10, "-b"),
+      TestCase({sst("a", "b", 10)}, "a", "b", 10, "a-b"),
+      TestCase({sst("c", "d", 10)}, "a", "b", 10, "a-b"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10)}, "a", "c", 10, "a-b,b-c"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10)}, "a", "c", 100, "a-c"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10)}, "", "c", 10, "-b,b-c"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10)}, "a", "", 10, "a-b,b-"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10), sst("c", "d", 10)}, "a", "d", 10,
+               "a-b,b-c,c-d"),
+      TestCase({sst("a", "b", 10), sst("b", "c", 10), sst("c", "d", 10)}, "a", "d", 20, "a-c,c-d"),
   };
   for (auto c : testCases) {
     std::vector<rocksdb::Range> ranges;

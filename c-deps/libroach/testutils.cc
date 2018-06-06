@@ -12,10 +12,13 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include "testutils.h"
+#include <experimental/filesystem>
 #include <google/protobuf/stubs/stringprintf.h>
 #include <gtest/gtest.h>
 #include <regex>
 #include <rocksdb/status.h>
+#include <stdlib.h>
 #include <string>
 #include "fmt.h"
 
@@ -27,7 +30,39 @@ void __attribute__((weak)) rocksDBLog(char*, int) {}
 
 namespace testutils {
 
-rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg) {
+TempDirHandler::TempDirHandler() {}
+
+TempDirHandler::~TempDirHandler() {
+  if (tmp_dir_ == "") {
+    return;
+  }
+  std::experimental::filesystem::remove_all(tmp_dir_);
+}
+
+bool TempDirHandler::Init() {
+  auto fs_dir = std::experimental::filesystem::temp_directory_path() / "tmpccl.XXXXXX";
+
+  // mkdtemp needs a []char to modify.
+  char* tmpl = new char[strlen(fs_dir.c_str()) + 1];
+  strncpy(tmpl, fs_dir.c_str(), strlen(fs_dir.c_str()));
+
+  auto tmp_c_dir = mkdtemp(tmpl);
+  if (tmp_c_dir != NULL) {
+    tmp_dir_ = std::string(tmp_c_dir);
+  } else {
+    std::cerr << "Error creating temp directory" << std::endl;
+  }
+
+  delete[] tmpl;
+  return (tmp_c_dir != NULL);
+}
+
+std::string TempDirHandler::Path(const std::string& subpath) {
+  auto fullpath = std::experimental::filesystem::path(tmp_dir_) / subpath;
+  return fullpath.string();
+}
+
+rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg, bool partial) {
   if (strcmp("", err_msg) == 0) {
     // Expected success.
     if (status.ok()) {
@@ -43,15 +78,25 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
         fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
   std::regex re(err_msg);
-  if (std::regex_match(status.getState(), re)) {
-    return rocksdb::Status::OK();
+  if (partial) {
+    // Partial regexp match.
+    std::cmatch cm;
+    if (std::regex_search(status.getState(), cm, re)) {
+      return rocksdb::Status::OK();
+    }
+  } else {
+    // Full regexp match.
+    if (std::regex_match(status.getState(), re)) {
+      return rocksdb::Status::OK();
+    }
   }
+
   return rocksdb::Status::InvalidArgument(
       fmt::StringPrintf("expected error \"%s\", got \"%s\"", err_msg, status.getState()));
 }
 
-rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg) {
-  return compareErrorMessage(status, err_msg.c_str());
+rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg, bool partial) {
+  return compareErrorMessage(status, err_msg.c_str(), partial);
 }
 
 }  // namespace testutils

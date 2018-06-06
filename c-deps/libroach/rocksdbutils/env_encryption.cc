@@ -497,26 +497,27 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
   }
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) override {
-    auto status = file_registry_->MaybeDeleteEntry(fname);
+    auto status = EnvWrapper::DeleteFile(fname);
     if (!status.ok()) {
       return status;
     }
-    return EnvWrapper::DeleteFile(fname);
+    return file_registry_->MaybeDeleteEntry(fname);
   }
+
   virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) override {
-    auto status = file_registry_->MaybeRenameEntry(src, target);
+    auto status = EnvWrapper::RenameFile(src, target);
     if (!status.ok()) {
       return status;
     }
-    return EnvWrapper::RenameFile(src, target);
+    return file_registry_->MaybeRenameEntry(src, target);
   }
 
   virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) override {
-    auto status = file_registry_->MaybeLinkEntry(src, target);
+    auto status = EnvWrapper::LinkFile(src, target);
     if (!status.ok()) {
       return status;
     }
-    return EnvWrapper::LinkFile(src, target);
+    return file_registry_->MaybeLinkEntry(src, target);
   }
 
   rocksdb::Status
