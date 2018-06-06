@@ -793,6 +793,22 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// pg_is_xlog_replay_paused returns true if the Postgres database is currently
+	// in recovery but that recovery is paused.  This is not applicable so this
+	// can always return false.
+	// https://www.postgresql.org/docs/9.6/static/functions-admin.html#FUNCTIONS-RECOVERY-CONTROL-TABLE
+	// Note that this function was removed from Postgres in version 10.
+	"pg_is_xlog_replay_paused": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(*tree.EvalContext, tree.Datums) (tree.Datum, error) {
+				return tree.DBoolFalse, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// Access Privilege Inquiry Functions allow users to query object access
 	// privileges programmatically. Each function has a number of variants,
 	// which differ based on their function signatures. These signatures have
