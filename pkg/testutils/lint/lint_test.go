@@ -870,6 +870,7 @@ func TestLint(t *testing.T) {
 				t.Error(err)
 				return
 			}
+			defer file.Close()
 			firstLine, err := bufio.NewReader(file).ReadString('\n')
 			if err != nil {
 				t.Errorf("reading first line of %s: %s", filename, err)
