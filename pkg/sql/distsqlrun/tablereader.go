@@ -270,12 +270,16 @@ var _ DistSQLSpanStats = &TableReaderStats{}
 func (trs *TableReaderStats) Stats() map[string]string {
 	return map[string]string{
 		"tablereader.input.rows": fmt.Sprintf("%d", trs.InputStats.NumRows),
+		"tablereader.stalltime":  fmt.Sprintf("%v", trs.InputStats.RoundStallTime()),
 	}
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
-	return []string{fmt.Sprintf("rows read: %d", trs.InputStats.NumRows)}
+	return []string{
+		fmt.Sprintf("rows read: %d", trs.InputStats.NumRows),
+		fmt.Sprintf("stall time: %v", trs.InputStats.RoundStallTime()),
+	}
 }
 
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
