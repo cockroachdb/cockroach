@@ -12,17 +12,15 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <vector>
-#include <utility>
 #include <gtest/gtest.h>
-#include "protos/roachpb/internal.pb.h"
+#include <utility>
+#include <vector>
 #include "merge.h"
+#include "protos/roachpb/internal.pb.h"
 
 using namespace cockroach;
 
-void testAddColumns(
-  roachpb::InternalTimeSeriesData* data, int offset, int value
-) {
+void testAddColumns(roachpb::InternalTimeSeriesData* data, int offset, int value) {
   data->add_offset(offset);
   data->add_count(value + 1);
   data->add_last(value + 2);
@@ -33,16 +31,12 @@ void testAddColumns(
   data->add_variance(value + 7);
 }
 
-void testAddColumnsNoRollup(
-  roachpb::InternalTimeSeriesData* data, int offset, int value
-) {
+void testAddColumnsNoRollup(roachpb::InternalTimeSeriesData* data, int offset, int value) {
   data->add_offset(offset);
   data->add_last(value);
 }
 
-void testAddRows(
-  roachpb::InternalTimeSeriesData* data, int offset, int value
-) {
+void testAddRows(roachpb::InternalTimeSeriesData* data, int offset, int value) {
   auto row = data->add_samples();
   row->set_offset(offset);
   row->set_sum(value);
@@ -57,166 +51,157 @@ TEST(TimeSeriesMerge, SortAndDeduplicate) {
     rowData originalRows;
     int firstUnsorted;
     rowData expectedRows;
-    TestCase(rowData orig, int first, rowData expected): 
-      originalRows(orig), firstUnsorted(first), expectedRows(expected) {};
+    TestCase(rowData orig, int first, rowData expected)
+        : originalRows(orig), firstUnsorted(first), expectedRows(expected){};
   };
 
   std::vector<TestCase> testCases = {
-    // Basic sorting and deduplication.
-    TestCase(
-      {
-        {10, 999},
-        {8, 1},
-        {9, 2},
-        {10, 0},
-        {4, 0},
-        {10, 3},
-      },
-      0,
-      {
-        {4, 0},
-        {8, 1},
-        {9, 2},
-        {10, 3},
-      }
-    ),
-    // Partial sorting and deduplication. The first index is intentionally out
-    // of order in order strongly demonstrate that only a suffix of the array
-    // is being sorted, anything before firstUnsorted is not modified.
-    TestCase(
-      {
-        {10, 999},
-        {8, 1},
-        {9, 2},
-        {10, 0},
-        {4, 0},
-        {10, 3},
-      },
-      3,
-      {
-        {10, 999},
-        {8, 1},
-        {9, 2},
-        {4, 0},
-        {10, 3},
-      }
-    ),
-    // Sort only last sample (common case).
-    TestCase(
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      },
-      4,
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    ),
-    // Already sorted.
-    TestCase(
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      },
-      0,
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    ),
-    // Single element shifted forward.
-    TestCase(
-      {
-        {5, 5},
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-      },
-      0,
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    ),
-    // Reversed.
-    TestCase(
-      {
-        {5, 5},
-        {4, 4},
-        {3, 3},
-        {2, 2},
-        {1, 1},
-      },
-      0,
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    ),
-    // Element shift with duplicate.
-    TestCase(
-      {
-        {5, 999},
-        {1, 1},
-        {2, 2},
-        {5, 5},
-        {3, 3},
-        {4, 4},
-      },
-      0,
-      {
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    ),
-    // Shift with firstUnsorted.
-    TestCase(
-      {
-        {99, 999},
-        {88, 888},
-        {77, 777},
-        {5, 5},
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-      },
-      3,
-      {
-        {99, 999},
-        {88, 888},
-        {77, 777},
-        {1, 1},
-        {2, 2},
-        {3, 3},
-        {4, 4},
-        {5, 5},
-      }
-    )
-  };
+      // Basic sorting and deduplication.
+      TestCase(
+          {
+              {10, 999},
+              {8, 1},
+              {9, 2},
+              {10, 0},
+              {4, 0},
+              {10, 3},
+          },
+          0,
+          {
+              {4, 0},
+              {8, 1},
+              {9, 2},
+              {10, 3},
+          }),
+      // Partial sorting and deduplication. The first index is intentionally out
+      // of order in order strongly demonstrate that only a suffix of the array
+      // is being sorted, anything before firstUnsorted is not modified.
+      TestCase(
+          {
+              {10, 999},
+              {8, 1},
+              {9, 2},
+              {10, 0},
+              {4, 0},
+              {10, 3},
+          },
+          3,
+          {
+              {10, 999},
+              {8, 1},
+              {9, 2},
+              {4, 0},
+              {10, 3},
+          }),
+      // Sort only last sample (common case).
+      TestCase(
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          },
+          4,
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          }),
+      // Already sorted.
+      TestCase(
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          },
+          0,
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          }),
+      // Single element shifted forward.
+      TestCase(
+          {
+              {5, 5},
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+          },
+          0,
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          }),
+      // Reversed.
+      TestCase(
+          {
+              {5, 5},
+              {4, 4},
+              {3, 3},
+              {2, 2},
+              {1, 1},
+          },
+          0,
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          }),
+      // Element shift with duplicate.
+      TestCase(
+          {
+              {5, 999},
+              {1, 1},
+              {2, 2},
+              {5, 5},
+              {3, 3},
+              {4, 4},
+          },
+          0,
+          {
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          }),
+      // Shift with firstUnsorted.
+      TestCase(
+          {
+              {99, 999},
+              {88, 888},
+              {77, 777},
+              {5, 5},
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+          },
+          3,
+          {
+              {99, 999},
+              {88, 888},
+              {77, 777},
+              {1, 1},
+              {2, 2},
+              {3, 3},
+              {4, 4},
+              {5, 5},
+          })};
   for (auto testCase : testCases) {
     roachpb::InternalTimeSeriesData orig;
     for (auto row : testCase.originalRows) {
