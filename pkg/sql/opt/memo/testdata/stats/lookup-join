@@ -63,6 +63,7 @@ project
       │    ├── lookup-join
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string)
       │    │    ├── table: a
+      │    │    ├── key columns: [1]
       │    │    ├── stats: [rows=200]
       │    │    ├── keys: (1)
       │    │    └── scan a@secondary
