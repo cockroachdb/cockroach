@@ -26,7 +26,7 @@ a         public              admin      ALL
 a         public              readwrite  ALL
 a         public              root       ALL
 
-# Show that by default GRANT is retricted to the current database
+# Show that by default GRANT is restricted to the current database
 query TTTTT colnames
 SHOW GRANTS
 ----
@@ -114,6 +114,7 @@ test      pg_catalog          pg_rewrite                         public  SELECT
 test      pg_catalog          pg_roles                           public  SELECT
 test      pg_catalog          pg_sequence                        public  SELECT
 test      pg_catalog          pg_settings                        public  SELECT
+test      pg_catalog          pg_shdescription                   public  SELECT
 test      pg_catalog          pg_stat_activity                   public  SELECT
 test      pg_catalog          pg_tables                          public  SELECT
 test      pg_catalog          pg_tablespace                      public  SELECT
