@@ -83,6 +83,8 @@ type hashRowContainer interface {
 
 	// Close frees up resources held by the hashRowContainer.
 	Close(context.Context)
+	// Empty indicates that there are zero rows in the hashRowContainer
+	Empty() bool
 }
 
 // columnEncoder is a utility struct used by implementations of hashRowContainer
@@ -201,6 +203,10 @@ func (h *hashMemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRo
 		return err
 	}
 	return h.addRowToBucket(ctx, row, rowIdx)
+}
+
+func (h *hashMemRowContainer) Empty() bool {
+	return h.memRowContainer.Len() == 0
 }
 
 // Close implements the hashRowContainer interface.
@@ -461,6 +467,12 @@ func (h *hashDiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumR
 		err = h.diskRowContainer.AddRow(ctx, row)
 	}
 	return err
+}
+
+func (i *hashDiskRowContainer) Empty() bool {
+	// This test is valid because hashDiskRowContainer has no functionality to
+	// remove rows.
+	return i.addedRows == 0
 }
 
 // hashDiskRowBucketIterator iterates over the rows in a bucket.

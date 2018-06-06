@@ -40,9 +40,9 @@ type diskRowContainer struct {
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
 
-	// rowID is used as a key suffix to prevent duplicate rows from overwriting
-	// each other.
-	rowID uint64
+	// addedRows counts how many rows were added to the container. It is used as a
+	// unique key suffix to prevent duplicate rows from overwriting each other.
+	addedRows uint64
 
 	// types is the schema of rows in the container.
 	types []sqlbase.ColumnType
@@ -140,7 +140,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 
 	// Put a unique row to keep track of duplicates. Note that this will not
 	// mess with key decoding.
-	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
+	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.addedRows)
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
 		return errors.Wrapf(err, "this query requires additional disk space")
 	}
@@ -149,7 +149,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	}
 	d.scratchKey = d.scratchKey[:0]
 	d.scratchVal = d.scratchVal[:0]
-	d.rowID++
+	d.addedRows++
 	return nil
 }
 

@@ -298,6 +298,12 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	log.VEventf(ctx, 1, "build phase complete")
 
+	// If storedSide is empty and we are processing an inner-join, we can early exit.
+	if h.joinType == sqlbase.InnerJoin && storedRows.Empty() {
+		DrainAndClose(ctx, h.out.output, err /* cause */, h.pushTrailingMeta, h.leftSource, h.rightSource)
+		return
+	}
+
 	if earlyExit, err := h.probePhase(ctx, storedRows); earlyExit || err != nil {
 		if err != nil {
 			// We got an error. We still want to drain. Any error encountered while
