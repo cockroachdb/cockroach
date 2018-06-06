@@ -240,36 +240,27 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── inner-join (merge)
+ └── inner-join (lookup a)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+      ├── key columns: [6] = [1]
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
-      ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── constraint: /1: [/101 - ]
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5)
-      │    └── ordering: +1
       ├── select
       │    ├── columns: x:6(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6)
-      │    ├── ordering: +6
       │    ├── scan xy
       │    │    ├── columns: x:6(int!null)
       │    │    ├── limit: 1
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(6)
-      │    │    └── ordering: +6
+      │    │    └── fd: ()-->(6)
       │    └── filters [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
       │         └── xy.x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +6
-           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: [/101 - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── a.k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
 opt
@@ -372,22 +363,17 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── inner-join (merge)
+ └── inner-join (lookup a)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+      ├── key columns: [6] = [1]
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
-      ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5)
-      │    └── ordering: +1
       ├── project
       │    ├── columns: x:6(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6)
-      │    ├── ordering: +6
       │    └── select
       │         ├── columns: x:6(int!null) y:7(int)
       │         ├── cardinality: [0 - 1]
@@ -400,11 +386,8 @@ project
       │         │    └── fd: ()-->(6,7)
       │         └── filters [type=bool, outer=(7)]
       │              └── (xy.y + 1) > 10 [type=bool, outer=(7)]
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +6
-           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Any clause with constant.
 opt

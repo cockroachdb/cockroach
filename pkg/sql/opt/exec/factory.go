@@ -126,6 +126,24 @@ type Factory interface {
 		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
 	) (Node, error)
 
+	// ConstructLookupJoin returns a node that preforms a lookup join.
+	// The keyCols are columns from the input used as keys for the columns of the
+	// index (or a prefix of them); lookupCols are ordinals for the table columns
+	// we are retrieving.
+	//
+	// The node produces the columns in the input and lookupCols (ordered by
+	// ordinal). The ON condition can refer to these using IndexedVars.
+	ConstructLookupJoin(
+		joinType sqlbase.JoinType,
+		input Node,
+		table opt.Table,
+		index opt.Index,
+		keyCols []ColumnOrdinal,
+		lookupCols ColumnOrdinalSet,
+		onCond tree.TypedExpr,
+		reqOrder sqlbase.ColumnOrdering,
+	) (Node, error)
+
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If one or the other is not needed, then it is
 	// set to nil.
