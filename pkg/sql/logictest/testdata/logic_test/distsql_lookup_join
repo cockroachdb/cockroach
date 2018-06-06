@@ -209,54 +209,84 @@ SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
 ############################
-statement ok
-create table t (a int primary key, b int, c int, d int, index bc (b, c));
-
-statement ok
-insert into t values
-  (1, 10, 100, 1000),
-  (2, 10, 200, 2000),
-  (3, 20, 300, 3000)
-
 # Left join against primary index
 query II rowsort
-SELECT x, b FROM (VALUES (2), (99)) AS v(x) LEFT JOIN t ON x = a
+SELECT t1.b, t2.a FROM multiples t1 LEFT JOIN multiples t2 ON t1.b = t2.a
 ----
-2 10
-99 NULL
+2 2
+4 4
+6 6
+8 8
+10 10
+12 NULL
+14 NULL
+16 NULL
+18 NULL
+20 NULL
 
 # Left join against covering secondary index
 query II rowsort
-SELECT x, c FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
+SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
 ----
-1 NULL
-10 100
-10 200
+3   NULL
+6   9
+9   NULL
+12  18
+15  NULL
+18  27
+21  NULL
+24  NULL
+27  NULL
+30  NULL
 
 # Left join against non-covering secondary index
 query II rowsort
-SELECT x, d FROM (VALUES (1), (10)) AS v(x) LEFT JOIN t@bc ON x = b
+SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
 ----
-1 NULL
-10 1000
-10 2000
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
+18  36
+21  NULL
+24  NULL
+27  NULL
+30  NULL
 
 # Left join with ON filter on covering index
 query II rowsort
-SELECT x, c FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND c < 200
+SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.c < 20
 ----
-10 100
-20 NULL
+3   NULL
+6   9
+9   NULL
+12  18
+15  NULL
+18  NULL
+21  NULL
+24  NULL
+27  NULL
+30  NULL
 
 # Left join with ON filter on non-covering index
 query II rowsort
-SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b AND d < 2000
+SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.d < 30
 ----
-10 1000
-20 NULL
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
+18  NULL
+21  NULL
+24  NULL
+27  NULL
+30  NULL
 
 # Left join with ON filter and WHERE clause
 query II rowsort
-SELECT x, d FROM (VALUES (10), (20)) AS v(x) LEFT JOIN t@bc ON x = b WHERE d < 2000
+SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHERE t2.d < 30
 ----
-10 1000
+6   12
+12  24
