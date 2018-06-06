@@ -705,8 +705,8 @@ check-libroach: $(LIBROACH_DIR)/Makefile $(LIBJEMALLOC) $(LIBPROTOBUF) $(LIBSNAP
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # Some targets (protobuf) produce different results depending on the sort order;
-# set LC_COLLATE so this is consistent across systems.
-export LC_COLLATE=C
+# set LC_ALL so this is consistent across systems.
+export LC_ALL=C
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
