@@ -141,11 +141,11 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
 	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
-	reverseMultiplier := memo.Cost(1)
+	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {
-		reverseMultiplier++
+		perRowCost *= 2
 	}
-	return rowCount * (seqIOCostFactor + reverseMultiplier*c.rowScanCost(def.Table, def.Index, def.Cols.Len()))
+	return rowCount * (seqIOCostFactor + perRowCost)
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
@@ -178,7 +178,7 @@ func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Lo
 
 	// A hash join must process every row from both tables once.
 	//
-	// We add some factors to account for the hashtable build and lookups.  The
+	// We add some factors to account for the hashtable build and lookups. The
 	// right side is the one stored in the hashtable, so we use a larger factor
 	// for that side. This ensures that a join with the smaller right side is
 	// preferred to the symmetric join.
@@ -209,21 +209,38 @@ func (c *coster) computeMergeJoinCost(candidate *memo.BestExpr, logical *props.L
 }
 
 func (c *coster) computeIndexJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	leftCost := c.mem.BestExprCost(candidate.Child(0))
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 	def := candidate.Private(c.mem).(*memo.IndexJoinDef)
+
+	cost := c.mem.BestExprCost(candidate.Child(0))
 
 	// The rows in the (left) input are used to probe into the (right) table.
 	// Since the matching rows in the table may not all be in the same range, this
 	// counts as random I/O.
 	perRowCost := cpuCostFactor + randIOCostFactor +
 		c.rowScanCost(def.Table, opt.PrimaryIndex, def.Cols.Len())
-	return leftCost + memo.Cost(leftRowCount)*perRowCost
+	cost += memo.Cost(leftRowCount) * perRowCost
+	return cost
 }
 
 func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	// TODO(radu): we can't execute lookup joins yet, set a very large cost.
-	return 1e100
+	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	def := candidate.Private(c.mem).(*memo.LookupJoinDef)
+
+	cost := c.mem.BestExprCost(candidate.Child(0))
+
+	// The rows in the (left) input are used to probe into the (right) table.
+	// Since the matching rows in the table may not all be in the same range, this
+	// counts as random I/O.
+	perLookupCost := memo.Cost(randIOCostFactor)
+	cost += memo.Cost(leftRowCount) * perLookupCost
+
+	// Each lookup might retrieve many rows; add the IO cost of retrieving the
+	// rows (relevant when we expect many resulting rows per lookup) and the CPU
+	// cost of emitting the rows.
+	perRowCost := seqIOCostFactor + c.rowScanCost(def.Table, def.Index, def.LookupCols.Len())
+	cost += memo.Cost(logical.Relational.Stats.RowCount) * perRowCost
+	return cost
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {
