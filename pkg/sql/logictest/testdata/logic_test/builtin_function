@@ -1778,3 +1778,11 @@ SELECT pg_is_in_recovery()
 ----
 pg_is_in_recovery
 false
+
+subtest pg_is_xlog_replay_paused
+
+query B colnames
+SELECT pg_is_xlog_replay_paused()
+----
+pg_is_xlog_replay_paused
+false
