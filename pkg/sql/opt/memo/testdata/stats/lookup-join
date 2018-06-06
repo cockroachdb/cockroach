@@ -66,7 +66,7 @@ project
       │    │    ├── stats: [rows=200]
       │    │    ├── keys: (1)
       │    │    └── scan a@secondary
-      │    │         ├── columns: x:1(int!null) s:3(string)
+      │    │         ├── columns: x:1(int!null) s:3(string!null)
       │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
       │    │         ├── stats: [rows=200, distinct(3)=1]
       │    │         └── keys: (1)
