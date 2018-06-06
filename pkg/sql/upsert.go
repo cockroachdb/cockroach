@@ -96,9 +96,6 @@ func (p *planner) newUpsertNode(
 	}()
 
 	if n.OnConflict.DoNothing {
-		// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
-		// conflict index, which means do nothing on any conflict. Support this if
-		// someone needs it.
 		if conflictIndex == nil {
 			un.run.tw = &strictTableUpserter{
 				ri:          ri,

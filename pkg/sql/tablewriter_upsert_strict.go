@@ -22,12 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // strictTableUpserter implements the conflict-intolerant path for an upsert. See
 // tableUpserter for the general case.
-
 type strictTableUpserter struct {
 	twb         tableWriterBase
 	ri          sqlbase.RowInserter
@@ -62,6 +60,7 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 
 	tu.resultCount = 0
 
+	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
 	if tu.collectRows {
 		tu.rowsUpserted = sqlbase.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
@@ -72,16 +71,17 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 	}
 
+	// Create the map from insert rows to returning rows
 	colIDToRetIndex := map[sqlbase.ColumnID]int{}
 	for i, col := range tableDesc.Columns {
 		colIDToRetIndex[col.ID] = i
 	}
-
 	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
 	for i, col := range tu.ri.InsertCols {
 		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 	}
 
+	// Initialize the insert rows
 	tu.insertRows.Init(
 		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
@@ -158,7 +158,7 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 	return nil
 }
 
-// get all unique indexes
+// Get all unique indexes and store them in tu.ConflictIndexes
 func (tu *strictTableUpserter) getUniqueIndexes() (err error) {
 	tableDesc := tu.tableDesc()
 	indexes := tableDesc.Indexes
@@ -237,11 +237,11 @@ func (tu *strictTableUpserter) getConflictingRows(
 		// There are (1 + len(tu.conflictIndexes)) * len(tu.InsertRows) results.
 		// All the results that correspond to a particular insertRow are next to each other.
 		// By this logic, the division computes the insertRow that is being queried for.
-		insertRowIndex := i / (1 + len(tu.conflictIndexes))
+		numIndexes := 1 + len(tu.conflictIndexes)
+		insertRowIndex := i / numIndexes
 
 		for _, row := range result.Rows {
 			// If any of the result values are not nil, then that means that the insert row is in conflict and should be marked as such.
-			log.Warningf(context.TODO(), "row.Key = %s, row.Value = %s", row.Key, row.Value)
 			if row.Value != nil {
 				conflictingRows[insertRowIndex] = struct{}{}
 			}

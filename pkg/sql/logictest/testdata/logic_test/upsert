@@ -10,16 +10,16 @@ CREATE TABLE ex(
 )
 
 statement count 1
-INSERT INTO ex(foo,bar,baz) VALUES(1,1,1)
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1)
 
 statement count 0
-INSERT INTO ex(foo,bar,baz) VALUES(1,1,1) ON CONFLICT DO NOTHING
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1) ON CONFLICT DO NOTHING
 
 statement count 0
-INSERT INTO ex(foo,bar,baz) VALUES(2,1,1) ON CONFLICT DO NOTHING
+INSERT INTO ex(foo,bar,baz) VALUES (2,1,1) ON CONFLICT DO NOTHING
 
 statement count 1
-INSERT INTO ex(foo,bar,baz) VALUES(3,2,2), (3,1,2), (4,2,1) ON CONFLICT DO NOTHING
+INSERT INTO ex(foo,bar,baz) VALUES (3,2,2), (3,1,2), (4,2,1) ON CONFLICT DO NOTHING
 
 query III colnames
 SELECT * from ex ORDER BY foo
@@ -45,7 +45,7 @@ CREATE TABLE ex2(
 )
 
 statement count 1
-INSERT INTO ex2(a,b,c,d,e) VALUES(0,0,0,0,0)
+INSERT INTO ex2(a,b,c,d,e) VALUES (0,0,0,0,0)
 
 statement count 0
 INSERT INTO ex2(a,b,c,d,e) VALUES (1,0,1,1,0), (2,4,0,0,5) ON CONFLICT DO NOTHING
