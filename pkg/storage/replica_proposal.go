@@ -437,7 +437,7 @@ func addSSTablePreApply(
 //
 // TODO(tschottdorf): there's also maybeTransferRaftLeader. Only one should exist.
 func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachpb.ReplicaID) {
-	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		// Only the raft leader can attempt a leadership transfer.
 		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
 			// Only attempt this if the target has all the log entries. Although
