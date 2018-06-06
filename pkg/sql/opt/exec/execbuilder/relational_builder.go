@@ -113,6 +113,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.IndexJoinOp:
 		ep, err = b.buildIndexJoin(ev)
 
+	case opt.LookupJoinOp:
+		ep, err = b.buildLookupJoin(ev)
+
 	case opt.ExplainOp:
 		ep, err = b.buildExplain(ev)
 
@@ -195,7 +198,8 @@ func (b *Builder) constructValues(
 }
 
 // getColumns returns the set of column ordinals in the table for the set of
-// column IDs, along with a mapping from the column IDs to output ordinals.
+// column IDs, along with a mapping from the column IDs to output ordinals
+// (starting with outputOrdinalStart).
 func (*Builder) getColumns(
 	md *opt.Metadata, cols opt.ColSet, tableID opt.TableID,
 ) (exec.ColumnOrdinalSet, opt.ColMap) {
@@ -385,14 +389,7 @@ func (b *Builder) initJoinBuild(
 		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 	}
 
-	// Calculate the outputCols map for the join plan: the first numLeftCols
-	// correspond to the columns from the left, the rest correspond to columns
-	// from the right (except for Anti and Semi joins).
-	numLeftCols := leftPlan.outputCols.Len()
-	allCols := leftPlan.outputCols.Copy()
-	rightPlan.outputCols.ForEach(func(colIdx, rightIdx int) {
-		allCols.Set(colIdx, rightIdx+numLeftCols)
-	})
+	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
@@ -408,6 +405,17 @@ func (b *Builder) initJoinBuild(
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
 	return leftPlan, rightPlan, onExpr, allCols, nil
+}
+
+// joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
+// the outputCols maps for its inputs.
+func joinOutputMap(left, right opt.ColMap) opt.ColMap {
+	numLeftCols := left.Len()
+	res := left.Copy()
+	right.ForEach(func(colIdx, rightIdx int) {
+		res.Set(colIdx, rightIdx+numLeftCols)
+	})
+	return res
 }
 
 func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
@@ -665,6 +673,56 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 		if err != nil {
 			return execPlan{}, err
 		}
+	}
+	return res, nil
+}
+
+func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	md := ev.Metadata()
+	def := ev.Private().(*memo.LookupJoinDef)
+
+	keyCols := make([]exec.ColumnOrdinal, len(def.KeyCols))
+	for i, c := range def.KeyCols {
+		keyCols[i] = input.getColumnOrdinal(c)
+	}
+
+	lookupCols, lookupColMap := b.getColumns(md, def.LookupCols, def.Table)
+	allCols := joinOutputMap(input.outputCols, lookupColMap)
+
+	res := execPlan{outputCols: allCols}
+
+	// Get sort *result column* ordinals. Don't confuse these with *table column*
+	// ordinals, which are used by the needed set. The sort columns should already
+	// be in the needed set, so no need to add anything further to that.
+	reqOrder := b.makeSQLOrdering(res, &ev.Physical().Ordering)
+
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivarMap: allCols,
+	}
+	onExpr, err := b.buildScalar(&ctx, ev.Child(1))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	tab := md.Table(def.Table)
+	res.root, err = b.factory.ConstructLookupJoin(
+		joinOpToJoinType(def.JoinType),
+		input.root,
+		tab,
+		tab.Index(def.Index),
+		keyCols,
+		lookupCols,
+		onExpr,
+		reqOrder,
+	)
+	if err != nil {
+		return execPlan{}, err
 	}
 	return res, nil
 }
