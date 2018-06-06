@@ -1150,50 +1150,13 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
-// holds the writing portion of a Txn (including EndTransaction) does not
-// launch a heartbeat goroutine at all.
-func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
-
-	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		br := ba.CreateReply()
-		txnClone := ba.Txn.Clone()
-		br.Txn = &txnClone
-		br.Txn.Writing = true
-		return br, nil
-	}
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	factory := NewTxnCoordSenderFactory(
-		ambient, cluster.MakeTestingClusterSettings(),
-		senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
-	)
-
-	// Stop the stopper manually, prior to trying the transaction. This has the
-	// effect of returning a NodeUnavailableError for any attempts at launching
-	// a heartbeat goroutine.
-	stopper.Stop(context.TODO())
-
-	var ba roachpb.BatchRequest
-	key := roachpb.Key("test")
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
-	ba.Add(&roachpb.EndTransactionRequest{})
-	txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
-	tc := factory.New(client.RootTxn, &txn)
-	ba.Txn = &txn
-	_, pErr := tc.Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-}
-
 // TestTxnCoordSenderErrorWithIntent validates that if a transactional request
 // returns an error but also indicates a Writing transaction, the coordinator
 // tracks it just like a successful request.
+//
+// Note(andrei): This test was written at a time when the Writing status
+// returned by the server mattered for the client. As of June 2018, that's no
+// longer the case. The test doesn't hurt, though.
 func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -1452,7 +1415,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	if !bytes.Equal(val, value) {
 		t.Fatalf("expected: %s, got: %s", value, val)
 	}
-	checkTxnMetrics(t, metrics, "commit 1PC txn", 1, 1 /* 1PC */, 0, 0, 0)
+	checkTxnMetrics(t, metrics, "commit 1PC txn", 1 /* commits */, 1 /* 1PC */, 0, 0, 0)
 }
 
 // createTimeoutDB returns a DB whose txns are considered abandoned by the
@@ -1851,6 +1814,9 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	}
 }
 
+// mockSender is a client.Sender implementation that passes requests to a list
+// of provided matchers, in sequence. The first matcher that returns either a
+// response or an error is used to provide the result for the request.
 type mockSender struct {
 	matchers []matcher
 }
@@ -1859,10 +1825,12 @@ var _ client.Sender = &mockSender{}
 
 type matcher func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
+// match adds a matcher to the list of matchers.
 func (s *mockSender) match(m matcher) {
 	s.matchers = append(s.matchers, m)
 }
 
+// Send implements the client.Sender interface.
 func (s *mockSender) Send(
 	_ context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1924,10 +1892,106 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 
 	if _, pErr := client.SendWrappedWith(
 		ctx, txn, txnHeader,
-		&roachpb.EndTransactionRequest{Commit: false}); !testutils.IsPError(pErr, "injected err") {
+		&roachpb.EndTransactionRequest{Commit: false},
+	); !testutils.IsPError(pErr, "injected err") {
 		t.Fatal(pErr)
 	}
 
+	testutils.SucceedsSoon(t, func() error {
+		if txn.Sender().(*TxnCoordSender).IsTracking() {
+			return fmt.Errorf("still tracking")
+		}
+		return nil
+	})
+}
+
+// Test that intent tracking and the heartbeat loop behave correctly for
+// transactions that attempt to run a batch containing both a BeginTransaction
+// and an EndTransaction. Since in case of an error it's not easy to determine
+// whether any intents have been laid down (i.e. in case the batch was split by
+// the DistSender and then there was mixed success for the sub-batches, or in
+// case a retriable error is returned), the test verifies that the heartbeat
+// loop is still going after the error and that the intents are properly tracked
+// and attached to a subsequent EndTransaction.
+// There was a time when the TxnCoordSender was cutting corners for these
+// wannabe 1PC batches, but that proved to be a bad idea.
+func TestOnePCErrorTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	sender := &mockSender{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	factory := NewTxnCoordSenderFactory(
+		ambient,
+		cluster.MakeTestingClusterSettings(),
+		sender,
+		clock,
+		false, /* linearizable */
+		stopper,
+		MakeTxnMetrics(metric.TestSampleInterval),
+	)
+	db := client.NewDB(factory, clock)
+	var key = roachpb.Key("a")
+
+	// Register a matcher catching the commit attempt.
+	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if et, ok := ba.GetArg(roachpb.EndTransaction); !ok {
+			return nil, nil
+		} else if !et.(*roachpb.EndTransactionRequest).Commit {
+			return nil, nil
+		}
+		return nil, roachpb.NewErrorf("injected err")
+	})
+	// Register a matcher catching the rollback attempt.
+	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		et, ok := ba.GetArg(roachpb.EndTransaction)
+		if !ok {
+			return nil, nil
+		}
+		etReq := et.(*roachpb.EndTransactionRequest)
+		if etReq.Commit {
+			return nil, nil
+		}
+		expIntents := []roachpb.Span{{Key: key}}
+		intents := etReq.IntentSpans
+		if !reflect.DeepEqual(intents, expIntents) {
+			return nil, roachpb.NewErrorf("expected intents %s, got: %s", expIntents, intents)
+		}
+		resp := ba.CreateReply()
+		// Set the response's txn to the Aborted status (as the server would). This
+		// will make the TxnCoordSender stop the heartbeat loop.
+		txnCopy := ba.Txn.Clone()
+		resp.Txn = &txnCopy
+		resp.Txn.Status = roachpb.ABORTED
+		return resp, nil
+	})
+
+	txn := client.NewTxn(db, roachpb.NodeID(1), client.RootTxn)
+	txnHeader := roachpb.Header{
+		Txn: txn.Proto(),
+	}
+	b := txn.NewBatch()
+	b.Put(key, "test value")
+	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "injected err") {
+		t.Fatal(err)
+	}
+
+	if !txn.Sender().(*TxnCoordSender).IsTracking() {
+		t.Fatalf("expected TxnCoordSender to be tracking after the write")
+	}
+
+	// Now send a rollback and verify that the TxnCoordSender attaches the intent
+	// to it.
+	if _, pErr := client.SendWrappedWith(
+		ctx, txn, txnHeader,
+		&roachpb.EndTransactionRequest{Commit: false},
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// As always, check that the rollback we just sent stops the heartbeat loop.
 	testutils.SucceedsSoon(t, func() error {
 		if txn.Sender().(*TxnCoordSender).IsTracking() {
 			return fmt.Errorf("still tracking")
