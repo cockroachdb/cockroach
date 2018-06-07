@@ -13,7 +13,7 @@ import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 
 export const CLUSTERVIZ_ROOT = "/overview/map";
 
-export default function(): JSX.Element {
+export default function createNodeMapRoutes(): JSX.Element {
   return (
     <Route path="overview" component={ ClusterOverview } >
       <IndexRedirect to="list" />
