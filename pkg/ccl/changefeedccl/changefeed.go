@@ -68,11 +68,17 @@ type emitRow struct {
 	resolved hlc.Timestamp
 }
 
-func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job) error {
+func runChangefeedFlow(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
+	startedCh chan<- tree.Datums,
+) error {
 	details, err := validateChangefeed(job.Record.Details.(jobs.ChangefeedDetails))
 	if err != nil {
 		return err
 	}
+
 	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
 		return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
 			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
@@ -93,6 +99,14 @@ func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jo
 	if err != nil {
 		return err
 	}
+
+	// We abuse the job's results channel to make CREATE CHANGEFEED wait for
+	// this before returning to the user to ensure the setup went okay. Job
+	// resumption doesn't have the same hack, but at the moment ignores results
+	// and so is currently okay. Return nil instead of anything meaningful so
+	// that if we start doing anything with the results returned by resumed
+	// jobs, then it breaks instead of returning nonsense.
+	startedCh <- tree.Datums(nil)
 
 	for {
 		if err := emitRowsFn(ctx); err != nil {
