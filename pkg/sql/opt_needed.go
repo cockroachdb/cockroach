@@ -99,8 +99,34 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *projectSetNode:
-		markOmitted(n.columns, needed)
-		setNeededColumns(n.source, needed[:n.numColsInSource])
+		// Optimization: remove the source columns that are not needed.
+		// Be careful not to remove actual SRFs: even if the SRF is not
+		// needed we must still execute it so that the number of
+		// rows is preserved.
+		// Non-SRF expressions can be omitted.
+		n.ivarHelper.Reset()
+		curCol := n.numColsInSource
+		for i := range n.exprs {
+			if n.funcs[i] == nil && !needed[curCol] {
+				// This is just a scalar expression and it's not
+				// needed. Remove it.
+				n.exprs[i] = tree.DNull
+			}
+			if n.exprs[i] != tree.DNull {
+				n.exprs[i] = n.ivarHelper.Rebind(n.exprs[i], false, true)
+				if n.funcs[i] != nil {
+					n.funcs[i] = n.exprs[i].(*tree.FuncExpr)
+				}
+			}
+			curCol += n.numColsPerGen[i]
+		}
+		sourceNeeded := make([]bool, n.numColsInSource)
+		for i := range sourceNeeded {
+			sourceNeeded[i] = needed[i] || n.ivarHelper.IndexedVarUsed(i)
+		}
+		setNeededColumns(n.source, sourceNeeded)
+		markOmitted(n.columns[:n.numColsInSource], sourceNeeded[:n.numColsInSource])
+		markOmitted(n.columns[n.numColsInSource:], needed[n.numColsInSource:])
 
 	case *delayedNode:
 		if n.plan != nil {

@@ -39,7 +39,11 @@ import (
 // of R prefixed. Formally, this performs a lateral cross join of R
 // with zip(a,b,c).
 type projectSetNode struct {
-	source planNode
+	source     planNode
+	sourceInfo *sqlbase.DataSourceInfo
+
+	// ivarHelper is used to resolve names in correlated SRFs.
+	ivarHelper tree.IndexedVarHelper
 
 	// columns contains all the columns from the source, and then
 	// the columns from the generators.
@@ -61,29 +65,39 @@ type projectSetNode struct {
 	// The size of the slice is the same as `exprs` though.
 	funcs []*tree.FuncExpr
 
+	// numColsPerGen indicates how many columns are produced by
+	// each entry in `exprs`.
+	numColsPerGen []int
+
 	run projectSetRun
 }
 
 // ProjectSet wraps a plan in a projectSetNode.
 func (p *planner) ProjectSet(
-	ctx context.Context, source planNode, errCtx string, exprs ...tree.Expr,
-) (planNode, error) {
+	ctx context.Context,
+	source planNode,
+	sourceInfo *sqlbase.DataSourceInfo,
+	errCtx string,
+	sourceNames tree.TableNames,
+	exprs ...tree.Expr,
+) (planDataSource, error) {
 	if len(exprs) == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: ProjectSet invoked with no projected expression")
 	}
 
-	srcCols := planColumns(source)
-	n := projectSetNode{
+	srcCols := sourceInfo.SourceColumns
+	n := &projectSetNode{
 		source:          source,
+		sourceInfo:      sourceInfo,
 		columns:         make(sqlbase.ResultColumns, 0, len(srcCols)+len(exprs)),
 		numColsInSource: len(srcCols),
 		exprs:           make(tree.TypedExprs, len(exprs)),
 		funcs:           make([]*tree.FuncExpr, len(exprs)),
+		numColsPerGen:   make([]int, len(exprs)),
 		run: projectSetRun{
-			numColsPerGen: make([]int, len(exprs)),
-			gens:          make([]tree.ValueGenerator, len(exprs)),
-			done:          make([]bool, len(exprs)),
+			gens: make([]tree.ValueGenerator, len(exprs)),
+			done: make([]bool, len(exprs)),
 		},
 	}
 
@@ -101,11 +115,12 @@ func (p *planner) ProjectSet(
 	p.semaCtx.Properties.Require("FROM", tree.RejectAggregates|tree.RejectWindowApplications)
 
 	// Analyze the provided expressions.
+	n.ivarHelper = tree.MakeIndexedVarHelper(n, len(srcCols))
 	for i, expr := range exprs {
 		normalized, err := p.analyzeExpr(
-			ctx, expr, sqlbase.MultiSourceInfo{}, tree.IndexedVarHelper{}, types.Any, false, errCtx)
+			ctx, expr, sqlbase.MultiSourceInfo{sourceInfo}, n.ivarHelper, types.Any, false, errCtx)
 		if err != nil {
-			return nil, err
+			return planDataSource{}, err
 		}
 
 		// Store it for later.
@@ -118,7 +133,7 @@ func (p *planner) ProjectSet(
 			// Set-generating functions: generate_series() etc.
 			tType := normalized.ResolvedType().(types.TTuple)
 			n.funcs[i] = tFunc
-			n.run.numColsPerGen[i] = len(tType.Types)
+			n.numColsPerGen[i] = len(tType.Types)
 
 			// Prepare the result columns. Use the tuple labels in the SRF's
 			// return type as column labels.
@@ -130,7 +145,7 @@ func (p *planner) ProjectSet(
 			}
 		} else {
 			// A simple non-generator expression.
-			n.run.numColsPerGen[i] = 1
+			n.numColsPerGen[i] = 1
 
 			// There is just one result column.
 			// TODO(knz): until #26236 is resolved, make a best effort at guessing
@@ -151,7 +166,44 @@ func (p *planner) ProjectSet(
 	// Pre-allocate the result buffer to conserve memory.
 	n.run.rowBuffer = make(tree.Datums, len(n.columns))
 
-	return &n, nil
+	var info *sqlbase.DataSourceInfo
+	if sourceNames == nil {
+		// No source names specified: we have the ROWS FROM syntax. There is no
+		// source operand, so we can ignore the sourceInfo really.
+		info = sqlbase.NewSourceInfoForSingleTable(sqlbase.AnonymousTable, n.columns)
+	} else {
+		// Some sources specified. We must keep the source info and also
+		// add new source aliases for each column group.
+		numAliasesInSource := len(sourceInfo.SourceAliases)
+		info = &sqlbase.DataSourceInfo{
+			SourceColumns: n.columns,
+			SourceAliases: make(sqlbase.SourceAliases, numAliasesInSource+len(n.exprs)),
+		}
+		copy(info.SourceAliases, sourceInfo.SourceAliases)
+		colIdx := n.numColsInSource
+		for i := range n.exprs {
+			nextFirstCol := colIdx + n.numColsPerGen[i]
+			info.SourceAliases[numAliasesInSource+i] = sqlbase.SourceAlias{
+				Name:      sourceNames[i],
+				ColumnSet: sqlbase.FillColumnRange(colIdx, nextFirstCol-1),
+			}
+			colIdx = nextFirstCol
+		}
+	}
+
+	return planDataSource{info: info, plan: n}, nil
+}
+
+func (n *projectSetNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	return n.run.rowBuffer[idx].Eval(ctx)
+}
+
+func (n *projectSetNode) IndexedVarResolvedType(idx int) types.T {
+	return n.columns[idx].Typ
+}
+
+func (n *projectSetNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return n.sourceInfo.NodeFormatter(idx)
 }
 
 type projectSetRun struct {
@@ -165,10 +217,6 @@ type projectSetRun struct {
 	// gens contains the current "active" ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
 	gens []tree.ValueGenerator
-
-	// numColsPerGen indicates how many columns in rowBuffer are populated by
-	// each entry in `gens`.
-	numColsPerGen []int
 
 	// done indicates for each `expr` whether the values produced by
 	// either the SRF or the scalar expressions are fully consumed and
@@ -196,10 +244,12 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 
 			// Initialize a round of SRF generators or scalar values.
 			colIdx := n.numColsInSource
+			evalCtx := params.EvalContext()
+			evalCtx.IVarContainer = n
 			for i := range n.exprs {
 				if fn := n.funcs[i]; fn != nil {
 					// A set-generating function. Prepare its ValueGenerator.
-					gen, err := fn.EvalArgsAndGetGenerator(params.EvalContext())
+					gen, err := fn.EvalArgsAndGetGenerator(evalCtx)
 					if err != nil {
 						return false, err
 					}
@@ -212,7 +262,7 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 					n.run.gens[i] = gen
 				}
 				n.run.done[i] = false
-				colIdx += n.run.numColsPerGen[i]
+				colIdx += n.numColsPerGen[i]
 			}
 
 			// Mark the row ready for further iterations.
@@ -223,7 +273,7 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 		colIdx := n.numColsInSource
 		newValAvail := false
 		for i := range n.exprs {
-			numCols := n.run.numColsPerGen[i]
+			numCols := n.numColsPerGen[i]
 
 			// Do we have a SRF?
 			if gen := n.run.gens[i]; gen != nil {
