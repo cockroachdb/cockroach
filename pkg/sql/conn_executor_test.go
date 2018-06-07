@@ -84,6 +84,10 @@ select * from crdb_internal.node_runtime_info;
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.
+//
+// TODO(andrei): This test terminates a client connection by calling Close() on
+// a driver.Conn(), which sends a MsgTerminate. We should also have a test that
+// closes the connection more abruptly than that.
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	aborter := NewTxnAborter()
