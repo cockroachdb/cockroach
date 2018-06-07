@@ -39,9 +39,11 @@ pg_proc
 pg_range
 pg_rewrite
 pg_roles
+pg_seclabel
 pg_sequence
 pg_settings
 pg_shdescription
+pg_shseclabel
 pg_stat_activity
 pg_tables
 pg_tablespace
@@ -101,9 +103,11 @@ pg_proc
 pg_range
 pg_rewrite
 pg_roles
+pg_seclabel
 pg_sequence
 pg_settings
 pg_shdescription
+pg_shseclabel
 pg_stat_activity
 pg_tables
 pg_tablespace
@@ -1456,3 +1460,17 @@ SELECT unnest((SELECT proargtypes FROM pg_proc WHERE proname='split_part'));
 #attname   atttypid  typname
 #a         20        int8
 #b         20        int2
+
+subtest pg_catalog.pg_seclabel
+
+query OOOTT colnames
+SELECT objoid, classoid, objsubid, provider, label FROM pg_catalog.pg_seclabel
+----
+objoid  classoid  objsubid  provider  label
+
+subtest pg_catalog.pg_shseclabel
+
+query OOTT colnames
+SELECT objoid, classoid, provider, label FROM pg_catalog.pg_shseclabel
+----
+objoid  classoid  provider  label
