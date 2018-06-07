@@ -101,7 +101,7 @@ type tableUpserter struct {
 
 // init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.twb.init(txn)
+	tu.tableWriterBase.init(txn)
 
 	tu.tableUpserterBase = tableUpserterBase{
 		ri:          tu.ri,
@@ -222,7 +222,7 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 		if conflictingRowIdx == -1 {
 			// We don't have a conflict. This is a new row in KV. Create it.
 			resultRow, existingRows, err = tu.insertNonConflictingRow(
-				ctx, tu.twb.b, insertRow, conflictingRowPK, existingRows, pkToRowIdx, tableDesc, traceKV)
+				ctx, tu.b, insertRow, conflictingRowPK, existingRows, pkToRowIdx, tableDesc, traceKV)
 			if err != nil {
 				return err
 			}
@@ -276,7 +276,7 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 			// We know there was a row already, and we know we need to update it. Do it.
 			resultRow, existingRows, err = tu.updateConflictingRow(
-				ctx, tu.twb.b, insertRow,
+				ctx, tu.b, insertRow,
 				conflictingRowPK, conflictingRowIdx, conflictingRowValues,
 				existingRows, pkToRowIdx,
 				tableDesc, traceKV)
@@ -581,7 +581,7 @@ func (tu *tableUpserter) upsertRowPKs(
 	// primary key can be constructed from the entries that come back. In this
 	// case, some spots in the slice will be nil (indicating no conflict) and the
 	// others will be conflicting rows.
-	b := tu.twb.txn.NewBatch()
+	b := tu.txn.NewBatch()
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
 		entries, err := sqlbase.EncodeSecondaryIndex(
@@ -598,7 +598,7 @@ func (tu *tableUpserter) upsertRowPKs(
 		}
 	}
 
-	if err := tu.twb.txn.Run(ctx, b); err != nil {
+	if err := tu.txn.Run(ctx, b); err != nil {
 		return nil, nil, err
 	}
 	conflictingPKs := make(map[int]roachpb.Key)
@@ -666,7 +666,7 @@ func (tu *tableUpserter) fetchExisting(
 
 	// Start retrieving the PKs.
 	// We don't limit batches here because the spans are unordered.
-	if err := tu.fetcher.StartScan(ctx, tu.twb.txn, pkSpans, false /* no batch limits */, 0, traceKV); err != nil {
+	if err := tu.fetcher.StartScan(ctx, tu.txn, pkSpans, false /* no batch limits */, 0, traceKV); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -717,7 +717,7 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.T
 }
 
 type tableUpserterBase struct {
-	twb tableWriterBase
+	tableWriterBase
 
 	ri          sqlbase.RowInserter
 	alloc       *sqlbase.DatumAlloc
@@ -742,7 +742,7 @@ type tableUpserterBase struct {
 }
 
 func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.twb.init(txn)
+	tu.tableWriterBase.init(txn)
 	tableDesc := tu.tableDesc()
 
 	tu.insertRows.Init(
@@ -792,7 +792,7 @@ func (tu *tableUpserterBase) tableDesc() *sqlbase.TableDescriptor {
 func (tu *tableUpserterBase) row(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	tu.twb.batchSize++
+	tu.batchSize++
 	return tu.insertRows.AddRow(ctx, row)
 }
 
@@ -802,7 +802,7 @@ func (tu *tableUpserterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
-	return tu.twb.flushAndStartNewBatch(ctx, tu.tableDesc())
+	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
 
 // batchedCount is part of the batchedTableWriter interface.
@@ -827,7 +827,7 @@ func (tu *tableUpserterBase) close(ctx context.Context) {
 func (tu *tableUpserterBase) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
 ) (*sqlbase.RowContainer, error) {
-	return nil, tu.twb.finalize(ctx, autoCommit, tu.tableDesc())
+	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
 // makeResultFromInsertRow reshapes a row that was inserted by the

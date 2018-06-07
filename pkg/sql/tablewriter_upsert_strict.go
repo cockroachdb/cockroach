@@ -42,7 +42,7 @@ type strictTableUpserter struct {
 }
 
 func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.twb.init(txn)
+	tu.tableWriterBase.init(txn)
 
 	tu.tableUpserterBase = tableUpserterBase{
 		ri:          tu.ri,
@@ -84,7 +84,7 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 			continue
 		}
 
-		if err := tu.ri.InsertRow(ctx, tu.twb.b, insertRow, true, sqlbase.CheckFKs, traceKV); err != nil {
+		if err := tu.ri.InsertRow(ctx, tu.b, insertRow, true, sqlbase.CheckFKs, traceKV); err != nil {
 			return err
 		}
 
@@ -136,7 +136,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 	seenKeys := make(map[string]struct{})
 
-	b := tu.twb.txn.NewBatch()
+	b := tu.txn.NewBatch()
 
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		row := tu.insertRows.At(i)
@@ -182,7 +182,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 	}
 
 	// Run a transaction to see if any of the rows conflict with any existing rows in the table or with other insert rows.
-	if err := tu.twb.txn.Run(ctx, b); err != nil {
+	if err := tu.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
 
