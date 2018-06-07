@@ -7,11 +7,8 @@ import step3Img from "assets/nodeMapSteps/3-seeMap.png";
 import {
   NodeCanvasContainerOwnProps,
 } from "src/views/clusterviz/containers/map/nodeCanvasContainer";
-import { NODE_MAP_DOCS_URL } from "src/views/clusterviz/components/instructionsBox";
+import * as docsURL from "src/util/docs";
 import "./needEnterpriseLicense.styl";
-
-const LICENSE_DOCS_URL = "https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html";
-const TRIAL_LICENSE_URL = "https://www.cockroachlabs.com/pricing/start-trial/";
 
 // This takes the same props as the NodeCanvasContainer which it is swapped out with.
 export default class NeedEnterpriseLicense extends React.Component<NodeCanvasContainerOwnProps> {
@@ -24,23 +21,23 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
             <p className="need-license-blurb__text">
               The Node Map shows the geographical layout of your cluster, along
               with metrics and health indicators. To enable the Node Map,
-              request an <a href={LICENSE_DOCS_URL}>Enterprise trial license</a> and refer to
-              this <a href={NODE_MAP_DOCS_URL}>configuration guide</a>.
+              request an <a href={docsURL.enterpriseLicensing}>Enterprise trial license</a> and refer to
+              this <a href={docsURL.enableNodeMap}>configuration guide</a>.
             </p>
           </div>
-          <a href={TRIAL_LICENSE_URL} className="need-license-blurb__trial-link">
+          <a href={docsURL.startTrial} className="need-license-blurb__trial-link">
             GET A 30-DAY ENTERPRISE TRIAL
           </a>
         </div>
         <div className="need-license-steps">
           <Step num={1} img={step1Img}>
-            <a href={TRIAL_LICENSE_URL}>Get a trial license</a> delivered straight to your inbox.
+            <a href={docsURL.startTrial}>Get a trial license</a> delivered straight to your inbox.
           </Step>
           <Step num={2} img={step2Img}>
             Activate the trial license with two simple SQL commands.
           </Step>
           <Step num={3} img={step3Img}>
-            Refer this <a href={NODE_MAP_DOCS_URL}>configuration guide</a> to configure the Node Map.
+            Refer this <a href={docsURL.enableNodeMap}>configuration guide</a> to configure the Node Map.
           </Step>
         </div>
       </section>

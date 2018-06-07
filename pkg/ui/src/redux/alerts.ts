@@ -18,6 +18,7 @@ import {
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
 import { AdminUIState } from "./state";
+import * as docsURL from "src/util/docs";
 
 export enum AlertLevel {
   NOTIFICATION,
@@ -201,10 +202,7 @@ export const newVersionNotificationSelector = createSelector(
       level: AlertLevel.NOTIFICATION,
       title: "New Version Available",
       text: "A new version of CockroachDB is available.",
-      // Note that this explicitly does not use util/docs to create the link,
-      // since we want to link to the updated version, not the version currently
-      // running on the cluster.
-      link: "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html",
+      link: docsURL.upgradeCockroachVersion,
       dismiss: (dispatch) => {
         const dismissedAt = moment();
         // Dismiss locally.

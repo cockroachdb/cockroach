@@ -7,7 +7,7 @@ import { withRouter, WithRouterProps } from "react-router";
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 import { getDataFromServer } from "src/util/dataFromServer";
-import docsURL from "src/util/docs";
+import * as docsURL from "src/util/docs";
 import { trustIcon } from "src/util/trust";
 
 import logo from "assets/crdb.png";
@@ -100,7 +100,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
               account access and password restoration.
             </p>
             <p className="aside">
-              <a href={docsURL("admin-ui-overview.html")} className="docs-link">
+              <a href={docsURL.adminUIOverview} className="docs-link">
                 <span className="docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
                 <span className="docs-link__text">Read the documentation</span>
               </a>
