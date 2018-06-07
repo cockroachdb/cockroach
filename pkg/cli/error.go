@@ -93,21 +93,26 @@ communicate with a secure cluster).
 	}
 }
 
-// MaybeShoutError calls log.Shout on errors, better surfacing problems to the user.
-func MaybeShoutError(
+// maybeShoutError calls log.Shout on errors, better surfacing problems to the user.
+func maybeShoutError(
 	wrapped func(*cobra.Command, []string) error,
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
-		if err != nil {
-			severity := log.Severity_ERROR
-			cause := err
-			if ec, ok := errors.Cause(err).(*cliError); ok {
-				severity = ec.severity
-				cause = ec.cause
-			}
-			log.Shout(context.Background(), severity, cause)
-		}
-		return err
+		return checkAndMaybeShout(err)
 	}
+}
+
+func checkAndMaybeShout(err error) error {
+	if err == nil {
+		return nil
+	}
+	severity := log.Severity_ERROR
+	cause := err
+	if ec, ok := errors.Cause(err).(*cliError); ok {
+		severity = ec.severity
+		cause = ec.cause
+	}
+	log.Shout(context.Background(), severity, cause)
+	return err
 }

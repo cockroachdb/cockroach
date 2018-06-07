@@ -1177,7 +1177,9 @@ func runStatements(conn *sqlConn, stmts []string) error {
 	return nil
 }
 
-func runTerm(cmd *cobra.Command, args []string) error {
+// checkInteractive sets the isInteractive parameter depending on the
+// execution environment and the presence of -e flags.
+func checkInteractive() {
 	// We don't consider sessions interactives unless we have a
 	// serious hunch they are. For now, only `cockroach sql` *without*
 	// `-e` has the ability to input from a (presumably) human user,
@@ -1185,6 +1187,10 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	// input is not terminal-like -- likely redirected from a file,
 	// etc.
 	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(os.Stdin.Fd())
+}
+
+func runTerm(cmd *cobra.Command, args []string) error {
+	checkInteractive()
 
 	if cliCtx.isInteractive {
 		// The user only gets to see the info screen on interactive sessions.
@@ -1197,6 +1203,10 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
+	return runClient(cmd, conn)
+}
+
+func runClient(cmd *cobra.Command, conn *sqlConn) error {
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
 	if err := conn.ensureConn(); err != nil {
