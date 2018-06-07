@@ -4,12 +4,14 @@ import PropTypes from "prop-types";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
+import { createSelector } from "reselect";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshDatabases } from "src/redux/apiReducers";
+import { Pick } from "src/util/pick";
 
 import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";
 import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
@@ -53,8 +55,11 @@ class DatabaseListNav extends React.Component<{selected: string}, {}> {
 // DatabaseListData describes properties which should be passed to the
 // DatabaseList container.
 interface DatabaseListData {
-  // A list of databases.
-  databaseNames: string[];
+  // A list of databases for the user and the system.
+  databasesByType: {
+    user: string[];
+    system: string[];
+  };
 }
 
 // DatabaseListActions describes actions that can be dispatched by a
@@ -72,7 +77,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
-    const dbs = _.partition(this.props.databaseNames, (db) => systemDatabases.indexOf(db) === -1);
+    const { user, system } = this.props.databasesByType;
 
     return <div>
       <Helmet>
@@ -82,11 +87,11 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
         {
-          dbs[0].map(n => <DatabaseSummaryTables name={n} key={n} />)
+          user.map(n => <DatabaseSummaryTables name={n} key={n} />)
         }
         <hr />
         {
-          dbs[1].map(n => <DatabaseSummaryTables name={n} key={n} />)
+          system.map(n => <DatabaseSummaryTables name={n} key={n} />)
         }
         <NonTableSummary />
       </div>
@@ -101,7 +106,7 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
-    const dbs = _.partition(this.props.databaseNames, (db) => systemDatabases.indexOf(db) === -1);
+    const { user, system } = this.props.databasesByType;
 
     return <div>
       <Helmet>
@@ -111,30 +116,40 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
         {
-          dbs[0].map(n => <DatabaseSummaryGrants name={n} key={n} />)
+          user.map(n => <DatabaseSummaryGrants name={n} key={n} />)
         }
         <hr />
         {
-          dbs[1].map(n => <DatabaseSummaryGrants name={n} key={n} />)
+          system.map(n => <DatabaseSummaryGrants name={n} key={n} />)
         }
       </div>
     </div>;
   }
 }
 
+type DatabasesState = Pick<AdminUIState, "cachedData", "databases">;
+
 // Base selectors to extract data from redux state.
-function databaseNames(state: AdminUIState): string[] {
+function databaseNames(state: DatabasesState): string[] {
   if (state.cachedData.databases.data && state.cachedData.databases.data.databases) {
     return state.cachedData.databases.data.databases;
   }
   return [];
 }
 
+export const selectDatabasesByType = createSelector(
+  databaseNames,
+  (dbs: string[]) => {
+    const [user, system] = _.partition(dbs, (db) => systemDatabases.indexOf(db) === -1);
+    return { user, system };
+  },
+);
+
 // Connect the DatabaseTablesList class with our redux store.
 const databaseTablesListConnected = connect(
   (state: AdminUIState) => {
     return {
-      databaseNames: databaseNames(state),
+      databasesByType: selectDatabasesByType(state),
     };
   },
   {
@@ -146,7 +161,7 @@ const databaseTablesListConnected = connect(
 const databaseGrantsListConnected = connect(
   (state: AdminUIState) => {
     return {
-      databaseNames: databaseNames(state),
+      databasesByType: selectDatabasesByType(state),
     };
   },
   {
