@@ -972,12 +972,6 @@ func (txn *Txn) Send(
 		// begin transaction request before the first write command and update
 		// transaction state accordingly.
 		if needBeginTxn {
-			// Unless it's a 1PC, ask the TxnCoordSender to track the transaction.
-			if txn.mu.state == txnReadOnly && !haveEndTxn {
-				if err := txn.mu.sender.StartTracking(ctx); err != nil {
-					return roachpb.NewError(err)
-				}
-			}
 			// We're about to send a BeginTxn, so move to the Writing state.
 			txn.mu.state = txnWriting
 			// From now on, all requests need to be checked against the AbortCache on
