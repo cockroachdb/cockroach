@@ -3411,31 +3411,6 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 		return nil
 	})
-
-	// Manually transfer raft leadership to node 0.
-	origCount0 = store0.Metrics().RangeRaftLeaderTransfers.Count()
-	origCount1 := store1.Metrics().RangeRaftLeaderTransfers.Count()
-	testutils.SucceedsSoon(t, func() error {
-		repl1.RaftTransferLeader(context.Background(), rd0.ReplicaID)
-		// We can't check repl1.RaftStatus().Lead here because leadership
-		// could have reverted back to the leaseholder faster than we
-		// could observe it. Instead, we just check the transfer metrics.
-		if a, e := store1.Metrics().RangeRaftLeaderTransfers.Count()-origCount1, int64(1); a < e {
-			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
-		}
-		return nil
-	})
-
-	// Verify that Raft leadership reverts back to the leaseholder.
-	testutils.SucceedsSoon(t, func() error {
-		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
-			return errors.Errorf("expected raft leader be %d; got %d", e, a)
-		}
-		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count()-origCount0, int64(1); a < e {
-			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
-		}
-		return nil
-	})
 }
 
 // TestFailedPreemptiveSnapshot verifies that ChangeReplicas is
