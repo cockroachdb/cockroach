@@ -53,9 +53,8 @@ func registerKV(r *registry) {
 			// Run kv with encryption turned off because of recently found
 			// checksum mismatch when running workload against encrypted
 			// cluster.
-			// TODO(marc): add back true to turn on encryption for kv when
-			// checksum issue is resolved.
-			for _, e := range []bool{false} {
+			for _, e := range []bool{false, true} {
+				e := e
 				minVersion := "2.0.0"
 				if e {
 					minVersion = "2.1.0"
