@@ -4,30 +4,29 @@ import PropTypes from "prop-types";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
+import { createSelector } from "reselect";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshDatabases } from "src/redux/apiReducers";
+import { Pick } from "src/util/pick";
 
 import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";
 import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
 import NonTableSummary from "./nonTableSummary";
 
-// excludedTableList is a list of virtual databases that should be excluded
-// from database lists; they are not physical databases, and thus cause issues
-// with our backend methods.
-// TODO(mrtracy): This exclusion should occur on the backend methods, which
-// should handle virtual tables correctly. Github #9689.
-const excludedTableList = {
-  "information_schema": true,
-  "pg_catalog": true,
-};
-
 const databasePages = [
   { value: "tables", label: "Tables" },
   { value: "grants", label: "Grants" },
+];
+
+// The system databases should sort after user databases.
+const systemDatabases = [
+  "defaultdb",
+  "postgres",
+  "system",
 ];
 
 // DatabaseListNav displays the database page navigation bar.
@@ -56,8 +55,11 @@ class DatabaseListNav extends React.Component<{selected: string}, {}> {
 // DatabaseListData describes properties which should be passed to the
 // DatabaseList container.
 interface DatabaseListData {
-  // A list of databases.
-  databaseNames: string[];
+  // A list of databases for the user and the system.
+  databasesByType: {
+    user: string[];
+    system: string[];
+  };
 }
 
 // DatabaseListActions describes actions that can be dispatched by a
@@ -75,6 +77,8 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
+    const { user, system } = this.props.databasesByType;
+
     return <div>
       <Helmet>
         <title>Tables | Databases</title>
@@ -82,12 +86,13 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
-        { _.map(this.props.databaseNames, (n) => {
-          if (excludedTableList.hasOwnProperty(n)) {
-            return null;
-          }
-          return <DatabaseSummaryTables name={n} key={n} />;
-        }) }
+        {
+          user.map(n => <DatabaseSummaryTables name={n} key={n} />)
+        }
+        <hr />
+        {
+          system.map(n => <DatabaseSummaryTables name={n} key={n} />)
+        }
         <NonTableSummary />
       </div>
     </div>;
@@ -101,6 +106,8 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
+    const { user, system } = this.props.databasesByType;
+
     return <div>
       <Helmet>
         <title>Grants | Databases</title>
@@ -108,25 +115,41 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
-        { _.map(this.props.databaseNames, (n) => {
-          if (excludedTableList.hasOwnProperty(n)) {
-            return null;
-          }
-          return <DatabaseSummaryGrants name={n} key={n} />;
-        }) }
+        {
+          user.map(n => <DatabaseSummaryGrants name={n} key={n} />)
+        }
+        <hr />
+        {
+          system.map(n => <DatabaseSummaryGrants name={n} key={n} />)
+        }
       </div>
     </div>;
   }
 }
 
+type DatabasesState = Pick<AdminUIState, "cachedData", "databases">;
+
 // Base selectors to extract data from redux state.
-const databaseNames = (state: AdminUIState): string[] => state.cachedData.databases.data && state.cachedData.databases.data.databases;
+function databaseNames(state: DatabasesState): string[] {
+  if (state.cachedData.databases.data && state.cachedData.databases.data.databases) {
+    return state.cachedData.databases.data.databases;
+  }
+  return [];
+}
+
+export const selectDatabasesByType = createSelector(
+  databaseNames,
+  (dbs: string[]) => {
+    const [user, system] = _.partition(dbs, (db) => systemDatabases.indexOf(db) === -1);
+    return { user, system };
+  },
+);
 
 // Connect the DatabaseTablesList class with our redux store.
 const databaseTablesListConnected = connect(
   (state: AdminUIState) => {
     return {
-      databaseNames: databaseNames(state),
+      databasesByType: selectDatabasesByType(state),
     };
   },
   {
@@ -138,7 +161,7 @@ const databaseTablesListConnected = connect(
 const databaseGrantsListConnected = connect(
   (state: AdminUIState) => {
     return {
-      databaseNames: databaseNames(state),
+      databasesByType: selectDatabasesByType(state),
     };
   },
   {
