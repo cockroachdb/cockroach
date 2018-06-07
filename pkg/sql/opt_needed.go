@@ -71,14 +71,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// using the table scanNode.
 		setNeededColumns(n.table, needed)
 		setNeededColumns(n.index, n.primaryKeyColumns)
-
-		for i, colNeeded := range needed {
-			if colNeeded {
-				n.resultColumns[i].Omitted = false
-			} else {
-				n.resultColumns[i].Omitted = true
-			}
-		}
+		markOmitted(n.resultColumns, needed)
 
 	case *unionNode:
 		if !n.emitAll {
