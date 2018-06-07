@@ -40,14 +40,14 @@ import (
 
 type interceptingTransport struct {
 	kv.Transport
-	sendNext func(context.Context, chan<- kv.BatchCall)
+	sendNext func(context.Context) (*roachpb.BatchResponse, error)
 }
 
-func (t *interceptingTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
+func (t *interceptingTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	if fn := t.sendNext; fn != nil {
-		fn(ctx, done)
+		return fn(ctx)
 	} else {
-		t.Transport.SendNext(ctx, done)
+		return t.Transport.SendNext(ctx)
 	}
 }
 
@@ -89,39 +89,31 @@ func TestAmbiguousCommit(t *testing.T) {
 				transport, err := kv.GRPCTransportFactory(opts, rpcContext, replicas, args)
 				return &interceptingTransport{
 					Transport: transport,
-					sendNext: func(ctx context.Context, done chan<- kv.BatchCall) {
+					sendNext: func(ctx context.Context) (*roachpb.BatchResponse, error) {
 						if ambiguousSuccess {
-							interceptDone := make(chan kv.BatchCall)
-							go transport.SendNext(ctx, interceptDone)
-							call := <-interceptDone
+							br, err := transport.SendNext(ctx)
 							// During shutdown, we may get responses that
 							// have call.Err set and all we have to do is
 							// not crash on those.
 							//
 							// For the rest, compare and perhaps inject an
 							// RPC error ourselves.
-							if call.Err == nil && call.Reply.Error.Equal(translateToRPCError) {
+							if err == nil && br.Error.Equal(translateToRPCError) {
 								// Translate the injected error into an RPC
 								// error to simulate an ambiguous result.
-								done <- kv.BatchCall{Err: call.Reply.Error.GoError()}
-							} else {
-								// Either the call succeeded or we got a non-
-								// sentinel error; let normal machinery do its
-								// thing.
-								done <- call
+								return nil, br.Error.GoError()
 							}
+							return br, err
 						} else {
 							if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 								if pErr := maybeRPCError(req.(*roachpb.ConditionalPutRequest)); pErr != nil {
 									// Blackhole the RPC and return an
 									// error to simulate an ambiguous
 									// result.
-									done <- kv.BatchCall{Err: pErr.GoError()}
-
-									return
+									return nil, pErr.GoError()
 								}
 							}
-							transport.SendNext(ctx, done)
+							return transport.SendNext(ctx)
 						}
 					},
 				}, err
