@@ -56,11 +56,7 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 	}
 
 	err = tu.getUniqueIndexes()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // fkSpanCollector is part of the tableWriter interface.
