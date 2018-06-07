@@ -374,7 +374,6 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan kvBatch)
-	sampleCh := make(chan sqlbase.EncDatumRow)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var conv inputConverter
@@ -438,10 +437,9 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 
 	// Sample KVs
 	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "sampleImportKVs")
+		ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 		defer tracing.FinishSpan(span)
 
-		defer close(sampleCh)
 		var fn sampleFunc
 		if cp.sampleSize == 0 {
 			fn = sampleAll
@@ -478,28 +476,15 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
 					}
-					select {
-					case <-group.Done:
-						return group.Err()
-					case sampleCh <- row:
+
+					cs, err := cp.out.EmitRow(ctx, row)
+					if err != nil {
+						return err
+					}
+					if cs != distsqlrun.NeedMoreRows {
+						return errors.New("unexpected closure of consumer")
 					}
 				}
-			}
-		}
-		return nil
-	})
-	// Send sampled KVs to dist sql
-	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
-		defer tracing.FinishSpan(span)
-
-		for row := range sampleCh {
-			cs, err := cp.out.EmitRow(ctx, row)
-			if err != nil {
-				return err
-			}
-			if cs != distsqlrun.NeedMoreRows {
-				return errors.New("unexpected closure of consumer")
 			}
 		}
 		return nil
