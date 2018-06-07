@@ -39,11 +39,11 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
+func (l *localTestClusterTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
-	l.Transport.SendNext(ctx, done)
+	return l.Transport.SendNext(ctx)
 }
 
 // InitFactoryForLocalTestCluster initializes a TxnCoordSenderFactory

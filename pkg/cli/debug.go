@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -724,6 +725,7 @@ type replicaCheckInfo struct {
 	appliedIndex   uint64
 	firstIndex     uint64
 	lastIndex      uint64
+	committedIndex uint64
 }
 
 func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
@@ -736,10 +738,19 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	var hasError bool
 	if err := runDebugCheckStoreRaft(ctx, db); err != nil {
-		return err
+		hasError = true
+		log.Warning(ctx, err)
 	}
-	return runDebugCheckStoreDescriptors(ctx, db)
+	if err := runDebugCheckStoreDescriptors(ctx, db); err != nil {
+		hasError = true
+		log.Warning(ctx, err)
+	}
+	if hasError {
+		return errors.New("errors detected")
+	}
+	return nil
 }
 
 func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) error {
@@ -763,11 +774,10 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 				if !claimedMS.ContainsEstimates {
 					failed = true
 				} else {
+					ms.ContainsEstimates = true
 					prefix = "(ignored) "
 				}
 				fmt.Printf("\n%s%+v: diff(actual, claimed): %s\n", prefix, desc, strings.Join(pretty.Diff(ms, claimedMS), "\n"))
-			} else {
-				fmt.Print(".")
 			}
 			return false, nil
 		}); err != nil {
@@ -793,6 +803,8 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 		return replicaInfo[rangeID]
 	}
 
+	var hasError bool
+
 	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
 		false /* consistent */, false /* tombstones */, nil, /* txn */
 		false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
@@ -802,12 +814,24 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 			}
 
 			switch {
+			case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
+				var hs raftpb.HardState
+				if err := kv.Value.GetProto(&hs); err != nil {
+					return false, err
+				}
+				getReplicaInfo(rangeID).committedIndex = hs.Commit
 			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
 					return false, err
 				}
 				getReplicaInfo(rangeID).truncatedIndex = trunc.Index
+			case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
+				var state enginepb.RangeAppliedState
+				if err := kv.Value.GetProto(&state); err != nil {
+					return false, err
+				}
+				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
 			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
 				idx, err := kv.Value.GetInt()
 				if err != nil {
@@ -827,6 +851,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 					if index != ri.lastIndex+1 {
 						fmt.Printf("range %s: log index anomaly: %v followed by %v\n",
 							rangeID, ri.lastIndex, index)
+						hasError = true
 					}
 					ri.lastIndex = index
 				}
@@ -839,13 +864,33 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 
 	for rangeID, info := range replicaInfo {
 		if info.truncatedIndex != info.firstIndex-1 {
+			hasError = true
 			fmt.Printf("range %s: truncated index %v should equal first index %v - 1\n",
 				rangeID, info.truncatedIndex, info.firstIndex)
 		}
+		if info.firstIndex > info.lastIndex {
+			hasError = true
+			fmt.Printf("range %s: [first index, last index] is [%d, %d]\n",
+				rangeID, info.firstIndex, info.lastIndex)
+		}
 		if info.appliedIndex < info.firstIndex || info.appliedIndex > info.lastIndex {
+			hasError = true
 			fmt.Printf("range %s: applied index %v should be between first index %v and last index %v\n",
 				rangeID, info.appliedIndex, info.firstIndex, info.lastIndex)
 		}
+		if info.appliedIndex > info.committedIndex {
+			hasError = true
+			fmt.Printf("range %s: committed index %d must not trail applied index %d\n",
+				rangeID, info.committedIndex, info.appliedIndex)
+		}
+		if info.committedIndex > info.lastIndex {
+			hasError = true
+			fmt.Printf("range %s: committed index %d ahead of last index  %d\n",
+				rangeID, info.committedIndex, info.lastIndex)
+		}
+	}
+	if hasError {
+		return errors.New("anomalies detected in Raft state")
 	}
 
 	return nil
