@@ -91,6 +91,8 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	if flags.showMetadata {
 		columns = sqlbase.ExplainPlanVerboseColumns
 	}
+	// Make a copy (to allow changes through planMutableColumns).
+	columns = append(sqlbase.ResultColumns(nil), columns...)
 
 	e := explainer{explainFlags: flags}
 
