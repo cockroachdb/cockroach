@@ -359,6 +359,16 @@ func (h *hashJoiner) bufferPhase(
 			// This stream is done, great! We will build the hashtable using this
 			// stream.
 			h.storedSide = side
+
+			if h.rows[h.storedSide].Len() == 0 {
+				// If storedSide is empty we might be able to short-circuit.
+				if h.joinType == sqlbase.InnerJoin ||
+					(h.joinType == sqlbase.LeftOuterJoin && h.storedSide == leftSide) ||
+					(h.joinType == sqlbase.RightOuterJoin && h.storedSide == rightSide) {
+					return nil, true, nil
+				}
+			}
+
 			return nil, false, nil
 		}
 		if h.testingKnobMemFailPoint == buffer && rand.Float64() < h.testingKnobFailProbability {
