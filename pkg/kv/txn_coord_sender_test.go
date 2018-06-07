@@ -1850,3 +1850,88 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		})
 	}
 }
+
+type mockSender struct {
+	matchers []matcher
+}
+
+var _ client.Sender = &mockSender{}
+
+type matcher func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+
+func (s *mockSender) match(m matcher) {
+	s.matchers = append(s.matchers, m)
+}
+
+func (s *mockSender) Send(
+	_ context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	for _, m := range s.matchers {
+		br, pErr := m(ba)
+		if br != nil || pErr != nil {
+			return br, pErr
+		}
+	}
+	// If none of the matchers triggered, just create an empty reply.
+	return ba.CreateReply(), nil
+}
+
+// Test that a rollback sent to the TxnCoordSender stops the heartbeat loop even
+// if it encounters an error. As of June 2018, there's a separate code path for
+// handling errors on rollback in this regard.
+func TestRollbackErrorStopsHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	sender := &mockSender{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	factory := NewTxnCoordSenderFactory(
+		ambient,
+		cluster.MakeTestingClusterSettings(),
+		sender,
+		clock,
+		false, /* linearizable */
+		stopper,
+		MakeTxnMetrics(metric.TestSampleInterval),
+	)
+	db := client.NewDB(factory, clock)
+
+	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
+			return nil, nil
+		}
+		return nil, roachpb.NewErrorf("injected err")
+	})
+
+	txn := client.NewTxn(db, roachpb.NodeID(1), client.RootTxn)
+	txnHeader := roachpb.Header{
+		Txn: txn.Proto(),
+	}
+	if _, pErr := client.SendWrappedWith(
+		ctx, txn, txnHeader, &roachpb.PutRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: roachpb.Key("a"),
+			},
+		},
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+	if !txn.Sender().(*TxnCoordSender).IsTracking() {
+		t.Fatalf("expected TxnCoordSender to be tracking after the write")
+	}
+
+	if _, pErr := client.SendWrappedWith(
+		ctx, txn, txnHeader,
+		&roachpb.EndTransactionRequest{Commit: false}); !testutils.IsPError(pErr, "injected err") {
+		t.Fatal(pErr)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if txn.Sender().(*TxnCoordSender).IsTracking() {
+			return fmt.Errorf("still tracking")
+		}
+		return nil
+	})
+}

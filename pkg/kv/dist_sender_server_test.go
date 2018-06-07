@@ -1871,7 +1871,6 @@ func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
 // but still fail in others, depending on different conditions.
 func TestTxnCoordSenderRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("26434")
 
 	var filterFn atomic.Value
 	var storeKnobs storage.StoreTestingKnobs
