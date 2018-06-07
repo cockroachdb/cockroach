@@ -79,8 +79,36 @@ start_test "Check that \\set can change the display format"
 send "\\set display_format csv\r\\set\r"
 eexpect "display_format,csv"
 eexpect root@
-send "\\set display_format tsv\r"
+
+send "\\set display_format=tsv\r\\set\r"
+eexpect "display_format\ttsv"
+eexpect root@
 end_test
+
+start_test "Check various ways to set a boolean flag."
+send "\\set show_times=false\r\\set\r"
+eexpect "show_times\tfalse"
+eexpect root@
+send "\\set show_times=true\r\\set\r"
+eexpect "show_times\ttrue"
+eexpect root@
+send "\\set show_times=0\r\\set\r"
+eexpect "show_times\tfalse"
+eexpect root@
+send "\\set show_times=1\r\\set\r"
+eexpect "show_times\ttrue"
+eexpect root@
+send "\\set show_times=off\r\\set\r"
+eexpect "show_times\tfalse"
+eexpect root@
+send "\\set show_times=on\r\\set\r"
+eexpect "show_times\ttrue"
+eexpect root@
+send "\\set show_times=blah\r"
+eexpect "invalid syntax"
+eexpect root@
+end_test
+
 
 start_test "Check that a built-in command in the middle of a token (eg a string) is processed locally."
 send "select 'hello\r"
