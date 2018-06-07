@@ -10,7 +10,7 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { nodeStatusesSelector } from "src/redux/nodes";
 import { LocalityTier } from "src/redux/localities";
-import docsURL from "src/util/docs";
+import * as docsURL from "src/util/docs";
 import nodeMapScreenshot from "assets/nodeMapSteps/3-seeMap.png";
 import questionMap from "assets/questionMap.svg";
 import "./instructionsBox.styl";
@@ -21,8 +21,6 @@ interface InstructionsBoxProps {
   expand: () => void;
   collapse: () => void;
 }
-
-export const NODE_MAP_DOCS_URL = docsURL("enable-node-map.html");
 
 class InstructionsBox extends React.Component<InstructionsBoxProps> {
   renderExpanded() {
@@ -36,7 +34,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
               See your nodes on a map!
             </span>{" "}
             <a
-              href={NODE_MAP_DOCS_URL}
+              href={docsURL.enableNodeMap}
               className="instructions-box-top-bar__setup_link"
             >
               Follow our configuration guide

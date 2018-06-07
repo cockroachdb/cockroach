@@ -10,7 +10,7 @@ import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
-import docsURL from "src/util/docs";
+import * as docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { ExpandableString } from "src/views/shared/components/expandableString";
 import Loading from "src/views/shared/components/loading";
@@ -165,8 +165,8 @@ interface JobsTableProps {
 const titleTooltip = (
   <span>
     Some jobs can be paused or canceled through SQL. For details, view the docs
-    on the <a href={docsURL("pause-job.html")}><code>PAUSE JOB</code></a> and <a
-    href={docsURL("cancel-job.html")}><code>CANCEL JOB</code></a> statements.
+    on the <a href={docsURL.pauseJob}><code>PAUSE JOB</code></a> and <a
+    href={docsURL.cancelJob}><code>CANCEL JOB</code></a> statements.
   </span>
 );
 
