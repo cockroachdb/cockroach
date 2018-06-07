@@ -97,8 +97,6 @@ func (db *testSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic
 
 func (db *testSender) OnFinish(func(error)) { panic("unimplemented") }
 
-func (db *testSender) StartTracking(context.Context) error { panic("unimplemented") }
-
 // Send forwards the call to the single store. This is a poor man's
 // version of kv.TxnCoordSender, but it serves the purposes of
 // supporting tests in this package. Transactions are not supported.
