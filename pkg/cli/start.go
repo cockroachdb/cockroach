@@ -79,7 +79,7 @@ uninitialized, specify the --join flag to point to any healthy node
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	Args:    cobra.NoArgs,
-	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runStart)),
+	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStart)),
 }
 
 // maxSizePerProfile is the maximum total size in bytes for profiles per
