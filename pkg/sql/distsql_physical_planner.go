@@ -416,6 +416,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// SET statements are never distributed.
 		return 0, setNotSupportedError
 
+	case *projectSetNode:
+		return dsp.checkSupportForNode(n.source)
+
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2125,6 +2128,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *createStatsNode:
 		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 
+	case *projectSetNode:
+		plan, err = dsp.createPlanForProjectSet(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
@@ -2275,6 +2281,64 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+
+	return plan, nil
+}
+
+func createProjectSetSpec(
+	planCtx *planningCtx, n *projectSetNode,
+) (*distsqlrun.ProjectSetSpec, error) {
+	spec := distsqlrun.ProjectSetSpec{
+		Exprs:            make([]distsqlrun.Expression, len(n.exprs)),
+		GeneratedColumns: make([]sqlbase.ColumnType, len(n.columns)-n.numColsInSource),
+		NumColsPerGen:    make([]uint32, len(n.exprs)),
+	}
+	for i, expr := range n.exprs {
+		spec.Exprs[i] = distsqlplan.MakeExpression(expr, &planCtx.extendedEvalCtx.EvalContext, nil)
+	}
+	for i, col := range n.columns[n.numColsInSource:] {
+		columnType, err := sqlbase.DatumTypeToColumnType(col.Typ)
+		if err != nil {
+			return nil, err
+		}
+		spec.GeneratedColumns[i] = columnType
+	}
+	for i, n := range n.numColsPerGen {
+		spec.NumColsPerGen[i] = uint32(n)
+	}
+	return &spec, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForProjectSet(
+	planCtx *planningCtx, n *projectSetNode,
+) (physicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	numResults := len(plan.ResultTypes)
+
+	// Create the project set processor spec.
+	projectSetSpec, err := createProjectSetSpec(planCtx, n)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	spec := distsqlrun.ProcessorCoreUnion{
+		ProjectSet: projectSetSpec,
+	}
+
+	// Since ProjectSet tends to be a late stage which produces more rows than its
+	// source, we opt to perform it only on the gateway node. If we encounter
+	// cases in the future where this is non-optimal (perhaps if its output is
+	// filtered), we could try to detect these cases and use AddNoGroupingStage
+	// instead.
+	outputTypes := append(plan.ResultTypes, projectSetSpec.GeneratedColumns...)
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, spec, distsqlrun.PostProcessSpec{}, outputTypes)
+
+	// Add generated columns to planToStreamColMap.
+	for i := range projectSetSpec.GeneratedColumns {
+		plan.planToStreamColMap = append(plan.planToStreamColMap, numResults+i)
+	}
 
 	return plan, nil
 }

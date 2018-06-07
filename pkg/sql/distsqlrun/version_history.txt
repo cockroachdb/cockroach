@@ -65,3 +65,6 @@
 - Version: 15 (MinAcceptedVersion: 6)
     - Add support for processing queries with tuples in DistSQL. Old versions
       would not recognize the new tuple field in the proto.
+- Version: 16 (MinAcceptedVersion: 6)
+    - Add SRF support via a new ProjectSet processor. The new processor spec
+      would not be recognized by old versions.
