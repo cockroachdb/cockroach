@@ -26,13 +26,13 @@ std::string HexString(const std::string& s);
 // but to do it properly we might want to pre-read in the background.
 std::string RandomBytes(size_t length);
 
-// AES block cipher using CryptoPP.
-class AESCipher : public rocksdb_utils::BlockCipher {
+// AES block cipher using CryptoPP: encryption only.
+class AESEncryptCipher : public rocksdb_utils::BlockCipher {
  public:
   // The key must have a valid length (16/24/32 bytes) or CryptoPP will fail.
-  AESCipher(std::string key)
-      : enc_((byte*)key.data(), key.size()), dec_((byte*)key.data(), key.size()) {}
-  virtual ~AESCipher();
+  AESEncryptCipher(const std::string& key) : enc_((byte*)key.data(), key.size()) {}
+
+  virtual ~AESEncryptCipher();
 
   // Blocksize is fixed for AES.
   virtual size_t BlockSize() override;
@@ -43,9 +43,9 @@ class AESCipher : public rocksdb_utils::BlockCipher {
 
   // Decrypt a block of data.
   // Length of data is equal to BlockSize().
+  // NOT IMPLEMENTED: this is not needed for CTR mode so remains unimplemented.
   virtual rocksdb::Status Decrypt(char* data) override;
 
  private:
   CryptoPP::AES::Encryption enc_;
-  CryptoPP::AES::Decryption dec_;
 };
