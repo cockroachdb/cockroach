@@ -1157,17 +1157,20 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 				db.IngestExternalFiles(context.Background(), []string{filename}, true)
 			}
 
-			// Create a range tombstone that overlaps all of these entries.
-			from := makeKey(0)
-			to := makeKey(entries)
-			if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
-				b.Fatal(err)
+			// Create a few range tombstones that completely cover the above entries.
+			const numTombstones = 3
+			for i, n := 0, entries/numTombstones; i < entries; i += n {
+				from := makeKey(i)
+				to := makeKey(i + n)
+				if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
+					b.Fatal(err)
+				}
 			}
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				iter := db.NewIterator(IterOptions{})
-				iter.Seek(MakeMVCCMetadataKey(from))
+				iter.Seek(MakeMVCCMetadataKey(makeKey(0)))
 				ok, err := iter.Valid()
 				if err != nil {
 					b.Fatal(err)
