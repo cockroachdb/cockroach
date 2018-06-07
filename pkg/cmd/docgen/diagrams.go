@@ -446,7 +446,7 @@ var specs = []stmtSpec{
 	{
 		name:    "create_index_stmt",
 		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
-		replace: map[string]string{"opt_using_gin": ""},
+		replace: map[string]string{"opt_using_gin_btree": ""},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
 	},
 	{
@@ -457,7 +457,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			" opt_index_name":                      "",
 			" opt_partition_by":                    "",
-			" opt_using_gin":                       "",
+			" opt_using_gin_btree":                 "",
 			"'ON' table_name '(' index_params ')'": "'...'",
 			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
 			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
