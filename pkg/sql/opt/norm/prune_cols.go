@@ -17,6 +17,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 )
 
 // neededCols returns the set of columns needed by the given group. It is an
@@ -151,7 +152,7 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 	newCols := make(opt.ColList, 0, neededCols.Len())
 
 	existingRows := f.mem.LookupList(valuesExpr.Rows())
-	newRows := listBuilder{f: f}
+	newRows := xfunc.MakeListBuilder(&f.funcs.CustomFuncs)
 
 	// Create new list of columns that only contains needed columns.
 	for _, colID := range existingCols {
@@ -162,7 +163,7 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 	}
 
 	// newElems is used to store tuple values.
-	newElems := listBuilder{f: f}
+	newElems := xfunc.MakeListBuilder(&f.funcs.CustomFuncs)
 
 	for _, row := range existingRows {
 		existingElems := f.mem.LookupList(f.mem.NormExpr(row).AsTuple().Elems())
@@ -173,14 +174,14 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 				continue
 			}
 
-			newElems.addItem(elem)
+			newElems.AddItem(elem)
 			n++
 		}
 
-		newRows.addItem(f.ConstructTuple(newElems.buildList()))
+		newRows.AddItem(f.ConstructTuple(newElems.BuildList()))
 	}
 
-	return f.ConstructValues(newRows.buildList(), f.InternColList(newCols))
+	return f.ConstructValues(newRows.BuildList(), f.InternColList(newCols))
 }
 
 // filterColList removes columns not in colWhitelist from a list of groups and
