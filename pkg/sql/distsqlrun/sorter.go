@@ -18,12 +18,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/pkg/errors"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -37,9 +33,6 @@ type sorterBase struct {
 	// ProcOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
-	// tempStorage is used to store rows when the working set is larger than can
-	// be stored in memory.
-	tempStorage engine.Engine
 }
 
 func (s *sorterBase) init(
@@ -63,7 +56,6 @@ func (s *sorterBase) init(
 	s.ordering = ordering
 	s.matchLen = matchLen
 	s.count = count
-	s.tempStorage = flowCtx.TempStorage
 	return s.processorBase.init(post, input.OutputTypes(), flowCtx, processorID, output, opts)
 }
 
@@ -116,9 +108,7 @@ func newSorter(
 type sortAllProcessor struct {
 	sorterBase
 
-	useTempStorage  bool
-	diskContainer   *diskRowContainer
-	rows            memRowContainer
+	rows            sortableRowContainer
 	rowContainerMon *mon.BytesMonitor
 
 	// The following variables are used by the state machine, and are used by Next()
@@ -163,7 +153,6 @@ func newSortAllProcessor(
 
 	proc := &sortAllProcessor{
 		rowContainerMon: rowContainerMon,
-		useTempStorage:  useTempStorage,
 	}
 	if err := proc.sorterBase.init(
 		flowCtx, processorID, input, post, out,
@@ -179,7 +168,26 @@ func newSortAllProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	if useTempStorage {
+		rc := diskBackedRowContainer{}
+		rc.init(
+			ordering,
+			input.OutputTypes(),
+			proc.evalCtx,
+			flowCtx.TempStorage,
+			flowCtx.diskMonitor,
+			rowContainerMon,
+		)
+		proc.rows = &rc
+	} else {
+		rc := memRowContainer{}
+		rc.init(
+			ordering,
+			input.OutputTypes(),
+			proc.evalCtx,
+		)
+		proc.rows = &rc
+	}
 	return proc, nil
 }
 
@@ -217,88 +225,23 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, s.drainHelper()
 }
 
-// fill fills the container with the input's rows.
-//
-// It returns true if the container is valid, false otherwise. If false is
-// returned, the caller is expected to drain.
-// It is possible for ok to be false even if no error is returned - in case an
-// error metadata was received.
-func (s *sortAllProcessor) fill() (ok bool, _ error) {
-	ctx := s.evalCtx.Ctx()
-	// Attempt an in memory implementation of a sort. If this run fails with a
-	// memory error, fall back to use disk.
-	valid, row, err := s.fillWithContainer(ctx, &s.rows)
-	if err == nil {
-		return valid, nil
-	}
-	// TODO(asubiotto): A memory error could also be returned if a limit other
-	// than the COCKROACH_WORK_MEM was reached. We should distinguish between
-	// these cases and log the event to facilitate debugging of queries that
-	// may be slow for this reason.
-	// We return the memory error if the row is nil because this case implies
-	// that we received the memory error from a code path that was not adding
-	// a row (e.g. from an upstream processor).
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) || row == nil {
-		return false, err
-	}
-	if !s.useTempStorage {
-		return false, errors.Wrap(err, "external storage for large queries disabled")
-	}
-	log.VEventf(ctx, 2, "falling back to disk")
-	diskContainer := makeDiskRowContainer(
-		ctx, s.flowCtx.diskMonitor, s.rows.types, s.rows.ordering, s.tempStorage,
-	)
-	s.diskContainer = &diskContainer
-
-	// Transfer the rows from memory to disk. This frees up the memory taken up by s.rows.
-	i := s.rows.NewFinalIterator(ctx)
-	for i.Rewind(); ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			return false, err
-		} else if !ok {
-			break
-		}
-		memRow, err := i.Row()
-		if err != nil {
-			return false, err
-		}
-		if err := s.diskContainer.AddRow(ctx, memRow); err != nil {
-			return false, err
-		}
-	}
-	s.i = nil
-
-	// Add the row that caused the memory container to run out of memory.
-	if err := s.diskContainer.AddRow(ctx, row); err != nil {
-		return false, err
-	}
-
-	// Continue and fill the rest of the rows from the input.
-	valid, _ /* row */, err = s.fillWithContainer(ctx, s.diskContainer)
-	return valid, err
-}
-
-// fill the rows from the input into the given container.
+// fill fills s.rows with the input's rows.
 //
 // Metadata is buffered in s.trailingMeta.
 //
-// If an error occurs, while adding a row to the given container, the row is
-// returned together with the error in order to not lose it.
-//
-// The ok retval is true if the container is valid, false otherwise (if an
-// error occurred or if the input returned an error metadata record). The caller
-// is expected to inspect the error (if any) and drain if it's not recoverable.
-// It is possible for ok to be false even if no error is returned - in case an
-// error metadata was received.
-func (s *sortAllProcessor) fillWithContainer(
-	ctx context.Context, r sortableRowContainer,
-) (ok bool, _ sqlbase.EncDatumRow, _ error) {
+// The ok retval is false if an error occurred or if the input returned an error
+// metadata record. The caller is expected to inspect the error (if any) and
+// drain if it's not recoverable. It is possible for ok to be false even if no
+// error is returned - in case an error metadata was received.
+func (s *sortAllProcessor) fill() (ok bool, _ error) {
+	ctx := s.evalCtx.Ctx()
+
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
 			s.trailingMeta = append(s.trailingMeta, *meta)
 			if meta.Err != nil {
-				return false, nil, nil
+				return false, nil
 			}
 			continue
 		}
@@ -306,16 +249,15 @@ func (s *sortAllProcessor) fillWithContainer(
 			break
 		}
 
-		if err := r.AddRow(ctx, row); err != nil {
-			return false, row, err
+		if err := s.rows.AddRow(ctx, row); err != nil {
+			return false, err
 		}
 	}
-	r.Sort(ctx)
+	s.rows.Sort(ctx)
 
-	s.i = r.NewFinalIterator(ctx)
+	s.i = s.rows.NewFinalIterator(ctx)
 	s.i.Rewind()
-
-	return true, nil, nil
+	return true, nil
 }
 
 func (s *sortAllProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
@@ -337,9 +279,6 @@ func (s *sortAllProcessor) close() {
 			s.i.Close()
 		}
 		ctx := s.evalCtx.Ctx()
-		if s.diskContainer != nil {
-			s.diskContainer.Close(ctx)
-		}
 		s.rows.Close(ctx)
 		s.rowContainerMon.Stop(ctx)
 	}
