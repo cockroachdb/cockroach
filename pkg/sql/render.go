@@ -592,9 +592,9 @@ func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
 	if r.run.row == nil {
 		r.run.row = make([]tree.Datum, len(r.render))
 	}
+	evalCtx.IVarContainer = r
 	for i, e := range r.render {
 		var err error
-		evalCtx.IVarContainer = r
 		r.run.row[i], err = e.Eval(evalCtx)
 		if err != nil {
 			return err
