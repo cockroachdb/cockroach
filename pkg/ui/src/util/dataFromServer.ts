@@ -2,6 +2,7 @@ export interface DataFromServer {
   ExperimentalUseLogin: boolean;
   LoginEnabled: boolean;
   LoggedInUser: string;
+  Tag: string;
   Version: string;
 }
 

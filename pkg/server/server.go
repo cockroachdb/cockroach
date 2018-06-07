@@ -1928,6 +1928,7 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 		tmplArgs := ui.IndexHTMLArgs{
 			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         cfg.RequireWebSession(),
+			Tag:                  build.GetInfo().Tag,
 			Version:              build.VersionPrefix(),
 		}
 		loggedInUser, ok := request.Context().Value(webSessionUserKey{}).(string)

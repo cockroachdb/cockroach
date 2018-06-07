@@ -19,7 +19,7 @@ class NodesWrapper extends React.Component<{}, {}> {
   }
 }
 
-export default function(): JSX.Element {
+export default function createClusterOverviewRoutes(): JSX.Element {
   return (
     <Route path="overview" component={ ClusterOverview } >
       <IndexRedirect to="list" />
