@@ -128,7 +128,7 @@ func (p *planner) getDataSource(
 		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
 	case *tree.RowsFromExpr:
-		return p.getPlanForRowsFrom(ctx, sqlbase.AnonymousTable, t.Items...)
+		return p.getPlanForRowsFrom(ctx, t.Items...)
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)
@@ -423,16 +423,11 @@ func (p *planner) getSubqueryPlan(
 
 // getPlanForRowsFrom builds the plan for a ROWS FROM(...) expression.
 func (p *planner) getPlanForRowsFrom(
-	ctx context.Context, srcName tree.TableName, exprs ...tree.Expr,
+	ctx context.Context, exprs ...tree.Expr,
 ) (planDataSource, error) {
-	plan, err := p.ProjectSet(ctx, &unaryNode{}, "ROWS FROM", exprs...)
-	if err != nil {
-		return planDataSource{}, err
-	}
-	return planDataSource{
-		info: sqlbase.NewSourceInfoForSingleTable(srcName, planColumns(plan)),
-		plan: plan,
-	}, nil
+	srcPlan := &unaryNode{}
+	srcInfo := sqlbase.NewSourceInfoForSingleTable(sqlbase.AnonymousTable, nil)
+	return p.ProjectSet(ctx, srcPlan, srcInfo, "ROWS FROM", nil, exprs...)
 }
 
 func (p *planner) getSequenceSource(
