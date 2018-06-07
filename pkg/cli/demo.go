@@ -35,56 +35,64 @@ interactive SQL prompt to it.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
-	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runDemo)),
+	RunE:    MaybeDecorateGRPCError(runDemo),
 }
 
-func runDemo(_ *cobra.Command, _ []string) error {
+func setupTransientServer() (connURL string, adminURL string, cleanup func(), err error) {
+	cleanup = func() {}
 	ctx := context.Background()
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
-		return err
+		return connURL, adminURL, cleanup, err
 	}
-	defer stopper.Stop(ctx)
+	cleanup = func() { stopper.Stop(ctx) }
 
 	args := base.TestServerArgs{
 		Insecure: true,
 	}
 	server := server.TestServerFactory.New(args).(*server.TestServer)
 	if err := server.Start(args); err != nil {
-		return err
+		return connURL, adminURL, cleanup, err
 	}
-	defer server.Stopper().Stop(ctx)
+	prevCleanup := cleanup
+	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
 
 	options := url.Values{}
 	options.Add("sslmode", "disable")
+	options.Add("application_name", "cockroach demo")
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
 		Host:     server.ServingAddr(),
-		Path:     "demo",
 		RawQuery: options.Encode(),
 	}
-	conn := makeSQLConn(url.String())
-	defer conn.Close()
 
-	// Open the connection to make sure everything is OK before running any
-	// statements. Performs authentication.
-	if err := conn.ensureConn(); err != nil {
-		return err
-	}
-	if err := conn.Exec("CREATE DATABASE demo", nil); err != nil {
-		return err
-	}
-	cliCtx.isInteractive = true
+	return url.String(), server.AdminURL(), cleanup, nil
+}
 
-	fmt.Printf(`#
+func runDemo(cmd *cobra.Command, _ []string) error {
+	connURL, adminURL, cleanup, err := setupTransientServer()
+	defer cleanup()
+	if err != nil {
+		return checkAndMaybeShout(err)
+	}
+
+	checkInteractive()
+
+	if cliCtx.isInteractive {
+		fmt.Printf(`#
 # Welcome to the CockroachDB demo database!
 #
-# You are connected to a temporary, in-memory CockroachDB instance. Your changes
-# will not be saved.
+# You are connected to a temporary, in-memory CockroachDB
+# instance. Your changes will not be saved!
 #
-# Admin UI: %s
+# Web UI: %s
 #
-`, server.AdminURL())
-	return runInteractive(conn)
+`, adminURL)
+	}
+
+	conn := makeSQLConn(connURL)
+	defer conn.Close()
+
+	return runClient(cmd, conn)
 }

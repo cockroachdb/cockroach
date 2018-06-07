@@ -702,6 +702,53 @@ func Example_zone() {
 	// system.jobs
 }
 
+func Example_demo() {
+	testData := [][]string{
+		{"demo", "-e", "show database"},
+		{"demo", "-e", "show application_name"},
+		{"demo", "--format=pretty", "-e", "show database"},
+		{"demo", "-e", "select 1", "-e", "select 3"},
+		{"demo", "--echo-sql", "-e", "select 1"},
+	}
+
+	// Ensure that CLI error messages and anything meant for the
+	// original stderr is redirected to stdout, where it can be
+	// captured.
+	stderr = os.Stdout
+
+	for _, cmd := range testData {
+		TestingReset()
+		fmt.Println(strings.Join(cmd, " "))
+		if err := Run(cmd); err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	// Output:
+	// demo -e show database
+	// database
+	// defaultdb
+	// demo -e show application_name
+	// application_name
+	// cockroach demo
+	// demo --format=pretty -e show database
+	// +-----------+
+	// | database  |
+	// +-----------+
+	// | defaultdb |
+	// +-----------+
+	// (1 row)
+	// demo -e select 1 -e select 3
+	// 1
+	// 1
+	// 3
+	// 3
+	// demo --echo-sql -e select 1
+	// > select 1
+	// 1
+	// 1
+}
+
 func Example_sql() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
