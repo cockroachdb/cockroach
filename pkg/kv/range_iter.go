@@ -128,6 +128,11 @@ func (ri *RangeIterator) Error() *roachpb.Error {
 	return ri.pErr
 }
 
+// Reset resets the RangeIterator to its initial state.
+func (ri *RangeIterator) Reset() {
+	*ri = RangeIterator{ds: ri.ds}
+}
+
 // Next advances the iterator to the next range. The direction of
 // advance is dependent on whether the iterator is reversed. The
 // iterator must be valid.
