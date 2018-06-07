@@ -68,7 +68,6 @@ type tableUpsertEvaler interface {
 //
 type tableUpserter struct {
 	twb tableWriterBase
-	tub tableUpserterBase
 	ri  sqlbase.RowInserter
 
 	// insertRows are the rows produced by the insertion data source.
@@ -121,12 +120,39 @@ type tableUpserter struct {
 
 // init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	err := tu.tub.init(txn, evalCtx)
-	if err != nil {
-		return err
+	tu.twb.init(txn)
+	tableDesc := tu.tableDesc()
+
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+
+	tu.insertRows.Init(
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+	)
+
+	if tu.collectRows {
+		tu.rowsUpserted = sqlbase.NewRowContainer(
+			evalCtx.Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
+			tu.insertRows.Len(),
+		)
+
+		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
+		// all the table columns. We need to pass values for all table columns
+		// to rh, in the correct order; we will use rowTemplate for this. We
+		// also need a table that maps row indices to rowTemplate indices to
+		// fill in the row values; any absent values will be NULLs.
+		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 	}
 
-	tableDesc := tu.tableDesc()
+	colIDToRetIndex := map[sqlbase.ColumnID]int{}
+	for i, col := range tableDesc.Columns {
+		colIDToRetIndex[col.ID] = i
+	}
+
+	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
+	for i, col := range tu.ri.InsertCols {
+		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+	}
 	// TODO(dan): This could be made tighter, just the rows needed for the ON
 	// CONFLICT and RETURNING exprs.
 	requestedCols := tableDesc.Columns
@@ -135,6 +161,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		tu.fetchCols = requestedCols
 		tu.fetchColIDtoRowIndex = sqlbase.ColIDtoRowIndexFromCols(requestedCols)
 	} else {
+		var err error
 		tu.ru, err = sqlbase.MakeRowUpdater(
 			txn,
 			tableDesc,
@@ -148,6 +175,11 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		if err != nil {
 			return err
 		}
+
+		tu.insertRows.Init(
+			evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		)
+
 		// t.ru.fetchCols can also contain columns undergoing mutation.
 		tu.fetchCols = tu.ru.FetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.FetchColIDtoRowIndex
@@ -815,9 +847,8 @@ type tableUpserterBase struct {
 	resultCount int
 
 	// internal state
-	conflictIndexes []sqlbase.IndexDescriptor
-	insertRows      sqlbase.RowContainer
-	indexKeyPrefix  []byte
+	insertRows     sqlbase.RowContainer
+	indexKeyPrefix []byte
 }
 
 func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
@@ -898,6 +929,13 @@ func (tu *tableUpserterBase) close(ctx context.Context) {
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
 	}
+}
+
+// finalize is part of the tableWriter interface.
+func (tu *tableUpserterBase) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+) (*sqlbase.RowContainer, error) {
+	return nil, tu.twb.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
 func (tu *tableUpserterBase) makeResultFromInsertRow(
