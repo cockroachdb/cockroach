@@ -228,6 +228,10 @@ func (c *cliState) invalidSyntax(
 	return nextState
 }
 
+func (c *cliState) invalidOptSet(nextState cliStateEnum, args []string) cliStateEnum {
+	return c.invalidSyntax(nextState, `\set %s. Try \? for help.`, strings.Join(args, " "))
+}
+
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
 	fmt.Fprintf(stderr, "cannot change option during multi-line editing: %s\n", opt)
 	return nextState
@@ -235,18 +239,18 @@ func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliSt
 
 var options = map[string]struct {
 	description               string
-	numExpectedArgs           int
+	isBoolean                 bool
 	validDuringMultilineEntry bool
-	set                       func(c *cliState, args []string) error
-	unset                     func(c *cliState) error
+	set                       func(c *cliState, val string) error
+	reset                     func(c *cliState) error
 	display                   func(c *cliState) string
 }{
 	`display_format`: {
 		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
-		1,
+		false,
 		true,
-		func(_ *cliState, args []string) error {
-			return cliCtx.tableDisplayFormat.Set(args[0])
+		func(_ *cliState, val string) error {
+			return cliCtx.tableDisplayFormat.Set(val)
 		},
 		func(_ *cliState) error {
 			displayFormat := tableDisplayTSV
@@ -260,41 +264,41 @@ var options = map[string]struct {
 	},
 	`echo`: {
 		"show SQL queries before they are sent to the server",
-		0,
+		true,
 		false,
-		func(_ *cliState, _ []string) error { sqlCtx.echo = true; return nil },
+		func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
 		func(_ *cliState) error { sqlCtx.echo = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
 	},
 	`errexit`: {
 		"exit the shell upon a query error",
-		0,
 		true,
-		func(c *cliState, _ []string) error { c.errExit = true; return nil },
+		true,
+		func(c *cliState, _ string) error { c.errExit = true; return nil },
 		func(c *cliState) error { c.errExit = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.errExit) },
 	},
 	`check_syntax`: {
 		"check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
-		0,
+		true,
 		false,
-		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
+		func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
 		func(c *cliState) error { c.checkSyntax = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
 	},
 	`show_times`: {
 		"display the execution time after each query",
-		0,
 		true,
-		func(_ *cliState, _ []string) error { cliCtx.showTimes = true; return nil },
+		true,
+		func(_ *cliState, _ string) error { cliCtx.showTimes = true; return nil },
 		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
 	},
 	`smart_prompt`: {
 		"print connection and session metadata in the prompt",
-		0,
 		true,
-		func(c *cliState, _ []string) error { c.smartPrompt = true; return nil },
+		true,
+		func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
 		func(c *cliState) error { c.smartPrompt = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
 	},
@@ -327,14 +331,47 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 
 		return nextState
 	}
+
+	if len(args) == 1 {
+		// Try harder to find a value.
+		args = strings.SplitN(args[0], "=", 2)
+	}
+
 	opt, ok := options[args[0]]
-	if !ok || len(args)-1 != opt.numExpectedArgs {
-		return c.invalidSyntax(errState, `\set %s. Try \? for help.`, strings.Join(args, " "))
+	if !ok {
+		return c.invalidOptSet(errState, args)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
 	}
-	if err := opt.set(c, args[1:]); err != nil {
+
+	// Determine which value to use.
+	var val string
+	switch len(args) {
+	case 1:
+		val = "true"
+	case 2:
+		val = args[1]
+	default:
+		return c.invalidOptSet(errState, args)
+	}
+
+	// Run the command.
+	var err error
+	if !opt.isBoolean {
+		err = opt.set(c, val)
+	} else {
+		switch val {
+		case "true", "1", "on":
+			err = opt.set(c, "true")
+		case "false", "0", "off":
+			err = opt.reset(c)
+		default:
+			return c.invalidOptSet(errState, args)
+		}
+	}
+
+	if err != nil {
 		fmt.Fprintf(stderr, "\\set %s: %v\n", strings.Join(args, " "), err)
 		return errState
 	}
@@ -353,7 +390,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
 	}
-	if err := opt.unset(c); err != nil {
+	if err := opt.reset(c); err != nil {
 		fmt.Fprintf(stderr, "\\unset %s: %v\n", args[0], err)
 		return errState
 	}
