@@ -266,6 +266,14 @@ accidents. This can also be overridden in a session with SET
 sql_safe_updates = FALSE.`,
 	}
 
+	Set = FlagInfo{
+		Name:      "set",
+		Shorthand: "s",
+		Description: `
+Set a client-side configuration parameter before running the SQL
+shell. This flag may be specified multiple times.`,
+	}
+
 	TableDisplayFormat = FlagInfo{
 		Name: "format",
 		Description: `

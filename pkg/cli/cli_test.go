@@ -702,6 +702,58 @@ func Example_zone() {
 	// system.jobs
 }
 
+func Example_demo() {
+	testData := [][]string{
+		{"demo", "-e", "show database"},
+		{"demo", "-e", "show application_name"},
+		{"demo", "--format=pretty", "-e", "show database"},
+		{"demo", "-e", "select 1", "-e", "select 3"},
+		{"demo", "--echo-sql", "-e", "select 1"},
+		{"demo", "--set=errexit=0", "-e", "select nonexistent", "-e", "select 123"},
+	}
+
+	// Ensure that CLI error messages and anything meant for the
+	// original stderr is redirected to stdout, where it can be
+	// captured.
+	stderr = os.Stdout
+
+	for _, cmd := range testData {
+		TestingReset()
+		fmt.Println(strings.Join(cmd, " "))
+		if err := Run(cmd); err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	// Output:
+	// demo -e show database
+	// database
+	// defaultdb
+	// demo -e show application_name
+	// application_name
+	// cockroach demo
+	// demo --format=pretty -e show database
+	// +-----------+
+	// | database  |
+	// +-----------+
+	// | defaultdb |
+	// +-----------+
+	// (1 row)
+	// demo -e select 1 -e select 3
+	// 1
+	// 1
+	// 3
+	// 3
+	// demo --echo-sql -e select 1
+	// > select 1
+	// 1
+	// 1
+	// demo --set=errexit=0 -e select nonexistent -e select 123
+	// pq: column "nonexistent" does not exist
+	// 123
+	// 123
+}
+
 func Example_sql() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
@@ -727,6 +779,10 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-e", "copy t.f from stdin"})
 	// --echo-sql should print out the SQL statements.
 	c.RunWithArgs([]string{"user", "ls", "--echo-sql"})
+	// --set changes client-side variables before executing commands.
+	c.RunWithArgs([]string{"sql", "--set=errexit=0", "-e", "select nonexistent", "-e", "select 123"})
+	c.RunWithArgs([]string{"sql", "--set", "echo=true", "-e", "select 123"})
+	c.RunWithArgs([]string{"sql", "--set", "unknownoption", "-e", "select 123"})
 
 	// Output:
 	// sql -e show application_name
@@ -776,6 +832,17 @@ func Example_sql() {
 	// > SHOW USERS
 	// username
 	// root
+	// sql --set=errexit=0 -e select nonexistent -e select 123
+	// pq: column "nonexistent" does not exist
+	// 123
+	// 123
+	// sql --set echo=true -e select 123
+	// > select 123
+	// 123
+	// 123
+	// sql --set unknownoption -e select 123
+	// invalid syntax: \set unknownoption. Try \? for help.
+	// invalid syntax
 }
 
 func Example_sql_format() {

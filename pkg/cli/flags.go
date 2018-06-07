@@ -323,21 +323,28 @@ func init() {
 	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
 	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
 
-	VarFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
-	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
+	for _, cmd := range []*cobra.Command{sqlShellCmd, demoCmd} {
+		f := cmd.Flags()
+		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
+		VarFlag(f, &sqlCtx.execStmts, cliflags.Execute)
+		BoolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
+	}
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, dumpCtx.asOf)
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}
+	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
-		StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
-		StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
+
+		if cmd != demoCmd {
+			StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+			StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
+		}
 
 		if cmd == sqlShellCmd {
 			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
@@ -345,7 +352,7 @@ func init() {
 	}
 
 	// Commands that print tables.
-	tableOutputCommands := []*cobra.Command{sqlShellCmd, genSettingsListCmd}
+	tableOutputCommands := []*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd}
 	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
 

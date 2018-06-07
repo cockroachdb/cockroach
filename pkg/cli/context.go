@@ -77,6 +77,7 @@ func initCLIDefaults() {
 	cliCtx.sqlConnUser = ""
 	cliCtx.sqlConnDBName = ""
 
+	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
 	sqlCtx.safeUpdates = false
 	sqlCtx.echo = false
@@ -156,6 +157,9 @@ var cliCtx = cliContext{Config: baseCfg}
 // Defaults set by InitCLIDefaults() above.
 var sqlCtx = struct {
 	*cliContext
+
+	// setStmts is a list of \set commands to execute before entering the sql shell.
+	setStmts statementsValue
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
