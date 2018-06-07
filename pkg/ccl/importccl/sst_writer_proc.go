@@ -167,12 +167,12 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 					if chunk > 0 {
 						name = fmt.Sprintf("%d-%s", chunk, name)
 					}
+					end := span.End
+					if sst.more {
+						end = sst.span.EndKey
+					}
 
 					if sp.spec.Destination == "" {
-						end := span.End
-						if sst.more {
-							end = sst.span.EndKey
-						}
 						if err := sp.db.AdminSplit(ctx, end, end); err != nil {
 							return err
 						}
@@ -231,7 +231,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						),
 						sqlbase.DatumToEncDatum(
 							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-							tree.NewDBytes(tree.DBytes(sst.span.EndKey)),
+							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}
 					cs, err := sp.out.EmitRow(ctx, row)
