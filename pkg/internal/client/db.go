@@ -175,14 +175,6 @@ type DBContext struct {
 	NodeID *base.NodeIDContainer
 	// Stopper is used for async tasks.
 	Stopper *stop.Stopper
-	// UseNonCancelableCtxForTxn, when set, means that db.Txn() doesn't signal
-	// transaction completion to the TxnCoordSender through context cancelation.
-	// This means that the TxnCoordSender will consider a transaction to be
-	// abandoned based on a timeout.
-	// TODO(andrei): This is only used by a few tests dealing with the timeout.
-	// Remove it once the TxnCoordSender is no longer concerned with abandoned
-	// transactions.
-	UseTimeoutTxnAbandonment bool
 }
 
 // DefaultDBContext returns (a copy of) the default options for
@@ -531,13 +523,6 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	// TODO(andrei): revisit this when TxnSender is moved to the client
-	// (https://github.com/cockroachdb/cockroach/issues/10511).
-	if !db.ctx.UseTimeoutTxnAbandonment {
-		var cancel func()
-		ctx, cancel = context.WithCancel(ctx)
-		defer cancel()
-	}
 	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
