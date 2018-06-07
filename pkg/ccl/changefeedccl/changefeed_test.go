@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -237,6 +238,25 @@ func TestChangefeedSchemaChange(t *testing.T) {
 
 	// TODO(dan): Test a schema change that uses a backfill once we figure out
 	// the user facing semantics of that.
+}
+
+func TestChangefeedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+	if _, err := sqlDB.DB.Exec(
+		`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://nope`,
+	); !testutils.IsError(err, `no test producer: nope`) {
+		t.Fatalf(`expected 'no test producer: nope' error got: %+v`, err)
+	}
 }
 
 // testKafkaProducer is an implementation of sarama.SyncProducer used for

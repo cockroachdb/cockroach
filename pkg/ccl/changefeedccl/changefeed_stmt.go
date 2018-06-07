@@ -114,14 +114,12 @@ func changefeedPlanHook(
 			Opts:       opts,
 			SinkURI:    sinkURI,
 		}
-		// The resumed job validates, but also validate early so the `CREATE
-		// CHANGEFEED` returns an error if any of the options are wrong,
-		// otherwise it would only show up as a failed job.
-		if details, err = validateChangefeed(details); err != nil {
-			return err
-		}
 
-		job, _, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
+		// Make a channel for runChangefeedFlow to signal once everything has
+		// been setup okay. This intentionally abuses what would normally be
+		// hooked up to resultsCh to avoid a bunch of extra plumbing.
+		startedCh := make(chan tree.Datums)
+		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
 			Description: changefeedJobDescription(changefeedStmt),
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -138,6 +136,15 @@ func changefeedPlanHook(
 		if err != nil {
 			return err
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-errCh:
+			return err
+		case <-startedCh:
+			// The feed set up without error, return control to the user.
+		}
+
 		resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*job.ID())),
 		}
@@ -151,6 +158,13 @@ func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
 }
 
 func validateChangefeed(details jobs.ChangefeedDetails) (jobs.ChangefeedDetails, error) {
+	if details.Opts == nil {
+		// The proto MarshalTo method omits the Opts field if the map is empty.
+		// So, if no options were specified by the user, Opts will be nil when
+		// the job gets restarted.
+		details.Opts = map[string]string{}
+	}
+
 	switch envelopeType(details.Opts[optEnvelope]) {
 	case ``, optEnvelopeRow:
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
@@ -175,10 +189,10 @@ func validateChangefeed(details jobs.ChangefeedDetails) (jobs.ChangefeedDetails,
 type changefeedResumer struct{}
 
 func (b *changefeedResumer) Resume(
-	ctx context.Context, job *jobs.Job, planHookState interface{}, _ chan<- tree.Datums,
+	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
-	return runChangefeedFlow(ctx, execCfg, job)
+	return runChangefeedFlow(ctx, execCfg, job, startedCh)
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
