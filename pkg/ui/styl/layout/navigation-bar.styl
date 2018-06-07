@@ -67,8 +67,37 @@ $subnav-underline-height = 3px
         polyline, rect, path, ellipse
           stroke $link-color
 
-    &.cockroach
+    &.login-indicator
       padding-top 10px
+      text-align center
+
+      &--insecure
+        font-family Lato-Heavy
+        font-size 8px
+        text-transform uppercase
+        text-align center
+        color $warning-color
+
+        path
+          fill $warning-color
+
+      .login-indicator__initial
+        border 2px solid $link-color
+        width 32px
+        height 32px
+        border-radius 5px
+        color $link-color
+        font-size 18px
+        line-height 32px
+        text-align center
+        margin 0 auto
+
+      a
+        display inline
+        padding 0
+
+        &:hover
+          color $link-color
 
     &.active
       background-color $navbar-bg

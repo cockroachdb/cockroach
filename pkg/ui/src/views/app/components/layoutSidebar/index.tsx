@@ -7,6 +7,7 @@ import { Link } from "react-router";
 
 import { AdminUIState } from "src/redux/state";
 import { selectLoginState, LoginState, doLogout } from "src/redux/login";
+import { LOGOUT_PAGE } from "src/routes/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
@@ -14,6 +15,7 @@ import homeIcon from "!!raw-loader!assets/home.svg";
 import metricsIcon from "!!raw-loader!assets/metrics.svg";
 import databasesIcon from "!!raw-loader!assets/databases.svg";
 import jobsIcon from "!!raw-loader!assets/jobs.svg";
+import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
 
 interface IconLinkProps {
   icon: string;
@@ -69,7 +71,13 @@ function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
   }
 
   if (!loginState.loginEnabled()) {
-    return (<div className="login-indicator">Insecure mode</div>);
+    return (
+      <li className="login-indicator login-indicator--insecure">
+        <div className="image-container"
+             dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
+        <div>Insecure mode</div>
+      </li>
+    );
   }
 
   const user = loginState.loggedInUser();
@@ -78,11 +86,15 @@ function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
   }
 
   return (
-    <div className="login-indicator">
-        Logged in as {user}
-        <br />
-        <button onClick={handleLogout}>Logout</button>
-    </div>
+    <li className="login-indicator">
+        <div
+          className="login-indicator__initial"
+          title={`Signed in as ${user}`}
+        >
+          { user[0] }
+        </div>
+        <Link to={LOGOUT_PAGE} onClick={handleLogout}>Sign Out</Link>
+    </li>
   );
 }
 
@@ -113,10 +125,8 @@ export default class Sidebar extends React.Component {
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
-        <div className="logged-in-user">
-          <LoginIndicatorConnected />
-        </div>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
+          <LoginIndicatorConnected />
           <IconLink to="/" icon={cockroachIcon} className="cockroach" />
         </ul>
       </nav>

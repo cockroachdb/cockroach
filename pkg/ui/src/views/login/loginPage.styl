@@ -1,0 +1,102 @@
+@require "~styl/base/palette.styl"
+
+.login-page
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+  width 100%
+  position absolute
+  background-color white
+
+  .content
+    border thin solid $table-border-color
+    position relative
+
+  &__info.section
+    width 486px
+    display inline-block
+    padding 24px
+
+  &__form.section
+    background-color $table-border-color
+    width 486px
+    display inline-block
+    padding 108px 53px 138px
+
+  .heading
+    text-transform none
+    letter-spacing 1px
+    margin-bottom 24px
+
+  .aside
+    margin-top 12px
+    line-height 24px
+    letter-spacing 1px
+    color $body-color
+    width 350px
+
+  .version
+    color $body-color
+    position absolute
+    left 12px
+    top 12px
+
+  .version-tag
+    color #54b30e
+
+  .logo
+    height 32px
+
+  .docs-link
+    display block
+    margin-top 32px
+    text-decoration none
+    color $link-color
+
+    &__icon
+      position relative
+      top 6px
+
+    &__text
+      font-size 17px
+      line-height 30px
+      margin-left 6px
+
+  .input-text
+    width 100%
+    font-size 14px
+    line-height 17px
+    padding 12px 18px
+    vertical-align middle
+    border 1px solid $button-border-color
+    border-radius 3px
+    margin 12px 0
+    color $body-color
+    display block
+
+    &--error
+      border-color $alert-color
+
+  .submit-button
+    width 100%
+    text-transform uppercase
+    font-size 14px
+    letter-spacing 2px
+    line-height 17px
+    padding 12px 24px
+    vertical-align middle
+    border 0px none
+    border-radius 3px
+    margin 24px 0
+    color $background-color
+    background-color $link-color
+    cursor pointer
+    display block
+
+    &:disabled
+      background-color #90b8ef
+
+  &__error
+    color $alert-color
+    margin 12px 0

@@ -79,6 +79,7 @@ type IndexHTMLArgs struct {
 	ExperimentalUseLogin bool
 	LoginEnabled         bool
 	LoggedInUser         *string
+	Tag                  string
 	Version              string
 }
 

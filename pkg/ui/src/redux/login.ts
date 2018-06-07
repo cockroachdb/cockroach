@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import { createPath } from "src/hacks/createPath";
 import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
-import { LOGIN_PAGE } from "src/routes/login";
+import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
@@ -100,8 +100,20 @@ export const selectLoginState = createSelector(
     },
 );
 
+function shouldRedirect(location: Location) {
+  if (!location) {
+    return false;
+  }
+
+  if (location.pathname === LOGOUT_PAGE) {
+    return false;
+  }
+
+  return true;
+}
+
 export function getLoginPage(location: Location) {
-  const query = !location ? undefined : {
+  const query = !shouldRedirect(location) ? undefined : {
     redirectTo: createPath({
       pathname: location.pathname,
       search: location.search,
@@ -119,7 +131,7 @@ export function getLoginPage(location: Location) {
 
 export interface LoginAPIState {
   loggedInUser: string;
-  error: string;
+  error: Error;
   inProgress: boolean;
 }
 
@@ -153,10 +165,10 @@ function loginSuccess(loggedInUser: string): LoginSuccessAction {
 
 interface LoginFailureAction extends Action {
   type: typeof LOGIN_FAILURE;
-  error: string;
+  error: Error;
 }
 
-function loginFailure(error: string): LoginFailureAction {
+function loginFailure(error: Error): LoginFailureAction {
   return {
     type: LOGIN_FAILURE,
     error,
@@ -180,7 +192,7 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     return userLogin(loginReq)
       .then(
         () => { dispatch(loginSuccess(username)); },
-        (err) => { dispatch(loginFailure(err.toString())); },
+        (err) => { dispatch(loginFailure(err)); },
       );
   };
 }

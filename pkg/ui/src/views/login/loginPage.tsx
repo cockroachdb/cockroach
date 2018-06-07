@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -5,6 +6,16 @@ import { withRouter, WithRouterProps } from "react-router";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
+import { getDataFromServer } from "src/util/dataFromServer";
+import docsURL from "src/util/docs";
+import { trustIcon } from "src/util/trust";
+
+import logo from "assets/crdb.png";
+import docsIcon from "!!raw-loader!assets/docs.svg";
+
+const version = getDataFromServer().Tag || "UNKNOWN";
+
+import "./loginPage.styl";
 
 interface LoginPageProps {
   loginState: LoginAPIState;
@@ -26,15 +37,15 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
     // TODO(vilterp): focus username field on mount
   }
 
-  handleUpdateUsername = (username: string) => {
+  handleUpdateUsername = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
-      username,
+      username: evt.currentTarget.value,
     });
   }
 
-  handleUpdatePassword = (password: string) => {
+  handleUpdatePassword = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
-      password,
+      password: evt.currentTarget.value,
     });
   }
 
@@ -52,31 +63,74 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         });
   }
 
-  render() {
+  renderError() {
+    const { error } = this.props.loginState;
+
+    if (!error) {
+      return null;
+    }
+
+    let message = "Invalid username or password.";
+    if (error.message !== "Unauthorized") {
+        message = error.message;
+    }
     return (
-      <div>
+      <div className="login-page__error">Unable to log in: { message }</div>
+    );
+  }
+
+  render() {
+    const inputClasses = classNames("input-text", {
+      "input-text--error": !!this.props.loginState.error,
+    });
+
+    return (
+      <div className="login-page">
         <Helmet>
           <title>Login</title>
         </Helmet>
-        <section className="section">
-          <h1>Login</h1>
-          {this.props.loginState.error
-            ? <div className="login-page__error">Login error: {this.props.loginState.error}</div>
-            : null}
-          <form onSubmit={this.handleSubmit}>
-            <input
-              type="text"
-              onChange={(evt) => this.handleUpdateUsername(evt.target.value)}
-              value={this.state.username}
-            /><br />
-            <input
-              type="password"
-              onChange={(evt) => this.handleUpdatePassword(evt.target.value)}
-              value={this.state.password}
-            /><br />
-            <input type="submit" disabled={this.props.loginState.inProgress} />
-          </form>
-        </section>
+        <div className="content">
+          <section className="section login-page__info">
+            <p className="version">
+              Version: <span className="version-tag">{ version }</span>
+            </p>
+            <img className="logo" alt="CockroachDB" src={logo} />
+            <p className="aside">
+              Please contact your database administrator for
+              account access and password restoration.
+            </p>
+            <p className="aside">
+              <a href={docsURL("admin-ui-overview.html")} className="docs-link">
+                <span className="docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
+                <span className="docs-link__text">Read the documentation</span>
+              </a>
+            </p>
+          </section>
+          <section className="section login-page__form">
+            <h1 className="heading">Sign in to the Console</h1>
+            {this.renderError()}
+            <form onSubmit={this.handleSubmit}>
+              <input
+                type="text"
+                className={inputClasses}
+                onChange={this.handleUpdateUsername}
+                value={this.state.username}
+              />
+              <input
+                type="password"
+                className={inputClasses}
+                onChange={this.handleUpdatePassword}
+                value={this.state.password}
+              />
+              <input
+                type="submit"
+                className="submit-button"
+                disabled={this.props.loginState.inProgress}
+                value={this.props.loginState.inProgress ? "Signing in..." : "Sign In"}
+              />
+            </form>
+          </section>
+        </div>
       </div>
     );
   }
