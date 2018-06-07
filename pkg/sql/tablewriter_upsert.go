@@ -716,6 +716,7 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.T
 	}
 }
 
+// tableUpserterBase is meant to contain common functionality between different upserter implementations.
 type tableUpserterBase struct {
 	tableWriterBase
 
