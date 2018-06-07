@@ -572,6 +572,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 	var err error
 	optMode := ex.sessionData.OptimizerMode
+	// TODO(radu): for now, the experimental force lookup join flag does not work
+	// with the optimizer. Turn the optimizer off for the query so the flag can
+	// still function.
+	if optMode != sessiondata.OptimizerAlways && ex.sessionData.LookupJoinEnabled {
+		optMode = sessiondata.OptimizerOff
+	}
 	if optMode != sessiondata.OptimizerOff {
 		// Experimental path (disabled by default).
 		if err = planner.makeOptimizerPlan(ctx, stmt); err != nil {
