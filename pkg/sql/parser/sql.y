@@ -457,7 +457,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> ASYMMETRIC AT
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
-%token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
+%token <str> BLOB BOOL BOOLEAN BOTH BTREE BY BYTEA BYTES
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK
@@ -823,7 +823,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_column
-%type <bool> opt_using_gin
+%type <bool> opt_using_gin_btree
 
 %type <bool> opt_set_data
 
@@ -4192,7 +4192,7 @@ create_view_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
@@ -4205,7 +4205,7 @@ create_index_stmt:
       Inverted: $7.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
@@ -4241,10 +4241,14 @@ create_index_stmt:
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
 
 
-opt_using_gin:
+opt_using_gin_btree:
   USING GIN
   {
     $$.val = true
+  }
+| USING BTREE
+  {
+    $$.val = false
   }
 | /* EMPTY */
   {
@@ -7940,6 +7944,7 @@ unreserved_keyword:
 | BIGSERIAL
 | BLOB
 | BOOL
+| BTREE
 | BY
 | BYTEA
 | BYTES
