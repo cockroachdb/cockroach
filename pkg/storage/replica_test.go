@@ -7695,6 +7695,37 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			t.Fatalf("expected new value %d, got (%t, %+v)", expInc, ok, resp)
 		}
 	}
+
+	// Test LeaseRequest since it's special: MaxLeaseIndex plays no role and so
+	// there is no re-evaluation of the request.
+	atomic.StoreInt32(&c, 0)
+	{
+		prevLease, _ := tc.repl.GetLease()
+		ba := ba
+		ba.Requests = nil
+
+		lease := prevLease
+		lease.Sequence = 0
+
+		ba.Add(&roachpb.RequestLeaseRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: tc.repl.Desc().StartKey.AsRawKey(),
+			},
+			Lease:     lease,
+			PrevLease: prevLease,
+		})
+		_, pErr := tc.repl.executeWriteBatch(
+			context.WithValue(ctx, magicKey{}, "foo"),
+			ba,
+		)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
+			t.Fatalf("expected %d proposals, got %d", exp, act)
+		}
+	}
+
 }
 
 // TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
