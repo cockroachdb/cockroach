@@ -86,6 +86,7 @@ select * from crdb_internal.node_runtime_info;
 // in that txn being rolled back.
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("26524")
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
