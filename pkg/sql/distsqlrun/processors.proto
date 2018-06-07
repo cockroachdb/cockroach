@@ -136,6 +136,7 @@ message ProcessorCoreUnion {
   optional MetadataTestSenderSpec metadataTestSender = 18;
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
+  optional ProjectSetSpec projectSet = 22;
 
   reserved 6, 12;
 }
@@ -788,4 +789,17 @@ message InterleavedReaderJoinerSpec {
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+// ProjectSetSpec is the specification of a processor which applies a set of
+// expressions, which may be set-returning functions, to its input.
+message ProjectSetSpec {
+  // Expressions to be applied
+  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
+
+  // Column types for the generated values
+  repeated sqlbase.ColumnType generated_columns = 2 [(gogoproto.nullable) = false];
+
+  // The number of columns each expression returns. Same length as exprs.
+  repeated uint32 num_cols_per_gen = 3;
 }

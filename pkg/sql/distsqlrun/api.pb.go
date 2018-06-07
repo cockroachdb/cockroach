@@ -58,6 +58,7 @@
 		SamplerSpec
 		SampleAggregatorSpec
 		InterleavedReaderJoinerSpec
+		ProjectSetSpec
 		InputStats
 		TableReaderStats
 		HashJoinerStats
