@@ -251,7 +251,8 @@ func (tu *strictTableUpserter) makeResultFromInsertRow(
 	return tu.tub.makeResultFromInsertRow(insertRow, cols)
 }
 
-func (tu *strictTableUpserter) curBatchSize() int { return tu.tub.insertRows.Len() }
+// curBatchSize is part of the extendedTableWriter interface
+func (tu *strictTableUpserter) curBatchSize() int { return tu.tub.curBatchSize() }
 
 var _ batchedTableWriter = (*strictTableUpserter)(nil)
 var _ tableWriter = (*strictTableUpserter)(nil)
