@@ -286,6 +286,15 @@ func (d *DistinctSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (d *ProjectSetSpec) summary() (string, []string) {
+	var details []string
+	for _, expr := range d.Exprs {
+		details = append(details, expr.Expr)
+	}
+	return "ProjectSet", details
+}
+
+// summary implements the diagramCellType interface.
 func (s *SamplerSpec) summary() (string, []string) {
 	details := []string{fmt.Sprintf("SampleSize: %d", s.SampleSize)}
 	for _, sk := range s.Sketches {
