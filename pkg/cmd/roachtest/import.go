@@ -43,25 +43,15 @@ func registerImportTPCC(r *registry) {
 			c.Run(ctx, c.Node(1), cmd)
 			return nil
 		})
-		// To diagnose #26132.
-		done := make(chan struct{})
-		go func() {
-			m.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(5 * time.Hour):
-			t.Fatal("timed out making fixture")
-		}
+		m.Wait()
 	}
 
 	const warehouses = 1000
 	const numNodes = 4
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
-		Nodes: nodes(numNodes),
+		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+		Nodes:   nodes(numNodes),
+		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runImportTPCC(ctx, t, c, warehouses)
 		},
