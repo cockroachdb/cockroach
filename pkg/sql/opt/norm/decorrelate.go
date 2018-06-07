@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -114,12 +115,12 @@ func (f *Factory) hoistValuesSubquery(rows memo.ListID, cols memo.PrivateID) mem
 	var hoister subqueryHoister
 	hoister.init(f.evalCtx, f, f.constructNoColsRow())
 
-	lb := listBuilder{f: f}
+	lb := xfunc.MakeListBuilder(&f.funcs.CustomFuncs)
 	for _, item := range f.mem.LookupList(rows) {
-		lb.addItem(hoister.hoistAll(item))
+		lb.AddItem(hoister.hoistAll(item))
 	}
 
-	values := f.ConstructValues(lb.buildList(), cols)
+	values := f.ConstructValues(lb.BuildList(), cols)
 	projCols := f.mem.GroupProperties(values).Relational.OutputCols
 	join := f.ConstructInnerJoinApply(hoister.input(), values, f.ConstructTrue())
 	return f.ConstructSimpleProject(join, projCols)
@@ -308,9 +309,9 @@ func (f *Factory) ensureNotNullCol(in memo.GroupID) (out memo.GroupID, colID opt
 // constructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (f *Factory) constructNoColsRow() memo.GroupID {
-	lb := listBuilder{f: f}
-	lb.addItem(f.ConstructTuple(f.InternList(nil)))
-	return f.ConstructValues(lb.buildList(), f.InternColList(opt.ColList{}))
+	lb := xfunc.MakeListBuilder(&f.funcs.CustomFuncs)
+	lb.AddItem(f.ConstructTuple(f.InternList(nil)))
+	return f.ConstructValues(lb.BuildList(), f.InternColList(opt.ColList{}))
 }
 
 // referenceSingleColumn returns a Variable operator that refers to the one and
