@@ -31,8 +31,8 @@ import (
 // without any specified columns. In this case, whenever a conflict is detected
 // for an insert row on any of the indexes with unique key constraints, the insert is not done.
 type strictTableUpserter struct {
-	twb         tableWriterBase
-	tub         tableUpserterBase
+	tableUpserterBase
+
 	ri          sqlbase.RowInserter
 	alloc       *sqlbase.DatumAlloc
 	collectRows bool
@@ -44,13 +44,13 @@ type strictTableUpserter struct {
 func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.twb.init(txn)
 
-	tu.tub = tableUpserterBase{
+	tu.tableUpserterBase = tableUpserterBase{
 		ri:          tu.ri,
 		alloc:       tu.alloc,
 		collectRows: tu.collectRows,
 	}
 
-	err := tu.tub.init(txn, evalCtx)
+	err := tu.tableUpserterBase.init(txn, evalCtx)
 	if err != nil {
 		return err
 	}
@@ -63,27 +63,9 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 	return nil
 }
 
-// row is part of the tableWriter interface.
-func (tu *strictTableUpserter) row(
-	ctx context.Context, row tree.Datums, traceKV bool,
-) (tree.Datums, error) {
-	tu.twb.batchSize++
-	return tu.tub.insertRows.AddRow(ctx, row)
-}
-
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
-func (tu *strictTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
-	return tu.tub.flushAndStartNewBatch(ctx)
-}
-
 // fkSpanCollector is part of the tableWriter interface.
 func (tu *strictTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
 	return tu.ri.Fks
-}
-
-// tableDesc is part of the tableWriter interface.
-func (tu *strictTableUpserter) tableDesc() *sqlbase.TableDescriptor {
-	return tu.tub.tableDesc()
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -94,8 +76,8 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 	if err != nil {
 		return err
 	}
-	for i := 0; i < tu.tub.insertRows.Len(); i++ {
-		insertRow := tu.tub.insertRows.At(i)
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		insertRow := tu.insertRows.At(i)
 
 		// Has this insert row been marked as conflicting? If so, skip.
 		if _, ok := conflictingRows[i]; ok {
@@ -108,10 +90,10 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 
 		// for ... RETURNING clause
 		resultRow := tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
-		tu.tub.resultCount++
+		tu.resultCount++
 
 		if tu.collectRows {
-			_, err = tu.tub.rowsUpserted.AddRow(ctx, resultRow)
+			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
 			}
@@ -123,7 +105,7 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 		// will want to know exactly how many rows there in there.
 		// Use that as final resultCount. This overrides any
 		// other value computed in the main loop above.
-		tu.tub.resultCount = tu.tub.rowsUpserted.Len()
+		tu.resultCount = tu.rowsUpserted.Len()
 	}
 
 	return nil
@@ -156,12 +138,12 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 	b := tu.twb.txn.NewBatch()
 
-	for i := 0; i < tu.tub.insertRows.Len(); i++ {
-		row := tu.tub.insertRows.At(i)
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		row := tu.insertRows.At(i)
 
 		// Get the primary key of the insert row.
 		upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.tub.indexKeyPrefix)
+			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -222,37 +204,8 @@ func (tu *strictTableUpserter) getConflictingRows(
 	return conflictingRows, nil
 }
 
-// batchedCount is part of the batchedTableWriter interface.
-func (tu *strictTableUpserter) batchedCount() int { return tu.tub.resultCount }
-
-// batchedValues is part of the batchedTableWriter interface.
-func (tu *strictTableUpserter) batchedValues(rowIdx int) tree.Datums {
-	return tu.tub.rowsUpserted.At(rowIdx)
-}
-
-// finalize is part of the tableWriter interface.
-func (tu *strictTableUpserter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-) (*sqlbase.RowContainer, error) {
-	return nil, tu.twb.finalize(ctx, autoCommit, tu.tableDesc())
-}
-
 // walkExprs is part of the tableWriter interface.
 func (tu *strictTableUpserter) walkExprs(walk func(desc string, index int, expr tree.TypedExpr)) {}
-
-// close is part of the tableWriter interface.
-func (tu *strictTableUpserter) close(ctx context.Context) {
-	tu.tub.close(ctx)
-}
-
-func (tu *strictTableUpserter) makeResultFromInsertRow(
-	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
-) tree.Datums {
-	return tu.tub.makeResultFromInsertRow(insertRow, cols)
-}
-
-// curBatchSize is part of the extendedTableWriter interface
-func (tu *strictTableUpserter) curBatchSize() int { return tu.tub.curBatchSize() }
 
 var _ batchedTableWriter = (*strictTableUpserter)(nil)
 var _ tableWriter = (*strictTableUpserter)(nil)
