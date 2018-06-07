@@ -112,9 +112,11 @@ test      pg_catalog          pg_proc                            public  SELECT
 test      pg_catalog          pg_range                           public  SELECT
 test      pg_catalog          pg_rewrite                         public  SELECT
 test      pg_catalog          pg_roles                           public  SELECT
+test      pg_catalog          pg_seclabel                        public  SELECT
 test      pg_catalog          pg_sequence                        public  SELECT
 test      pg_catalog          pg_settings                        public  SELECT
 test      pg_catalog          pg_shdescription                   public  SELECT
+test      pg_catalog          pg_shseclabel                      public  SELECT
 test      pg_catalog          pg_stat_activity                   public  SELECT
 test      pg_catalog          pg_tables                          public  SELECT
 test      pg_catalog          pg_tablespace                      public  SELECT

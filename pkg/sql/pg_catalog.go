@@ -92,6 +92,8 @@ var pgCatalog = virtualSchema{
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 		pgCatalogStatActivityTable,
+		pgCatalogSecurityLabelTable,
+		pgCatalogSharedSecurityLabelTable,
 	},
 	// Postgres's catalogs are ill-defined when there is no current
 	// database set. Simply reject any attempts to use them in that
@@ -1932,6 +1934,38 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	backend_xid INTEGER,
 	backend_xmin INTEGER,
 	query TEXT
+)
+`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+//
+// See https://www.postgresql.org/docs/current/static/catalog-pg-seclabel.html
+var pgCatalogSecurityLabelTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_seclabel (
+	objoid OID,
+	classoid OID,
+	objsubid INTEGER,
+	provider TEXT,
+	label TEXT
+)
+`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+// See https://www.postgresql.org/docs/current/static/catalog-pg-shseclabel.html
+var pgCatalogSharedSecurityLabelTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_shseclabel (
+	objoid OID,
+	classoid OID,
+	provider TEXT,
+	label TEXT
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
