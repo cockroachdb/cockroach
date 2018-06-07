@@ -735,7 +735,7 @@ type tableUpserterBase struct {
 	// collectRows is set, counted separately otherwise.
 	resultCount int
 
-	// internal state
+	// Contains all the rows to be inserted.
 	insertRows sqlbase.RowContainer
 
 	// For allocation avoidance.
