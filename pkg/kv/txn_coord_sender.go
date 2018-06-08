@@ -135,8 +135,17 @@ type TxnCoordSender struct {
 	*TxnCoordSenderFactory
 
 	// An ordered stack of pluggable request interceptors that can transform
-	// requests and responses.
-	interceptors []txnReqInterceptor
+	// batch requests and responses while each maintaining targeted state.
+	// The stack is stored in an array and each txnReqInterceptor implementation
+	// is embedded in the interceptorAlloc struct, so the entire stack is
+	// allocated together with TxnCoordSender without any additional heap
+	// allocations necessary.
+	interceptorStack [3]txnReqInterceptor
+	interceptorAlloc struct {
+		txnIntentCollector
+		txnSpanRefresher
+		txnBatchWrapper
+	}
 
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
@@ -299,27 +308,30 @@ func (tcf *TxnCoordSenderFactory) New(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		ri = NewRangeIterator(ds)
 	}
-	tcs.interceptors = []txnReqInterceptor{
-		&txnIntentCollector{
-			st:   tcf.st,
-			ri:   ri,
-			meta: &tcs.mu.meta,
-		},
-		&txnSpanRefresher{
-			st:   tcf.st,
-			mu:   &tcs.mu,
-			meta: &tcs.mu.meta,
-			// We can only allow refresh span retries on root transactions
-			// because those are the only places where we have all of the
-			// refresh spans. If this is a leaf, as in a distributed sql flow,
-			// we need to propagate the error to the root for an epoch restart.
-			canAutoRetry:     typ == client.RootTxn,
-			wrapped:          tcs.wrapped,
-			autoRetryCounter: tcs.metrics.AutoRetries,
-		},
-		&txnBatchWrapper{
-			tcf: tcf,
-		},
+	tcs.interceptorAlloc.txnIntentCollector = txnIntentCollector{
+		st:   tcf.st,
+		ri:   ri,
+		meta: &tcs.mu.meta,
+	}
+	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
+		st:   tcf.st,
+		mu:   &tcs.mu,
+		meta: &tcs.mu.meta,
+		// We can only allow refresh span retries on root transactions
+		// because those are the only places where we have all of the
+		// refresh spans. If this is a leaf, as in a distributed sql flow,
+		// we need to propagate the error to the root for an epoch restart.
+		canAutoRetry:     typ == client.RootTxn,
+		wrapped:          tcs.wrapped,
+		autoRetryCounter: tcs.metrics.AutoRetries,
+	}
+	tcs.interceptorAlloc.txnBatchWrapper = txnBatchWrapper{
+		tcf: tcf,
+	}
+	tcs.interceptorStack = [...]txnReqInterceptor{
+		&tcs.interceptorAlloc.txnIntentCollector,
+		&tcs.interceptorAlloc.txnSpanRefresher,
+		&tcs.interceptorAlloc.txnBatchWrapper,
 	}
 
 	// If a transaction was passed in bind the TxnCoordSender to it.
@@ -392,7 +404,7 @@ func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoord
 	}
 	tc.mu.meta.CommandCount += meta.CommandCount
 	// Refresh the interceptors.
-	for _, reqInt := range tc.interceptors {
+	for _, reqInt := range tc.interceptorStack {
 		reqInt.refreshMetaLocked()
 	}
 }
@@ -485,7 +497,7 @@ func (tc *TxnCoordSender) Send(
 			tc.mu.meta.CommandCount += int32(len(ba.Requests))
 
 			// Allow each interceptor to modify the request.
-			for _, reqInt := range tc.interceptors {
+			for _, reqInt := range tc.interceptorStack {
 				ba, pErr = reqInt.beforeSendLocked(ctx, ba)
 				if pErr != nil {
 					return ba, pErr
@@ -513,8 +525,8 @@ func (tc *TxnCoordSender) Send(
 			log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, pErr)
 		} else {
 			// Allow each interceptor to decide whether to retry the request.
-			for i := len(tc.interceptors) - 1; i >= 0; i-- {
-				reqInt := tc.interceptors[i]
+			for i := len(tc.interceptorStack) - 1; i >= 0; i-- {
+				reqInt := tc.interceptorStack[i]
 				br, pErr = reqInt.maybeRetrySend(ctx, &ba, br, pErr)
 			}
 		}
@@ -534,8 +546,8 @@ func (tc *TxnCoordSender) Send(
 		// Allow each interceptor to update internal state based on the response
 		// and optionally modify it. Iterate in reverse order to "unwrap" the
 		// interceptor stack.
-		for i := len(tc.interceptors) - 1; i >= 0; i-- {
-			reqInt := tc.interceptors[i]
+		for i := len(tc.interceptorStack) - 1; i >= 0; i-- {
+			reqInt := tc.interceptorStack[i]
 			br, pErr = reqInt.afterSendLocked(ctx, ba, br, pErr)
 		}
 
@@ -965,7 +977,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			tc.mu.meta.RefreshReads = nil
 			tc.mu.meta.RefreshWrites = nil
 			tc.mu.meta.RefreshValid = true
-			for _, reqInt := range tc.interceptors {
+			for _, reqInt := range tc.interceptorStack {
 				reqInt.refreshMetaLocked()
 			}
 		} else {
