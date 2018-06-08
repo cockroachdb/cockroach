@@ -241,10 +241,10 @@ scan a
 # FoldIsNull
 # --------------------------------------------------
 opt
-SELECT NULL IS NULL
+SELECT NULL IS NULL AS r
 ----
 project
- ├── columns: "NULL IS NULL":1(bool!null)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -256,10 +256,10 @@ project
 # FoldNonNullIsNull
 # --------------------------------------------------
 opt
-SELECT 1 IS NULL
+SELECT 1 IS NULL AS r
 ----
 project
- ├── columns: "1 IS NULL":1(bool!null)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -271,10 +271,10 @@ project
 # FoldIsNotNull
 # --------------------------------------------------
 opt
-SELECT NULL IS NOT NULL, NULL IS NOT TRUE
+SELECT NULL IS NOT NULL AS r, NULL IS NOT TRUE AS s
 ----
 project
- ├── columns: "NULL IS NOT NULL":1(bool!null) "NULL IS NOT true":2(bool!null)
+ ├── columns: r:1(bool!null) s:2(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -290,10 +290,10 @@ project
 # We could (but do not currently) infer that k IS NOT NULL is always True given
 # that k is declared NOT NULL.
 opt
-SELECT 1 IS NOT NULL, k IS NOT NULL, i IS NOT NULL from a
+SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: "1 IS NOT NULL":6(bool!null) "k IS NOT NULL":7(bool) "i IS NOT NULL":8(bool)
+ ├── columns: r:6(bool!null) s:7(bool) t:8(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -306,10 +306,10 @@ project
 # CommuteNullIs
 # --------------------------------------------------
 opt
-SELECT NULL IS NOT TRUE, NULL IS TRUE
+SELECT NULL IS NOT TRUE AS r, NULL IS TRUE AS s
 ----
 project
- ├── columns: "NULL IS NOT true":1(bool!null) "NULL IS true":2(bool!null)
+ ├── columns: r:1(bool!null) s:2(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]

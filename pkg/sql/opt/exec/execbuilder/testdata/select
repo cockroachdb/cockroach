@@ -37,38 +37,38 @@ scan  ·       ·          (x, y)  ·
 ·     filter  y < 30     ·       ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT x + 1 FROM a
+EXPLAIN (VERBOSE) SELECT x + 1 AS r FROM a
 ----
-render     ·         ·          ("x + 1")  ·
- │         render 0  x + 1      ·          ·
- └── scan  ·         ·          (x)        ·
-·          table     a@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          (r)  ·
+ │         render 0  x + 1      ·    ·
+ └── scan  ·         ·          (x)  ·
+·          table     a@primary  ·    ·
+·          spans     ALL        ·    ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT x, x + 1, y, y + 1, x + y FROM a
+EXPLAIN (VERBOSE) SELECT x AS a, x + 1 AS b, y, y + 1 AS c, x + y AS d FROM a
 ----
-render     ·         ·          (x, "x + 1", y, "y + 1", "x + y")  ·
- │         render 0  x          ·                                  ·
- │         render 1  x + 1      ·                                  ·
- │         render 2  y          ·                                  ·
- │         render 3  y + 1      ·                                  ·
- │         render 4  x + y      ·                                  ·
- └── scan  ·         ·          (x, y)                             ·
-·          table     a@primary  ·                                  ·
-·          spans     ALL        ·                                  ·
+render     ·         ·          (a, b, y, c, d)  ·
+ │         render 0  x          ·                ·
+ │         render 1  x + 1      ·                ·
+ │         render 2  y          ·                ·
+ │         render 3  y + 1      ·                ·
+ │         render 4  x + y      ·                ·
+ └── scan  ·         ·          (x, y)           ·
+·          table     a@primary  ·                ·
+·          spans     ALL        ·                ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT u * v + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+EXPLAIN (VERBOSE) SELECT u * v + v AS r FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
-render          ·         ·                                ("(u * v) + v")      ·
- │              render 0  "y + 10" + ("x + 3" * "y + 10")  ·                    ·
- └── render     ·         ·                                ("x + 3", "y + 10")  ·
-      │         render 0  x + 3                            ·                    ·
-      │         render 1  y + 10                           ·                    ·
-      └── scan  ·         ·                                (x, y)               ·
-·               table     a@primary                        ·                    ·
-·               spans     ALL                              ·                    ·
+render          ·         ·                                       (r)                       ·
+ │              render 0  "?column?" + ("?column?" * "?column?")  ·                         ·
+ └── render     ·         ·                                       ("?column?", "?column?")  ·
+      │         render 0  x + 3                                   ·                         ·
+      │         render 1  y + 10                                  ·                         ·
+      └── scan  ·         ·                                       (x, y)                    ·
+·               table     a@primary                               ·                         ·
+·               spans     ALL                                     ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, x, y, x FROM a
@@ -83,15 +83,15 @@ render     ·         ·          (x, x, y, x)  ·
 ·          spans     ALL        ·             ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
+EXPLAIN (VERBOSE) SELECT x + 1 AS a, x + y AS b FROM a WHERE x + y > 20
 ----
-render     ·         ·             ("x + 1", "x + y")  ·
- │         render 0  x + 1         ·                   ·
- │         render 1  x + y         ·                   ·
- └── scan  ·         ·             (x, y)              ·
-·          table     a@primary     ·                   ·
-·          spans     ALL           ·                   ·
-·          filter    (x + y) > 20  ·                   ·
+render     ·         ·             (a, b)  ·
+ │         render 0  x + 1         ·       ·
+ │         render 1  x + y         ·       ·
+ └── scan  ·         ·             (x, y)  ·
+·          table     a@primary     ·       ·
+·          spans     ALL           ·       ·
+·          filter    (x + y) > 20  ·       ·
 
 statement ok
 DROP TABLE a
@@ -279,13 +279,13 @@ statement ok
 CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1, * FROM nocols
+EXPLAIN (VERBOSE) SELECT 1 AS a, * FROM nocols
 ----
-render     ·         ·               ("1")  ·
- │         render 0  1               ·      ·
- └── scan  ·         ·               ()     ·
-·          table     nocols@primary  ·      ·
-·          spans     ALL             ·      ·
+render     ·         ·               (a)  ·
+ │         render 0  1               ·    ·
+ └── scan  ·         ·               ()   ·
+·          table     nocols@primary  ·    ·
+·          spans     ALL             ·    ·
 
 statement ok
 DROP TABLE nocols

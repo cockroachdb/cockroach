@@ -120,10 +120,10 @@ semi-join
 # InlineProjectInProject
 # --------------------------------------------------
 opt
-SELECT expr, i+1 FROM (SELECT k=1 AS expr, i FROM a)
+SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool) "i + 1":7(int)
+ ├── columns: expr:6(bool) r:7(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -133,12 +133,12 @@ project
 
 # Inline multiple expressions.
 opt
-SELECT expr+1, i, expr2 || 'bar' FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
+SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
- ├── columns: "expr + 1":8(int) i:2(int) "expr2 || 'bar'":9(string)
+ ├── columns: r:8(int) i:2(int) s:9(string)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+ │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1,2,4)]
       ├── (a.k + 1) + 1 [type=int, outer=(1)]
@@ -146,10 +146,10 @@ project
 
 # Don't inline when there are multiple references.
 opt
-SELECT expr, expr*2 FROM (SELECT k+1 AS expr FROM a)
+SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: expr:6(int) "expr * 2":7(int)
+ ├── columns: expr:6(int) r:7(int)
  ├── project
  │    ├── columns: expr:6(int)
  │    ├── scan a
@@ -162,10 +162,10 @@ project
 
 # Uncorrelated subquery should not block inlining.
 opt
-SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 FROM (SELECT k+1 AS expr FROM a)
+SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: "EXISTS (SELECT * FROM xy WHERE (x = 1) OR (x = 2))":9(bool) "expr * 2":10(int)
+ ├── columns: exists:9(bool) r:10(int)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
@@ -182,7 +182,7 @@ opt
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: "EXISTS (SELECT * FROM xy WHERE expr < 0)":9(bool)
+ ├── columns: exists:9(bool)
  ├── group-by
  │    ├── columns: any_not_null:11(bool) rownum:13(int!null)
  │    ├── grouping columns: rownum:13(int!null)

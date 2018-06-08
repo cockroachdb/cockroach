@@ -2,10 +2,10 @@
 
 sql
 CREATE DATABASE d;
-CREATE VIEW d.bar AS SELECT 1;
+CREATE VIEW d.bar AS SELECT 1 AS x;
 ----
 CREATE VIEW
 
 dump d
 ----
-CREATE VIEW bar ("1") AS SELECT 1;
+CREATE VIEW bar (x) AS SELECT 1 AS x;

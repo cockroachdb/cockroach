@@ -28,6 +28,9 @@ type TArray struct {
 	Bounds    []int32
 }
 
+// TypeName implements the ColTypeFormatter interface.
+func (node *TArray) TypeName() string { return node.Name }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
@@ -55,6 +58,9 @@ type TVector struct {
 	Name      string
 	ParamType T
 }
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TVector) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TVector) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {

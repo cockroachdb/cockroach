@@ -29,7 +29,7 @@ build
 SELECT (VALUES (x), (y+1)) FROM xy
 ----
 project
- ├── columns: "(VALUES (x), (y + 1))":4(int)
+ ├── columns: column1:4(int)
  ├── stats: [rows=1000]
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)

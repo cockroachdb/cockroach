@@ -90,10 +90,10 @@ limit
 # PushLimitIntoProject
 # --------------------------------------------------
 opt
-SELECT k, f*2.0 FROM a LIMIT 5
+SELECT k, f*2.0 AS r FROM a LIMIT 5
 ----
 project
- ├── columns: k:1(int!null) "f * 2.0":6(float)
+ ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 5]
  ├── keys: (1)
  ├── scan a
@@ -105,10 +105,10 @@ project
 
 # Detect PushLimitIntoProject and FilterUnusedLimitCols dependency cycle.
 opt
-SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
+SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
 ----
 project
- ├── columns: f:3(float) "f + 1.1":6(float)
+ ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 5]
  ├── ordering: +3
  ├── limit
@@ -160,10 +160,10 @@ limit
 # PushOffsetIntoProject
 # --------------------------------------------------
 opt
-SELECT k, f*2.0 FROM a OFFSET 5
+SELECT k, f*2.0 AS r FROM a OFFSET 5
 ----
 project
- ├── columns: k:1(int!null) "f * 2.0":6(float)
+ ├── columns: k:1(int!null) r:6(float)
  ├── keys: (1)
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
@@ -177,10 +177,10 @@ project
 
 # Detect PushOffsetIntoProject and FilterUnusedOffsetCols dependency cycle.
 opt
-SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5
+SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5
 ----
 project
- ├── columns: f:3(float) "f + 1.1":6(float)
+ ├── columns: f:3(float) r:6(float)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
@@ -204,10 +204,10 @@ project
 # PushLimitIntoProject + PushOffsetIntoProject
 # --------------------------------------------------
 opt
-SELECT k, f*2.0 FROM a OFFSET 5 LIMIT 10
+SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: k:1(int!null) "f * 2.0":6(float)
+ ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
@@ -226,10 +226,10 @@ project
       └── a.f * 2.0 [type=float, outer=(3)]
 
 opt
-SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
+SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: f:3(float) "f + 1.1":6(float)
+ ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 10]
  ├── ordering: +3
  ├── limit

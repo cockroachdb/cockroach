@@ -399,30 +399,30 @@ func Example_logging() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.RunWithArgs([]string{"sql", "--logtostderr=false", "-e", "select 1"})
-	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
-	c.RunWithArgs([]string{"sql", "--log-dir=", "-e", "select 1"})
-	c.RunWithArgs([]string{"sql", "--logtostderr=true", "-e", "select 1"})
-	c.RunWithArgs([]string{"sql", "--verbosity=0", "-e", "select 1"})
-	c.RunWithArgs([]string{"sql", "--vmodule=foo=1", "-e", "select 1"})
+	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--log-backtrace-at=foo.go:1`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--log-dir=`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--verbosity=0`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--vmodule=foo=1`, `-e`, `select 1 as "1"`})
 
 	// Output:
-	// sql --logtostderr=false -e select 1
+	// sql --logtostderr=false -e select 1 as "1"
 	// 1
 	// 1
-	// sql --log-backtrace-at=foo.go:1 -e select 1
+	// sql --log-backtrace-at=foo.go:1 -e select 1 as "1"
 	// 1
 	// 1
-	// sql --log-dir= -e select 1
+	// sql --log-dir= -e select 1 as "1"
 	// 1
 	// 1
-	// sql --logtostderr=true -e select 1
+	// sql --logtostderr=true -e select 1 as "1"
 	// 1
 	// 1
-	// sql --verbosity=0 -e select 1
+	// sql --verbosity=0 -e select 1 as "1"
 	// 1
 	// 1
-	// sql --vmodule=foo=1 -e select 1
+	// sql --vmodule=foo=1 -e select 1 as "1"
 	// 1
 	// 1
 }
@@ -704,12 +704,12 @@ func Example_zone() {
 
 func Example_demo() {
 	testData := [][]string{
-		{"demo", "-e", "show database"},
-		{"demo", "-e", "show application_name"},
-		{"demo", "--format=pretty", "-e", "show database"},
-		{"demo", "-e", "select 1", "-e", "select 3"},
-		{"demo", "--echo-sql", "-e", "select 1"},
-		{"demo", "--set=errexit=0", "-e", "select nonexistent", "-e", "select 123"},
+		{`demo`, `-e`, `show database`},
+		{`demo`, `-e`, `show application_name`},
+		{`demo`, `--format=pretty`, `-e`, `show database`},
+		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
+		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
+		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
 	}
 
 	// Ensure that CLI error messages and anything meant for the
@@ -739,16 +739,16 @@ func Example_demo() {
 	// | defaultdb |
 	// +-----------+
 	// (1 row)
-	// demo -e select 1 -e select 3
+	// demo -e select 1 as "1" -e select 3 as "3"
 	// 1
 	// 1
 	// 3
 	// 3
-	// demo --echo-sql -e select 1
-	// > select 1
+	// demo --echo-sql -e select 1 as "1"
+	// > select 1 as "1"
 	// 1
 	// 1
-	// demo --set=errexit=0 -e select nonexistent -e select 123
+	// demo --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// pq: column "nonexistent" does not exist
 	// 123
 	// 123
@@ -758,31 +758,31 @@ func Example_sql() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.RunWithArgs([]string{"sql", "-e", "show application_name"})
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
-	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
-	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
-	c.RunWithArgs([]string{"sql", "--execute=show databases"})
-	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
-	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2 where false"})
+	c.RunWithArgs([]string{`sql`, `-e`, `show application_name`})
+	c.RunWithArgs([]string{`sql`, `-e`, `create database t; create table t.f (x int, y int); insert into t.f values (42, 69)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select 3 as "3"`, `-e`, `select * from t.f`})
+	c.RunWithArgs([]string{`sql`, `-e`, `begin`, `-e`, `select 3 as "3"`, `-e`, `commit`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select * from t.f`})
+	c.RunWithArgs([]string{`sql`, `--execute=show databases`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "2"`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "@" where false`})
 	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
-	c.RunWithArgs([]string{"sql", "-e", "create table t.g1 (x int)"})
-	c.RunWithArgs([]string{"sql", "-e", "create table t.g2 as select * from generate_series(1,10)"})
+	c.RunWithArgs([]string{`sql`, `-e`, `create table t.g1 (x int)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `create table t.g2 as select * from generate_series(1,10)`})
 	// It must be possible to access pre-defined/virtual tables even if the current database
 	// does not exist yet.
-	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "select count(*) from \"\".information_schema.tables limit 0"})
+	c.RunWithArgs([]string{`sql`, `-d`, `nonexistent`, `-e`, `select count(*) from "".information_schema.tables limit 0`})
 	// It must be possible to create the current database after the
 	// connection was established.
-	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "create database nonexistent; create table foo(x int); select * from foo"})
+	c.RunWithArgs([]string{`sql`, `-d`, `nonexistent`, `-e`, `create database nonexistent; create table foo(x int); select * from foo`})
 	// COPY should return an intelligible error message.
-	c.RunWithArgs([]string{"sql", "-e", "copy t.f from stdin"})
+	c.RunWithArgs([]string{`sql`, `-e`, `copy t.f from stdin`})
 	// --echo-sql should print out the SQL statements.
-	c.RunWithArgs([]string{"user", "ls", "--echo-sql"})
+	c.RunWithArgs([]string{`user`, `ls`, `--echo-sql`})
 	// --set changes client-side variables before executing commands.
-	c.RunWithArgs([]string{"sql", "--set=errexit=0", "-e", "select nonexistent", "-e", "select 123"})
-	c.RunWithArgs([]string{"sql", "--set", "echo=true", "-e", "select 123"})
-	c.RunWithArgs([]string{"sql", "--set", "unknownoption", "-e", "select 123"})
+	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
 
 	// Output:
 	// sql -e show application_name
@@ -790,12 +790,12 @@ func Example_sql() {
 	// cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
-	// sql -e select 3 -e select * from t.f
+	// sql -e select 3 as "3" -e select * from t.f
 	// 3
 	// 3
 	// x	y
 	// 42	69
-	// sql -e begin -e select 3 -e commit
+	// sql -e begin -e select 3 as "3" -e commit
 	// BEGIN
 	// 3
 	// 3
@@ -809,15 +809,15 @@ func Example_sql() {
 	// postgres
 	// system
 	// t
-	// sql -e select 1; select 2
+	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
 	// 1
 	// 2
 	// 2
-	// sql -e select 1; select 2 where false
+	// sql -e select 1 as "1"; select 2 as "@" where false
 	// 1
 	// 1
-	// 2
+	// @
 	// sql -e create table t.g1 (x int)
 	// CREATE TABLE
 	// sql -e create table t.g2 as select * from generate_series(1,10)
@@ -832,15 +832,15 @@ func Example_sql() {
 	// > SHOW USERS
 	// username
 	// root
-	// sql --set=errexit=0 -e select nonexistent -e select 123
+	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// pq: column "nonexistent" does not exist
 	// 123
 	// 123
-	// sql --set echo=true -e select 123
-	// > select 123
+	// sql --set echo=true -e select 123 as "123"
+	// > select 123 as "123"
 	// 123
 	// 123
-	// sql --set unknownoption -e select 123
+	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// invalid syntax
 }

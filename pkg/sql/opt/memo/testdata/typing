@@ -36,10 +36,10 @@ project
 
 # Const
 build
-SELECT 1, TRUE, FALSE, NULL
+SELECT 1 AS a, TRUE AS b, FALSE AS c, NULL AS d
 ----
 project
- ├── columns: "1":1(int!null) true:2(bool!null) false:3(bool!null) NULL:4(unknown)
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(bool!null) d:4(unknown)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -61,10 +61,10 @@ select
 
 # Tuple, Projections
 build
-SELECT (a.x, 1.5), a.y FROM a
+SELECT (a.x, 1.5) AS r, a.y FROM a
 ----
 project
- ├── columns: "(a.x, 1.5)":3(tuple{int, decimal}) y:2(int)
+ ├── columns: r:3(tuple{int, decimal}) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -160,12 +160,12 @@ select
 
 # Bitand, Bitor, Bitxor
 build
-SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a
+SELECT a.x & a.y AS r, a.x | a.y AS s, a.x # a.y AS t FROM a
 ----
 project
- ├── columns: "a.x & a.y":3(int) "a.x | a.y":4(int) "a.x # a.y":5(int)
+ ├── columns: r:3(int) s:4(int) t:5(int)
  ├── scan a
- │    └── columns: x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── projections
       ├── a.x & a.y [type=int]
       ├── a.x | a.y [type=int]
@@ -173,12 +173,17 @@ project
 
 # Plus, Minus, Mult, Div, FloorDiv
 build
-SELECT a.x + 1.5, DATE '2000-01-01' - 15, 10.10 * a.x, 1 / a.y, a.x // 1.5 FROM a
+SELECT a.x + 1.5 AS r,
+       DATE '2000-01-01' - 15 AS s,
+       10.10 * a.x AS t,
+       1 / a.y AS u,
+       a.x // 1.5 AS v
+  FROM a
 ----
 project
- ├── columns: "a.x + 1.5":3(decimal) "DATE '2000-01-01' - 15":4(date) "10.10 * a.x":5(decimal) "1 / a.y":6(decimal) "a.x // 1.5":7(decimal)
+ ├── columns: r:3(decimal) s:4(date) t:5(decimal) u:6(decimal) v:7(decimal)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── projections
       ├── a.x + 1.5 [type=decimal]
       ├── '2000-01-01' - 15 [type=date]
@@ -188,12 +193,16 @@ project
 
 # Mod, Pow, LShift, RShift
 build
-SELECT 100.1 % a.x, a.x ^ 2.5, a.x << 3, a.y >> 2 FROM a
+SELECT 100.1 % a.x AS r,
+       a.x ^ 2.5 AS s,
+       a.x << 3 AS t,
+       a.y >> 2 AS u
+  FROM a
 ----
 project
- ├── columns: "100.1 % a.x":3(decimal) "a.x ^ 2.5":4(decimal) "a.x << 3":5(int) "a.y >> 2":6(int)
+ ├── columns: r:3(decimal) s:4(decimal) t:5(int) u:6(int)
  ├── scan a
- │    └── columns: a.x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── projections
       ├── 100.1 % a.x [type=decimal]
       ├── a.x ^ 2.5 [type=decimal]
@@ -202,10 +211,14 @@ project
 
 # FetchVal, FetchText, FetchValPath, FetchTextPath
 build
-SELECT '[1, 2]'->1, '[1, 2]'->>1, '{"a": 5}'#>ARRAY['a'], '{"a": 5}'#>>ARRAY['a'] FROM a
+SELECT '[1, 2]'->1 AS r,
+       '[1, 2]'->>1 AS s,
+       '{"a": 5}'#>ARRAY['a'] AS t,
+       '{"a": 5}'#>>ARRAY['a'] AS u
+  FROM a
 ----
 project
- ├── columns: "'[1, 2]'->1":3(jsonb) "'[1, 2]'->>1":4(string) "'{"a": 5}'#>ARRAY['a']":5(jsonb) "'{"a": 5}'#>>ARRAY['a']":6(string)
+ ├── columns: r:3(jsonb) s:4(string) t:5(jsonb) u:6(string)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -216,10 +229,10 @@ project
 
 # Concat
 build
-SELECT b.x || 'more' FROM b
+SELECT b.x || 'more' AS r FROM b
 ----
 project
- ├── columns: "b.x || 'more'":3(string)
+ ├── columns: r:3(string)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── projections
@@ -227,22 +240,22 @@ project
 
 # UnaryMinus, UnaryComplement
 build
-SELECT -a.y, ~a.x FROM a
+SELECT -a.y AS r, ~a.x AS s FROM a
 ----
 project
- ├── columns: "-a.y":3(int) "~a.x":4(int)
+ ├── columns: r:3(int) s:4(int)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── projections
       ├── -a.y [type=int]
       └── ~a.x [type=int]
 
 # Array Concat
 build
-SELECT arr || arr, arr || NULL, NULL || arr FROM unusual
+SELECT arr || arr AS r, arr || NULL AS s, NULL || arr AS t FROM unusual
 ----
 project
- ├── columns: "arr || arr":3(int[]) "arr || NULL":4(int[]) "NULL || arr":5(int[])
+ ├── columns: r:3(int[]) s:4(int[]) t:5(int[])
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
@@ -252,10 +265,10 @@ project
 
 # Array Element Concat
 build
-SELECT x || arr, arr || x, x || NULL, NULL || x FROM unusual
+SELECT x || arr AS r, arr || x AS s, x || NULL AS t, NULL || x AS u FROM unusual
 ----
 project
- ├── columns: "x || arr":3(int[]) "arr || x":4(int[]) "x || NULL":5(int[]) "NULL || x":6(int[])
+ ├── columns: r:3(int[]) s:4(int[]) t:5(int[]) u:6(int[])
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
@@ -362,7 +375,7 @@ opt
 SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT MAX(x) FROM b WHERE y=z::int) > 'foo'
 ----
 project
- ├── columns: x:1(int!null) "x::STRING":3(string) y:2(int)
+ ├── columns: x:1(int!null) x:3(string) y:2(int)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int) max:6(string!null)
  │    ├── group-by
@@ -391,8 +404,8 @@ build
 SELECT x::VARCHAR(2) FROM b
 ----
 project
- ├── columns: "x::VARCHAR(2)":3(string)
+ ├── columns: x:3(string)
  ├── scan b
- │    └── columns: x:1(string!null) z:2(decimal!null)
+ │    └── columns: b.x:1(string!null) z:2(decimal!null)
  └── projections
       └── b.x::VARCHAR(2) [type=string]

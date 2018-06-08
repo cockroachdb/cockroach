@@ -4,110 +4,110 @@ subtest unlabeled_tuple
 
 # TODO(bram): We don't pretty print tuples the same way as postgres. See #25522.
 query TT colnames
-SELECT (1, 2, 'hello', NULL, NULL), (true, NULL, (false, 6.6, false))
+SELECT (1, 2, 'hello', NULL, NULL) AS t, (true, NULL, (false, 6.6, false)) AS u
 ----
-(1, 2, 'hello', NULL, NULL)  (true, NULL, (false, 6.6, false))
-(1,2,'hello',,)              (true,,(false, 6.6, false))
+t                u
+(1,2,'hello',,)  (true,,(false, 6.6, false))
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) < (1, 1),
-  (2, 2) < (1, 2),
-  (2, 2) < (1, 3),
-  (2, 2) < (2, 1),
-  (2, 2) < (2, 2),
-  (2, 2) < (2, 3),
-  (2, 2) < (3, 1),
-  (2, 2) < (3, 2),
-  (2, 2) < (3, 3)
+  (2, 2) < (1, 1) AS a,
+  (2, 2) < (1, 2) AS b,
+  (2, 2) < (1, 3) AS c,
+  (2, 2) < (2, 1) AS d,
+  (2, 2) < (2, 2) AS e,
+  (2, 2) < (2, 3) AS f,
+  (2, 2) < (3, 1) AS g,
+  (2, 2) < (3, 2) AS h,
+  (2, 2) < (3, 3) AS i 
 ----
-(2, 2) < (1, 1)  (2, 2) < (1, 2)  (2, 2) < (1, 3)  (2, 2) < (2, 1)  (2, 2) < (2, 2)  (2, 2) < (2, 3)  (2, 2) < (3, 1)  (2, 2) < (3, 2)  (2, 2) < (3, 3)
-false            false            false            false            false            true             true             true             true
+a      b      c      d      e      f     g     h     i
+false  false  false  false  false  true  true  true  true
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) > (1, 1),
-  (2, 2) > (1, 2),
-  (2, 2) > (1, 3),
-  (2, 2) > (2, 1),
-  (2, 2) > (2, 2),
-  (2, 2) > (2, 3),
-  (2, 2) > (3, 1),
-  (2, 2) > (3, 2),
-  (2, 2) > (3, 3)
+  (2, 2) > (1, 1) AS a,
+  (2, 2) > (1, 2) AS b,
+  (2, 2) > (1, 3) AS c,
+  (2, 2) > (2, 1) AS d,
+  (2, 2) > (2, 2) AS e,
+  (2, 2) > (2, 3) AS f,
+  (2, 2) > (3, 1) AS g,
+  (2, 2) > (3, 2) AS h,
+  (2, 2) > (3, 3) AS i
 ----
-(2, 2) > (1, 1)  (2, 2) > (1, 2)  (2, 2) > (1, 3)  (2, 2) > (2, 1)  (2, 2) > (2, 2)  (2, 2) > (2, 3)  (2, 2) > (3, 1)  (2, 2) > (3, 2)  (2, 2) > (3, 3)
-true             true             true             true             false            false            false            false            false
+a     b     c     d     e      f      g      h      i
+true  true  true  true  false  false  false  false  false
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) <= (1, 1),
-  (2, 2) <= (1, 2),
-  (2, 2) <= (1, 3),
-  (2, 2) <= (2, 1),
-  (2, 2) <= (2, 2),
-  (2, 2) <= (2, 3),
-  (2, 2) <= (3, 1),
-  (2, 2) <= (3, 2),
-  (2, 2) <= (3, 3)
+  (2, 2) <= (1, 1) AS a,
+  (2, 2) <= (1, 2) AS b,
+  (2, 2) <= (1, 3) AS c,
+  (2, 2) <= (2, 1) AS d,
+  (2, 2) <= (2, 2) AS e,
+  (2, 2) <= (2, 3) AS f,
+  (2, 2) <= (3, 1) AS g,
+  (2, 2) <= (3, 2) AS h,
+  (2, 2) <= (3, 3) AS i
 ----
-(2, 2) <= (1, 1)  (2, 2) <= (1, 2)  (2, 2) <= (1, 3)  (2, 2) <= (2, 1)  (2, 2) <= (2, 2)  (2, 2) <= (2, 3)  (2, 2) <= (3, 1)  (2, 2) <= (3, 2)  (2, 2) <= (3, 3)
-false             false             false             false             true              true              true              true              true
+a      b      c      d      e     f     g     h     i
+false  false  false  false  true  true  true  true  true
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) >= (1, 1),
-  (2, 2) >= (1, 2),
-  (2, 2) >= (1, 3),
-  (2, 2) >= (2, 1),
-  (2, 2) >= (2, 2),
-  (2, 2) >= (2, 3),
-  (2, 2) >= (3, 1),
-  (2, 2) >= (3, 2),
-  (2, 2) >= (3, 3)
+  (2, 2) >= (1, 1) AS a,
+  (2, 2) >= (1, 2) AS b,
+  (2, 2) >= (1, 3) AS c,
+  (2, 2) >= (2, 1) AS d,
+  (2, 2) >= (2, 2) AS e,
+  (2, 2) >= (2, 3) AS f,
+  (2, 2) >= (3, 1) AS g,
+  (2, 2) >= (3, 2) AS h,
+  (2, 2) >= (3, 3) AS i
 ----
-(2, 2) >= (1, 1)  (2, 2) >= (1, 2)  (2, 2) >= (1, 3)  (2, 2) >= (2, 1)  (2, 2) >= (2, 2)  (2, 2) >= (2, 3)  (2, 2) >= (3, 1)  (2, 2) >= (3, 2)  (2, 2) >= (3, 3)
-true              true              true              true              true              false             false             false             false
+a     b     c     d     e     f      g      h      i
+true  true  true  true  true  false  false  false  false
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) = (1, 1),
-  (2, 2) = (1, 2),
-  (2, 2) = (1, 3),
-  (2, 2) = (2, 1),
-  (2, 2) = (2, 2),
-  (2, 2) = (2, 3),
-  (2, 2) = (3, 1),
-  (2, 2) = (3, 2),
-  (2, 2) = (3, 3)
+  (2, 2) = (1, 1) AS a,
+  (2, 2) = (1, 2) AS b,
+  (2, 2) = (1, 3) AS c,
+  (2, 2) = (2, 1) AS d,
+  (2, 2) = (2, 2) AS e,
+  (2, 2) = (2, 3) AS f,
+  (2, 2) = (3, 1) AS g,
+  (2, 2) = (3, 2) AS h,
+  (2, 2) = (3, 3) AS i
 ----
-(2, 2) = (1, 1)  (2, 2) = (1, 2)  (2, 2) = (1, 3)  (2, 2) = (2, 1)  (2, 2) = (2, 2)  (2, 2) = (2, 3)  (2, 2) = (3, 1)  (2, 2) = (3, 2)  (2, 2) = (3, 3)
-false            false            false            false            true             false            false            false            false
+a      b      c      d      e     f      g      h      i
+false  false  false  false  true  false  false  false  false
 
 query BBBBBBBBB colnames
 SELECT
-  (2, 2) != (1, 1),
-  (2, 2) != (1, 2),
-  (2, 2) != (1, 3),
-  (2, 2) != (2, 1),
-  (2, 2) != (2, 2),
-  (2, 2) != (2, 3),
-  (2, 2) != (3, 1),
-  (2, 2) != (3, 2),
-  (2, 2) != (3, 3)
+  (2, 2) != (1, 1) AS a,
+  (2, 2) != (1, 2) AS b,
+  (2, 2) != (1, 3) AS c,
+  (2, 2) != (2, 1) AS d,
+  (2, 2) != (2, 2) AS e,
+  (2, 2) != (2, 3) AS f,
+  (2, 2) != (3, 1) AS g,
+  (2, 2) != (3, 2) AS h,
+  (2, 2) != (3, 3) AS i
 ----
-(2, 2) != (1, 1)  (2, 2) != (1, 2)  (2, 2) != (1, 3)  (2, 2) != (2, 1)  (2, 2) != (2, 2)  (2, 2) != (2, 3)  (2, 2) != (3, 1)  (2, 2) != (3, 2)  (2, 2) != (3, 3)
-true              true              true              true              false             true              true              true              true
+a     b     c     d     e      f     g     h     i
+true  true  true  true  false  true  true  true  true
 
 query BBBB colnames
 SELECT
-  (1, 1) > (0, NULL),
-  (1, 1) > (1, NULL),
-  (1, 1) > (2, NULL),
-  (1, 1) > (NULL, 0)
+  (1, 1) > (0, NULL) AS a,
+  (1, 1) > (1, NULL) AS b,
+  (1, 1) > (2, NULL) AS c,
+  (1, 1) > (NULL, 0) AS d
 ----
-(1, 1) > (0, NULL)  (1, 1) > (1, NULL)  (1, 1) > (2, NULL)  (1, 1) > (NULL, 0)
-true                NULL                false               NULL
+a     b     c      d
+true  NULL  false  NULL
 
 statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not comparable at index 2: unsupported comparison operator
 SELECT (1, 2) > (1, 'hi')
@@ -137,35 +137,36 @@ a b c
 3 1 2
 
 query T colnames,rowsort
-SELECT (t.*) FROM t
+SELECT (t.*) AS a FROM t
 ----
-(t.*)
-(1,2,3)
+a
 (2,3,1)
 (3,1,2)
+(1,2,3)
 
 query BB colnames
-SELECT ((1, 2), 'equal') = ((1, 2.0), 'equal'), ((1, 2), 'equal') = ((1, 2.0), 'not equal')
+SELECT ((1, 2), 'equal') = ((1, 2.0), 'equal') AS a,
+       ((1, 2), 'equal') = ((1, 2.0), 'not equal') AS b
 ----
-((1, 2), 'equal') = ((1, 2.0), 'equal')  ((1, 2), 'equal') = ((1, 2.0), 'not equal')
-true                                     false
+a     b
+true  false
 
 query B colnames
-SELECT ((1, 2), 'equal') = ((1, 2.1), 'equal')
+SELECT ((1, 2), 'equal') = ((1, 2.1), 'equal') AS a
 ----
-((1, 2), 'equal') = ((1, 2.1), 'equal')
+a
 false
 
 query B colnames
-SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100.0)), 'ab')
+SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100.0)), 'ab') AS a
 ----
-(ROW(pow(1, 10.0) + 9), 'a' || 'b') = (ROW(sqrt(100.0)), 'ab')
+a
 true
 
 query B colnames
-SELECT (ROW(SQRT(100.0)), 'ab') = (ROW(POW(1, 10.0) + 9), 'a' || 'b')
+SELECT (ROW(SQRT(100.0)), 'ab') = (ROW(POW(1, 10.0) + 9), 'a' || 'b') AS a
 ----
-(ROW(sqrt(100.0)), 'ab') = (ROW(pow(1, 10.0) + 9), 'a' || 'b')
+a
 true
 
 query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not comparable at index 1: tuples \(1, 2\), \(1, 'huh'\) are not comparable at index 2: unsupported comparison operator
@@ -198,41 +199,41 @@ DROP TABLE kv
 # Issue #12295
 
 query B colnames
-SELECT 'foo' IN (x, 'aaa') FROM (SELECT 'foo' AS x)
+SELECT 'foo' IN (x, 'aaa') AS r FROM (SELECT 'foo' AS x)
 ----
-'foo' IN (x, 'aaa')
+r
 true
 
 query B colnames
-SELECT 'foo' IN (x, 'zzz') FROM (SELECT 'foo' AS x)
+SELECT 'foo' IN (x, 'zzz') AS r FROM (SELECT 'foo' AS x)
 ----
-'foo' IN (x, 'zzz')
+r
 true
 
 # Subquery tuples are already sorted
 
 query B colnames
-SELECT 3 IN (SELECT c FROM t ORDER BY 1 ASC)
+SELECT 3 IN (SELECT c FROM t ORDER BY 1 ASC) AS r
 ----
-3 IN (SELECT c FROM t ORDER BY 1 ASC)
+r
 true
 
 query B colnames
-SELECT 4 IN (SELECT c FROM t ORDER BY 1 DESC)
+SELECT 4 IN (SELECT c FROM t ORDER BY 1 DESC) AS r
 ----
-4 IN (SELECT c FROM t ORDER BY 1 DESC)
+r
 false
 
 query B colnames
-SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 ASC, 2 ASC)
+SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 ASC, 2 ASC) AS r
 ----
-(1, 2) IN (SELECT a, b FROM t ORDER BY 1 ASC, 2 ASC)
+r
 true
 
 query B colnames
-SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 DESC, 2 DESC)
+SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 DESC, 2 DESC) AS r
 ----
-(1, 2) IN (SELECT a, b FROM t ORDER BY 1 DESC, 2 DESC)
+r
 true
 
 statement ok
@@ -241,28 +242,28 @@ DROP TABLE t
 # Issue #12302
 
 query B colnames
-SELECT 1 IN (2, NULL)
+SELECT 1 IN (2, NULL) AS r
 ----
-1 IN (2, NULL)
+r
 NULL
 
 query B colnames
-SELECT 1 IN (2, x) FROM (SELECT NULL AS x)
+SELECT 1 IN (2, x) AS r FROM (SELECT NULL AS x)
 ----
-1 IN (2, x)
+r
 NULL
 
 # Issue 10407: tuple comparisons should not require homogeneous types
 query B colnames
-SELECT (now(), 2) = (now() :: timestamp, 2)
+SELECT (now(), 2) = (now() :: timestamp, 2) AS r
 ----
-(now(), 2) = (now()::TIMESTAMP, 2)
+r
 true
 
 query B colnames
-SELECT (1, 2) > (1.0, 2.0)
+SELECT (1, 2) > (1.0, 2.0) AS r
 ----
-(1, 2) > (1.0, 2.0)
+r
 false
 
 statement ok
@@ -605,21 +606,21 @@ DROP TABLE uvw
 subtest tuple_placeholders
 
 statement ok
-PREPARE x AS SELECT $1 = (1,2)
+PREPARE x AS SELECT $1 = (1,2) AS r
 
 statement ok
-PREPARE y AS SELECT (1,2) = $1
+PREPARE y AS SELECT (1,2) = $1 AS r
 
 query B colnames
 EXECUTE x((1,2))
 ----
-$1 = (1, 2)
+r
 true
 
 query B colnames
 EXECUTE y((1,2))
 ----
-(1, 2) = $1
+r
 true
 
 query error expected EXECUTE parameter expression to have type tuple\{int, int\}, but '\(1, 2, 3\)' has type tuple\{int, int, int\}
@@ -629,19 +630,20 @@ subtest labeled_tuple
 
 # Selecting two tuples
 query TT colnames
-SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5), ((true, NULL, (false, 6.6, false)) AS a1, b2, c3)
+SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5) AS r,
+       ((true, NULL, (false, 6.6, false)) AS a1, b2, c3) AS s
 ----
-((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5)  ((true, NULL, (false, 6.6, false)) AS a1, b2, c3)
-(1,2,'hello',,)                                      (true,,(false, 6.6, false))
+r                s
+(1,2,'hello',,)  (true,,(false, 6.6, false))
 
 # Comparing tuples
 query BBB colnames
-SELECT ((2, 2) AS a, b) < ((1, 1) AS c, d)
-      ,((2, 2) AS a, b) < (1, 2)
-      ,(2, 2) < ((1, 3) AS c, d)
+SELECT ((2, 2) AS a, b) < ((1, 1) AS c, d) AS r
+      ,((2, 2) AS a, b) < (1, 2) AS s
+      ,(2, 2) < ((1, 3) AS c, d) AS t
 ----
-((2, 2) AS a, b) < ((1, 1) AS c, d)  ((2, 2) AS a, b) < (1, 2)  (2, 2) < ((1, 3) AS c, d)
-false                                false                      false
+r      s      t
+false  false  false
 
 statement error pq: tuples \(\(1, 2\) AS a, b\), \(\(1, 'hi'\) AS c, d\) are not comparable at index 2: unsupported comparison operator: <int> > <string>
 SELECT ((1, 2) AS a, b) > ((1, 'hi') AS c, d)
@@ -671,11 +673,11 @@ nnnn  nnnu  nnun  nnuu  nunn  nunu  nuun  nuuu  unnn  unnu  unun  unuu  uunn  uu
 true  true  true  true  true  true  true  true  true  true  true  true  true  true  true  true
 
 query BB colnames
-SELECT (((ROW(POW(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6)
-      ,(ROW(POW(1, 10.0) + 9), 'a' || 'b') = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6)
+SELECT (((ROW(POW(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6) AS a
+      ,(ROW(POW(1, 10.0) + 9), 'a' || 'b') = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6) AS b
 ----
-(((ROW(pow(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6)  (ROW(pow(1, 10.0) + 9), 'a' || 'b') = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6)
-true                                                                                                    true
+a     b
+true  true
 
 query error pq: tuples \(\(\(\(1, 2\) AS a, b\), 'equal'\) AS c, d\), \(\(\(\(1, 'huh'\) AS e, f\), 'equal'\) AS g, h\) are not comparable at index 1: tuples \(\(1, 2\) AS a, b\), \(\(1, 'huh'\) AS e, f\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
 SELECT ((((1, 2) AS a, b), 'equal') AS c, d) = ((((1, 'huh') AS e, f), 'equal') AS g, h)
@@ -702,9 +704,9 @@ SELECT ((1, '2', true) AS b, a, a)
 
 # But inner tuples can reuse labels
 query T colnames
-SELECT ((((((1, '2', 3) AS a, b, c), ((4,'5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c)
+SELECT ((((((1, '2', 3) AS a, b, c), ((4,'5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c) AS r
 ----
-((((((1, '2', 3) AS a, b, c), ((4, '5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c)
+r
 (((1, '2', 3), (4, '5'), (6)),(7, 8),('9'))
 
 ### Accessing a specific column
