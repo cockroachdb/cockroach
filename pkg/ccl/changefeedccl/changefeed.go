@@ -101,10 +101,11 @@ func runChangefeedFlow(
 	// TODO(dan): Make this into a DistSQL flow.
 	changedKVsFn := exportRequestPoll(execCfg, details, progress)
 	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
-	emitRowsFn, err := emitRows(details, jobProgressedFn, rowsFn)
+	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = closeFn() }()
 
 	// We abuse the job's results channel to make CREATE CHANGEFEED wait for
 	// this before returning to the user to ensure the setup went okay. Job
@@ -280,24 +281,24 @@ func emitRows(
 	details jobs.ChangefeedDetails,
 	jobProgressedFn func(context.Context, hlc.Timestamp) error,
 	inputFn func(context.Context) ([]emitRow, error),
-) (func(context.Context) error, error) {
+) (emitFn func(context.Context) error, closeFn func() error, err error) {
 	var kafkaTopicPrefix string
 	var producer sarama.SyncProducer
 
 	sinkURI, err := url.Parse(details.SinkURI)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	switch sinkURI.Scheme {
 	case sinkSchemeKafka:
 		kafkaTopicPrefix = sinkURI.Query().Get(sinkParamTopicPrefix)
 		producer, err = getKafkaProducer(sinkURI.Host)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		defer func() { _ = producer.Close() }()
+		closeFn = producer.Close
 	default:
-		return nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
+		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
 
 	return func(ctx context.Context) error {
@@ -361,5 +362,5 @@ func emitRows(
 			}
 		}
 		return nil
-	}, nil
+	}, closeFn, nil
 }
