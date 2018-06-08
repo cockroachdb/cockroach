@@ -227,7 +227,7 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 	md := e.mem.Metadata()
 	tab := md.Table(scanOpDef.Table)
 
-	pkCols := md.IndexColumns(scanOpDef.Table, 0)
+	pkCols := md.IndexColumnsList(scanOpDef.Table, opt.PrimaryIndex)
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
@@ -243,20 +243,30 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
 
-			indexScanOpDef := e.mem.InternScanOpDef(&memo.ScanOpDef{
+			// We scan whatever columns we need which are available from the index,
+			// plus the PK columns. The main reason is to allow pushing of filters as
+			// much as possible.
+			scanCols := indexCols.Intersection(scanOpDef.Cols)
+			for _, c := range pkCols {
+				scanCols.Add(int(c))
+			}
+
+			indexScanOpDef := memo.ScanOpDef{
 				Table: scanOpDef.Table,
 				Index: i,
-				Cols:  indexCols.Intersection(scanOpDef.Cols).Union(pkCols),
-			})
+				Cols:  scanCols,
+			}
 
-			input := e.f.ConstructScan(indexScanOpDef)
+			input := e.f.ConstructScan(e.mem.InternScanOpDef(&indexScanOpDef))
 
-			def := e.mem.InternLookupJoinDef(&memo.LookupJoinDef{
-				Table: scanOpDef.Table,
-				Cols:  scanOpDef.Cols,
-			})
+			// We scan whatever needed columns are left from the primary index.
+			def := memo.LookupJoinDef{
+				Table:      scanOpDef.Table,
+				KeyCols:    pkCols,
+				LookupCols: scanOpDef.Cols.Difference(indexScanOpDef.Cols),
+			}
 
-			join := memo.MakeLookupJoinExpr(input, def)
+			join := memo.MakeLookupJoinExpr(input, e.mem.InternLookupJoinDef(&def))
 
 			e.exprs = append(e.exprs, memo.Expr(join))
 		}

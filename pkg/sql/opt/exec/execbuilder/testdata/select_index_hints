@@ -130,12 +130,13 @@ index-join  ·      ·
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  abcd@cd
- │          spans  /10-/11
- └── scan   ·      ·
-·           table  abcd@primary
+render           ·      ·
+ └── index-join  ·      ·
+      ├── scan   ·      ·
+      │          table  abcd@cd
+      │          spans  /10-/11
+      └── scan   ·      ·
+·                table  abcd@primary
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10

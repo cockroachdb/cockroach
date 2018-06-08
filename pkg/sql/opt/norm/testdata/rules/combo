@@ -246,6 +246,7 @@ GenerateIndexScans (higher cost)
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
   -      │    │    └── keys: (1)
   +      │    │    ├── table: a
+  +      │    │    ├── key columns: [1]
   +      │    │    ├── keys: (1)
   +      │    │    └── scan a@secondary
   +      │    │         ├── columns: k:1(int!null) s:4(string)
@@ -583,6 +584,7 @@ GenerateIndexScans (higher cost)
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   - │    └── keys: (1) weak(3,4)
   + │    ├── table: a
+  + │    ├── key columns: [1]
   + │    ├── keys: (1) weak(3,4)
   + │    └── scan a@secondary
   + │         ├── columns: k:1(int!null) f:3(float) s:4(string) j:5(jsonb)

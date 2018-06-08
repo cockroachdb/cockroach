@@ -37,6 +37,7 @@ select
  ├── lookup-join
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── table: a
+ │    ├── key columns: [1]
  │    ├── stats: [rows=1]
  │    ├── keys: (1) weak(3,4) weak(2,3)
  │    └── scan a@secondary
@@ -64,6 +65,7 @@ project
       ├── lookup-join
       │    ├── columns: x:1(int!null) y:2(int) s:3(string)
       │    ├── table: a
+      │    ├── key columns: [1]
       │    ├── stats: [rows=1]
       │    ├── keys: (1) weak(2,3)
       │    └── scan a@secondary
