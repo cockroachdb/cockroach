@@ -251,7 +251,13 @@ func (ev ExprView) format(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "%v", ev.op)
+	// Special case for merge-join: we want the type of the join to show up
+	if ev.Operator() == opt.MergeJoinOp {
+		def := ev.Child(2).Private().(*MergeOnDef)
+		fmt.Fprintf(&buf, "%v (merge)", def.JoinType)
+	} else {
+		fmt.Fprintf(&buf, "%v", ev.op)
+	}
 
 	switch ev.Operator() {
 	case opt.ScanOp, opt.LookupJoinOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
@@ -400,15 +406,23 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	// Omit empty ProjectionsOp and AggregationsOp.
-	if (ev.Operator() == opt.ProjectionsOp || ev.Operator() == opt.AggregationsOp) &&
+	if (ev.op == opt.ProjectionsOp || ev.op == opt.AggregationsOp) &&
 		ev.ChildCount() == 0 {
 		return
 	}
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v", ev.op)
-	ev.formatScalarPrivate(&buf, ev.Private())
-	ev.FormatScalarProps(f, &buf)
-	tp = tp.Child(buf.String())
+	if ev.op == opt.MergeOnOp {
+		tp = tp.Childf("%v", ev.op)
+		def := ev.Private().(*MergeOnDef)
+		tp.Childf("left ordering: %s", def.LeftEq)
+		tp.Childf("right ordering: %s", def.RightEq)
+	} else {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "%v", ev.op)
+
+		ev.formatScalarPrivate(&buf, ev.Private())
+		ev.FormatScalarProps(f, &buf)
+		tp = tp.Child(buf.String())
+	}
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
 		child.format(f, tp)

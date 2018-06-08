@@ -73,42 +73,42 @@ define Project {
 # predicate are filtered. While expressions in the predicate can refer to
 # columns projected by either the left or right inputs, the inputs are not
 # allowed to refer to the other's projected columns.
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define InnerJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define LeftJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define RightJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define FullJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define SemiJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define AntiJoin {
     Left  Expr
     Right Expr
@@ -120,6 +120,17 @@ define AntiJoin {
 define LookupJoin {
     Input Expr
     Def LookupJoinDef
+}
+
+# MergeJoin represents a join that is executed using merge-join.
+# MergeOn is a scalar which contains the ON condition and merge-join ordering
+# information; see the MergeOn scalar operator.
+# It can be any type of join (identified in the private of MergeOn).
+[Relational]
+define MergeJoin {
+    Left    Expr
+    Right   Expr
+    MergeOn Expr
 }
 
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike

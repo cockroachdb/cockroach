@@ -274,3 +274,27 @@ type SetOpColMap struct {
 	Right opt.ColList
 	Out   opt.ColList
 }
+
+// MergeOnDef contains information on the equality columns we are doing a merge
+// join on.
+type MergeOnDef struct {
+	// JoinType is one of the basic join operators: InnerJoin, LeftJoin,
+	// RightJoin, FullJoin, SemiJoin, AntiJoin.
+	JoinType opt.Operator
+
+	// LeftEq and RightEq are orderings on equality columns. They have the same
+	// length and LeftEq[i] is a column on the left side which is constrained to
+	// be equal to RightEq[i] on the right side. The directions also have to
+	// match.
+	//
+	// Examples of valid settings for abc JOIN def ON a=d,b=e:
+	//   LeftEq: a+,b+   RightEq: d+,e+
+	//   LeftEq: b-,a+   RightEq: e-,d+
+	//
+	// TODO(radu): we may want one of the orderings to cover more than the
+	// equality columns (to guarantee a certain output ordering). In the example
+	// above, if we can get ordering a+,b+,c+ on the left side and ordering d+,e+
+	// on the right side, we can guarantee a+,b+,c+ on the merge join results.
+	LeftEq  opt.Ordering
+	RightEq opt.Ordering
+}

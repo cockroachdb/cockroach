@@ -116,6 +116,7 @@ func init() {
 		opt.TupleOp:           typeAsTuple,
 		opt.ProjectionsOp:     typeAsAny,
 		opt.AggregationsOp:    typeAsAny,
+		opt.MergeOnOp:         typeAsAny,
 		opt.ExistsOp:          typeAsBool,
 		opt.AnyOp:             typeAsBool,
 		opt.FunctionOp:        typeFunction,
