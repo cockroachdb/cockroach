@@ -71,16 +71,23 @@ type emitRow struct {
 func runChangefeedFlow(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	job *jobs.Job,
+	details jobs.ChangefeedDetails,
+	progress jobs.ChangefeedProgress,
 	startedCh chan<- tree.Datums,
+	progressedFn func(context.Context, jobs.ProgressedFn) error,
 ) error {
-	details, err := validateChangefeed(job.Record.Details.(jobs.ChangefeedDetails))
+	details, err := validateChangefeed(details)
 	if err != nil {
 		return err
 	}
 
 	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
-		return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
+		// Some benchmarks want to skip the job progress update for a bit more
+		// isolation.
+		if progressedFn == nil {
+			return nil
+		}
+		return progressedFn(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
 			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
 			cfDetails.Highwater = highwater
 			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
@@ -92,7 +99,6 @@ func runChangefeedFlow(
 	// easy to later make it into a DistSQL processor.
 	//
 	// TODO(dan): Make this into a DistSQL flow.
-	progress := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed
 	changedKVsFn := exportRequestPoll(execCfg, details, progress)
 	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
 	emitRowsFn, err := emitRows(details, jobProgressedFn, rowsFn)
@@ -129,7 +135,7 @@ func runChangefeedFlow(
 // The fetches are rate limited to be no more often than the
 // `changefeed.experimental_poll_interval` setting.
 func exportRequestPoll(
-	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress *jobs.ChangefeedProgress,
+	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress jobs.ChangefeedProgress,
 ) func(context.Context) (changedKVs, error) {
 	sender := execCfg.DB.GetSender()
 	var spans []roachpb.Span
