@@ -265,7 +265,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
 				return nil
@@ -401,7 +401,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(ts.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
 				return nil
@@ -426,7 +426,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 
 				payload := args.Payload.(eventTxnStartPayload)
 
@@ -452,7 +452,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
 				return nil
@@ -485,7 +485,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
 				return nil
@@ -510,7 +510,7 @@ var TxnStateTransitions = Compile(Pattern{
 func cleanupAndFinish(args Args) error {
 	ts := args.Extended.(*txnState)
 	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-	ts.finishSQLTxn(args.Ctx)
+	ts.finishSQLTxn()
 	ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 	return nil
 }
@@ -555,7 +555,7 @@ var BoundTxnStateTransitions = Compile(Pattern{
 			Next: stateInternalError{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				return nil
 			},
@@ -564,7 +564,7 @@ var BoundTxnStateTransitions = Compile(Pattern{
 			Next: stateInternalError{},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn(args.Ctx)
+				ts.finishSQLTxn()
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				return nil
 			},

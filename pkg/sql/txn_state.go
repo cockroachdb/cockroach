@@ -226,10 +226,7 @@ func (ts *txnState) resetForNewSQLTxn(
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn.
-//
-// ctx is the connExecutor's context. This will be used once ts.Ctx is
-// finalized.
-func (ts *txnState) finishSQLTxn(connCtx context.Context) {
+func (ts *txnState) finishSQLTxn() {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -263,6 +260,24 @@ func (ts *txnState) finishSQLTxn(connCtx context.Context) {
 	ts.Ctx = nil
 	ts.mu.txn = nil
 	ts.recordingThreshold = 0
+}
+
+// finishExternalTxn is a stripped-down version of finishSQLTxn used by
+// connExecutors that run within a higher-level transaction (through the
+// InternalExecutor). These guys don't want to mess with the transaction per-se,
+// but still want to clean up other stuff.
+func (ts *txnState) finishExternalTxn() {
+	ts.mon.Stop(ts.Ctx)
+	if ts.cancel != nil {
+		ts.cancel()
+		ts.cancel = nil
+	}
+	if ts.sp != nil {
+		ts.sp.Finish()
+	}
+	ts.sp = nil
+	ts.Ctx = nil
+	ts.mu.txn = nil
 }
 
 func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
