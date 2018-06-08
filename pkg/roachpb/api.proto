@@ -334,6 +334,19 @@ message ScanOptions {
   int64 min_results = 2;
 }
 
+// ScanFormat is an enumeration of the available response formats for MVCCScan
+// operations.
+enum ScanFormat {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // The standard MVCCScan format: a slice of KeyValue messages.
+  KEY_VALUES = 0;
+  // The batch_response format: a byte slice of alternating keys and values,
+  // each prefixed by their length as a varint.
+  BATCH_RESPONSE = 1;
+}
+
+
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
@@ -343,6 +356,11 @@ message ScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The desired format for the response. If set to BATCH_RESPONSE, the server
+  // will set the batch_response field in the ScanResponse instead of the rows
+  // field.
+  ScanFormat scan_format = 4;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -354,6 +372,12 @@ message ScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, the results of the scan in batch format - the key/value pairs are
+  // a buffer of varint-prefixed slices, alternating from key to value. There
+  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
+  // be set and vice versa.
+  bytes batch_response = 4;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -365,6 +389,11 @@ message ReverseScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The desired format for the response. If set to BATCH_RESPONSE, the server
+  // will set the batch_response field in the ScanResponse instead of the rows
+  // field.
+  ScanFormat scan_format = 4;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -376,6 +405,12 @@ message ReverseScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, the results of the scan in batch format - the key/value pairs are
+  // a buffer of varint-prefixed slices, alternating from key to value. There
+  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
+  // be set and vice versa.
+  bytes batch_response = 4;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
