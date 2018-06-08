@@ -160,7 +160,6 @@ func LoadCSV(
 	job *jobs.Job,
 	resultRows *RowResultWriter,
 	tables map[string]*sqlbase.TableDescriptor,
-	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
 	format roachpb.IOFileFormat,
@@ -197,7 +196,7 @@ func LoadCSV(
 	})
 
 	// Setup common to both stages.
-	if len(tables) == 0 && tableDesc == nil {
+	if len(tables) == 0 {
 		return errors.Errorf("must specify table(s) to import")
 	}
 
@@ -215,9 +214,6 @@ func LoadCSV(
 					Slot:  int32(i),
 				},
 				Uri: make(map[int32]string),
-			}
-			if tableDesc != nil {
-				spec.TableDesc = *tableDesc
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -254,12 +250,8 @@ func LoadCSV(
 		}
 	}
 
-	splits := make([][]byte, 0, 2+2*len(tables)+len(samples))
+	splits := make([][]byte, 0, 2*len(tables)+len(samples))
 	// Add the table keys to the spans.
-	if tableDesc != nil {
-		tableSpan := tableDesc.TableSpan()
-		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
-	}
 	for _, desc := range tables {
 		tableSpan := desc.TableSpan()
 		splits = append(splits, tableSpan.Key, tableSpan.EndKey)

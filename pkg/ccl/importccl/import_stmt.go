@@ -173,19 +173,23 @@ func finalizeCSVBackup(
 	ctx context.Context,
 	backupDesc *backupccl.BackupDescriptor,
 	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
+	tables map[string]*sqlbase.TableDescriptor,
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
-	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
-	backupDesc.Descriptors = []sqlbase.Descriptor{
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
-			Name: csvDatabaseName,
-			ID:   parentID,
-		}),
-		*sqlbase.WrapDescriptor(tableDesc),
+
+	backupDesc.Spans = make([]roachpb.Span, 0, len(tables))
+	backupDesc.Descriptors = make([]sqlbase.Descriptor, 1, len(tables)+1)
+	backupDesc.Descriptors[0] = *sqlbase.WrapDescriptor(
+		&sqlbase.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
+	)
+
+	for _, table := range tables {
+		backupDesc.Spans = append(backupDesc.Spans, table.TableSpan())
+		backupDesc.Descriptors = append(backupDesc.Descriptors, *sqlbase.WrapDescriptor(table))
 	}
+
 	backupDesc.FormatVersion = backupccl.BackupFormatInitialVersion
 	backupDesc.BuildInfo = build.GetInfo()
 	if execCfg != nil {
@@ -583,7 +587,6 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
 	tables map[string]*sqlbase.TableDescriptor,
-	tableDesc *sqlbase.TableDescriptor,
 	transformOnly string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -611,7 +614,6 @@ func doDistributedCSVTransform(
 		job,
 		sql.NewRowResultWriter(rows),
 		tables,
-		tableDesc,
 		files,
 		transformOnly,
 		format,
@@ -669,12 +671,22 @@ func doDistributedCSVTransform(
 	sort.Slice(backupDesc.Files, func(i, j int) bool {
 		return backupDesc.Files[i].Span.Key.Compare(backupDesc.Files[j].Span.Key) < 0
 	})
-	tableSpan := tableDesc.TableSpan()
-	backupDesc.Files[0].Span.Key = tableSpan.Key
+
+	var minTableSpan, maxTableSpan roachpb.Key
+	for _, tableDesc := range tables {
+		span := tableDesc.TableSpan()
+		if minTableSpan == nil || span.Key.Compare(minTableSpan) < 0 {
+			minTableSpan = span.Key
+		}
+		if maxTableSpan == nil || span.EndKey.Compare(maxTableSpan) > 0 {
+			maxTableSpan = span.EndKey
+		}
+	}
+	backupDesc.Files[0].Span.Key = minTableSpan
 	for i := 1; i < len(backupDesc.Files); i++ {
 		backupDesc.Files[i].Span.Key = backupDesc.Files[i-1].Span.EndKey
 	}
-	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = tableSpan.EndKey
+	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = maxTableSpan
 
 	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
@@ -686,7 +698,7 @@ func doDistributedCSVTransform(
 	}
 	defer es.Close()
 
-	return finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, p.ExecCfg())
+	return finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
 }
 
 type importResumer struct {
@@ -721,20 +733,13 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	var tableDesc *sqlbase.TableDescriptor
-	var tables map[string]*sqlbase.TableDescriptor
-
-	if len(details.Tables) == 1 {
-		tableDesc = details.Tables[0].Desc
-	} else if len(details.Tables) > 1 {
-		tables = make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
-		for _, i := range details.Tables {
-			tables[i.Desc.Name] = i.Desc
-		}
+	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	for _, i := range details.Tables {
+		tables[i.Desc.Name] = i.Desc
 	}
 
 	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tables, tableDesc, transform, format, walltime, sstSize,
+		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize,
 	)
 }
 
