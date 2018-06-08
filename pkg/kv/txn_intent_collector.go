@@ -46,10 +46,15 @@ var maxTxnIntentsBytes = settings.RegisterIntSetting(
 // transaction completes.
 type txnIntentCollector struct {
 	st *cluster.Settings
-	ri *RangeIterator
 
-	// meta contains all txn intents.
-	meta *roachpb.TxnCoordMeta
+	// intents stores key spans affected by this transaction through
+	// this coordinator. These spans allow the coordinator to set the
+	// list of intent spans in the EndTransactionRequest when the
+	// transaction is finalized.
+	intents []roachpb.Span
+	// an optional RangeIterator that is used to condense intent spans if
+	// provided.
+	ri *RangeIterator
 	// intentsSizeBytes is the size in bytes of the intent spans in the
 	// meta, maintained to efficiently check the threshold.
 	intentsSizeBytes int64
@@ -82,7 +87,7 @@ func (ic *txnIntentCollector) beforeSendLocked(
 	// Defensively set distinctSpans to false if we had any previous
 	// writes in this transaction. This effectively limits the distinct
 	// spans optimization to 1pc transactions.
-	distinctSpans := len(ic.meta.Intents) == 0
+	distinctSpans := len(ic.intents) == 0
 
 	// We can't pass in a batch response here to better limit the key
 	// spans as we don't know what is going to be affected. This will
@@ -95,7 +100,7 @@ func (ic *txnIntentCollector) beforeSendLocked(
 
 	// Populate et.IntentSpans, taking into account both any existing
 	// and new writes, and taking care to perform proper deduplication.
-	et.IntentSpans = append([]roachpb.Span(nil), ic.meta.Intents...)
+	et.IntentSpans = append([]roachpb.Span(nil), ic.intents...)
 	// TODO(peter): Populate DistinctSpans on all batches, not just batches
 	// which contain an EndTransactionRequest.
 	var distinct bool
@@ -136,13 +141,32 @@ func (ic *txnIntentCollector) afterSendLocked(
 	return br, pErr
 }
 
-// refreshMetaLocked implements the txnReqInterceptor interface.
-func (ic *txnIntentCollector) refreshMetaLocked() {
+// populateMetaLocked implements the txnReqInterceptor interface.
+func (ic *txnIntentCollector) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
+	// Copy mutable state so access is safe for the caller.
+	meta.Intents = append([]roachpb.Span(nil), ic.intents...)
+}
+
+// augmentMetaLocked implements the txnReqInterceptor interface.
+func (ic *txnIntentCollector) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+	// Do not modify existing intent slices when copying.
+	ic.intents, _ = roachpb.MergeSpans(
+		append(append([]roachpb.Span(nil), ic.intents...), meta.Intents...),
+	)
+	// Recompute the size of the intents.
 	ic.intentsSizeBytes = 0
-	for _, i := range ic.meta.Intents {
+	for _, i := range ic.intents {
 		ic.intentsSizeBytes += int64(len(i.Key) + len(i.EndKey))
 	}
 }
+
+// epochRetryLocked implements the txnReqInterceptor interface.
+func (*txnIntentCollector) epochRetryLocked() {
+	// No-op. Intents are tracked cumulatively across epochs on retries.
+}
+
+// closeLocked implements the txnReqInterceptor interface.
+func (*txnIntentCollector) closeLocked() {}
 
 func (ic *txnIntentCollector) appendAndCondenseIntentsLocked(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
@@ -151,16 +175,16 @@ func (ic *txnIntentCollector) appendAndCondenseIntentsLocked(
 	// intents blocking concurrent writers for extended periods of time. See
 	// #3346.
 	ba.IntentSpanIterate(br, func(span roachpb.Span) {
-		ic.meta.Intents = append(ic.meta.Intents, span)
+		ic.intents = append(ic.intents, span)
 		ic.intentsSizeBytes += int64(len(span.Key) + len(span.EndKey))
 	})
 	condensedIntents, condensedIntentsSize, err := ic.maybeCondenseIntentSpans(
-		ctx, ic.meta.Intents, ic.intentsSizeBytes,
+		ctx, ic.intents, ic.intentsSizeBytes,
 	)
 	if err != nil {
 		return err
 	}
-	ic.meta.Intents, ic.intentsSizeBytes = condensedIntents, condensedIntentsSize
+	ic.intents, ic.intentsSizeBytes = condensedIntents, condensedIntentsSize
 	return nil
 }
 
@@ -193,6 +217,9 @@ func (ic *txnIntentCollector) maybeCondenseIntentSpans(
 	}
 
 	// Sort the spans by start key.
+	// TODO(nvanbenschoten): this sorting is performed after every request.
+	// Now that Intents are no longer stored in a protobuf slice, we may want
+	// to store them in an ordered tree to preserve order between requests.
 	sort.Slice(spans, func(i, j int) bool { return spans[i].Key.Compare(spans[j].Key) < 0 })
 
 	// Divide them by range boundaries and condense. Iterate over spans

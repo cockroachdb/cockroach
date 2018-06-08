@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -43,15 +44,24 @@ var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 // all the spans can be updated to the current transaction timestamp.
 type txnSpanRefresher struct {
 	st *cluster.Settings
-
-	// mu locks the TxnCoordMeta.
+	// mu locks the TxnCoordSender. Used in maybeRetrySend.
 	mu sync.Locker
-	// meta contains all refresh spans.
-	meta *roachpb.TxnCoordMeta
+
+	// See TxnCoordMeta.RefreshReads and TxnCoordMeta.RefreshWrites.
+	refreshReads  []roachpb.Span
+	refreshWrites []roachpb.Span
+	// See TxnCoordMeta.RefreshValid.
+	refreshValid bool
 	// refreshSpansBytes is the total size in bytes of the spans
-	// encountered during this transaction that need to be refreshed to
-	// avoid serializable restart.
+	// encountered during this transaction that need to be refreshed
+	// to avoid serializable restart.
 	refreshSpansBytes int64
+	// refreshedTimestamp keeps track of the largest timestamp that a
+	// transaction was able to refresh all of its refreshable spans at.
+	// It is updated under lock and used to ensure that concurrent requests
+	// don't cause the refresh spans to get out of sync.
+	// See appendRefreshSpansLocked.
+	refreshedTimestamp hlc.Timestamp
 
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool
@@ -75,8 +85,7 @@ func (sr *txnSpanRefresher) beforeSendLocked(
 	}
 
 	et := rArgs.(*roachpb.EndTransactionRequest)
-	if sr.meta.Txn.IsSerializable() && sr.meta.RefreshValid &&
-		len(sr.meta.RefreshReads) == 0 && len(sr.meta.RefreshWrites) == 0 {
+	if ba.Txn.IsSerializable() && sr.refreshValid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 		et.NoRefreshSpans = true
 	}
 	return ba, nil
@@ -114,7 +123,6 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 			sr.mu.Unlock()
 			return nil, pErr
 		}
-		sr.meta.Txn.RefreshedTimestamp.Forward(retryTxn.RefreshedTimestamp)
 		sr.mu.Unlock()
 		retryBa.Requests = ba.Requests[len(br.Responses):]
 	}
@@ -161,9 +169,14 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) bool {
 	sr.mu.Lock()
-	refreshReads := sr.meta.RefreshReads
-	refreshWrites := sr.meta.RefreshWrites
-	refreshValid := sr.meta.RefreshValid
+	refreshReads := sr.refreshReads
+	refreshWrites := sr.refreshWrites
+	refreshValid := sr.refreshValid
+	// Forward the refreshed timestamp under lock. This in conjunction with a
+	// check in appendRefreshSpansLocked prevents a race where a concurrent
+	// request may add new refresh spans only "verified" up to a certain after
+	// we've refreshed past that timestamp.
+	sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
 	sr.mu.Unlock()
 
 	if !refreshValid {
@@ -215,7 +228,7 @@ func (sr *txnSpanRefresher) afterSendLocked(
 	// has serializable isolation and we haven't yet exceeded the max
 	// read key bytes.
 	if pErr == nil && ba.Txn.IsSerializable() {
-		if sr.meta.RefreshValid {
+		if sr.refreshValid {
 			if !sr.appendRefreshSpansLocked(ctx, ba, br) {
 				// The refresh spans are out of date, return a generic client-side retry error.
 				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn)
@@ -225,9 +238,9 @@ func (sr *txnSpanRefresher) afterSendLocked(
 		// doesn't exceed the max threshold.
 		if sr.refreshSpansBytes > maxTxnRefreshSpansBytes.Get(&sr.st.SV) {
 			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
-			sr.meta.RefreshReads = nil
-			sr.meta.RefreshWrites = nil
-			sr.meta.RefreshValid = false
+			sr.refreshReads = nil
+			sr.refreshWrites = nil
+			sr.refreshValid = false
 			sr.refreshSpansBytes = 0
 		}
 	}
@@ -235,8 +248,7 @@ func (sr *txnSpanRefresher) afterSendLocked(
 	// exhausted, return a non-retryable error indicating that the
 	// transaction is too large and should potentially be split.
 	// We do this to avoid endlessly retrying a txn likely refail.
-	if pErr == nil && !sr.meta.RefreshValid &&
-		(br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+	if pErr == nil && !sr.refreshValid && (br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
 		pErr = roachpb.NewErrorWithTxn(
 			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
 		)
@@ -244,16 +256,51 @@ func (sr *txnSpanRefresher) afterSendLocked(
 	return br, pErr
 }
 
-// refreshMetaLocked implements the txnReqInterceptor interface.
-func (sr *txnSpanRefresher) refreshMetaLocked() {
+// populateMetaLocked implements the txnReqInterceptor interface.
+func (sr *txnSpanRefresher) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
+	meta.RefreshValid = sr.refreshValid
+	if sr.refreshValid {
+		// Copy mutable state so access is safe for the caller.
+		meta.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
+		meta.RefreshWrites = append([]roachpb.Span(nil), sr.refreshWrites...)
+	}
+}
+
+// augmentMetaLocked implements the txnReqInterceptor interface.
+func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+	// Do not modify existing span slices when copying.
+	if !meta.RefreshValid {
+		sr.refreshValid = false
+		sr.refreshReads = nil
+		sr.refreshWrites = nil
+	} else if sr.refreshValid {
+		sr.refreshReads, _ = roachpb.MergeSpans(
+			append(append([]roachpb.Span(nil), sr.refreshReads...), meta.RefreshReads...),
+		)
+		sr.refreshWrites, _ = roachpb.MergeSpans(
+			append(append([]roachpb.Span(nil), sr.refreshWrites...), meta.RefreshWrites...),
+		)
+	}
+	// Recompute the size of the refreshes.
 	sr.refreshSpansBytes = 0
-	for _, u := range sr.meta.RefreshReads {
+	for _, u := range sr.refreshReads {
 		sr.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
 	}
-	for _, u := range sr.meta.RefreshWrites {
+	for _, u := range sr.refreshWrites {
 		sr.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
 	}
 }
+
+// epochRetryLocked implements the txnReqInterceptor interface.
+func (sr *txnSpanRefresher) epochRetryLocked() {
+	sr.refreshReads = nil
+	sr.refreshWrites = nil
+	sr.refreshValid = true
+	sr.refreshSpansBytes = 0
+}
+
+// closeLocked implements the txnReqInterceptor interface.
+func (*txnSpanRefresher) closeLocked() {}
 
 // appendRefreshSpansLocked appends refresh spans from the supplied batch
 // request, qualified by the batch response where appropriate. Returns
@@ -272,9 +319,9 @@ func (sr *txnSpanRefresher) appendRefreshSpansLocked(
 ) bool {
 	origTS := ba.Txn.OrigTimestamp
 	origTS.Forward(ba.Txn.RefreshedTimestamp)
-	if origTS.Less(sr.meta.Txn.RefreshedTimestamp) {
+	if origTS.Less(sr.refreshedTimestamp) {
 		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
-			origTS, sr.meta.Txn.RefreshedTimestamp)
+			origTS, sr.refreshedTimestamp)
 		return false
 	}
 	ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) {
@@ -282,9 +329,9 @@ func (sr *txnSpanRefresher) appendRefreshSpansLocked(
 			log.Infof(ctx, "refresh: %s write=%t", span, write)
 		}
 		if write {
-			sr.meta.RefreshWrites = append(sr.meta.RefreshWrites, span)
+			sr.refreshWrites = append(sr.refreshWrites, span)
 		} else {
-			sr.meta.RefreshReads = append(sr.meta.RefreshReads, span)
+			sr.refreshReads = append(sr.refreshReads, span)
 		}
 		sr.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
 	})
