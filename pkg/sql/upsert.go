@@ -98,16 +98,20 @@ func (p *planner) newUpsertNode(
 	if n.OnConflict.DoNothing {
 		if conflictIndex == nil {
 			un.run.tw = &strictTableUpserter{
-				ri:          ri,
-				collectRows: needRows,
-				alloc:       &p.alloc,
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					collectRows: needRows,
+					alloc:       &p.alloc,
+				},
 			}
 		} else {
 			un.run.tw = &tableUpserter{
-				ri:            ri,
 				conflictIndex: *conflictIndex,
-				collectRows:   needRows,
-				alloc:         &p.alloc,
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					collectRows: needRows,
+					alloc:       &p.alloc,
+				},
 			}
 		}
 	} else {
@@ -189,13 +193,15 @@ func (p *planner) newUpsertNode(
 		} else {
 			// General/slow path.
 			un.run.tw = &tableUpserter{
-				ri:            ri,
-				alloc:         &p.alloc,
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					alloc:       &p.alloc,
+					collectRows: needRows,
+				},
 				anyComputed:   len(computeExprs) >= 0,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
-				collectRows:   needRows,
 				evaler:        helper,
 			}
 		}

@@ -33,10 +33,6 @@ import (
 type strictTableUpserter struct {
 	tableUpserterBase
 
-	ri          sqlbase.RowInserter
-	alloc       *sqlbase.DatumAlloc
-	collectRows bool
-
 	// internal state
 	conflictIndexes []sqlbase.IndexDescriptor
 }
@@ -44,19 +40,12 @@ type strictTableUpserter struct {
 func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
 
-	tu.tableUpserterBase = tableUpserterBase{
-		ri:          tu.ri,
-		alloc:       tu.alloc,
-		collectRows: tu.collectRows,
-	}
-
 	err := tu.tableUpserterBase.init(txn, evalCtx)
 	if err != nil {
 		return err
 	}
 
-	err = tu.getUniqueIndexes()
-	return err
+	return tu.getUniqueIndexes()
 }
 
 // fkSpanCollector is part of the tableWriter interface.

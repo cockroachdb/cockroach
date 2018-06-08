@@ -26,6 +26,144 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// tableUpserterBase contains common functionality between different upserter implementations.
+type tableUpserterBase struct {
+	tableWriterBase
+
+	ri          sqlbase.RowInserter
+	alloc       *sqlbase.DatumAlloc
+	collectRows bool
+
+	// Rows returned if collectRows is true.
+	rowsUpserted *sqlbase.RowContainer
+	// rowTemplate is used to prepare rows to add to rowsUpserted.
+	rowTemplate tree.Datums
+	// rowIdxToRetIdx maps the indices in the inserted rows
+	// back to indices in rowTemplate.
+	rowIdxToRetIdx []int
+	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
+	// collectRows is set, counted separately otherwise.
+	resultCount int
+
+	// Contains all the rows to be inserted.
+	insertRows sqlbase.RowContainer
+
+	// For allocation avoidance.
+	indexKeyPrefix []byte
+}
+
+func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
+	tu.tableWriterBase.init(txn)
+	tableDesc := tu.tableDesc()
+
+	tu.insertRows.Init(
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+	)
+
+	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
+	if tu.collectRows {
+		tu.rowsUpserted = sqlbase.NewRowContainer(
+			evalCtx.Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
+			tu.insertRows.Len(),
+		)
+
+		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
+		// all the table columns. We need to pass values for all table columns
+		// to rh, in the correct order; we will use rowTemplate for this. We
+		// also need a table that maps row indices to rowTemplate indices to
+		// fill in the row values; any absent values will be NULLs.
+		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
+	}
+
+	// Create the map from insert rows to returning rows.
+	colIDToRetIndex := map[sqlbase.ColumnID]int{}
+	for i, col := range tableDesc.Columns {
+		colIDToRetIndex[col.ID] = i
+	}
+	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
+	for i, col := range tu.ri.InsertCols {
+		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+	}
+
+	tu.insertRows.Init(
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+	)
+
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+
+	return nil
+}
+
+func (tu *tableUpserterBase) tableDesc() *sqlbase.TableDescriptor {
+	return tu.ri.Helper.TableDesc
+}
+
+// row is part of the tableWriter interface.
+func (tu *tableUpserterBase) row(
+	ctx context.Context, row tree.Datums, traceKV bool,
+) (tree.Datums, error) {
+	tu.batchSize++
+	return tu.insertRows.AddRow(ctx, row)
+}
+
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (tu *tableUpserterBase) flushAndStartNewBatch(ctx context.Context) error {
+	tu.insertRows.Clear(ctx)
+	if tu.collectRows {
+		tu.rowsUpserted.Clear(ctx)
+	}
+	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
+}
+
+// batchedCount is part of the batchedTableWriter interface.
+func (tu *tableUpserterBase) batchedCount() int { return tu.resultCount }
+
+// batchedValues is part of the batchedTableWriter interface.
+func (tu *tableUpserterBase) batchedValues(rowIdx int) tree.Datums {
+	return tu.rowsUpserted.At(rowIdx)
+}
+
+func (tu *tableUpserterBase) curBatchSize() int { return tu.insertRows.Len() }
+
+// close is part of the tableWriter interface.
+func (tu *tableUpserterBase) close(ctx context.Context) {
+	tu.insertRows.Close(ctx)
+	if tu.rowsUpserted != nil {
+		tu.rowsUpserted.Close(ctx)
+	}
+}
+
+// finalize is part of the tableWriter interface.
+func (tu *tableUpserterBase) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+) (*sqlbase.RowContainer, error) {
+	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
+}
+
+// makeResultFromInsertRow reshapes a row that was inserted by the
+// data source (in tu.insertRow) to a row suitable for storing for a
+// later RETURNING clause, shaped by the target table's descriptor.
+// For example, the inserted row may not contain values for nullable
+// columns.
+func (tu *tableUpserterBase) makeResultFromInsertRow(
+	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
+) tree.Datums {
+	resultRow := insertRow
+	if len(resultRow) < len(cols) {
+		resultRow = make(tree.Datums, len(cols))
+		// Pre-fill with NULLs.
+		for i := range resultRow {
+			resultRow[i] = tree.DNull
+		}
+		// Fill the other values from insertRow.
+		for i, val := range insertRow {
+			resultRow[tu.rowIdxToRetIdx[i]] = val
+		}
+	}
+	return resultRow
+}
+
 type tableUpsertEvaler interface {
 	expressionCarrier
 
@@ -68,7 +206,6 @@ type tableUpsertEvaler interface {
 //
 type tableUpserter struct {
 	tableUpserterBase
-	ri sqlbase.RowInserter
 
 	// updateCols indicates which columns need an update during a
 	// conflict.  There is one entry per column descriptors in the
@@ -78,8 +215,6 @@ type tableUpserter struct {
 	updateCols []sqlbase.ColumnDescriptor
 
 	conflictIndex sqlbase.IndexDescriptor
-	alloc         *sqlbase.DatumAlloc
-	collectRows   bool
 	anyComputed   bool
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
@@ -102,12 +237,6 @@ type tableUpserter struct {
 // init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
-
-	tu.tableUpserterBase = tableUpserterBase{
-		ri:          tu.ri,
-		alloc:       tu.alloc,
-		collectRows: tu.collectRows,
-	}
 
 	err := tu.tableUpserterBase.init(txn, evalCtx)
 	if err != nil {
@@ -714,142 +843,4 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.T
 	if tu.evaler != nil {
 		tu.evaler.walkExprs(walk)
 	}
-}
-
-// tableUpserterBase is meant to contain common functionality between different upserter implementations.
-type tableUpserterBase struct {
-	tableWriterBase
-
-	ri          sqlbase.RowInserter
-	alloc       *sqlbase.DatumAlloc
-	collectRows bool
-
-	// Rows returned if collectRows is true.
-	rowsUpserted *sqlbase.RowContainer
-	// rowTemplate is used to prepare rows to add to rowsUpserted.
-	rowTemplate tree.Datums
-	// rowIdxToRetIdx maps the indices in the inserted rows
-	// back to indices in rowTemplate.
-	rowIdxToRetIdx []int
-	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
-	// collectRows is set, counted separately otherwise.
-	resultCount int
-
-	// Contains all the rows to be inserted.
-	insertRows sqlbase.RowContainer
-
-	// For allocation avoidance.
-	indexKeyPrefix []byte
-}
-
-func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.tableWriterBase.init(txn)
-	tableDesc := tu.tableDesc()
-
-	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
-	)
-
-	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
-	if tu.collectRows {
-		tu.rowsUpserted = sqlbase.NewRowContainer(
-			evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
-			tu.insertRows.Len(),
-		)
-
-		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
-		// all the table columns. We need to pass values for all table columns
-		// to rh, in the correct order; we will use rowTemplate for this. We
-		// also need a table that maps row indices to rowTemplate indices to
-		// fill in the row values; any absent values will be NULLs.
-		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
-	}
-
-	// Create the map from insert rows to returning rows.
-	colIDToRetIndex := map[sqlbase.ColumnID]int{}
-	for i, col := range tableDesc.Columns {
-		colIDToRetIndex[col.ID] = i
-	}
-	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
-	for i, col := range tu.ri.InsertCols {
-		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
-	}
-
-	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
-	)
-
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-
-	return nil
-}
-
-func (tu *tableUpserterBase) tableDesc() *sqlbase.TableDescriptor {
-	return tu.ri.Helper.TableDesc
-}
-
-// row is part of the tableWriter interface.
-func (tu *tableUpserterBase) row(
-	ctx context.Context, row tree.Datums, traceKV bool,
-) (tree.Datums, error) {
-	tu.batchSize++
-	return tu.insertRows.AddRow(ctx, row)
-}
-
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
-func (tu *tableUpserterBase) flushAndStartNewBatch(ctx context.Context) error {
-	tu.insertRows.Clear(ctx)
-	if tu.collectRows {
-		tu.rowsUpserted.Clear(ctx)
-	}
-	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
-}
-
-// batchedCount is part of the batchedTableWriter interface.
-func (tu *tableUpserterBase) batchedCount() int { return tu.resultCount }
-
-// batchedValues is part of the batchedTableWriter interface.
-func (tu *tableUpserterBase) batchedValues(rowIdx int) tree.Datums {
-	return tu.rowsUpserted.At(rowIdx)
-}
-
-func (tu *tableUpserterBase) curBatchSize() int { return tu.insertRows.Len() }
-
-// close is part of the tableWriter interface.
-func (tu *tableUpserterBase) close(ctx context.Context) {
-	tu.insertRows.Close(ctx)
-	if tu.rowsUpserted != nil {
-		tu.rowsUpserted.Close(ctx)
-	}
-}
-
-// finalize is part of the tableWriter interface.
-func (tu *tableUpserterBase) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-) (*sqlbase.RowContainer, error) {
-	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
-}
-
-// makeResultFromInsertRow reshapes a row that was inserted by the
-// data source (in tu.insertRow) to a row suitable for storing for a
-// later RETURNING clause, shaped by the target table's descriptor.
-// For example, the inserted row may not contain values for nullable
-// columns.
-func (tu *tableUpserterBase) makeResultFromInsertRow(
-	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
-) tree.Datums {
-	resultRow := insertRow
-	if len(resultRow) < len(cols) {
-		resultRow = make(tree.Datums, len(cols))
-		// Pre-fill with NULLs.
-		for i := range resultRow {
-			resultRow[i] = tree.DNull
-		}
-		// Fill the other values from insertRow.
-		for i, val := range insertRow {
-			resultRow[tu.rowIdxToRetIdx[i]] = val
-		}
-	}
-	return resultRow
 }
