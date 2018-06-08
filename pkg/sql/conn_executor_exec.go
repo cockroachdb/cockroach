@@ -579,22 +579,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		optMode = sessiondata.OptimizerOff
 	}
 	if optMode != sessiondata.OptimizerOff {
-		// Experimental path (disabled by default).
-		if err = planner.makeOptimizerPlan(ctx, stmt); err != nil {
-			// Fall back on the heuristic planner if the cost-based optimizer returns
-			// an "unsupported feature" error.
-			pgerr, ok := err.(*pgerror.Error)
-			if ok && pgerr.Code == pgerror.CodeFeatureNotSupportedError {
-				// Always fallback for SET commands even if the optimizer is in Always
-				// mode, or else we can't switch to another mode.
-				if optMode == sessiondata.OptimizerAlways {
-					if _, setVar := stmt.AST.(*tree.SetVar); setVar {
-						optMode = sessiondata.OptimizerOff
-					}
-				} else {
-					optMode = sessiondata.OptimizerOff
-				}
-			}
+		err = planner.makeOptimizerPlan(ctx, stmt)
+		if canFallbackFromOpt(err, optMode, stmt) {
+			optMode = sessiondata.OptimizerOff
 		}
 	}
 
@@ -675,6 +662,34 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	return nil
+}
+
+// canFallbackFromOpt returns whether we can fallback on the heuristic planner
+// when the optimizer hits an error.
+func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt Statement) bool {
+	pgerr, ok := err.(*pgerror.Error)
+	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
+		// We only fallback on "feature not supported" errors.
+		return false
+	}
+
+	if optMode == sessiondata.OptimizerAlways {
+		// In Always mode we never fallback, with one exception: SET commands (or
+		// else we can't switch to another mode).
+		_, isSetVar := stmt.AST.(*tree.SetVar)
+		return isSetVar
+	}
+
+	// If the statement is EXPLAIN (OPT), then don't fallback (we want to return
+	// the error, not show a plan from the heuristic planner).
+	// TODO(radu): this is hacky and doesn't handle an EXPLAIN (OPT) inside
+	// a larger query.
+	if e, ok := stmt.AST.(*tree.Explain); ok {
+		if opts, err := e.ParseOptions(); err == nil && opts.Mode == tree.ExplainOpt {
+			return false
+		}
+	}
+	return true
 }
 
 // execWithLocalEngine runs a plan using the local (non-distributed) SQL

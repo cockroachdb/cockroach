@@ -113,6 +113,12 @@ var ExplainDistSQLColumns = ResultColumns{
 	{Name: "JSON", Typ: types.String, Hidden: true},
 }
 
+// ExplainOptColumns are the result columns of an
+// EXPLAIN (OPT) statement.
+var ExplainOptColumns = ResultColumns{
+	{Name: "text", Typ: types.String},
+}
+
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},

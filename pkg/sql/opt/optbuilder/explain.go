@@ -48,6 +48,9 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	case tree.ExplainDistSQL:
 		cols = sqlbase.ExplainDistSQLColumns
 
+	case tree.ExplainOpt:
+		cols = sqlbase.ExplainOptColumns
+
 	default:
 		panic(fmt.Errorf("unsupported EXPLAIN mode: %d", opts.Mode))
 	}

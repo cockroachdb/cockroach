@@ -16,6 +16,7 @@ package execbuilder
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -175,8 +176,13 @@ func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 			}
 		}
 	}
+	return b.constructValues(md, rows, cols)
+}
 
-	resultCols := make(sqlbase.ResultColumns, numCols)
+func (b *Builder) constructValues(
+	md *opt.Metadata, rows [][]tree.TypedExpr, cols opt.ColList,
+) (execPlan, error) {
+	resultCols := make(sqlbase.ResultColumns, len(cols))
 	for i, col := range cols {
 		resultCols[i].Name = md.ColumnLabel(col)
 		resultCols[i].Typ = md.ColumnType(col)
@@ -645,15 +651,27 @@ func (b *Builder) applyPresentation(
 }
 
 func (b *Builder) buildExplain(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.ExplainOpDef)
+	if def.Options.Mode == tree.ExplainOpt {
+		// Special case: EXPLAIN (OPT). Put the formatted expression in
+		// a valuesNode.
+		textRows := strings.Split(strings.Trim(ev.Child(0).String(), "\n"), "\n")
+		rows := make([][]tree.TypedExpr, len(textRows))
+		for i := range textRows {
+			rows[i] = []tree.TypedExpr{tree.NewDString(textRows[i])}
+		}
+		return b.constructValues(ev.Metadata(), rows, def.ColList)
+	}
+
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
 	}
+
 	plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
 	if err != nil {
 		return execPlan{}, err
 	}
-	def := ev.Private().(*memo.ExplainOpDef)
 	node, err := b.factory.ConstructExplain(&def.Options, plan)
 	if err != nil {
 		return execPlan{}, err
