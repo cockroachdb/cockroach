@@ -106,8 +106,12 @@ type Factory interface {
 	// each row in the input node.
 	ConstructOrdinality(input Node, colName string) (Node, error)
 
-	// ConstructLookupJoin returns a node that performs a lookup join.
-	ConstructLookupJoin(input Node, table opt.Table, cols ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering) (Node, error)
+	// ConstructIndexJoin returns a node that performs an index join.
+	// The input must be created by ConstructScan for the same table; cols is the
+	// set of columns produced by the index join.
+	ConstructIndexJoin(
+		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
+	) (Node, error)
 
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If one or the other is not needed, then it is
