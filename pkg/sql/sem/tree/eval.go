@@ -2488,6 +2488,9 @@ type EvalContext struct {
 	// evaluation. It can change over the course of evaluation, such as on a
 	// per-row basis.
 	ActiveMemAcc *mon.BoundAccount
+
+	// JSONEndpoints ...
+	JSONEndpoints map[string]func(context.Context, json.JSON) (json.JSON, error)
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

@@ -2503,6 +2503,24 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.simulate_allocator": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{Name: "req", Typ: types.JSON}},
+			ReturnType: tree.FixedReturnType(types.JSON),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				handler, ok := ctx.JSONEndpoints["simulate_allocator"]
+				if !ok {
+					return nil, errors.New("unknown handler")
+				}
+				req := args[0].(*tree.DJSON).JSON
+				resp, err := handler(ctx.Ctx(), req)
+				return tree.NewDJSON(resp), err
+			},
+			Info: "Simulate an allocator run.",
+		},
+	),
+
 	"crdb_internal.cluster_id": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{

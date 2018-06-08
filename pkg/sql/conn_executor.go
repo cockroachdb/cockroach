@@ -42,9 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -853,6 +855,8 @@ type connExecutor struct {
 	curStmt tree.Statement
 
 	sessionID ClusterWideID
+
+	jsonEndpoints map[string]func(context.Context, json.JSON) (json.JSON, error)
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1704,6 +1708,8 @@ func (ex *connExecutor) evalCtx(
 		ex.server.cfg.Settings,
 	)
 
+	ex.maybeInitJSONEndpoints()
+
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:       p,
@@ -1724,6 +1730,7 @@ func (ex *connExecutor) evalCtx(
 			NodeID:           ex.server.cfg.NodeID.Get(),
 			ReCache:          ex.server.reCache,
 			InternalExecutor: &ie,
+			JSONEndpoints:    ex.jsonEndpoints,
 		},
 		SessionMutator:  &ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
@@ -1994,6 +2001,36 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 	log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, str)
 	if ex.eventLog != nil {
 		ex.eventLog.Printf("%s", str)
+	}
+}
+
+func (ex *connExecutor) maybeInitJSONEndpoints() {
+	if ex.jsonEndpoints != nil {
+		return
+	}
+	ex.jsonEndpoints = map[string]func(context.Context, json.JSON) (json.JSON, error){
+		// This is just a toy call. Really I care about the AdminServer, which
+		// would need to be added to ExecutorConfig, then the remaining code would
+		// be similar.
+		//
+		// We should really generate this map at init time and pass in the admin
+		// server only.
+		"simulate_allocator": func(ctx context.Context, jReq json.JSON) (json.JSON, error) {
+			var jpb protoutil.JSONPb
+			var req serverpb.AllocatorRequest
+			if err := jpb.Unmarshal([]byte(jReq.String()), &req); err != nil {
+				return nil, err
+			}
+			resp, err := ex.server.cfg.StatusServer.Allocator(ctx, &req)
+			if err != nil {
+				return nil, err
+			}
+			b, err := jpb.Marshal(resp)
+			if err != nil {
+				return nil, err
+			}
+			return json.ParseJSON(string(b))
+		},
 	}
 }
 
