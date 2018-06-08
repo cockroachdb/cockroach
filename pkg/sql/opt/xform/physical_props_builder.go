@@ -146,7 +146,8 @@ func (b physicalPropsBuilder) buildChildProps(
 		switch mexpr.Operator() {
 		case opt.LimitOp, opt.OffsetOp,
 			opt.ExplainOp, opt.ShowTraceOp,
-			opt.RowNumberOp, opt.GroupByOp:
+			opt.RowNumberOp, opt.GroupByOp,
+			opt.MergeJoinOp:
 			// These operations can require an ordering of some child even if there is
 			// no ordering requirement on themselves.
 		default:
@@ -201,6 +202,16 @@ func (b physicalPropsBuilder) buildChildProps(
 			childProps = b.mem.LookupPrivate(mexpr.AsShowTrace().Def()).(*memo.ShowTraceOpDef).Props
 		}
 
+	case opt.MergeJoinOp:
+		if nth == 0 || nth == 1 {
+			mergeOn := b.mem.NormExpr(mexpr.AsMergeJoin().MergeOn())
+			def := b.mem.LookupPrivate(mergeOn.AsMergeOn().Def()).(*memo.MergeOnDef)
+			if nth == 0 {
+				childProps.Ordering = def.LeftEq
+			} else {
+				childProps.Ordering = def.RightEq
+			}
+		}
 		// ************************* WARNING *************************
 		//  If you add a new case here, check if it needs to be added
 		//     to the exception list in the fast path above.

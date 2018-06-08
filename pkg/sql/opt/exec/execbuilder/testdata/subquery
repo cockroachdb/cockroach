@@ -207,3 +207,6 @@ join       ·      ·            (x, z)  ·
  └── scan  ·      ·            (x, y)  ·
 ·          table  a@primary    ·       ·
 ·          spans  ALL          ·       ·
+
+query error could not decorrelate subquery
+SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
