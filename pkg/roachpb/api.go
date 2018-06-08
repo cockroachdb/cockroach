@@ -256,6 +256,7 @@ func (sr *ScanResponse) combine(c combinable) error {
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
+		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -271,6 +272,7 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
+		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}

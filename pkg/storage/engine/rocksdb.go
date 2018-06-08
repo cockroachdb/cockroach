@@ -2119,7 +2119,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 	// Extract the value from the batch data.
 	repr := copyFromSliceVector(state.data.bufs, state.data.len)
-	mvccKey, rawValue, _, err := mvccScanDecodeKeyValue(repr)
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2768,10 +2768,28 @@ func unlockFile(lock C.DBFileLock) error {
 	return statusToError(C.DBUnlockFile(lock))
 }
 
-// Decode a key/value pair returned in an MVCCScan "batch" (this is not the
-// RocksDB batch repr format), returning both the key/value and the suffix of
-// data remaining in the batch.
-func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+// mvccScanSkipKeyValue is like MVCCScanDecodeKeyValue, but doesn't bother
+// actually decoding the kvs. Instead, it skips the kv and returns the rest of
+// the byte buffer.
+func mvccScanSkipKeyValue(repr []byte) ([]byte, error) {
+	if len(repr) < 8 {
+		return repr, errors.Errorf("unexpected batch EOF")
+	}
+	v := binary.LittleEndian.Uint64(repr)
+	keySize := v >> 32
+	valSize := v & ((1 << 32) - 1)
+	if (keySize + valSize) > uint64(len(repr)) {
+		return nil, fmt.Errorf("expected %d bytes, but only %d remaining",
+			keySize+valSize, len(repr))
+	}
+	repr = repr[8+keySize+valSize:]
+	return repr, nil
+}
+
+// MVCCScanDecodeKeyValue decodes a key/value pair returned in an MVCCScan
+// "batch" (this is not the RocksDB batch repr format), returning both the
+// key/value and the suffix of data remaining in the batch.
+func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
 	if len(repr) < 8 {
 		return key, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
