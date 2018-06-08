@@ -101,7 +101,7 @@ func backupRestoreTestSetupWithParams(
 	if _, err := workload.Setup(ctx, sqlDB.DB, bankData, insertBatchSize, concurrency); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if err := bank.Split(sqlDB.DB, bankData); err != nil {
+	if err := workload.Split(ctx, sqlDB.DB, bankData.Tables()[0], 1 /* concurrency */); err != nil {
 		// This occasionally flakes, so ignore errors.
 		t.Logf("failed to split: %+v", err)
 	}

@@ -15,11 +15,9 @@
 package bank
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
-	"fmt"
 	"math/rand"
 	"strings"
 
@@ -100,6 +98,20 @@ func (*bank) Meta() workload.Meta { return bankMeta }
 // Flags implements the Flagser interface.
 func (b *bank) Flags() workload.Flags { return b.flags }
 
+// Hooks implements the Hookser interface.
+func (b *bank) Hooks() workload.Hooks {
+	return workload.Hooks{
+		Validate: func() error {
+			if b.rows < b.ranges {
+				return errors.Errorf(
+					"Value of 'rows' (%d) must be greater than or equal to value of 'ranges' (%d)",
+					b.rows, b.ranges)
+			}
+			return nil
+		},
+	}
+}
+
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	table := workload.Table{
@@ -175,31 +187,4 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		ql.WorkerFns = append(ql.WorkerFns, workerFn)
 	}
 	return ql, nil
-}
-
-// Split creates the configured number of ranges in an already created version
-// of the table represented by `g`.
-func Split(db *gosql.DB, g workload.Generator) error {
-	// TODO(dan): Make this general and move it into the workload package.
-	b, ok := g.(*bank)
-	if !ok {
-		return errors.Errorf("don't know how to split: %T", g)
-	}
-	bankTable := b.Tables()[0]
-
-	var stmt bytes.Buffer
-	fmt.Fprintf(&stmt, `ALTER TABLE %s SPLIT AT VALUES `, bankTable.Name)
-	splitIdx, splits := 0, b.ranges-1
-	for ; splitIdx < splits; splitIdx++ {
-		if splitIdx != 0 {
-			stmt.WriteRune(',')
-		}
-		fmt.Fprintf(&stmt, `(%d)`, (splitIdx+1)*(b.rows/b.ranges))
-	}
-	if splitIdx > 0 {
-		if _, err := db.Exec(stmt.String()); err != nil {
-			return err
-		}
-	}
-	return nil
 }
