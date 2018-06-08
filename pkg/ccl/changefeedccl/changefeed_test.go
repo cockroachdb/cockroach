@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -202,6 +203,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	assertPayloads(t, k.Messages(), nil)
 
+	k.Reset()
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`[16]->{"a": 16, "b": "f"}`,
@@ -264,7 +266,8 @@ func TestChangefeedErrors(t *testing.T) {
 type testKafkaProducer struct {
 	mu struct {
 		syncutil.Mutex
-		msgs []*sarama.ProducerMessage
+		msgs   []*sarama.ProducerMessage
+		closed bool
 	}
 	flushCh chan struct{}
 }
@@ -273,13 +276,23 @@ func newTestKafkaProducer() *testKafkaProducer {
 	return &testKafkaProducer{flushCh: make(chan struct{}, 1)}
 }
 
+func (k *testKafkaProducer) Reset() {
+	k.mu.Lock()
+	k.mu.closed = false
+	k.mu.Unlock()
+}
+
 // SendMessage implements the KafkaProducer interface.
 func (k *testKafkaProducer) SendMessage(
 	msg *sarama.ProducerMessage,
 ) (partition int32, offset int64, err error) {
 	k.mu.Lock()
 	k.mu.msgs = append(k.mu.msgs, msg)
+	closed := k.mu.closed
 	k.mu.Unlock()
+	if closed {
+		return 0, 0, errors.New(`cannot send to closed producer`)
+	}
 	return 0, 0, nil
 }
 
@@ -287,7 +300,11 @@ func (k *testKafkaProducer) SendMessage(
 func (k *testKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 	k.mu.Lock()
 	msgLen := len(k.mu.msgs)
+	closed := k.mu.closed
 	k.mu.Unlock()
+	if closed {
+		return errors.New(`cannot send to closed producer`)
+	}
 	if msgLen == 0 {
 		// Make sure that WaitUntilNewMessages (which wakes up on the fluchCh
 		// trigger) always gets at least one full scan. Without this check,
@@ -316,6 +333,9 @@ func (k *testKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 
 // Close implements the KafkaProducer interface.
 func (k *testKafkaProducer) Close() error {
+	k.mu.Lock()
+	k.mu.closed = true
+	k.mu.Unlock()
 	return nil
 }
 
