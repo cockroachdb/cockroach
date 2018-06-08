@@ -4230,12 +4230,15 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
-		} else if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
+		} else if cannotApplyAnyMore := !p.command.ReplicatedEvalResult.IsLeaseRequest &&
+			p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex; cannotApplyAnyMore {
 			// The command's designated lease index slot was filled up. We got to
 			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
 			// this means that proposal p didn't commit, and it will be sent back to
 			// the proposer for a retry - the request needs to be re-evaluated and the
-			// command re-proposed with a new MaxLeaseIndex.
+			// command re-proposed with a new MaxLeaseIndex. Note that this branch is not
+			// taken for leases as their MaxLeaseIndex plays no role in deciding whether
+			// they can apply or not -- the sequence number of the previous lease matters.
 			//
 			// An exception is the case when we're refreshing because of
 			// reasonSnapshotApplied - in that case we don't know if p or some other
