@@ -84,8 +84,8 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
 Tree                      Field           Description               Columns                                                                                                                                           Ordering
-distinct                  ·               ·                         ("(authors.name)")                                                                                                                                weak-key("(authors.name)")
- └── render               ·               ·                         ("(authors.name)")                                                                                                                                ·
+distinct                  ·               ·                         (name)                                                                                                                                            weak-key(name)
+ └── render               ·               ·                         (name)                                                                                                                                            ·
       │                   render 0        test.public.authors.name  ·                                                                                                                                                 ·
       └── join            ·               ·                         (name, book[omitted], rowid[hidden,omitted], title[omitted], edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])  ·
            │              type            inner                     ·                                                                                                                                                 ·

@@ -23,10 +23,10 @@ TABLE b
 # EliminateMax1Row
 # --------------------------------------------------
 opt
-SELECT (SELECT i FROM a LIMIT 1) > 5
+SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
 project
- ├── columns: "(SELECT i FROM a LIMIT 1) > 5":6(bool)
+ ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -40,10 +40,10 @@ project
            └── const: 5 [type=int]
 
 opt
-SELECT (SELECT COUNT(*) FROM a) > 100
+SELECT (SELECT COUNT(*) FROM a) > 100 AS r
 ----
 project
- ├── columns: "(SELECT count(*) FROM a) > 100":7(bool)
+ ├── columns: r:7(bool)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -60,10 +60,10 @@ project
            └── const: 100 [type=int]
 
 opt
-SELECT (SELECT i FROM a LIMIT 0) > 5
+SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
 project
- ├── columns: "(SELECT i FROM a LIMIT 0) > 5":6(bool)
+ ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -81,10 +81,10 @@ project
 
 # Don't remove the Max1Row operator.
 opt
-SELECT (SELECT i FROM a) > 5
+SELECT (SELECT i FROM a) > 5 AS r
 ----
 project
- ├── columns: "(SELECT i FROM a) > 5":6(bool)
+ ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]

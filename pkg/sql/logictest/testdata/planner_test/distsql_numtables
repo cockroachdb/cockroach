@@ -145,17 +145,17 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y 
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkDFrwzAQhff-ivBmldiBLJqyBkpSQrfiQbWOILB9QneCluD_XmQNTQpNM967-57e0wUTezq4kQT2HS0MtugMYuKeRDgVuR7t_SdsYxCmmLXInUHPiWAv0KADweLAzxzXxcWTujAsZ7MBZ_2BRN2ZYDezuTJu7xu_uY-BTuQ8pXVzY4-YwujS127Ko7JogsExq13tSoyXMAZdbfFXiPYmxD_tTiSRJ6GH6jVzZ0D-TPUHhXPq6TVxvzxTx-PCLYIn0brd1GE_1VUJeA23d-HmF9zNT98BAAD___cAnxU=
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
+EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x AS y, x+1 AS z FROM NumToSquare)
 ----
-render          ·         ·                          (x)                                      x!=NULL; key(x)
- │              render 0  x                          ·                                        ·
- └── render     ·         ·                          (x, "2 * x"[omitted], "x + 1"[omitted])  x!=NULL; key(x)
-      │         render 0  test.public.numtosquare.x  ·                                        ·
-      │         render 1  NULL                       ·                                        ·
-      │         render 2  NULL                       ·                                        ·
-      └── scan  ·         ·                          (x, xsquared[omitted])                   x!=NULL; key(x)
-·               table     numtosquare@primary        ·                                        ·
-·               spans     ALL                        ·                                        ·
+render          ·         ·                          (x)                          x!=NULL; key(x)
+ │              render 0  x                          ·                            ·
+ └── render     ·         ·                          (x, y[omitted], z[omitted])  x!=NULL; key(x)
+      │         render 0  test.public.numtosquare.x  ·                            ·
+      │         render 1  NULL                       ·                            ·
+      │         render 2  NULL                       ·                            ·
+      └── scan  ·         ·                          (x, xsquared[omitted])       x!=NULL; key(x)
+·               table     numtosquare@primary        ·                            ·
+·               spans     ALL                        ·                            ·
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.

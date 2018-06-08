@@ -10,13 +10,13 @@ CREATE TABLE kv (
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
 ----
-group           ·            ·                                    (count, "k + v")                weak-key("k + v")
+group           ·            ·                                    (count, r)                      weak-key(r)
  │              aggregate 0  count_rows()                         ·                               ·
- │              aggregate 1  k + v                                ·                               ·
+ │              aggregate 1  ?column?                             ·                               ·
  │              group by     @1                                   ·                               ·
- └── render     ·            ·                                    ("k + v")                       ·
+ └── render     ·            ·                                    ("?column?")                    ·
       │         render 0     test.public.kv.k + test.public.kv.v  ·                               ·
       └── scan  ·            ·                                    (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
 ·               table        kv@primary                           ·                               ·
@@ -24,9 +24,9 @@ group           ·            ·                                    (count, "k +
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
+EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
 ----
-render               ·            ·                 (count, "k + v")                ·
+render               ·            ·                 (count, r)                      ·
  │                   render 0     agg0              ·                               ·
  │                   render 1     agg1 + agg2       ·                               ·
  └── group           ·            ·                 (agg0, agg1, agg2)              agg1!=NULL; key(agg1)
@@ -542,8 +542,8 @@ EXPLAIN (VERBOSE) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5)
 ]
 ----
 group           ·            ·
- │              aggregate 0  count_rows() FILTER (WHERE k > 5)
- │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
+ │              aggregate 0  count_rows() FILTER (WHERE ?column?)
+ │              aggregate 1  max(?column?) FILTER (WHERE ?column?)
  │              group by     @1
  └── render     ·            ·
       │         render 0     test.public.filter_test.v
@@ -555,15 +555,15 @@ group           ·            ·
 query TTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-group           ·            ·                                  (count int)                                                    ·
- │              aggregate 0  count_rows() FILTER (WHERE k > 5)  ·                                                              ·
- │              group by     @1                                 ·                                                              ·
- └── render     ·            ·                                  (v int, "k > 5" bool)                                          ·
-      │         render 0     (v)[int]                           ·                                                              ·
-      │         render 1     ((k)[int] > (5)[int])[bool]        ·                                                              ·
-      └── scan  ·            ·                                  (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
-·               table        filter_test@primary                ·                                                              ·
-·               spans        ALL                                ·                                                              ·
+group           ·            ·                                     (count int)                                                    ·
+ │              aggregate 0  count_rows() FILTER (WHERE ?column?)  ·                                                              ·
+ │              group by     @1                                    ·                                                              ·
+ └── render     ·            ·                                     (v int, "?column?" bool)                                       ·
+      │         render 0     (v)[int]                              ·                                                              ·
+      │         render 1     ((k)[int] > (5)[int])[bool]           ·                                                              ·
+      └── scan  ·            ·                                     (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
+·               table        filter_test@primary                   ·                                                              ·
+·               spans        ALL                                   ·                                                              ·
 
 # Tests with * inside GROUP BY.
 query TTT
@@ -841,16 +841,16 @@ join                       ·               ·                        (x, max, z
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
+EXPLAIN (VERBOSE) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
-render                    ·            ·                          ("1")                           "1"=CONST
+render                    ·            ·                          (a)                             a=CONST
  │                        render 0     1                          ·                               ·
  └── group                ·            ·                          (agg0)                          weak-key(agg0)
-      │                   aggregate 0  w::DECIMAL                 ·                               ·
+      │                   aggregate 0  w                          ·                               ·
       │                   group by     @1-@2                      ·                               ·
-      └── filter          ·            ·                          (v, "w::DECIMAL")               "w::DECIMAL"!=NULL
-           │              filter       "w::DECIMAL" > 1           ·                               ·
-           └── render     ·            ·                          (v, "w::DECIMAL")               ·
+      └── filter          ·            ·                          (v, w)                          w!=NULL
+           │              filter       w > 1                      ·                               ·
+           └── render     ·            ·                          (v, w)                          ·
                 │         render 0     test.public.kv.v           ·                               ·
                 │         render 1     test.public.kv.w::DECIMAL  ·                               ·
                 └── scan  ·            ·                          (k[omitted], v, w, s[omitted])  k!=NULL; key(k)
@@ -859,11 +859,11 @@ render                    ·            ·                          ("1")       
 
 # Regression test for #26419
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 123 FROM kv ORDER BY max(v)
+EXPLAIN (VERBOSE) SELECT 123 a FROM kv ORDER BY max(v)
 ----
-sort                      ·            ·                 ("123")                                  "123"=CONST
+sort                      ·            ·                 (a)                                      a=CONST
  │                        order        +max              ·                                        ·
- └── render               ·            ·                 ("123", max)                             "123"=CONST
+ └── render               ·            ·                 (a, max)                                 a=CONST
       │                   render 0     123               ·                                        ·
       │                   render 1     agg0              ·                                        ·
       └── group           ·            ·                 (agg0)                                   ·

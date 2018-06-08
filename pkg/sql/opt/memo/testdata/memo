@@ -17,23 +17,23 @@ TABLE b
       └── x string not null
 
 build
-SELECT y, b.x, y+1
+SELECT y, b.x, y+1 AS c
 FROM a, b
 WHERE a.y=1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
 limit
- ├── columns: y:2(int!null) x:3(string!null) "y + 1":5(int)
+ ├── columns: y:2(int!null) x:3(string!null) c:5(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── ordering: +2
  ├── sort
- │    ├── columns: y:2(int!null) b.x:3(string!null) "y + 1":5(int)
+ │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int)
  │    ├── stats: [rows=1428]
  │    ├── ordering: +2
  │    └── project
- │         ├── columns: "y + 1":5(int) y:2(int!null) b.x:3(string!null)
+ │         ├── columns: c:5(int) y:2(int!null) b.x:3(string!null)
  │         ├── stats: [rows=1428]
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
@@ -66,14 +66,14 @@ limit
  └── const: 10 [type=int]
 
 opt
-SELECT y, b.x, y+1
+SELECT y, b.x, y+1 AS c
 FROM a, b
 WHERE a.y=1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
 project
- ├── columns: y:2(int!null) x:3(string!null) "y + 1":5(int)
+ ├── columns: y:2(int!null) x:3(string!null) c:5(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── ordering: +2
@@ -117,7 +117,7 @@ project
            └── const: 1 [type=int]
 
 memo
-SELECT y, b.x, y+1
+SELECT y, b.x, y+1 AS c
 FROM a, b
 WHERE a.y=1 AND a.x::string=b.x
 ORDER BY y
@@ -125,7 +125,7 @@ LIMIT 10
 ----
 memo (optimized)
  ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,x:3,y + 1:5] [ordering: +2]"
+ │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
  │    │    └── cost: 2026.65
  │    └── ""
@@ -172,13 +172,13 @@ memo (optimized)
 
 # Test interning of expressions.
 memo
-SELECT 1, 1+z, left(x, 10)::timestamp, left(x, 10)::timestamptz
+SELECT 1 AS a, 1+z AS b, left(x, 10)::TIMESTAMP AS c, left(x, 10)::TIMESTAMPTZ AS d
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
 memo (optimized)
  ├── G1: (project G2 G3)
- │    └── "[presentation: 1:3,1 + z:4,left(x, 10)::TIMESTAMP:5,left(x, 10)::TIMESTAMP WITH TIME ZONE:6]"
+ │    └── "[presentation: a:3,b:4,c:5,d:6]"
  │         ├── best: (project G2 G3)
  │         └── cost: 1010.00
  ├── G2: (select G4 G5)

@@ -24,18 +24,18 @@ render     ·      ·
 ·          spans  ALL
 
 query TTTTT colnames
-EXPLAIN (PLAN, VERBOSE) SELECT 1
+EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
 Tree           Field     Description  Columns  Ordering
-render         ·         ·            ("1")    ·
+render         ·         ·            (a)      ·
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
 
 query TTTTT colnames
-EXPLAIN (VERBOSE,PLAN) SELECT 1
+EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
 Tree           Field     Description  Columns  Ordering
-render         ·         ·            ("1")    ·
+render         ·         ·            (a)      ·
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
 
@@ -46,12 +46,12 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
 output row: [1]
 
 query TTTTT colnames
-EXPLAIN (TYPES) SELECT 1
+EXPLAIN (TYPES) SELECT 1 a
 ----
-Tree           Field     Description  Columns    Ordering
-render         ·         ·            ("1" int)  ·
- │             render 0  (1)[int]     ·          ·
- └── emptyrow  ·         ·            ()         ·
+Tree           Field     Description  Columns  Ordering
+render         ·         ·            (a int)  ·
+ │             render 0  (1)[int]     ·        ·
+ └── emptyrow  ·         ·            ()       ·
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -67,10 +67,10 @@ EXPLAIN (TYPES) SELECT $1
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT colnames
-#EXPLAIN (TYPES) SELECT $1::INT
+#EXPLAIN (TYPES) SELECT $1::INT AS a
 #----
 #Tree           Field     Description               Columns          Ordering
-#render         ·         ·                         ("$1::INT" int)  "$1::INT"=CONST
+#render         ·         ·                         (a int)          a=CONST
 # │             render 0  (($1)[string]::INT)[int]  ·                ·
 # └── emptyrow  ·         ·                         ()               ·
 
@@ -433,11 +433,11 @@ count             ·              ·                 ()                         
 ·                 row 0, expr 1  (2)[int]          ·                           ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT 42
+EXPLAIN (TYPES) SELECT 42 AS a
 ----
-render         ·         ·          ("42" int)  ·
- │             render 0  (42)[int]  ·           ·
- └── emptyrow  ·         ·          ()          ·
+render         ·         ·          (a int)  ·
+ │             render 0  (42)[int]  ·        ·
+ └── emptyrow  ·         ·          ()       ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t
@@ -514,18 +514,18 @@ count                ·         ·                            ()              ·
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-count                ·         ·                              ()                           ·
- └── update          ·         ·                              ()                           ·
-      │              table     t                              ·                            ·
-      │              set       v                              ·                            ·
-      └── render     ·         ·                              (k int, v int, "k + 1" int)  k!=NULL; v!=NULL; key(k)
-           │         render 0  (k)[int]                       ·                            ·
-           │         render 1  (v)[int]                       ·                            ·
-           │         render 2  ((k)[int] + (1)[int])[int]     ·                            ·
-           └── scan  ·         ·                              (k int, v int)               k!=NULL; v!=NULL; key(k)
-·                    table     t@primary                      ·                            ·
-·                    spans     ALL                            ·                            ·
-·                    filter    ((v)[int] > (123)[int])[bool]  ·                            ·
+count                ·         ·                              ()                              ·
+ └── update          ·         ·                              ()                              ·
+      │              table     t                              ·                               ·
+      │              set       v                              ·                               ·
+      └── render     ·         ·                              (k int, v int, "?column?" int)  k!=NULL; v!=NULL; key(k)
+           │         render 0  (k)[int]                       ·                               ·
+           │         render 1  (v)[int]                       ·                               ·
+           │         render 2  ((k)[int] + (1)[int])[int]     ·                               ·
+           └── scan  ·         ·                              (k int, v int)                  k!=NULL; v!=NULL; key(k)
+·                    table     t@primary                      ·                               ·
+·                    spans     ALL                            ·                               ·
+·                    filter    ((v)[int] > (123)[int])[bool]  ·                               ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -592,17 +592,17 @@ render         ·         ·                      (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-render              ·         ·                                           ("x[1]" int)  ·
- │                  render 0  ((x)[int[]][(1)[int]])[int]                 ·             ·
- └── render         ·         ·                                           (x int[])     x=CONST
-      │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·             ·
-      └── emptyrow  ·         ·                                           ()            ·
+render              ·         ·                                           (x int)    ·
+ │                  render 0  ((x)[int[]][(1)[int]])[int]                 ·          ·
+ └── render         ·         ·                                           (x int[])  x=CONST
+      │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·          ·
+      └── emptyrow  ·         ·                                           ()         ·
 
 query T
-EXPLAIN (OPT) SELECT 1
+EXPLAIN (OPT) SELECT 1 AS r
 ----
 project
- ├── columns: "1":1(int!null)
+ ├── columns: r:1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.01

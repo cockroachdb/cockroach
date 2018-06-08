@@ -148,7 +148,7 @@ query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
 sort            ·      ·
- │              order  +"1"
+ │              order  +"?column?"
  └── render     ·      ·
       └── scan  ·      ·
 ·               table  t@primary
@@ -167,15 +167,15 @@ render               ·      ·
 
 # Check that the sort key reuses the existing render.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
+EXPLAIN (VERBOSE) SELECT b+2 r FROM t ORDER BY b+2
 ----
-sort            ·         ·          ("b + 2")  +"b + 2"
- │              order     +"b + 2"   ·          ·
- └── render     ·         ·          ("b + 2")  ·
-      │         render 0  b + 2      ·          ·
-      └── scan  ·         ·          (b)        ·
-·               table     t@primary  ·          ·
-·               spans     ALL        ·          ·
+sort            ·         ·          (r)  +r
+ │              order     +r         ·    ·
+ └── render     ·         ·          (r)  ·
+      │         render 0  b + 2      ·    ·
+      └── scan  ·         ·          (b)  ·
+·               table     t@primary  ·    ·
+·               spans     ALL        ·    ·
 
 # Check that the sort picks up a renamed render properly.
 query TTTTT
@@ -517,20 +517,20 @@ render               ·         ·                (b)        key()
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-render                    ·         ·                (b)                ·
- │                        render 0  test.public.t.b  ·                  ·
- └── run                  ·         ·                (a, b, c)          ·
-      └── update          ·         ·                (a, b, c)          ·
-           │              table     t                ·                  ·
-           │              set       c                ·                  ·
-           └── render     ·         ·                (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-                │         render 0  test.public.t.a  ·                  ·
-                │         render 1  test.public.t.b  ·                  ·
-                │         render 2  test.public.t.c  ·                  ·
-                │         render 3  true             ·                  ·
-                └── scan  ·         ·                (a, b, c)          a!=NULL; key(a)
-·                         table     t@primary        ·                  ·
-·                         spans     ALL              ·                  ·
+render                    ·         ·                (b)              ·
+ │                        render 0  test.public.t.b  ·                ·
+ └── run                  ·         ·                (a, b, c)        ·
+      └── update          ·         ·                (a, b, c)        ·
+           │              table     t                ·                ·
+           │              set       c                ·                ·
+           └── render     ·         ·                (a, b, c, bool)  bool=CONST; a!=NULL; key(a)
+                │         render 0  test.public.t.a  ·                ·
+                │         render 1  test.public.t.b  ·                ·
+                │         render 2  test.public.t.c  ·                ·
+                │         render 3  true             ·                ·
+                └── scan  ·         ·                (a, b, c)        a!=NULL; key(a)
+·                         table     t@primary        ·                ·
+·                         spans     ALL              ·                ·
 
 statement ok
 CREATE TABLE uvwxyz (

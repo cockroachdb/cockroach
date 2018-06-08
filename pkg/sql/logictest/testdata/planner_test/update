@@ -96,19 +96,19 @@ count           ·      ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-count                ·         ·                  ()                   ·
- └── update          ·         ·                  ()                   ·
-      │              table     xyz                ·                    ·
-      │              set       x, y               ·                    ·
-      └── render     ·         ·                  (x, y, z, "1", "2")  "1"=CONST; "2"=CONST; x!=NULL; key(x)
-           │         render 0  test.public.xyz.x  ·                    ·
-           │         render 1  test.public.xyz.y  ·                    ·
-           │         render 2  test.public.xyz.z  ·                    ·
-           │         render 3  1                  ·                    ·
-           │         render 4  2                  ·                    ·
-           └── scan  ·         ·                  (x, y, z)            x!=NULL; key(x)
-·                    table     xyz@primary        ·                    ·
-·                    spans     ALL                ·                    ·
+count                ·         ·                  ()                                 ·
+ └── update          ·         ·                  ()                                 ·
+      │              table     xyz                ·                                  ·
+      │              set       x, y               ·                                  ·
+      └── render     ·         ·                  (x, y, z, "?column?", "?column?")  "?column?"=CONST; "?column?"=CONST; x!=NULL; key(x)
+           │         render 0  test.public.xyz.x  ·                                  ·
+           │         render 1  test.public.xyz.y  ·                                  ·
+           │         render 2  test.public.xyz.z  ·                                  ·
+           │         render 3  1                  ·                                  ·
+           │         render 4  2                  ·                                  ·
+           └── scan  ·         ·                  (x, y, z)                          x!=NULL; key(x)
+·                    table     xyz@primary        ·                                  ·
+·                    spans     ALL                ·                                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
@@ -124,18 +124,18 @@ count           ·      ·            ()         ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-count                ·         ·                  ()              ·
- └── update          ·         ·                  ()              ·
-      │              table     xyz                ·               ·
-      │              set       x, y               ·               ·
-      └── render     ·         ·                  (x, y, z, "2")  "2"=CONST; x!=NULL; key(x)
-           │         render 0  test.public.xyz.x  ·               ·
-           │         render 1  test.public.xyz.y  ·               ·
-           │         render 2  test.public.xyz.z  ·               ·
-           │         render 3  2                  ·               ·
-           └── scan  ·         ·                  (x, y, z)       x!=NULL; key(x)
-·                    table     xyz@primary        ·               ·
-·                    spans     ALL                ·               ·
+count                ·         ·                  ()                     ·
+ └── update          ·         ·                  ()                     ·
+      │              table     xyz                ·                      ·
+      │              set       x, y               ·                      ·
+      └── render     ·         ·                  (x, y, z, "?column?")  "?column?"=CONST; x!=NULL; key(x)
+           │         render 0  test.public.xyz.x  ·                      ·
+           │         render 1  test.public.xyz.y  ·                      ·
+           │         render 2  test.public.xyz.z  ·                      ·
+           │         render 3  2                  ·                      ·
+           └── scan  ·         ·                  (x, y, z)              x!=NULL; key(x)
+·                    table     xyz@primary        ·                      ·
+·                    spans     ALL                ·                      ·
 
 statement ok
 CREATE TABLE pks (

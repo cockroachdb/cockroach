@@ -48,7 +48,7 @@ opt
 SELECT (SELECT (VALUES (x), (y))) FROM xysd
 ----
 project
- ├── columns: "(SELECT (VALUES (x), (y)))":7(int)
+ ├── columns: column1:7(int)
  ├── stats: [rows=1000]
  ├── inner-join-apply
  │    ├── columns: x:1(int!null) y:2(int) column1:5(int)

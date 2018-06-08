@@ -39,11 +39,10 @@ a b c
 1 2 3
 
 query TIII colnames
-SELECT NULL, * FROM abc
+SELECT NULL AS z, * FROM abc
 ----
-NULL a b c
-NULL 1 2 3
-
+z    a  b  c
+NULL 1  2  3
 
 # synonym for SELECT * FROM abc
 query III

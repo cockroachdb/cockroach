@@ -68,13 +68,13 @@ eexpect ":/# "
 end_test
 
 start_test "Check that a final comment after a final statement does not cause an error message. #9482"
-send "printf 'select 1;-- final comment' | $argv sql | cat\r"
-eexpect "1\r\n1\r\n:/# "
+send "printf 'select 1 as woo;-- final comment' | $argv sql | cat\r"
+eexpect "woo\r\n1\r\n:/# "
 end_test
 
 start_test "Check that a final comment does not cause an error message. #9243"
-send "printf 'select 1;\\n-- final comment' | $argv sql | cat\r"
-eexpect "1\r\n1\r\n:/# "
+send "printf 'select 1 as woo;\\n-- final comment' | $argv sql | cat\r"
+eexpect "woo\r\n1\r\n:/# "
 end_test
 
 # Finally terminate with Ctrl+C

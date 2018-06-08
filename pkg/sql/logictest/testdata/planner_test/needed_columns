@@ -1,19 +1,19 @@
 # LogicTest: local
 
 query TTTTT
-EXPLAIN (VERBOSE,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
+EXPLAIN (VERBOSE,NOOPTIMIZE) SELECT 1 a FROM (SELECT 2 AS s)
 ----
-render              ·         ·  ("1")  "1"=CONST
- │                  render 0  1  ·      ·
- └── render         ·         ·  (s)    s=CONST
-      │             render 0  2  ·      ·
-      └── emptyrow  ·         ·  ()     ·
+render              ·         ·  (a)  a=CONST
+ │                  render 0  1  ·    ·
+ └── render         ·         ·  (s)  s=CONST
+      │             render 0  2  ·    ·
+      └── emptyrow  ·         ·  ()   ·
 
 # Propagation to data sources.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 2 AS s)
+EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT 2 AS s)
 ----
-render              ·         ·     ("1")         "1"=CONST
+render              ·         ·     (a)           a=CONST
  │                  render 0  1     ·             ·
  └── render         ·         ·     (s[omitted])  ·
       │             render 0  NULL  ·             ·
@@ -21,10 +21,10 @@ render              ·         ·     ("1")         "1"=CONST
 
 # Propagation through CREATE TABLE.
 query TTTTT
-EXPLAIN (VERBOSE) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
+EXPLAIN (VERBOSE) CREATE TABLE t AS SELECT 1 a FROM (SELECT 2 AS s)
 ----
 create table             ·         ·     ()            ·
- └── render              ·         ·     ("1")         "1"=CONST
+ └── render              ·         ·     (a)           a=CONST
       │                  render 0  1     ·             ·
       └── render         ·         ·     (s[omitted])  ·
            │             render 0  NULL  ·             ·
@@ -32,20 +32,20 @@ create table             ·         ·     ()            ·
 
 # Propagation through LIMIT.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 2 AS s) LIMIT 1
+EXPLAIN (VERBOSE) SELECT 1 b FROM (SELECT 2 AS s) LIMIT 1
 ----
-limit                    ·         ·     ("1")         "1"=CONST
+limit                    ·         ·     (b)           b=CONST
  │                       count     1     ·             ·
- └── render              ·         ·     ("1")         "1"=CONST
+ └── render              ·         ·     (b)           b=CONST
       │                  render 0  1     ·             ·
       └── render         ·         ·     (s[omitted])  ·
            │             render 0  NULL  ·             ·
            └── emptyrow  ·         ·     ()            ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
+EXPLAIN (VERBOSE) SELECT 1 b FROM (SELECT 2 AS s LIMIT 1)
 ----
-render                   ·         ·     ("1")         "1"=CONST
+render                   ·         ·     (b)           b=CONST
  │                       render 0  1     ·             ·
  └── limit               ·         ·     (s[omitted])  ·
       │                  count     1     ·             ·
@@ -55,22 +55,22 @@ render                   ·         ·     ("1")         "1"=CONST
 
 # Propagation through UNION.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 1 AS s UNION SELECT 2 AS s)
+EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT 1 AS s UNION SELECT 2 AS s)
 ----
-render                   ·         ·  ("1")  "1"=CONST
- │                       render 0  1  ·      ·
- └── union               ·         ·  (s)    ·
-      ├── render         ·         ·  (s)    s=CONST
-      │    │             render 0  2  ·      ·
-      │    └── emptyrow  ·         ·  ()     ·
-      └── render         ·         ·  (s)    s=CONST
-           │             render 0  1  ·      ·
-           └── emptyrow  ·         ·  ()     ·
+render                   ·         ·  (a)  a=CONST
+ │                       render 0  1  ·    ·
+ └── union               ·         ·  (s)  ·
+      ├── render         ·         ·  (s)  s=CONST
+      │    │             render 0  2  ·    ·
+      │    └── emptyrow  ·         ·  ()   ·
+      └── render         ·         ·  (s)  s=CONST
+           │             render 0  1  ·    ·
+           └── emptyrow  ·         ·  ()   ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
+EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 ----
-render                   ·         ·     ("1")         "1"=CONST
+render                   ·         ·     (a)           a=CONST
  │                       render 0  1     ·             ·
  └── append              ·         ·     (s[omitted])  ·
       ├── render         ·         ·     (s[omitted])  ·
@@ -82,9 +82,9 @@ render                   ·         ·     ("1")         "1"=CONST
 
 # Propagation through WITH ORDINALITY.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
+EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
-render                   ·         ·     ("1")                       "1"=CONST
+render                   ·         ·     (a)                         a=CONST
  │                       render 0  1     ·                           ·
  └── ordinality          ·         ·     (s[omitted], "ordinality")  weak-key("ordinality")
       └── render         ·         ·     (s[omitted])                ·
@@ -142,9 +142,9 @@ statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT)
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM kv
+EXPLAIN (VERBOSE) SELECT 1 a FROM kv
 ----
-render     ·         ·           ("1")                     "1"=CONST
+render     ·         ·           (a)                       a=CONST
  │         render 0  1           ·                         ·
  └── scan  ·         ·           (k[omitted], v[omitted])  k!=NULL; key(k)
 ·          table     kv@primary  ·                         ·
@@ -163,12 +163,12 @@ distinct        ·         ·                 (v)              weak-key(v)
 
 # Propagation through INSERT.
 query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
+EXPLAIN (VERBOSE) INSERT INTO kv(k, v) SELECT 1 AS a, 2 AS b FROM (SELECT 3 AS x, 4 AS y)
 ----
 count                         ·         ·         ()                        ·
  └── insert                   ·         ·         ()                        ·
       │                       into      kv(k, v)  ·                         ·
-      └── render              ·         ·         ("1", "2")                "1"=CONST; "2"=CONST
+      └── render              ·         ·         (a, b)                    a=CONST; b=CONST
            │                  render 0  1         ·                         ·
            │                  render 1  2         ·                         ·
            └── render         ·         ·         (x[omitted], y[omitted])  ·
@@ -204,9 +204,9 @@ render                   ·         ·     (x)              x=CONST
            └── emptyrow  ·         ·     ()               ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
+EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
 ----
-render     ·         ·           ("1")                     "1"=CONST
+render     ·         ·           (a)                       a=CONST
  │         render 0  1           ·                         ·
  └── scan  ·         ·           (k[omitted], v[omitted])  k!=NULL; key(k)
 ·          table     kv@primary  ·                         ·

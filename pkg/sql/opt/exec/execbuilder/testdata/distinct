@@ -60,12 +60,12 @@ sort            ·            ·
 ·               spans        ALL
 
 query TTT
-EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
+EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
 sort                 ·            ·
- │                   order        +"y + z"
+ │                   order        +r
  └── group           ·            ·
-      │              aggregate 0  y + z
+      │              aggregate 0  r
       │              group by     @1
       └── render     ·            ·
            └── scan  ·            ·
@@ -122,15 +122,15 @@ CREATE TABLE abcd (
 )
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
+EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
-render     ·         ·                  ("1", d, b)  ·
- │         render 0  1                  ·            ·
- │         render 1  d                  ·            ·
- │         render 2  b                  ·            ·
- └── scan  ·         ·                  (b, d)       +d,+b
-·          table     abcd@abcd_d_b_key  ·            ·
-·          spans     ALL                ·            ·
+render     ·         ·                  (z, d, b)  ·
+ │         render 0  1                  ·          ·
+ │         render 1  d                  ·          ·
+ │         render 2  b                  ·          ·
+ └── scan  ·         ·                  (b, d)     +d,+b
+·          table     abcd@abcd_d_b_key  ·          ·
+·          spans     ALL                ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd

@@ -18,10 +18,10 @@ TABLE kv
 
 # Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
 build
-SELECT 3 FROM kv HAVING TRUE
+SELECT 3 r FROM kv HAVING TRUE
 ----
 project
- ├── columns: "3":5(int!null)
+ ├── columns: r:5(int!null)
  ├── select
  │    ├── group-by
  │    │    └── project
@@ -128,10 +128,10 @@ SELECT k FROM kv HAVING k > 7
 error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+w) > 5
+SELECT count(*), k+w AS r FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 project
- ├── columns: count:6(int) "k + w":5(int!null)
+ ├── columns: count:6(int) r:5(int!null)
  └── select
       ├── columns: column5:5(int!null) count:6(int)
       ├── group-by

@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -49,17 +50,17 @@ select '
 ;
 ';
 `,
-			expect: `+---------------+
-| e'\n\\?\n;\n' |
-+---------------+
-|               |
-|               |
-| \?            |
-|               |
-| ;             |
-|               |
-|               |
-+---------------+
+			expect: `+----------+
+| ?column? |
++----------+
+|          |
+|          |
+| \?       |
+|          |
+| ;        |
+|          |
+|          |
++----------+
 (1 row)
 `,
 		},
@@ -72,26 +73,26 @@ select '''
 ;
 ''';
 `,
-			expect: `+-------+
-| e'\'' |
-+-------+
-| '     |
-+-------+
+			expect: `+----------+
+| ?column? |
++----------+
+| '        |
++----------+
 (1 row)
-+--------------+
-| e'\'\n;\n\'' |
-+--------------+
-| '            |
-|              |
-| ;            |
-|              |
-| '            |
-+--------------+
++----------+
+| ?column? |
++----------+
+| '        |
+|          |
+| ;        |
+|          |
+| '        |
++----------+
 (1 row)
 `,
 		},
 		{
-			in: `select 1;
+			in: `select 1 as "1";
 -- just a comment without final semicolon`,
 			expect: `+---+
 | 1 |
@@ -126,34 +127,36 @@ select '''
 		stdin = os.Stdin
 	}()
 
-	for _, test := range tests {
-		// Populate the test input.
-		if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.WriteString(test.in); err != nil {
-			t.Fatal(err)
-		}
-		f.Close()
-		// Make it available for reading.
-		if f, err = os.Open(fname); err != nil {
-			t.Fatal(err)
-		}
-		// Override the standard input for runInteractive().
-		stdin = f
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			// Populate the test input.
+			if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.WriteString(test.in); err != nil {
+				t.Fatal(err)
+			}
+			f.Close()
+			// Make it available for reading.
+			if f, err = os.Open(fname); err != nil {
+				t.Fatal(err)
+			}
+			// Override the standard input for runInteractive().
+			stdin = f
 
-		out, err := captureOutput(func() {
-			err := runInteractive(conn)
+			out, err := captureOutput(func() {
+				err := runInteractive(conn)
+				if err != nil {
+					t.Fatal(err)
+				}
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
+			if out != test.expect {
+				t.Fatalf("%s:\nexpected: %s\ngot: %s", test.in, test.expect, out)
+			}
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if out != test.expect {
-			t.Fatalf("%s:\nexpected: %s\ngot: %s", test.in, test.expect, out)
-		}
 	}
 }
 

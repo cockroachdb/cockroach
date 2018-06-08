@@ -3146,7 +3146,7 @@ project
 # Regression test for #23609: make sure that the type of the merged column
 # is int (not unknown).
 build
-SELECT column1, column1+1
+SELECT column1, column1+1 AS r
 FROM
   (SELECT * FROM
     (VALUES (NULL, NULL)) AS t
@@ -3154,7 +3154,7 @@ FROM
     (VALUES (1, 1)) AS u)
 ----
 project
- ├── columns: column1:5(int) "column1 + 1":7(int)
+ ├── columns: column1:5(int) r:7(int)
  ├── project
  │    ├── columns: column1:5(int) column2:6(int)
  │    └── project
