@@ -433,6 +433,30 @@ SELECT * FROM noncover WHERE b = 2
 ----
 1 2 3 4
 
+# Subset of output columns, not including tested column.
+query II
+SELECT a, d FROM noncover WHERE b=2
+----
+1 4
+
+# Subset of output columns, not including tested column or order by column.
+query I
+SELECT a FROM noncover WHERE b=2 ORDER BY c DESC
+----
+1
+
+# Regression: panic when projecting non-covered column in sorted index join.
+query III
+SELECT a, b, d FROM noncover WHERE b=2 ORDER BY b
+----
+1 2 4
+
+# Use non-covered column in filtered and sorted index join.
+query II
+SELECT a, b FROM noncover WHERE b=2 AND d>3 ORDER BY b
+----
+1 2
+
 query IIII
 SELECT * FROM noncover WHERE c = 7
 ----
