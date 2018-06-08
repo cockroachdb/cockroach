@@ -1308,6 +1308,16 @@ func (ds *DistSender) sendToReplicas(
 			)
 		}
 
+		// Has the caller given up?
+		if ctx.Err() != nil {
+			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
+			log.Eventf(ctx, errMsg)
+			if ambiguousError != nil {
+				return nil, roachpb.NewAmbiguousResultError(errMsg)
+			}
+			return nil, roachpb.NewSendError(errMsg)
+		}
+
 		ds.metrics.NextReplicaErrCount.Inc(1)
 		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, transport.NextReplica())
 		br, err = transport.SendNext(ctx)
