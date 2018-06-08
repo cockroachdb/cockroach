@@ -554,14 +554,11 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
-  optional roachpb.CSVOptions legacy_csv_options = 1 [(gogoproto.nullable) = false];
+  reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
-
-  // table_desc is the table descriptor to use for input data.
-  // note: tables below may be used instead for multi-table input formats.
-  optional sqlbase.TableDescriptor table_desc = 3 [(gogoproto.nullable) = false];
+  reserved 3;
 
   // tables is an alternative to table_desc for input formats that can read
   // multiple tables. If it is non-empty, the keys specify the names of tables
