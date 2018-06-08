@@ -37,6 +37,26 @@ func Scan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
 
+	if args.ScanFormat == roachpb.BATCH_RESPONSE {
+		kvData, numKvs, resumeSpan, intents, err := engine.MVCCScanToBytes(
+			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys,
+			h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+		if err != nil {
+			return result.Result{}, err
+		}
+		reply.NumKeys = numKvs
+		reply.BatchResponse = kvData
+		if resumeSpan != nil {
+			reply.ResumeSpan = resumeSpan
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		}
+
+		if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
+			reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
+		}
+		return result.FromIntents(intents, args), err
+	}
+
 	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
 		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	if err != nil {
