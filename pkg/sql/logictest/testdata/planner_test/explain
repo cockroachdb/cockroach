@@ -716,3 +716,6 @@ render              ·         ·                                           ("x[
  └── render         ·         ·                                           (x int[])     x=CONST
       │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·             ·
       └── emptyrow  ·         ·                                           ()            ·
+
+statement error EXPLAIN \(OPT\) only supported with the cost-based optimizer
+EXPLAIN (OPT) SELECT 1

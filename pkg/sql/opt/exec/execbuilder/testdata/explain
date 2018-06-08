@@ -597,3 +597,23 @@ render              ·         ·                                           ("x[
  └── render         ·         ·                                           (x int[])     x=CONST
       │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·             ·
       └── emptyrow  ·         ·                                           ()            ·
+
+query T
+EXPLAIN (OPT) SELECT 1
+----
+project
+ ├── columns: "1":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.01
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.01
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── const: 1 [type=int]
+
+statement error aggregates with DISTINCT are not supported yet
+EXPLAIN (OPT) SELECT SUM(DISTINCT x) FROM (VALUES (1), (1), (2)) AS t(x)

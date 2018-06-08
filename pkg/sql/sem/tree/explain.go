@@ -76,15 +76,21 @@ type ExplainMode uint8
 const (
 	// ExplainPlan shows information about the planNode tree for a query.
 	ExplainPlan ExplainMode = iota
+
 	// ExplainDistSQL shows the physical distsql plan for a query and whether a
 	// query would be run in "auto" DISTSQL mode. See sql/explain_distsql.go for
 	// details.
 	ExplainDistSQL
+
+	// ExplainOpt shows the optimized relational expression (from the cost-based
+	// optimizer).
+	ExplainOpt
 )
 
 var explainModeStrings = map[string]ExplainMode{
 	"plan":    ExplainPlan,
 	"distsql": ExplainDistSQL,
+	"opt":     ExplainOpt,
 }
 
 // Explain flags.
