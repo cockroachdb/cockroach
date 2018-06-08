@@ -275,9 +275,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction metadata contains only two entries
 	// in its intents slice. "a" and range "aa"-"c".
-	tc.mu.Lock()
-	intents, _ := roachpb.MergeSpans(tc.mu.meta.Intents)
-	tc.mu.Unlock()
+	intents, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
 	if len(intents) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", intents)
 	}
@@ -613,11 +611,9 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if !ok {
 		t.Fatal(err)
 	}
-	tc.mu.Lock()
-	intentSpans, _ := roachpb.MergeSpans(tc.mu.meta.Intents)
+	intentSpans, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
-	tc.mu.Unlock()
 	if err := txn.Rollback(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
@@ -1137,12 +1133,9 @@ func TestTxnMultipleCoord(t *testing.T) {
 	// Augment txn with txn2's meta & commit.
 	txn.AugmentTxnCoordMeta(ctx, txn2.GetTxnCoordMeta())
 	// Verify presence of both intents.
-	tc.mu.Lock()
-	if a, e := tc.mu.meta.RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
-		tc.mu.Unlock()
+	if a, e := tc.GetMeta().RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected read spans %+v; got %+v", e, a)
 	}
-	tc.mu.Unlock()
 	ba := txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
 	if err := txn.Run(ctx, ba); err != nil {

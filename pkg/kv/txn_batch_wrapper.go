@@ -89,5 +89,14 @@ func (*txnBatchWrapper) afterSendLocked(
 	return br, pErr
 }
 
-// refreshMetaLocked implements the txnReqInterceptor interface.
-func (*txnBatchWrapper) refreshMetaLocked() {}
+// populateMetaLocked implements the txnReqInterceptor interface.
+func (*txnBatchWrapper) populateMetaLocked(meta *roachpb.TxnCoordMeta) {}
+
+// augmentMetaLocked implements the txnReqInterceptor interface.
+func (*txnBatchWrapper) augmentMetaLocked(meta roachpb.TxnCoordMeta) {}
+
+// epochRetryLocked implements the txnReqInterceptor interface.
+func (*txnBatchWrapper) epochRetryLocked() {}
+
+// closeLocked implements the txnReqInterceptor interface.
+func (*txnBatchWrapper) closeLocked() {}
