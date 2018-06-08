@@ -1,0 +1,8 @@
+# =============================================================================
+# join.opt contains exploration rules for the Join operator.
+# =============================================================================
+
+[GenerateMergeJoins, Explore]
+(JoinNonApply $left:* $right:* $on:*)
+=>
+(ConstructMergeJoins (OpName) $left $right $on)

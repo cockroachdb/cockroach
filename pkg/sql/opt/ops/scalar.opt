@@ -615,3 +615,11 @@ define JsonbAgg {
 define AnyNotNull {
     Input Expr
 }
+
+# MergeOn contains the ON condition and the metadata for a merge join; it is
+# always a child of MergeJoin.
+[Scalar]
+define MergeOn {
+    On Expr
+    Def MergeOnDef
+}
