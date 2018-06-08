@@ -379,13 +379,6 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 	if err != nil {
 		mq.modelRunner.t.Fatal(err)
 	}
-	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
-		mq.modelRunner.t.Logf("actual datapoints: %v", actualDatapoints)
-		mq.modelRunner.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
-	}
-	if a, e := len(actualSources), expectedSourceCount; a != e {
-		mq.modelRunner.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
-	}
 
 	// Query the model.
 	modelDatapoints := mq.modelRunner.model.Query(
@@ -405,6 +398,15 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 		for _, diff := range pretty.Diff(a, e) {
 			mq.modelRunner.t.Error(diff)
 		}
+	}
+	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
+		mq.modelRunner.t.Logf("actual datapoints: %v", actualDatapoints)
+		mq.modelRunner.t.Logf("model datapoints: %v", modelDatapoints)
+		mq.modelRunner.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
+	}
+	if a, e := len(actualSources), expectedSourceCount; a != e {
+		mq.modelRunner.t.Logf("actual sources: %v", actualSources)
+		mq.modelRunner.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 }
 
