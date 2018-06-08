@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 func TestBank(t *testing.T) {
@@ -54,7 +55,7 @@ func TestBank(t *testing.T) {
 			bankTable := bank.Tables()[0]
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
 
-			if err := Split(sqlDB.DB, bank); err != nil {
+			if err := workload.Split(ctx, sqlDB.DB, bankTable, 1 /* concurrency */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
