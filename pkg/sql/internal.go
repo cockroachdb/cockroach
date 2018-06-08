@@ -211,6 +211,11 @@ func (ie *internalExecutorImpl) initConnEx(
 		if err := ex.run(ctx, nil /* cancel */); err != nil {
 			errCallback(err)
 		}
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
 		wg.Done()
 	}()
 	return stmtBuf, &wg
