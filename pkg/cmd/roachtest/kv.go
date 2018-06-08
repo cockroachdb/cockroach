@@ -18,6 +18,10 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerKV(r *registry) {
@@ -70,6 +74,94 @@ func registerKV(r *registry) {
 			}
 		}
 	}
+}
+
+func registerKVQuiescenceDead(r *registry) {
+	r.Add(testSpec{
+		Name:   "kv/quiescence/nodes=3",
+		Nodes:  nodes(4),
+		Stable: false, // added 6/7/2018
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if !c.isLocal() {
+				c.RemountNoBarrier(ctx)
+			}
+
+			nodes := c.nodes - 1
+			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Start(ctx, c.Range(1, nodes))
+
+			run := func(cmd string, lastDown bool) {
+				n := nodes
+				if lastDown {
+					n--
+				}
+				m := newMonitor(ctx, c, c.Range(1, n))
+				m.Go(func(ctx context.Context) error {
+					t.WorkerStatus(cmd)
+					defer t.WorkerStatus()
+					return c.RunE(ctx, c.Node(nodes+1), cmd)
+				})
+				m.Wait()
+			}
+
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+
+			for {
+				fullReplicated := false
+				if err := db.QueryRow(
+					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+				).Scan(&fullReplicated); err != nil {
+					t.Fatal(err)
+				}
+				if fullReplicated {
+					break
+				}
+				time.Sleep(time.Second)
+			}
+
+			qps := func(f func()) float64 {
+
+				numInserts := func() float64 {
+					var v float64
+					if err := db.QueryRowContext(
+						ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
+					).Scan(&v); err != nil {
+						t.Fatal(err)
+					}
+					return v
+				}
+
+				tBegin := timeutil.Now()
+				before := numInserts()
+				f()
+				after := numInserts()
+				return (after - before) / float64(timeutil.Since(tBegin).Seconds())
+			}
+
+			const kv = "./workload run kv --duration=10m --read-percent=0"
+
+			run("./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}", false)
+			c.Stop(ctx, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
+			qpsAllUp := qps(func() {
+				run(kv+" --seed 1 {pgurl:1}", true)
+			})
+			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --port {pgport:3}")
+			c.Stop(ctx, c.Node(nodes))
+			qpsOneDown := qps(func() {
+				// Use a different seed to make sure it's not just stepping into the
+				// other earlier kv invocation's footsteps.
+				run(kv+" --seed 2 {pgurl:1}", true)
+			})
+
+			if maxPercent := 80; qpsOneDown/qpsAllUp < float64(maxPercent)/100.0 {
+				t.Fatalf("QPS dropped by more than %d%%: from %.2f to %.2f", maxPercent, qpsAllUp, qpsOneDown)
+			}
+			c.l.printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+		},
+	})
 }
 
 func registerKVSplits(r *registry) {

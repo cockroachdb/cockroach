@@ -38,6 +38,7 @@ func registerTests(r *registry) {
 	registerKV(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
+	registerKVQuiescenceDead(r)
 	registerLargeRange(r)
 	registerRestore(r)
 	registerRoachmart(r)
