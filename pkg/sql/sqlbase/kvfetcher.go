@@ -271,12 +271,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
+			scans[i].AcceptsBytes = true
 			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
+			scans[i].AcceptsBytes = true
 			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
@@ -346,22 +348,22 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, returns false.
-func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error) {
+func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, []byte, int64, error) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			return true, t.Rows, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		case *roachpb.ReverseScanResponse:
-			return true, t.Rows, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil
+		return false, nil, nil, 0, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, err
+		return false, nil, nil, 0, err
 	}
 	return f.nextBatch(ctx)
 }

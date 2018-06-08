@@ -342,6 +342,10 @@ message ScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // If true, the client can handle a ScanResponse with batch_response set
+  // instead of rows, and would prefer to see that form of ScanResponse.
+  bool accepts_bytes = 4;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -353,6 +357,12 @@ message ScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, the results of the scan in batch format - the key/value pairs are
+  // a buffer of varint-prefixed slices, alternating from key to value. There
+  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
+  // be set and vice versa.
+  bytes batch_response = 4;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -364,6 +374,10 @@ message ReverseScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // If true, the client can handle a ScanResponse with batch_response set
+  // instead of rows, and would prefer to see that form of ScanResponse.
+  bool accepts_bytes = 4;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -375,6 +389,12 @@ message ReverseScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, the results of the scan in batch format - the key/value pairs are
+  // a buffer of varint-prefixed slices, alternating from key to value. There
+  // are num_keys pairs, as defined by the ResponseHeader. If set, rows will not
+  // be set and vice versa.
+  bytes batch_response = 4;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.

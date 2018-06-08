@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,7 +39,11 @@ import (
 const debugRowFetch = false
 
 type kvFetcher interface {
-	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error)
+	// nextBatch returns the next batch of rows. Returns false in the first
+	// parameter if there are no more keys in the scan. May return either a slice
+	// of KeyValues or a batchResponse, numKvs pair, depending on the server
+	// version - both must be handled by calling code.
+	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -214,6 +219,9 @@ type RowFetcher struct {
 	kvEnd             bool
 
 	kvs []roachpb.KeyValue
+
+	batchResponse []byte
+	batchNumKvs   int64
 
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
@@ -439,7 +447,28 @@ func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue,
 		rf.kvs = rf.kvs[1:]
 		return true, kv, nil
 	}
-	ok, rf.kvs, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchNumKvs > 0 {
+		rf.batchNumKvs -= 1
+		var key engine.MVCCKey
+		var rawBytes []byte
+		var err error
+		key, rawBytes, rf.batchResponse, err = engine.MVCCScanDecodeKeyValue(rf.batchResponse)
+		if err != nil {
+			return false, kv, err
+		}
+		return true, roachpb.KeyValue{
+			Key: key.Key,
+			Value: roachpb.Value{
+				RawBytes: rawBytes,
+			},
+		}, nil
+	}
+
+	var numKeys int64
+	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchResponse != nil {
+		rf.batchNumKvs = numKeys
+	}
 	if err != nil {
 		return ok, kv, err
 	}

@@ -272,13 +272,13 @@ type SpanKVFetcher struct {
 }
 
 // nextBatch implements the kvFetcher interface.
-func (f *SpanKVFetcher) nextBatch(_ context.Context) (bool, []roachpb.KeyValue, error) {
+func (f *SpanKVFetcher) nextBatch(_ context.Context) (bool, []roachpb.KeyValue, []byte, int64, error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil
+		return false, nil, nil, 0, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil
+	return true, res, nil, 0, nil
 }
 
 // getRangesInfo implements the kvFetcher interface.
