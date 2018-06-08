@@ -340,6 +340,9 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			}
 		}
 
+	case *MergeOnDef:
+		fmt.Fprintf(f.buf, " %s,%s,%s", t.JoinType, t.LeftEq, t.RightEq)
+
 	case opt.ColSet, opt.ColList:
 		// Don't show anything, because it's mostly redundant.
 
