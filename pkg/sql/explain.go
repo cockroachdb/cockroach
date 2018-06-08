@@ -55,6 +55,9 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		p.semaCtx.Placeholders.PermitUnassigned()
 		return p.makeExplainPlanNode(ctx, &opts, n.Statement)
 
+	case tree.ExplainOpt:
+		return nil, errors.New("EXPLAIN (OPT) only supported with the optimizer")
+
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", opts.Mode)
 	}
