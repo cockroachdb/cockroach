@@ -562,9 +562,10 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	needed, output := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
+	// Get sort *result column* ordinals. Don't confuse these with *table column*
+	// ordinals, which are used by the needed set. The sort columns should already
+	// be in the needed set, so no need to add anything further to that.
 	reqOrder := b.makeSQLOrdering(res, ev)
-
-	needed.UnionWith(ev.Physical().Ordering.ColSet())
 
 	node, err := b.factory.ConstructLookupJoin(input.root, md.Table(def.Table), needed, reqOrder)
 	if err != nil {

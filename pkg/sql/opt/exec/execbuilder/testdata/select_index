@@ -837,14 +837,14 @@ index-join  ·      ·            (x, y)              ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
-render           ·         ·            (x)                    ·
- │               render 0  x            ·                      ·
- └── index-join  ·         ·            (x, y, rowid[hidden])  +y
-      ├── scan   ·         ·            (y, rowid[hidden])     +y
-      │          table     xy@xy_y_idx  ·                      ·
-      │          spans     /1-/2        ·                      ·
-      └── scan   ·         ·            (x, y, rowid[hidden])  ·
-·                table     xy@primary   ·                      ·
+render           ·         ·            (x)                 ·
+ │               render 0  x            ·                   ·
+ └── index-join  ·         ·            (x, y)              +y
+      ├── scan   ·         ·            (y, rowid[hidden])  +y
+      │          table     xy@xy_y_idx  ·                   ·
+      │          spans     /1-/2        ·                   ·
+      └── scan   ·         ·            (x, y)              ·
+·                table     xy@primary   ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
