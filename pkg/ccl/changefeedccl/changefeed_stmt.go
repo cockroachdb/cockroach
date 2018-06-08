@@ -192,7 +192,9 @@ func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
-	return runChangefeedFlow(ctx, execCfg, job, startedCh)
+	details := job.Record.Details.(jobs.ChangefeedDetails)
+	progress := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed
+	return runChangefeedFlow(ctx, execCfg, details, *progress, startedCh, job.Progressed)
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
