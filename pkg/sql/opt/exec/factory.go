@@ -88,6 +88,18 @@ type Factory interface {
 	// using IndexedVars (first the left columns, then the right columns).
 	ConstructJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
 
+	// ConstructMergeJoin returns a node that (under distsql) runs a merge join.
+	// The ON expression can refer to columns from both inputs using IndexedVars
+	// (first the left columns, then the right columns). In addition, the i-th
+	// column in leftOrdering is constrained to equal the i-th column in
+	// rightOrdering. The directions must match between the two orderings.
+	ConstructMergeJoin(
+		joinType sqlbase.JoinType,
+		left, right Node,
+		onCond tree.TypedExpr,
+		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	) (Node, error)
+
 	// ConstructGroupBy returns a node that runs an aggregation. If group columns
 	// are specified, a set of aggregations is performed for each group of values
 	// on those columns (otherwise there is a single group).
