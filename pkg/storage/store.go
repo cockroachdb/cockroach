@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -4231,6 +4232,70 @@ func (s *Store) AllocatorDryRun(
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}
 	return collect(), nil
+}
+
+// ManualQueue runs the given replica through the requested queue, returning
+// all trace events collected along the way as well as the error message
+// returned from the queue's process method, if any.
+// Intended to help power an admin debug endpoint.
+func (s *Store) ManualQueue(
+	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
+) ([]tracing.RecordedSpan, string, error) {
+	var queue queueImpl
+	switch strings.ToLower(queueName) {
+	case "gc":
+		queue = s.gcQueue
+	case "split":
+		queue = s.splitQueue
+	case "replicate":
+		queue = s.replicateQueue
+	case "replicagc":
+		queue = s.replicaGCQueue
+	case "raftlog":
+		queue = s.raftLogQueue
+	case "raftsnapshot":
+		queue = s.raftSnapshotQueue
+	case "consistency":
+		queue = s.consistencyQueue
+	default:
+		return nil, "", errors.Errorf("unknown queue type %q", queueName)
+	}
+
+	sysCfg, ok := s.cfg.Gossip.GetSystemConfig()
+	if !ok {
+		return nil, "", errors.New("cannot run queue without a valid system config; make sure the cluster " +
+			"has been initialized and all nodes connected to it")
+	}
+
+	// Most queues are only meant to be run on leaseholder replicas, so attempt to
+	// take the lease here or bail out early if a different replica has it.
+	hasLease, pErr := repl.getLeaseForGossip(ctx)
+	if pErr != nil {
+		return nil, "", pErr.GoError()
+	}
+	if !hasLease {
+		return nil, "", nil
+	}
+
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
+		ctx, fmt.Sprintf("manual %s queue run", queueName))
+	defer cancel()
+
+	if !skipShouldQueue {
+		log.Eventf(ctx, "running %s.shouldQueue", queueName)
+		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.Now(), repl, sysCfg)
+		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
+		if !shouldQueue {
+			return collect(), "", nil
+		}
+	}
+
+	log.Eventf(ctx, "running %s.process", queueName)
+	err := queue.process(ctx, repl, sysCfg)
+	if err != nil {
+		return collect(), err.Error(), nil
+	}
+	return collect(), "", nil
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.

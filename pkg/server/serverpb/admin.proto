@@ -17,6 +17,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
+import "server/serverpb/status.proto";
 import "sql/jobs/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -548,6 +549,24 @@ message ReplicaMatrixResponse {
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
+message QueueRequest {
+  string queue = 1;
+  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  // If RangeID is 0, returns range log history without filtering by range.
+  int64 range_id = 2;
+  // If set, run the queue's process method without first checking whether the
+  // replica should be processed by calling shouldQueue.
+  bool skip_should_queue = 3;
+}
+
+message QueueResponse {
+  // All trace events collected while processing the range in the queue.
+  repeated TraceEvent events = 1;
+  // The error message from the queue's processing, if any.
+  string error = 2;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -726,5 +745,26 @@ service Admin {
     option (google.api.http) = {
       get: "/_admin/v1/replica_matrix"
     };
+  }
+
+
+  // Queue runs the specified range through the specified queue on the range's
+  // leaseholder store, returning the detailed trace and error information from
+  // doing so.
+  // URL: /_admin/v1/queue/split/range/1
+  // URL: /_admin/v1/queue/split/range/1?skip_should_queue=true
+  rpc Queue(QueueRequest) returns (QueueResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queue/{queue}/range/{range_id}"
+    };
+  }
+
+  // QueueLocal checks whether the local node has the leaseholder replica for
+  // the requested range, running the replica through the requested queue and
+  // returning trace/error information if so. If not, returns an empty
+  // response.  This is just an unfortunate implementation detail of the Queue
+  // method, since we don't have a good way of finding a range's replicas and
+  // leaseholder given just its ID.
+  rpc QueueLocal(QueueRequest) returns (QueueResponse) {
   }
 }

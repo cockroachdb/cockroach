@@ -1502,6 +1502,130 @@ func (s *adminServer) ReplicaMatrix(
 	return resp, nil
 }
 
+// Queue runs the specified range through the specified queue, returning the
+// detailed trace and error information from doing so.
+func (s *adminServer) Queue(
+	ctx context.Context, req *serverpb.QueueRequest,
+) (*serverpb.QueueResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
+		return nil, remoteDebuggingErr
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
+	nodeCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	isLiveMap := s.server.nodeLiveness.GetIsLiveMap()
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *serverpb.QueueResponse
+		err    error
+	}
+
+	responses := make(chan nodeResponse)
+	for nodeID := range isLiveMap {
+		nodeID := nodeID
+		if err := s.server.stopper.RunAsyncTask(
+			nodeCtx,
+			"server.adminServer: forwarding queue request",
+			func(ctx context.Context) {
+				admin, err := s.dialNode(ctx, nodeID)
+				var queueResponse *serverpb.QueueResponse
+				if err == nil {
+					queueResponse, err = admin.QueueLocal(ctx, req)
+				}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   queueResponse,
+					err:    err,
+				}
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+	}
+
+	var finalResponse *serverpb.QueueResponse
+	var finalErr error
+	for remainingResponses := len(isLiveMap); remainingResponses > 0; remainingResponses-- {
+		select {
+		case resp := <-responses:
+			if resp.err != nil {
+				finalErr = resp.err
+				continue
+			}
+			if resp.resp != nil && (len(resp.resp.Events) != 0 || resp.resp.Error != "") {
+				finalResponse = resp.resp
+			}
+		case <-ctx.Done():
+			if finalResponse != nil {
+				return finalResponse, nil
+			}
+			if finalErr != nil {
+				return nil, finalErr
+			}
+			return nil, status.Errorf(codes.DeadlineExceeded, "request timed out")
+		}
+	}
+
+	if finalResponse != nil {
+		return finalResponse, nil
+	}
+	if finalErr != nil {
+		return nil, finalErr
+	}
+	return nil, status.Errorf(
+		codes.NotFound, "leaseholder for r%d not found on live nodes %v", req.RangeId, isLiveMap)
+}
+
+// QueueLocal checks whether the local node has the leaseholder replica for
+// the requested range, running the replica through the requested queue and
+// returning trace/error information if so. If not, returns an empty
+// response.  This is just an unfortunate implementation detail of the Queue
+// method, since we don't have a good way of finding a range's replicas and
+// leaseholder given just its ID.
+func (s *adminServer) QueueLocal(
+	ctx context.Context, req *serverpb.QueueRequest,
+) (*serverpb.QueueResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
+		return nil, remoteDebuggingErr
+	}
+
+	var store *storage.Store
+	var repl *storage.Replica
+	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
+		r, err := s.GetReplica(roachpb.RangeID(req.RangeId))
+		if err != nil {
+			return nil
+		}
+		repl = r
+		store = s
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if store == nil || repl == nil {
+		return &serverpb.QueueResponse{}, nil
+	}
+
+	traceSpans, processErr, err := store.ManualQueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.QueueResponse{
+		Events: recordedSpansToTraceEvents(traceSpans),
+		Error:  processErr,
+	}, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
@@ -1808,4 +1932,18 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+func (s *adminServer) dialNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.AdminClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.server.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewAdminClient(conn), nil
 }
