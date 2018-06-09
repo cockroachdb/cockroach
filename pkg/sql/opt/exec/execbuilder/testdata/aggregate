@@ -683,8 +683,6 @@ render               ·            ·                                 (sum decim
 statement ok
 CREATE TABLE xy(x STRING, y STRING);
 
-# TODO(radu): this requires tuples but they are not yet supported in
-# distsql (#15938).
 query TTTTT
 EXPLAIN (TYPES) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
