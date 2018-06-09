@@ -164,6 +164,14 @@ func (tq *testQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	}
 }
 
+func (tq *testQueue) Name() string {
+	return "testQueue"
+}
+
+func (tq *testQueue) NeedsLease() bool {
+	return false
+}
+
 func (tq *testQueue) count() int {
 	tq.Lock()
 	defer tq.Unlock()

@@ -277,7 +277,7 @@ func (s *statusServer) Allocator(
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 						RangeID: desc.RangeID,
-						Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+						Events:  recordedSpansToTraceEvents(allocatorSpans),
 					})
 					return false, nil
 				})
@@ -300,7 +300,7 @@ func (s *statusServer) Allocator(
 			}
 			output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 				RangeID: rep.RangeID,
-				Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+				Events:  recordedSpansToTraceEvents(allocatorSpans),
 			})
 		}
 		return nil
@@ -311,14 +311,12 @@ func (s *statusServer) Allocator(
 	return output, nil
 }
 
-func recordedSpansToAllocatorEvents(
-	spans []tracing.RecordedSpan,
-) []*serverpb.AllocatorDryRun_Event {
-	var output []*serverpb.AllocatorDryRun_Event
+func recordedSpansToTraceEvents(spans []tracing.RecordedSpan) []*serverpb.TraceEvent {
+	var output []*serverpb.TraceEvent
 	var buf bytes.Buffer
 	for _, sp := range spans {
 		for _, entry := range sp.Logs {
-			event := &serverpb.AllocatorDryRun_Event{
+			event := &serverpb.TraceEvent{
 				Time: entry.Time,
 			}
 			if len(entry.Fields) == 1 {
@@ -1227,24 +1225,29 @@ func (s *statusServer) Range(
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
 	}
 
-	nodeQuery := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
 		return status.Ranges(ctx, rangesRequest)
 	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		rangesResp := resp.(*serverpb.RangesResponse)
+		response.ResponsesByNodeID[nodeID] = serverpb.RangeResponse_NodeResponse{
+			Response: true,
+			Infos:    rangesResp.Ranges,
+		}
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.ResponsesByNodeID[nodeID] = serverpb.RangeResponse_NodeResponse{
+			ErrorMessage: err.Error(),
+		}
+	}
 
-	if err := s.iterateNodes(ctx, fmt.Sprintf("details about range %d", req.RangeId),
-		nodeQuery,
-		func(nodeID roachpb.NodeID, resp interface{}) {
-			rangesResp := resp.(*serverpb.RangesResponse)
-			response.ResponsesByNodeID[nodeID] = serverpb.RangeResponse_NodeResponse{
-				Response: true,
-				Infos:    rangesResp.Ranges,
-			}
-		},
-		func(nodeID roachpb.NodeID, err error) {
-			response.ResponsesByNodeID[nodeID] = serverpb.RangeResponse_NodeResponse{
-				ErrorMessage: err.Error(),
-			}
-		},
+	if err := s.iterateNodes(
+		ctx, fmt.Sprintf("details about range %d", req.RangeId), dialFn, nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, err
 	}
@@ -1303,7 +1306,8 @@ func (s *statusServer) ListLocalSessions(
 func (s *statusServer) iterateNodes(
 	ctx context.Context,
 	errorCtx string,
-	nodeFn func(ctx context.Context, status serverpb.StatusClient) (interface{}, error),
+	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
+	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) error {
@@ -1326,7 +1330,7 @@ func (s *statusServer) iterateNodes(
 		rpcCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 		defer cancel()
 
-		status, err := s.dialNode(rpcCtx, nodeID)
+		client, err := dialFn(rpcCtx, nodeID)
 		if err != nil {
 			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
 				nodeID, nodeStatuses[nodeID].LivenessStatus)
@@ -1334,7 +1338,7 @@ func (s *statusServer) iterateNodes(
 			return
 		}
 
-		res, err := nodeFn(ctx, status)
+		res, err := nodeFn(ctx, client, nodeID)
 		if err != nil {
 			err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
 				errorCtx, nodeID, nodeStatuses[nodeID].LivenessStatus)
@@ -1388,21 +1392,24 @@ func (s *statusServer) ListSessions(
 		Errors:   make([]serverpb.ListSessionsError, 0),
 	}
 
-	nodeQuery := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
 		return status.ListLocalSessions(ctx, req)
 	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		sessions := nodeResp.(*serverpb.ListSessionsResponse)
+		response.Sessions = append(response.Sessions, sessions.Sessions...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
 
-	if err := s.iterateNodes(ctx, "session list",
-		nodeQuery,
-		func(_ roachpb.NodeID, nodeResp interface{}) {
-			sessions := nodeResp.(*serverpb.ListSessionsResponse)
-			response.Sessions = append(response.Sessions, sessions.Sessions...)
-		},
-		func(nodeID roachpb.NodeID, err error) {
-			errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
-			response.Errors = append(response.Errors, errResponse)
-		},
-	); err != nil {
+	if err := s.iterateNodes(ctx, "session list", dialFn, nodeFn, responseFn, errorFn); err != nil {
 		err := serverpb.ListSessionsError{Message: err.Error()}
 		response.Errors = append(response.Errors, err)
 	}

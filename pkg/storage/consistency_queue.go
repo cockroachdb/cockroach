@@ -48,7 +48,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 		replicaCountFn: store.ReplicaCount,
 	}
 	q.baseQueue = newBaseQueue(
-		"replica consistency checker", q, store, gossip,
+		"consistencyChecker", q, store, gossip,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,

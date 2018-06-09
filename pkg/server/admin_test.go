@@ -1472,3 +1472,84 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	}
 	b.StopTimer()
 }
+
+func TestEnqueueRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	// RangeID being queued
+	const realRangeID = 1
+	const fakeRangeID = 999
+
+	// Who we expect responses from.
+	const none = 0
+	const leaseholder = 1
+	const allReplicas = 3
+
+	testCases := []struct {
+		nodeID            roachpb.NodeID
+		queue             string
+		rangeID           roachpb.RangeID
+		expectedDetails   int
+		expectedNonErrors int
+	}{
+		// Success cases
+		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "split", realRangeID, allReplicas, leaseholder},
+		{0, "replicaGC", realRangeID, allReplicas, allReplicas},
+		{0, "RaFtLoG", realRangeID, allReplicas, allReplicas},
+		{0, "RAFTSNAPSHOT", realRangeID, allReplicas, allReplicas},
+		{0, "consistencyChecker", realRangeID, allReplicas, leaseholder},
+		{0, "TIMESERIESmaintenance", realRangeID, allReplicas, leaseholder},
+		{1, "raftlog", realRangeID, leaseholder, leaseholder},
+		// Error cases
+		{0, "gv", realRangeID, allReplicas, none},
+		{0, "GC", fakeRangeID, allReplicas, none},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.queue, func(t *testing.T) {
+			req := &serverpb.EnqueueRangeRequest{
+				NodeID:  tc.nodeID,
+				Queue:   tc.queue,
+				RangeID: tc.rangeID,
+			}
+			var resp serverpb.EnqueueRangeResponse
+			if err := postAdminJSONProto(testCluster.Server(0), "enqueue_range", req, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if e, a := tc.expectedDetails, len(resp.Details); e != a {
+				t.Errorf("expected %d details; got %d: %+v", e, a, resp)
+			}
+			var numNonErrors int
+			for _, details := range resp.Details {
+				if len(details.Events) > 0 && details.Error == "" {
+					numNonErrors++
+				}
+			}
+			if tc.expectedNonErrors != numNonErrors {
+				t.Errorf("expected %d non-error details; got %d: %+v", tc.expectedNonErrors, numNonErrors, resp)
+			}
+		})
+	}
+
+	// Finally, test a few more basic error cases.
+	reqs := []*serverpb.EnqueueRangeRequest{
+		{NodeID: -1, Queue: "gc"},
+		{Queue: ""},
+		{RangeID: -1, Queue: "gc"},
+	}
+	for _, req := range reqs {
+		t.Run(fmt.Sprint(req), func(t *testing.T) {
+			var resp serverpb.EnqueueRangeResponse
+			err := postAdminJSONProto(testCluster.Server(0), "enqueue_range", req, &resp)
+			if err == nil {
+				t.Fatalf("unexpected success: %+v", resp)
+			}
+			if !testutils.IsError(err, "400 Bad Request") {
+				t.Fatalf("unexpected error type: %+v", err)
+			}
+		})
+	}
+}
