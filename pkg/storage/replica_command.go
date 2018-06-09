@@ -1496,10 +1496,10 @@ func mergeTrigger(
 	}
 
 	// Add in the stats for the RHS range's range keys.
-	iter := batch.NewIterator(engine.IterOptions{})
-	defer iter.Close()
 	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.StartKey))
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: localRangeKeyEnd.Key})
+	defer iter.Close()
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
 		return result.Result{}, errors.Errorf("unable to compute RHS range's local stats: %s", err)

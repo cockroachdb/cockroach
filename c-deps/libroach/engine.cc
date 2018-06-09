@@ -160,9 +160,9 @@ DBStatus DBImpl::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBSlice DBImpl::BatchRepr() { return ToDBSlice("unsupported"); }
 
-DBIterator* DBImpl::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator(iters);
-  iter->rep.reset(rep->NewIterator(*read_opts));
+DBIterator* DBImpl::NewIter(DBIterOptions iter_opts) {
+  DBIterator* iter = new DBIterator(iters, iter_opts);
+  iter->rep.reset(rep->NewIterator(iter->read_opts));
   return iter;
 }
 

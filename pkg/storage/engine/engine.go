@@ -127,12 +127,19 @@ type Iterator interface {
 }
 
 // IterOptions contains options used to create an Iterator.
+//
+// For performance, every Iterator must specify either Prefix or UpperBound.
 type IterOptions struct {
 	// If Prefix is true, Seek will use the user-key prefix of
 	// the supplied MVCC key to restrict which sstables are searched,
 	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped)
+	// prefix will not work correctly (keys may be skipped).
 	Prefix bool
+	// If UpperBound is non-nil, the iterator will become invalid after seeking
+	// past the provided key. This can drastically improve performance when
+	// seeking within a region covered by range deletion tombstones. See #24029
+	// for discussion.
+	UpperBound roachpb.Key
 	// If WithStats is true, the iterator accumulates RocksDB performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool

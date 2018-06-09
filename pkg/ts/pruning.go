@@ -84,9 +84,6 @@ func (tsdb *DB) findTimeSeries(
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
-	iter := snapshot.NewIterator(engine.IterOptions{})
-	defer iter.Close()
-
 	// Set start boundary for the search, which is the lesser of the range start
 	// key and the beginning of time series data.
 	start := engine.MakeMVCCMetadataKey(startKey.AsRawKey())
@@ -104,6 +101,9 @@ func (tsdb *DB) findTimeSeries(
 	}
 
 	thresholds := tsdb.computeThresholds(now.WallTime)
+
+	iter := snapshot.NewIterator(engine.IterOptions{UpperBound: endKey.AsRawKey()})
+	defer iter.Close()
 
 	for iter.Seek(next); ; iter.Seek(next) {
 		if ok, err := iter.Valid(); err != nil {

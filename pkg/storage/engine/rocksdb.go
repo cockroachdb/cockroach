@@ -1002,6 +1002,8 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	}
 	if iter.rocksDBIterator.iter == nil {
 		iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
+	} else {
+		iter.rocksDBIterator.setUpperBound(opts.UpperBound)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1242,6 +1244,8 @@ func (r *distinctBatch) NewIterator(opts IterOptions) Iterator {
 			r.ensureBatch()
 			iter.rocksDBIterator.init(r.batch, opts, r, r.parent)
 		}
+	} else {
+		iter.rocksDBIterator.setUpperBound(opts.UpperBound)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1624,6 +1628,8 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	if iter.iter.iter == nil {
 		r.ensureBatch()
 		iter.iter.init(r.batch, opts, r, r.parent)
+	} else {
+		iter.iter.setUpperBound(opts.UpperBound)
 	}
 	if iter.batch != nil {
 		panic("iterator already in use")
@@ -1888,21 +1894,41 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 		r.parent.iters.Unlock()
 	}
 
-	r.iter = C.DBNewIter(rdb, C.bool(opts.Prefix), C.bool(opts.WithStats))
+	if !opts.Prefix && len(opts.UpperBound) == 0 {
+		panic("iterator must set prefix or upper bound")
+	}
+
+	r.iter = C.DBNewIter(rdb, C.DBIterOptions{
+		prefix:      C._Bool(opts.Prefix),
+		upper_bound: goToCKey(MakeMVCCMetadataKey(opts.UpperBound)),
+		with_stats:  C._Bool(opts.WithStats),
+	})
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
 	r.engine = engine
 }
 
+// TODO(benesch): merge initTimeBound with init by introducing MinTimestamp and
+// MaxTimestamp fields in IterOptions. Separating normal and time-bound
+// iterators is silly: any iterator, even prefix iterators, can become
+// time-bound by plumbing the right options through to RocksDB.
 func (r *rocksDBIterator) initTimeBound(
 	rdb *C.DBEngine, start, end hlc.Timestamp, withStats bool, engine Reader,
 ) {
-	r.iter = C.DBNewTimeBoundIter(rdb, goToCTimestamp(start), goToCTimestamp(end), C.bool(withStats))
+	r.iter = C.DBNewIter(rdb, C.DBIterOptions{
+		min_timestamp: goToCTimestamp(start),
+		max_timestamp: goToCTimestamp(end),
+		with_stats:    C.bool(withStats),
+	})
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
 	r.engine = engine
+}
+
+func (r *rocksDBIterator) setUpperBound(key roachpb.Key) {
+	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(key)))
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
@@ -2469,12 +2495,13 @@ func dbIterate(
 	if !start.Less(end) {
 		return nil
 	}
-	it := newRocksDBIterator(rdb, IterOptions{}, engine, nil)
+	it := newRocksDBIterator(rdb, IterOptions{UpperBound: end.Key}, engine, nil)
 	defer it.Close()
 
 	it.Seek(start)
 	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
+		ok, err := it.Valid()
+		if err != nil {
 			return err
 		} else if !ok {
 			break

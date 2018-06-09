@@ -59,7 +59,7 @@ func ResolveIntentRange(
 		iter := batch.NewTimeBoundIterator(args.MinTimestamp, args.IntentTxn.Timestamp, false)
 		iterAndBuf = engine.GetBufUsingIter(iter)
 	} else {
-		iterAndBuf = engine.GetIterAndBuf(batch)
+		iterAndBuf = engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: args.EndKey})
 	}
 	defer iterAndBuf.Cleanup()
 
