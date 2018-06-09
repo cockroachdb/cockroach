@@ -15,6 +15,7 @@
 package opt_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -55,6 +56,19 @@ func TestOrdering(t *testing.T) {
 
 	if (opt.Ordering{}).Equals(ordering) {
 		t.Error("empty ordering should not equal ordering")
+	}
+
+	common := ordering.CommonPrefix(opt.Ordering{1})
+	if exp := (opt.Ordering{1}); !reflect.DeepEqual(common, exp) {
+		t.Errorf("expected common prefix %s, got %s", exp, common)
+	}
+	common = ordering.CommonPrefix(opt.Ordering{1, 2, 3})
+	if exp := (opt.Ordering{1}); !reflect.DeepEqual(common, exp) {
+		t.Errorf("expected common prefix %s, got %s", exp, common)
+	}
+	common = ordering.CommonPrefix(opt.Ordering{1, 5, 6})
+	if exp := (opt.Ordering{1, 5}); !reflect.DeepEqual(common, exp) {
+		t.Errorf("expected common prefix %s, got %s", exp, common)
 	}
 }
 

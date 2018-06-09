@@ -42,6 +42,21 @@ func TestPhysicalPropsFactory(t *testing.T) {
 	runDataDrivenTest(t, "testdata/physprops/", opt.ExprFmtHideAll)
 }
 
+// TestRuleProps files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
+//   ...
+func TestRuleProps(t *testing.T) {
+	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
+		catalog := testcat.New()
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.ExprFormat = opt.ExprFmtHideStats | opt.ExprFmtHideCost |
+				opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
+			return tester.RunCommand(t, d)
+		})
+	})
+}
+
 // TestRules files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/scan"
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"

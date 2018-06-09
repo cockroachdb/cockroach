@@ -375,8 +375,12 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideRuleProps) {
-		if !logProps.Relational.Rule.PruneCols.Empty() {
-			tp.Childf("prune: %s", logProps.Relational.Rule.PruneCols.String())
+		r := &logProps.Relational.Rule
+		if !r.PruneCols.Empty() {
+			tp.Childf("prune: %s", r.PruneCols.String())
+		}
+		if len(r.InterestingOrderings) > 0 {
+			tp.Childf("interesting orderings: %s", r.InterestingOrderings.String())
 		}
 	}
 

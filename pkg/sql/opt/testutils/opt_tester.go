@@ -170,6 +170,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
+		fillInLazyProps(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "opt":
@@ -177,6 +178,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
+		fillInLazyProps(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "optsteps":
@@ -196,6 +198,17 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
 		return ""
+	}
+}
+
+// Fills in lazily-derived properties (for display).
+func fillInLazyProps(ev memo.ExprView) {
+	if !ev.IsScalar() {
+		// Make sure the interesting orderings are calculated.
+		xform.GetInterestingOrderings(ev)
+	}
+	for i := 0; i < ev.ChildCount(); i++ {
+		fillInLazyProps(ev.Child(i))
 	}
 }
 
