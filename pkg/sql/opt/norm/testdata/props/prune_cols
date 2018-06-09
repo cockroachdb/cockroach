@@ -1,3 +1,5 @@
+# Tests for PruneCols property
+
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
 ----
@@ -17,10 +19,6 @@ TABLE xy
  ├── y int
  └── INDEX primary
       └── x int not null
-
-# --------------------------------------------------
-# PruneCols property
-# --------------------------------------------------
 
 # Scan operator.
 build

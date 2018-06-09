@@ -193,6 +193,15 @@ func (o Ordering) ColSet() opt.ColSet {
 	return colSet
 }
 
+func (o Ordering) CommonPrefix(other Ordering) Ordering {
+	for i := range o {
+		if i >= len(other) || o[i] != other[i] {
+			return o[:i]
+		}
+	}
+	return o
+}
+
 // Provides returns true if the required ordering is a prefix of this ordering.
 func (o Ordering) Provides(required Ordering) bool {
 	if len(o) < len(required) {
