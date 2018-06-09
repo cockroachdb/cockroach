@@ -77,9 +77,8 @@ ALTER TABLE abc INJECT STATISTICS '[
 opt
 SELECT * FROM abc WHERE c = 1
 ----
-lookup-join
+lookup-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- ├── table: abc
  ├── key columns: [1]
  ├── stats: [rows=1, distinct(3)=1]
  ├── cost: 5.01

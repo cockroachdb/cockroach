@@ -160,6 +160,11 @@ type LookupJoinDef struct {
 	// currently the only index used.
 	Table opt.TableID
 
+	// Index identifies the index to do lookups in (whether primary or secondary).
+	// It can be passed to the opt.Table.Index(i int) method in order to fetch the
+	// opt.Index metadata.
+	Index int
+
 	// KeyCols are the columns (produced by the input) used to create lookup keys;
 	// in the same order as the index columns (or a prefix of them).
 	KeyCols opt.ColList
