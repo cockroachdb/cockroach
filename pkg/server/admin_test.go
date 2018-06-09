@@ -1524,3 +1524,76 @@ func TestAdminAPIQueries(t *testing.T) {
 		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
 	}
 }
+
+func TestQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	testCases := []struct {
+		nodeID            roachpb.NodeID
+		queue             string
+		rangeID           roachpb.RangeID
+		expectedDetails   int
+		expectedNonErrors int
+	}{
+		// Success cases
+		{0, "gc", 1, 3, 1},
+		{0, "split", 1, 3, 1},
+		{0, "replicate", 1, 3, 1},
+		{0, "replicaGC", 1, 3, 3},
+		{0, "RaFtLoG", 1, 3, 3},
+		{0, "RAFTSNAPSHOT", 1, 3, 3},
+		{0, "consistencyChecker", 1, 3, 1},
+		{0, "TIMESERIESmaintenance", 1, 3, 1},
+		{1, "raftlog", 1, 1, 1},
+		// Error cases
+		{0, "gv", 1, 3, 0},
+		{0, "GC", 999, 3, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.queue, func(t *testing.T) {
+			req := &serverpb.QueueRequest{
+				NodeID:  tc.nodeID,
+				Queue:   tc.queue,
+				RangeID: tc.rangeID,
+			}
+			var resp serverpb.QueueResponse
+			if err := postAdminJSONProto(testCluster.Server(0), "queue", req, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if e, a := tc.expectedDetails, len(resp.Details); e != a {
+				t.Errorf("expected %d details; got %d: %+v", e, a, resp)
+			}
+			var numNonErrors int
+			for _, details := range resp.Details {
+				if len(details.Events) > 0 && details.Error == "" {
+					numNonErrors++
+				}
+			}
+			if tc.expectedNonErrors != numNonErrors {
+				t.Errorf("expected %d non-error details; got %d: %+v", tc.expectedNonErrors, numNonErrors, resp)
+			}
+		})
+	}
+
+	// Finally, test a few more basic error cases.
+	reqs := []*serverpb.QueueRequest{
+		{NodeID: -1, Queue: "gc"},
+		{Queue: ""},
+		{RangeID: -1, Queue: "gc"},
+	}
+	for _, req := range reqs {
+		t.Run(fmt.Sprint(req), func(t *testing.T) {
+			var resp serverpb.QueueResponse
+			err := postAdminJSONProto(testCluster.Server(0), "queue", req, &resp)
+			if err == nil {
+				t.Fatalf("unexpected success: %+v", resp)
+			}
+			if !testutils.IsError(err, "400 Bad Request") {
+				t.Fatalf("unexpected error type: %+v", err)
+			}
+		})
+	}
+}

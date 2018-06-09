@@ -277,7 +277,7 @@ func (s *statusServer) Allocator(
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 						RangeID: desc.RangeID,
-						Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+						Events:  recordedSpansToTraceEvents(allocatorSpans),
 					})
 					return false, nil
 				})
@@ -300,7 +300,7 @@ func (s *statusServer) Allocator(
 			}
 			output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 				RangeID: rep.RangeID,
-				Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+				Events:  recordedSpansToTraceEvents(allocatorSpans),
 			})
 		}
 		return nil
@@ -311,14 +311,12 @@ func (s *statusServer) Allocator(
 	return output, nil
 }
 
-func recordedSpansToAllocatorEvents(
-	spans []tracing.RecordedSpan,
-) []*serverpb.AllocatorDryRun_Event {
-	var output []*serverpb.AllocatorDryRun_Event
+func recordedSpansToTraceEvents(spans []tracing.RecordedSpan) []*serverpb.TraceEvent {
+	var output []*serverpb.TraceEvent
 	var buf bytes.Buffer
 	for _, sp := range spans {
 		for _, entry := range sp.Logs {
-			event := &serverpb.AllocatorDryRun_Event{
+			event := &serverpb.TraceEvent{
 				Time: entry.Time,
 			}
 			if len(entry.Fields) == 1 {

@@ -1528,6 +1528,168 @@ func (s *adminServer) Queries(
 	}, nil
 }
 
+// Queue runs the specified range through the specified queue, returning the
+// detailed trace and error information from doing so.
+func (s *adminServer) Queue(
+	ctx context.Context, req *serverpb.QueueRequest,
+) (*serverpb.QueueResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
+		return nil, remoteDebuggingErr
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
+	if req.NodeID < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
+	}
+	if req.Queue == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "queue name must be non-empty")
+	}
+	if req.RangeID <= 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "range_id must be positive; got %d", req.RangeID)
+	}
+
+	// If the request is targeted at this node, serve it directly. Otherwise,
+	// forward it to the appropriate node(s).
+	if req.NodeID == s.server.NodeID() {
+		return s.queueLocal(ctx, req)
+	}
+
+	nodeCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	isLiveMap := s.server.nodeLiveness.GetIsLiveMap()
+
+	// If a specific NodeID was requested, then shrink down isLiveMap to contain
+	// only it, since we choose which nodes to send the request to based on
+	// what's in isLiveMap.
+	if req.NodeID > 0 {
+		isLiveMap = map[roachpb.NodeID]bool{req.NodeID: isLiveMap[req.NodeID]}
+	}
+
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *serverpb.QueueResponse
+		err    error
+	}
+
+	responses := make(chan nodeResponse)
+	for nodeID := range isLiveMap {
+		nodeID := nodeID
+		if err := s.server.stopper.RunAsyncTask(
+			nodeCtx,
+			"server.adminServer: forwarding queue request",
+			func(ctx context.Context) {
+				admin, err := s.dialNode(ctx, nodeID)
+				queueRequest := *req
+				queueRequest.NodeID = nodeID
+				var queueResponse *serverpb.QueueResponse
+				if err == nil {
+					queueResponse, err = admin.Queue(ctx, &queueRequest)
+				}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   queueResponse,
+					err:    err,
+				}
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+	}
+
+	finalResponse := &serverpb.QueueResponse{}
+	for remainingResponses := len(isLiveMap); remainingResponses > 0; remainingResponses-- {
+		select {
+		case resp := <-responses:
+			if resp.err != nil {
+				finalResponse.Details = append(finalResponse.Details, &serverpb.QueueResponse_Details{
+					NodeID: resp.nodeID,
+					Error:  resp.err.Error(),
+				})
+				continue
+			}
+			finalResponse.Details = append(finalResponse.Details, resp.resp.Details...)
+		case <-ctx.Done():
+			// If we got no responses, just return an error.
+			if len(finalResponse.Details) == 0 {
+				return nil, status.Errorf(codes.DeadlineExceeded, "request timed out")
+			}
+			// Otherwise, add timeout errors for any node that didn't return a
+			// response.
+			for nodeID := range isLiveMap {
+				var responseForNode bool
+				for _, details := range finalResponse.Details {
+					if details.NodeID == nodeID {
+						responseForNode = true
+						break
+					}
+				}
+				if !responseForNode {
+					finalResponse.Details = append(finalResponse.Details, &serverpb.QueueResponse_Details{
+						NodeID: nodeID,
+						Error:  "request timed out",
+					})
+				}
+			}
+			return finalResponse, nil
+		}
+	}
+
+	return finalResponse, nil
+}
+
+// queueLocal checks whether the local node has a replica for the requested
+// range that can be run through the queue, running it through the queue and
+// returning trace/error information if so. If not, returns an empty
+// response.
+func (s *adminServer) queueLocal(
+	ctx context.Context, req *serverpb.QueueRequest,
+) (*serverpb.QueueResponse, error) {
+	response := &serverpb.QueueResponse{
+		Details: []*serverpb.QueueResponse_Details{
+			{
+				NodeID: s.server.NodeID(),
+			},
+		},
+	}
+
+	var store *storage.Store
+	var repl *storage.Replica
+	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
+		r, err := s.GetReplica(req.RangeID)
+		if err != nil {
+			return nil
+		}
+		repl = r
+		store = s
+		return nil
+	}); err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+
+	if store == nil || repl == nil {
+		response.Details[0].Error = fmt.Sprintf("n%d has no replica for r%d", s.server.NodeID(), req.RangeID)
+		return response, nil
+	}
+
+	traceSpans, processErr, err := store.ManualQueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	if err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
+	response.Details[0].Error = processErr
+	return response, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
@@ -1834,4 +1996,18 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+func (s *adminServer) dialNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.AdminClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.server.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewAdminClient(conn), nil
 }
