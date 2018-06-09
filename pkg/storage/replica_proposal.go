@@ -543,7 +543,7 @@ func (r *Replica) handleReplicatedEvalResult(
 				end := engine.MakeMVCCMetadataKey(
 					keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
 				)
-				iter := r.store.Engine().NewIterator(engine.IterOptions{})
+				iter := r.store.Engine().NewIterator(engine.IterOptions{UpperBound: end.Key})
 				// Clear the log entries. Intentionally don't use range deletion
 				// tombstones (ClearRange()) due to performance concerns connected
 				// to having many range deletion tombstones. There is a chance that

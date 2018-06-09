@@ -38,7 +38,7 @@ struct DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync) = 0;
   virtual DBSlice BatchRepr() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
-  virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
+  virtual DBIterator* NewIter(DBIterOptions) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
   virtual DBString GetEnvStats(DBEnvStatsResult* stats) = 0;
@@ -83,7 +83,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
+  virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);

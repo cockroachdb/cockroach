@@ -16,6 +16,7 @@
 #include "getter.h"
 #include "iterator.h"
 #include "status.h"
+#include "encoding.h"
 
 namespace cockroach {
 
@@ -42,10 +43,10 @@ DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr, bool sync) { return FmtStatus(
 
 DBSlice DBSnapshot::BatchRepr() { return ToDBSlice("unsupported"); }
 
-DBIterator* DBSnapshot::NewIter(rocksdb::ReadOptions* read_opts) {
-  read_opts->snapshot = snapshot;
-  DBIterator* iter = new DBIterator(iters);
-  iter->rep.reset(rep->NewIterator(*read_opts));
+DBIterator* DBSnapshot::NewIter(DBIterOptions iter_options) {
+  DBIterator* iter = new DBIterator(iters, iter_options);
+  iter->read_opts.snapshot = snapshot;
+  iter->rep.reset(rep->NewIterator(iter->read_opts));
   return iter;
 }
 

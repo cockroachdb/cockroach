@@ -107,10 +107,10 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 	k := MakeMVCCMetadataKey(testKey1)
 
-	before := b.NewIterator(IterOptions{})
+	before := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer before.Close()
 
-	nonBatchBefore := db.NewIterator(IterOptions{})
+	nonBatchBefore := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer nonBatchBefore.Close()
 
 	if err := b.Put(k, []byte("abc")); err != nil {
@@ -142,7 +142,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nonBatchAfter := db.NewIterator(IterOptions{})
+	nonBatchAfter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer nonBatchAfter.Close()
 
 	nonBatchBefore.Seek(k)
@@ -204,6 +204,90 @@ func TestBatchPrefixIter(t *testing.T) {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatalf("expected to not find anything, found %s -> %q", iter.Key(), iter.Value())
+	}
+}
+
+func TestIterUpperBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db := setupMVCCInMemRocksDB(t, "iter_upper_bound")
+	defer db.Close()
+
+	if err := db.Put(mvccKey("a"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put(mvccKey("b"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name         string
+		createEngine func() Reader
+	}{
+		{"batch", func() Reader { return db.NewBatch() }},
+		{"readonly", func() Reader { return db.NewReadOnly() }},
+		{"snapshot", func() Reader { return db.NewSnapshot() }},
+		{"engine", func() Reader { return db }},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := tc.createEngine()
+			defer e.Close()
+
+			// Test that a new iterator's upper bound is applied.
+			func() {
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("a")})
+				defer iter.Close()
+				iter.Seek(mvccKey("a"))
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+
+			// Test that the cached iterator, if the underlying engine implementation
+			// caches iterators, can take on a new upper bound.
+			func() {
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("b")})
+				defer iter.Close()
+
+				iter.Seek(mvccKey("a"))
+				if ok, err := iter.Valid(); !ok {
+					t.Fatal(err)
+				}
+				if !mvccKey("a").Equal(iter.Key()) {
+					t.Fatalf("expected key a, but got %q", iter.Key())
+				}
+				iter.Next()
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+
+			// If the engine supports writes, test that the upper bound is applied to
+			// newly written keys. This notably tests the logic in BaseDeltaIterator
+			// on batches.
+			w, isReadWriter := e.(ReadWriter)
+			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
+				return
+			}
+			if err := w.Put(mvccKey("c"), []byte("val")); err != nil {
+				t.Fatal(err)
+			}
+			func() {
+				iter := w.NewIterator(IterOptions{UpperBound: roachpb.Key("c")})
+				defer iter.Close()
+				iter.Seek(mvccKey("c"))
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+		})
 	}
 }
 
@@ -792,15 +876,73 @@ func TestRocksDBTimeBound(t *testing.T) {
 		keys, ssts int
 	}{
 		// Completely to the right, not touching.
-		{iter: batch.NewTimeBoundIterator(maxTimestamp.Next(), maxTimestamp.Next().Next(), true /* withStats */), keys: 0, ssts: 0},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: maxTimestamp.Next(),
+				MaxTimestampHint: maxTimestamp.Next().Next(),
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: 0,
+			ssts: 0,
+		},
 		// Completely to the left, not touching.
-		{iter: batch.NewTimeBoundIterator(minTimestamp.Prev().Prev(), minTimestamp.Prev(), true /* withStats */), keys: 0, ssts: 0},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp.Prev().Prev(),
+				MaxTimestampHint: minTimestamp.Prev(),
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: 0,
+			ssts: 0,
+		},
 		// Touching on the right.
-		{iter: batch.NewTimeBoundIterator(maxTimestamp, maxTimestamp, true /* withStats */), keys: len(times), ssts: 1},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: maxTimestamp,
+				MaxTimestampHint: maxTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: len(times),
+			ssts: 1,
+		},
 		// Touching on the left.
-		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, true /* withStats */), keys: len(times), ssts: 1},
-		// Copy of last case, but confirm that we don't get SST stats if we don't ask for them.
-		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, false /* withStats */), keys: len(times), ssts: 0}}
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: len(times),
+			ssts: 1,
+		},
+		// Copy of last case, but confirm that we don't get SST stats if we don't
+		// ask for them.
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        false,
+			}),
+			keys: len(times),
+			ssts: 0,
+		},
+		// Copy of last case, but confirm that upper bound is respected.
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       []byte("02"),
+				WithStats:        false,
+			}),
+			keys: 2,
+			ssts: 0,
+		},
+	}
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -810,7 +952,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	// Make a regular iterator. Before #21721, this would accidentally pick up the
 	// time bounded iterator instead.
-	iter := batch.NewIterator(IterOptions{})
+	iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	iter.Seek(NilKey)
 
@@ -886,7 +1028,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := db.NewIterator(IterOptions{})
+	iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(key("a"))
 	if ok, _ := iter.Valid(); ok {
 		t.Fatalf("unexpected key: %s", iter.Key())

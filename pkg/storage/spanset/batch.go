@@ -237,12 +237,6 @@ func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
 }
 
-func (s spanSetReader) NewTimeBoundIterator(
-	start, end hlc.Timestamp, withStats bool,
-) engine.Iterator {
-	return &Iterator{s.r.NewTimeBoundIterator(start, end, withStats), s.spans, nil, false}
-}
-
 type spanSetWriter struct {
 	w     engine.Writer
 	spans *SpanSet

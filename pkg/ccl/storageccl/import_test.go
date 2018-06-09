@@ -101,7 +101,7 @@ func slurpSSTablesLatestKey(
 	}
 
 	var kvs []engine.MVCCKeyValue
-	it := batch.NewIterator(engine.IterOptions{})
+	it := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 	for it.Seek(start); ; it.NextKey() {
 		if ok, err := it.Valid(); err != nil {

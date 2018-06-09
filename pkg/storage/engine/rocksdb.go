@@ -913,13 +913,6 @@ func (r *RocksDB) NewIterator(opts IterOptions) Iterator {
 	return newRocksDBIterator(r.rdb, opts, r, r)
 }
 
-// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *RocksDB) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
-	it := &rocksDBIterator{}
-	it.initTimeBound(r.rdb, start, end, withStats, r)
-	return it
-}
-
 // NewSnapshot creates a snapshot handle from engine and returns a
 // read-only rocksDBSnapshot engine.
 func (r *RocksDB) NewSnapshot() Reader {
@@ -996,27 +989,24 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
+	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		// Iterators that specify timestamp bounds cannot be cached.
+		return newRocksDBIterator(r.parent.rdb, opts, r, r.parent)
+	}
 	iter := &r.normalIter
 	if opts.Prefix {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
 		iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
+	} else {
+		iter.rocksDBIterator.setOptions(opts)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
 	}
 	iter.inuse = true
 	return iter
-}
-
-func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
-	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
-	}
-	it := &rocksDBIterator{}
-	it.initTimeBound(r.parent.rdb, start, end, withStats, r)
-	return it
 }
 
 // Writer methods are not implemented for rocksDBReadOnly. Ideally, the code could be refactored so that
@@ -1195,11 +1185,6 @@ func (r *rocksDBSnapshot) NewIterator(opts IterOptions) Iterator {
 	return newRocksDBIterator(r.handle, opts, r, r.parent)
 }
 
-// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *rocksDBSnapshot) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
-	panic("not implemented")
-}
-
 // reusableIterator wraps rocksDBIterator and allows reuse of an iterator
 // for the lifetime of a batch.
 type reusableIterator struct {
@@ -1234,7 +1219,16 @@ func (r *distinctBatch) Close() {
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
 func (r *distinctBatch) NewIterator(opts IterOptions) Iterator {
-	// Used the cached iterator, creating it on first access.
+	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		// Iterators that specify timestamp bounds cannot be cached.
+		if r.writeOnly {
+			return newRocksDBIterator(r.parent.rdb, opts, r, r.parent)
+		}
+		r.ensureBatch()
+		return newRocksDBIterator(r.batch, opts, r, r.parent)
+	}
+
+	// Use the cached iterator, creating it on first access.
 	iter := &r.normalIter
 	if opts.Prefix {
 		iter = &r.prefixIter
@@ -1246,6 +1240,8 @@ func (r *distinctBatch) NewIterator(opts IterOptions) Iterator {
 			r.ensureBatch()
 			iter.rocksDBIterator.init(r.batch, opts, r, r.parent)
 		}
+	} else {
+		iter.rocksDBIterator.setOptions(opts)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1620,7 +1616,16 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
-	// Used the cached iterator, creating it on first access.
+
+	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		// Iterators that specify timestamp bounds cannot be cached.
+		r.ensureBatch()
+		iter := &batchIterator{batch: r}
+		iter.iter.init(r.batch, opts, r, r.parent)
+		return iter
+	}
+
+	// Use the cached iterator, creating it on first access.
 	iter := &r.normalIter
 	if opts.Prefix {
 		iter = &r.prefixIter
@@ -1628,30 +1633,13 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	if iter.iter.iter == nil {
 		r.ensureBatch()
 		iter.iter.init(r.batch, opts, r, r.parent)
+	} else {
+		iter.iter.setOptions(opts)
 	}
 	if iter.batch != nil {
 		panic("iterator already in use")
 	}
 	iter.batch = r
-	return iter
-}
-
-// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
-	if r.writeOnly {
-		panic("write-only batch")
-	}
-	if r.distinctOpen {
-		panic("distinct batch open")
-	}
-
-	// Don't cache these iterators; we're unlikely to get many calls for the same
-	// time bounds.
-	r.ensureBatch()
-	iter := &batchIterator{
-		batch: r,
-	}
-	iter.iter.initTimeBound(r.batch, start, end, withStats, r)
 	return iter
 }
 
@@ -1892,21 +1880,25 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 		r.parent.iters.Unlock()
 	}
 
-	r.iter = C.DBNewIter(rdb, C.bool(opts.Prefix), C.bool(opts.WithStats))
+	if !opts.Prefix && len(opts.UpperBound) == 0 {
+		panic("iterator must set prefix or upper bound")
+	}
+
+	r.iter = C.DBNewIter(rdb, goToCIterOptions(opts))
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
 	r.engine = engine
 }
 
-func (r *rocksDBIterator) initTimeBound(
-	rdb *C.DBEngine, start, end hlc.Timestamp, withStats bool, engine Reader,
-) {
-	r.iter = C.DBNewTimeBoundIter(rdb, goToCTimestamp(start), goToCTimestamp(end), C.bool(withStats))
-	if r.iter == nil {
-		panic("unable to create iterator")
+func (r *rocksDBIterator) setOptions(opts IterOptions) {
+	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
+		panic("iterator with timestamp hints cannot be reused")
 	}
-	r.engine = engine
+	if !opts.Prefix && len(opts.UpperBound) == 0 {
+		panic("iterator must set prefix or upper bound")
+	}
+	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.UpperBound)))
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
@@ -2303,6 +2295,16 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 	return r
 }
 
+func goToCIterOptions(opts IterOptions) C.DBIterOptions {
+	return C.DBIterOptions{
+		prefix:             C.bool(opts.Prefix),
+		upper_bound:        goToCKey(MakeMVCCMetadataKey(opts.UpperBound)),
+		min_timestamp_hint: goToCTimestamp(opts.MinTimestampHint),
+		max_timestamp_hint: goToCTimestamp(opts.MaxTimestampHint),
+		with_stats:         C.bool(opts.WithStats),
+	}
+}
+
 func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
@@ -2473,12 +2475,13 @@ func dbIterate(
 	if !start.Less(end) {
 		return nil
 	}
-	it := newRocksDBIterator(rdb, IterOptions{}, engine, nil)
+	it := newRocksDBIterator(rdb, IterOptions{UpperBound: end.Key}, engine, nil)
 	defer it.Close()
 
 	it.Seek(start)
 	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
+		ok, err := it.Valid()
+		if err != nil {
 			return err
 		} else if !ok {
 			break
