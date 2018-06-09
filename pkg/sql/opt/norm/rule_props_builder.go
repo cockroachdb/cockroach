@@ -21,14 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// rulePropsBuilder is a helper class that fills out the rule property structure
-// in props.Relational. See the comment for the props.Relational.Rule field for
-// more details.
+// rulePropsBuilder is a helper class that fills out some fields (those needed
+// by normalization rules) in the Rule property structure in props.Relational.
+// See the comment for the props.Relational.Rule field for more details.
 type rulePropsBuilder struct {
 	mem *memo.Memo
 }
 
-// buildProps fills the props.Relational.Rule field in the given expression's
+// buildProps fills in props.Relational.Rule fields in the given expression's
 // logical properties. Each rule property is "owned" by a family of Optgen
 // rules, like the PruneCols rules, or the Decorrelate rules, that uses that
 // property. How the rule property is derived is tightly bound to how the

@@ -148,6 +148,19 @@ type Relational struct {
 		// not capable of filtering columns (like Explain) will not add any of
 		// their columns to this set.
 		PruneCols opt.ColSet
+
+		// InterestingOrderings is a list of orderings that potentially could be
+		// provided by the operator without sorting. Interesting orderings normally
+		// come from scans (index orders) and are bubbled up through some operators.
+		//
+		// Note that all prefixes of an interesting order are "interesting"; the
+		// list doesn't need to contain orderings that are prefixes of some other
+		// ordering in the list.
+		//
+		// Since this property is only useful for a few specific cases (like merge
+		// joins), it is calculated lazily. Once it is calculated, it is not nil
+		// (even if there are no interesting orderings).
+		InterestingOrderings opt.OrderingSet
 	}
 }
 
