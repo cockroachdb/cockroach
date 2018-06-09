@@ -7695,6 +7695,37 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			t.Fatalf("expected new value %d, got (%t, %+v)", expInc, ok, resp)
 		}
 	}
+
+	// Test LeaseRequest since it's special: MaxLeaseIndex plays no role and so
+	// there is no re-evaluation of the request.
+	atomic.StoreInt32(&c, 0)
+	{
+		prevLease, _ := tc.repl.GetLease()
+		ba := ba
+		ba.Requests = nil
+
+		lease := prevLease
+		lease.Sequence = 0
+
+		ba.Add(&roachpb.RequestLeaseRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: tc.repl.Desc().StartKey.AsRawKey(),
+			},
+			Lease:     lease,
+			PrevLease: prevLease,
+		})
+		_, pErr := tc.repl.executeWriteBatch(
+			context.WithValue(ctx, magicKey{}, "foo"),
+			ba,
+		)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
+			t.Fatalf("expected %d proposals, got %d", exp, act)
+		}
+	}
+
 }
 
 // TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
@@ -7855,6 +7886,75 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 	if !nonePending {
 		t.Fatalf("still pending commands: %+v", tc.repl.mu.proposals)
+	}
+}
+
+// TestReplicaLeaseReproposal verifies that the reproposal logic is aware of the
+// fact that for lease requests, MaxLeaseIndex plays no role.
+func TestReplicaLeaseReproposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+	repl := tc.repl
+
+	repDesc, err := repl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ba roachpb.BatchRequest
+	ba.Requests = nil
+
+	prevLease, _ := tc.repl.GetLease()
+	lease := prevLease
+	lease.Sequence = 0
+
+	key := roachpb.Key("a")
+
+	for i := 1; i < 10; i++ {
+		inc := incrementArgs(key, 1)
+		if _, pErr := client.SendWrapped(ctx, tc.Sender(), &inc); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	ba.Add(&roachpb.RequestLeaseRequest{
+		RequestHeader: roachpb.RequestHeader{Key: key},
+		Lease:         lease,
+		PrevLease:     prevLease,
+	})
+
+	ba.Timestamp = tc.Clock().Now()
+	proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	repl.mu.Lock()
+	defer repl.mu.Unlock()
+	ai := repl.mu.state.LeaseAppliedIndex
+	if ai <= 1 {
+		// Lease index zero is special. If this assertion ever fires, just add some
+		// earlier proposals to the test.
+		t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
+	}
+	// Decrement the MaxLeaseIndex. If refreshProposalsLocked didn't know that
+	// MaxLeaseIndex doesn't matter for lease requests, it might be tempted to
+	// end the proposal early (since it would assume that it couldn't commit).
+	repl.insertProposalLocked(proposal, repDesc, lease)
+	proposal.command.MaxLeaseIndex = ai - 1
+	repl.refreshProposalsLocked(1 /* delta */, reasonTicks)
+	select {
+	case res := <-proposal.doneCh:
+		t.Fatalf("proposal unexpectedly terminated: %+v", res)
+	default:
+		// Happy case. The proposal might have been submitted to Raft again (well,
+		// for the first time in this test actually), but that's fine.
 	}
 }
 
