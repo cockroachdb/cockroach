@@ -82,6 +82,10 @@ type OptTesterFlags struct {
 	// Verbose indicates whether verbose test debugging information will be
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
+
+	// PostProcessFn is called before formatting an expression; it has the
+	// opportunity to fill in lazily calculated fields like rule properties.
+	PostProcessFn func(ev memo.ExprView)
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -170,12 +174,18 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
+		if ot.Flags.PostProcessFn != nil {
+			ot.Flags.PostProcessFn(ev)
+		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "opt":
 		ev, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
+		}
+		if ot.Flags.PostProcessFn != nil {
+			ot.Flags.PostProcessFn(ev)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
