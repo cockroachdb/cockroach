@@ -546,12 +546,21 @@ func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
-	// If lookup join child is a sort operator, then flip the order so that the
-	// sort is on top of the lookup join.
+	var err error
+	// If lookup join child is a limit and/or sort operator then flip the order so
+	// that the sort/limit is on top of the lookup join.
 	// TODO(radu): Remove this code once we have support for a more general
 	// lookup join operator.
+	var limit tree.TypedExpr
 	var ordering props.Ordering
 	child := ev.Child(0)
+	if child.Operator() == opt.LimitOp {
+		limit, err = b.buildScalar(nil, child.Child(1))
+		if err != nil {
+			return execPlan{}, err
+		}
+		child = child.Child(0)
+	}
 	if child.Operator() == opt.SortOp {
 		ordering = child.Physical().Ordering
 		child = child.Child(0)
@@ -577,14 +586,23 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 		reqOrder = b.makeSQLOrdering(res, ev)
 	}
 
-	node, err := b.factory.ConstructIndexJoin(input.root, md.Table(def.Table), needed, reqOrder)
+	res.root, err = b.factory.ConstructIndexJoin(input.root, md.Table(def.Table), needed, reqOrder)
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	res.root = node
 	if ordering != nil {
-		return b.buildSortedInput(res, ordering)
+		res, err = b.buildSortedInput(res, ordering)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	if limit != nil {
+		var err error
+		res.root, err = b.factory.ConstructLimit(res.root, limit, nil)
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
 	return res, nil
 }
