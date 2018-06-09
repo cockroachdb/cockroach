@@ -60,9 +60,8 @@ project
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
       │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
       │    ├── keys: (1)
-      │    ├── lookup-join
+      │    ├── lookup-join a
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string)
-      │    │    ├── table: a
       │    │    ├── key columns: [1]
       │    │    ├── stats: [rows=200]
       │    │    ├── keys: (1)
