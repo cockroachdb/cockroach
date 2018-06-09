@@ -375,7 +375,7 @@ func (r *Replica) sha512(
 	snapshot *roachpb.RaftSnapshotData,
 ) (*replicaHash, error) {
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(engine.IterOptions{})
+	iter := snap.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator

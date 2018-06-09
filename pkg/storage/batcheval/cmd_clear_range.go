@@ -140,7 +140,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := batch.NewIterator(engine.IterOptions{})
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: to.Key})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {

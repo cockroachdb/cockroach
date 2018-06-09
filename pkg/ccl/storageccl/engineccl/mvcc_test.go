@@ -34,7 +34,11 @@ func iterateExpectErr(
 	errString string,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e, startTime, endTime)
+		iter := NewMVCCIncrementalIterator(e, IterOptions{
+			StartTime:  startTime,
+			EndTime:    endTime,
+			UpperBound: endKey,
+		})
 		defer iter.Close()
 		for iter.Seek(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 			if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
@@ -57,7 +61,11 @@ func assertEqualKVs(
 	expected []engine.MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e, startTime, endTime)
+		iter := NewMVCCIncrementalIterator(e, IterOptions{
+			StartTime:  startTime,
+			EndTime:    endTime,
+			UpperBound: endKey,
+		})
 		defer iter.Close()
 		var kvs []engine.MVCCKeyValue
 		for iter.Seek(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -307,7 +315,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
 			var expectedKVs []engine.MVCCKeyValue
-			iter := eng.NewIterator(engine.IterOptions{})
+			iter := eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			iter.Seek(engine.MVCCKey{})
 			for {

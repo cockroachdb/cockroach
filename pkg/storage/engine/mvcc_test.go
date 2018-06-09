@@ -3832,7 +3832,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	// Verify aggregated stats match computed stats after GC.
-	iter := engine.NewIterator(IterOptions{})
+	iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	for _, mvccStatsTest := range mvccStatsTests {
 		t.Run(mvccStatsTest.name, func(t *testing.T) {
