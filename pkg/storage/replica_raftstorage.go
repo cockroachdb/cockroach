@@ -642,7 +642,7 @@ func clearRangeData(
 	eng engine.Engine,
 	batch engine.Batch,
 ) error {
-	iter := eng.NewIterator(engine.IterOptions{})
+	iter := eng.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same

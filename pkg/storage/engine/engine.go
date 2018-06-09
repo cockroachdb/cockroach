@@ -127,15 +127,33 @@ type Iterator interface {
 }
 
 // IterOptions contains options used to create an Iterator.
+//
+// For performance, every Iterator must specify either Prefix or UpperBound.
 type IterOptions struct {
 	// If Prefix is true, Seek will use the user-key prefix of
 	// the supplied MVCC key to restrict which sstables are searched,
 	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped)
+	// prefix will not work correctly (keys may be skipped).
 	Prefix bool
+	// If UpperBound is non-nil, the iterator will become invalid after seeking
+	// past the provided key. This can drastically improve performance when
+	// seeking within a region covered by range deletion tombstones. See #24029
+	// for discussion.
+	UpperBound roachpb.Key
 	// If WithStats is true, the iterator accumulates RocksDB performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
+	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
+	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
+	// need to be presented by the iterator. The underlying iterator may be able
+	// to efficiently skip over keys outside of the hinted time range, e.g., when
+	// an SST indicates that it contains no keys within the time range.
+	//
+	// Note that time bound hints are strictly a performance optimization, and
+	// iterators with time bounds hints will frequently return keys outside of the
+	// [start, end] time range. If you must guarantee that you never see a key
+	// outside of the time bounds, perform your own filtering.
+	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
 // Reader is the read interface to an engine's data.
@@ -167,15 +185,6 @@ type Reader interface {
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
 	NewIterator(opts IterOptions) Iterator
-	// NewTimeBoundIterator is like NewIterator, but the underlying iterator will
-	// efficiently skip over SSTs that contain no MVCC keys in the time range
-	// [start, end].
-	//
-	// Note that time-bound iterators are strictly a performance optimization, and
-	// will frequently return keys outside of the [start, end] time range. If you
-	// must guarantee that you never see a key outside of the time bounds, perform
-	// your own filtering.
-	NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator
 }
 
 // Writer is the write interface to an engine's data.

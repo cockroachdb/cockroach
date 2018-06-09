@@ -225,7 +225,13 @@ func (r *RocksDBMap) NewIterator() SortedDiskMapIterator {
 	// NOTE: prefix is only false because we can't use the normal prefix
 	// extractor. This iterator still only does prefix iteration. See
 	// RocksDBMapIterator.Valid().
-	return &RocksDBMapIterator{iter: r.store.NewIterator(IterOptions{}), makeKey: r.makeKey, prefix: r.prefix}
+	return &RocksDBMapIterator{
+		iter: r.store.NewIterator(IterOptions{
+			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
+		}),
+		makeKey: r.makeKey,
+		prefix:  r.prefix,
+	}
 }
 
 // NewBatchWriter implements the SortedDiskMap interface.

@@ -44,7 +44,11 @@ func RefreshRange(
 
 	// Use a time-bounded iterator to avoid unnecessarily iterating over
 	// older data.
-	iter := batch.NewTimeBoundIterator(h.Txn.OrigTimestamp, h.Txn.Timestamp, false)
+	iter := batch.NewIterator(engine.IterOptions{
+		MinTimestampHint: h.Txn.OrigTimestamp,
+		MaxTimestampHint: h.Txn.Timestamp,
+		UpperBound:       args.EndKey,
+	})
 	defer iter.Close()
 	// Iterate over values until we discover any value written at or
 	// after the original timestamp, but before or at the current
