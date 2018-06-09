@@ -232,7 +232,7 @@ PruneJoinRightCols
          └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
               └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+ConstrainScan (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: s:4(string)
@@ -258,13 +258,13 @@ GenerateIndexScans (higher cost)
          └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
               └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 --------------------------------------------------------------------------------
-ConstrainScan (no changes)
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
 ConstrainLookupJoinIndexScan (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-GenerateIndexScans (no changes)
+NumRuleNames (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+ConstrainScan (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
@@ -343,7 +343,7 @@ PruneSelectCols
               ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
               └── a.f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+ConstrainScan (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: s:4(string!null) k:1(int!null)
@@ -359,10 +359,10 @@ GenerateIndexScans (higher cost)
               ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
               └── a.f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
 --------------------------------------------------------------------------------
-ConstrainScan (no changes)
+ConstrainLookupJoinIndexScan (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
-ConstrainScan
+ConstrainLookupJoinIndexScan
   Cost: 1.01
 ================================================================================
    project
@@ -573,7 +573,7 @@ EliminateSelect
   + └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   +      └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+ConstrainScan (higher cost)
 --------------------------------------------------------------------------------
    semi-join
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -593,7 +593,7 @@ GenerateIndexScans (higher cost)
     └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
          └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 --------------------------------------------------------------------------------
-GenerateIndexScans (no changes)
+ConstrainScan (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
@@ -1311,10 +1311,10 @@ InlineProjectInProject
   + └── projections [outer=(1,10)]
   +      └── CASE WHEN bool_or AND (xy.x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(1,10)]
 --------------------------------------------------------------------------------
-GenerateIndexScans (no changes)
+ConstrainScan (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+ConstrainScan (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: r:8(bool)

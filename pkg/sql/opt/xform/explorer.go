@@ -458,6 +458,53 @@ func (e *explorer) limitScanDef(def, limit memo.PrivateID) memo.PrivateID {
 	return e.mem.InternScanOpDef(&defCopy)
 }
 
+// hasOrderingCols returns true if the output columns produced by a group
+// contain all columns in an ordering.
+func (e *explorer) hasOrderingCols(input memo.GroupID, ordering memo.PrivateID) bool {
+	outCols := e.mem.GroupProperties(input).Relational.OutputCols
+	ord := e.mem.LookupPrivate(ordering).(props.Ordering)
+	for _, c := range ord {
+		if !outCols.Contains(int(c.ID())) {
+			return false
+		}
+	}
+	return true
+}
+
+// oneResultPerInput returns true if the given LookupJoinOp always produces
+// exactly one row for each input row.
+func (e *explorer) oneResultPerInput(def memo.PrivateID) bool {
+	md := e.mem.Metadata()
+	lookupJoinDef := e.mem.LookupPrivate(def).(*memo.LookupJoinDef)
+
+	// Check if this is an index join. For index joins, the input key column IDs
+	// are the table PK column IDs.
+	if lookupJoinDef.Index == opt.PrimaryIndex {
+		index := md.Table(lookupJoinDef.Table).Index(opt.PrimaryIndex)
+		// See if the KeyCols match the key columns of the index.
+		if len(lookupJoinDef.KeyCols) == index.UniqueColumnCount() {
+			matches := true
+			for i, keyCol := range lookupJoinDef.KeyCols {
+				if col := md.TableColumn(lookupJoinDef.Table, index.Column(i).Ordinal); col != keyCol {
+					matches = false
+					break
+				}
+			}
+			if matches {
+				return true
+			}
+		}
+	}
+
+	// TODO(radu): in general, we need to check if the keyCols are associated with
+	// a foreign key constraint.
+
+	// TODO(radu): we also know to have exactly one result per input if we have a
+	// left lookup join and the KeyCols form a key in the table.
+
+	return false
+}
+
 // ----------------------------------------------------------------------
 //
 // Exploration state
