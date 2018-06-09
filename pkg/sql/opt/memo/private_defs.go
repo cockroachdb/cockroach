@@ -177,6 +177,16 @@ type LookupJoinDef struct {
 	LookupCols opt.ColSet
 }
 
+// IsIndexJoin is true if the lookup join is an index join, meaning that the
+// input columns are from the same table as the lookup columns. In this special
+// case, there is always a 1:1 relationship between input and output rows.
+func (l *LookupJoinDef) IsIndexJoin(md *opt.Metadata) bool {
+	// The input and index key column sets will be the same if this is an index
+	// join, or always disjoint if not.
+	ord := md.Table(l.Table).Index(l.Index).Column(0).Ordinal
+	return md.TableColumn(l.Table, ord) == l.KeyCols[0]
+}
+
 // ExplainOpDef defines the value of the Def private field of the Explain operator.
 type ExplainOpDef struct {
 	Options tree.ExplainOptions
