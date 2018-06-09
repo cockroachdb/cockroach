@@ -44,26 +44,26 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		t.Helper()
 
 		// Single column stats.
-		singleColStats := make(map[opt.ColumnID]*opt.ColumnStatistic, 3)
+		singleColStats := make(map[opt.ColumnID]*props.ColumnStatistic, 3)
 		cols := util.MakeFastIntSet(1)
-		singleColStats[opt.ColumnID(1)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+		singleColStats[opt.ColumnID(1)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
 		cols = util.MakeFastIntSet(2)
-		singleColStats[opt.ColumnID(2)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+		singleColStats[opt.ColumnID(2)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
 		cols = util.MakeFastIntSet(3)
-		singleColStats[opt.ColumnID(3)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+		singleColStats[opt.ColumnID(3)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
 
 		// Multi column stats.
-		multiColStats := make(map[string]*opt.ColumnStatistic, 1)
+		multiColStats := make(map[string]*props.ColumnStatistic, 1)
 		cols = util.MakeFastIntSet(1, 2, 3)
 		key := keyBuffer{}
 		key.writeColSet(cols)
-		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 9900}
+		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 9900}
 
-		inputStatsBuilder := statisticsBuilder{s: &opt.Statistics{
+		inputStatsBuilder := statisticsBuilder{s: &props.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
@@ -75,24 +75,24 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		t.Helper()
 
 		// Single column stats.
-		singleColStats := make(map[opt.ColumnID]*opt.ColumnStatistic, 2)
+		singleColStats := make(map[opt.ColumnID]*props.ColumnStatistic, 2)
 		cols := util.MakeFastIntSet(4)
-		singleColStats[opt.ColumnID(4)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 10}
+		singleColStats[opt.ColumnID(4)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 10}
 		cols = util.MakeFastIntSet(5)
-		singleColStats[opt.ColumnID(5)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 10}
+		singleColStats[opt.ColumnID(5)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 10}
 
 		// Multi column stats.
-		multiColStats := make(map[string]*opt.ColumnStatistic, 1)
+		multiColStats := make(map[string]*props.ColumnStatistic, 1)
 		cols = util.MakeFastIntSet(4, 5)
 		key := keyBuffer{}
 		key.writeColSet(cols)
-		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 100}
+		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 100}
 
-		inputStatsBuilder := statisticsBuilder{s: &opt.Statistics{
+		inputStatsBuilder := statisticsBuilder{s: &props.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)

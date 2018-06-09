@@ -15,8 +15,6 @@
 package opt
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -26,6 +24,19 @@ import (
 // query. The ids of its columns start at the table id and proceed sequentially
 // from there. See the comment for Metadata for more details.
 type TableID int32
+
+// TableAnnID uniquely identifies an annotation on an instance of table
+// metadata. A table annotation allows arbitrary values to be cached with table
+// metadata, which can be used to avoid recalculating base table properties or
+// other information each time it's needed.
+//
+// To create a TableAnnID, call NewTableAnnID during Go's program initialization
+// phase. The returned TableAnnID never clashes with other annotations on the
+// same table.
+type TableAnnID int
+
+// tableAnnIDCount counts the number of times NewTableAnnID is called.
+var tableAnnIDCount TableAnnID
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // within the scope of a particular query. Because it is specific to one query,
@@ -70,13 +81,8 @@ type mdTable struct {
 	// tab is a reference to the table in the catalog.
 	tab Table
 
-	// weakKeys is a cache of the weak key column combinations on this table.
-	// See RelationalProps.WeakKeys for more details.
-	weakKeys WeakKeys
-
-	// statistics contains the available statistics for this table. See
-	// RelationalProps.Statistics for more details.
-	statistics *Statistics
+	// anns annotates the table metadata with arbitrary data.
+	anns []interface{}
 }
 
 // mdColumn stores information about one of the columns stored in the metadata,
@@ -207,92 +213,41 @@ func (md *Metadata) TableColumn(tabID TableID, ord int) ColumnID {
 	return ColumnID(int(tabID) + ord)
 }
 
-// TableWeakKeys returns the weak key column combinations on the given table.
-// Weak keys are derived lazily and are cached in the metadata, since they may
-// be accessed multiple times during query optimization. For more details, see
-// RelationalProps.WeakKeys.
-func (md *Metadata) TableWeakKeys(tabID TableID) WeakKeys {
-	mdTab := md.tables[tabID]
-	if mdTab.weakKeys == nil {
-		mdTab.weakKeys = make(WeakKeys, 0, mdTab.tab.IndexCount())
-		for idx := 0; idx < mdTab.tab.IndexCount(); idx++ {
-			var cs ColSet
-			index := mdTab.tab.Index(idx)
-			for col := 0; col < index.UniqueColumnCount(); col++ {
-				cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
-			}
-			mdTab.weakKeys.Add(cs)
-		}
+// TableAnnotation returns the given annotation that is associated with the
+// given table. If the table has no such annotation, TableAnnotation returns
+// nil.
+func (md *Metadata) TableAnnotation(tabID TableID, annID TableAnnID) interface{} {
+	tab := md.tables[tabID]
+	if tab.anns == nil {
+		return nil
 	}
-	return mdTab.weakKeys
+	return tab.anns[annID]
 }
 
-// TableStatistics returns the available statistics for the given table.
-// Statistics are derived lazily and are cached in the metadata, since they may
-// be accessed multiple times during query optimization. For more details, see
-// RelationalProps.Statistics.
-func (md *Metadata) TableStatistics(tabID TableID) *Statistics {
-	mdTab := md.tables[tabID]
-	if mdTab.statistics == nil {
-		mdTab.statistics = &Statistics{}
-		if mdTab.tab.StatisticCount() == 0 {
-			// No statistics.
-			mdTab.statistics.RowCount = 1000
-		} else {
-			// Get the RowCount from the most recent statistic. Stats are ordered
-			// with most recent first.
-			mdTab.statistics.RowCount = mdTab.tab.Statistic(0).RowCount()
-
-			// Add all the column statistics, using the most recent statistic for each
-			// column set. Stats are ordered with most recent first.
-			mdTab.statistics.ColStats = make(map[ColumnID]*ColumnStatistic)
-			mdTab.statistics.MultiColStats = make(map[string]*ColumnStatistic)
-			for i := 0; i < mdTab.tab.StatisticCount(); i++ {
-				stat := mdTab.tab.Statistic(i)
-				cols := md.colSetFromTableStatistic(stat, tabID)
-
-				if cols.Len() == 1 {
-					col, _ := cols.Next(0)
-					key := ColumnID(col)
-
-					if _, ok := mdTab.statistics.ColStats[key]; !ok {
-						mdTab.statistics.ColStats[key] = &ColumnStatistic{
-							Cols:          cols,
-							DistinctCount: stat.DistinctCount(),
-						}
-					}
-				} else {
-					// Get a unique key for this column set.
-					key := writeColSet(cols)
-
-					if _, ok := mdTab.statistics.MultiColStats[key]; !ok {
-						mdTab.statistics.MultiColStats[key] = &ColumnStatistic{
-							Cols:          cols,
-							DistinctCount: stat.DistinctCount(),
-						}
-					}
-				}
-			}
-		}
+// SetTableAnnotation associates the given annotation with the given table. The
+// annotation is associated by the given ID, which was allocated by
+// calling NewTableAnnID. If an annotation with the ID already exists on the
+// table, then it is overwritten.
+//
+//   var myAnnID = NewTableAnnID()
+//
+//   md.SetTableAnnotation(TableID(1), myAnnID, "foo")
+//   ann := md.TableAnnotation(TableID(1), myAnnID)
+//
+func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann interface{}) {
+	tab := md.tables[tabID]
+	if tab.anns == nil {
+		tab.anns = make([]interface{}, tableAnnIDCount)
 	}
-	return mdTab.statistics
+	tab.anns[tabAnnID] = ann
 }
 
-func (md *Metadata) colSetFromTableStatistic(stat TableStatistic, tableID TableID) (cols ColSet) {
-	for i := 0; i < stat.ColumnCount(); i++ {
-		cols.Add(int(md.TableColumn(tableID, stat.ColumnOrdinal(i))))
-	}
-	return cols
-}
-
-// writeColSet writes a series of varints, one for each column in the set, in
-// column id order. Can be used as a key in a map.
-func writeColSet(colSet ColSet) string {
-	var buf [10]byte
-	var res bytes.Buffer
-	colSet.ForEach(func(i int) {
-		cnt := binary.PutUvarint(buf[:], uint64(i))
-		res.Write(buf[:cnt])
-	})
-	return res.String()
+// NewTableAnnID allocates a unique annotation identifier that is used to
+// associate arbitrary data with table metadata. It is not thread-safe, and
+// therefore should only be called during Go's program initialization phase.
+// See SetTableAnnotation for more details and an example.
+func NewTableAnnID() TableAnnID {
+	cnt := tableAnnIDCount
+	tableAnnIDCount++
+	return cnt
 }
