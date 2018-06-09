@@ -15,7 +15,6 @@
 package opt_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -112,100 +111,6 @@ func TestMetadataTables(t *testing.T) {
 	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
-}
-
-func TestMetadataWeakKeys(t *testing.T) {
-	test := func(weakKeys opt.WeakKeys, expected string) {
-		t.Helper()
-		actual := fmt.Sprintf("%v", weakKeys)
-		if actual != expected {
-			t.Errorf("expected: %s, actual: %s", expected, actual)
-		}
-	}
-
-	testContains := func(weakKeys opt.WeakKeys, cs opt.ColSet, expected bool) {
-		t.Helper()
-		actual := weakKeys.ContainsSubsetOf(cs)
-		if actual != expected {
-			t.Errorf("expected: %v, actual: %v", expected, actual)
-		}
-	}
-
-	md := opt.NewMetadata()
-
-	// Create table with the following interesting indexes:
-	//   1. Primary key index with multiple columns.
-	//   2. Single column index.
-	//   3. Storing values (should have no impact).
-	//   4. Non-unique index (should always be superset of primary key).
-	//   5. Unique index that has subset of cols of another unique index, but
-	//      which is defined afterwards (triggers removal of previous weak key).
-	cat := testcat.New()
-	_, err := cat.ExecuteDDL(
-		"CREATE TABLE a (" +
-			"k INT, " +
-			"i INT, " +
-			"d DECIMAL, " +
-			"f FLOAT, " +
-			"s STRING, " +
-			"PRIMARY KEY (k, i), " +
-			"UNIQUE INDEX (f) STORING (s, i)," +
-			"UNIQUE INDEX (d DESC, i, s)," +
-			"UNIQUE INDEX (d, i DESC) STORING (f)," +
-			"INDEX (s DESC, i))")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := md.AddTable(cat.Table("a"))
-
-	wk := md.TableWeakKeys(a)
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	// Test ContainsSubsetOf method.
-	testContains(wk, util.MakeFastIntSet(1, 2), true)
-	testContains(wk, util.MakeFastIntSet(1, 2, 3), true)
-	testContains(wk, util.MakeFastIntSet(4), true)
-	testContains(wk, util.MakeFastIntSet(4, 3, 2, 1), true)
-	testContains(wk, util.MakeFastIntSet(1), false)
-	testContains(wk, util.MakeFastIntSet(1, 3), false)
-	testContains(wk, util.MakeFastIntSet(5), false)
-
-	// Add additional weak keys to additionally verify Add method.
-	wk.Add(util.MakeFastIntSet(1, 2, 3))
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	wk.Add(util.MakeFastIntSet(2, 1))
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	wk.Add(util.MakeFastIntSet(2))
-	test(wk, "[(4) (2)]")
-
-	// Test Combine method.
-	// Combine weak keys with themselves.
-	wk = md.TableWeakKeys(a).Combine(md.TableWeakKeys(a))
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	var wk2 opt.WeakKeys
-
-	// Combine set with empty set.
-	wk = wk.Combine(wk2)
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	// Combine empty set with another set.
-	wk = wk2.Combine(wk)
-	test(wk, "[(1,2) (4) (2,3)]")
-
-	// Combine new key not in the existing set.
-	wk2.Add(util.MakeFastIntSet(5, 1))
-	wk = wk.Combine(wk2)
-	test(wk, "[(1,2) (4) (2,3) (1,5)]")
-
-	// Combine weak keys that overlap with existing keys.
-	wk2.Add(util.MakeFastIntSet(2))
-	wk2.Add(util.MakeFastIntSet(6))
-
-	wk = wk.Combine(wk2)
-	test(wk, "[(4) (1,5) (2) (6)]")
 }
 
 // TestIndexColumns tests that we can extract a set of columns from an index ordinal.

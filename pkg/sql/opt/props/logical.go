@@ -92,7 +92,7 @@ type Relational struct {
 	// An empty key is valid (an empty key implies there is at most one row). Note
 	// that an empty key is always the only key in the set, since it's a subset of
 	// every other key (i.e. every other key would be redundant).
-	WeakKeys opt.WeakKeys
+	WeakKeys WeakKeys
 
 	// Cardinality is the number of rows that can be returned from this relational
 	// expression. The number of rows will always be between the inclusive Min and
@@ -102,7 +102,7 @@ type Relational struct {
 
 	// Stats is the set of statistics that apply to this relational expression.
 	// See opt/statistics.go and statistics_builder.go for more details.
-	Stats opt.Statistics
+	Stats Statistics
 
 	// Rule encapsulates the set of properties that are maintained to assist
 	// with specific sets of transformation rules. They are not intended to be

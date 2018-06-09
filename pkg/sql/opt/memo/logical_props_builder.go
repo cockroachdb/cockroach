@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+var weakKeysAnnID = opt.NewTableAnnID()
+
 // logicalPropsBuilder is a helper class that consolidates the code that derives
 // a parent expression's logical properties from those of its children.
 type logicalPropsBuilder struct {
@@ -121,7 +123,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Weak Keys
 	// ---------
 	// Initialize weak keys from the table schema.
-	relational.WeakKeys = md.TableWeakKeys(def.Table)
+	relational.WeakKeys = b.makeTableWeakKeys(md, def.Table)
 	filterWeakKeys(relational)
 
 	// Cardinality
@@ -383,7 +385,7 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	// schema. Only include weak keys that are composed of columns that are
 	// projected by the lookup join operator.
 	relational.WeakKeys = inputProps.WeakKeys.Copy()
-	for _, weakKey := range md.TableWeakKeys(def.Table) {
+	for _, weakKey := range b.makeTableWeakKeys(md, def.Table) {
 		relational.WeakKeys.Add(weakKey)
 	}
 	filterWeakKeys(relational)
@@ -442,7 +444,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 			relational.WeakKeys = inputProps.WeakKeys
 			filterWeakKeys(relational)
 		} else {
-			relational.WeakKeys = opt.WeakKeys{groupingColSet}
+			relational.WeakKeys = props.WeakKeys{groupingColSet}
 		}
 	}
 
@@ -873,17 +875,45 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	return logical
 }
 
+// makeTableWeakKeys returns the weak key column combinations on the given
+// table. Weak keys are derived lazily and are cached in the metadata, since
+// they may be accessed multiple times during query optimization. For more
+// details, see RelationalProps.WeakKeys.
+func (b *logicalPropsBuilder) makeTableWeakKeys(
+	md *opt.Metadata, tabID opt.TableID,
+) props.WeakKeys {
+	weakKeys, ok := md.TableAnnotation(tabID, weakKeysAnnID).(props.WeakKeys)
+	if ok {
+		// Already made.
+		return weakKeys
+	}
+
+	// Make now and annotate the metadata table with it for next time.
+	tab := md.Table(tabID)
+	weakKeys = make(props.WeakKeys, 0, tab.IndexCount())
+	for idx := 0; idx < tab.IndexCount(); idx++ {
+		var cs opt.ColSet
+		index := tab.Index(idx)
+		for col := 0; col < index.UniqueColumnCount(); col++ {
+			cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
+		}
+		weakKeys.Add(cs)
+	}
+	md.SetTableAnnotation(tabID, weakKeysAnnID, weakKeys)
+	return weakKeys
+}
+
 // filterWeakKeys ensures that each weak key is a subset of the output columns.
 // It respects immutability by making a copy of the weak keys if they need to be
 // updated.
 func filterWeakKeys(relational *props.Relational) {
-	var filtered opt.WeakKeys
+	var filtered props.WeakKeys
 	for i, weakKey := range relational.WeakKeys {
 		// Discard weak keys that have columns that are not part of the output
 		// column set.
 		if !weakKey.SubsetOf(relational.OutputCols) {
 			if filtered == nil {
-				filtered = make(opt.WeakKeys, i, len(relational.WeakKeys)-1)
+				filtered = make(props.WeakKeys, i, len(relational.WeakKeys)-1)
 				copy(filtered, relational.WeakKeys[:i])
 			}
 		} else {
