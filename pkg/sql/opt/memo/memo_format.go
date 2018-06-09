@@ -271,23 +271,22 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 	switch t := private.(type) {
 	case *ScanOpDef:
 		// Don't output name of index if it's the primary index.
-		def := private.(*ScanOpDef)
-		tab := f.mem.metadata.Table(def.Table)
-		if def.Index == opt.PrimaryIndex {
+		tab := f.mem.metadata.Table(t.Table)
+		if t.Index == opt.PrimaryIndex {
 			fmt.Fprintf(f.buf, " %s", tab.TabName())
 		} else {
-			fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
+			fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
 		}
 
 		if mode == formatMemo {
-			if tab.ColumnCount() != def.Cols.Len() {
-				fmt.Fprintf(f.buf, ",cols=%s", def.Cols)
+			if tab.ColumnCount() != t.Cols.Len() {
+				fmt.Fprintf(f.buf, ",cols=%s", t.Cols)
 			}
-			if def.Constraint != nil {
+			if t.Constraint != nil {
 				fmt.Fprintf(f.buf, ",constrained")
 			}
-			if def.HardLimit > 0 {
-				fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
+			if t.HardLimit > 0 {
+				fmt.Fprintf(f.buf, ",lim=%d", t.HardLimit)
 			}
 		}
 
@@ -306,8 +305,15 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
 	case *LookupJoinDef:
-		tn := f.mem.metadata.Table(t.Table).TabName()
-		fmt.Fprintf(f.buf, " %s,keyCols=%v,lookupCols=%s", tn, t.KeyCols, t.LookupCols)
+		tab := f.mem.metadata.Table(t.Table)
+		if t.Index == opt.PrimaryIndex {
+			fmt.Fprintf(f.buf, " %s", tab.TabName())
+		} else {
+			fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
+		}
+		if mode == formatMemo {
+			fmt.Fprintf(f.buf, ",keyCols=%v,lookupCols=%s", t.KeyCols, t.LookupCols)
+		}
 
 	case *ExplainOpDef:
 		if mode == formatMemo {

@@ -262,6 +262,7 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 			// We scan whatever needed columns are left from the primary index.
 			def := memo.LookupJoinDef{
 				Table:      scanOpDef.Table,
+				Index:      opt.PrimaryIndex,
 				KeyCols:    pkCols,
 				LookupCols: scanOpDef.Cols.Difference(indexScanOpDef.Cols),
 			}
