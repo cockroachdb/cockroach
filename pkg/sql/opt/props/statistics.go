@@ -12,7 +12,11 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt
+package props
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+)
 
 // Statistics is a collection of measurements and statistics that is used by
 // the coster to estimate the cost of expressions. Statistics are collected
@@ -39,7 +43,7 @@ type Statistics struct {
 	// in an expression or table. It is keyed by column ID, and it is separated
 	// from the MultiColStats to minimize serialization costs and to efficiently
 	// iterate through all single-column stats.
-	ColStats map[ColumnID]*ColumnStatistic
+	ColStats map[opt.ColumnID]*ColumnStatistic
 
 	// MultiColStats contains statistics that pertain to multi-column subsets
 	// of the columns in an expression or table. It is keyed by the column set,
@@ -60,7 +64,7 @@ type Statistics struct {
 type ColumnStatistic struct {
 	// Cols is the set of columns whose data are summarized by this
 	// ColumnStatistic struct.
-	Cols ColSet
+	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
