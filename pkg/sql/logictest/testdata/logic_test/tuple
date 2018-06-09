@@ -130,7 +130,7 @@ a b c
 3 1 2
 
 query III colnames
-SELECT * FROM t WHERE (a, b, c) > (1, 2, 3) ORDER BY a, b, c
+SELECT * FROM t WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10) ORDER BY a, b, c
 ----
 a b c
 2 3 1

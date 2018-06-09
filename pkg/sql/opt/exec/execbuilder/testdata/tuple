@@ -67,14 +67,21 @@ DROP TABLE uvw
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
 
-# TODO(radu): should be using index
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3);
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8, 9, 10)
 ----
-scan  ·       ·                      (a, b, c)  ·
-·     table   abc@primary            ·          ·
-·     spans   ALL                    ·          ·
-·     filter  (a, b, c) > (1, 2, 3)  ·          ·
+render                ·         ·                                                     (a, b, c)                 ·
+ │                    render 0  a                                                     ·                         ·
+ │                    render 1  b                                                     ·                         ·
+ │                    render 2  c                                                     ·                         ·
+ └── filter           ·         ·                                                     (a, b, c, rowid[hidden])  ·
+      │               filter    ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                         ·
+      └── index-join  ·         ·                                                     (a, b, c, rowid[hidden])  ·
+           ├── scan   ·         ·                                                     (a, b, rowid[hidden])     ·
+           │          table     abc@abc_a_b_idx                                       ·                         ·
+           │          spans     /1/2-/8/10                                            ·                         ·
+           └── scan   ·         ·                                                     (a, b, c, rowid[hidden])  ·
+·                     table     abc@primary                                           ·                         ·
 
 statement ok
 DROP TABLE abc
