@@ -56,11 +56,17 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	nodeStatement := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeStatement := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
 		return status.Statements(ctx, localReq)
 	}
 
 	if err := s.iterateNodes(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
+		dialFn,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			statementsResp := resp.(*serverpb.StatementsResponse)
