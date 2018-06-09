@@ -2445,6 +2445,14 @@ func (fq *fakeRangeQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	fq.maybeRemovedRngs <- rangeID
 }
 
+func (fq *fakeRangeQueue) Name() string {
+	return "fakeRangeQueue"
+}
+
+func (fq *fakeRangeQueue) NeedsLease() bool {
+	return false
+}
+
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
 func TestMaybeRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
