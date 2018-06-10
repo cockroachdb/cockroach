@@ -115,8 +115,8 @@ send "select 'hello\r"
 eexpect " ->"
 send "\\?\r"
 eexpect " ->"
-send "world';\r"
-eexpect "hello\\\\nworld"
+send "world' as woo;\r"
+eexpect "hello\r\nworld"
 eexpect "Time"
 eexpect root@
 end_test
@@ -126,8 +126,8 @@ start_test "Check that \\set can change the display of query times"
 send "\\unset show_times\r\\set\r"
 eexpect "show_times\tfalse"
 eexpect root@
-send "select 1;\r"
-eexpect "1\r\n1\r\n"
+send "select 1 as woo;\r"
+eexpect "woo\r\n1\r\n"
 expect {
     "Time:" {
 	report "unexpected Time"
@@ -220,7 +220,7 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that non-interactive built-in commands are only accepted at the start of a statement."
-send "(echo '\\set check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\r"
+send "(echo '\\set check_syntax'; echo 'select '; echo '\\help'; echo ';') | $argv sql\r"
 eexpect "statement ignored"
 eexpect ":/# "
 

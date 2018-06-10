@@ -106,40 +106,12 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 }
 
 // getColName returns the output column name for a projection expression.
-// It assumes that top-level variable names have already been normalized via a
-// call to NormalizeTopLevelVarName().
-// NB: This function is copied from sql/getRenderColName() in sql/render.go.
 func (b *Builder) getColName(expr tree.SelectExpr) string {
-	if expr.As != "" {
-		return string(expr.As)
+	s, err := tree.GetRenderColName(b.semaCtx.SearchPath, expr)
+	if err != nil {
+		panic(builderError{err})
 	}
-
-	switch t := expr.Expr.(type) {
-	case *tree.ColumnItem:
-		// If the expression designates a column, try to reuse that column's name
-		// as projection name.
-		return t.Column()
-
-	case *tree.FuncExpr:
-		// Special case for projecting builtin functions: the column name for an
-		// otherwise un-named builtin output column is just the name of the builtin.
-		fd, err := t.Func.Resolve(b.semaCtx.SearchPath)
-		if err != nil {
-			panic(builderError{err})
-		}
-		return fd.Name
-
-	case *tree.ColumnAccessExpr:
-		// Special case for projecting a column accessor.
-		if t.Star {
-			// TODO(bram): remove this, this case should never happen once (srf).* is
-			// correctly implemented.
-			return t.Expr.String()
-		}
-		return t.ColName
-	}
-
-	return expr.Expr.String()
+	return s
 }
 
 // buildScalarProjection builds a set of memo groups that represent a scalar

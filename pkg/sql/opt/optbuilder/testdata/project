@@ -18,10 +18,10 @@ TABLE b
       └── rowid int not null (hidden)
 
 build
-SELECT 5
+SELECT 5 r
 ----
 project
- ├── columns: "5":1(int!null)
+ ├── columns: r:1(int!null)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -79,10 +79,10 @@ project
       └── false [type=bool]
 
 build
-SELECT *, ((x < y) OR x > 1000) FROM a
+SELECT *, ((x < y) OR x > 1000) AS r FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) "((x < y) OR (x > 1000))":3(bool)
+ ├── columns: x:1(int!null) y:2(float) r:3(bool)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
@@ -98,19 +98,19 @@ build
 SELECT a.*, true FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) true:3(bool!null)
+ ├── columns: x:1(int!null) y:2(float) bool:3(bool!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
       └── true [type=bool]
 
 build
-SELECT u + 1, v + 1 FROM (SELECT a.x + 3, a.y + 1.0 FROM a) AS foo(u, v)
+SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
 ----
 project
- ├── columns: "u + 1":5(int) "v + 1":6(float)
+ ├── columns: r:5(int) s:6(float)
  ├── project
- │    ├── columns: "a.x + 3":3(int) "a.y + 1.0":4(float)
+ │    ├── columns: t:3(int) u:4(float)
  │    ├── scan a
  │    │    └── columns: x:1(int!null) y:2(float)
  │    └── projections
@@ -122,10 +122,10 @@ project
  │              └── const: 1.0 [type=float]
  └── projections
       ├── plus [type=int]
-      │    ├── variable: a.x + 3 [type=int]
+      │    ├── variable: t [type=int]
       │    └── const: 1 [type=int]
       └── plus [type=float]
-           ├── variable: a.y + 1.0 [type=float]
+           ├── variable: u [type=float]
            └── const: 1.0 [type=float]
 
 build
@@ -204,9 +204,9 @@ build
 SELECT rowid::string FROM b
 ----
 project
- ├── columns: "rowid::STRING":4(string)
+ ├── columns: rowid:4(string)
  ├── scan b
- │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
+ │    └── columns: x:1(int) y:2(float) b.rowid:3(int!null)
  └── projections
       └── cast: STRING [type=string]
            └── variable: b.rowid [type=int]

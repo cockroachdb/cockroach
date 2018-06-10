@@ -73,17 +73,17 @@ select
                 └── const: 10 [type=int]
 
 build
-SELECT 1 FROM a WITH ORDINALITY
+SELECT 1 x FROM a WITH ORDINALITY
 ----
 project
- ├── columns: "1":4(int!null)
+ ├── columns: x:4(int!null)
  ├── stats: [rows=4000]
  ├── row-number
- │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) ordinality:3(int!null)
  │    ├── stats: [rows=4000]
  │    ├── keys: (1) (3)
  │    └── scan a
- │         ├── columns: x:1(int!null) y:2(int)
+ │         ├── columns: a.x:1(int!null) y:2(int)
  │         ├── stats: [rows=4000]
  │         └── keys: (1)
  └── projections

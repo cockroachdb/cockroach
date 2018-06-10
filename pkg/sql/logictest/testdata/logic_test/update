@@ -171,10 +171,10 @@ statement count 1
 UPDATE abc SET a = 1, (b, c) = (SELECT 1, 2)
 
 query III colnames
-UPDATE abc SET (b, c) = (8, 9) RETURNING abc.b, c, 4
+UPDATE abc SET (b, c) = (8, 9) RETURNING abc.b, c, 4 AS d
 ----
-b c 4
-8 9 4
+b  c  d
+8  9  4
 
 query III colnames
 UPDATE abc SET (b, c) = (8, 9) RETURNING b as col1, c as col2, 4 as col3
@@ -189,10 +189,10 @@ a
 1
 
 query IIII colnames
-UPDATE abc SET (b, c) = (5, 6) RETURNING a, b, c, 4
+UPDATE abc SET (b, c) = (5, 6) RETURNING a, b, c, 4 AS d
 ----
-a b c 4
-1 5 6 4
+a  b  c  d
+1  5  6  4
 
 query III colnames
 UPDATE abc SET (b, c) = (7, 8) RETURNING *
@@ -201,10 +201,10 @@ a b c
 1 7 8
 
 query IIII colnames
-UPDATE abc SET (b, c) = (7, 8) RETURNING *, 4
+UPDATE abc SET (b, c) = (7, 8) RETURNING *, 4 AS d
 ----
-a b c 4
-1 7 8 4
+a  b  c  d
+1  7  8  4
 
 query III colnames
 UPDATE abc SET (b, c) = (8, 9) RETURNING abc.*

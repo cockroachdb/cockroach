@@ -613,14 +613,14 @@ Final best expression
 
 # Decorrelation pattern using ANY function.
 optsteps
-SELECT x=ANY(SELECT k FROM a) FROM xy
+SELECT x=ANY(SELECT k FROM a) AS r FROM xy
 ----
 ================================================================================
 Initial expression
   Cost: 2000.00
 ================================================================================
   project
-   ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+   ├── columns: r:8(bool)
    ├── scan xy
    │    ├── columns: x:1(int!null) y:2(int)
    │    └── keys: (1)
@@ -638,7 +638,7 @@ PruneScanCols
   Cost: 2000.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── scan xy
     │    ├── columns: x:1(int!null) y:2(int)
     │    └── keys: (1)
@@ -658,7 +658,7 @@ EliminateProject
   Cost: 2000.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── scan xy
     │    ├── columns: x:1(int!null) y:2(int)
     │    └── keys: (1)
@@ -678,7 +678,7 @@ PruneScanCols
   Cost: 2000.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── scan xy
   - │    ├── columns: x:1(int!null) y:2(int)
   + │    ├── columns: x:1(int!null)
@@ -694,7 +694,7 @@ HoistProjectSubquery
   Cost: 2020.01
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
   - ├── scan xy
   - │    ├── columns: x:1(int!null)
   - │    └── keys: (1)
@@ -744,7 +744,7 @@ EnsureSelectFilters
   Cost: 2020.01
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── inner-join-apply
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -787,7 +787,7 @@ TryDecorrelateProject
   Cost: 2030.01
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
   - ├── inner-join-apply
   + ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
@@ -857,7 +857,7 @@ TryDecorrelateScalarGroupBy
   Cost: 2036.66
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -924,7 +924,7 @@ TryDecorrelateProjectSelect
   Cost: 2033.33
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -988,7 +988,7 @@ DecorrelateJoin
   Cost: 2033.33
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -1034,7 +1034,7 @@ EliminateGroupByProject
   Cost: 2033.33
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -1094,7 +1094,7 @@ EliminateSelect
   Cost: 2030.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── keys: (1)
@@ -1157,7 +1157,7 @@ EliminateSelect
   Cost: 2020.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
   - ├── select
   - │    ├── columns: x:1(int!null) case:11(bool)
   + ├── project
@@ -1221,7 +1221,7 @@ PruneProjectCols
   Cost: 2020.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── project
   - │    ├── columns: case:11(bool) x:1(int!null)
   - │    ├── keys: (1)
@@ -1257,7 +1257,7 @@ InlineProjectInProject
   Cost: 2020.00
 ================================================================================
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
   - ├── project
   - │    ├── columns: case:11(bool)
   - │    ├── group-by
@@ -1317,7 +1317,7 @@ GenerateIndexScans (no changes)
 GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    project
-    ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+    ├── columns: r:8(bool)
     ├── group-by
     │    ├── columns: x:1(int!null) bool_or:10(bool)
     │    ├── grouping columns: x:1(int!null)
@@ -1348,7 +1348,7 @@ Final best expression
   Cost: 2020.00
 ================================================================================
   project
-   ├── columns: "x = ANY (SELECT k FROM a)":8(bool)
+   ├── columns: r:8(bool)
    ├── group-by
    │    ├── columns: x:1(int!null) bool_or:10(bool)
    │    ├── grouping columns: x:1(int!null)

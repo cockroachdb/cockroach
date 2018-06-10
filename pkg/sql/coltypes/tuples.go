@@ -24,6 +24,9 @@ import (
 // all types still need ColType representations.
 type TTuple []T
 
+// TypeName implements the ColTypeFormatter interface.
+func (node TTuple) TypeName() string { return "" }
+
 // Format implements the ColTypeFormatter interface.
 func (node TTuple) Format(buf *bytes.Buffer, flags lex.EncodeFlags) {
 	buf.WriteString("(")

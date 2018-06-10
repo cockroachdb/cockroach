@@ -220,16 +220,16 @@ func (p *planner) rewriteSRFs(
 		newTargets[i].Expr = newExpr
 		newTargets[i].As = target.As
 
-		if len(v.srfs) != curSrfs {
+		if len(v.srfs) != curSrfs && target.As == "" {
 			// If the transform is adding a SRF, the expression will have
 			// changed structure. To help the user (and for compatibility
 			// with pg) we need to ensure the column label is based off the
 			// original expression.
-			newLabel, err := simplifyRenderAlias(v.searchPath, target)
+			_, newLabel, err := tree.ComputeColNameInternal(v.searchPath, target.Expr)
 			if err != nil {
 				return nil, err
 			}
-			newTargets[i].As = newLabel
+			newTargets[i].As = tree.UnrestrictedName(newLabel)
 		}
 	}
 
@@ -253,35 +253,6 @@ func (p *planner) rewriteSRFs(
 		return newTargets, nil
 	}
 	return targets, nil
-}
-
-// simplifyRenderAliases creates a suitable AS clause for the target
-// expression, in case it is sufficiently simple. We cannot use the
-// regular getRenderColName() here because that also produces labels
-// for things containing stars, and we can't create an AS clause for a
-// star (that would be invalid).
-func simplifyRenderAlias(
-	searchPath sessiondata.SearchPath, target tree.SelectExpr,
-) (tree.UnrestrictedName, error) {
-	if target.As != "" {
-		return target.As, nil
-	}
-
-	switch t := target.Expr.(type) {
-	case *tree.ColumnItem:
-		return tree.UnrestrictedName(t.Column()), nil
-
-	case *tree.FuncExpr:
-		// Special case for rendering builtin functions: the column name for an
-		// otherwise un-named builtin output column is just the name of the builtin.
-		fd, err := t.Func.Resolve(searchPath)
-		if err != nil {
-			return "", err
-		}
-		return tree.UnrestrictedName(fd.Name), nil
-	}
-
-	return "", nil
 }
 
 func (v *srfExtractionVisitor) transformSRF(

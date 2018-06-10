@@ -102,10 +102,10 @@ sort
 
 # Pass through ordering to scan operator that can support it.
 opt
-SELECT x+1, y FROM a ORDER BY x, y DESC
+SELECT x+1 AS r, y FROM a ORDER BY x, y DESC
 ----
 project
- ├── columns: "x + 1":5(int) y:2(float!null)
+ ├── columns: r:5(int) y:2(float!null)
  ├── ordering: +1,-2
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -115,13 +115,13 @@ project
 
 # Pass through ordering to scan operator that can't support it.
 opt
-SELECT y, x, z+1 FROM a ORDER BY x, y
+SELECT y, x, z+1 AS r FROM a ORDER BY x, y
 ----
 sort
- ├── columns: y:2(float!null) x:1(int!null) "z + 1":5(decimal)
+ ├── columns: y:2(float!null) x:1(int!null) r:5(decimal)
  ├── ordering: +1,+2
  └── project
-      ├── columns: "z + 1":5(decimal) x:1(int!null) y:2(float!null)
+      ├── columns: r:5(decimal) x:1(int!null) y:2(float!null)
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
       └── projections
@@ -147,10 +147,10 @@ sort
 
 # Pass through ordering to scan operator that can support it.
 opt
-SELECT y, x-1 FROM a WHERE x>y ORDER BY x, y DESC
+SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
 project
- ├── columns: y:2(float!null) "x - 1":5(int)
+ ├── columns: y:2(float!null) z:5(int)
  ├── ordering: +1,-2
  ├── select
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -164,11 +164,11 @@ project
       └── a.x - 1 [type=int]
 
 memo
-SELECT y, x-1 FROM a WHERE x>y ORDER BY x, y DESC
+SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
 memo (optimized)
  ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,x - 1:5] [ordering: +1,-2]"
+ │    ├── "[presentation: y:2,z:5] [ordering: +1,-2]"
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3)
  │    │    └── cost: 1010.00
  │    └── ""

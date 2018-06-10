@@ -2,18 +2,18 @@
 
 # Tests for the implicit one row, zero column values operator.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1
+EXPLAIN (VERBOSE) SELECT 1 a
 ----
-render         ·         ·  ("1")  ·
- │             render 0  1  ·      ·
- └── emptyrow  ·         ·  ()     ·
+render         ·         ·  (a)  ·
+ │             render 0  1  ·    ·
+ └── emptyrow  ·         ·  ()   ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 + 2
+EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
-render         ·         ·  ("1 + 2")  ·
- │             render 0  3  ·          ·
- └── emptyrow  ·         ·  ()         ·
+render         ·         ·  (a)  ·
+ │             render 0  3  ·    ·
+ └── emptyrow  ·         ·  ()   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
@@ -38,9 +38,9 @@ values  ·              ·                 (column1)  ·
 ·       row 3, expr 0  length('ab') * 2  ·          ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
+EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-render       ·              ·                  ("a + b")           ·
+render       ·              ·                  (r)                 ·
  │           render 0       column1 + column2  ·                   ·
  └── values  ·              ·                  (column1, column2)  ·
 ·            size           2 columns, 3 rows  ·                   ·

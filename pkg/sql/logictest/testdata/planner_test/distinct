@@ -53,12 +53,12 @@ distinct             ·          ·
 ·                    spans      ALL
 
 query TTT
-EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
+EXPLAIN SELECT DISTINCT y + z AS a FROM xyz ORDER BY a
 ----
 distinct             ·          ·
- │                   order key  y + z
+ │                   order key  a
  └── sort            ·          ·
-      │              order      +"y + z"
+      │              order      +a
       └── render     ·          ·
            └── scan  ·          ·
 ·                    table      xyz@primary
@@ -114,9 +114,9 @@ CREATE TABLE abcd (
 )
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
+EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
 ----
-render     ·         ·                   ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
+render     ·         ·                   (x, d, b)                       x=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
  │         render 0  1                   ·                               ·
  │         render 1  test.public.abcd.d  ·                               ·
  │         render 2  test.public.abcd.b  ·                               ·

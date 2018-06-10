@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -411,7 +410,7 @@ func (p *planner) initTargets(
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(p.SessionData().SearchPath, target, &r.ivarHelper)
+		outputName, err := tree.GetRenderColName(p.SessionData().SearchPath, target)
 		if err != nil {
 			return err
 		}
@@ -519,46 +518,6 @@ func (p *planner) initWhere(
 	r.source.plan = f
 
 	return f, nil
-}
-
-// getRenderColName returns the output column name for a render expression.
-func getRenderColName(
-	searchPath sessiondata.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
-) (string, error) {
-	if target.As != "" {
-		return string(target.As), nil
-	}
-
-	// If the expression designates a column, try to reuse that column's name
-	// as render name.
-	if err := target.NormalizeTopLevelVarName(); err != nil {
-		return "", err
-	}
-
-	switch t := target.Expr.(type) {
-	case *tree.ColumnItem:
-		return t.Column(), nil
-
-	case *tree.FuncExpr:
-		// Special case for rendering builtin functions: the column name for an
-		// otherwise un-named builtin output column is just the name of the builtin.
-		fd, err := t.Func.Resolve(searchPath)
-		if err != nil {
-			return "", err
-		}
-		return fd.Name, nil
-
-	case *tree.ColumnAccessExpr:
-		// Special case for rending a column accessor.
-		if t.Star {
-			// TODO(bram): remove this, this case should never happen once (srf).* is
-			// correctly implemented.
-			return t.Expr.String(), nil
-		}
-		return t.ColName, nil
-	}
-
-	return target.Expr.String(), nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.

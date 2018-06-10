@@ -139,7 +139,7 @@ query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
 nosort          ·      ·
- │              order  +"1 + 2"
+ │              order  +"?column?"
  └── render     ·      ·
       └── scan  ·      ·
 ·               table  t@primary
@@ -165,11 +165,11 @@ nosort          ·      ·
 
 # Check that the sort key reuses the existing render.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
+EXPLAIN (VERBOSE) SELECT b+2 AS c FROM t ORDER BY b+2
 ----
-sort            ·         ·                    ("b + 2")                    +"b + 2"
- │              order     +"b + 2"             ·                            ·
- └── render     ·         ·                    ("b + 2")                    ·
+sort            ·         ·                    (c)                          +c
+ │              order     +c                   ·                            ·
+ └── render     ·         ·                    (c)                          ·
       │         render 0  test.public.t.b + 2  ·                            ·
       └── scan  ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
 ·               table     t@primary            ·                            ·
@@ -508,20 +508,20 @@ render               ·         ·                (b)        key()
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-render                    ·         ·                (b)                ·
- │                        render 0  test.public.t.b  ·                  ·
- └── run                  ·         ·                (a, b, c)          ·
-      └── update          ·         ·                (a, b, c)          ·
-           │              table     t                ·                  ·
-           │              set       c                ·                  ·
-           └── render     ·         ·                (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-                │         render 0  test.public.t.a  ·                  ·
-                │         render 1  test.public.t.b  ·                  ·
-                │         render 2  test.public.t.c  ·                  ·
-                │         render 3  true             ·                  ·
-                └── scan  ·         ·                (a, b, c)          a!=NULL; key(a)
-·                         table     t@primary        ·                  ·
-·                         spans     ALL              ·                  ·
+render                    ·         ·                (b)              ·
+ │                        render 0  test.public.t.b  ·                ·
+ └── run                  ·         ·                (a, b, c)        ·
+      └── update          ·         ·                (a, b, c)        ·
+           │              table     t                ·                ·
+           │              set       c                ·                ·
+           └── render     ·         ·                (a, b, c, bool)  bool=CONST; a!=NULL; key(a)
+                │         render 0  test.public.t.a  ·                ·
+                │         render 1  test.public.t.b  ·                ·
+                │         render 2  test.public.t.c  ·                ·
+                │         render 3  true             ·                ·
+                └── scan  ·         ·                (a, b, c)        a!=NULL; key(a)
+·                         table     t@primary        ·                ·
+·                         spans     ALL              ·                ·
 
 statement ok
 CREATE TABLE uvwxyz (
@@ -684,15 +684,15 @@ nosort             ·         ·                 (v)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
-sort               ·         ·                     (k)              k!=NULL
- │                 order     +v,+k,+"v - 2"        ·                ·
- └── render        ·         ·                     (k, v, "v - 2")  k!=NULL; weak-key(k,v); +v
-      │            render 0  test.public.kv.k      ·                ·
-      │            render 1  test.public.kv.v      ·                ·
-      │            render 2  test.public.kv.v - 2  ·                ·
-      └── revscan  ·         ·                     (k, v)           k!=NULL; weak-key(k,v); +v
-·                  table     kv@foo                ·                ·
-·                  spans     ALL                   ·                ·
+sort               ·         ·                     (k)                 k!=NULL
+ │                 order     +v,+k,+"?column?"     ·                   ·
+ └── render        ·         ·                     (k, v, "?column?")  k!=NULL; weak-key(k,v); +v
+      │            render 0  test.public.kv.k      ·                   ·
+      │            render 1  test.public.kv.v      ·                   ·
+      │            render 2  test.public.kv.v - 2  ·                   ·
+      └── revscan  ·         ·                     (k, v)              k!=NULL; weak-key(k,v); +v
+·                  table     kv@foo                ·                   ·
+·                  spans     ALL                   ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo

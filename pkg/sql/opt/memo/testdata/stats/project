@@ -136,13 +136,13 @@ group-by
 
 # No available stats for column y.
 build
-SELECT * FROM (SELECT y + 3 FROM a) AS q(v) WHERE v >= 1 AND v <= 100
+SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
 ----
 select
  ├── columns: v:5(int!null)
  ├── stats: [rows=142, distinct(5)=100]
  ├── project
- │    ├── columns: "y + 3":5(int)
+ │    ├── columns: v:5(int)
  │    ├── stats: [rows=2000, distinct(5)=1400]
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -155,10 +155,10 @@ select
  └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
       └── and [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
            ├── ge [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
-           │    ├── variable: y + 3 [type=int, outer=(5)]
+           │    ├── variable: v [type=int, outer=(5)]
            │    └── const: 1 [type=int]
            └── le [type=bool, outer=(5), constraints=(/5: (/NULL - /100]; tight)]
-                ├── variable: y + 3 [type=int, outer=(5)]
+                ├── variable: v [type=int, outer=(5)]
                 └── const: 100 [type=int]
 
 exec-ddl

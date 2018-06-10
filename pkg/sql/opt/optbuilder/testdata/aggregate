@@ -101,7 +101,7 @@ SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1),
   VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 project
- ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) "avg(1)::FLOAT":7(float) sum:8(decimal) stddev:9(decimal) "variance(1)::FLOAT":11(float) bool_and:13(bool) bool_or:14(bool) to_hex:17(string)
+ ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:7(float) sum:8(decimal) stddev:9(decimal) variance:11(float) bool_and:13(bool) bool_or:14(bool) to_hex:17(string)
  ├── group-by
  │    ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) column6:6(decimal) sum:8(decimal) stddev:9(decimal) column10:10(decimal) bool_and:13(bool) bool_or:14(bool) column16:16(bytes)
  │    ├── project
@@ -188,10 +188,10 @@ group-by
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 build
-SELECT 1 FROM kv GROUP BY v
+SELECT 1 r FROM kv GROUP BY v
 ----
 project
- ├── columns: "1":5(int!null)
+ ├── columns: r:5(int!null)
  ├── group-by
  │    ├── columns: v:2(int)
  │    ├── grouping columns: v:2(int)
@@ -245,15 +245,15 @@ build
 SELECT (SELECT COALESCE(MAX(1), 0) FROM kv)
 ----
 project
- ├── columns: "(SELECT COALESCE(max(1), 0) FROM kv)":8(int)
+ ├── columns: coalesce:8(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: "COALESCE(max(1), 0)":7(int)
+                ├── columns: coalesce:7(int)
                 └── project
-                     ├── columns: "COALESCE(max(1), 0)":7(int)
+                     ├── columns: coalesce:7(int)
                      ├── group-by
                      │    ├── columns: column6:6(int)
                      │    ├── project
@@ -526,10 +526,10 @@ error (42803): column "s" must appear in the GROUP BY clause or be used in an ag
 
 # Selecting and grouping on a more complex expression works.
 build
-SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
 ----
 project
- ├── columns: count:6(int) "k + v":5(int)
+ ├── columns: count:6(int) r:5(int)
  └── group-by
       ├── columns: column5:5(int) count:6(int)
       ├── grouping columns: column5:5(int)
@@ -547,10 +547,10 @@ project
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 build
-SELECT COUNT(*), k+v FROM kv GROUP BY k, v
+SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
 ----
 project
- ├── columns: count:5(int) "k + v":6(int)
+ ├── columns: count:5(int) r:6(int)
  ├── group-by
  │    ├── columns: k:1(int!null) v:2(int) count:5(int)
  │    ├── grouping columns: k:1(int!null) v:2(int)
@@ -855,10 +855,10 @@ offset
  └── const: 1 [type=int]
 
 build
-SELECT COUNT(k)+COUNT(kv.v) FROM kv
+SELECT COUNT(k)+COUNT(kv.v) AS r FROM kv
 ----
 project
- ├── columns: "count(k) + count(kv.v)":7(int)
+ ├── columns: r:7(int)
  ├── group-by
  │    ├── columns: column5:5(int) column6:6(int)
  │    ├── project
@@ -1038,10 +1038,10 @@ group-by
            └── variable: column7 [type=decimal]
 
 build
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL AS r FROM kv
 ----
 project
- ├── columns: "(avg(k) * 2.0) + max(v)::DECIMAL":7(decimal)
+ ├── columns: r:7(decimal)
  ├── group-by
  │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
@@ -1062,10 +1062,10 @@ project
                 └── variable: column6 [type=int]
 
 build
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL AS r FROM kv WHERE w*2 = k
 ----
 project
- ├── columns: "(avg(k) * 2.0) + max(v)::DECIMAL":7(decimal)
+ ├── columns: r:7(decimal)
  ├── group-by
  │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
@@ -1469,7 +1469,7 @@ build
 SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
 ----
 project
- ├── columns: "avg(1::INT)::FLOAT":3(float) "avg(2::FLOAT)::FLOAT":6(float) "avg(3::DECIMAL)::FLOAT":9(float)
+ ├── columns: avg:3(float) avg:6(float) avg:9(float)
  ├── group-by
  │    ├── columns: column2:2(decimal) column5:5(float) column8:8(decimal)
  │    ├── project
@@ -1596,12 +1596,12 @@ group-by
 
 # Ensure subqueries don't trigger aggregation.
 build
-SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+SELECT x > (SELECT avg(0)) AS r FROM xyz LIMIT 1
 ----
 limit
- ├── columns: "x > (SELECT avg(0))":6(bool)
+ ├── columns: r:6(bool)
  ├── project
- │    ├── columns: "x > (SELECT avg(0))":6(bool)
+ │    ├── columns: r:6(bool)
  │    ├── scan xyz
  │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    └── projections
@@ -1624,12 +1624,12 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT x > (SELECT avg(y) FROM xyz) FROM xyz LIMIT 1
+SELECT x > (SELECT avg(y) FROM xyz) AS r FROM xyz LIMIT 1
 ----
 limit
- ├── columns: "x > (SELECT avg(y) FROM xyz)":8(bool)
+ ├── columns: r:8(bool)
  ├── project
- │    ├── columns: "x > (SELECT avg(y) FROM xyz)":8(bool)
+ │    ├── columns: r:8(bool)
  │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections
@@ -1676,10 +1676,10 @@ group-by
 
 # Tests with * inside GROUP BY.
 build
-SELECT 1 FROM kv GROUP BY kv.*;
+SELECT 1 r FROM kv GROUP BY kv.*;
 ----
 project
- ├── columns: "1":5(int!null)
+ ├── columns: r:5(int!null)
  ├── group-by
  │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    ├── grouping columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
@@ -1851,10 +1851,10 @@ TABLE xy
 
 # Grouping and rendering tuples.
 build
-SELECT (b, a) FROM ab GROUP BY (b, a)
+SELECT (b, a) AS r FROM ab GROUP BY (b, a)
 ----
 project
- ├── columns: "(b, a)":3(tuple{int, int})
+ ├── columns: r:3(tuple{int, int})
  ├── group-by
  │    ├── columns: a:1(int!null) b:2(int)
  │    ├── grouping columns: a:1(int!null) b:2(int)
@@ -1868,11 +1868,11 @@ project
            └── variable: ab.a [type=int]
 
 build
-SELECT MIN(y), (b, a)
+SELECT MIN(y), (b, a) AS r
  FROM ab, xy GROUP BY (x, (a, b))
 ----
 project
- ├── columns: min:6(string) "(b, a)":7(tuple{int, int})
+ ├── columns: min:6(string) r:7(tuple{int, int})
  ├── group-by
  │    ├── columns: a:1(int!null) b:2(int) x:3(string) min:6(string)
  │    ├── grouping columns: a:1(int!null) b:2(int) x:3(string)
@@ -1946,10 +1946,10 @@ sort
                 └── variable: column5 [type=int]
 
 build
-SELECT (k+v)/(v+w) FROM kv GROUP BY k+v, v+w;
+SELECT (k+v)/(v+w) AS r FROM kv GROUP BY k+v, v+w;
 ----
 project
- ├── columns: "(k + v) / (v + w)":7(decimal)
+ ├── columns: r:7(decimal)
  ├── group-by
  │    ├── columns: column5:5(int) column6:6(int)
  │    ├── grouping columns: column5:5(int) column6:6(int)
@@ -1991,10 +1991,10 @@ project
                 └── variable: t.public.kv.w [type=int]
 
 build fully-qualify-names
-SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
+SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
 ----
 project
- ├── columns: sum:7(decimal) lower:5(string) "t.kv.v + (k * t.kv.w)":8(int) v:2(int)
+ ├── columns: sum:7(decimal) lower:5(string) r:8(int) v:2(int)
  ├── group-by
  │    ├── columns: t.public.kv.v:2(int) column5:5(string) column6:6(int) sum:7(decimal)
  │    ├── grouping columns: t.public.kv.v:2(int) column5:5(string) column6:6(int)
@@ -2018,10 +2018,10 @@ project
 
 # Check all the different types of scalar expressions as group by columns
 build
-SELECT b1.b AND abc.c AND b2.b FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
+SELECT b1.b AND abc.c AND b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
 ----
 project
- ├── columns: "(b1.b AND abc.c) AND b2.b":10(bool)
+ ├── columns: r:10(bool)
  ├── group-by
  │    ├── columns: bools.b:3(bool) column9:9(bool)
  │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
@@ -2054,10 +2054,10 @@ SELECT b1.b AND abc.c AND abc.c FROM bools b1, bools b2, abc GROUP BY b1.b AND a
 error (42803): column "c" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT b1.b OR abc.c OR b2.b FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
+SELECT b1.b OR abc.c OR b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
 ----
 project
- ├── columns: "(b1.b OR abc.c) OR b2.b":10(bool)
+ ├── columns: r:10(bool)
  ├── group-by
  │    ├── columns: bools.b:3(bool) column9:9(bool)
  │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
@@ -2090,10 +2090,10 @@ SELECT b1.b OR abc.c OR abc.c FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.
 error (42803): column "c" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT k % w % v FROM kv GROUP BY k % w, v
+SELECT k % w % v AS r FROM kv GROUP BY k % w, v
 ----
 project
- ├── columns: "(k % w) % v":6(int)
+ ├── columns: r:6(int)
  ├── group-by
  │    ├── columns: v:2(int) column5:5(int)
  │    ├── grouping columns: v:2(int) column5:5(int)
@@ -2142,10 +2142,10 @@ SELECT CONCAT(CONCAT(s, a), s) FROM kv, abc GROUP BY CONCAT(s, a), a
 error (42803): column "s" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT k < w AND v != 5 FROM kv GROUP BY k < w, v
+SELECT k < w AND v != 5 AS r FROM kv GROUP BY k < w, v
 ----
 project
- ├── columns: "(k < w) AND (v != 5)":6(bool)
+ ├── columns: r:6(bool)
  ├── group-by
  │    ├── columns: v:2(int) column5:5(bool)
  │    ├── grouping columns: v:2(int) column5:5(bool)
@@ -2180,10 +2180,10 @@ TABLE foo
       └── rowid int not null (hidden)
 
 build
-SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
+SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
 ----
 project
- ├── columns: "(a.bar @> b.baz) AND (b.baz @> b.baz)":8(bool)
+ ├── columns: r:8(bool)
  ├── group-by
  │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
  │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
@@ -2213,10 +2213,10 @@ SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz 
 error (42803): column "bar" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT b.baz <@ a.bar AND b.baz <@ b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
+SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
 ----
 project
- ├── columns: "(b.baz <@ a.bar) AND (b.baz <@ b.baz)":8(bool)
+ ├── columns: r:8(bool)
  ├── group-by
  │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
  │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
@@ -2249,11 +2249,11 @@ TABLE times
       └── t time not null
 
 build
-SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) FROM times a, times b
+SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) AS r FROM times a, times b
   GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
 ----
 project
- ├── columns: "date_trunc('second', a.t) - date_trunc('minute', b.t)":5(interval)
+ ├── columns: r:5(interval)
  ├── group-by
  │    ├── columns: column3:3(interval) column4:4(interval)
  │    ├── grouping columns: column3:3(interval) column4:4(interval)
@@ -2285,10 +2285,10 @@ SELECT date_trunc('second', a.t) - date_trunc('second', b.t) FROM times a, times
 error (42803): column "t" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT NOT b FROM bools GROUP BY NOT b
+SELECT NOT b AS r FROM bools GROUP BY NOT b
 ----
 group-by
- ├── columns: "NOT b":3(bool)
+ ├── columns: r:3(bool)
  ├── grouping columns: column3:3(bool)
  └── project
       ├── columns: column3:3(bool)
@@ -2304,10 +2304,10 @@ SELECT b FROM bools GROUP BY NOT b
 error (42803): column "b" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT NOT b FROM bools GROUP BY b
+SELECT NOT b AS r FROM bools GROUP BY b
 ----
 project
- ├── columns: "NOT b":3(bool)
+ ├── columns: r:3(bool)
  ├── group-by
  │    ├── columns: b:1(bool)
  │    ├── grouping columns: b:1(bool)
@@ -2320,10 +2320,10 @@ project
            └── variable: bools.b [type=bool]
 
 build
-SELECT +k * (-w) FROM kv GROUP BY +k, -w
+SELECT +k * (-w) AS r FROM kv GROUP BY +k, -w
 ----
 project
- ├── columns: "(+k) * (-w)":7(int)
+ ├── columns: r:7(int)
  ├── group-by
  │    ├── columns: column5:5(int) column6:6(int)
  │    ├── grouping columns: column5:5(int) column6:6(int)
@@ -2346,10 +2346,10 @@ SELECT k * (-w) FROM kv GROUP BY +k, -w
 error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT +k * (-w) FROM kv GROUP BY k, w
+SELECT +k * (-w) AS r FROM kv GROUP BY k, w
 ----
 project
- ├── columns: "(+k) * (-w)":5(int)
+ ├── columns: r:5(int)
  ├── group-by
  │    ├── columns: k:1(int!null) w:3(int)
  │    ├── grouping columns: k:1(int!null) w:3(int)
@@ -2364,10 +2364,10 @@ project
                 └── variable: kv.w [type=int]
 
 build
-SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
+SELECT 1 + MIN(v*2) AS r FROM kv GROUP BY k+3
 ----
 project
- ├── columns: "1 + min(v * 2)":8(int)
+ ├── columns: r:8(int)
  ├── group-by
  │    ├── columns: column5:5(int) column7:7(int)
  │    ├── grouping columns: column5:5(int)
@@ -2562,17 +2562,17 @@ sort
 # because the aggregate input expressions and grouping expressions are
 # built as part of the same projection. 
 build
-SELECT MAX((k+v)/(k-v)), (k+v)*(k-v) FROM kv GROUP BY k+v, k-v
+SELECT MAX((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----
 project
- ├── columns: max:8(decimal) "(k + v) * (k - v)":9(int)
+ ├── columns: r:8(decimal) s:9(int)
  ├── group-by
- │    ├── columns: column5:5(int) column6:6(int) max:8(decimal)
+ │    ├── columns: column5:5(int) column6:6(int) r:8(decimal)
  │    ├── grouping columns: column5:5(int) column6:6(int)
  │    ├── project
  │    │    ├── columns: column5:5(int) column6:6(int) column7:7(decimal)
  │    │    ├── scan kv
- │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) kv.s:4(string)
  │    │    └── projections
  │    │         ├── plus [type=int]
  │    │         │    ├── variable: kv.k [type=int]
@@ -2596,12 +2596,12 @@ project
            └── variable: column6 [type=int]
 
 build
-SELECT MAX((k+v)/(k-v)), (k+v)*(k-v) FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
+SELECT MAX((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
- ├── columns: max:8(decimal) "(k + v) * (k - v)":7(int)
+ ├── columns: r:8(decimal) s:7(int)
  └── group-by
-      ├── columns: column5:5(int) column6:6(decimal) column7:7(int) max:8(decimal)
+      ├── columns: column5:5(int) column6:6(decimal) column7:7(int) r:8(decimal)
       ├── grouping columns: column5:5(int) column6:6(decimal) column7:7(int)
       ├── project
       │    ├── columns: column5:5(int) column6:6(decimal) column7:7(int)
@@ -2631,13 +2631,13 @@ project
 
 # Regression test for #26419
 build
-SELECT 123 FROM kv ORDER BY max(v)
+SELECT 123 r FROM kv ORDER BY max(v)
 ----
 sort
- ├── columns: "123":5(int!null)
+ ├── columns: r:5(int!null)
  ├── ordering: +6
  └── project
-      ├── columns: "123":5(int!null) column6:6(int)
+      ├── columns: r:5(int!null) column6:6(int)
       ├── group-by
       │    ├── columns: column6:6(int)
       │    ├── project

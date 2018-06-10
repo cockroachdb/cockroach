@@ -27,6 +27,9 @@ type TString struct {
 	N    int
 }
 
+// TypeName implements the ColTypeFormatter interface.
+func (node *TString) TypeName() string { return node.Name }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
@@ -38,6 +41,9 @@ func (node *TString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 // TName represents a a NAME type.
 type TName struct{}
 
+// TypeName implements the ColTypeFormatter interface.
+func (node *TName) TypeName() string { return "NAME" }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TName) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("NAME")
@@ -47,6 +53,9 @@ func (node *TName) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 type TBytes struct {
 	Name string
 }
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TBytes) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
@@ -60,6 +69,9 @@ type TCollatedString struct {
 	N      int
 	Locale string
 }
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TCollatedString) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TCollatedString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
