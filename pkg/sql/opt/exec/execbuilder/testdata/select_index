@@ -1253,3 +1253,79 @@ render           ·         ·           (w)        ·
       │          spans     /1-/100     ·          ·
       └── scan   ·         ·           (k, v, w)  ·
 ·                table     t3@primary  ·          ·
+
+
+statement ok
+CREATE TABLE tab1 (
+      pk INTEGER NOT NULL,
+      col0 INTEGER NULL,
+      col1 FLOAT NULL,
+      col2 STRING NULL,
+      col3 INTEGER NULL,
+      col4 FLOAT NULL,
+      col5 STRING NULL,
+      CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+      INDEX idx_tab1_0 (col0 ASC),
+      INDEX idx_tab1_1 (col1 ASC),
+      INDEX idx_tab1_3 (col3 ASC),
+      INDEX idx_tab1_4 (col4 ASC),
+      FAMILY "primary" (pk, col0, col1, col2, col3, col4, col5)
+)
+
+# This test verifies the hack in execbuilder to move the sort above the
+# lookup join, specifically that the index join node doesn't advertise an
+# ordering.
+#
+# We include the EXPLAIN (OPT) output because this test is fragile: we currently
+# prefer the sort under the lookup-join only because of the way the floating
+# costs happen to add up (the plan with the sort above the lookup join has the
+# same cost).
+query T
+EXPLAIN (OPT) SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
+----
+project
+ ├── columns: pk:1(int!null) col0:2(int)
+ ├── stats: [rows=31]
+ ├── cost: 156.85
+ ├── keys: (1)
+ ├── ordering: -1
+ ├── prune: (1,2)
+ └── lookup-join tab1
+      ├── columns: tab1.pk:1(int!null) tab1.col0:2(int) tab1.col3:5(int!null)
+      ├── key columns: [1]
+      ├── stats: [rows=31, distinct(5)=22]
+      ├── cost: 156.85
+      ├── keys: (1)
+      ├── ordering: -1
+      ├── prune: (1,2)
+      └── sort
+           ├── columns: tab1.pk:1(int!null) tab1.col3:5(int)
+           ├── stats: [rows=31, distinct(5)=22]
+           ├── cost: 32.54
+           ├── keys: (1)
+           ├── ordering: -1
+           ├── prune: (1,5)
+           └── scan tab1@idx_tab1_3
+                ├── columns: tab1.pk:1(int!null) tab1.col3:5(int)
+                ├── constraint: /5/1: [/66 - /87]
+                ├── stats: [rows=31, distinct(5)=22]
+                ├── cost: 31.00
+                ├── keys: (1)
+                └── prune: (1,5)
+
+# THe index-join node should not advertise an ordering (it can cause invalid
+# distributed plans).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
+----
+render                ·         ·                (pk, col0)        ·
+ │                    render 0  pk               ·                 ·
+ │                    render 1  col0             ·                 ·
+ └── sort             ·         ·                (pk, col0, col3)  -pk
+      │               order     -pk              ·                 ·
+      └── index-join  ·         ·                (pk, col0, col3)  ·
+           ├── scan   ·         ·                (pk, col3)        ·
+           │          table     tab1@idx_tab1_3  ·                 ·
+           │          spans     /66-/88          ·                 ·
+           └── scan   ·         ·                (pk, col0, col3)  ·
+·                     table     tab1@primary     ·                 ·
