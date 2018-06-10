@@ -92,7 +92,6 @@ func initCLIDefaults() {
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
-	debugCtx.maxResults = 1000
 	debugCtx.ballastSize = base.SizeSpec{}
 
 	zoneCtx.zoneConfig = ""
@@ -186,14 +185,20 @@ var dumpCtx struct {
 // debugCtx captures the command-line parameters of the `debug` command.
 // Defaults set by InitCLIDefaults() above.
 var debugCtx struct {
-	startKey, endKey  engine.MVCCKey
-	values            bool
-	sizes             bool
-	replicated        bool
+	// debug keys
+	startKey, endKey engine.MVCCKey
+	values           bool
+	sizes            bool
+
+	// debug range-data
+	replicated bool
+
+	// debug gossip-values
 	inputFile         string
-	ballastSize       base.SizeSpec
 	printSystemConfig bool
-	maxResults        int64
+
+	// debug ballast
+	ballastSize base.SizeSpec
 }
 
 // zoneCtx captures the command-line parameters of the `zone` command.
