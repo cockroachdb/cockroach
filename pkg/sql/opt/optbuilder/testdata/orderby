@@ -452,13 +452,13 @@ sort
            └── const: 3 [type=int]
 
 build
-SELECT 1, * FROM t ORDER BY 1
+SELECT 1 AS r, * FROM t ORDER BY 1
 ----
 sort
- ├── columns: "1":4(int!null) a:1(int!null) b:2(int) c:3(bool)
+ ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: "1":4(int!null) a:1(int!null) b:2(int) c:3(bool)
+      ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
@@ -479,13 +479,13 @@ sort
                 └── const: 'abc' [type=string]
 
 build
-SELECT b+2 FROM t ORDER BY b+2
+SELECT b+2 AS r FROM t ORDER BY b+2
 ----
 sort
- ├── columns: "b + 2":4(int)
+ ├── columns: r:4(int)
  ├── ordering: +4
  └── project
-      ├── columns: "b + 2":4(int)
+      ├── columns: r:4(int)
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
@@ -777,10 +777,10 @@ TABLE abcd
 # expression does not guarantee it will apply the ORDER BY).
 
 build
-SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
+SELECT a+b AS r FROM (SELECT * FROM abcd ORDER BY d)
 ----
 project
- ├── columns: "a + b":5(int)
+ ├── columns: r:5(int)
  ├── scan abcd
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
@@ -789,10 +789,10 @@ project
            └── variable: abcd.b [type=int]
 
 build
-SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
+SELECT b+d AS r FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
 project
- ├── columns: "b + d":5(int)
+ ├── columns: r:5(int)
  ├── scan abcd
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections

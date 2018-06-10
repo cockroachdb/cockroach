@@ -33,10 +33,10 @@ scan a
 # EliminateEmptyOr
 # --------------------------------------------------
 opt
-SELECT False OR False
+SELECT False OR False AS r
 ----
 project
- ├── columns: "false OR false":1(bool!null)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -48,10 +48,10 @@ project
 # EliminateSingletonAndOr
 # --------------------------------------------------
 opt
-SELECT (i=5 OR False) AND (s<'foo' AND True) FROM a
+SELECT (i=5 OR False) AND (s<'foo' AND True) AS r FROM a
 ----
 project
- ├── columns: "((i = 5) OR false) AND ((s < 'foo') AND true)":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    └── columns: i:2(int) s:4(string)
  └── projections [outer=(2,4)]
@@ -63,29 +63,29 @@ project
 
 # Replace with False if any operand is false.
 opt
-SELECT k=1 AND False AND f=3.5 FROM a
+SELECT k=1 AND False AND f=3.5 AS r FROM a
 ----
 project
- ├── columns: "((k = 1) AND false) AND (f = 3.5)":6(bool!null)
+ ├── columns: r:6(bool!null)
  ├── scan a
  └── projections
       └── false [type=bool]
 
 opt
-SELECT False AND s='foo' FROM a
+SELECT False AND s='foo' AS r FROM a
 ----
 project
- ├── columns: "false AND (s = 'foo')":6(bool!null)
+ ├── columns: r:6(bool!null)
  ├── scan a
  └── projections
       └── false [type=bool]
 
 # Discard True operands.
 opt
-SELECT true AND k=1 FROM a
+SELECT true AND k=1 AS r FROM a
 ----
 project
- ├── columns: "true AND (k = 1)":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
@@ -93,10 +93,10 @@ project
       └── a.k = 1 [type=bool, outer=(1)]
 
 opt
-SELECT k=1 AND i=2 AND true FROM a
+SELECT k=1 AND i=2 AND true AS r FROM a
 ----
 project
- ├── columns: "((k = 1) AND (i = 2)) AND true":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -113,10 +113,10 @@ scan a
 
 # Flatten nested And operands.
 opt
-SELECT (k>1 AND k<5) AND (f=3.5 AND s='foo') FROM a
+SELECT (k>1 AND k<5) AND (f=3.5 AND s='foo') AS r FROM a
 ----
 project
- ├── columns: "((k > 1) AND (k < 5)) AND ((f = 3.5) AND (s = 'foo'))":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) f:3(float) s:4(string)
  │    └── keys: (1)
@@ -129,29 +129,29 @@ project
 
 # Replace with True if any operand is True.
 opt
-SELECT k=1 OR (i=2 OR True) FROM a
+SELECT k=1 OR (i=2 OR True) AS r FROM a
 ----
 project
- ├── columns: "(k = 1) OR ((i = 2) OR true)":6(bool!null)
+ ├── columns: r:6(bool!null)
  ├── scan a
  └── projections
       └── true [type=bool]
 
 opt
-SELECT k=1 OR True OR f=3.5 FROM a
+SELECT k=1 OR True OR f=3.5 AS r FROM a
 ----
 project
- ├── columns: "((k = 1) OR true) OR (f = 3.5)":6(bool!null)
+ ├── columns: r:6(bool!null)
  ├── scan a
  └── projections
       └── true [type=bool]
 
 # Discard False operands.
 opt
-SELECT false OR k=1 FROM a
+SELECT false OR k=1 AS r FROM a
 ----
 project
- ├── columns: "false OR (k = 1)":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
@@ -196,10 +196,10 @@ select
 # SimplifyAnd + SimplifyOr
 # --------------------------------------------------
 opt
-SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true FROM a
+SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true AS r FROM a
 ----
 project
- ├── columns: "(((k = 1) OR false) AND ((false OR (k = 2)) OR false)) AND true":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
@@ -208,10 +208,10 @@ project
 
 # Use parentheses to make and/or tree right-heavy instead of left-heavy.
 opt
-SELECT (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar') FROM a
+SELECT (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar') AS r FROM a
 ----
 project
- ├── columns: "((k = 1) OR ((i = 2) OR (f = 3.5))) AND ((s = 'foo') AND (s != 'bar'))":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    └── keys: (1)
@@ -254,38 +254,38 @@ scan a
 # FoldNullAndOr
 # --------------------------------------------------
 opt
-SELECT null and null FROM a
+SELECT null and null AS r FROM a
 ----
 project
- ├── columns: "NULL AND NULL":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  └── projections
       └── null [type=bool]
 
 opt
-SELECT null or null FROM a
+SELECT null or null AS r FROM a
 ----
 project
- ├── columns: "NULL OR NULL":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  └── projections
       └── null [type=bool]
 
 opt
-SELECT null or (null and null and null) or null FROM a
+SELECT null or (null and null and null) or null AS r FROM a
 ----
 project
- ├── columns: "(NULL OR ((NULL AND NULL) AND NULL)) OR NULL":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  └── projections
       └── null [type=bool]
 
 # Don't fold.
 opt
-SELECT null or (null and k=1) FROM a
+SELECT null or (null and k=1) AS r FROM a
 ----
 project
- ├── columns: "NULL OR (NULL AND (k = 1))":6(bool)
+ ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)

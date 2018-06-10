@@ -1331,7 +1331,7 @@ sort
                 ├── variable: column37 [type=float, outer=(37)]
                 └── subquery [type=float]
                      └── project
-                          ├── columns: "sum(ps_supplycost * ps_availqty::FLOAT) * 0.0001":35(float)
+                          ├── columns: "?column?":35(float)
                           ├── cardinality: [1 - 1]
                           ├── group-by
                           │    ├── columns: column34:34(float)
@@ -1714,11 +1714,11 @@ project
  │    ├── columns: column44:44(float)
  │    ├── cardinality: [1 - 1]
  │    ├── inner-join
- │    │    ├── columns: lineitem.l_partkey:2(int!null) lineitem.l_quantity:5(float) lineitem.l_extendedprice:6(float) p_partkey:17(int!null) "0.2 * avg(l_quantity)":43(float)
+ │    │    ├── columns: lineitem.l_partkey:2(int!null) lineitem.l_quantity:5(float) lineitem.l_extendedprice:6(float) p_partkey:17(int!null) "?column?":43(float)
  │    │    ├── scan lineitem
  │    │    │    └── columns: lineitem.l_partkey:2(int!null) lineitem.l_quantity:5(float) lineitem.l_extendedprice:6(float)
  │    │    ├── project
- │    │    │    ├── columns: "0.2 * avg(l_quantity)":43(float) p_partkey:17(int!null)
+ │    │    │    ├── columns: "?column?":43(float) p_partkey:17(int!null)
  │    │    │    ├── keys: (17)
  │    │    │    ├── group-by
  │    │    │    │    ├── columns: p_partkey:17(int!null) column42:42(float)
@@ -1746,7 +1746,7 @@ project
  │    │    │         └── column42 * 0.2 [type=float, outer=(42)]
  │    │    └── filters [type=bool, outer=(2,5,17,43), constraints=(/2: (/NULL - ]; /5: (/NULL - ]; /17: (/NULL - ]; /43: (/NULL - ])]
  │    │         ├── part.p_partkey = lineitem.l_partkey [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ])]
- │    │         └── lineitem.l_quantity < 0.2 * avg(l_quantity) [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
+ │    │         └── lineitem.l_quantity < ?column? [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
  │    └── aggregations [outer=(6)]
  │         └── sum [type=float, outer=(6)]
  │              └── variable: lineitem.l_extendedprice [type=float, outer=(6)]

@@ -65,7 +65,7 @@ limit
  └── const: 5 [type=int]
 
 build
-SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5)
+SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5 AS c)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
@@ -85,11 +85,11 @@ limit
  │              └── const: 'foo' [type=string]
  └── subquery [type=int]
       └── max1-row
-           ├── columns: "5":5(int!null)
+           ├── columns: c:5(int!null)
            ├── cardinality: [1 - 1]
            ├── stats: [rows=1]
            └── project
-                ├── columns: "5":5(int!null)
+                ├── columns: c:5(int!null)
                 ├── cardinality: [1 - 1]
                 ├── stats: [rows=1]
                 ├── values

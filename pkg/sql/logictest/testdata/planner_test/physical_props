@@ -205,7 +205,7 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT true FROM abc WHERE b=1 and b=c;
 ----
 Tree       Field     Description          Columns                                    Ordering
-render     ·         ·                    ("true")                                   "true"=CONST
+render     ·         ·                    (bool)                                     bool=CONST
  │         render 0  true                 ·                                          ·
  └── scan  ·         ·                    (a[omitted], b, c, rowid[hidden,omitted])  b=c; b=CONST; c!=NULL; weak-key(a)
 ·          table     abc@abc_a_b_c_key    ·                                          ·

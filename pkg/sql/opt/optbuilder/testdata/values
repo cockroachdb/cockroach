@@ -135,7 +135,7 @@ build
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
 project
- ├── columns: "COALESCE(a, b)":3(int)
+ ├── columns: coalesce:3(int)
  ├── values
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── tuple [type=tuple{int, int}]
@@ -157,16 +157,16 @@ project
 
 # subqueries can be evaluated in VALUES
 build
-VALUES ((SELECT 1)), ((SELECT 2))
+VALUES ((SELECT 1 a)), ((SELECT 2 b))
 ----
 values
  ├── columns: column1:3(int)
  ├── tuple [type=tuple{int}]
  │    └── subquery [type=int]
  │         └── max1-row
- │              ├── columns: "1":1(int!null)
+ │              ├── columns: a:1(int!null)
  │              └── project
- │                   ├── columns: "1":1(int!null)
+ │                   ├── columns: a:1(int!null)
  │                   ├── values
  │                   │    └── tuple [type=tuple{}]
  │                   └── projections
@@ -174,16 +174,16 @@ values
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: "2":2(int!null)
+                ├── columns: b:2(int!null)
                 └── project
-                     ├── columns: "2":2(int!null)
+                     ├── columns: b:2(int!null)
                      ├── values
                      │    └── tuple [type=tuple{}]
                      └── projections
                           └── const: 2 [type=int]
 
 build
-VALUES (1), ((SELECT 2))
+VALUES (1), ((SELECT 2 a))
 ----
 values
  ├── columns: column1:2(int)
@@ -192,9 +192,9 @@ values
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: "2":1(int!null)
+                ├── columns: a:1(int!null)
                 └── project
-                     ├── columns: "2":1(int!null)
+                     ├── columns: a:1(int!null)
                      ├── values
                      │    └── tuple [type=tuple{}]
                      └── projections

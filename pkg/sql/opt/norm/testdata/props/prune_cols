@@ -63,10 +63,10 @@ select
 
 # Project operator.
 build
-SELECT i, s, k+1 FROM a
+SELECT i, s, k+1 AS r FROM a
 ----
 project
- ├── columns: i:2(int) s:4(string) "k + 1":5(int)
+ ├── columns: i:2(int) s:4(string) r:5(int)
  ├── prune: (2,4,5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
@@ -114,18 +114,18 @@ inner-join
 opt
 SELECT *
 FROM a
-WHERE (SELECT k+1 FROM xy WHERE x=k) = 1
+WHERE (SELECT k+1 AS r FROM xy WHERE x=k) = 1
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  ├── keys: (1)
  ├── prune: (1-4)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) "k + 1":7(int!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
       ├── keys: (1)
       ├── prune: (2-4)
       ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) "k + 1":7(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int)
       │    ├── keys: (1)
       │    ├── prune: (2-4,7)
       │    ├── scan a
@@ -133,12 +133,12 @@ project
       │    │    ├── keys: (1)
       │    │    └── prune: (1-4)
       │    ├── max1-row
-      │    │    ├── columns: "k + 1":7(int)
+      │    │    ├── columns: r:7(int)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── prune: (7)
       │    │    └── project
-      │    │         ├── columns: "k + 1":7(int)
+      │    │         ├── columns: r:7(int)
       │    │         ├── outer: (1)
       │    │         ├── prune: (7)
       │    │         ├── select
@@ -155,7 +155,7 @@ project
       │    │              └── a.k + 1 [type=int, outer=(1)]
       │    └── true [type=bool]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
-           └── k + 1 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # SemiJoin operator.
 opt
@@ -397,10 +397,10 @@ offset
 
 # Max1Row operator.
 build
-SELECT (SELECT 1 FROM a)
+SELECT (SELECT 1 AS r FROM a)
 ----
 project
- ├── columns: "(SELECT 1 FROM a)":6(int)
+ ├── columns: r:6(int)
  ├── cardinality: [1 - 1]
  ├── prune: (6)
  ├── values
@@ -409,11 +409,11 @@ project
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: "1":5(int!null)
+                ├── columns: r:5(int!null)
                 ├── cardinality: [0 - 1]
                 ├── prune: (5)
                 └── project
-                     ├── columns: "1":5(int!null)
+                     ├── columns: r:5(int!null)
                      ├── prune: (5)
                      ├── scan a
                      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)

@@ -26,6 +26,9 @@ type TBool struct {
 	Name string
 }
 
+// TypeName implements the ColTypeFormatter interface.
+func (node *TBool) TypeName() string { return node.Name }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TBool) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
@@ -37,6 +40,9 @@ type TInt struct {
 	Width         int
 	ImplicitWidth bool
 }
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TInt) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
@@ -70,6 +76,9 @@ type TFloat struct {
 	PrecSpecified bool // true if the value of Prec is not the default
 }
 
+// TypeName implements the ColTypeFormatter interface.
+func (node *TFloat) TypeName() string { return node.Name }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TFloat) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
@@ -84,6 +93,9 @@ type TDecimal struct {
 	Prec  int
 	Scale int
 }
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TDecimal) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TDecimal) Format(buf *bytes.Buffer, f lex.EncodeFlags) {

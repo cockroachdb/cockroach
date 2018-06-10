@@ -213,9 +213,9 @@ INSERT INTO return VALUES (default) RETURNING a, b
 
 # Test column names
 query III colnames
-INSERT INTO return VALUES (default) RETURNING a, b as C, 4
+INSERT INTO return VALUES (default) RETURNING a, b AS c, 4 AS d
 ----
-a  c     4
+a  c     d
 3  NULL  4
 
 # Return a qualified name
@@ -276,11 +276,11 @@ statement error pq: "return.*" cannot be aliased
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.* as x
 
 query III colnames
-INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b
+INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b AS c
 ----
-a b a + b
-1 2 3
-3 4 7
+a  b  c
+1  2  3
+3  4  7
 
 # Table alias
 statement ok

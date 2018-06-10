@@ -32,20 +32,20 @@ scan a
 
 # Discard all columns.
 opt
-SELECT 1 FROM (SELECT i+1, k FROM a) a
+SELECT 1 r FROM (SELECT i+1, k FROM a) a
 ----
 project
- ├── columns: "1":6(int!null)
+ ├── columns: r:6(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
 
 # Use column values within computed column.
 opt
-SELECT k+i FROM (SELECT i, k, s || 'foo' FROM a) a
+SELECT k+i AS r FROM (SELECT i, k, s || 'foo' FROM a) a
 ----
 project
- ├── columns: "k + i":6(int)
+ ├── columns: r:6(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -67,10 +67,10 @@ project
 
 # Compute column based on another computed column.
 opt
-SELECT l*l, k FROM (SELECT k, length(s) l, i FROM a) a
+SELECT l*l AS r, k FROM (SELECT k, length(s) l, i FROM a) a
 ----
 project
- ├── columns: "l * l":6(int) k:1(int!null)
+ ├── columns: r:6(int) k:1(int!null)
  ├── keys: (1)
  ├── project
  │    ├── columns: l:5(int) k:1(int!null)
@@ -97,10 +97,10 @@ scan a
 
 # Project subset of columns, some used in computed columns.
 opt
-SELECT k, k+1, i+1 FROM a
+SELECT k, k+1 AS r, i+1 AS s FROM a
 ----
 project
- ├── columns: k:1(int!null) "k + 1":5(int) "i + 1":6(int)
+ ├── columns: k:1(int!null) r:5(int) s:6(int)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
@@ -111,10 +111,10 @@ project
 
 # Use columns only in computed columns.
 opt
-SELECT k+i FROM a
+SELECT k+i AS r FROM a
 ----
 project
- ├── columns: "k + i":5(int)
+ ├── columns: r:5(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -123,10 +123,10 @@ project
 
 # Use no scan columns.
 opt
-SELECT 1 FROM a
+SELECT 1 r FROM a
 ----
 project
- ├── columns: "1":5(int!null)
+ ├── columns: r:5(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -167,10 +167,10 @@ select
 
 # No needed select columns.
 opt
-SELECT 1 FROM a WHERE $1<'2000-01-01T02:00:00'::timestamp
+SELECT 1 r FROM a WHERE $1<'2000-01-01T02:00:00'::timestamp
 ----
 project
- ├── columns: "1":5(int!null)
+ ├── columns: r:5(int!null)
  ├── select
  │    ├── scan a
  │    └── filters [type=bool]
@@ -180,10 +180,10 @@ project
 
 # Select columns used in computed columns.
 opt
-SELECT i-1, k*k FROM a WHERE k+1<5 AND s||'o'='foo'
+SELECT i-1 AS r, k*k AS t FROM a WHERE k+1<5 AND s||'o'='foo'
 ----
 project
- ├── columns: "i - 1":5(int) "k * k":6(int)
+ ├── columns: r:5(int) t:6(int)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    ├── keys: (1)
@@ -218,10 +218,10 @@ project
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 opt
-SELECT f, f+1.1 FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
+SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
 ----
 project
- ├── columns: f:3(float) "f + 1.1":6(float)
+ ├── columns: f:3(float) r:6(float)
  ├── select
  │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
  │    ├── keys: (1)
@@ -293,10 +293,10 @@ project
 # Project uses subset of Limit columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down to Scan.
 opt
-SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
+SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
 ----
 project
- ├── columns: f:3(float) "f * 2.0":5(float)
+ ├── columns: f:3(float) r:5(float)
  ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
@@ -467,10 +467,10 @@ project
 
 # Project filter offset/limit columns, but can't push all the way down to scan.
 opt
-SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
+SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 ----
 project
- ├── columns: f:3(float) "f * 2.0":5(float)
+ ├── columns: f:3(float) r:5(float)
  ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
@@ -546,10 +546,10 @@ project
 
 # Columns needed only by projection, full join.
 opt
-SELECT a.k+1, xy.* FROM a FULL JOIN xy ON True
+SELECT a.k+1 AS r, xy.* FROM a FULL JOIN xy ON True
 ----
 project
- ├── columns: "a.k + 1":7(int) x:5(int) y:6(int)
+ ├── columns: r:7(int) x:5(int) y:6(int)
  ├── full-join
  │    ├── columns: k:1(int) x:5(int) y:6(int)
  │    ├── scan a
@@ -576,17 +576,17 @@ inner-join
 
 # Computed columns.
 opt
-SELECT a.k+1, a.i/2, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s||'o'='foo'
+SELECT a.k+1 AS r, a.i/2 AS s, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s||'o'='foo'
 ----
 project
- ├── columns: "a.k + 1":7(int) "a.i / 2":8(decimal) x:5(int!null) y:6(int)
+ ├── columns: r:7(int) s:8(decimal) x:5(int!null) y:6(int)
  ├── inner-join
- │    ├── columns: k:1(int!null) i:2(int) s:4(string) x:5(int!null) y:6(int)
+ │    ├── columns: k:1(int!null) i:2(int) a.s:4(string) x:5(int!null) y:6(int)
  │    ├── select
- │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+ │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    │    ├── keys: (1)
  │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+ │    │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    │    │    └── keys: (1)
  │    │    └── filters [type=bool, outer=(4)]
  │    │         └── (a.s || 'o') = 'foo' [type=bool, outer=(4)]
@@ -685,10 +685,10 @@ project
 
 # Columns needed only by projection, full join.
 opt
-SELECT xy.*, a.k+1 FROM xy FULL JOIN a ON True
+SELECT xy.*, a.k+1 AS r FROM xy FULL JOIN a ON True
 ----
 project
- ├── columns: x:1(int) y:2(int) "a.k + 1":7(int)
+ ├── columns: x:1(int) y:2(int) r:7(int)
  ├── full-join
  │    ├── columns: x:1(int) y:2(int) k:3(int)
  │    ├── scan xy
@@ -715,20 +715,20 @@ inner-join
 
 # Computed columns.
 opt
-SELECT xy.*, a.k+1, a.i/2 FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s||'o'='foo'
+SELECT xy.*, a.k+1 AS r, a.i/2 AS s FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s||'o'='foo'
 ----
 project
- ├── columns: x:1(int!null) y:2(int) "a.k + 1":7(int) "a.i / 2":8(decimal)
+ ├── columns: x:1(int!null) y:2(int) r:7(int) s:8(decimal)
  ├── inner-join
- │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) s:6(string)
+ │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) a.s:6(string)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    └── keys: (1)
  │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) s:6(string)
+ │    │    ├── columns: k:3(int!null) i:4(int) a.s:6(string)
  │    │    ├── keys: (3)
  │    │    ├── scan a
- │    │    │    ├── columns: k:3(int!null) i:4(int) s:6(string)
+ │    │    │    ├── columns: k:3(int!null) i:4(int) a.s:6(string)
  │    │    │    └── keys: (3)
  │    │    └── filters [type=bool, outer=(6)]
  │    │         └── (a.s || 'o') = 'foo' [type=bool, outer=(6)]
@@ -774,10 +774,10 @@ project
 
 # Columns not needed by either side of join.
 opt
-SELECT 1 FROM a,xy
+SELECT 1 r FROM a,xy
 ----
 project
- ├── columns: "1":7(int!null)
+ ├── columns: r:7(int!null)
  ├── inner-join
  │    ├── scan a
  │    ├── scan xy
@@ -787,17 +787,17 @@ project
 
 # Subset of columns needed by each side of join.
 opt
-SELECT a.k, xy.x, a.k+xy.x FROM a LEFT JOIN xy ON a.k=xy.x
+SELECT a.k, xy.x, a.k+xy.x AS r FROM a LEFT JOIN xy ON a.k=xy.x
 ----
 project
- ├── columns: k:1(int!null) x:5(int) "a.k + xy.x":7(int)
+ ├── columns: k:1(int!null) x:5(int) r:7(int)
  ├── left-join
- │    ├── columns: k:1(int!null) xy.x:5(int)
+ │    ├── columns: k:1(int!null) x:5(int)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── keys: (1)
  │    ├── scan xy
- │    │    ├── columns: xy.x:5(int!null)
+ │    │    ├── columns: x:5(int!null)
  │    │    └── keys: (5)
  │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -835,10 +835,10 @@ group-by
 
 # No aggregates to discard.
 opt
-SELECT 1 FROM (SELECT s FROM a GROUP BY s) a
+SELECT 1 r FROM (SELECT s FROM a GROUP BY s) a
 ----
 project
- ├── columns: "1":5(int!null)
+ ├── columns: r:5(int!null)
  ├── group-by
  │    ├── columns: s:4(string)
  │    ├── grouping columns: s:4(string)
@@ -902,10 +902,10 @@ group-by
 
 # Columns used only by groupings, no aggregation columns.
 opt
-SELECT s, i+1 FROM a GROUP BY i, s
+SELECT s, i+1 AS r FROM a GROUP BY i, s
 ----
 project
- ├── columns: s:4(string) "i + 1":5(int)
+ ├── columns: s:4(string) r:5(int)
  ├── group-by
  │    ├── columns: i:2(int) s:4(string)
  │    ├── grouping columns: i:2(int) s:4(string)
@@ -973,10 +973,10 @@ values
 
 # Discard all Values columns.
 opt
-SELECT 1 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
+SELECT 1 r FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 project
- ├── columns: "1":4(int!null)
+ ├── columns: r:4(int!null)
  ├── cardinality: [2 - 2]
  ├── values
  │    ├── cardinality: [2 - 2]

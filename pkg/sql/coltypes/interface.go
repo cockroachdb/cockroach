@@ -25,6 +25,10 @@ import (
 type ColTypeFormatter interface {
 	fmt.Stringer
 
+	// TypeName returns the base name of the type, suitable to generate
+	// column names for cast expressions.
+	TypeName() string
+
 	// Format returns a non-lossy string representation of the coltype.
 	// NOTE: It is important that two coltypes that should be different print out
 	//       different string representations. The optimizer relies on unique

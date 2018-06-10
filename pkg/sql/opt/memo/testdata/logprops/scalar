@@ -34,16 +34,16 @@ select
            └── const: 5 [type=int]
 
 build
-SELECT xy.x + 1 = length('foo') + xy.y, uv.rowid * xy.x FROM xy, uv
+SELECT xy.x + 1 = length('foo') + xy.y AS a, uv.rowid * xy.x AS b FROM xy, uv
 ----
 project
- ├── columns: "(xy.x + 1) = (length('foo') + xy.y)":6(bool) "uv.rowid * xy.x":7(int)
+ ├── columns: a:6(bool) b:7(int)
  ├── stats: [rows=1000000]
  ├── inner-join
- │    ├── columns: xy.x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
  │    ├── stats: [rows=1000000]
  │    ├── scan xy
- │    │    ├── columns: xy.x:1(int!null) y:2(int)
+ │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1)
  │    ├── scan uv
