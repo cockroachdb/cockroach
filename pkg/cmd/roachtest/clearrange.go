@@ -34,8 +34,8 @@ func registerClearRange(r *registry) {
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
-			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
-			location := storeDirURL(fixtureURL, c.nodes, "2.0")
+			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=2`
+			location := storeDirURL(fixtureURL, c.nodes, "2.0-6")
 
 			// Download this store dump, which measures around 2TB (across all nodes).
 			if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
@@ -43,7 +43,7 @@ func registerClearRange(r *registry) {
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, startArgs("--args=--vmodule=rocksdb=3"))
 
 			// Also restore a much smaller table. We'll use it to run queries against
 			// the cluster after having dropped the large table above, verifying that

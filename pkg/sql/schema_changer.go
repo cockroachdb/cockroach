@@ -366,7 +366,7 @@ func (sc *SchemaChanger) truncateTable(
 	// A batch size of 50 allows a 2TB table (after replication) to DROP
 	// successfully in 90 minutes on a 10 node cluster without causing a major
 	// performance hit. It could certainly use more tuning.
-	const batchSize = 50
+	const batchSize = 20
 
 	var n int
 	lastKey := tableSpan.Key
@@ -393,12 +393,13 @@ func (sc *SchemaChanger) truncateTable(
 					EndKey: endKey.AsRawKey(),
 				},
 			})
-			log.VEventf(ctx, 2, "ClearRange %s - %s", lastKey, endKey)
+			log.Infof(ctx, "ClearRange %s - %s", lastKey, endKey)
 			if err := sc.db.Run(ctx, &b); err != nil {
 				return err
 			}
 			n = 0
 			lastKey = endKey
+			time.Sleep(time.Second)
 		}
 
 		if !ri.NeedAnother(tableSpan) {
