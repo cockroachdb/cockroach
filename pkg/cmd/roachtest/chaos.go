@@ -45,6 +45,9 @@ type Chaos struct {
 	// Stopper is a channel that the chaos agent listens on. The agent will
 	// terminate cleanly once it receives on the channel.
 	Stopper <-chan time.Time
+	// DrainAndQuit is used to determine if want to kill the node vs draining it
+	// first and shutting down gracefully.
+	DrainAndQuit bool
 }
 
 // Runner returns a closure that runs chaos against the given cluster without
@@ -67,9 +70,15 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			}
 
 			target := ch.Target()
-			l.printf("killing %v (slept %s)\n", target, before)
 			m.ExpectDeath()
-			c.Stop(ctx, target)
+
+			if ch.DrainAndQuit {
+				l.printf("stopping and draining %v (slept %s)\n", target, before)
+				c.Run(ctx, target, `pkill cockroach`)
+			} else {
+				l.printf("killing %v (slept %s)\n", target, before)
+				c.Stop(ctx, target)
+			}
 
 			select {
 			case <-ch.Stopper:
