@@ -26,13 +26,16 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -638,6 +641,128 @@ func TestRouterBlocks(t *testing.T) {
 			}
 			wg.Wait()
 		})
+	}
+}
+
+// TestRouterDiskSpill verifies that router outputs spill to disk when a memory
+// limit is reached.
+func TestRouterDiskSpill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numRows = 200
+	const numCols = 1
+
+	var (
+		rowChan RowChannel
+		rb      routerBase
+		wg      sync.WaitGroup
+	)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+	// monitor is the custom memory monitor used in this test. The increment is
+	// set to 1 for fine-grained memory allocations and the limit is set to half
+	// the number of rows that wil eventually be added to the underlying
+	// rowContainer. This is a bytes value that will ensure we fall back to disk
+	// but use memory for at least a couple of rows.
+	monitor := mon.MakeMonitorWithLimit(
+		"test-monitor",
+		mon.MemoryResource,
+		(numRows-routerRowBufSize)/2, /* limit */
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		1,             /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		Settings:    st,
+		EvalCtx:     evalCtx,
+		TempStorage: tempEngine,
+		diskMonitor: &diskMonitor,
+	}
+	alloc := &sqlbase.DatumAlloc{}
+
+	// Initialize the RowChannel with the minimal buffer size so as to block
+	// writes to the channel (after the first one).
+	rowChan.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rb.setupStreams([]RowReceiver{&rowChan}, false /* disableBuffering */)
+	rb.init(&flowCtx, oneIntCol)
+	rb.start(ctx, &wg, nil /* ctxCancel */)
+
+	rows := makeIntRows(numRows, numCols)
+	// output is the sole router output in this test.
+	output := &rb.outputs[0]
+	errChan := make(chan error)
+
+	go func() {
+		for _, row := range rows {
+			output.mu.Lock()
+			err := output.addRowLocked(ctx, row)
+			output.mu.Unlock()
+			if err != nil {
+				errChan <- err
+			}
+		}
+		rb.ProducerDone()
+		wg.Wait()
+		close(errChan)
+	}()
+
+	testutils.SucceedsSoon(t, func() error {
+		output.mu.Lock()
+		spilled := output.mu.rowContainer.Spilled()
+		output.mu.Unlock()
+		if !spilled {
+			return errors.New("did not spill to disk")
+		}
+		return nil
+	})
+
+	for i := 0; ; i++ {
+		row, meta := rowChan.Next()
+		if meta != nil {
+			t.Fatalf("unexpected meta: %v", meta)
+		}
+		if row == nil {
+			break
+		}
+		// Verify correct order (should be the order in which we added rows).
+		for j, c := range row {
+			if cmp, err := c.Compare(&intType, alloc, &flowCtx.EvalCtx, &rows[i][j]); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
+				t.Fatalf(
+					"order violated on row %d, expected %v got %v",
+					i,
+					rows[i].String(oneIntCol),
+					row.String(oneIntCol),
+				)
+			}
+		}
+	}
+
+	// Make sure the goroutine adding rows is done.
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
 	}
 }
 
