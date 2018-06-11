@@ -740,7 +740,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("crdb_internal").Others(3),
 		},
 		"SHOW CONSTRAINTS FROM system.users": {
-			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
+			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true),
 		},
 		"SHOW TIME ZONE": {
 			baseTest.Results("UTC"),

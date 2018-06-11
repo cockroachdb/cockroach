@@ -247,10 +247,22 @@ render            ·     ·
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-sort         ·      ·
- │           order  +"Table",+"Name"
- └── values  ·      ·
-·            size   5 columns, 0 rows
+sort                             ·         ·
+ │                               order     +"table",+name
+ └── render                      ·         ·
+      └── join                   ·         ·
+           │                     type      inner
+           │                     equality  (relnamespace, oid) = (oid, conrelid)
+           ├── filter            ·         ·
+           │    └── values       ·         ·
+           │                     size      27 columns, 91 rows
+           └── join              ·         ·
+                │                type      cross
+                ├── filter       ·         ·
+                │    └── values  ·         ·
+                │                size      4 columns, 4 rows
+                └── values       ·         ·
+·                                size      26 columns, 0 rows
 
 query TTT
 EXPLAIN SHOW USERS

@@ -85,14 +85,14 @@ a f b    c
 2 9 1    1
 3 9 2    1
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-Table  Name            Type         Column(s)  Details
-t      check_a         CHECK        a          a > 0
-t      fk_f_ref_other  FOREIGN KEY  f          other.[b]
-t      foo             UNIQUE       b          NULL
-t      primary         PRIMARY KEY  a          NULL
+table  name            type         details                               validated
+t      check_a         CHECK        CHECK (a > 0)                         true
+t      fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t      foo             UNIQUE       UNIQUE (b ASC)                        true
+t      primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -109,13 +109,13 @@ ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -124,14 +124,14 @@ ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK (UNVALIDATED)  a  a > 0
-t  check_a1        CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         false
+t  check_a1        CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -145,14 +145,14 @@ DELETE FROM t WHERE a = -2
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK                a  a > 0
-t  check_a1        CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         true
+t  check_a1        CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -376,12 +376,12 @@ a   x     y     z     d     e     f
 31  NULL  1.3   1.4   NULL  NULL  NULL
 33  2.0   2.1   2.2   NULL  NULL  NULL
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  primary  PRIMARY KEY  a  NULL
-t  t_d_key  UNIQUE       d  NULL
-t  t_e_key  UNIQUE       e  NULL
+t  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_d_key  UNIQUE       UNIQUE (d ASC)       true
+t  t_e_key  UNIQUE       UNIQUE (e ASC)       true
 
 # Subsequent operations succeed because the table is empty
 statement ok

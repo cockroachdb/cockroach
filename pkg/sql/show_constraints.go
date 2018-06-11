@@ -16,12 +16,8 @@ package sql
 
 import (
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // ShowConstraints returns all the constraints for a table.
@@ -29,79 +25,27 @@ import (
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var desc *TableDescriptor
-	// We avoid the cache so that we can observe the constraints without
-	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
-	if err != nil {
-		return nil, sqlbase.NewUndefinedRelationError(tn)
-	}
-	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
-		return nil, err
-	}
-
-	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: types.String},
-		{Name: "Name", Typ: types.String},
-		{Name: "Type", Typ: types.String},
-		{Name: "Column(s)", Typ: types.String},
-		{Name: "Details", Typ: types.String},
-	}
-
-	return &delayedNode{
-		name:    "SHOW CONSTRAINTS FROM " + tn.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			info, err := desc.GetConstraintInfo(ctx, p.txn)
-			if err != nil {
-				return nil, err
-			}
-			for name, c := range info {
-				detailsDatum := tree.DNull
-				if c.Details != "" {
-					detailsDatum = tree.NewDString(c.Details)
-				}
-				columnsDatum := tree.DNull
-				if c.Columns != nil {
-					columnsDatum = tree.NewDString(strings.Join(c.Columns, ", "))
-				}
-				kind := string(c.Kind)
-				if c.Unvalidated {
-					kind += " (UNVALIDATED)"
-				}
-				newRow := []tree.Datum{
-					tree.NewDString(tn.Table()),
-					tree.NewDString(name),
-					tree.NewDString(kind),
-					columnsDatum,
-					detailsDatum,
-				}
-				if _, err := v.rows.AddRow(ctx, newRow); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-			}
-
-			// Sort the results by constraint name.
-			return &sortNode{
-				plan: v,
-				ordering: sqlbase.ColumnOrdering{
-					{ColIdx: 0, Direction: encoding.Ascending},
-					{ColIdx: 1, Direction: encoding.Ascending},
-				},
-				columns: v.columns,
-			}, nil
-		},
-	}, nil
+	const getConstraintsQuery = `
+     SELECT
+        t.relname AS table,
+        c.conname AS name,
+        CASE c.contype
+           WHEN 'p' THEN 'PRIMARY KEY'
+           WHEN 'u' THEN 'UNIQUE'
+           WHEN 'c' THEN 'CHECK'
+           WHEN 'f' THEN 'FOREIGN KEY'
+           ELSE c.contype
+        END AS type,
+        c.condef AS details,
+        c.convalidated AS validated
+    FROM
+       %[4]s.pg_catalog.pg_class t,
+       %[4]s.pg_catalog.pg_namespace n,
+       %[4]s.pg_catalog.pg_constraint c
+    WHERE t.relname = %[2]s
+      AND n.nspname = %[5]s AND t.relnamespace = n.oid
+      AND t.oid = c.conrelid
+    ORDER BY 1, 2
+   `
+	return p.showTableDetails(ctx, "SHOW CONSTRAINTS", n.Table, getConstraintsQuery)
 }

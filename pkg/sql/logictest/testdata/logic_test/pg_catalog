@@ -142,10 +142,10 @@ SHOW INDEXES FROM pg_catalog.pg_namespace
 ----
 Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
-Table         Name     Type  Column(s)  Details
+table  name  type  details  validated
 
 query TTTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
