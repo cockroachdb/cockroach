@@ -370,6 +370,12 @@ func (s *Server) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
 	return s.sqlStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
+// GetStmtStats returns the same thing as GetScrubbedStmtStats, except
+// identifiers (e.g. table and column names) aren't scrubbed.
+func (s *Server) GetStmtStats() []roachpb.CollectedStatementStatistics {
+	return s.sqlStats.getStmtStats(s.cfg.VirtualSchemas, false /* scrub */)
+}
+
 // ServeConn creates a connExecutor and serves a client connection by reading
 // commands from stmtBuf.
 //
