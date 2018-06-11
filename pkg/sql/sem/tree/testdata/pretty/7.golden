@@ -1,0 +1,262 @@
+1:
+-
+INSERT
+INTO
+	mnop
+		(
+			m,
+			n
+		)
+SELECT
+	i,
+	(
+		1e9
+		+
+		i
+		/
+		2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i
+			(
+				i
+			)
+RETURNING NOTHING
+
+13:
+-------------
+INSERT
+INTO
+	mnop
+		(
+			m,
+			n
+		)
+SELECT
+	i,
+	(
+		1e9
+		+
+		i
+		/ 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i
+			(
+				i
+			)
+RETURNING NOTHING
+
+14:
+--------------
+INSERT
+INTO
+	mnop
+		(m, n)
+SELECT
+	i,
+	(
+		1e9
+		+
+		i
+		/ 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i
+			(
+				i
+			)
+RETURNING NOTHING
+
+15:
+---------------
+INSERT
+INTO
+	mnop (m, n)
+SELECT
+	i,
+	(
+		1e9
+		+
+		i / 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i
+			(i)
+RETURNING NOTHING
+
+16:
+----------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i,
+	(
+		1e9
+		+
+		i / 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+17:
+-----------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i,
+	(
+		1e9
+		+ i / 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+21:
+---------------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i,
+	(
+		1e9 + i / 2e4
+	)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+26:
+--------------------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i,
+	(1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+29:
+-----------------------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i, (1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(
+			1,
+			2e4
+		)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+31:
+-------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT
+	i, (1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(1, 2e4)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+32:
+--------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT i, (1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (
+		generate_series(1, 2e4)
+	)
+		AS i (i)
+RETURNING NOTHING
+
+39:
+---------------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT i, (1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (generate_series(1, 2e4))
+		AS i (i)
+RETURNING NOTHING
+
+48:
+------------------------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT i, (1e9 + i / 2e4)::FLOAT
+FROM
+	ROWS FROM (generate_series(1, 2e4)) AS i (i)
+RETURNING NOTHING
+
+49:
+-------------------------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT i, (1e9 + i / 2e4)::FLOAT
+FROM ROWS FROM (generate_series(1, 2e4)) AS i (i)
+RETURNING NOTHING
+
+82:
+----------------------------------------------------------------------------------
+INSERT
+INTO mnop (m, n)
+SELECT i, (1e9 + i / 2e4)::FLOAT FROM ROWS FROM (generate_series(1, 2e4)) AS i (i)
+RETURNING NOTHING
