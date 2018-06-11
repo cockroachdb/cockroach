@@ -1,0 +1,51 @@
+1:
+-
+SELECT DISTINCT
+	x,
+	y,
+	z
+FROM
+	xyz
+ORDER BY
+	x,
+	y
+
+8:
+--------
+SELECT DISTINCT
+	x,
+	y,
+	z
+FROM xyz
+ORDER BY
+	x, y
+
+11:
+-----------
+SELECT DISTINCT
+	x, y, z
+FROM xyz
+ORDER BY
+	x, y
+
+13:
+-------------
+SELECT DISTINCT
+	x, y, z
+FROM xyz
+ORDER BY x, y
+
+23:
+-----------------------
+SELECT DISTINCT x, y, z
+FROM xyz
+ORDER BY x, y
+
+32:
+--------------------------------
+SELECT DISTINCT x, y, z FROM xyz
+ORDER BY x, y
+
+46:
+----------------------------------------------
+SELECT DISTINCT x, y, z FROM xyz ORDER BY x, y

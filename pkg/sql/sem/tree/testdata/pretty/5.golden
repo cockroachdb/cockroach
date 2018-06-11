@@ -1,0 +1,14 @@
+1:
+-
+SELECT
+	"primary",
+	'primary'
+
+24:
+------------------------
+SELECT
+	"primary", 'primary'
+
+27:
+---------------------------
+SELECT "primary", 'primary'
