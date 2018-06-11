@@ -832,7 +832,7 @@ project
       └── const: 1 [type=int]
 
 opt format=show-all
-SELECT SUM(ol_amount)
+SELECT sum(ol_amount)
 FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
 ----
@@ -880,7 +880,7 @@ project
 
 # TODO(andyk): re-enable when we support COUNT DISTINCT.
 #opt format=show-all
-#SELECT COUNT(DISTINCT(s_i_id))
+#SELECT count(DISTINCT(s_i_id))
 #FROM order_line
 #JOIN stock
 #ON s_i_id=ol_i_id AND s_w_id=ol_w_id
@@ -897,11 +897,11 @@ project
 # They are not part of the benchmark itself.
 # --------------------------------------------------
 opt format=show-all
-SELECT COUNT(*)
+SELECT count(*)
 FROM warehouse
 FULL OUTER JOIN
 (
-    SELECT d_w_id, SUM(d_ytd) as sum_d_ytd
+    SELECT d_w_id, sum(d_ytd) as sum_d_ytd
     FROM district
     GROUP BY d_w_id
 )
@@ -969,7 +969,7 @@ scan district
  └── prune: (1,2,11)
 
 opt format=show-all
-SELECT MAX(no_o_id)
+SELECT max(no_o_id)
 FROM new_order
 GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
@@ -999,7 +999,7 @@ sort
                 └── variable: new_order.no_o_id [type=int, outer=(1)]
 
 opt format=show-all
-SELECT MAX(o_id)
+SELECT max(o_id)
 FROM "order"
 GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
@@ -1029,10 +1029,10 @@ sort
                 └── variable: "order".o_id [type=int, outer=(1)]
 
 opt format=show-all
-SELECT COUNT(*)
+SELECT count(*)
 FROM
 (
-    SELECT MAX(no_o_id) - MIN(no_o_id) - COUNT(*) AS nod
+    SELECT max(no_o_id) - min(no_o_id) - count(*) AS nod
     FROM new_order
     GROUP BY no_w_id, no_d_id
 )
@@ -1080,7 +1080,7 @@ group-by
       └── count-rows [type=int]
 
 opt format=show-all
-SELECT SUM(o_ol_cnt)
+SELECT sum(o_ol_cnt)
 FROM "order"
 GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
@@ -1109,7 +1109,7 @@ sort
                 └── variable: "order".o_ol_cnt [type=int, outer=(7)]
 
 opt format=show-all
-SELECT COUNT(*)
+SELECT count(*)
 FROM order_line
 GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
@@ -1224,7 +1224,7 @@ opt format=show-all
 )
 EXCEPT ALL
 (
-    SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*)
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
     FROM order_line
     GROUP BY (ol_w_id, ol_d_id, ol_o_id)
     ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
@@ -1259,7 +1259,7 @@ except-all
 
 opt format=show-all
 (
-    SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*)
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
     FROM order_line
     GROUP BY (ol_w_id, ol_d_id, ol_o_id)
     ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
@@ -1299,7 +1299,7 @@ except-all
       └── prune: (12-14,18)
 
 opt format=show-all
-SELECT COUNT(*)
+SELECT count(*)
 FROM
 (
     SELECT o_w_id, o_d_id, o_id

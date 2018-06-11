@@ -55,7 +55,7 @@ statement ok
 DELETE FROM a WHERE id = 5;
 
 query I
-SELECT COUNT(*) FROM b;
+SELECT count(*) FROM b;
 ----
 0
 
@@ -182,12 +182,12 @@ DELETE FROM a WHERE id = 'a-pk1';
 
 query IIIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+ ,(SELECT count(*) FROM c3)
 ;
 ----
 0 0 0 0 0 0
@@ -242,11 +242,11 @@ DELETE FROM a WHERE id = 'pk1';
 
 query IIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
 ;
 ----
 0 0 0 0 0
@@ -331,11 +331,11 @@ DELETE FROM a WHERE id = 'a-pk1';
 
 query IIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
 ;
 ----
 0 0 0 0 0
@@ -467,12 +467,12 @@ DELETE FROM b1 WHERE id = 'pk2';
 
 query IIIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+ ,(SELECT count(*) FROM c3)
 ;
 ----
 2 1 2 1 1 2
@@ -483,12 +483,12 @@ DELETE FROM a WHERE id = 'pk1';
 
 query IIIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+ ,(SELECT count(*) FROM c3)
 ;
 ----
 1 0 1 0 0 1
@@ -499,12 +499,12 @@ DELETE FROM a WHERE id = 'pk2';
 
 query IIIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+ ,(SELECT count(*) FROM c3)
 ;
 ----
 0 0 0 0 0 0
@@ -568,12 +568,12 @@ DELETE FROM b1 WHERE id = 'pk2';
 
 query IIIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b1)
- ,(SELECT COUNT(*) FROM b2)
- ,(SELECT COUNT(*) FROM c1)
- ,(SELECT COUNT(*) FROM c2)
- ,(SELECT COUNT(*) FROM c3)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b1)
+ ,(SELECT count(*) FROM b2)
+ ,(SELECT count(*) FROM c1)
+ ,(SELECT count(*) FROM c2)
+ ,(SELECT count(*) FROM c3)
 ;
 ----
 2 1 2 1 1 2
@@ -606,7 +606,7 @@ statement ok
 DELETE FROM self WHERE id = 1;
 
 query I
-SELECT COUNT(*) FROM self
+SELECT count(*) FROM self
 ----
 0
 
@@ -637,7 +637,7 @@ statement ok
 DELETE FROM self WHERE id = 1;
 
 query I
-SELECT COUNT(*) FROM self
+SELECT count(*) FROM self
 ----
 0
 
@@ -684,8 +684,8 @@ DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
 query II
 SELECT
-  (SELECT COUNT(*) FROM loop_a)
- ,(SELECT COUNT(*) FROM loop_b)
+  (SELECT count(*) FROM loop_a)
+ ,(SELECT count(*) FROM loop_b)
 ;
 ----
 0 0
@@ -730,8 +730,8 @@ DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
 query II
 SELECT
-  (SELECT COUNT(*) FROM loop_a)
- ,(SELECT COUNT(*) FROM loop_b)
+  (SELECT count(*) FROM loop_a)
+ ,(SELECT count(*) FROM loop_b)
 ;
 ----
 0 0
@@ -761,7 +761,7 @@ statement ok
 DELETE FROM self_x2 WHERE x = 'pk1';
 
 query I
-SELECT COUNT(*) FROM self_x2
+SELECT count(*) FROM self_x2
 ----
 0
 
@@ -820,11 +820,11 @@ DELETE FROM a WHERE id = 'a1';
 
 query IIIII
 SELECT
-  (SELECT COUNT(*) FROM a)
- ,(SELECT COUNT(*) FROM b)
- ,(SELECT COUNT(*) FROM c)
- ,(SELECT COUNT(*) FROM d)
- ,(SELECT COUNT(*) FROM e)
+  (SELECT count(*) FROM a)
+ ,(SELECT count(*) FROM b)
+ ,(SELECT count(*) FROM c)
+ ,(SELECT count(*) FROM d)
+ ,(SELECT count(*) FROM e)
 ;
 ----
 0 0 0 0 0
@@ -2086,7 +2086,7 @@ statement ok
 DELETE FROM a WHERE id = 'delete-me';
 
 query I
-SELECT COUNT(*) FROM a;
+SELECT count(*) FROM a;
 ----
 1
 

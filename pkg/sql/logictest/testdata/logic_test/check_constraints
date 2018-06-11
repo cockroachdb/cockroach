@@ -67,9 +67,9 @@ INSERT INTO t3 (a, b) VALUES (3, 2)
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < a\)
 INSERT INTO t3 (a, b) VALUES (2, 3)
 
-# Verify we don't accept COUNT(*)
+# Verify we don't accept count(*)
 statement error variable sub-expressions are not allowed in CHECK
-CREATE TABLE t4 (a INT, b INT CHECK (COUNT(*) = 1))
+CREATE TABLE t4 (a INT, b INT CHECK (count(*) = 1))
 
 # no subqueries either.
 statement error variable sub-expressions are not allowed in CHECK
@@ -94,11 +94,11 @@ INSERT INTO calls_func VALUES (-5)
 
 # Aggregate function calls in CHECK are not ok.
 statement error aggregate functions are not allowed in CHECK
-CREATE TABLE bad (a INT CHECK(SUM(a) > 1))
+CREATE TABLE bad (a INT CHECK(sum(a) > 1))
 
 # Window function calls in CHECK are not ok.
 statement error window functions are not allowed in CHECK
-CREATE TABLE bad (a INT CHECK(SUM(a) OVER () > 1))
+CREATE TABLE bad (a INT CHECK(sum(a) OVER () > 1))
 
 # fail on bad check types
 statement error pq: unsupported binary operator: <bool> - <bool>

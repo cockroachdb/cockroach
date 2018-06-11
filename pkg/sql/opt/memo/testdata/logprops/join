@@ -466,7 +466,7 @@ select
 
 # Calculate semi-join cardinality when left side has non-zero cardinality.
 opt
-SELECT * FROM (SELECT COUNT(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
+SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
 ----
 semi-join
  ├── columns: cnt:5(int!null)

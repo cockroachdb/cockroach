@@ -399,7 +399,7 @@ func (s LeaseStore) Publish(
 func (s LeaseStore) countLeases(
 	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
-	const countLeases = `SELECT COUNT(version) FROM system.lease ` +
+	const countLeases = `SELECT count(version) FROM system.lease ` +
 		`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
 	values, err := s.execCfg.InternalExecutor.QueryRow(
 		ctx, "count-leases", nil /* txn */, countLeases, descID, int(version), expiration,

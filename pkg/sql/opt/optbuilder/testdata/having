@@ -33,7 +33,7 @@ project
       └── const: 3 [type=int]
 
 build
-SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
+SELECT s, count(*) FROM kv GROUP BY s HAVING count(*) > 1
 ----
 select
  ├── columns: s:4(string) count:5(int!null)
@@ -52,7 +52,7 @@ select
            └── const: 1 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
+SELECT max(k), min(v) FROM kv HAVING min(v) > 2
 ----
 project
  ├── columns: max:6(int) min:5(int!null)
@@ -75,7 +75,7 @@ project
                 └── const: 2 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
+SELECT max(k), min(v) FROM kv HAVING max(v) > 2
 ----
 project
  ├── columns: max:6(int) min:7(int)
@@ -100,12 +100,12 @@ project
                 └── const: 2 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
+SELECT max(k), min(v) FROM kv HAVING max(min(v)) > 2
 ----
 error (42803): aggregate function calls cannot be nested
 
 build
-SELECT MAX(k), MIN(v) FROM kv HAVING k
+SELECT max(k), min(v) FROM kv HAVING k
 ----
 error (42804): argument of HAVING must be type bool, not type int
 
@@ -159,7 +159,7 @@ error (42803): column "k" must appear in the GROUP BY clause or be used in an ag
 
 # Check that everything still works with differently qualified names
 build
-SELECT MAX(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
+SELECT max(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
 ----
 project
  ├── columns: max:5(int)
@@ -181,7 +181,7 @@ project
                 └── const: 5 [type=int]
 
 build
-SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING LOWER(kv.s) LIKE 'test%'
+SELECT sum(kv.w) FROM kv GROUP BY lower(s) HAVING lower(kv.s) LIKE 'test%'
 ----
 project
  ├── columns: sum:6(decimal)
@@ -206,7 +206,7 @@ project
                 └── const: 'test%' [type=string]
 
 build
-SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING SUM(w) IN (4, 5, 6)
+SELECT sum(kv.w) FROM kv GROUP BY lower(s) HAVING sum(w) IN (4, 5, 6)
 ----
 project
  ├── columns: sum:6(decimal!null)
@@ -262,7 +262,7 @@ SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
 error (42803): column "w" must appear in the GROUP BY clause or be used in an aggregate function
 
 build fully-qualify-names
-SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
+SELECT upper(s), count(s), count(upper(s)) FROM t.kv GROUP BY upper(s) HAVING count(s) > 1
 ----
 select
  ├── columns: upper:5(string) count:6(int!null) count:7(int)
@@ -288,7 +288,7 @@ select
 
 # Check that ordering by an alias of an aggregate works when HAVING is present.
 build
-SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING SUM(k)=10 ORDER BY mk
+SELECT sum(k) AS mk FROM kv GROUP BY v HAVING sum(k)=10 ORDER BY mk
 ----
 sort
  ├── columns: mk:5(decimal!null)
@@ -313,7 +313,7 @@ sort
                      └── const: 10 [type=decimal]
 
 build
-SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk
+SELECT sum(k) AS mk FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk
 ----
 sort
  ├── columns: mk:6(decimal)
@@ -340,7 +340,7 @@ sort
                      └── const: 10 [type=int]
 
 build
-SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
+SELECT sum(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
 ----
 sort
  ├── columns: mk:5(decimal)
@@ -365,7 +365,7 @@ sort
                      └── const: 10 [type=int]
 
 build
-SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk1
+SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk1
 ----
 sort
  ├── columns: mk1:5(int!null) mk2:5(int!null)
@@ -390,7 +390,7 @@ sort
                      └── const: 10 [type=int]
 
 build
-SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk2
+SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk2
 ----
 sort
  ├── columns: mk1:5(int!null) mk2:5(int!null)

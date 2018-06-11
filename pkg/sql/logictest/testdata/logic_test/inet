@@ -871,6 +871,6 @@ SELECT text('::ffff:192.168.0.1/24'::INET)
 
 # Verify the inet datum gets serialized correctly for distsql.
 query T
-SELECT host(MAX('192.168.0.2/24'::INET)) FROM (VALUES (1)) AS t(x)
+SELECT host(max('192.168.0.2/24'::INET)) FROM (VALUES (1)) AS t(x)
 ----
 192.168.0.2

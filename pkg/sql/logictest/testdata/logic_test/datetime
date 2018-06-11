@@ -79,12 +79,12 @@ statement ok
 SET TIME ZONE -5
 
 query TTTT
-SELECT MAX(b), MAX(c), MAX(d), MAX(e) FROM u
+SELECT max(b), max(c), max(d), max(e) FROM u
 ----
 2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  234h45m2s234ms
 
 query TTTT
-SELECT MIN(b), MIN(c), MIN(d), MIN(e) FROM u
+SELECT min(b), min(c), min(d), min(e) FROM u
 ----
 2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
 
@@ -233,7 +233,7 @@ INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 4
 
@@ -259,7 +259,7 @@ INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 
@@ -291,7 +291,7 @@ INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 

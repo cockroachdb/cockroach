@@ -285,7 +285,7 @@ CREATE TABLE y (
 
 statement error impure functions are not allowed in computed column
 CREATE TABLE y (
-  a STRING AS (CONCAT(now()::STRING, uuid_v4()::STRING)) STORED
+  a STRING AS (concat(now()::STRING, uuid_v4()::STRING)) STORED
 )
 
 statement error computed columns cannot reference other computed columns
@@ -301,7 +301,7 @@ CREATE TABLE y (
 
 statement error aggregate functions are not allowed in computed column
 CREATE TABLE y (
-  b INT AS (COUNT(1)) STORED
+  b INT AS (count(1)) STORED
 )
 
 statement error computed columns cannot have default values
@@ -632,7 +632,7 @@ generation_expression
 a * 2
 
 query I
-SELECT COUNT(*) FROM information_schema.columns
+SELECT count(*) FROM information_schema.columns
 WHERE table_name = 'x' and generation_expression = ''
 ----
 1

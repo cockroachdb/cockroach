@@ -10,7 +10,7 @@ CREATE TABLE kv (
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
+EXPLAIN (VERBOSE) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 group           ·            ·                                    (count, r)                      weak-key(r)
  │              aggregate 0  count_rows()                         ·                               ·
@@ -24,7 +24,7 @@ group           ·            ·                                    (count, r)  
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
+EXPLAIN (VERBOSE) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 render               ·            ·                 (count, r)                      ·
  │                   render 0     agg0              ·                               ·
@@ -43,7 +43,7 @@ render               ·            ·                 (count, r)                
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
+EXPLAIN (VERBOSE) SELECT count(k) FROM kv
 ]
 ----
 group           ·            ·
@@ -56,7 +56,7 @@ group           ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+EXPLAIN (VERBOSE) SELECT count(k), sum(k), max(k) FROM kv
 ]
 ----
 group           ·            ·
@@ -70,7 +70,7 @@ group           ·            ·
 ·               spans        ALL
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
 group                ·            ·                             (count)                                                       ·
  │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
@@ -87,7 +87,7 @@ group                ·            ·                             (count)       
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY a.*
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
 group                ·            ·
@@ -110,7 +110,7 @@ group                ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
 group                ·            ·
@@ -135,7 +135,7 @@ group                ·            ·
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (a.*)
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
 group                ·            ·
@@ -189,7 +189,7 @@ CREATE TABLE abc (
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
 group           ·            ·
@@ -221,7 +221,7 @@ CREATE TABLE xyz (
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz
 ]
 ----
 group           ·            ·
@@ -235,7 +235,7 @@ group           ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ]
 ----
 group           ·            ·
@@ -249,7 +249,7 @@ group           ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
+EXPLAIN (VERBOSE) SELECT max(x) FROM xyz
 ]
 ----
 group              ·            ·
@@ -263,7 +263,7 @@ group              ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
+EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 1
 ]
 ----
 group           ·            ·
@@ -277,7 +277,7 @@ group           ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
+EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 1
 ]
 ----
 group              ·            ·
@@ -291,7 +291,7 @@ group              ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
+EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 7
 ]
 ----
 group           ·            ·
@@ -305,7 +305,7 @@ group           ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
+EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 7
 ]
 ----
 group              ·            ·
@@ -319,7 +319,7 @@ group              ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ]
 ----
 group           ·            ·
@@ -335,7 +335,7 @@ statement okSE
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+SELECT message FROM [SHOW KV TRACE FOR SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -343,7 +343,7 @@ output row: [1]
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+EXPLAIN (VERBOSE) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ]
 ----
 group              ·            ·
@@ -358,7 +358,7 @@ group              ·            ·
 # VARIANCE/STDDEV
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/primary/1 -> NULL
@@ -373,7 +373,7 @@ output row: [9 4.5 6.33333333333333]
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+EXPLAIN (VERBOSE) SELECT variance(x) FROM xyz WHERE x = 1
 ]
 ----
 group           ·            ·
@@ -386,7 +386,7 @@ group           ·            ·
 
 # Verify we only look at one row for MIN when we have an index on that column.
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(z) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SELECT min(z) FROM xyz]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -403,7 +403,7 @@ CREATE TABLE ab (
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
 group           ·            ·
@@ -425,7 +425,7 @@ INSERT INTO ab VALUES
 
 # Verify we only buffer one row.
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SELECT min(a) FROM ab]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/1 -> NULL
@@ -434,7 +434,7 @@ output row: [1]
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(a) FROM abc
+EXPLAIN (VERBOSE) SELECT max(a) FROM abc
 ]
 ----
 group              ·            ·
@@ -448,7 +448,7 @@ group              ·            ·
 
 # Verify we only buffer one row.
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MAX(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SELECT max(a) FROM ab]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/5/b -> 50
@@ -457,7 +457,7 @@ output row: [5]
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+EXPLAIN (VERBOSE) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ]
 ----
 sort                 ·            ·
@@ -475,7 +475,7 @@ sort                 ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+EXPLAIN (VERBOSE) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ]
 ----
 sort                 ·            ·
@@ -492,7 +492,7 @@ sort                 ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+EXPLAIN (VERBOSE) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ]
 ----
 sort                 ·            ·
@@ -511,7 +511,7 @@ sort                 ·            ·
 # Check that filters propagate through no-op aggregation.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
 ]
 ----
 group           ·            ·
@@ -538,7 +538,7 @@ CREATE TABLE filter_test (
 # Check that filter expressions are only rendered once.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ]
 ----
 group           ·            ·
@@ -553,7 +553,7 @@ group           ·            ·
 ·               spans        ALL
 
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+EXPLAIN (TYPES) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 group           ·            ·                                     (count int)                                                    ·
  │              aggregate 0  count_rows() FILTER (WHERE ?column?)  ·                                                              ·
@@ -581,7 +581,7 @@ render          ·         ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
+EXPLAIN (VERBOSE) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ]
 ----
 group                ·            ·
@@ -609,7 +609,7 @@ CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test
 ----
 group           ·            ·                       (min)            ·
  │              aggregate 0  min(v)                  ·                ·
@@ -622,7 +622,7 @@ group           ·            ·                       (min)            ·
 
 # Repeat test when there is an existing filter.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                       (min)   ·
  │              aggregate 0  min(v)                  ·       ·
@@ -637,7 +637,7 @@ group           ·            ·                       (min)   ·
 # present an ordering on v+1 so the optimization is not applied, but the IS NOT
 # NULL filter should be added.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
+EXPLAIN (VERBOSE) SELECT min(v+1) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                           (min)            ·
  │              aggregate 0  min(v + 1)                  ·                ·
@@ -650,7 +650,7 @@ group           ·            ·                           (min)            ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test GROUP BY k
 ----
 group      ·            ·                 (min)   ·
  │         aggregate 0  min(v)            ·       ·
@@ -683,7 +683,7 @@ CREATE TABLE xy(x STRING, y STRING);
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE)
-   SELECT MIN(y), (b, a)
+   SELECT min(y), (b, a)
      FROM ab, xy GROUP BY (x, (a, b))
 ]
 ----

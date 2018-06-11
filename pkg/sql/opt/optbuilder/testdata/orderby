@@ -574,7 +574,7 @@ TABLE abc
       └── c int not null
 
 build
-SELECT d FROM abc ORDER BY LOWER(d)
+SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
  ├── columns: d:4(string)

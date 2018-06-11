@@ -223,14 +223,14 @@ opt
 SELECT
     l_returnflag,
     l_linestatus,
-    SUM(l_quantity) AS sum_qty,
-    SUM(l_extendedprice) AS sum_base_price,
-    SUM(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
-    SUM(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
-    AVG(l_quantity) AS avg_qty,
-    AVG(l_extendedprice) AS avg_price,
-    AVG(l_discount) AS avg_disc,
-    COUNT(*) AS count_order
+    sum(l_quantity) AS sum_qty,
+    sum(l_extendedprice) AS sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+    avg(l_quantity) AS avg_qty,
+    avg(l_extendedprice) AS avg_price,
+    avg(l_discount) AS avg_disc,
+    count(*) AS count_order
 FROM
     lineitem
 WHERE
@@ -324,7 +324,7 @@ WHERE
     AND r_name = 'EUROPE'
     AND ps_supplycost = (
         SELECT
-            MIN(ps_supplycost)
+            min(ps_supplycost)
         FROM
             partsupp,
             supplier,
@@ -469,7 +469,7 @@ project
 opt
 SELECT
     l_orderkey,
-    SUM(l_extendedprice * (1 - l_discount)) AS revenue,
+    sum(l_extendedprice * (1 - l_discount)) AS revenue,
     o_orderdate,
     o_shippriority
 FROM
@@ -557,7 +557,7 @@ limit
 opt
 SELECT
     o_orderpriority,
-    COUNT(*) AS order_count
+    count(*) AS order_count
 FROM
     orders
 WHERE
@@ -628,7 +628,7 @@ sort
 opt
 SELECT
     n_name,
-    SUM(l_extendedprice * (1 - l_discount)) AS revenue
+    sum(l_extendedprice * (1 - l_discount)) AS revenue
 FROM
     customer,
     orders,
@@ -733,7 +733,7 @@ sort
 # --------------------------------------------------
 opt
 SELECT
-    SUM(l_extendedprice * l_discount) AS revenue
+    sum(l_extendedprice * l_discount) AS revenue
 FROM
     lineitem
 WHERE
@@ -783,12 +783,12 @@ opt
 SELECT
     supp_nation,
     cust_nation,
-    l_year, SUM(volume) AS revenue
+    l_year, sum(volume) AS revenue
 FROM (
     SELECT
         n1.n_name AS supp_nation,
         n2.n_name AS cust_nation,
-        EXTRACT(year FROM l_shipdate) AS l_year,
+        extract(year FROM l_shipdate) AS l_year,
         l_extendedprice * (1 - l_discount) AS volume
     FROM
         supplier,
@@ -897,14 +897,14 @@ sort
 opt
 SELECT
     o_year,
-    SUM(CASE
+    sum(CASE
         WHEN nation = 'BRAZIL'
             THEN volume
         ELSE 0
-    END) / SUM(volume) AS mkt_share
+    END) / sum(volume) AS mkt_share
 FROM (
     SELECT
-        EXTRACT(year FROM o_orderdate) AS o_year,
+        extract(year FROM o_orderdate) AS o_year,
         l_extendedprice * (1 - l_discount) AS volume,
         n2.n_name AS nation
     FROM
@@ -1052,11 +1052,11 @@ opt
 SELECT
     nation,
     o_year,
-    SUM(amount) AS sum_profit
+    sum(amount) AS sum_profit
 FROM (
     SELECT
         n_name AS nation,
-        EXTRACT(year FROM o_orderdate) AS o_year,
+        extract(year FROM o_orderdate) AS o_year,
         l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity AS amount
     FROM
         part,
@@ -1162,7 +1162,7 @@ opt
 SELECT
     c_custkey,
     c_name,
-    SUM(l_extendedprice * (1 - l_discount)) AS revenue,
+    sum(l_extendedprice * (1 - l_discount)) AS revenue,
     c_acctbal,
     n_name,
     c_address,
@@ -1260,7 +1260,7 @@ limit
 opt
 SELECT
     ps_partkey,
-    SUM(ps_supplycost * ps_availqty::float) AS value
+    sum(ps_supplycost * ps_availqty::float) AS value
 FROM
     partsupp,
     supplier,
@@ -1271,9 +1271,9 @@ WHERE
     AND n_name = 'GERMANY'
 GROUP BY
     ps_partkey HAVING
-        SUM(ps_supplycost * ps_availqty::float) > (
+        sum(ps_supplycost * ps_availqty::float) > (
             SELECT
-                SUM(ps_supplycost * ps_availqty::float) * 0.0001
+                sum(ps_supplycost * ps_availqty::float) * 0.0001
             FROM
                 partsupp,
                 supplier,
@@ -1384,13 +1384,13 @@ sort
 opt
 SELECT
     l_shipmode,
-    SUM(CASE
+    sum(CASE
         WHEN o_orderpriority = '1-URGENT'
             OR o_orderpriority = '2-HIGH'
             THEN 1
         ELSE 0
     END) AS high_line_count,
-    SUM(CASE
+    sum(CASE
         WHEN o_orderpriority <> '1-URGENT'
             AND o_orderpriority <> '2-HIGH'
             THEN 1
@@ -1461,11 +1461,11 @@ sort
 # --------------------------------------------------
 opt
 SELECT
-    c_count, COUNT(*) AS custdist
+    c_count, count(*) AS custdist
 FROM (
     SELECT
         c_custkey,
-        COUNT(o_orderkey)
+        count(o_orderkey)
     FROM
         customer LEFT OUTER JOIN orders ON
             c_custkey = o_custkey
@@ -1525,11 +1525,11 @@ sort
 # --------------------------------------------------
 opt
 SELECT
-    100.00 * SUM(CASE
+    100.00 * sum(CASE
         WHEN p_type LIKE 'PROMO%'
             THEN l_extendedprice * (1 - l_discount)
         ELSE 0
-    END) / SUM(l_extendedprice * (1 - l_discount)) AS promo_revenue
+    END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue
 FROM
     lineitem,
     part
@@ -1589,7 +1589,7 @@ project
 #CREATE VIEW revenue0 (supplier_no, total_revenue) AS
 #    SELECT
 #        l_suppkey,
-#        SUM(l_extendedprice * (1 - l_discount))
+#        sum(l_extendedprice * (1 - l_discount))
 #    FROM
 #        lineitem
 #    WHERE
@@ -1611,7 +1611,7 @@ project
 #    s_suppkey = supplier_no
 #    AND total_revenue = (
 #        SELECT
-#            MAX(total_revenue)
+#            max(total_revenue)
 #        FROM
 #            revenue0
 #    )
@@ -1643,7 +1643,7 @@ project
 #    p_brand,
 #    p_type,
 #    p_size,
-#    COUNT(DISTINCT ps_suppkey) AS supplier_cnt
+#    count(DISTINCT ps_suppkey) AS supplier_cnt
 #FROM
 #    partsupp,
 #    part
@@ -1690,7 +1690,7 @@ project
 # --------------------------------------------------
 opt
 SELECT
-    SUM(l_extendedprice) / 7.0 AS avg_yearly
+    sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM
     lineitem,
     part
@@ -1700,7 +1700,7 @@ WHERE
     AND p_container = 'MED BOX'
     AND l_quantity < (
         SELECT
-            0.2 * AVG(l_quantity)
+            0.2 * avg(l_quantity)
         FROM
             lineitem
         WHERE
@@ -1774,7 +1774,7 @@ SELECT
     o_orderkey,
     o_orderdate,
     o_totalprice,
-    SUM(l_quantity)
+    sum(l_quantity)
 FROM
     customer,
     orders,
@@ -1787,7 +1787,7 @@ WHERE
             lineitem
         GROUP BY
             l_orderkey HAVING
-                SUM(l_quantity) > 300
+                sum(l_quantity) > 300
     )
     AND c_custkey = o_custkey
     AND o_orderkey = l_orderkey
@@ -1872,7 +1872,7 @@ limit
 # --------------------------------------------------
 opt
 SELECT
-    SUM(l_extendedprice* (1 - l_discount)) AS revenue
+    sum(l_extendedprice* (1 - l_discount)) AS revenue
 FROM
     lineitem,
     part
@@ -1965,7 +1965,7 @@ WHERE
             )
             AND ps_availqty > (
                 SELECT
-                    0.5 * SUM(l_quantity)
+                    0.5 * sum(l_quantity)
                 FROM
                     lineitem
                 WHERE
@@ -2064,7 +2064,7 @@ sort
 opt
 SELECT
     s_name,
-    COUNT(*) AS numwait
+    count(*) AS numwait
 FROM
     supplier,
     lineitem l1,
@@ -2192,8 +2192,8 @@ limit
 opt
 SELECT
     cntrycode,
-    COUNT(*) AS numcust,
-    SUM(c_acctbal) AS totacctbal
+    count(*) AS numcust,
+    sum(c_acctbal) AS totacctbal
 FROM (
     SELECT
         substring(c_phone FROM 1 FOR 2) AS cntrycode,
@@ -2205,7 +2205,7 @@ FROM (
             ('13', '31', '23', '29', '30', '18', '17')
         AND c_acctbal > (
             SELECT
-                AVG(c_acctbal)
+                avg(c_acctbal)
             FROM
                 customer
             WHERE

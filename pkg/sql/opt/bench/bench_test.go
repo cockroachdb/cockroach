@@ -83,7 +83,7 @@ var queries = [...]benchQuery{
 	{"Select3", `SELECT a/b, b/c, c != 3.3 + 1.0, a = 2.0, c * 9.0 FROM bench.select WHERE a > 1 AND b < 4.5`},
 
 	// Taken from BenchmarkCount in pkg/sql/bench/bench_test.go.
-	{"Count", `SELECT COUNT(*) FROM bench.count`},
+	{"Count", `SELECT count(*) FROM bench.count`},
 
 	// Taken from BenchmarkScan in pkg/sql/bench/bench_test.go.
 	{"Scan", `SELECT * FROM scan LIMIT 10`},
@@ -100,7 +100,7 @@ var queries = [...]benchQuery{
 	{"ScanFilter", `SELECT * FROM scan2 WHERE a IN (1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 20, 21, 23) AND b < 10*a`},
 
 	// Taken from BenchmarkWideTableIgnoreColumns in pkg/sql/bench/bench_test.go.
-	{"WideTableIgnoreColumns", `SELECT COUNT(*) FROM widetable WHERE f4 < 10`},
+	{"WideTableIgnoreColumns", `SELECT count(*) FROM widetable WHERE f4 < 10`},
 
 	// Taken from BenchmarkIndexJoin in pkg/sql/bench_test.go.
 	{"IndexJoin", `SELECT * from tidx WHERE v < 1000`},

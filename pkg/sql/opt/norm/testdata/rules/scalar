@@ -352,7 +352,7 @@ select
 
 # Scalar group by shouldn't get eliminated.
 opt
-SELECT * FROM a WHERE EXISTS(SELECT MAX(s) FROM a WHERE False)
+SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a WHERE False)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
@@ -376,7 +376,7 @@ select
 # EliminateExistsGroupBy + EliminateExistsProject
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE EXISTS(SELECT MAX(s) FROM a GROUP BY i)
+SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a GROUP BY i)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])

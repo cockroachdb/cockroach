@@ -823,7 +823,7 @@ project
            └── const: 1 [type=int]
 
 build
-SELECT * FROM xyz WHERE x = (SELECT MIN(x) FROM xyz)
+SELECT * FROM xyz WHERE x = (SELECT min(x) FROM xyz)
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
@@ -846,7 +846,7 @@ select
                                     └── variable: xyz.x [type=int]
 
 build
-SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
@@ -1611,7 +1611,7 @@ TABLE t3
       └── rowid int not null (hidden)
 
 build
-SELECT (SELECT (SELECT MAX(t3.a) FROM t1) FROM t2) FROM t3
+SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
 ----
 project
  ├── columns: max:10(int)
@@ -1671,7 +1671,7 @@ project
                                                    └── variable: t3.a [type=int]
 
 build
-SELECT (SELECT (SELECT COUNT(*) FROM t1 GROUP BY t3.a) FROM t2) FROM t3
+SELECT (SELECT (SELECT count(*) FROM t1 GROUP BY t3.a) FROM t2) FROM t3
 ----
 project
  ├── columns: count:10(int)
@@ -1777,7 +1777,7 @@ project
                                                    └── variable: a [type=int]
 
 build
-SELECT (SELECT ARRAY[COUNT(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
+SELECT (SELECT ARRAY[count(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
 ----
 project
  ├── columns: array:8(int[])
@@ -1813,7 +1813,7 @@ project
                                └── variable: a [type=int]
 
 build
-SELECT (SELECT (SELECT MAX(t3.a) / MIN(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
+SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
 ----
 project
  ├── columns: r:13(decimal)

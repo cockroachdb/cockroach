@@ -317,7 +317,7 @@ statement error views do not currently support \* expressions
 create view s1 AS SELECT a FROM t ORDER BY t.*
 
 statement error views do not currently support \* expressions
-create view s1 AS SELECT COUNT(1) FROM t GROUP BY t.*
+create view s1 AS SELECT count(1) FROM t GROUP BY t.*
 
 statement error views do not currently support \* expressions
 create view s1 AS SELECT alias.* FROM t AS alias
@@ -356,16 +356,16 @@ statement error views do not currently support \* expressions
 create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
 
 statement ok
-create view s1 AS SELECT COUNT(*) FROM t
+create view s1 AS SELECT count(*) FROM t
 
 statement ok
-create view s2 AS SELECT a FROM t WHERE a IN (SELECT COUNT(*) FROM t)
+create view s2 AS SELECT a FROM t WHERE a IN (SELECT count(*) FROM t)
 
 statement ok
-create view s3 AS SELECT a, COUNT(*) FROM t GROUP BY a
+create view s3 AS SELECT a, count(*) FROM t GROUP BY a
 
 statement ok
-create view s4 AS SELECT a, COUNT(*) FROM t GROUP BY a HAVING a > (SELECT COUNT(*) FROM t)
+create view s4 AS SELECT a, count(*) FROM t GROUP BY a HAVING a > (SELECT count(*) FROM t)
 
 statement ok
 DROP VIEW s4

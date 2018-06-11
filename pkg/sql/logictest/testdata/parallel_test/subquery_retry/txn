@@ -4,4 +4,4 @@
 
 repeat 50
 statement ok
-INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+INSERT INTO T VALUES ((SELECT max(k+1) FROM T))

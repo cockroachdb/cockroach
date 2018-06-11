@@ -477,7 +477,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT $0 > 0":                             "pq: invalid placeholder name: $0",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
-		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of placeholder $1",
+		"SELECT ($1 + $1) + current_date()":         "pq: could not determine data type of placeholder $1",
 		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of placeholder $1",
 		"SELECT $1[2]":                              "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + 2) + ($1 + 2.5::FLOAT)":       "pq: unsupported binary operator: <int> + <float>",
@@ -665,7 +665,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
 			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
-		"SELECT GREATEST($1, 0, $2), $2": {
+		"SELECT greatest($1, 0, $2), $2": {
 			baseTest.SetArgs(1, -1).Results(1, -1),
 			baseTest.SetArgs(-1, 10).Results(10, 10),
 			baseTest.SetArgs("-2", "-1").Results(0, -1),
@@ -681,7 +681,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
 		},
 		// Check for name resolution.
-		"SELECT COUNT(*)": {
+		"SELECT count(*)": {
 			baseTest.Results(1),
 		},
 		"SELECT CASE WHEN $1 THEN 1-$3 WHEN $2 THEN 1+$3 END": {
@@ -783,12 +783,12 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
-		"INSERT INTO d.ts VALUES(CURRENT_TIMESTAMP(), $1) RETURNING b": {
+		"INSERT INTO d.ts VALUES(current_timestamp(), $1) RETURNING b": {
 			baseTest.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
-		"INSERT INTO d.ts VALUES(STATEMENT_TIMESTAMP(), $1) RETURNING b": {
+		"INSERT INTO d.ts VALUES(statement_timestamp(), $1) RETURNING b": {
 			baseTest.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
@@ -815,7 +815,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(1).Results(1, 2),
 			baseTest.SetArgs(3).Results(3, 4),
 		},
-		"INSERT INTO d.T VALUES (GREATEST(42, $1)) RETURNING a": {
+		"INSERT INTO d.T VALUES (greatest(42, $1)) RETURNING a": {
 			baseTest.SetArgs(40).Results(42),
 			baseTest.SetArgs(45).Results(45),
 		},
@@ -840,7 +840,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(12).Results("2001-01-26T00:00:00Z"),
 		},
 		// Hint for INT type to distinguish from ~INET functionality.
-		"SELECT TO_HEX(~(~$1:::INT))": {
+		"SELECT to_hex(~(~$1:::INT))": {
 			baseTest.SetArgs(12).Results("c"),
 		},
 		"SELECT $1::INT": {
@@ -863,7 +863,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
 			baseTest.SetArgs(5, 6).Results(-6, 11),
 		},
-		"INSERT INTO d.str (s) VALUES (LEFT($1, 3)) RETURNING s": {
+		"INSERT INTO d.str (s) VALUES (left($1, 3)) RETURNING s": {
 			baseTest.SetArgs("abcdef").Results("abc"),
 			baseTest.SetArgs("123456").Results("123"),
 		},

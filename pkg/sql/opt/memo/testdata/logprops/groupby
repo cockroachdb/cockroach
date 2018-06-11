@@ -24,7 +24,7 @@ TABLE kuv
       └── k int not null
 
 build
-SELECT y, SUM(z), x, False FROM xyzs GROUP BY x, y
+SELECT y, sum(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
  ├── columns: y:2(int) sum:5(float) x:1(int!null) bool:6(bool!null)
@@ -51,7 +51,7 @@ project
 
 # Scalar groupby.
 build
-SELECT SUM(x), MAX(y) FROM xyzs
+SELECT sum(x), max(y) FROM xyzs
 ----
 group-by
  ├── columns: sum:5(decimal) max:6(int)
@@ -94,7 +94,7 @@ project
 
 # Group by columns that otherwise wouldn't be weak key.
 build
-SELECT y, SUM(z) FROM xyzs GROUP BY z, y
+SELECT y, sum(z) FROM xyzs GROUP BY z, y
 ----
 project
  ├── columns: y:2(int) sum:5(float)
@@ -117,7 +117,7 @@ project
 
 # Group by column that is subset of unique index.
 build
-SELECT z, MAX(s) FROM xyzs GROUP BY z
+SELECT z, max(s) FROM xyzs GROUP BY z
 ----
 group-by
  ├── columns: z:3(float!null) max:5(string)
@@ -155,7 +155,7 @@ project
 
 # Propagate outer columns.
 build
-SELECT * FROM xyzs WHERE (SELECT SUM(x) FROM (SELECT y, u FROM kuv) GROUP BY u) > 100
+SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) > 100
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)

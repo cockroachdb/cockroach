@@ -81,7 +81,7 @@ limit           ·       ·          (k, v)  -v
 ·               spans   ALL        ·       ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                    ·            ·          (sum)         ·
  │                        render 0     agg0       ·             ·

@@ -18,11 +18,11 @@ CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
 
 # Aggregate function calls in CHECK are not ok.
 statement error aggregate functions are not allowed in DEFAULT
-CREATE TABLE bad (a INT DEFAULT COUNT(1))
+CREATE TABLE bad (a INT DEFAULT count(1))
 
 # Window function calls in CHECK are not ok.
 statement error window functions are not allowed in DEFAULT
-CREATE TABLE bad (a INT DEFAULT COUNT(1) OVER ())
+CREATE TABLE bad (a INT DEFAULT count(1) OVER ())
 
 statement ok
 CREATE TABLE t (

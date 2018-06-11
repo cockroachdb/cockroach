@@ -13,7 +13,7 @@ query error unknown function: defaults
 SELECT defaults()
 
 query II colnames
-SELECT LENGTH('roach7'), LENGTH(b'roach77')
+SELECT length('roach7'), length(b'roach77')
 ----
 length length
 6      7
@@ -26,7 +26,7 @@ SELECT length('Hello, 世界'), length(b'Hello, 世界'),
 9 13 9 13 9 13
 
 statement error unknown signature: length\(int\)
-SELECT LENGTH(23)
+SELECT length(23)
 
 query III
 SELECT octet_length('Hello'), octet_length('世界'), octet_length(b'世界')
@@ -95,157 +95,157 @@ statement ok
 RESET bytea_output
 
 query T colnames
-SELECT UPPER('roacH7')
+SELECT upper('roacH7')
 ----
 upper
 ROACH7
 
 statement error unknown signature: upper\(decimal\)
-SELECT UPPER(2.2)
+SELECT upper(2.2)
 
 query T colnames
-SELECT LOWER('RoacH7')
+SELECT lower('RoacH7')
 ----
 lower
 roach7
 
 statement error unknown signature: lower\(int\)
-SELECT LOWER(32)
+SELECT lower(32)
 
 # Multiplying by zero so the result is deterministic.
 query R
-SELECT RANDOM() * 0.0
+SELECT random() * 0.0
 ----
 0
 
 # Concatenating 'empty' because the empty string doesn't work in these tests.
 query T
-SELECT CONCAT() || 'empty'
+SELECT concat() || 'empty'
 ----
 empty
 
 query T
-SELECT CONCAT('RoacH', NULL)
+SELECT concat('RoacH', NULL)
 ----
 RoacH
 
 statement error unknown signature: concat\(string, bool, decimal, bool\)
-SELECT CONCAT('RoacH', false, 64.532, TRUE)
+SELECT concat('RoacH', false, 64.532, TRUE)
 
 query T
-SELECT SUBSTR('RoacH', 2, 3)
+SELECT substr('RoacH', 2, 3)
 ----
 oac
 
 query T
-SELECT SUBSTRING('RoacH', 2, 3)
+SELECT substring('RoacH', 2, 3)
 ----
 oac
 
 query T
-SELECT SUBSTRING('💩oacH', 2, 3)
+SELECT substring('💩oacH', 2, 3)
 ----
 oac
 
 query T
-SELECT SUBSTRING('RoacH' from 2 for 3)
+SELECT substring('RoacH' from 2 for 3)
 ----
 oac
 
 query T
-SELECT SUBSTRING('RoacH' for 3 from 2)
+SELECT substring('RoacH' for 3 from 2)
 ----
 oac
 
 query T
-SELECT SUBSTR('RoacH', 2)
+SELECT substr('RoacH', 2)
 ----
 oacH
 
 query T
-SELECT SUBSTR('💩oacH', 2)
+SELECT substr('💩oacH', 2)
 ----
 oacH
 
 query T
-SELECT SUBSTRING('RoacH' from 2)
+SELECT substring('RoacH' from 2)
 ----
 oacH
 
 query T
-SELECT SUBSTR('RoacH', -2)
+SELECT substr('RoacH', -2)
 ----
 RoacH
 
 query T
-SELECT SUBSTR('RoacH', -2, 4)
+SELECT substr('RoacH', -2, 4)
 ----
 R
 
 query T
-SELECT SUBSTR('12345', 2, 77)
+SELECT substr('12345', 2, 77)
 ----
 2345
 
 query T
-SELECT SUBSTR('12345', -2, 77)
+SELECT substr('12345', -2, 77)
 ----
 12345
 
 statement error substr\(\): negative substring length -1 not allowed
-SELECT SUBSTR('12345', 2, -1)
+SELECT substr('12345', 2, -1)
 
 query T
-SELECT SUBSTR('string', 4827075662841736053, 5123273972570225659) || 'empty'
+SELECT substr('string', 4827075662841736053, 5123273972570225659) || 'empty'
 ----
 empty
 
 query T
-SELECT SUBSTRING('12345' for 3)
+SELECT substring('12345' for 3)
 ----
 123
 
 query T
-SELECT SUBSTRING('foobar' from 'o.b')
+SELECT substring('foobar' from 'o.b')
 ----
 oob
 
 query T
-SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')
+SELECT substring('f(oabaroob' from '\(o(.)b')
 ----
 a
 
 query T
-SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')
+SELECT substring('f(oabaroob' from '+(o(.)b' for '+')
 ----
 a
 
 query error substring\(\): error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
-SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
+SELECT substring('f(oabaroob' from '\(o(.)b' for '+')
 
 query error unknown signature: substring\(\)
-SELECT SUBSTRING()
+SELECT substring()
 
 query error unknown signature: concat_ws\(\)
-SELECT CONCAT_WS()
+SELECT concat_ws()
 
 query T
-SELECT CONCAT_WS(NULL::STRING, 'a', 'b')
+SELECT concat_ws(NULL::STRING, 'a', 'b')
 ----
 NULL
 
 query T
-SELECT CONCAT_WS(',', 'abcde', NULL)
+SELECT concat_ws(',', 'abcde', NULL)
 ----
 abcde
 
 query T
-SELECT CONCAT_WS(',', 'abcde', '2')
+SELECT concat_ws(',', 'abcde', '2')
 ----
 abcde,2
 
 statement error unknown signature: concat_ws\(string, string, int, unknown, int\)
-SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
+SELECT concat_ws(',', 'abcde', 2, NULL, 22)
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
@@ -1049,99 +1049,99 @@ SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
 true 16
 
 query error syntax error at or near.*
-SELECT GREATEST()
+SELECT greatest()
 
 query error syntax error at or near.*
-SELECT LEAST()
+SELECT least()
 
 query I
-SELECT GREATEST(4, 5, 7, 1, 2)
+SELECT greatest(4, 5, 7, 1, 2)
 ----
 7
 
 query I
-SELECT LEAST(4, 5, 7, 1, 2)
+SELECT least(4, 5, 7, 1, 2)
 ----
 1
 
 query I
-SELECT GREATEST(4, NULL, 7, 1, 2)
+SELECT greatest(4, NULL, 7, 1, 2)
 ----
 7
 
 query I
-SELECT GREATEST(NULL, NULL, 7, NULL, 2)
+SELECT greatest(NULL, NULL, 7, NULL, 2)
 ----
 7
 
 query I
-SELECT GREATEST(NULL, NULL, NULL, NULL, 2)
+SELECT greatest(NULL, NULL, NULL, NULL, 2)
 ----
 2
 
 query I
-SELECT GREATEST(2, NULL, NULL, NULL, NULL)
+SELECT greatest(2, NULL, NULL, NULL, NULL)
 ----
 2
 
 query I
-SELECT LEAST(4, NULL, 7, 1, 2)
+SELECT least(4, NULL, 7, 1, 2)
 ----
 1
 
 query I
-SELECT GREATEST(NULL, NULL, NULL)
+SELECT greatest(NULL, NULL, NULL)
 ----
 NULL
 
 query I
-SELECT LEAST(NULL, NULL, NULL)
+SELECT least(NULL, NULL, NULL)
 ----
 NULL
 
 query I
-SELECT GREATEST(2, '4')
+SELECT greatest(2, '4')
 ----
 4
 
 query I
-SELECT LEAST(2, '4')
+SELECT least(2, '4')
 ----
 2
 
 query T
-SELECT GREATEST('foo', 'bar', 'foobar')
+SELECT greatest('foo', 'bar', 'foobar')
 ----
 foobar
 
 query T
-SELECT LEAST('foo', 'bar', 'foobar')
+SELECT least('foo', 'bar', 'foobar')
 ----
 bar
 
 query R
-SELECT GREATEST(1, 1.2)
+SELECT greatest(1, 1.2)
 ----
 1.2
 
 # Test homogenous functions that can't be constant folded.
 query I
-SELECT GREATEST(NULL, a, 5, NULL) FROM foo
+SELECT greatest(NULL, a, 5, NULL) FROM foo
 ----
 5
 
 query I
-SELECT GREATEST(NULL, NULL, NULL, a, -1) FROM foo
+SELECT greatest(NULL, NULL, NULL, a, -1) FROM foo
 ----
 1
 
 query I
-SELECT LEAST(NULL, a, 5, NULL) FROM foo
+SELECT least(NULL, a, 5, NULL) FROM foo
 ----
 1
 
 query I
-SELECT LEAST(NULL, NULL, NULL, a, -1) FROM foo
+SELECT least(NULL, NULL, NULL, a, -1) FROM foo
 ----
 -1
 
@@ -1233,7 +1233,7 @@ SELECT strpos(version(), 'CockroachDB')
 
 # Don't panic during incorrect use of * (#7727)
 query error pq: cos\(\): cannot use "\*" in this context
-SELECT COS(*) FROM system.namespace
+SELECT cos(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
 query error cannot use "nonexistent.\*" without a FROM clause
@@ -1257,65 +1257,56 @@ query error unsupported comparison operator: <tuple{int}> IS DISTINCT FROM <bool
 SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 
 query T
-SELECT CURRENT_SCHEMAS(true)
+SELECT current_schemas(true)
 ----
 {"pg_catalog","public"}
 
 query T
-SELECT CURRENT_SCHEMAS(false)
+SELECT current_schemas(false)
 ----
 {"public"}
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
 query T
-SELECT CURRENT_SCHEMAS(x) FROM (VALUES (true), (false)) AS t(x);
+SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
 {"pg_catalog","public"}
 {"public"}
 
 statement ok
-SET SEARCH_PATH=test,pg_catalog
+SET search_path=test,pg_catalog
 
 query T
-SELECT CURRENT_SCHEMAS(true)
+SELECT current_schemas(true)
 ----
 {"pg_catalog"}
 
 query T
-SELECT CURRENT_SCHEMAS(false)
+SELECT current_schemas(false)
 ----
 {"pg_catalog"}
 
 statement ok
-RESET SEARCH_PATH
+RESET search_path
 
 query error pq: unknown signature: current_schemas()
-SELECT CURRENT_SCHEMAS()
+SELECT current_schemas()
 
 query T
-SELECT CURRENT_SCHEMAS(NULL::bool)
+SELECT current_schemas(NULL::bool)
 ----
 NULL
 
 query B
-SELECT 'public' = ANY (CURRENT_SCHEMAS(true))
+SELECT 'public' = ANY (current_schemas(true))
 ----
 true
 
 query B
-SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
+SELECT 'not test' = ANY (current_schemas(true))
 ----
 false
-
-# Until #22725 is fixed.
-# statement ok
-# SET SEARCH_PATH = ???
-
-# query T
-# SELECT current_schema()
-# ----
-# NULL
 
 query B
 SELECT pg_catalog.pg_table_is_visible('foo'::regclass)
@@ -1437,76 +1428,76 @@ SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
 2
 
 query T
-SELECT ENCODE('\xa7', 'hex')
+SELECT encode('\xa7', 'hex')
 ----
 a7
 
 query TT
-SELECT ENCODE('abc', 'hex'), DECODE('616263', 'hex')
+SELECT encode('abc', 'hex'), decode('616263', 'hex')
 ----
 616263 abc
 
 query T
-SELECT ENCODE(e'123\000456', 'escape')
+SELECT encode(e'123\000456', 'escape')
 ----
 123\000456
 
 query T
-SELECT DECODE('123\000456', 'escape')::STRING
+SELECT decode('123\000456', 'escape')::STRING
 ----
 \x31323300343536
 
 query TT
-SELECT ENCODE('abc', 'base64'), DECODE('YWJj', 'base64')
+SELECT encode('abc', 'base64'), decode('YWJj', 'base64')
 ----
 YWJj abc
 
 query T
-SELECT DECODE('padded==', 'base64')::STRING
+SELECT decode('padded==', 'base64')::STRING
 ----
 \xa5a75d79
 
 query T
-SELECT DECODE('padded1=', 'base64')::STRING
+SELECT decode('padded1=', 'base64')::STRING
 ----
 \xa5a75d79dd
 
 query error illegal base64 data at input byte 4
-SELECT DECODE('invalid', 'base64')
+SELECT decode('invalid', 'base64')
 
-query error only 'hex', 'escape', and 'base64' formats are supported for ENCODE
-SELECT ENCODE('abc', 'fake')
+query error only 'hex', 'escape', and 'base64' formats are supported for encode\(\)
+SELECT encode('abc', 'fake')
 
-query error only 'hex', 'escape', and 'base64' formats are supported for DECODE
-SELECT DECODE('abc', 'fake')
+query error only 'hex', 'escape', and 'base64' formats are supported for decode\(\)
+SELECT decode('abc', 'fake')
 
 query T
-SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
+SELECT from_ip(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
 ----
 1.2.3.4
 
 query T
-SELECT FROM_IP(TO_IP('1.2.3.4'))
+SELECT from_ip(to_ip('1.2.3.4'))
 ----
 1.2.3.4
 
 # net.IP.String() always gives us the most succinct form of ipv6
 query T
-select FROM_IP(TO_IP('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
+select from_ip(to_ip('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
 ----
 2001:db8:85a3::8a2e:370:7334
 
 query error pq: unknown signature: to_ip()
-SELECT TO_IP()
+SELECT to_ip()
 
 query error pq: from_ip\(\): zero length IP
-SELECT FROM_IP(b'')
+SELECT from_ip(b'')
 
 query error pq: to_ip\(\): invalid IP format: ''
-SELECT TO_IP('')
+SELECT to_ip('')
 
 query error pq: to_ip\(\): invalid IP format: 'asdf'
-select TO_IP('asdf')
+select to_ip('asdf')
 
 query R
 select ln(4.0786335175292462e+34::decimal)
@@ -1514,17 +1505,17 @@ select ln(4.0786335175292462e+34::decimal)
 79.693655171940461633
 
 query IB
-SELECT LENGTH(GEN_RANDOM_UUID()::BYTES), GEN_RANDOM_UUID() = GEN_RANDOM_UUID()
+SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
 query TTTTTT
-SELECT TO_UUID('63616665-6630-3064-6465-616462656566'),
-       TO_UUID('{63616665-6630-3064-6465-616462656566}'),
-       TO_UUID('urn:uuid:63616665-6630-3064-6465-616462656566'),
-       FROM_UUID(b'cafef00ddeadbeef'),
-       TO_UUID(FROM_UUID(b'cafef00ddeadbeef')),
-       FROM_UUID(TO_UUID('63616665-6630-3064-6465-616462656566'))
+SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
+       to_uuid('{63616665-6630-3064-6465-616462656566}'),
+       to_uuid('urn:uuid:63616665-6630-3064-6465-616462656566'),
+       from_uuid(b'cafef00ddeadbeef'),
+       to_uuid(from_uuid(b'cafef00ddeadbeef')),
+       from_uuid(to_uuid('63616665-6630-3064-6465-616462656566'))
 ----
 cafef00ddeadbeef
 cafef00ddeadbeef
@@ -1534,16 +1525,16 @@ cafef00ddeadbeef
 63616665-6630-3064-6465-616462656566
 
 query error uuid: incorrect UUID length
-SELECT TO_UUID('63616665-6630-3064-6465')
+SELECT to_uuid('63616665-6630-3064-6465')
 
 query error uuid: incorrect UUID length
-SELECT TO_UUID('63616665-6630-3064-6465-616462656566-123')
+SELECT to_uuid('63616665-6630-3064-6465-616462656566-123')
 
 query error uuid: incorrect UUID format
-SELECT TO_UUID('6361666512-6630-3064-6465-616462656566')
+SELECT to_uuid('6361666512-6630-3064-6465-616462656566')
 
 query error uuid: UUID must be exactly 16 bytes long, got 4 bytes
-SELECT FROM_UUID(b'f00d')
+SELECT from_uuid(b'f00d')
 
 query T
 SELECT pg_catalog.pg_typeof(sign(1:::decimal))

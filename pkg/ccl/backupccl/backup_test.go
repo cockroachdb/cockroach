@@ -339,12 +339,12 @@ func backupAndRestore(
 		}
 
 		var rowCount int64
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
 
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank@balance_idx`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank@balance_idx`).Scan(&rowCount)
 		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
@@ -817,7 +817,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		// If the restore properly took the (incorrect) low-water mark into account,
 		// the first half of the table will be missing.
 		var restoredCount int64
-		sqlDB.QueryRow(t, `SELECT COUNT(*) FROM restoredb.bank`).Scan(&restoredCount)
+		sqlDB.QueryRow(t, `SELECT count(*) FROM restoredb.bank`).Scan(&restoredCount)
 		if e, a := int64(numAccounts)/2, restoredCount; e != a {
 			t.Fatalf("expected %d restored rows, but got %d\n", e, a)
 		}
@@ -955,8 +955,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			}
 		}
 		sqlDB.CheckQueryResults(t,
-			`SELECT COUNT(*) FROM pause.bank`,
-			sqlDB.QueryStr(t, `SELECT COUNT(*) FROM data.bank`),
+			`SELECT count(*) FROM pause.bank`,
+			sqlDB.QueryStr(t, `SELECT count(*) FROM data.bank`),
 		)
 
 		sqlDB.CheckQueryResults(t,
@@ -1093,19 +1093,19 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		}
 
 		var rowCount int64
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 		if rowCount != numAccounts {
 			t.Errorf("expected %d rows but found %d", numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i0`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i0`).Scan(&rowCount)
 		if rowCount != 2*numAccounts {
 			t.Errorf("expected %d rows but found %d", 2*numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i0_0`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i0_0`).Scan(&rowCount)
 		if rowCount != 3*numAccounts {
 			t.Errorf("expected %d rows but found %d", 3*numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i1`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i1`).Scan(&rowCount)
 		if rowCount != 4*numAccounts {
 			t.Errorf("expected %d rows but found %d", 4*numAccounts, rowCount)
 		}
@@ -1185,7 +1185,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// and a few views for good measure.
 		origDB.Exec(t, `CREATE VIEW store.early_customers AS SELECT id, email from store.customers WHERE id < 5`)
 		origDB.Exec(t, `CREATE VIEW storestats.ordercounts AS
-			SELECT c.id, c.email, COUNT(o.id)
+			SELECT c.id, c.email, count(o.id)
 			FROM store.customers AS c
 			LEFT OUTER JOIN store.orders AS o ON o.customerid = c.id
 			GROUP BY c.id, c.email
@@ -1201,7 +1201,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 			for i := 0; i < 3; i++ {
 				oID := cID*100 + i
 				rID := oID * 10
-				origDB.Exec(t, `INSERT INTO store.orders VALUES ($1, NOW(), $2)`, oID, cID)
+				origDB.Exec(t, `INSERT INTO store.orders VALUES ($1, now(), $2)`, oID, cID)
 				origDB.Exec(t, `INSERT INTO store.receipts VALUES ($1, NULL, $2, $3)`, rID, cID, oID)
 				if i > 1 {
 					origDB.Exec(t, `INSERT INTO store.receipts VALUES ($1, $2, $3, $4)`, rID+1, rID, cID, oID)
@@ -1233,7 +1233,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation on customers from receipts is preserved.
 		if _, err := db.DB.Exec(
-			`UPDATE store.customers SET email = CONCAT(id::string, 'nope')`,
+			`UPDATE store.customers SET email = concat(id::string, 'nope')`,
 		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
 			t.Fatal(err)
 		}
@@ -1739,7 +1739,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 	if expected := 0; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
@@ -1751,14 +1751,14 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, beforeDir)
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 	if expected := numAccounts; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, equalDir)
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 	if expected := 0; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
@@ -1845,7 +1845,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[7])
 
 	sqlDB.Exec(t, `UPSERT INTO data.bank (id, balance)
-	           SELECT i, 4 FROM GENERATE_SERIES(0, $1 - 1) AS g(i)`, numAccounts)
+	           SELECT i, 4 FROM generate_series(0, $1 - 1) AS g(i)`, numAccounts)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[8])
 
 	sqlDB.Exec(t,
@@ -2029,7 +2029,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&afterTs)
 
 	var rowCount int
-	const q = `SELECT COUNT(*) FROM data.bank AS OF SYSTEM TIME '%s'`
+	const q = `SELECT count(*) FROM data.bank AS OF SYSTEM TIME '%s'`
 	// Before the RESTORE, the table doesn't exist, so an AS OF query should fail.
 	if err := sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount); !testutils.IsError(
 		err, `relation "data.bank" does not exist`,

@@ -231,7 +231,7 @@ project
 
 # GroupBy operator.
 opt
-SELECT COUNT(*), SUM(i) FROM a GROUP BY s, f
+SELECT count(*), sum(i) FROM a GROUP BY s, f
 ----
 project
  ├── columns: count:5(int) sum:6(decimal)
@@ -251,7 +251,7 @@ project
 
 # Scalar GroupBy operator.
 opt
-SELECT COUNT(*), SUM(i) FROM a
+SELECT count(*), sum(i) FROM a
 ----
 group-by
  ├── columns: count:5(int) sum:6(decimal)

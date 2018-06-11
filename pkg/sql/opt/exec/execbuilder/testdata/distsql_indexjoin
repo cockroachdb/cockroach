@@ -5,12 +5,12 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 
 # Split the index into 5 parts, as if numbers were in the range 1 to 100.
 statement ok
-ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM GENERATE_SERIES(1, 4) AS g(i)
+ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
 statement ok
 ALTER INDEX t@v TESTING_RELOCATE
-  SELECT ARRAY[i+1], (i * 10)::int FROM GENERATE_SERIES(0, 4) AS g(i)
+  SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
 
 query TTITI colnames
 SHOW TESTING_RANGES FROM INDEX t@v

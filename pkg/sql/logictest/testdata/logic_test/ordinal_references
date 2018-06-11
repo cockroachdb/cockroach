@@ -50,7 +50,7 @@ statement ok
 INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
 
 query R
-SELECT SUM(a) AS s FROM foo GROUP BY @1 ORDER BY s
+SELECT sum(a) AS s FROM foo GROUP BY @1 ORDER BY s
 ----
 1
 2
@@ -60,7 +60,7 @@ SELECT SUM(a) AS s FROM foo GROUP BY @1 ORDER BY s
 6
 
 query R
-SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
+SELECT sum(a) AS s FROM foo GROUP BY @2 ORDER BY s
 ----
 2
 3

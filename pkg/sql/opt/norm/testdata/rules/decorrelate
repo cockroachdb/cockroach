@@ -500,7 +500,7 @@ SELECT *
 FROM a
 WHERE EXISTS
 (
-    SELECT * FROM xy INNER JOIN (SELECT SUM(v), COUNT(*) AS cnt FROM uv WHERE i=5) ON x=cnt
+    SELECT * FROM xy INNER JOIN (SELECT sum(v), count(*) AS cnt FROM uv WHERE i=5) ON x=cnt
 )
 ----
 semi-join-apply
@@ -545,7 +545,7 @@ semi-join-apply
 
 # Synthesize key when one is not present.
 opt
-SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT MAX(y) FROM xy WHERE x=i)
+SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT max(y) FROM xy WHERE x=i)
 ----
 project
  ├── columns: i:2(int) cst:6(string!null)
@@ -580,7 +580,7 @@ project
 
 # Don't decorrelate when agg function that doesn't ignore nulls is used.
 opt
-SELECT * FROM a WHERE 'foo'=(SELECT CONCAT_AGG(y::string) FROM xy WHERE x=k)
+SELECT * FROM a WHERE 'foo'=(SELECT concat_agg(y::string) FROM xy WHERE x=k)
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -622,7 +622,7 @@ project
 
 # Don't decorrelate when the group by input is ordered.
 opt
-SELECT * FROM a WHERE 'foo'=(SELECT MAX(y::string) FROM (SELECT * FROM xy ORDER BY y) WHERE x=k)
+SELECT * FROM a WHERE 'foo'=(SELECT max(y::string) FROM (SELECT * FROM xy ORDER BY y) WHERE x=k)
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -960,7 +960,7 @@ project
 # Multiple correlated subqueries.
 opt
 SELECT * FROM a
-WHERE (SELECT COUNT(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
+WHERE (SELECT count(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
 project
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
@@ -1019,7 +1019,7 @@ project
 # Subquery nested below interesting scalar operators like cast, function, tuple,
 # or, etc).
 opt
-SELECT * FROM a WHERE (0, length((SELECT COUNT(*) FROM uv WHERE k=u)::string)) > (0, 1) OR i=1
+SELECT * FROM a WHERE (0, length((SELECT count(*) FROM uv WHERE k=u)::string)) > (0, 1) OR i=1
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -1221,7 +1221,7 @@ SELECT
     (SELECT y FROM xy LIMIT 1),
     5 IN (SELECT y FROM xy) AS b,
     EXISTS(SELECT * FROM xy),
-    (SELECT COUNT(*) FROM xy WHERE y=k)
+    (SELECT count(*) FROM xy WHERE y=k)
 FROM a
 ----
 project
@@ -1281,7 +1281,7 @@ project
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
 opt
-SELECT MAX((SELECT y FROM xy WHERE y=i)) FROM a
+SELECT max((SELECT y FROM xy WHERE y=i)) FROM a
 ----
 group-by
  ├── columns: max:9(int)

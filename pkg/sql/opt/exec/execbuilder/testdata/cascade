@@ -61,7 +61,7 @@ INSERT INTO c2 VALUES
 INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
 
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -136,7 +136,7 @@ statement ok
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR UPDATE a SET id = 'updated2' WHERE id = 'updated'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -184,7 +184,7 @@ INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR DELETE FROM a WHERE id = 'delete_me'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -251,7 +251,7 @@ INSERT INTO c3 VALUES
 ;
 
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -299,7 +299,7 @@ INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -368,7 +368,7 @@ INSERT INTO c3 VALUES
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -418,7 +418,7 @@ INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR DELETE FROM a WHERE id = 'delete_me'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -485,7 +485,7 @@ INSERT INTO c3 VALUES
 ;
 
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -533,7 +533,7 @@ INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
 ] WHERE message LIKE 'cascading %';
 ----
@@ -602,7 +602,7 @@ INSERT INTO c3 VALUES
 # Ensure that show trace adds a cascade message for each of the tables that is
 # cascaded into.
 query I
-SELECT COUNT(*) FROM [
+SELECT count(*) FROM [
   SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
 ] WHERE message LIKE 'cascading %';
 ----

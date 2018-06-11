@@ -11,20 +11,20 @@ CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
 
 # Split into ten parts.
 statement ok
-ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE data TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate all combinations of values 1 to 10.
 statement ok
 INSERT INTO data SELECT a, b, c, d FROM
-   GENERATE_SERIES(1, 10) AS A(a),
-   GENERATE_SERIES(1, 10) AS B(b),
-   GENERATE_SERIES(1, 10) AS C(c),
-   GENERATE_SERIES(1, 10) AS D(d)
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
 
 statement ok
 CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c));
@@ -85,7 +85,7 @@ SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WH
 
 # Ensure join performs properly on input that has more than 100 rows.
 query I
-SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2
+SELECT count(*) FROM data as d1 NATURAL JOIN data as d2
 ----
 10000
 
@@ -172,17 +172,17 @@ CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc
 
 # Split into ten parts.
 statement ok
-ALTER TABLE multiples SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE multiples TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate 10 rows.
 statement ok
 INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
-  GENERATE_SERIES(1, 10) AS A(x)
+  generate_series(1, 10) AS a(x)
 
 # Lookup join on covering secondary index
 query II rowsort

@@ -46,7 +46,7 @@ SELECT * FROM d
 7
 
 statement ok
-UPDATE d SET x = x + 1 WHERE x + SQRT(x) >= 2 + .1
+UPDATE d SET x = x + 1 WHERE x + sqrt(x) >= 2 + .1
 
 query R rowsort
 SELECT * FROM d
@@ -88,21 +88,21 @@ query error incompatible COALESCE expressions: could not parse "foo" as type int
 SELECT COALESCE(1::INT, 'foo')
 
 query R
-SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4))
+SELECT greatest(-1, 1, 2.3, 123456789, 3 + 5, -(-4))
 ----
 123456789
 
 query T
-SELECT GREATEST('2010-09-29', '2010-09-28'::TIMESTAMP)
+SELECT greatest('2010-09-29', '2010-09-28'::TIMESTAMP)
 ----
 2010-09-29 00:00:00 +0000 +0000
 
 query T
-SELECT GREATEST('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
+SELECT greatest('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
 ----
 12h2m
 
-# This is a current limitation where a nested constant that does not get folded (eg. ABS(-9))
+# This is a current limitation where a nested constant that does not get folded (eg. abs(-9))
 # will not be exposed to the same constant type resolution rules as other constants, meaning that
 # it may miss out on being upcast. The limitation could be addressed by either improving the
 # scope of constant folding or improving homogeneous type resolution.
@@ -110,10 +110,10 @@ SELECT GREATEST('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
 #     of all constants for the first resolvableExpr in typeCheckSameTypedExprs when the parent
 #     expression has no desired type.
 query error greatest\(\): expected -1.123 to be of type int, found type decimal
-SELECT GREATEST(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), ABS(-9))
+SELECT greatest(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), abs(-9))
 
 query R
-SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0))
+SELECT greatest(-1, 1, 2.3, 123456789, 3 + 5, -(-4), abs(-9.0))
 ----
 123456789
 
@@ -137,10 +137,10 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 # Regression tests for #15050
 
 statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
-CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN NOW() < '2017-04-18 18:00' THEN 2 ELSE 2 END);
+CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN now() < '2017-04-18 18:00' THEN 2 ELSE 2 END);
 
 statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
-CREATE TABLE t15050b (c DECIMAL DEFAULT IF(NOW() < '2017-04-18 18:00', 2, 2));
+CREATE TABLE t15050b (c DECIMAL DEFAULT IF(now() < '2017-04-18 18:00', 2, 2));
 
 # Regression tests for #15632
 

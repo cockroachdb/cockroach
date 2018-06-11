@@ -350,7 +350,7 @@ func MakeFixture(
 			}
 			// Specify an explicit empty prefix for crdb_internal to avoid an error if
 			// the database we're connected to does not exist.
-			const numNodesQuery = `SELECT COUNT(node_id) FROM "".crdb_internal.gossip_liveness`
+			const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
 			var numNodes int
 			if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
 				return err

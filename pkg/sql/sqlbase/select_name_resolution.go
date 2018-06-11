@@ -77,7 +77,7 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		// Hence:
 		//    SELECT kv.* FROM kv                 -> SELECT k, v FROM kv
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
-		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
+		//    SELECT count(DISTINCT kv.*) FROM kv -> SELECT count(DISTINCT (k, v)) FROM kv
 		//
 		_, exprs, err := expandStar(context.TODO(), v.sources, t, v.iVarHelper)
 		if err != nil {

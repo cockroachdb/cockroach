@@ -123,7 +123,7 @@ EXECUTE allTypes(0, 0.0, 'foo', 'bar', '2017-08-08', '2015-08-30 03:34:45.34567'
 ## Other
 
 statement
-PREPARE c AS SELECT COUNT(*)
+PREPARE c AS SELECT count(*)
 
 query I
 EXECUTE c
@@ -233,7 +233,7 @@ SELECT * FROM f
 # Ensure that we have a memory monitor for preparing statements
 
 statement
-PREPARE z AS SELECT UPPER('a')
+PREPARE z AS SELECT upper('a')
 
 # Ensure that GROUP BY HAVING doesn't mutate the parsed AST (#16388)
 statement
