@@ -96,14 +96,23 @@ func (p *planner) newUpsertNode(
 	}()
 
 	if n.OnConflict.DoNothing {
-		// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
-		// conflict index, which means do nothing on any conflict. Support this if
-		// someone needs it.
-		un.run.tw = &tableUpserter{
-			ri:            ri,
-			conflictIndex: *conflictIndex,
-			collectRows:   needRows,
-			alloc:         &p.alloc,
+		if conflictIndex == nil {
+			un.run.tw = &strictTableUpserter{
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					collectRows: needRows,
+					alloc:       &p.alloc,
+				},
+			}
+		} else {
+			un.run.tw = &tableUpserter{
+				conflictIndex: *conflictIndex,
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					collectRows: needRows,
+					alloc:       &p.alloc,
+				},
+			}
 		}
 	} else {
 		// We're going to work on allocating an upsertHelper here, even
@@ -179,18 +188,22 @@ func (p *planner) newUpsertNode(
 			// We then use the super-simple, super-fast writer. There's not
 			// much else to prepare.
 			un.run.tw = &fastTableUpserter{
-				ri: ri,
+				tableUpserterBase: tableUpserterBase{
+					ri: ri,
+				},
 			}
 		} else {
 			// General/slow path.
 			un.run.tw = &tableUpserter{
-				ri:            ri,
-				alloc:         &p.alloc,
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					alloc:       &p.alloc,
+					collectRows: needRows,
+				},
 				anyComputed:   len(computeExprs) >= 0,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
-				collectRows:   needRows,
 				evaler:        helper,
 			}
 		}
@@ -740,6 +753,10 @@ func upsertExprsAndIndex(
 			updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
 		}
 		return updateExprs, conflictIndex, nil
+	}
+
+	if onConflict.DoNothing && len(onConflict.Columns) == 0 {
+		return onConflict.Exprs, nil, nil
 	}
 
 	// General case: INSERT with an ON CONFLICT clause.

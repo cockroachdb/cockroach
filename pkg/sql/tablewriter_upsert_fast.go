@@ -33,8 +33,7 @@ import (
 // is the same model as the other `tableFoo`s, which are more simple
 // than upsert.
 type fastTableUpserter struct {
-	tableWriterBase
-	ri sqlbase.RowInserter
+	tableUpserterBase
 }
 
 // init is part of the tableWriter interface.
@@ -69,23 +68,6 @@ func (tu *fastTableUpserter) atBatchEnd(_ context.Context, _ bool) error { retur
 // flushAndStartNewBatch is part of the extendedTableWriter interface.
 func (tu *fastTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
-}
-
-// finalize is part of the tableWriter interface.
-func (tu *fastTableUpserter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-) (*sqlbase.RowContainer, error) {
-	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
-}
-
-// fkSpanCollector is part of the tableWriter interface.
-func (tu *fastTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
-	return tu.ri.Fks
-}
-
-// tableDesc is part of the tableWriter interface.
-func (tu *fastTableUpserter) tableDesc() *sqlbase.TableDescriptor {
-	return tu.ri.Helper.TableDesc
 }
 
 // close is part of the tableWriter interface.

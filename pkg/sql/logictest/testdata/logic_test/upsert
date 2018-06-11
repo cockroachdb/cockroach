@@ -1,5 +1,91 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+subtest strict
+
+statement ok
+CREATE TABLE ex(
+  foo INT PRIMARY KEY,
+  bar INT UNIQUE,
+  baz INT
+)
+
+statement count 1
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1)
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (2,1,1) ON CONFLICT DO NOTHING
+
+statement count 1
+INSERT INTO ex(foo,bar,baz) VALUES (3,2,2), (3,1,2), (4,2,1) ON CONFLICT DO NOTHING
+
+query III colnames
+SELECT * from ex ORDER BY foo
+----
+foo bar baz
+1   1   1
+3   2   2
+
+query III colnames
+INSERT INTO ex(foo,bar,baz) VALUES (4,3,1), (5,2,1) ON CONFLICT DO NOTHING RETURNING *
+----
+foo  bar  baz
+4    3    1
+
+statement ok
+CREATE TABLE ex2(
+  a INT PRIMARY KEY,
+  b INT UNIQUE,
+  c INT,
+  d INT,
+  e INT,
+  UNIQUE (c,d)
+)
+
+statement count 1
+INSERT INTO ex2(a,b,c,d,e) VALUES (0,0,0,0,0)
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (1,0,1,1,0), (2,4,0,0,5) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12), (13,14,15,16,17) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12) ON CONFLICT DO NOTHING
+
+statement ok
+CREATE TABLE no_unique(
+  a INT,
+  b INT
+)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,3), (3,2) ON CONFLICT DO NOTHING
+
+query II colnames
+SELECT * from no_unique ORDER BY a, b
+----
+a  b
+1  2
+1  2
+1  2
+1  3
+3  2
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,2), (1,2) ON CONFLICT DO NOTHING
+
+subtest notstrict
+
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -53,9 +139,9 @@ UPSERT INTO kv VALUES (11, 10), (11, 12) RETURNING k, v
 11 12
 
 statement count 1
-INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
+INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING RETURNING *
 
-statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
+statement count 0
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT DO NOTHING
 
 statement count 2
