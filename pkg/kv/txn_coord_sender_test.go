@@ -343,7 +343,9 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
 			}
 		}
-		return args.CreateReply(), nil
+		resp := args.CreateReply()
+		resp.Txn = args.Txn
+		return resp, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ds := NewDistSender(
@@ -842,6 +844,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				pErr := test.pErrGen(ba.Txn)
 				if pErr == nil {
 					reply = ba.CreateReply()
+					reply.Txn = ba.Txn
 				}
 				return reply, pErr
 			}
@@ -1422,8 +1425,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				br := ba.CreateReply()
 
-				switch req := ba.Requests[0].GetInner().(type) {
-				case *roachpb.BeginTransactionRequest:
+				if _, hasBT := ba.GetArg(roachpb.BeginTransaction); hasBT {
 					if _, ok := ba.Requests[1].GetInner().(*roachpb.PutRequest); !ok {
 						t.Fatalf("expected Put")
 					}
@@ -1437,8 +1439,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 						br.Txn.Writing = true
 						br.Txn.Status = roachpb.PENDING
 					}
-				case *roachpb.EndTransactionRequest:
-					if req.Commit {
+				} else if et, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
+					if et.(*roachpb.EndTransactionRequest).Commit {
 						commit.Store(true)
 						if test.errFn != nil {
 							return nil, test.errFn(*ba.Txn)
@@ -1446,7 +1448,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
 					}
 					abort.Store(true)
-				default:
+				} else {
 					t.Fatalf("unexpected batch: %s", ba)
 				}
 				return br, nil
@@ -1540,7 +1542,9 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
-			return nil, nil
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			return resp, nil
 		}
 		return nil, roachpb.NewErrorf("injected err")
 	})

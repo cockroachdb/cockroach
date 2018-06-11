@@ -53,7 +53,7 @@ dist sender  querying next range at /Table/SystemConfigSpan/Start
 dist sender  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
 
 
 # More KV operations.
@@ -88,7 +88,7 @@ dist sender  querying next range at /Table/3/1/53/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
 
 # We avoid using the full trace output, because that would make the
 # ensuing trace especially chatty, as it traces the index backfill at
@@ -123,7 +123,7 @@ dist sender  querying next range at /Table/3/1/54/2/1
 dist sender  r1: sending batch 1 Put to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 9 QueryIntent to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -258,7 +258,7 @@ sql txn      CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
 sql txn      fetched: /kv/primary/2/v -> /3
 sql txn      CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 2 CPut, 1 EndTxn, 7 QueryIntent to (n1,s1):1
 sql txn      fast path completed
 sql txn      rows affected: 2
 
@@ -277,7 +277,7 @@ dist sender  querying next range at /Table/2/1/53/"kv2"/3/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  querying next range at /Table/3/1/55/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 1 QueryIntent to (n1,s1):1
 sql txn      Scan /Table/55/{1-2}
 dist sender  querying next range at /Table/55/1
 dist sender  r1: sending batch 1 Scan to (n1,s1):1
@@ -342,7 +342,7 @@ dist sender  querying next range at /Table/SystemConfigSpan/Start
 dist sender  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 6 QueryIntent to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
@@ -403,7 +403,7 @@ dist sender  querying next range at /Table/3/1/54/2/1
 dist sender  r1: sending batch 1 Put to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 9 QueryIntent to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
@@ -441,7 +441,7 @@ dist sender  querying next range at /Table/SystemConfigSpan/Start
 dist sender  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
 sql txn      rows affected: 0
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 6 QueryIntent to (n1,s1):1
 
 # Check that session tracing does not inhibit the fast path for inserts &
 # friends (the path resulting in 1PC transactions).

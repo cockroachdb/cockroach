@@ -142,9 +142,10 @@ type TxnCoordSender struct {
 	// is embedded in the interceptorAlloc struct, so the entire stack is
 	// allocated together with TxnCoordSender without any additional heap
 	// allocations necessary.
-	interceptorStack [2]txnInterceptor
+	interceptorStack [3]txnInterceptor
 	interceptorAlloc struct {
 		txnIntentCollector
+		txnPipeliner
 		txnSpanRefresher
 		txnLockGatekeeper // not in interceptorStack array.
 	}
@@ -406,6 +407,9 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		st: tcf.st,
 		ri: ri,
 	}
+	tcs.interceptorAlloc.txnPipeliner = txnPipeliner{
+		st: tcf.st,
+	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
 		knobs: &tcf.testingKnobs,
@@ -422,6 +426,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	}
 	tcs.interceptorStack = [...]txnInterceptor{
 		&tcs.interceptorAlloc.txnIntentCollector,
+		&tcs.interceptorAlloc.txnPipeliner,
 		&tcs.interceptorAlloc.txnSpanRefresher,
 	}
 	for i, reqInt := range tcs.interceptorStack {
