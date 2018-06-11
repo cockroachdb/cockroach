@@ -258,61 +258,6 @@ func (c *CustomFuncs) IsCorrelated(src, dst memo.GroupID) bool {
 	return c.f.outerCols(src).Intersects(c.f.outputCols(dst))
 }
 
-// IsBoundBy returns true if all outer references in the source expression are
-// bound by the destination expression. For example:
-//
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     (Eq (Variable a.x) (Const 1))
-//   )
-//
-// The (Eq) expression is fully bound by the (Scan a) expression because all of
-// its outer references are satisfied by the columns produced by the Scan.
-func (c CustomFuncs) IsBoundBy(src, dst memo.GroupID) bool {
-	return c.f.outerCols(src).SubsetOf(c.f.outputCols(dst))
-}
-
-// ExtractBoundConditions returns a new list containing only those expressions
-// from the given list that are fully bound by the given expression (i.e. all
-// outer references are satisfied by it). For example:
-//
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     (Filters [
-//       (Eq (Variable a.x) (Variable b.x))
-//       (Gt (Variable a.x) (Const 1))
-//     ])
-//   )
-//
-// Calling extractBoundConditions with the filter conditions list and the output
-// columns of (Scan a) would extract the (Gt) expression, since its outer
-// references only reference columns from a.
-func (c CustomFuncs) ExtractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	for _, item := range c.f.mem.LookupList(list) {
-		if c.IsBoundBy(item, group) {
-			lb.AddItem(item)
-		}
-	}
-	return lb.BuildList()
-}
-
-// ExtractUnboundConditions is the inverse of extractBoundConditions. Instead of
-// extracting expressions that are bound by the given expression, it extracts
-// list expressions that have at least one outer reference that is *not* bound
-// by the given expression (i.e. it has a "free" variable).
-func (c CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	for _, item := range c.f.mem.LookupList(list) {
-		if !c.IsBoundBy(item, group) {
-			lb.AddItem(item)
-		}
-	}
-	return lb.BuildList()
-}
-
 // ConcatFilters creates a new Filters operator that contains conditions from
 // both the left and right boolean filter expressions. If the left or right
 // expression is itself a Filters operator, then it is "flattened" by merging
