@@ -1308,15 +1308,6 @@ SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
 ----
 false
 
-# Until #22725 is fixed.
-# statement ok
-# SET SEARCH_PATH = ???
-
-# query T
-# SELECT current_schema()
-# ----
-# NULL
-
 query B
 SELECT pg_catalog.pg_table_is_visible('foo'::regclass)
 ----
