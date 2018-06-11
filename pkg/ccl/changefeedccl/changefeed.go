@@ -259,8 +259,9 @@ func kvsToRows(
 					if r.row == nil {
 						break
 					}
-					r.deleted = rf.RowIsDeleted()
+					r.row = append(tree.Datums(nil), r.row...)
 
+					r.deleted = rf.RowIsDeleted()
 					r.rowTimestamp = unsafeKey.Timestamp
 					output = append(output, r)
 				}
