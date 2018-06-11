@@ -27,9 +27,11 @@ import (
 
 // Compute the size of various structures to use when tracking memory usage.
 var (
-	sizeOfTimeSeriesData = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
-	sizeOfSample         = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
-	sizeOfDataPoint      = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
+	sizeOfTimeSeriesData       = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
+	sizeOfSample               = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
+	sizeOfDataPoint            = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
+	sizeOfInt32          int64 = 4
+	sizeOfFloat64        int64 = 8
 )
 
 // QueryMemoryOptions represents the adjustable options of a QueryMemoryContext.
@@ -46,6 +48,8 @@ type QueryMemoryOptions struct {
 	// hard limit on the timespan that needs to be read from disk to satisfy
 	// a query.
 	InterpolationLimitNanos int64
+	// If true, memory will be computed assuming the columnar layout.
+	Columnar bool
 }
 
 // QueryMemoryContext encapsulates the memory-related parameters of a time
@@ -86,7 +90,14 @@ func (qmc QueryMemoryContext) GetMaxTimespan(r Resolution) (int64, error) {
 
 	// Size of slab is the size of a completely full data slab for the supplied
 	// data resolution.
-	sizeOfSlab := sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfSample
+	var sizeOfSlab int64
+	if qmc.Columnar {
+		// Contains an Offset (int32) and Last (float64) for each sample.
+		sizeOfSlab = sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*(sizeOfInt32+sizeOfFloat64)
+	} else {
+		// Contains a sample structure for each sample.
+		sizeOfSlab = sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfSample
+	}
 
 	// InterpolationBuffer is the number of slabs outside of the query range
 	// needed to satisfy the interpolation limit. Extra slabs may be queried
