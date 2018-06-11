@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1606,6 +1607,9 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		t.outf("%s;", stmt.sql)
 	}
 	res, err := t.db.Exec(stmt.sql)
+	if err == nil {
+		parser.VerifyStatementPrettyRoundtrip(t.t, stmt.sql)
+	}
 	if err == nil && stmt.expectCount >= 0 {
 		var count int64
 		count, err = res.RowsAffected()
@@ -1648,6 +1652,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		t.outf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
+	if err == nil {
+		parser.VerifyStatementPrettyRoundtrip(t.t, query.sql)
+	}
 	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
 		return err
 	}
