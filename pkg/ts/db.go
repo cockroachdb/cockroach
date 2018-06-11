@@ -60,6 +60,10 @@ type DB struct {
 	// which is older than the given threshold for a resolution is considered
 	// eligible for deletion. Thresholds are specified in nanoseconds.
 	pruneThresholdByResolution map[Resolution]func() int64
+
+	// writeColumnar is set to true if the database should write in columnar
+	// format. Currently only set to true in tests.
+	writeColumnar bool
 }
 
 // NewDB creates a new DB instance.
@@ -179,7 +183,7 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
 	for _, d := range data {
-		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
+		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), db.writeColumnar)
 		if err != nil {
 			return err
 		}
@@ -193,7 +197,7 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 				Key:   key,
 				Value: value,
 			})
-			totalSamples += int64(len(idata.Samples))
+			totalSamples += int64(idata.SampleCount())
 			totalSizeOfKvs += int64(len(value.RawBytes)+len(key)) + sizeOfTimestamp
 		}
 	}
