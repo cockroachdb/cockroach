@@ -2332,11 +2332,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 			var txnKey roachpb.Key
 			ctx := context.Background()
 			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
-			opts := client.TxnExecOptions{
-				AutoCommit: true,
-				AutoRetry:  false,
-			}
-			if err := txn.Exec(ctx, opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+			txnFn := func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(lhsKey), force, commit), "lhsValue")
 				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(rhsKey), force, commit), "rhsValue")
@@ -2361,14 +2357,15 @@ func TestDistributedTxnCleanup(t *testing.T) {
 					})
 					_, pErr := store.Send(ctx, ba)
 					if pErr != nil {
-						t.Errorf("failed to abort the txn: %s", pErr)
+						t.Fatalf("failed to abort the txn: %s", pErr)
 					}
 				}
 				if commit {
-					return nil
+					return txn.Commit(ctx)
 				}
 				return errors.New("forced abort")
-			}); err != nil {
+			}
+			if err := txnFn(ctx, txn); err != nil {
 				txn.CleanupOnError(ctx, err)
 				if !force && commit {
 					t.Fatalf("expected success with commit == true; got %v", err)

@@ -15,7 +15,6 @@
 package kv_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -105,7 +104,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		s.Stopper(),
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	db := client.NewDB(tsf, s.Clock())
+	db := client.NewDB(ambient, tsf, s.Clock())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to
@@ -1771,33 +1770,28 @@ func TestTxnStarvation(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderHeartbeatFailurePostSplit verifies that on
-// heartbeat timeout, the transaction is aborted asynchronously,
-// leaving abort span entries which cause concurrent reads to fail
-// with txn aborted errors on a range different that the txn's anchor.
-//
-// Note that this is a post-split version of TestTxnCoordSenderGCTimeout.
-func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
+// Test that, if the TxnCoordSender gets a TransactionAbortError, it sends an
+// EndTransaction with Poison=true (the poisoning is so that concurrent readers
+// don't miss their writes).
+func TestAsyncAbortPoisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
 	var storeKnobs storage.StoreTestingKnobs
 	keyA := roachpb.Key("a")
-	keyB := roachpb.Key("b")
-	signal := make(chan struct{})
+	var expectPoison int64
+	commitCh := make(chan error, 1)
 	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			switch r := req.GetInner().(type) {
-			case *roachpb.GetRequest:
-				if r.Key.Equal(keyA) || r.Key.Equal(keyB) {
-					log.VEventf(context.TODO(), 1, "waiting on read of key %s", r.Key)
-					<-signal
-				}
-			case *roachpb.HeartbeatTxnRequest:
-				if bytes.Equal(ba.Txn.Key, keyA) {
-					log.VEventf(context.TODO(), 1, "failing heartbeat of txn %s", r.Key)
-					return roachpb.NewErrorf("induced heartbeat failure")
+			case *roachpb.EndTransactionRequest:
+				if r.Key.Equal(keyA) && atomic.LoadInt64(&expectPoison) == 1 {
+					if r.Poison {
+						close(commitCh)
+					} else {
+						commitCh <- fmt.Errorf("EndTransaction didn't have expected Poison flag")
+					}
 				}
 			}
 		}
@@ -1810,59 +1804,32 @@ func TestTxnCoordSenderHeartbeatFailurePostSplit(t *testing.T) {
 
 	// Setup two userspace ranges: /Min-b, b-/Max.
 	db := s.DB()
-	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
-		t.Fatal(err)
-	}
 
-	// Write values to keys "a" and "b", on separate ranges.
+	// Write values to key "a".
 	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 	b := txn.NewBatch()
 	b.Put(keyA, []byte("value"))
-	b.Put(keyB, []byte("value"))
 	if err := txn.Run(context.TODO(), b); err != nil {
 		t.Fatal(err)
 	}
 
-	startReader := func(key roachpb.Key) chan error {
-		errCh := make(chan error)
-		go func() {
-			if _, err := txn.Get(context.TODO(), key); err != nil {
-				log.Infof(context.TODO(), "read of key %s: %s", key, err)
-				errCh <- err
-			} else {
-				errCh <- errors.New("expected error")
-			}
-		}()
-		return errCh
-	}
-	errChB := startReader(keyB)
-
-	stores := s.GetStores().(*storage.Stores)
-	store, err := stores.GetStore(1)
-	if err != nil {
+	// Run a high-priority txn that will abort the previous one.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+			return err
+		}
+		return txn.Put(ctx, keyA, []byte("value2"))
+	}); err != nil {
 		t.Fatal(err)
 	}
-	// Wait for the transaction to fail the heartbeat and cleanup
-	// intents (and poison the abort span for the txn ID).
-	testutils.SucceedsSoon(t, func() error {
-		for _, key := range []roachpb.Key{keyA, keyB} {
-			meta := &enginepb.MVCCMetadata{}
-			ok, _, _, err := store.Engine().GetProto(engine.MakeMVCCMetadataKey(key), meta)
-			if err != nil {
-				return fmt.Errorf("error getting MVCC metadata: %s", err)
-			}
-			if ok && meta.Txn != nil {
-				return fmt.Errorf("found unexpected write intent: %s", meta)
-			}
-		}
-		return nil
-	})
 
-	// Now signal the inflight readers to continue; they should witness
-	// abort span entries.
-	close(signal)
-	if err := <-errChB; !testutils.IsError(err, "txn aborted") {
-		t.Errorf("expected transaction aborted error reading %s; got %s", keyB, err)
+	atomic.StoreInt64(&expectPoison, 1)
+
+	if _, err := txn.Get(context.TODO(), keyA); !testutils.IsError(err, "txn aborted") {
+		t.Fatal(err)
+	}
+	if err := <-commitCh; err != nil {
+		t.Fatal(err)
 	}
 }
 

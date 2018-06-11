@@ -134,6 +134,10 @@ const (
 // transaction is the top level (root), or one of potentially many
 // distributed transactions (leaf).
 //
+// If the transaction is used to send any operations, CommitOrCleanup() or
+// CleanupOnError() should eventually be called to commit/rollback the
+// transaction (including stopping the heartbeat loop).
+//
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
 //   transaction is running. Normally this is the current node, but in the case
 //   of Txns created on remote nodes by DistSQL this will be the gateway.
@@ -592,9 +596,6 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 	}
-	if !txn.IsFinalized() {
-		log.Fatal(ctx, "Commit() failed to move txn to a final state")
-	}
 	return err
 }
 
@@ -626,17 +627,49 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 	return txn.rollback(ctx).GoError()
 }
 
+// TODO(andrei): It's common for rollbacks to fail with TransactionStatusError:
+// txn record not found (REASON_TXN_NOT_FOUND), in case the txn record was never
+// written (e.g. if a 1PC failed). One would think that, depending on the error
+// received by a 1PC batch, we'd know if a txn record was written and, if it
+// wasn't, we could short-circuit the rollback. There's two tricky things about
+// that, though: a) we'd need to know whether the DistSender has split what
+// looked like a 1PC batch to the client and b) ambiguous errors.
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
-	// TODO(andrei): It's common for rollbacks to fail with
-	// TransactionStatusError: txn record not found (REASON_TXN_NOT_FOUND),
-	// in case the txn record was never written (e.g. if a 1PC failed). One would
-	// think that, depending on the error received by a 1PC batch, we'd know if a
-	// txn record was written and, if it wasn't, we could short-circuit the
-	// rollback. There's two tricky things about that, though: a) we'd need to
-	// know whether the DistSender has split what looked like a 1PC batch to the
-	// client and b) ambiguous errors.
 	log.VEventf(ctx, 2, "rolling back transaction")
-	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
+
+	// Mark the txn as finalized. We don't allow any more requests to be sent once
+	// a rollback is attempted. Also, the SQL layer likes to assert that the
+	// transaction has been finalized after attempting cleanup.
+	txn.mu.Lock()
+	txn.mu.finalized = true
+	txn.mu.Unlock()
+
+	sync := true
+	if ctx.Err() != nil {
+		sync = false
+	}
+	if sync {
+		pErr := txn.sendEndTxnReq(ctx, false /* commit */, nil)
+		if pErr == nil {
+			return nil
+		}
+		// If ctx has been canceled, assume that caused the error and try again
+		// async below.
+		if ctx.Err() == nil {
+			return pErr
+		}
+	}
+
+	stopper := txn.db.ctx.Stopper
+	ctx = stopper.WithCancel(txn.db.AnnotateCtx(context.Background()))
+	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
+		if err := txn.sendEndTxnReq(ctx, false /* commit */, nil); err != nil {
+			log.Infof(ctx, "async rollback failed: %s", err)
+		}
+	}); err != nil {
+		return roachpb.NewError(err)
+	}
+	return nil
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -735,21 +768,6 @@ func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Re
 	return req
 }
 
-// TxnExecOptions controls how Exec() runs a transaction and the corresponding
-// closure.
-type TxnExecOptions struct {
-	// If set, the transaction is automatically aborted if the closure returns any
-	// error aside from recoverable internal errors, in which case the closure is
-	// retried. The retryable function should have no side effects which could
-	// cause problems in the event it must be run more than once.
-	// If not set, all errors cause the txn to be aborted.
-	AutoRetry bool
-	// If set, then the txn is automatically committed if no errors are
-	// encountered. If not set, committing or leaving open the txn is the
-	// responsibility of the client.
-	AutoCommit bool
-}
-
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
 type AutoCommitError struct {
 	cause error
@@ -759,59 +777,30 @@ func (e *AutoCommitError) Error() string {
 	return e.cause.Error()
 }
 
-// Exec executes fn in the context of a distributed transaction.
-// Execution is controlled by opt (see comments in TxnExecOptions).
+// exec executes fn in the context of a distributed transaction. The closure is
+// retried on retriable errors.
+// If no error is returned by the closure, an attempt to commit the txn is made.
 //
-// opt is passed to fn, and it's valid for fn to modify opt as it sees
-// fit during each execution attempt.
-//
-// It's valid for txn to be nil (meaning the txn has already aborted) if fn
-// can handle that. This is useful for continuing transactions that have been
-// aborted because of an error in a previous batch of statements in the hope
-// that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
-// can be set in this case.
-//
-// It is not permitted to call Commit concurrently with any call to Exec. Since
-// Exec with the AutoCommitflag is equivalent to an Exec possibly followed by a
-// Commit, it must not be called concurrently with any other call to Exec or
-// Commit.
-//
-// When this method returns, txn might be in any state; Exec does not attempt
+// When this method returns, txn might be in any state; exec does not attempt
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
-//
-// TODO(andrei): The SQL Executor was the most complex user of this interface.
-// It needed fine control by using TxnExecOptions. Now SQL no longer uses this
-// interface, so it's time to see how it can be simplified. TxnExecOptions can
-// probably go away, and so can AutoCommitError. The method should also be
-// documented to not allow calls concurrent with any other txn use, so that the
-// Commit() call inside it is clearly correct (as in, it won't run concurrently
-// with other txn calls).
-func (txn *Txn) Exec(
-	ctx context.Context, opt TxnExecOptions, fn func(context.Context, *Txn, *TxnExecOptions) error,
-) (err error) {
+func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
-		log.Fatal(ctx, "asked to retry or commit a txn that is already aborted")
-	}
-
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		err = fn(ctx, txn, &opt)
+		err = fn(ctx, txn)
 
-		if err == nil && opt.AutoCommit {
-			status := txn.status()
-			switch status {
-			case roachpb.ABORTED:
-				// TODO(andrei): Until 7881 is fixed.
-				log.Errorf(ctx, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
-					opt, txn)
-			case roachpb.PENDING:
-				// fn succeeded, but didn't commit.
+		// Commit on success, unless the txn has already been committed by the
+		// closure. We allow that, as closure might want to run 1PC transactions.
+		if err == nil {
+			if txn.status() == roachpb.ABORTED {
+				log.Fatalf(ctx, "no err but aborted txn proto. txn: %+v", txn)
+			}
+			if txn.status() == roachpb.PENDING {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
 				if err != nil {
@@ -833,7 +822,7 @@ func (txn *Txn) Exec(
 				// We sent transactional requests, so the TxnCoordSender was supposed to
 				// turn retryable errors into HandledRetryableTxnError. Note that this
 				// applies only in the case where this is the root transaction.
-				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.Exec level: %s", err)
+				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 			}
 
 		case *roachpb.HandledRetryableTxnError:
@@ -849,7 +838,7 @@ func (txn *Txn) Exec(
 			retryable = true
 		}
 
-		if !opt.AutoRetry || !retryable {
+		if !retryable {
 			break
 		}
 
@@ -944,9 +933,12 @@ func (txn *Txn) Send(
 
 		sender = txn.mu.sender
 		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
-			return roachpb.NewErrorf(
-				"attempting to use transaction with wrong status or finalized: %s %v",
-				txn.mu.Proto.Status, txn.mu.finalized)
+			onlyRollback := lastIndex == 0 && haveEndTxn && !endTxnRequest.Commit
+			if !onlyRollback {
+				return roachpb.NewErrorf(
+					"attempting to use transaction with wrong status or finalized: %s %v",
+					txn.mu.Proto.Status, txn.mu.finalized)
+			}
 		}
 
 		// For testing purposes, txn.UserPriority can be a negative value (see
@@ -1092,6 +1084,10 @@ func (txn *Txn) Send(
 					requestTxnID, retryErr.TxnID, retryErr)
 			}
 			txn.updateStateOnRetryableErrLocked(ctx, retryErr)
+		default:
+			if errTxn := pErr.GetTxn(); txn != nil {
+				txn.mu.Proto.Update(errTxn)
+			}
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to

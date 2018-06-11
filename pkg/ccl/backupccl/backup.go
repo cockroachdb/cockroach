@@ -508,18 +508,14 @@ func loadAllDescs(
 	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, error) {
 	var allDescs []sqlbase.Descriptor
-	// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
-	// express that whatever this txn does should not count towards lease
-	// placement stats.
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-	opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-	err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
-		var err error
-		txn.SetFixedTimestamp(ctx, asOf)
-		allDescs, err = allSQLDescriptors(ctx, txn)
-		return err
-	})
-	if err != nil {
+	if err := db.Txn(
+		ctx,
+		func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			txn.SetFixedTimestamp(ctx, asOf)
+			allDescs, err = allSQLDescriptors(ctx, txn)
+			return err
+		}); err != nil {
 		return nil, err
 	}
 	return allDescs, nil

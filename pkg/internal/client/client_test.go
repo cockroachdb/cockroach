@@ -810,7 +810,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 			})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
 			prepWithRC := func() *client.Batch {
@@ -860,8 +860,9 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
+	ctx := context.TODO()
 
-	if err := db.Put(context.TODO(), "k", "v"); err != nil {
+	if err := db.Put(ctx, "k", "v"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -871,19 +872,15 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 		t.Fatal(err)
 	}
-	opts := client.TxnExecOptions{
-		AutoRetry:  false,
-		AutoCommit: true,
+
+	// Set a deadline, then set a higher commit timestamp for the txn.
+	txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
+	txn.Proto().Timestamp.Forward(s.Clock().Now())
+	if _, err := txn.Get(ctx, "k"); err != nil {
+		t.Fatal(err)
 	}
-	if err := txn.Exec(
-		context.TODO(), opts,
-		func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-			// Set a deadline, then set a higher commit timestamp for the txn.
-			txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-			txn.Proto().Timestamp.Forward(s.Clock().Now())
-			_, err := txn.Get(ctx, "k")
-			return err
-		}); !testutils.IsError(err, "deadline exceeded before transaction finalization") {
+	if err := txn.Commit(ctx); !testutils.IsError(
+		err, "deadline exceeded before transaction finalization") {
 		// We test for TransactionAbortedError. If this was not a read-only txn,
 		// the error returned by the server would have been different - a
 		// TransactionStatusError. This inconsistency is unfortunate.
@@ -985,7 +982,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(factory, clock, dbCtx)
+	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
@@ -1086,5 +1083,41 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 		if dur > 800*time.Millisecond {
 			t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 		}
+	}
+}
+
+// Test that a transaction can be rolled back even with a canceled context.
+// This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
+func TestCleanupWithCanceledContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	key := roachpb.Key("a")
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		cancel()
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// TODO(andrei): It'd be better to use tracing to verify what we were and
+	// weren't blocked on. Similar in TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 	}
 }
