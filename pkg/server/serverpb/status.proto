@@ -608,6 +608,7 @@ message StoresResponse {
 }
 
 message QueriesRequest {
+  string node_id = 3 [ (gogoproto.customname) = "NodeID" ];
 }
 
 message QueriesResponse {

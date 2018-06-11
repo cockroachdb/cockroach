@@ -860,7 +860,7 @@ func TestStatusAPIQueries(t *testing.T) {
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
 		stmt          string
