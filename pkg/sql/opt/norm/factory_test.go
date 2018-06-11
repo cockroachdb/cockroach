@@ -97,7 +97,7 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		combined := f.projectColsFromBoth(tc.left, tc.right)
+		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
 		f.checkExpr(memo.MakeNormExprView(f.mem, combined))
 		actual := f.outputCols(combined).String()
 		if actual != tc.expected {

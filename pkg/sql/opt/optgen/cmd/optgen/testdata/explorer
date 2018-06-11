@@ -172,20 +172,20 @@ func (_e *explorer) exploreInnerJoin(_rootState *exploreState, _root memo.ExprID
 					_filtersExpr := _e.mem.Expr(_eid).AsFilters()
 					if _filtersExpr != nil {
 						upperConditions := _filtersExpr.Conditions()
-						if _e.isCorrelated(filters, r) {
-							if _e.isCorrelated(filters, t) {
+						if _e.funcs.IsCorrelated(filters, r) {
+							if _e.funcs.IsCorrelated(filters, t) {
 								if _e.o.matchedRule == nil || _e.o.matchedRule(opt.AssociateJoin) {
 									_expr := memo.MakeInnerJoinExpr(
 										_e.f.ConstructInnerJoin(
 											r,
 											t,
 											_e.f.ConstructFilters(
-												_e.constructConditionsNotUsing(s, lowerConditions, upperConditions),
+												_e.funcs.ConstructConditionsNotUsing(s, lowerConditions, upperConditions),
 											),
 										),
 										s,
 										_e.f.ConstructFilters(
-											_e.constructConditionsUsing(s, lowerConditions, upperConditions),
+											_e.funcs.ConstructConditionsUsing(s, lowerConditions, upperConditions),
 										),
 									)
 									_before := _e.mem.ExprCount(_root.Group)
@@ -241,7 +241,7 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 						aggregations := _groupByExpr.Aggregations()
 						def := _groupByExpr.GroupingCols()
 						filter := _rootExpr.Filter()
-						if !_e.isCorrelated(filter, right) {
+						if !_e.funcs.IsCorrelated(filter, right) {
 							if _e.o.matchedRule == nil || _e.o.matchedRule(opt.PushDownGroupBy) {
 								_expr := memo.MakeInnerJoinExpr(
 									_e.f.ConstructSelect(
@@ -280,9 +280,9 @@ func (_e *explorer) exploreScan(_rootState *exploreState, _root memo.ExprID) (_f
 	{
 		if _root.Expr >= _rootState.start {
 			def := _rootExpr.Def()
-			if _e.isPrimaryScan(def) {
+			if _e.funcs.IsPrimaryScan(def) {
 				if _e.o.matchedRule == nil || _e.o.matchedRule(opt.GenerateIndexScans) {
-					_exprs := _e.generateIndexScans(def)
+					_exprs := _e.funcs.GenerateIndexScans(def)
 					_before := _e.mem.ExprCount(_root.Group)
 					for i := range _exprs {
 						_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])
