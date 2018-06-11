@@ -30,7 +30,12 @@ var MaxCost = Cost(math.Inf(+1))
 
 // Less returns true if this cost is lower than the given cost.
 func (c Cost) Less(other Cost) bool {
-	return c < other
+	// Two plans with the same cost can have slightly different floating point
+	// results (e.g. same subcosts being added up in a different order). So we
+	// treat plans with very similar cost as equal.
+	const epsilon = 1e-5
+
+	return c <= other-epsilon
 }
 
 // Sub subtracts the other cost from this cost and returns the result.
