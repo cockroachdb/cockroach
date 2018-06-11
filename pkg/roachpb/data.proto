@@ -382,6 +382,18 @@ message Intent {
   TransactionStatus status = 3;
 }
 
+// A SequencedWrite is a point write to a key with a certain sequence number.
+//
+// TODO(nvanbenschoten/tschottdorf): This message type can be used as the
+// PromisedWrites repeated field in EndTransaction in the parallel commits
+// proposal (#24194).
+message SequencedWrite {
+  // The key that the write was made at.
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // The sequence number of the request that created the write.
+  int32 sequence = 2;
+}
+
 // Lease contains information about range leases including the
 // expiration and lease holder.
 message Lease {
@@ -479,4 +491,9 @@ message TxnCoordMeta {
   // any spans were discarded or not collected (i.e. because of a dist
   // SQL processor running a version before refreshing was introduced).
   bool refresh_valid = 6;
+  // outstanding_writes stores all writes that are outstanding and have
+  // not yet been resolved. Any client wishing to send a request that
+  // overlaps with them must chain on to their success using a QueryIntent
+  // request.
+  repeated SequencedWrite outstanding_writes = 7 [(gogoproto.nullable) = false];
 }

@@ -471,15 +471,16 @@ func (r *Replica) AdminMerge(
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
-		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
-			&roachpb.GetSnapshotForMergeRequest{
-				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-				LeftRange:     *origLeftDesc,
-			})
-		if pErr != nil {
-			return pErr.GoError()
+		b = txn.NewBatch()
+		b.AddRawRequest(&roachpb.GetSnapshotForMergeRequest{
+			RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
+			LeftRange:     *origLeftDesc,
+		})
+		if err := txn.Run(ctx, b); err != nil {
+			return err
 		}
-		rhsSnapshotRes := br.(*roachpb.GetSnapshotForMergeResponse)
+		br := b.RawResponse()
+		rhsSnapshotRes := br.Responses[0].GetInner().(*roachpb.GetSnapshotForMergeResponse)
 
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
