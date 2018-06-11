@@ -589,7 +589,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		// limit the amount of log messages when a size blowup is caused by
 		// many small allocations.
 		if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
-			log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
+			log.VEventf(ctx, 3, "%s: bytes usage increases to %s (+%d)",
 				mm.name,
 				humanizeutil.IBytes(mm.mu.curAllocated), x)
 		}

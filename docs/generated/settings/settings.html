@@ -39,6 +39,7 @@
 <tr><td><code>server.remote_debugging.mode</code></td><td>string</td><td><code>local</code></td><td>set to enable remote debugging, localhost-only or disable (any, local, off)</td></tr>
 <tr><td><code>server.shutdown.drain_wait</code></td><td>duration</td><td><code>0s</code></td><td>the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process</td></tr>
 <tr><td><code>server.shutdown.query_wait</code></td><td>duration</td><td><code>10s</code></td><td>the server will wait for at least this amount of time for active queries to finish</td></tr>
+<tr><td><code>server.test_qps_threshold</code></td><td>float</td><td><code>1.5E-01</code></td><td>the maximum fraction a store's qps can differ from the average before store-level rebalancing kicks in</td></tr>
 <tr><td><code>server.time_until_store_dead</code></td><td>duration</td><td><code>5m0s</code></td><td>the time after which if there is no new gossiped information about a store, it is considered dead</td></tr>
 <tr><td><code>server.web_session_timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that a newly created web session will be valid</td></tr>
 <tr><td><code>sql.defaults.distsql</code></td><td>enumeration</td><td><code>1</code></td><td>Default distributed SQL execution mode [off = 0, auto = 1, on = 2]</td></tr>
