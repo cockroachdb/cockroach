@@ -354,7 +354,7 @@ semi-join-apply
 # SimplifyLeftJoin
 # --------------------------------------------------
 opt
-SELECT * FROM a LEFT JOIN (SELECT COUNT(*) FROM b) ON True
+SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
@@ -372,7 +372,7 @@ inner-join
 
 # Full-join.
 opt
-SELECT * FROM a FULL JOIN (SELECT COUNT(*) FROM b) ON True
+SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 ----
 right-join
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
@@ -391,7 +391,7 @@ right-join
 
 # Left-join-apply.
 opt
-SELECT * FROM a WHERE (SELECT SUM(column1) FROM (VALUES (k), (1))) = 1
+SELECT * FROM a WHERE (SELECT sum(column1) FROM (VALUES (k), (1))) = 1
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -431,7 +431,7 @@ project
 
 # Don't simplify right join
 opt
-SELECT * FROM a RIGHT JOIN (SELECT COUNT(*) FROM b) ON True
+SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 ----
 right-join
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
@@ -452,7 +452,7 @@ right-join
 # SimplifyRightJoin
 # --------------------------------------------------
 opt
-SELECT * FROM (SELECT COUNT(*) FROM b) RIGHT JOIN a ON True
+SELECT * FROM (SELECT count(*) FROM b) RIGHT JOIN a ON True
 ----
 inner-join
  ├── columns: count:3(int) k:4(int!null) i:5(int) f:6(float) s:7(string) j:8(jsonb)
@@ -470,7 +470,7 @@ inner-join
 
 # Full-join.
 opt
-SELECT * FROM (SELECT COUNT(*) FROM b) FULL JOIN a ON True
+SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join
  ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
@@ -489,7 +489,7 @@ left-join
 
 # Don't simplify left join
 opt
-SELECT * FROM (SELECT COUNT(*) FROM b) LEFT JOIN a ON True
+SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
 left-join
  ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
@@ -510,7 +510,7 @@ left-join
 # EliminateSemiJoin
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE EXISTS(SELECT COUNT(*) FROM b WHERE x=k)
+SELECT * FROM a WHERE EXISTS(SELECT count(*) FROM b WHERE x=k)
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -543,7 +543,7 @@ select
 # EliminateJoinNoColsRight
 # --------------------------------------------------
 opt
-SELECT s FROM a INNER JOIN (SELECT COUNT(*) FROM b) ON s='foo'
+SELECT s FROM a INNER JOIN (SELECT count(*) FROM b) ON s='foo'
 ----
 select
  ├── columns: s:4(string!null)

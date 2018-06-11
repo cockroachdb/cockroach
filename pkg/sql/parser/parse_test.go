@@ -1184,7 +1184,7 @@ func TestParse2(t *testing.T) {
 
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.
-		{`SELECT FAMILY(x)`,
+		{`SELECT FAMILY(x)`, // lint: uppercase function OK
 			`SELECT "family"(x)`},
 
 		{`SET SCHEMA 'public'`,

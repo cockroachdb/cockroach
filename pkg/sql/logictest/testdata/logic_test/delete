@@ -170,16 +170,16 @@ statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
+SELECT count(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
 ----
 2
 
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 1 RETURNING v]
+SELECT count(*) FROM [DELETE FROM unindexed LIMIT 1 RETURNING v]
 ----
 1
 
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
+SELECT count(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 ----
 1

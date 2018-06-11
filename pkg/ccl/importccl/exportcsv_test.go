@@ -54,7 +54,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 		t.Fatal(err)
 	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")
-	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT COUNT(*) FROM bank]")
+	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT count(*) FROM bank]")
 
 	return db, dir, func() {
 		tc.Stopper().Stop(ctx)

@@ -2198,7 +2198,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 //   ANY/SOME: no comparisons evaluate to true
 //   ALL: no comparisons evaluate to false
 //
-// For example, given 1 < ANY (SELECT * FROM GENERATE_SERIES(1,3))
+// For example, given 1 < ANY (SELECT * FROM generate_series(1,3))
 // (right is a DTuple), evalTupleCmp would be called with:
 //   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
 // Similarly, given 1 < ANY (ARRAY[1, 2, 3]) (right is a DArray),

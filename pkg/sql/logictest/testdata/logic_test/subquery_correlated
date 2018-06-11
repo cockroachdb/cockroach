@@ -232,11 +232,11 @@ WHERE
 statement error pq: unsupported relational op semi-join-apply
 SELECT *
 FROM c
-WHERE (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
 
 # Customers with more than one order.
 query IT rowsort
-SELECT * FROM c WHERE (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1;
+SELECT * FROM c WHERE (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1;
 ----
 1  CA
 2  TX
@@ -244,7 +244,7 @@ SELECT * FROM c WHERE (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1;
 
 # Customers with more than one order shipped to a known state (i.e. NOT NULL).
 query IT rowsort
-SELECT * FROM c WHERE (SELECT COUNT(ship) FROM o WHERE o.c_id=c.c_id) > 1;
+SELECT * FROM c WHERE (SELECT count(ship) FROM o WHERE o.c_id=c.c_id) > 1;
 ----
 1  CA
 2  TX
@@ -254,8 +254,8 @@ query IT rowsort
 SELECT *
 FROM c
 WHERE
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1
-    AND (SELECT MAX(ship) FROM o WHERE o.c_id=c.c_id) = 'CA';
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
+    AND (SELECT max(ship) FROM o WHERE o.c_id=c.c_id) = 'CA';
 ----
 1  CA
 
@@ -264,7 +264,7 @@ query IT rowsort
 SELECT *
 FROM c
 WHERE
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
     OR EXISTS(SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NULL);
 ----
 1  CA
@@ -579,13 +579,13 @@ ORDER BY c_id;
 statement error pq: unsupported relational op semi-join-apply
 SELECT *
 FROM c
-WHERE (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
 
 # Customers with at least one shipping address = minimum shipping address.
 query IB
 SELECT
     c_id,
-    (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
 FROM c
 ORDER BY c_id;
 ----
@@ -598,7 +598,7 @@ ORDER BY c_id;
 
 # Maximum number of orders for a customer. Use subquery in aggregate function.
 query I
-SELECT MAX((SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
+SELECT max((SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
 ----
 3
 
@@ -606,7 +606,7 @@ SELECT MAX((SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
 query II
 SELECT
     c_id,
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
 FROM c
 ORDER BY c_id;
 ----
@@ -621,7 +621,7 @@ ORDER BY c_id;
 query TI
 SELECT
     s.st,
-    (SELECT COUNT(*) FROM c WHERE c.bill=s.st) + (SELECT COUNT(*) FROM o WHERE o.ship=s.st)
+    (SELECT count(*) FROM c WHERE c.bill=s.st) + (SELECT count(*) FROM o WHERE o.ship=s.st)
 FROM (SELECT c.bill AS st FROM c UNION SELECT o.ship AS st FROM o) s
 ORDER BY s.st;
 ----
@@ -635,7 +635,7 @@ WY    1
 
 # ConcatAgg prevents decorrelation.
 statement error pq: unsupported relational op inner-join-apply
-SELECT (SELECT CONCAT_AGG(ship || ' ') FROM o WHERE o.c_id=c.c_id)
+SELECT (SELECT concat_agg(ship || ' ') FROM o WHERE o.c_id=c.c_id)
 FROM c;
 
 # ------------------------------------------------------------------------------
@@ -645,11 +645,11 @@ FROM c;
 # Group by order count by customer, and order by that order count as well.
 query II
 SELECT
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) AS order_cnt,
-    COUNT(*) AS cust_cnt
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) AS order_cnt,
+    count(*) AS cust_cnt
 FROM c
-GROUP BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)
-ORDER BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) DESC;
+GROUP BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
+ORDER BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id) DESC;
 ----
 3  2
 2  1
@@ -659,7 +659,7 @@ ORDER BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) DESC;
 # Subquery in VALUES clause.
 query III
 SELECT c_cnt, o_cnt, c_cnt + o_cnt AS total
-FROM (VALUES ((SELECT COUNT(*) FROM c), (SELECT COUNT(*) FROM o))) AS v(c_cnt, o_cnt)
+FROM (VALUES ((SELECT count(*) FROM c), (SELECT count(*) FROM o))) AS v(c_cnt, o_cnt)
 WHERE c_cnt > 0 AND o_cnt > 0;
 ----
 6  9  15
@@ -682,4 +682,4 @@ statement error pq: unsupported relational op inner-join-apply
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
-ON c.c_id=o.c_id AND o.ship = (SELECT MIN(o.ship) FROM o WHERE o.c_id=c.c_id);
+ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);

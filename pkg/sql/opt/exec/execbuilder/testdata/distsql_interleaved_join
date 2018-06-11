@@ -85,22 +85,22 @@ INTERLEAVE IN PARENT child2 (pid1, cid2, cid3)
 
 # Split at parent1 key into five parts.
 statement ok
-ALTER TABLE parent1 SPLIT AT SELECT i FROM GENERATE_SERIES(8, 32, 8) AS g(i)
+ALTER TABLE parent1 SPLIT AT SELECT i FROM generate_series(8, 32, 8) AS g(i)
 
 # Split at child1 keys in between parent1 parts (total 10 parts).
 statement ok
 ALTER TABLE child1 SPLIT AT SELECT pid1, pid1 + 40 FROM
-GENERATE_SERIES(4, 36, 8) AS g(pid1)
+generate_series(4, 36, 8) AS g(pid1)
 
 # Split at grandchild2 keys in between the 10 parts (total 20 parts).
 statement ok
 ALTER TABLE grandchild2 SPLIT AT SELECT pid1, pid1 + 40, pid1, pid1 FROM
-GENERATE_SERIES(2, 38, 4) AS g(pid1)
+generate_series(2, 38, 4) AS g(pid1)
 
 # Relocate the twenty parts to the five nodes.
 statement ok
 ALTER TABLE grandchild2 TESTING_RELOCATE
-  SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM GENERATE_SERIES(1, 39, 2) AS g(i)
+  SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
 
 # Verify data placement.
 query TTITI colnames
@@ -305,7 +305,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 # # Aggregation over parent and child keys.
 # query T
 # SELECT "URL" FROM [EXPLAIN (DISTSQL)
-#   SELECT SUM(parent1.pid1), SUM(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
+#   SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
 #     pid1 >= 10 AND pid1 <= 39
 # ]
 # ----

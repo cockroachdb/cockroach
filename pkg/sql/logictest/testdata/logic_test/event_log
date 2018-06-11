@@ -52,7 +52,7 @@ WHERE "eventType" = 'create_table'
 ##################
 
 query I
-SELECT COUNT(*)
+SELECT count(*)
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE badtable%'

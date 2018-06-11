@@ -59,7 +59,7 @@ CREATE TABLE d.t (a STRING)
 	}
 
 	for i := 0; i < numRows; i++ {
-		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (REPEAT('a', $1))`, rowSize); err != nil {
+		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (repeat('a', $1))`, rowSize); err != nil {
 			return err
 		}
 	}
@@ -75,9 +75,9 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 	// besides the aggregate itself from being able to catch the
 	// large memory usage.
 	statements := []string{
-		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.t`,
-		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.t`,
-		`SELECT JSON_TYPEOF(JSON_AGG(A)) FROM d.t`,
+		`SELECT length(concat_agg(a)) FROM d.t`,
+		`SELECT array_length(array_agg(a), 1) FROM d.t`,
+		`SELECT json_typeof(json_agg(A)) FROM d.t`,
 	}
 
 	for _, statement := range statements {
@@ -160,8 +160,8 @@ func TestEvaluatedMemoryIsChecked(t *testing.T) {
 	// REPEAT up as a result, the memory error would be caught there even if
 	// REPEAT was not doing its accounting.
 	testData := []string{
-		`SELECT LENGTH(REPEAT('abc', 300000))`,
-		`SELECT crdb_internal.no_constant_folding(LENGTH(REPEAT('abc', 300000)))`,
+		`SELECT length(repeat('abc', 300000))`,
+		`SELECT crdb_internal.no_constant_folding(length(repeat('abc', 300000)))`,
 	}
 
 	for _, statement := range testData {
@@ -196,7 +196,7 @@ func TestMemoryGetsFreedOnEachRow(t *testing.T) {
 	// Check that if this string is allocated per-row, we don't OOM.
 	if _, err := sqlDB.Exec(
 		fmt.Sprintf(
-			`SELECT crdb_internal.no_constant_folding(LENGTH(REPEAT('a', %d))) FROM GENERATE_SERIES(1, %d)`,
+			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d))) FROM generate_series(1, %d)`,
 			stringLength,
 			numRows,
 		),
@@ -207,7 +207,7 @@ func TestMemoryGetsFreedOnEachRow(t *testing.T) {
 	// Ensure that if this memory is all allocated at once, we OOM.
 	if _, err := sqlDB.Exec(
 		fmt.Sprintf(
-			`SELECT crdb_internal.no_constant_folding(LENGTH(REPEAT('a', %d * %d)))`,
+			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d * %d)))`,
 			stringLength,
 			numRows,
 		),

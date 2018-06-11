@@ -263,7 +263,7 @@ distinct             ·            ·                  (y, z, x)                
 #####################
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT ON (MAX(y)) MAX(x) FROM xyz
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
 render                    ·            ·                  (max)                                           ·
  │                        render 0     max                ·                                               ·
@@ -280,7 +280,7 @@ render                    ·            ·                  (max)               
 ·                         spans        ALL                ·                                               ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(a) FROM abc
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
 render               ·            ·              (max)                 ·
  │                   render 0     max            ·                     ·
@@ -302,7 +302,7 @@ render               ·            ·              (max)                 ·
 # TODO(richardwu): we can elide the DISTINCT ON since its key is equivalent
 # to the group key.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 render                    ·            ·                  (min)                                           ·
  │                        render 0     min                ·                                               ·
@@ -320,7 +320,7 @@ render                    ·            ·                  (min)               
 ·                         spans        ALL                ·                                               ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 distinct                  ·            ·                  (min)                                           min=CONST; key()
  │                        distinct on  min                ·                                               ·

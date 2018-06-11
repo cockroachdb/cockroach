@@ -1379,7 +1379,7 @@ statement ok
 SET DATABASE = 'constraint_db'
 
 query I
-SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
+SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
 3
 
@@ -1409,7 +1409,7 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 
 query error cannot access virtual schema in anonymous database
-SELECT COUNT(*) FROM pg_catalog.pg_depend
+SELECT count(*) FROM pg_catalog.pg_depend
 
 query error cannot access virtual schema in anonymous database
 select 'upper'::REGPROC;
@@ -1433,13 +1433,13 @@ WHERE t.typname = '_int4'
 ## #16285
 ## int2vectors should be 0-indexed
 query I
-SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
+SELECT count(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
 ----
 0
 
 ## Ensure no two builtins have the same oid.
 query I
-SELECT c FROM (SELECT oid, COUNT(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
+SELECT c FROM (SELECT oid, count(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
 ----
 
 ## Ensure that unnest works with oid wrapper arrays

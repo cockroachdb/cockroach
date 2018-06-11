@@ -179,7 +179,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 				if err != nil {
 					t.Fatal(err)
 				}
-				rows, err := db.Query(`SELECT ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges LIMIT 1`)
+				rows, err := db.Query(`SELECT array_length(replicas, 1) FROM crdb_internal.ranges LIMIT 1`)
 				if err != nil {
 					// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
 					// to determine whether a cluster has up-replicated. This is relevant for the

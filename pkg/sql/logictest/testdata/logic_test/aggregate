@@ -10,118 +10,118 @@ CREATE TABLE kv (
 
 # Aggregate functions return NULL if there are no rows.
 query IIIIRRRRBBT
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01') FROM kv
 ----
 NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Aggregate functions return NULL if there are no rows.
 query T
-SELECT ARRAY_AGG(1) FROM kv
+SELECT array_agg(1) FROM kv
 ----
 NULL
 
 query T
-SELECT JSON_AGG(1) FROM kv
+SELECT json_agg(1) FROM kv
 ----
 NULL
 
 query T
-SELECT JSONB_AGG(1) FROM kv
+SELECT jsonb_agg(1) FROM kv
 ----
 NULL
 
 query IIIIRRRRBBT
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
-SELECT ARRAY_AGG(v) FROM kv
+SELECT array_agg(v) FROM kv
 ----
 NULL
 
 query T
-SELECT JSON_AGG(v) FROM kv
+SELECT json_agg(v) FROM kv
 ----
 NULL
 
 query T
-SELECT JSONB_AGG(v) FROM kv
+SELECT jsonb_agg(v) FROM kv
 ----
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query IIIIRRRRBBT
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 1 1 1 1 1 1 NULL NULL true true 01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
-SELECT ARRAY_AGG(1)
+SELECT array_agg(1)
 ----
 {1}
 
 query T
-SELECT JSON_AGG(1)
+SELECT json_agg(1)
 ----
 [1]
 
 query T
-SELECT JSONB_AGG(1)
+SELECT jsonb_agg(1)
 ----
 [1]
 
 # Some aggregate functions are not normalized to NULL when given a NULL
 # argument.
 query I
-SELECT COUNT(NULL)
+SELECT count(NULL)
 ----
 0
 
 query T
-SELECT JSON_AGG(NULL)
+SELECT json_agg(NULL)
 ----
 [null]
 
 query T
-SELECT JSONB_AGG(NULL)
+SELECT jsonb_agg(NULL)
 ----
 [null]
 
 # This should ideally return {NULL}, but this is a pathological case, and
 # Postgres has the same behavior, so it's sufficient for now.
 statement error ambiguous call
-SELECT ARRAY_AGG(NULL)
+SELECT array_agg(NULL)
 
 # With an explicit cast, this works as expected.
 query T
-SELECT ARRAY_AGG(NULL::TEXT)
+SELECT array_agg(NULL::TEXT)
 ----
 {NULL}
 
 # Regression test for #25724 (problem with typed NULLs and distsql planning).
 # The previous query doesn't run under distsql.
 query T
-SELECT ARRAY_AGG(NULL::TEXT) FROM (VALUES (1)) AS t(x)
+SELECT array_agg(NULL::TEXT) FROM (VALUES (1)) AS t(x)
 ----
 {NULL}
 
 # Check that COALESCE using aggregate results over an empty table
 # work properly.
 query I
-SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0)
+SELECT COALESCE(max(1), 0) FROM generate_series(1,0)
 ----
 0
 
 query I
-SELECT COUNT_ROWS() FROM generate_series(1,100)
+SELECT count_rows() FROM generate_series(1,100)
 ----
 100
 
 # Same, using arithmetic on COUNT.
 query I
-SELECT 1 + COUNT(*) FROM generate_series(1,0)
+SELECT 1 + count(*) FROM generate_series(1,0)
 ----
 1
 
@@ -129,13 +129,13 @@ SELECT 1 + COUNT(*) FROM generate_series(1,0)
 # The following test *must* occur before the first INSERT to the tables,
 # so that it can observe an empty table.
 query II
-SELECT COUNT(*), COALESCE(MAX(k), 1) FROM kv
+SELECT count(*), COALESCE(max(k), 1) FROM kv
 ----
 0 1
 
 # Same, using a subquery. (#12705)
 query I
-SELECT (SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0))
+SELECT (SELECT COALESCE(max(1), 0) FROM generate_series(1,0))
 ----
 0
 
@@ -151,23 +151,23 @@ INSERT INTO kv VALUES
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
 query IIIIRRRRBBT
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
 ----
 1 6 1 6 1 6 0 0 true true 00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
-SELECT ARRAY_AGG(1) FROM kv
+SELECT array_agg(1) FROM kv
 ----
 {1,1,1,1,1,1}
 
 query T
-SELECT JSON_AGG(1) FROM kv
+SELECT json_agg(1) FROM kv
 ----
 [1, 1, 1, 1, 1, 1]
 
 query T
-SELECT JSONB_AGG(1) FROM kv
+SELECT jsonb_agg(1) FROM kv
 ----
 [1, 1, 1, 1, 1, 1]
 
@@ -186,13 +186,13 @@ SELECT 3 FROM kv HAVING TRUE
 3
 
 query error pgcode 42803 column "k" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), k FROM kv
+SELECT count(*), k FROM kv
 
 query error unsupported comparison operator: <string> < <int>
-SELECT COUNT(*) FROM kv GROUP BY s < 5
+SELECT count(*) FROM kv GROUP BY s < 5
 
 query II rowsort
-SELECT COUNT(*), k FROM kv GROUP BY k
+SELECT count(*), k FROM kv GROUP BY k
 ----
 1 1
 1 3
@@ -203,7 +203,7 @@ SELECT COUNT(*), k FROM kv GROUP BY k
 
 # GROUP BY specified using column index works.
 query II rowsort
-SELECT COUNT(*), k FROM kv GROUP BY 2
+SELECT count(*), k FROM kv GROUP BY 2
 ----
 1 1
 1 3
@@ -213,35 +213,35 @@ SELECT COUNT(*), k FROM kv GROUP BY 2
 1 8
 
 query error aggregate functions are not allowed in GROUP BY
-SELECT * FROM kv GROUP BY v, COUNT(DISTINCT w)
+SELECT * FROM kv GROUP BY v, count(DISTINCT w)
 
 query error aggregate functions are not allowed in GROUP BY
-SELECT COUNT(DISTINCT w) FROM kv GROUP BY 1
+SELECT count(DISTINCT w) FROM kv GROUP BY 1
 
 query error aggregate functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
 
 query error aggregate functions are not allowed in LIMIT
-SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
+SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 
 query error aggregate functions are not allowed in OFFSET
-SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
+SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 
 query error aggregate functions are not allowed in VALUES
-INSERT INTO kv (k, v) VALUES (99, COUNT(1))
+INSERT INTO kv (k, v) VALUES (99, count(1))
 
 query error pgcode 42P10 GROUP BY position 5 is not in select list
-SELECT COUNT(*), k FROM kv GROUP BY 5
+SELECT count(*), k FROM kv GROUP BY 5
 
 query error pgcode 42P10 GROUP BY position 0 is not in select list
-SELECT COUNT(*), k FROM kv GROUP BY 0
+SELECT count(*), k FROM kv GROUP BY 0
 
 query error pgcode 42601 non-integer constant in GROUP BY
 SELECT 1 GROUP BY 'a'
 
 # Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
 query IT rowsort
-SELECT COUNT(*), kv.s FROM kv GROUP BY s
+SELECT count(*), kv.s FROM kv GROUP BY s
 ----
 1 A
 1 NULL
@@ -249,7 +249,7 @@ SELECT COUNT(*), kv.s FROM kv GROUP BY s
 2 b
 
 query IT rowsort
-SELECT COUNT(*), s FROM kv GROUP BY kv.s
+SELECT count(*), s FROM kv GROUP BY kv.s
 ----
 1 A
 1 NULL
@@ -257,7 +257,7 @@ SELECT COUNT(*), s FROM kv GROUP BY kv.s
 2 b
 
 query IT rowsort
-SELECT COUNT(*), kv.s FROM kv GROUP BY kv.s
+SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
 1 A
 1 NULL
@@ -265,7 +265,7 @@ SELECT COUNT(*), kv.s FROM kv GROUP BY kv.s
 2 b
 
 query IT rowsort
-SELECT COUNT(*), s FROM kv GROUP BY s
+SELECT count(*), s FROM kv GROUP BY s
 ----
 1 A
 1 NULL
@@ -274,7 +274,7 @@ SELECT COUNT(*), s FROM kv GROUP BY s
 
 # Grouping by more than one column works.
 query III rowsort
-SELECT v, COUNT(*), w FROM kv GROUP BY v, w
+SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
 2    1 2
 2    2 3
@@ -284,7 +284,7 @@ NULL 1 5
 
 # Grouping by more than one column using column numbers works.
 query III rowsort
-SELECT v, COUNT(*), w FROM kv GROUP BY 1, 3
+SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
 2    1 2
 2    2 3
@@ -294,7 +294,7 @@ NULL 1 5
 
 # Selecting and grouping on a function expression works.
 query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
+SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
 1 NULL
 2 B
@@ -302,18 +302,18 @@ SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
 
 # Selecting and grouping on a constant works.
 query I
-SELECT COUNT(*) FROM kv GROUP BY 1+2
+SELECT count(*) FROM kv GROUP BY 1+2
 ----
 6
 
 query I
-SELECT COUNT(*) FROM kv GROUP BY length('abc')
+SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 6
 
 # Selecting a function of something which is grouped works.
 query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
+SELECT count(*), upper(s) FROM kv GROUP BY s
 ----
 1 A
 1 NULL
@@ -322,11 +322,11 @@ SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
 
 # Selecting a value that is not grouped, even if a function of it it, does not work.
 query error column "s" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
+SELECT count(*), s FROM kv GROUP BY upper(s)
 
 # Selecting and grouping on a more complex expression works.
 query II rowsort
-SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+SELECT count(*), k+v FROM kv GROUP BY k+v
 ----
 1 12
 1 3
@@ -338,7 +338,7 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query II rowsort
-SELECT COUNT(*), k+v FROM kv GROUP BY k, v
+SELECT count(*), k+v FROM kv GROUP BY k, v
 ----
 1 12
 1 3
@@ -348,19 +348,19 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 1 NULL
 
 query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), k+v FROM kv GROUP BY k
+SELECT count(*), k+v FROM kv GROUP BY k
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), k+v FROM kv GROUP BY v
+SELECT count(*), k+v FROM kv GROUP BY v
 
 query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
+SELECT count(*), v/(k+v) FROM kv GROUP BY k+v
 
 query error aggregate functions are not allowed in WHERE
-SELECT k FROM kv WHERE AVG(k) > 1
+SELECT k FROM kv WHERE avg(k) > 1
 
 query error aggregate function calls cannot be nested
-SELECT MAX(AVG(k)) FROM kv
+SELECT max(avg(k)) FROM kv
 
 # Test case from #2761.
 query II rowsort
@@ -373,30 +373,30 @@ SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 2  5
 
 query TI rowsort
-SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
+SELECT s, count(*) FROM kv GROUP BY s HAVING count(*) > 1
 ----
 a 2
 b 2
 
 query TII rowsort
-SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+SELECT upper(s), count(DISTINCT s), count(DISTINCT upper(s)) FROM kv GROUP BY upper(s) HAVING count(DISTINCT s) > 1
 ----
 A 2 1
 
 query II rowsort
-SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
+SELECT max(k), min(v) FROM kv HAVING min(v) > 2
 ----
 
 query II rowsort
-SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
+SELECT max(k), min(v) FROM kv HAVING max(v) > 2
 ----
 8 2
 
 query error pgcode 42803 aggregate function calls cannot be nested
-SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
+SELECT max(k), min(v) FROM kv HAVING max(min(v)) > 2
 
 query error argument of HAVING must be type bool, not type int
-SELECT MAX(k), MIN(v) FROM kv HAVING k
+SELECT max(k), min(v) FROM kv HAVING k
 
 # Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
@@ -411,84 +411,84 @@ query error column "k" must appear in the GROUP BY clause or be used in an aggre
 SELECT k FROM kv HAVING k > 7
 
 query error syntax error at or near ","
-SELECT COUNT(*, 1) FROM kv
+SELECT count(*, 1) FROM kv
 
 query I
-SELECT COUNT(*)
+SELECT count(*)
 ----
 1
 
 query I
-SELECT COUNT(k) from kv
+SELECT count(k) from kv
 ----
 6
 
 query I
-SELECT COUNT(1)
+SELECT count(1)
 ----
 1
 
 query I
-SELECT COUNT(1) from kv
+SELECT count(1) from kv
 ----
 6
 
 query error unknown signature: count\(int, int\)
-SELECT COUNT(k, v) FROM kv
+SELECT count(k, v) FROM kv
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v
 ----
 NULL 1
 2 3
 4 2
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v DESC
 ----
 4 2
 2 3
 NULL 1
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k) DESC
 ----
 2 3
 4 2
 NULL 1
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 NULL 1
 2 3
 4 2
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY 1 DESC
 ----
 4 2
 2 3
 NULL 1
 
 query III colnames
-SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
+SELECT count(*), count(k), count(kv.v) FROM kv
 ----
 count  count  count
 6      6      5
 
 query I
-SELECT COUNT(kv.*) FROM kv
+SELECT count(kv.*) FROM kv
 ----
 6
 
 query III
-SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv
 ----
 6 2 2
 
 query TIII rowsort
-SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv GROUP BY UPPER(s)
+SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
 ----
 A    3 2 2
 B    2 1 1
@@ -496,62 +496,62 @@ NULL 1 0 0
 
 
 query I
-SELECT COUNT((k, v)) FROM kv
+SELECT count((k, v)) FROM kv
 ----
 6
 
 query I
-SELECT COUNT(DISTINCT (k, v)) FROM kv
+SELECT count(DISTINCT (k, v)) FROM kv
 ----
 6
 
 query I
-SELECT COUNT(DISTINCT (k, (v))) FROM kv
+SELECT count(DISTINCT (k, (v))) FROM kv
 ----
 6
 
 query I
-SELECT COUNT(*) FROM kv a, kv b
+SELECT count(*) FROM kv a, kv b
 ----
 36
 
 query I
-SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
 6
 
 query I
-SELECT COUNT((k, v)) FROM kv LIMIT 1
+SELECT count((k, v)) FROM kv LIMIT 1
 ----
 6
 
 query I
-SELECT COUNT((k, v)) FROM kv OFFSET 1
+SELECT count((k, v)) FROM kv OFFSET 1
 ----
 
 query I
-SELECT COUNT(k)+COUNT(kv.v) FROM kv
+SELECT count(k)+count(kv.v) FROM kv
 ----
 11
 
 query II
-SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+SELECT count(NULL::int), count((NULL, NULL))
 ----
 0 1
 
 query IIII
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
+SELECT min(k), max(k), min(v), max(v) FROM kv
 ----
 1 8 2 4
 
 # Even if no input rows match, we expect a row (of nulls).
 query IIII
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
+SELECT min(k), max(k), min(v), max(v) FROM kv WHERE k > 8
 ----
 NULL NULL NULL NULL
 
 query TT
-SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
+SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 {1,3,5,6,7,8} {"a","a",NULL,"b","b","A"}
 
@@ -561,39 +561,39 @@ SELECT array_agg(s) FROM kv WHERE s IS NULL
 {NULL}
 
 query T
-SELECT JSON_AGG(s) FROM kv WHERE s IS NULL
+SELECT json_agg(s) FROM kv WHERE s IS NULL
 ----
 [null]
 
 query T
-SELECT JSONB_AGG(s) FROM kv WHERE s IS NULL
+SELECT jsonb_agg(s) FROM kv WHERE s IS NULL
 ----
 [null]
 
 query RRRR
-SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
+SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
 5 2.8 30 14
 
 query RRRR
-SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
+SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
 5 2.8 30 14
 
 query RRRR
-SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
+SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
 ----
 5 3 30 6
 
 query R
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
+SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv
 ----
 14.0
 
 # Verify things work with distsql when some of the nodes emit no results in the
 # local stage.
 query R
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
+SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 14.0
 
@@ -609,17 +609,17 @@ statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
 query TRBR
-SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
+SELECT min(a), min(b), min(c), min(d) FROM abc
 ----
 one 1.5 false 1.1
 
 query TRBR
-SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM abc
+SELECT max(a), max(b), max(c), max(d) FROM abc
 ----
 two 2 true 5
 
 query RRRR
-SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
+SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
 1.75 3.5 3.05 6.1
 
@@ -633,28 +633,28 @@ statement ok
 INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
 
 query T
-SELECT SUM(a) FROM intervals
+SELECT sum(a) FROM intervals
 ----
 3y5mon7d19s
 
 
 query error unknown signature: avg\(string\)
-SELECT AVG(a) FROM abc
+SELECT avg(a) FROM abc
 
 query error unknown signature: avg\(bool\)
-SELECT AVG(c) FROM abc
+SELECT avg(c) FROM abc
 
 query error unknown signature: avg\(tuple{string, bool}\)
-SELECT AVG((a,c)) FROM abc
+SELECT avg((a,c)) FROM abc
 
 query error unknown signature: sum\(string\)
-SELECT SUM(a) FROM abc
+SELECT sum(a) FROM abc
 
 query error unknown signature: sum\(bool\)
-SELECT SUM(c) FROM abc
+SELECT sum(c) FROM abc
 
 query error unknown signature: sum\(tuple{string, bool}\)
-SELECT SUM((a,c)) FROM abc
+SELECT sum((a,c)) FROM abc
 
 statement ok
 CREATE TABLE xyz (
@@ -672,74 +672,74 @@ statement ok
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
 query I
-SELECT MIN(x) FROM xyz
+SELECT min(x) FROM xyz
 ----
 1
 
 query I
-SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 4
 
 query I
-SELECT MAX(x) FROM xyz
+SELECT max(x) FROM xyz
 ----
 7
 
 query I
-SELECT MIN(y) FROM xyz WHERE x = 1
+SELECT min(y) FROM xyz WHERE x = 1
 ----
 2
 
 query I
-SELECT MAX(y) FROM xyz WHERE x = 1
+SELECT max(y) FROM xyz WHERE x = 1
 ----
 2
 
 query I
-SELECT MIN(y) FROM xyz WHERE x = 7
+SELECT min(y) FROM xyz WHERE x = 7
 ----
 NULL
 
 query I
-SELECT MAX(y) FROM xyz WHERE x = 7
+SELECT max(y) FROM xyz WHERE x = 7
 ----
 NULL
 
 query I
-SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 1
 
 query I
-SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 1
 
 # VARIANCE/STDDEV
 
 query RRR
-SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
+SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
 ----
 9 4.5 6.33333333333333
 
 query R
-SELECT VARIANCE(x) FROM xyz WHERE x = 10
+SELECT variance(x) FROM xyz WHERE x = 10
 ----
 NULL
 
 query R
-SELECT VARIANCE(x) FROM xyz WHERE x = 1
+SELECT variance(x) FROM xyz WHERE x = 1
 ----
 NULL
 
 query RRR
-SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
+SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
 ----
 3  2.1213203435596425732  2.51661147842358
 
 query R
-SELECT STDDEV(x) FROM xyz WHERE x = 1
+SELECT stddev(x) FROM xyz WHERE x = 1
 ----
 NULL
 
@@ -758,44 +758,44 @@ CREATE TABLE mnop (
 
 statement ok
 INSERT INTO mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
-  GENERATE_SERIES(1, 2e4) AS I(i)
+  generate_series(1, 2e4) AS i(i)
 
 statement ok
 UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
 
 query RRR
-SELECT round(VARIANCE(n), 2), round(VARIANCE(n), 2), round(VARIANCE(p)) FROM mnop
+SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mnop
 ----
 0.08 0.08 8
 
 
 query RRR
-SELECT round(STDDEV(n), 2), round(STDDEV(n), 2), round(STDDEV(p)) FROM mnop
+SELECT round(stddev(n), 2), round(stddev(n), 2), round(stddev(p)) FROM mnop
 ----
 0.29 0.29 3
 
 query RRR
-SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
+SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
 ----
 1 2 3
 
 query III
-SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
+SELECT count(2::int), count(3::float), count(4::decimal)
 ----
 1 1 1
 
 query RRR
-SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
+SELECT sum(1::int), sum(2::float), sum(3::decimal)
 ----
 1 2 3
 
 query RRR
-SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
+SELECT variance(1::int), variance(1::float), variance(1::decimal)
 ----
 NULL NULL NULL
 
 query RRR
-SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
+SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 ----
 NULL NULL NULL
 
@@ -809,7 +809,7 @@ statement ok
 CREATE TABLE bools (b BOOL)
 
 query BB
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+SELECT bool_and(b), bool_or(b) FROM bools
 ----
 NULL NULL
 
@@ -817,7 +817,7 @@ statement OK
 INSERT INTO bools VALUES (true), (true), (true)
 
 query BB
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+SELECT bool_and(b), bool_or(b) FROM bools
 ----
 true true
 
@@ -825,7 +825,7 @@ statement OK
 INSERT INTO bools VALUES (false), (false)
 
 query BB
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+SELECT bool_and(b), bool_or(b) FROM bools
 ----
 false true
 
@@ -833,22 +833,22 @@ statement OK
 DELETE FROM bools WHERE b
 
 query BB
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+SELECT bool_and(b), bool_or(b) FROM bools
 ----
 false false
 
 query T
-SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 aabbA
 
 query T
-SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT json_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 ["a", "a", null, "b", "b", "A"]
 
 query T
-SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT jsonb_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 ["a", "a", null, "b", "b", "A"]
 
@@ -873,7 +873,7 @@ INSERT INTO filter_test VALUES
 
 # FILTER should eliminate some results.
 query II rowsort
-SELECT v, COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+SELECT v, count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 2 2
 4 1
@@ -881,7 +881,7 @@ NULL 0
 
 # Test multiple filters
 query IBIII rowsort
-SELECT v, mark, COUNT(*) FILTER (WHERE k > 5), COUNT(*), MAX(k) FILTER (WHERE k < 8) FROM filter_test GROUP BY v, mark
+SELECT v, mark, count(*) FILTER (WHERE k > 5), count(*), max(k) FILTER (WHERE k < 8) FROM filter_test GROUP BY v, mark
 ----
 2 false 0 1 1
 2 true 2 2 7
@@ -895,7 +895,7 @@ query error syntax error at or near "filter"
 SELECT k FILTER (WHERE k=1) FROM kv GROUP BY k
 
 query error aggregate functions are not allowed in FILTER
-SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
+SELECT v, count(*) FILTER (WHERE count(*) > 5) FROM filter_test GROUP BY v
 
 # Tests with * inside GROUP BY.
 query I
@@ -909,7 +909,7 @@ SELECT 1 FROM kv GROUP BY kv.*
 1
 
 query R rowsort
-SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
+SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 1.1
 6.1
@@ -927,25 +927,25 @@ INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 # Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
 query I
-SELECT MIN(v) FROM opt_test
+SELECT min(v) FROM opt_test
 ----
 5
 
 # Cross-check against a query without this optimization.
 query I
-SELECT MIN(v) FROM opt_test@primary
+SELECT min(v) FROM opt_test@primary
 ----
 5
 
 # Repeat test when there is an existing filter.
 query I
-SELECT MIN(v) FROM opt_test WHERE k <> 4
+SELECT min(v) FROM opt_test WHERE k <> 4
 ----
 10
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query I rowsort
-SELECT MIN(v) FROM opt_test GROUP BY k
+SELECT min(v) FROM opt_test GROUP BY k
 ----
 NULL
 NULL
@@ -953,7 +953,7 @@ NULL
 10
 
 query I rowsort
-SELECT MAX(v) FROM opt_test GROUP BY k
+SELECT max(v) FROM opt_test GROUP BY k
 ----
 NULL
 NULL
@@ -972,21 +972,21 @@ INSERT INTO xor_bytes VALUES
   (b'\x10\x01', 2, 0)
 
 query TI
-SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM xor_bytes
+SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
 ----
 1f01 6
 
 query TII
-SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
+SELECT to_hex(xor_agg(a)), b, xor_agg(c) FROM xor_bytes GROUP BY b ORDER BY b
 ----
 0300  1   2
 1c01  2   4
 
 statement error arguments to xor must all be the same length
-SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
+SELECT xor_agg(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 
 query BB
-SELECT MAX(true), MIN(true)
+SELECT max(true), min(true)
 ----
 true
 true
@@ -1013,7 +1013,7 @@ SELECT (b, a) FROM ab GROUP BY (b, a)
 (4,3)
 
 query TT rowsort
-SELECT MIN(y), (b, a)
+SELECT min(y), (b, a)
  FROM ab, xy GROUP BY (x, (a, b))
 ----
 b  (2,1)
@@ -1121,7 +1121,7 @@ SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
 
 # Regression test for distsql aggregator crash when using hash aggregation.
 query IT rowsort
-SELECT v, ARRAY_AGG('a') FROM kv GROUP BY v
+SELECT v, array_agg('a') FROM kv GROUP BY v
 ----
 2     {"a","a","a"}
 4     {"a","a"}

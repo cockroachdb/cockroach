@@ -53,7 +53,7 @@ true
 
 # Aggregation - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k]
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k]
 ----
 true
 
@@ -77,7 +77,7 @@ true
 
 # Limit after aggregation - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
 ----
 true
 

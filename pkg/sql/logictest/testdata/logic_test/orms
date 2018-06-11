@@ -49,8 +49,8 @@ SELECT i.relname AS name,
        ix.indisprimary AS PRIMARY,
        ix.indisunique AS UNIQUE,
        ix.indkey AS indkey,
-       ARRAY_AGG(a.attnum) AS column_indexes,
-       ARRAY_AGG(a.attname) AS column_names,
+       array_agg(a.attnum) AS column_indexes,
+       array_agg(a.attname) AS column_names,
        pg_get_indexdef(ix.indexrelid) AS definition
 FROM pg_class t,
      pg_class i,
@@ -120,7 +120,7 @@ CREATE INDEX b_idx ON b(a_id);
 # ActiveRecord 4.2.x query for checking if an index exists
 # Relies on OID IN tuple support
 query I
-SELECT COUNT(*)
+SELECT count(*)
 FROM pg_class t
 INNER JOIN pg_index d ON t.oid = d.indrelid
 INNER JOIN pg_class i ON d.indexrelid = i.oid

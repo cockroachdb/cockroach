@@ -9,7 +9,7 @@ CREATE TABLE kv (
 )
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
+EXPLAIN (TYPES) SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
  │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
@@ -33,7 +33,7 @@ group           ·             ·                   (min int, max int, count int
 ·               spans         ALL                 ·                                                                                                                                                   ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 render               ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
  │                   render 0     (agg0)[int]                  ·                                                                                                                                                    ·
@@ -69,7 +69,7 @@ render               ·            ·                            (min int, max i
 
 # Aggregate functions trigger aggregation and computation when there is no source.
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+EXPLAIN (TYPES) SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 render                   ·             ·                                 (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)  ·
  │                       render 0      (agg0)[int]                       ·                                                                                                                                                 ·
@@ -102,7 +102,7 @@ render                   ·             ·                                 (min 
            └── emptyrow  ·             ·                                 ()                                                                                                                                                ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*), k FROM kv GROUP BY 2
+EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
 render          ·            ·             (count int, k int)  ·
  │              render 0     (agg0)[int]   ·                   ·
@@ -117,7 +117,7 @@ render          ·            ·             (count int, k int)  ·
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
+EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 render               ·            ·                           (count int, r int)       ·
  │                   render 0     (agg0)[int]                 ·                        ·
@@ -134,7 +134,7 @@ render               ·            ·                           (count int, r in
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
+EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 render          ·            ·                           (count int, r int)        ·
  │              render 0     (agg0)[int]                 ·                         ·
@@ -149,7 +149,7 @@ render          ·            ·                           (count int, r int)   
 ·               spans        ALL                         ·                         ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(k) FROM kv
+EXPLAIN (TYPES) SELECT count(k) FROM kv
 ----
 group      ·            ·           (count int)  ·
  │         aggregate 0  count(k)    ·            ·
@@ -158,7 +158,7 @@ group      ·            ·           (count int)  ·
 ·          spans        ALL         ·            ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
 ----
 group      ·            ·           (count int, sum decimal, max int)  ·
  │         aggregate 0  count(k)    ·                                  ·
@@ -169,7 +169,7 @@ group      ·            ·           (count int, sum decimal, max int)  ·
 ·          spans        ALL         ·                                  ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
 group                ·            ·                             (count)                                                       ·
  │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
@@ -186,7 +186,7 @@ group                ·            ·                             (count)       
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY a.*
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
 render               ·            ·
@@ -209,7 +209,7 @@ render               ·            ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
 render                    ·            ·
@@ -241,7 +241,7 @@ render                    ·            ·
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (a.*)
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
 render               ·            ·
@@ -294,7 +294,7 @@ CREATE TABLE abc (
 )
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(a) FROM abc
+EXPLAIN (TYPES) SELECT min(a) FROM abc
 ----
 group      ·            ·            (min string)  ·
  │         aggregate 0  min(a)       ·             ·
@@ -318,7 +318,7 @@ statement ok
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(x) FROM xyz
+EXPLAIN (TYPES) SELECT min(x) FROM xyz
 ----
 group      ·            ·            (min int)  ·
  │         aggregate 0  min(x)       ·          ·
@@ -328,7 +328,7 @@ group      ·            ·            (min int)  ·
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group      ·            ·                        (min int)  ·
  │         aggregate 0  min(x)                   ·          ·
@@ -338,7 +338,7 @@ group      ·            ·                        (min int)  ·
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 query TTTTT
-EXPLAIN (TYPES) SELECT MAX(x) FROM xyz
+EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
 group      ·            ·            (max int)  ·
  │         aggregate 0  max(x)       ·          ·
@@ -347,7 +347,7 @@ group      ·            ·            (max int)  ·
 ·          spans        ALL          ·          ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (min int)       ·
  │         aggregate 0  min(y)       ·               ·
@@ -356,7 +356,7 @@ group      ·            ·            (min int)       ·
 ·          spans        /1-/1/#      ·               ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (max int)       ·
  │         aggregate 0  max(y)       ·               ·
@@ -365,7 +365,7 @@ group      ·            ·            (max int)       ·
 ·          spans        /1-/1/#      ·               ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (min int)       ·
  │         aggregate 0  min(y)       ·               ·
@@ -374,7 +374,7 @@ group      ·            ·            (min int)       ·
 ·          spans        /7-/7/#      ·               ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (max int)       ·
  │         aggregate 0  max(y)       ·               ·
@@ -383,7 +383,7 @@ group      ·            ·            (max int)       ·
 ·          spans        /7-/7/#      ·               ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group      ·            ·          (min int)                ·
  │         aggregate 0  min(x)     ·                        ·
@@ -392,14 +392,14 @@ group      ·            ·          (min int)                ·
 ·          spans        /3/2-/3/3  ·                        ·
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+SELECT message FROM [SHOW KV TRACE FOR SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+EXPLAIN (TYPES) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group      ·            ·          (max int)                ·
  │         aggregate 0  max(x)     ·                        ·
@@ -410,7 +410,7 @@ group      ·            ·          (max int)                ·
 # VARIANCE/STDDEV
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/primary/1 -> NULL
@@ -424,7 +424,7 @@ fetched: /xyz/primary/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
 query TTTTT
-EXPLAIN (TYPES) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (variance decimal)  ·
  │         aggregate 0  variance(x)  ·                   ·
@@ -451,7 +451,7 @@ INSERT INTO ab VALUES
 
 # TODO(radu): we don't support the single-row optimization yet.
 #exec nodist
-#EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
+#EXPLAIN (EXPRS) SELECT min(a) FROM abc
 #----
 #group           ·            ·
 # │              aggregate 0  min(a)
@@ -464,7 +464,7 @@ INSERT INTO ab VALUES
 #
 ## Verify we only buffer one row.
 #exec
-#SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(a) FROM ab]
+#SELECT message FROM [SHOW KV TRACE FOR SELECT min(a) FROM ab]
 # WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 #----
 #fetched: /ab/primary/1 -> NULL
@@ -472,7 +472,7 @@ INSERT INTO ab VALUES
 #output row: [1]
 #
 #exec nodist
-#EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
+#EXPLAIN (EXPRS) SELECT max(a) FROM abc
 #----
 #group              ·            ·
 # │                 aggregate 0  max(a)
@@ -485,7 +485,7 @@ INSERT INTO ab VALUES
 #
 ## Verify we only buffer one row.
 #exec
-#SELECT message FROM [SHOW KV TRACE FOR SELECT MAX(a) FROM ab]
+#SELECT message FROM [SHOW KV TRACE FOR SELECT max(a) FROM ab]
 # WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 #----
 #fetched: /ab/primary/5/b -> 50
@@ -493,7 +493,7 @@ INSERT INTO ab VALUES
 #output row: [5]
 
 query TTTTT
-EXPLAIN (TYPES) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
 sort            ·            ·           (v int, count int)  +count
  │              order        +count      ·                   ·
@@ -506,7 +506,7 @@ sort            ·            ·           (v int, count int)  +count
 ·               spans        ALL         ·                   ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
 sort            ·            ·             (v int, count int)  +count
  │              order        +count        ·                   ·
@@ -519,7 +519,7 @@ sort            ·            ·             (v int, count int)  +count
 ·               spans        ALL           ·                   ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+EXPLAIN (TYPES) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
 sort                 ·            ·               (v int, count int)         +count
  │                   order        +count          ·                          ·
@@ -537,7 +537,7 @@ sort                 ·            ·               (v int, count int)         +
 # TODO(radu): we don't propagate filters yet.
 ## Check that filters propagate through no-op aggregation.
 #exec nodist
-#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
+#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
 #----
 #group           ·            ·
 # │              aggregate 0  v
@@ -564,7 +564,7 @@ sort                 ·            ·               (v int, count int)         +
 #
 ## Check that filter expressions are only rendered once.
 #exec nodist
-#EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+#EXPLAIN (EXPRS) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 #----
 #group           ·            ·
 # │              aggregate 0  count_rows() FILTER (WHERE k > 5)
@@ -578,7 +578,7 @@ sort                 ·            ·               (v int, count int)         +
 #·               spans        ALL
 #
 #exec nodist
-#EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+#EXPLAIN (TYPES) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 #----
 #group           0  group   ·            ·                                  (count int)                                                    ·
 # │              0  ·       aggregate 0  count_rows() FILTER (WHERE k > 5)  ·                                                              ·
@@ -601,7 +601,7 @@ render     ·         ·           (a int)  ·
 ·          spans     ALL         ·        ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
+EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 render               ·            ·                                 (sum decimal)                                  ·
  │                   render 0     (agg0)[decimal]                   ·                                              ·
@@ -630,7 +630,7 @@ render               ·            ·                                 (sum decim
 #
 ## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 #exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test
+#EXPLAIN (TYPES) SELECT min(v) FROM opt_test
 #----
 #group           0  group   ·            ·                       (min)            ·
 # │              0  ·       aggregate 0  min(v)                  ·                ·
@@ -643,7 +643,7 @@ render               ·            ·                                 (sum decim
 #
 ## Repeat test when there is an existing filter.
 #exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test WHERE k <> 4
+#EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                       (min)   ·
 # │              0  ·       aggregate 0  min(v)                  ·       ·
@@ -658,7 +658,7 @@ render               ·            ·                                 (sum decim
 ## present an ordering on v+1 so the optimization is not applied, but the IS NOT
 ## NULL filter should be added.
 #exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
+#EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                           (min)            ·
 # │              0  ·       aggregate 0  min(v + 1)                  ·                ·
@@ -671,7 +671,7 @@ render               ·            ·                                 (sum decim
 #
 ## Verify that we don't use the optimization if there is a GROUP BY.
 #exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test GROUP BY k
+#EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 #----
 #group      0  group  ·            ·                 (min)   ·
 # │         0  ·      aggregate 0  min(v)            ·       ·
@@ -693,7 +693,7 @@ render     ·         ·                                        (r tuple{int, in
 ·          spans     ALL                                      ·                    ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MIN(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
+EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
 render               ·            ·                                        (min string, r tuple{int, int})        ·
  │                   render 0     (agg0)[string]                           ·                                      ·
@@ -883,7 +883,7 @@ render               ·            ·            (m)                 ·
 ·                    spans        ALL          ·                   ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT ARRAY_AGG(v) FROM (SELECT * FROM kv ORDER BY v)
+EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)
 ----
 group           ·            ·             (array_agg)  ·
  │              aggregate 0  array_agg(v)  ·            ·
@@ -905,7 +905,7 @@ render          ·         ·           (k)     ·
 ·               spans     ALL         ·       ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group      ·            ·              (concat_agg)  ·
  │         aggregate 0  concat_agg(s)  ·             ·
@@ -914,7 +914,7 @@ group      ·            ·              (concat_agg)  ·
 ·          spans        ALL            ·             ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT ARRAY_AGG(k) FROM (SELECT k FROM kv ORDER BY s)
+EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 group           ·            ·             (array_agg)  ·
  │              aggregate 0  array_agg(k)  ·            ·

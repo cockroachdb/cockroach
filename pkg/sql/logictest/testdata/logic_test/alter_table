@@ -636,7 +636,7 @@ SELECT count(distinct a) FROM impure
 
 # No orphaned schema change jobs.
 query I
-SELECT COUNT(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
+SELECT count(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
 ----
 0
 

@@ -1237,7 +1237,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	}
 
 	if _, err := tx.Exec(
-		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
+		"SELECT crdb_internal.force_retry('1s':::INTERVAL)"); !testutils.IsError(
 		err, `forced by crdb_internal\.force_retry\(\)`) {
 		t.Fatal(err)
 	}
@@ -1532,7 +1532,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	// Test that a stand-alone statement is retried by the Executor.
-	if _, err := db.Exec("SELECT COUNT(1) FROM t"); err != nil {
+	if _, err := db.Exec("SELECT count(1) FROM t"); err != nil {
 		t.Fatal(err)
 	}
 	if !restarted {
@@ -1553,7 +1553,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	// Let's make sure that DISTSQL will actually be used.
-	row := txn.QueryRow(`SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT COUNT(1) FROM t]`)
+	row := txn.QueryRow(`SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT count(1) FROM t]`)
 	var automatic bool
 	if err := row.Scan(&automatic); err != nil {
 		t.Fatal(err)
@@ -1562,7 +1562,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 		t.Fatal("DISTSQL not used for test's query")
 	}
 
-	_, err = txn.Exec("SELECT COUNT(1) FROM t")
+	_, err = txn.Exec("SELECT count(1) FROM t")
 	if !restarted {
 		t.Fatalf("expected the EvalFilter to restart the txn, but it didn't")
 	}
@@ -1581,7 +1581,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	// ordering criteria is to ensure that the ORDER BY is present and not elided
 	// because we're ordering on the primary key column.
 	restarted = false
-	rows, err := db.Query("SELECT * FROM t ORDER BY UPPER(num::TEXT)")
+	rows, err := db.Query("SELECT * FROM t ORDER BY upper(num::TEXT)")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1650,7 +1650,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	}
 
 	var ts time.Time
-	r := tx.QueryRow("SELECT NOW()")
+	r := tx.QueryRow("SELECT now()")
 	if err := r.Scan(&ts); err != nil {
 		t.Fatal(err)
 	}
