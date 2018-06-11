@@ -18,6 +18,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerClearRange(r *registry) {
@@ -32,8 +34,8 @@ func registerClearRange(r *registry) {
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
-			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
-			location := storeDirURL(fixtureURL, c.nodes, "2.0")
+			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=2`
+			location := storeDirURL(fixtureURL, c.nodes, "2.0-6")
 
 			// Download this store dump, which measures around 2TB (across all nodes).
 			if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
@@ -41,7 +43,7 @@ func registerClearRange(r *registry) {
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, startArgs("--args=--vmodule=rocksdb=3"))
 
 			// Also restore a much smaller table. We'll use it to run queries against
 			// the cluster after having dropped the large table above, verifying that
@@ -79,7 +81,7 @@ func registerClearRange(r *registry) {
 				// above didn't brick the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 20
+				const minutes = 60
 				t.WorkerStatus("repeatedly running COUNT(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
@@ -90,10 +92,11 @@ func registerClearRange(r *registry) {
 						return err
 					}
 					// If we can't aggregate over 80kb in 10s, the database is far from usable.
+					start := timeutil.Now()
 					if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
-					c.l.printf("read %d rows\n", count)
+					c.l.printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
 					t.WorkerProgress(float64(i+1) / float64(minutes))
 					select {
 					case <-after:

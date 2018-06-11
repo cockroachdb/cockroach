@@ -1005,7 +1005,24 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("%s", db.GetSSTables())
+	sstables := db.GetSSTables()
+	fmt.Printf("%s", sstables)
+
+	sort.Slice(sstables, func(i, j int) bool {
+		a, b := sstables[i], sstables[j]
+		if a.Level < b.Level {
+			return true
+		}
+		if a.Level > b.Level {
+			return false
+		}
+		return a.Start.Less(b.Start)
+	})
+	fmt.Printf("\n")
+	for i := range sstables {
+		fmt.Printf("%d: %s - %s\n",
+			sstables[i].Level, sstables[i].Start.Key, sstables[i].End.Key)
+	}
 	return nil
 }
 
