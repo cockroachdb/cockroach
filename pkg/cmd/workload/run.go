@@ -259,7 +259,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			return err
 		}
 	}
-
+	rampDone := make(chan bool)
 	start := timeutil.Now()
 	errCh := make(chan error)
 	var wg sync.WaitGroup
@@ -271,6 +271,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			go workerRun(ctx, errCh, &wg, limiter, workFn)
 			time.Sleep(sleepTime)
 		}
+		rampDone <- true
 	}()
 
 	var numErr int
@@ -285,7 +286,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	if *duration > 0 {
 		go func() {
-			time.Sleep(*duration)
+			time.Sleep(*duration + *ramp)
 			done <- syscall.Signal(0)
 		}()
 	}
@@ -331,6 +332,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				if jsonEnc != nil {
 					_ = jsonEnc.Encode(t.Snapshot())
 				}
+			})
+		// Once the load generator is fully ramped up, we reset the histogram and the start time, to
+		// throw away the stats for the the ramp up period.
+		case <-rampDone:
+			start = timeutil.Now()
+			i = 0
+			reg.Tick(func(t workload.HistogramTick) {
+				t.Cumulative.Reset()
+				t.Hist.Reset()
 			})
 
 		case <-done:
