@@ -1306,13 +1306,13 @@ func TestImportMysql(t *testing.T) {
 	}{
 		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, simple},
-		{`single table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, second},
+		{`second table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
 		{`second from multi`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, multitable},
 		{`all from multi`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, everything`)
 			sqlDB.Exec(t, c.query, c.args...)
 
 			if c.expected == expectSimple || c.expected == expectAll {

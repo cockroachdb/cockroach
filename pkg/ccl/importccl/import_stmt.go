@@ -454,6 +454,7 @@ func importPlanHook(
 
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
+		var names []string
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
 			if err != nil {
@@ -466,14 +467,11 @@ func importPlanHook(
 			}
 			defer reader.Close()
 
-			var match string
 			if table != nil {
-				match = table.TableName.String()
+				names = []string{table.TableName.String()}
 			}
 			switch format.Format {
 			case roachpb.IOFileFormat_Mysqldump:
-				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readMysqlCreateTable(reader, evalCtx, parentID, match)
 			default:
 				// should be unreachable based on current parser rules.
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
@@ -554,9 +552,12 @@ func importPlanHook(
 			}
 		}
 
-		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
-		for i := range tableDescs {
-			tableDetails[i].Desc = tableDescs[i]
+		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
+		for _, tbl := range tableDescs {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl})
+		}
+		for _, name := range names {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
 		}
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
@@ -620,6 +621,9 @@ func doDistributedCSVTransform(
 		format,
 		walltime,
 		sstSize,
+		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
+			return storageccl.MakeKeyRewriter(descs)
+		},
 	); err != nil {
 		// If the job was canceled, any of the distsql processors could have been
 		// the first to encounter the .Progress error. This error's string is sent
@@ -735,8 +739,16 @@ func (r *importResumer) Resume(
 	}
 
 	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
-	for _, i := range details.Tables {
-		tables[i.Desc.Name] = i.Desc
+	if details.Tables != nil {
+		for _, i := range details.Tables {
+			if i.Name != "" {
+				tables[i.Name] = i.Desc
+			} else if i.Desc != nil {
+				tables[i.Desc.Name] = i.Desc
+			} else {
+				return errors.Errorf("invalid table specification")
+			}
+		}
 	}
 
 	return doDistributedCSVTransform(
@@ -769,7 +781,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Payload().Details.(*jobspb.Payload_Import).Import
 
 	if details.BackupPath != "" {
 		return nil
@@ -778,6 +790,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
 	for i := range details.Tables {
 		toWrite[i] = details.Tables[i].Desc
+		toWrite[i].ParentID = details.ParentID
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
