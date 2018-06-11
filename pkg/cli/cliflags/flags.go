@@ -669,6 +669,12 @@ If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
 
+	JSON = FlagInfo{
+		Name: "json",
+		Description: `
+Format output as JSON.`,
+	}
+
 	Decommission = FlagInfo{
 		Name: "decommission",
 		Description: `

@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -1005,7 +1006,12 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("%s", db.GetSSTables())
+	sstables := db.GetSSTables()
+	if debugCtx.json {
+		encoder := json.NewEncoder(os.Stdout)
+		return encoder.Encode(sstables)
+	}
+	fmt.Printf("%s", sstables)
 	return nil
 }
 

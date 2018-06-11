@@ -93,6 +93,7 @@ func initCLIDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
 	debugCtx.ballastSize = base.SizeSpec{}
+	debugCtx.json = false
 
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
@@ -199,6 +200,9 @@ var debugCtx struct {
 
 	// debug ballast
 	ballastSize base.SizeSpec
+
+	// debug sstables
+	json bool
 }
 
 // zoneCtx captures the command-line parameters of the `zone` command.

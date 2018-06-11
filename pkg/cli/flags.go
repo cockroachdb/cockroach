@@ -387,6 +387,10 @@ func init() {
 		f := debugBallastCmd.Flags()
 		VarFlag(f, &debugCtx.ballastSize, cliflags.Size)
 	}
+	{
+		f := debugSSTablesCmd.Flags()
+		BoolFlag(f, &debugCtx.json, cliflags.JSON, debugCtx.json)
+	}
 }
 
 func extraServerFlagInit() {

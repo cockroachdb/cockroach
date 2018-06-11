@@ -17,6 +17,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sync"
@@ -145,6 +146,17 @@ func (k MVCCKey) String() string {
 		return k.Key.String()
 	}
 	return fmt.Sprintf("%s/%s", k.Key, k.Timestamp)
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (k MVCCKey) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Raw    []byte
+		Pretty string
+	}{
+		Raw:    k.Key,
+		Pretty: k.Key.String(),
+	})
 }
 
 // MVCCKeyValue contains the raw bytes of the value for a key.
