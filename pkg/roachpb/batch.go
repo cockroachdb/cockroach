@@ -183,21 +183,27 @@ func (ba *BatchRequest) hasFlag(flag int) bool {
 
 // GetArg returns a request of the given type if one is contained in the
 // Batch. The request returned is the first of its kind, with the exception
-// of EndTransaction, where it examines the very last request only.
+// of EndTransaction, where it examines the very last request only, and
+// BeginTransaction, where it examines the very first request only.
 func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
-	// when looking for EndTransaction, just look at the last entry.
-	if method == EndTransaction {
+	switch method {
+	case BeginTransaction:
+		if length := len(ba.Requests); length > 0 {
+			if req := ba.Requests[0].GetInner(); req.Method() == BeginTransaction {
+				return req, true
+			}
+		}
+	case EndTransaction:
 		if length := len(ba.Requests); length > 0 {
 			if req := ba.Requests[length-1].GetInner(); req.Method() == EndTransaction {
 				return req, true
 			}
 		}
-		return nil, false
-	}
-
-	for _, arg := range ba.Requests {
-		if req := arg.GetInner(); req.Method() == method {
-			return req, true
+	default:
+		for _, arg := range ba.Requests {
+			if req := arg.GetInner(); req.Method() == method {
+				return req, true
+			}
 		}
 	}
 	return nil, false
@@ -376,6 +382,24 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 			// Regardless of flags, a NoopRequest is always compatible.
 			if method == Noop {
 				continue
+			}
+			if method == QueryIntent {
+				// QueryIntent wants to be a "prefix" to others commands,
+				// whether they're writes or reads. Use the same flags as
+				// the following non-QueryIntent request.
+				//
+				// WIP: this behavior should be specified by a flag itself,
+				//      like isAlone.
+				// WIP: Gross quadratic behavior...
+				for _, union := range ba.Requests[i+1:] {
+					args := union.GetInner()
+					nextMethod := args.Method()
+					if nextMethod != QueryIntent {
+						flags = args.flags()
+						flags &^= isAlone // remove
+						break
+					}
+				}
 			}
 			if !compatible(method, gFlags, flags) {
 				part = ba.Requests[:i]

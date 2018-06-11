@@ -386,6 +386,11 @@ func (r *distSQLReceiver) Push(
 		if meta.TxnMeta != nil {
 			if r.txn != nil {
 				if r.txn.ID() == meta.TxnMeta.Txn.ID {
+					// Strip unnecessary fields that don't need to be sent to the Root txn.
+					// TODO(nvanbenschoten): This indicates that we should consider having
+					// two separate type instead of a single TxnCoordMeta.
+					meta.TxnMeta.OutstandingWrites = nil
+
 					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnMeta)
 				}
 			} else {
