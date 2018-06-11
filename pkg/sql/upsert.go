@@ -762,7 +762,8 @@ func upsertExprsAndIndex(
 	if indexMatch(tableDesc.PrimaryIndex) {
 		return onConflict.Exprs, &tableDesc.PrimaryIndex, nil
 	}
-	for _, index := range tableDesc.Indexes {
+	for i := range tableDesc.Indexes {
+		index := tableDesc.Indexes[i]
 		if indexMatch(index) {
 			return onConflict.Exprs, &index, nil
 		}
