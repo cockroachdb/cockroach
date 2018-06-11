@@ -116,6 +116,10 @@ func makeDiskRowContainer(
 	return d
 }
 
+func (d *diskRowContainer) Len() int {
+	return int(d.rowID)
+}
+
 func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(d.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
