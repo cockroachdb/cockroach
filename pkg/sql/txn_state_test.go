@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,10 +66,11 @@ func makeTestContext() testContext {
 	})
 
 	settings := cluster.MakeTestingClusterSettings()
+	ambient := testutils.MakeAmbientCtx()
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      client.NewDB(factory, clock),
+		mockDB:      client.NewDB(ambient, factory, clock),
 		mon: mon.MakeMonitor(
 			"test root mon",
 			mon.MemoryResource,
@@ -78,7 +80,7 @@ func makeTestContext() testContext {
 			1000, /* noteworthy */
 			settings,
 		),
-		tracer:   tracing.NewTracer(),
+		tracer:   ambient.Tracer,
 		ctx:      context.TODO(),
 		settings: settings,
 	}

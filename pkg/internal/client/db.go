@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -172,14 +173,8 @@ type DBContext struct {
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
 	NodeID *base.NodeIDContainer
-	// UseNonCancelableCtxForTxn, when set, means that db.Txn() doesn't signal
-	// transaction completion to the TxnCoordSender through context cancelation.
-	// This means that the TxnCoordSender will consider a transaction to be
-	// abandoned based on a timeout.
-	// TODO(andrei): This is only used by a few tests dealing with the timeout.
-	// Remove it once the TxnCoordSender is no longer concerned with abandoned
-	// transactions.
-	UseTimeoutTxnAbandonment bool
+	// Stopper is used for async tasks.
+	Stopper *stop.Stopper
 }
 
 // DefaultDBContext returns (a copy of) the default options for
@@ -188,12 +183,15 @@ func DefaultDBContext() DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		NodeID:       &base.NodeIDContainer{},
+		Stopper:      stop.NewStopper(),
 	}
 }
 
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
+	log.AmbientContext
+
 	factory TxnSenderFactory
 	clock   *hlc.Clock
 	ctx     DBContext
@@ -223,16 +221,22 @@ func (db *DB) GetFactory() TxnSenderFactory {
 }
 
 // NewDB returns a new DB.
-func NewDB(factory TxnSenderFactory, clock *hlc.Clock) *DB {
-	return NewDBWithContext(factory, clock, DefaultDBContext())
+func NewDB(actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock) *DB {
+	return NewDBWithContext(actx, factory, clock, DefaultDBContext())
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
-func NewDBWithContext(factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext) *DB {
+func NewDBWithContext(
+	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext,
+) *DB {
+	if actx.Tracer == nil {
+		panic("no tracer set in AmbientCtx")
+	}
 	return &DB{
-		factory: factory,
-		clock:   clock,
-		ctx:     ctx,
+		AmbientContext: actx,
+		factory:        factory,
+		clock:          clock,
+		ctx:            ctx,
 	}
 }
 
@@ -515,26 +519,13 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
-//
-// If you need more control over how the txn is executed, check out txn.Exec().
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	// TODO(andrei): revisit this when TxnSender is moved to the client
-	// (https://github.com/cockroachdb/cockroach/issues/10511).
-	if !db.ctx.UseTimeoutTxnAbandonment {
-		var cancel func()
-		ctx, cancel = context.WithCancel(ctx)
-		defer cancel()
-	}
 	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
-	opts := TxnExecOptions{
-		AutoCommit: true,
-		AutoRetry:  true,
-	}
-	err := txn.Exec(ctx, opts, func(ctx context.Context, txn *Txn, _ *TxnExecOptions) error {
+	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)
 	})
 	if err != nil {

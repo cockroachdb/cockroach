@@ -144,7 +144,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	config.TestingSetupZoneConfigHook(stopper)
 
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: cfg.Settings.Tracer}, &base.Config{Insecure: true}, cfg.Clock,
+		cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock,
 		stopper, &cfg.Settings.Version)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
@@ -163,7 +163,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
-	cfg.DB = client.NewDB(factory, cfg.Clock)
+	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.store = store
 	if err := store.Bootstrap(
