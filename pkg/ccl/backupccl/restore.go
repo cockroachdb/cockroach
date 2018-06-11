@@ -1013,7 +1013,7 @@ func restore(
 			NewDesc: newDescBytes,
 		})
 	}
-	kr, err := storageccl.MakeKeyRewriter(rekeys)
+	kr, err := storageccl.MakeKeyRewriterFromRekeys(rekeys)
 	if err != nil {
 		return mu.res, nil, nil, err
 	}

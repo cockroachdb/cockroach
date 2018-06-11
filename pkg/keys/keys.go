@@ -679,6 +679,15 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// IsDescriptorKey returns true if the passed Key is a valid Descriptor key.
+func IsDescriptorKey(key roachpb.Key) bool {
+	_, id, err := DecodeTablePrefix(key)
+	if err != nil {
+		return false
+	}
+	return id == DescriptorTableID
+}
+
 // DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
 func DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	// Extract object ID from key.
