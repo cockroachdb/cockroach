@@ -199,7 +199,6 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 		}
 		return nil, false
 	}
-
 	for _, arg := range ba.Requests {
 		if req := arg.GetInner(); req.Method() == method {
 			return req, true
@@ -381,6 +380,24 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 			// Regardless of flags, a NoopRequest is always compatible.
 			if method == Noop {
 				continue
+			}
+			if method == QueryIntent {
+				// QueryIntent wants to be a "prefix" to others commands,
+				// whether they're writes or reads. Use the same flags as
+				// the following non-QueryIntent request.
+				//
+				// WIP: this behavior should be specified by a flag itself,
+				//      like isAlone.
+				// WIP: Gross quadratic behavior...
+				for _, union := range ba.Requests[i+1:] {
+					args := union.GetInner()
+					nextMethod := args.Method()
+					if nextMethod != QueryIntent {
+						flags = args.flags()
+						flags &^= isAlone // remove
+						break
+					}
+				}
 			}
 			if !compatible(method, gFlags, flags) {
 				part = ba.Requests[:i]

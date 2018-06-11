@@ -3366,7 +3366,6 @@ func (r *Replica) propose(
 	// If the request requested that Raft consensus be performed asynchronously,
 	// return a proposal result immediately on the proposal's done channel.
 	// The channel's capacity will be large enough to accommodate this.
-	// TODO move up.
 	if ba.AsyncConsensus {
 		endTxns := proposal.Local.DetachEndTxns(false /* alwaysOnly */)
 		if len(endTxns) != 0 {
@@ -3382,8 +3381,10 @@ func (r *Replica) propose(
 		proposal.ctx, proposal.sp = tracing.ForkCtxSpan(ctx, "async consensus")
 
 		// Signal the proposal's response channel immediately.
+		reply := *proposal.Local.Reply
+		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
 		pr := proposalResult{
-			Reply:   proposal.Local.Reply,
+			Reply:   &reply,
 			Intents: proposal.Local.DetachIntents(),
 		}
 		proposal.signalProposalResult(pr)
