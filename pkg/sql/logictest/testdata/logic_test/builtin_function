@@ -18,18 +18,81 @@ SELECT LENGTH('roach7'), LENGTH(b'roach77')
 length length
 6      7
 
-query II
-SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
+query IIIIII
+SELECT length('Hello, 世界'), length(b'Hello, 世界'),
+       char_length('Hello, 世界'), char_length(b'Hello, 世界'),
+       character_length('Hello, 世界'), character_length(b'Hello, 世界')
 ----
-9 13
+9 13 9 13 9 13
 
 statement error unknown signature: length\(int\)
 SELECT LENGTH(23)
 
-query II
-SELECT octet_length('Hello'), octet_length(b'世界')
+query III
+SELECT octet_length('Hello'), octet_length('世界'), octet_length(b'世界')
 ----
-5 6
+5 6 6
+
+query III
+SELECT bit_length('Hello'), bit_length('世界'), bit_length(b'世界')
+----
+40 48 48
+
+query TTTTTTTT
+SELECT quote_ident('abc'), quote_ident('ab.c'), quote_ident('ab"c'), quote_ident('世界'),
+       quote_ident('array'), -- reserved keyword
+       quote_ident('family'), -- type/func name keyword
+       quote_ident('bigint'), -- col name keyword
+       quote_ident('alter') -- unreserved keyword
+----
+abc  "ab.c"  "ab""c"  世界  "array"  "family"  "bigint"  alter
+
+query TTTT
+SELECT quote_literal('abc'), quote_literal('ab''c'), quote_literal('ab"c'), quote_literal(e'ab\nc')
+----
+'abc'  e'ab\'c'  'ab"c'  e'ab\nc'
+
+query TTTTTTTT
+SELECT
+ quote_literal(123::string), quote_nullable(123::string),
+ quote_literal(123), quote_nullable(123),
+ quote_literal(true), quote_nullable(true),
+ quote_literal(123.3), quote_nullable(123.3)
+----
+'123'  '123'  '123'  '123'  'true'  'true'  '123.3'  '123.3'
+
+query TTTTTT
+SELECT
+ quote_literal('1d'::interval),	quote_nullable('1d'::interval),
+ quote_literal('2018-06-11 12:13:14'::timestamp), quote_nullable('2018-06-11 12:13:14'::timestamp),
+ quote_literal('2018-06-11'::date), quote_nullable('2018-06-11'::date)
+----
+'1d'  '1d'  '2018-06-11 12:13:14+00:00'  '2018-06-11 12:13:14+00:00'  '2018-06-11'  '2018-06-11'
+
+query TTBB
+SELECT
+ quote_literal(null::int), quote_nullable(null::int),
+ quote_literal(null::int) IS NULL, quote_nullable(null::int) IS NULL
+----
+NULL  NULL  true  false
+
+# Check that quote_literal is properly sensitive to bytea_output.
+
+query TT
+SELECT quote_literal(b'abc'), quote_nullable(b'abc')
+----
+e'\\x616263'  e'\\x616263'
+
+statement ok
+SET bytea_output = 'escape'
+
+query TT
+SELECT quote_literal(b'abc'), quote_nullable(b'abc')
+----
+'abc'  'abc'
+
+statement ok
+RESET bytea_output
 
 query T colnames
 SELECT UPPER('roacH7')
@@ -1786,3 +1849,8 @@ SELECT pg_is_xlog_replay_paused()
 ----
 pg_is_xlog_replay_paused
 false
+
+query T
+SELECT pg_catalog.pg_client_encoding()
+----
+UTF8

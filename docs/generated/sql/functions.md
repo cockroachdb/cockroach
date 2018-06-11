@@ -672,10 +672,22 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tbody>
 <tr><td><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the ASCII value for the first character in <code>val</code>.</p>
 </span></td></tr>
+<tr><td><code>bit_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>bit_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
+</span></td></tr>
 <tr><td><code>btrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning or end of <code>input</code> (applies recursively).</p>
 <p>For example, <code>btrim('doggie', 'eod')</code> returns <code>ggi</code>.</p>
 </span></td></tr>
 <tr><td><code>btrim(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes all spaces from the beginning and end of <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>char_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bytes in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>char_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of characters in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>character_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bytes in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>character_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of characters in <code>val</code>.</p>
 </span></td></tr>
 <tr><td><code>concat(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
 </span></td></tr>
@@ -723,6 +735,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>For example, <code>overlay('doggie', 'CAT', 2)</code> returns <code>dCATie</code>.</p>
 </span></td></tr>
 <tr><td><code>overlay(input: <a href="string.html">string</a>, overlay_val: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>, end_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Deletes the characters in <code>input</code> between <code>start_pos</code> and <code>end_pos</code> (count starts at 1), and then insert <code>overlay_val</code> at <code>start_pos</code>.</p>
+</span></td></tr>
+<tr><td><code>quote_ident(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as identifier in a SQL statement.</p>
+</span></td></tr>
+<tr><td><code>quote_literal(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as string literal in a SQL statement.</p>
+</span></td></tr>
+<tr><td><code>quote_literal(val: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal.</p>
+</span></td></tr>
+<tr><td><code>quote_nullable(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal. If <code>val</code> is NULL, returns ‘NULL’.</p>
+</span></td></tr>
+<tr><td><code>quote_nullable(val: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal. If <code>val</code> is NULL, returns ‘NULL’.</p>
 </span></td></tr>
 <tr><td><code>regexp_extract(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the first match for the Regular Expression <code>regex</code> in <code>input</code>.</p>
 </span></td></tr>
