@@ -121,6 +121,7 @@
 		ObservedTimestamp
 		Transaction
 		Intent
+		SequencedWrite
 		Lease
 		AbortSpanEntry
 		TxnCoordMeta

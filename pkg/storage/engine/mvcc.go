@@ -1547,7 +1547,14 @@ func mvccInitPutUsingIter(
 				}
 				// The existing value matches the supplied value; return an error
 				// to prevent rewriting the value.
-				return nil, errInitPutValueMatchesExisting
+				//
+				// WIP: removing this optimization for now. It's currently not possible
+				// at the client to tell whether an InitPut succeeded and wrote an
+				// intent or not. We either need to return this information or remove
+				// the fast path. It might be worth it to remove the optimization
+				// because it will also mess with parallel commits and its not
+				// clear how often we actually hit it in practice.
+				// return nil, errInitPutValueMatchesExisting
 			}
 			return value.RawBytes, nil
 		},

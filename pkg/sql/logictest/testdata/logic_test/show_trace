@@ -93,7 +93,7 @@ dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 5 CPut to (n1,s1):1
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
 
 
 # More KV operations.
@@ -145,7 +145,7 @@ dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 5 CPut to (n1,s1):1
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 7 QueryIntent to (n1,s1):1
 
 # We avoid SHOW KV TRACE FOR <stmt> here, because that would make the
 # ensuing trace especially chatty, as it traces the index backfill at
@@ -344,7 +344,7 @@ sql txn      CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
 sql txn      fetched: /kv/primary/2/v -> /3
 sql txn      CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
 dist sender  querying next range at /Table/SystemConfigSpan/Start
-dist sender  r1: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 2 CPut, 1 EndTxn, 7 QueryIntent to (n1,s1):1
 
 query TT
 SET tracing=kv;
@@ -368,7 +368,7 @@ dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 1 CPut, 1 BeginTxn to (n1,s1):1
-dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
+dist sender  r1: sending batch 1 EndTxn, 1 QueryIntent to (n1,s1):1
 sql txn      Scan /Table/55/{1-2}
 dist sender  querying next range at /Table/55/1
 dist sender  r1: sending batch 1 Scan to (n1,s1):1

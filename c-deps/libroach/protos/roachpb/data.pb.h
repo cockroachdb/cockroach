@@ -39,7 +39,7 @@ namespace protobuf_roachpb_2fdata_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[15];
+  static const ::google::protobuf::internal::ParseTable schema[16];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -68,6 +68,8 @@ void InitDefaultsTransactionImpl();
 void InitDefaultsTransaction();
 void InitDefaultsIntentImpl();
 void InitDefaultsIntent();
+void InitDefaultsSequencedWriteImpl();
+void InitDefaultsSequencedWrite();
 void InitDefaultsLeaseImpl();
 void InitDefaultsLease();
 void InitDefaultsAbortSpanEntryImpl();
@@ -87,6 +89,7 @@ inline void InitDefaults() {
   InitDefaultsObservedTimestamp();
   InitDefaultsTransaction();
   InitDefaultsIntent();
+  InitDefaultsSequencedWrite();
   InitDefaultsLease();
   InitDefaultsAbortSpanEntry();
   InitDefaultsTxnCoordMeta();
@@ -121,6 +124,9 @@ extern ModifiedSpanTriggerDefaultTypeInternal _ModifiedSpanTrigger_default_insta
 class ObservedTimestamp;
 class ObservedTimestampDefaultTypeInternal;
 extern ObservedTimestampDefaultTypeInternal _ObservedTimestamp_default_instance_;
+class SequencedWrite;
+class SequencedWriteDefaultTypeInternal;
+extern SequencedWriteDefaultTypeInternal _SequencedWrite_default_instance_;
 class Span;
 class SpanDefaultTypeInternal;
 extern SpanDefaultTypeInternal _Span_default_instance_;
@@ -1681,6 +1687,117 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
 };
 // -------------------------------------------------------------------
 
+class SequencedWrite : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.SequencedWrite) */ {
+ public:
+  SequencedWrite();
+  virtual ~SequencedWrite();
+
+  SequencedWrite(const SequencedWrite& from);
+
+  inline SequencedWrite& operator=(const SequencedWrite& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SequencedWrite(SequencedWrite&& from) noexcept
+    : SequencedWrite() {
+    *this = ::std::move(from);
+  }
+
+  inline SequencedWrite& operator=(SequencedWrite&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const SequencedWrite& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SequencedWrite* internal_default_instance() {
+    return reinterpret_cast<const SequencedWrite*>(
+               &_SequencedWrite_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    12;
+
+  void Swap(SequencedWrite* other);
+  friend void swap(SequencedWrite& a, SequencedWrite& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SequencedWrite* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SequencedWrite* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const SequencedWrite& from);
+  void MergeFrom(const SequencedWrite& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(SequencedWrite* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // int32 sequence = 2;
+  void clear_sequence();
+  static const int kSequenceFieldNumber = 2;
+  ::google::protobuf::int32 sequence() const;
+  void set_sequence(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.SequencedWrite)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::int32 sequence_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
+  friend void ::protobuf_roachpb_2fdata_2eproto::InitDefaultsSequencedWriteImpl();
+};
+// -------------------------------------------------------------------
+
 class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Lease) */ {
  public:
   Lease();
@@ -1715,7 +1832,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(Lease* other);
   friend void swap(Lease& a, Lease& b) {
@@ -1863,7 +1980,7 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_AbortSpanEntry_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(AbortSpanEntry* other);
   friend void swap(AbortSpanEntry& a, AbortSpanEntry& b) {
@@ -1983,7 +2100,7 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_TxnCoordMeta_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    14;
+    15;
 
   void Swap(TxnCoordMeta* other);
   friend void swap(TxnCoordMeta& a, TxnCoordMeta& b) {
@@ -2062,6 +2179,17 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
       refresh_writes() const;
 
+  int outstanding_writes_size() const;
+  void clear_outstanding_writes();
+  static const int kOutstandingWritesFieldNumber = 7;
+  const ::cockroach::roachpb::SequencedWrite& outstanding_writes(int index) const;
+  ::cockroach::roachpb::SequencedWrite* mutable_outstanding_writes(int index);
+  ::cockroach::roachpb::SequencedWrite* add_outstanding_writes();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >*
+      mutable_outstanding_writes();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
+      outstanding_writes() const;
+
   bool has_txn() const;
   void clear_txn();
   static const int kTxnFieldNumber = 1;
@@ -2089,6 +2217,7 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_reads_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_writes_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > outstanding_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 command_count_;
   bool refresh_valid_;
@@ -3718,6 +3847,76 @@ inline void Intent::set_status(::cockroach::roachpb::TransactionStatus value) {
 
 // -------------------------------------------------------------------
 
+// SequencedWrite
+
+inline void SequencedWrite::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& SequencedWrite::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequencedWrite.key)
+  return key_.GetNoArena();
+}
+inline void SequencedWrite::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SequencedWrite.key)
+}
+#if LANG_CXX11
+inline void SequencedWrite::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.SequencedWrite.key)
+}
+#endif
+inline void SequencedWrite::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.SequencedWrite.key)
+}
+inline void SequencedWrite::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.SequencedWrite.key)
+}
+inline ::std::string* SequencedWrite::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SequencedWrite.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SequencedWrite::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.SequencedWrite.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SequencedWrite::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SequencedWrite.key)
+}
+
+// int32 sequence = 2;
+inline void SequencedWrite::clear_sequence() {
+  sequence_ = 0;
+}
+inline ::google::protobuf::int32 SequencedWrite::sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequencedWrite.sequence)
+  return sequence_;
+}
+inline void SequencedWrite::set_sequence(::google::protobuf::int32 value) {
+  
+  sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SequencedWrite.sequence)
+}
+
+// -------------------------------------------------------------------
+
 // Lease
 
 inline bool Lease::has_start() const {
@@ -4243,9 +4442,40 @@ inline void TxnCoordMeta::set_refresh_valid(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_valid)
 }
 
+inline int TxnCoordMeta::outstanding_writes_size() const {
+  return outstanding_writes_.size();
+}
+inline void TxnCoordMeta::clear_outstanding_writes() {
+  outstanding_writes_.Clear();
+}
+inline const ::cockroach::roachpb::SequencedWrite& TxnCoordMeta::outstanding_writes(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
+  return outstanding_writes_.Get(index);
+}
+inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::mutable_outstanding_writes(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
+  return outstanding_writes_.Mutable(index);
+}
+inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::add_outstanding_writes() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
+  return outstanding_writes_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >*
+TxnCoordMeta::mutable_outstanding_writes() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
+  return &outstanding_writes_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
+TxnCoordMeta::outstanding_writes() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
+  return outstanding_writes_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
