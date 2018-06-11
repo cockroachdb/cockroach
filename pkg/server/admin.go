@@ -1505,7 +1505,7 @@ func (s *adminServer) ReplicaMatrix(
 func (s *adminServer) Queries(
 	ctx context.Context, req *serverpb.QueriesRequest,
 ) (*serverpb.QueriesResponse, error) {
-	stmtStats := s.server.pgServer.SQLServer.GetScrubbedStmtStats()
+	stmtStats := s.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
 
 	return &serverpb.QueriesResponse{
 		Queries: stmtStats,

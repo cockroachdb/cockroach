@@ -285,6 +285,18 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 func (s *sqlStats) getScrubbedStmtStats(
 	vt *VirtualSchemaHolder,
 ) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, true /* scrub */)
+}
+
+func (s *sqlStats) getUnscrubbedStmtStats(
+	vt *VirtualSchemaHolder,
+) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, false /* scrub */)
+}
+
+func (s *sqlStats) getStmtStats(
+	vt *VirtualSchemaHolder, scrub bool,
+) []roachpb.CollectedStatementStatistics {
 	s.Lock()
 	defer s.Unlock()
 	var ret []roachpb.CollectedStatementStatistics
@@ -297,10 +309,14 @@ func (s *sqlStats) getScrubbedStmtStats(
 		hashedAppName := HashForReporting(salt, appName)
 		a.Lock()
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			maybeScrubbed := q.stmt
+			ok := true
+			if scrub {
+				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
+			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
-					Query:   scrubbed,
+					Query:   maybeScrubbed,
 					DistSQL: q.distSQLUsed,
 					Failed:  q.failed,
 					App:     hashedAppName,
