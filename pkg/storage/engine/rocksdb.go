@@ -2413,7 +2413,33 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 }
 
 func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
-	return statusToError(C.DBDeleteRange(rdb, goToCKey(start), goToCKey(end)))
+	if err := statusToError(C.DBDeleteRange(rdb, goToCKey(start), goToCKey(end))); err != nil {
+		return err
+	}
+	// This is a serious hack. RocksDB generates sstables which cover an
+	// excessively large amount of the key space when range tombstones are
+	// present. The crux of the problem is that the logic for determining sstable
+	// boundaries depends on actual keys being present. So we help that logic
+	// along by adding deletions of the first key covered by the range tombstone,
+	// and a key near the end of the range (previous is difficult). See
+	// TestRocksDBDeleteRangeCompaction which verifies that either this hack is
+	// working, or the upstream problem was fixed in RocksDB.
+	if err := dbClear(rdb, start); err != nil {
+		return err
+	}
+	prev := make(roachpb.Key, len(end.Key))
+	copy(prev, end.Key)
+	if n := len(prev) - 1; prev[n] > 0 {
+		prev[n]--
+	} else {
+		prev = prev[:n]
+	}
+	if start.Key.Compare(prev) < 0 {
+		if err := dbClear(rdb, MakeMVCCMetadataKey(prev)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
