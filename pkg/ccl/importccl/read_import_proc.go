@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -383,8 +384,10 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 		for _, table := range cp.spec.Tables {
 			singleTable = table
 		}
-	} else if format := cp.spec.Format.Format; !isMultiTableFormat(format) {
-		return errors.Errorf("%s only supports reading a single table", format.String())
+	}
+
+	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
+		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
 	}
 
 	var conv inputConverter
@@ -439,8 +442,9 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 		defer tracing.FinishSpan(span)
 
 		var fn sampleFunc
+		var sampleAll bool
 		if cp.spec.SampleSize == 0 {
-			fn = sampleAll
+			sampleAll = true
 		} else {
 			sr := sampleRate{
 				rnd:        rand.New(rand.NewSource(rand.Int63())),
@@ -469,7 +473,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 				if completedSpans.Contains(kv.Key) {
 					continue
 				}
-				if fn(kv) {
+				if sampleAll || keys.IsDescriptorKey(kv.Key) || fn(kv) {
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
@@ -504,10 +508,6 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	sz := float64(len(kv.Key) + len(kv.Value.RawBytes))
 	prob := sz / s.sampleSize
 	return prob > s.rnd.Float64()
-}
-
-func sampleAll(kv roachpb.KeyValue) bool {
-	return true
 }
 
 func makeRowErr(file string, row int64, format string, args ...interface{}) error {

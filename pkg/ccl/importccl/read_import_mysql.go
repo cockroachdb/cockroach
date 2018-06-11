@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+
 	"github.com/pkg/errors"
 	mysql "github.com/xwb1989/sqlparser"
 	mysqltypes "github.com/xwb1989/sqlparser/dependency/sqltypes"
@@ -39,9 +41,12 @@ import (
 // tables with names that appear in the `tables` map is converted to Cockroach
 // KVs using the mapped converter and sent to kvCh.
 type mysqldumpReader struct {
-	tables   map[string]*rowConverter
+	evalCtx   *tree.EvalContext
+	tables    map[string]*rowConverter
+	importAll bool // import any table encountered.
+	kvCh      chan kvBatch
+
 	debugRow func(tree.Datums)
-	kvCh     chan kvBatch
 }
 
 var _ inputConverter = &mysqldumpReader{}
@@ -49,15 +54,23 @@ var _ inputConverter = &mysqldumpReader{}
 func newMysqldumpReader(
 	kvCh chan kvBatch, tables map[string]*sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
+	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, importAll: len(tables) == 0}
+
 	converters := make(map[string]*rowConverter, len(tables))
 	for name, table := range tables {
+		if table == nil {
+			converters[name] = nil
+			continue
+		}
 		conv, err := newRowConverter(table, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}
 		converters[name] = conv
 	}
-	return &mysqldumpReader{kvCh: kvCh, tables: converters}, nil
+	res.tables = converters
+
+	return res, nil
 }
 
 func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
@@ -70,6 +83,7 @@ func (m *mysqldumpReader) inputFinished(ctx context.Context) {
 func (m *mysqldumpReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
+	var generatedIDs sqlbase.ID
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
@@ -82,6 +96,40 @@ func (m *mysqldumpReader) readFile(
 			return errors.Wrap(err, "mysql parse error")
 		}
 		switch i := stmt.(type) {
+		case *mysql.DDL:
+			if i.Action != mysql.CreateStr {
+				continue
+			}
+			name := i.NewName.Name.String()
+			conv, ok := m.tables[name]
+			// If we already have this schema, skip it.
+			if conv != nil {
+				continue
+			}
+			// If we're only importing the named tables and this is not one, skip it.
+			if !m.importAll && !ok {
+				continue
+			}
+
+			generatedIDs++
+			id := defaultCSVTableID + generatedIDs
+			tbl, err := mysqlTableToCockroach(m.evalCtx, defaultCSVParentID, id, name, i.TableSpec)
+			if err != nil {
+				return err
+			}
+			conv, err = newRowConverter(tbl, m.evalCtx, m.kvCh)
+			if err != nil {
+				return err
+			}
+			kv := roachpb.KeyValue{Key: sqlbase.MakeDescMetadataKey(id)}
+			if err := kv.Value.SetProto(tbl); err != nil {
+				return err
+			}
+			kv.Value.InitChecksum(kv.Key)
+			conv.kvBatch = append(conv.kvBatch, kv)
+
+			m.tables[name] = conv
+
 		case *mysql.Insert:
 			name := i.Table.Name.String()
 			conv, ok := m.tables[name]
@@ -89,7 +137,7 @@ func (m *mysqldumpReader) readFile(
 				// not importing this table.
 				continue
 			}
-			if ok && conv == nil {
+			if conv == nil {
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
 			inserts++
