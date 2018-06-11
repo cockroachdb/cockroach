@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -269,6 +270,7 @@ type testKafkaProducer struct {
 		msgs   []*sarama.ProducerMessage
 		closed bool
 	}
+	scratch bufalloc.ByteAllocator
 	flushCh chan struct{}
 }
 
@@ -277,6 +279,7 @@ func newTestKafkaProducer() *testKafkaProducer {
 }
 
 func (k *testKafkaProducer) Reset() {
+	k.scratch = k.scratch[:0]
 	k.mu.Lock()
 	k.mu.closed = false
 	k.mu.Unlock()
@@ -286,6 +289,19 @@ func (k *testKafkaProducer) Reset() {
 func (k *testKafkaProducer) SendMessage(
 	msg *sarama.ProducerMessage,
 ) (partition int32, offset int64, err error) {
+	key, err := msg.Key.Encode()
+	if err != nil {
+		return 0, 0, err
+	}
+	k.scratch, key = k.scratch.Copy(key, 0 /* extraCap */)
+	msg.Key = sarama.ByteEncoder(key)
+	value, err := msg.Value.Encode()
+	if err != nil {
+		return 0, 0, err
+	}
+	k.scratch, value = k.scratch.Copy(value, 0 /* extraCap */)
+	msg.Value = sarama.ByteEncoder(value)
+
 	k.mu.Lock()
 	k.mu.msgs = append(k.mu.msgs, msg)
 	closed := k.mu.closed
