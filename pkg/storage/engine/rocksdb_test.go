@@ -1113,3 +1113,138 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 }
+
+// Verify that range tombstones do not result in sstables that cover an
+// exessively large portion of the key space.
+func TestRocksDBDeleteRangeCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db := setupMVCCInMemRocksDB(t, "delrange").(InMem)
+	defer db.Close()
+
+	makeKey := func(prefix string, i int) roachpb.Key {
+		return roachpb.Key(fmt.Sprintf("%s%09d", prefix, i))
+	}
+
+	rnd, _ := randutil.NewPseudoRand()
+
+	// Create sstables in L6 that are half the L6 target size. Any smaller and
+	// RocksDB might choose to compact them.
+	const targetSize = 64 << 20
+	const numEntries = 10000
+	const keySize = 10
+	const valueSize = (targetSize / numEntries) - keySize
+
+	for _, p := range "abc" {
+		sst, err := MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(sst)
+		}
+		defer sst.Close()
+
+		for i := 0; i < numEntries; i++ {
+			kv := MVCCKeyValue{
+				Key: MVCCKey{
+					Key: makeKey(string(p), i),
+				},
+				Value: randutil.RandBytes(rnd, valueSize),
+			}
+			if err := sst.Add(kv); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		filename := fmt.Sprintf("ingest")
+		if err := db.WriteFile(filename, sstContents); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := db.IngestExternalFiles(context.Background(), []string{filename}, true); err != nil {
+			t.Fatal(err)
+		}
+		if testing.Verbose() {
+			fmt.Printf("ingested %s\n", string(p))
+		}
+	}
+
+	getSSTables := func() string {
+		ssts := db.GetSSTables()
+		sort.Slice(ssts, func(i, j int) bool {
+			a, b := ssts[i], ssts[j]
+			if a.Level < b.Level {
+				return true
+			}
+			if a.Level > b.Level {
+				return false
+			}
+			return a.Start.Less(b.Start)
+		})
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "\n")
+		for i := range ssts {
+			fmt.Fprintf(&buf, "%d: %s - %s\n",
+				ssts[i].Level, ssts[i].Start.Key, ssts[i].End.Key)
+		}
+		return buf.String()
+	}
+
+	verifySSTables := func(expected string) {
+		actual := getSSTables()
+		if expected != actual {
+			t.Fatalf("expected%sgot%s", expected, actual)
+		}
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+	}
+
+	// After setup there should be 3 sstables.
+	verifySSTables(`
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+6: "c000000000" - "c000009999"
+`)
+
+	// Generate a batch which writes to the very first key, and then deletes the
+	// range of keys covered by the last sstable.
+	batch := db.NewBatch()
+	if err := batch.Put(MakeMVCCMetadataKey(makeKey("a", 0)), []byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := batch.ClearRange(MakeMVCCMetadataKey(makeKey("c", 0)),
+		MakeMVCCMetadataKey(makeKey("c", numEntries))); err != nil {
+		t.Fatal(err)
+	}
+	if err := batch.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+	batch.Close()
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	// After flushing, there is a single additional L0 table that covers the
+	// entire key range.
+	verifySSTables(`
+0: "a000000000" - "c000010000"
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+6: "c000000000" - "c000009999"
+`)
+
+	// Compacting the key range covering the last sstable should result in that
+	// sstable being deleted. Prior to the hack in dbClearRange, all of the
+	// sstables would be compacted resulting in 2 L6 sstables with different
+	// boundaries than the ones below.
+	_ = db.CompactRange(makeKey("c", 0), makeKey("c", numEntries), false)
+	verifySSTables(`
+5: "a000000000" - "a000000000"
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+`)
+}
