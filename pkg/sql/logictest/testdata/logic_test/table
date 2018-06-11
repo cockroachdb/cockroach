@@ -215,14 +215,14 @@ CREATE TABLE test.dupe_generated (
   CHECK (foo < 10)
 )
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM test.dupe_generated
 ----
-Table           Name        Type         Column(s)   Details
-dupe_generated  check_bar   CHECK        bar        bar > 2
-dupe_generated  check_foo   CHECK        foo        foo > 2
-dupe_generated  check_foo1  CHECK        foo        foo < 10
-dupe_generated  check_foo2  CHECK        foo        foo > 1
+table           name        type   details           validated
+dupe_generated  check_bar   CHECK  CHECK (bar > 2)   true
+dupe_generated  check_foo   CHECK  CHECK (foo > 2)   true
+dupe_generated  check_foo1  CHECK  CHECK (foo < 10)  true
+dupe_generated  check_foo2  CHECK  CHECK (foo > 1)   true
 
 statement ok
 CREATE TABLE test.named_constraints (
@@ -265,16 +265,16 @@ test.public.named_constraints  CREATE TABLE named_constraints (
                                CONSTRAINT ck1 CHECK (length(nickname) < 10)
 )
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM test.named_constraints
 ----
-Table              Name  Type         Column(s)       Details
-named_constraints  bar   UNIQUE       id, name        NULL
-named_constraints  ck1   CHECK        nickname        length(nickname) < 10
-named_constraints  ck2   CHECK        name, nickname  length(nickname) < length(name)
-named_constraints  pk    PRIMARY KEY  id              NULL
-named_constraints  uq    UNIQUE       email           NULL
-named_constraints  uq2   UNIQUE       username        NULL
+table              name  type         details                                  validated
+named_constraints  bar   UNIQUE       UNIQUE (id ASC, name ASC)                true
+named_constraints  ck1   CHECK        CHECK (length(nickname) < 10)            true
+named_constraints  ck2   CHECK        CHECK (length(nickname) < length(name))  true
+named_constraints  pk    PRIMARY KEY  PRIMARY KEY (id ASC)                     true
+named_constraints  uq    UNIQUE       UNIQUE (email ASC)                       true
+named_constraints  uq2   UNIQUE       UNIQUE (username ASC)                    true
 
 statement error duplicate constraint name: "pk"
 CREATE TABLE test.dupe_named_constraints (
