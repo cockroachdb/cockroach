@@ -779,9 +779,9 @@ func upsertExprsAndIndex(
 	if indexMatch(tableDesc.PrimaryIndex) {
 		return onConflict.Exprs, &tableDesc.PrimaryIndex, nil
 	}
-	for _, index := range tableDesc.Indexes {
-		if indexMatch(index) {
-			return onConflict.Exprs, &index, nil
+	for i := range tableDesc.Indexes {
+		if indexMatch(tableDesc.Indexes[i]) {
+			return onConflict.Exprs, &tableDesc.Indexes[i], nil
 		}
 	}
 	return nil, nil, fmt.Errorf("there is no unique or exclusion constraint matching the ON CONFLICT specification")
