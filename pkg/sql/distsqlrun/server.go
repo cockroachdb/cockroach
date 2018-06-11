@@ -367,24 +367,7 @@ func (ds *ServerImpl) setupFlow(
 			*req.EvalContext.SeqState.LastSeqIncremented)
 	}
 
-	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := FlowCtx{
-		Settings:       ds.Settings,
-		AmbientContext: ds.AmbientContext,
-		stopper:        ds.Stopper,
-		id:             req.Flow.FlowID,
-		EvalCtx:        evalCtx,
-		rpcCtx:         ds.RPCContext,
-		gossip:         ds.Gossip,
-		txn:            txn,
-		clientDB:       ds.DB,
-		executor:       ds.Executor,
-		testingKnobs:   ds.TestingKnobs,
-		nodeID:         nodeID,
-		TempStorage:    ds.TempStorage,
-		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.ServerConfig.JobRegistry,
-	}
+	flowCtx := ds.MakeFlowContext(req.Flow.FlowID, evalCtx, txn, nodeID)
 
 	ctx = flowCtx.AnnotateCtx(ctx)
 
@@ -397,6 +380,27 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	return ctx, f, nil
+}
+
+func (ds *ServerImpl) MakeFlowContext(id FlowID, evalCtx tree.EvalContext, txn *client.Txn, nodeID roachpb.NodeID) FlowCtx {
+	// TODO(radu): we should sanity check some of these fields.
+	return FlowCtx{
+		Settings:       ds.Settings,
+		AmbientContext: ds.AmbientContext,
+		stopper:        ds.Stopper,
+		id:             id,
+		EvalCtx:        evalCtx,
+		rpcCtx:         ds.RPCContext,
+		gossip:         ds.Gossip,
+		txn:            txn,
+		clientDB:       ds.DB,
+		executor:       ds.Executor,
+		testingKnobs:   ds.TestingKnobs,
+		nodeID:         nodeID,
+		TempStorage:    ds.TempStorage,
+		diskMonitor:    ds.DiskMonitor,
+		JobRegistry:    ds.ServerConfig.JobRegistry,
+	}
 }
 
 // SetupSyncFlow sets up a synchronous flow, connecting the sync response

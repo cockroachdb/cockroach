@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type planMaker interface {
@@ -96,6 +98,14 @@ func (r *runParams) EvalContext() *tree.EvalContext {
 // SessionData gives convenient access to the runParam's SessionData.
 func (r *runParams) SessionData() *sessiondata.SessionData {
 	return r.extendedEvalCtx.SessionData
+}
+
+func (r *runParams) LocalFlowCtx() distsqlrun.FlowCtx {
+	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
+	return r.extendedEvalCtx.ExecCfg.DistSQLSrv.MakeFlowContext(
+		flowID, r.extendedEvalCtx.EvalContext,
+		r.extendedEvalCtx.Txn, r.extendedEvalCtx.NodeID,
+	)
 }
 
 // planNode defines the interface for executing a query or portion of a query.

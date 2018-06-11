@@ -59,11 +59,18 @@ func ConvertToMappedSpecOrdering(
 			}
 		}
 		specOrdering.Columns[i].ColIdx = uint32(colIdx)
-		if c.Direction == encoding.Ascending {
-			specOrdering.Columns[i].Direction = Ordering_Column_ASC
-		} else {
-			specOrdering.Columns[i].Direction = Ordering_Column_DESC
-		}
+		specOrdering.Columns[i].Direction = ConvertOrdering(c.Direction)
 	}
 	return specOrdering
+}
+
+func ConvertOrdering(direction encoding.Direction) Ordering_Column_Direction {
+	switch direction {
+	case encoding.Ascending:
+		return Ordering_Column_ASC
+	case encoding.Descending:
+		return Ordering_Column_DESC
+	default:
+		panic(fmt.Sprintf("Invalid direction %d", direction))
+	}
 }

@@ -27,6 +27,8 @@ import (
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
+	rowSourceToPlanNode
+
 	plan planNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
@@ -188,9 +190,7 @@ func (p *planner) distinct(
 }
 
 func (n *distinctNode) startExec(params runParams) error {
-	flowCtx := &distsqlrun.FlowCtx{
-		EvalCtx: *params.EvalContext(),
-	}
+	flowCtx := params.LocalFlowCtx()
 
 	cols := make([]int, len(planColumns(n.plan)))
 	for i := range cols {
@@ -210,24 +210,16 @@ func (n *distinctNode) startExec(params runParams) error {
 	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
 	var output distsqlrun.RowReceiver     // output is never used as distinct is only run as a RowSource.
 
-	proc, err := distsqlrun.NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, output)
+	proc, err := distsqlrun.NewDistinct(&flowCtx, 0 /* processorID */, spec, input, post, output)
 	if err != nil {
 		return err
 	}
 
-	n.run = makeRowSourceToPlanNode(proc)
+	n.rowSourceToPlanNode = makeRowSourceToPlanNode(proc)
 
-	n.run.source.Start(params.ctx)
+	n.rowSourceToPlanNode.source.Start(params.ctx)
 
 	return nil
-}
-
-func (n *distinctNode) Next(params runParams) (bool, error) {
-	return n.run.Next(params)
-}
-
-func (n *distinctNode) Values() tree.Datums {
-	return n.run.Values()
 }
 
 func (n *distinctNode) Close(ctx context.Context) {

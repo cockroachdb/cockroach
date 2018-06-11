@@ -1077,10 +1077,7 @@ func (dsp *DistSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
-
-	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
-
-	if matchLen < len(n.ordering) {
+	if n.matchLen < len(n.ordering) {
 		// Sorting is needed; we add a stage of sorting processors.
 		ordering := distsqlrun.ConvertToMappedSpecOrdering(n.ordering, p.planToStreamColMap)
 
@@ -1088,7 +1085,7 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 			distsqlrun.ProcessorCoreUnion{
 				Sorter: &distsqlrun.SorterSpec{
 					OutputOrdering:   ordering,
-					OrderingMatchLen: uint32(matchLen),
+					OrderingMatchLen: uint32(n.matchLen),
 				},
 			},
 			distsqlrun.PostProcessSpec{},
