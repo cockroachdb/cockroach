@@ -118,7 +118,7 @@ func TestTrace(t *testing.T) {
 				// to trace. We don't insert any rows in this test, thus the expected
 				// stat value is 0.
 				rows, err = sqlDB.Query(
-					"SELECT COUNT(message) FROM crdb_internal.session_trace " +
+					"SELECT count(message) FROM crdb_internal.session_trace " +
 						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
 				)
 				if err != nil {
@@ -296,7 +296,7 @@ func TestTrace(t *testing.T) {
 							}
 
 							// Sanity check that new sessions don't have trace info on them.
-							row := sqlDB.QueryRow("SELECT COUNT(1) FROM crdb_internal.session_trace")
+							row := sqlDB.QueryRow("SELECT count(1) FROM crdb_internal.session_trace")
 							var count int
 							if err := row.Scan(&count); err != nil {
 								t.Fatal(err)
@@ -485,7 +485,7 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
 	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
-	r.Exec(t, "SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
+	r.Exec(t, "SHOW KV TRACE FOR SELECT count(*) FROM test.a")
 }
 
 // Test that spans are collected from RPC that returned (structured) errors, in

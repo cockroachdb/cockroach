@@ -307,7 +307,9 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "ERROR resultFormat=%d PQgetf(bytea): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
-			if (memcmp(recvbytea.data, bytea.data, MIN(recvbytea.len, bytea.len)) != 0) {
+			if (memcmp(recvbytea.data, bytea.data,
+				   MIN(recvbytea.len, bytea.len) // lint: uppercase function OK
+				) != 0) {
 				fprintf(stderr, "resultFormat=%d expected (%d bytes): ", resultFormat, bytea.len);
 				for (int i = 0; i < bytea.len; ++i) {
 					fprintf(stderr, "%c", bytea.data[i]);

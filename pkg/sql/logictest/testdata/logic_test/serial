@@ -15,7 +15,7 @@ statement ok
 INSERT INTO serial (b) VALUES (2)
 
 query III
-SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM serial
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
 ----
 4 3 4
 
@@ -29,7 +29,7 @@ statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
 query III
-SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM smallbig
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 ----
 2 2 1
 
@@ -40,6 +40,6 @@ statement ok
 INSERT INTO serials (d) VALUES (9), (9)
 
 query III
-SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM serials
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serials
 ----
 2 2 2

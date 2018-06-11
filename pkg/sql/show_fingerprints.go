@@ -147,7 +147,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// TODO(dan): If/when this ever loses its EXPERIMENTAL prefix and gets
 	// exposed to users, consider adding a version to the fingerprint output.
 	sql := fmt.Sprintf(`SELECT
-	  XOR_AGG(FNV64(%s))::string AS fingerprint
+	  xor_agg(fnv64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 	// If were'in in an AOST context, propagate it to the inner statement so that

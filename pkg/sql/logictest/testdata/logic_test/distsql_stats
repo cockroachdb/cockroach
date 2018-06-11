@@ -5,20 +5,20 @@ CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
 
 # Split into ten parts.
 statement ok
-ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE data TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate all combinations of values 1 to 10.
 statement ok
 INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
-   GENERATE_SERIES(1, 10) AS A(a),
-   GENERATE_SERIES(1, 10) AS B(b),
-   GENERATE_SERIES(1, 10) AS C(c),
-   GENERATE_SERIES(1, 10) AS D(d)
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
 
 # Verify data placement.
 query TTTI colnames

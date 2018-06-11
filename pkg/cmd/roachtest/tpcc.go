@@ -151,7 +151,7 @@ func loadTPCCBench(
 
 		var curWarehouses int
 		if err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM tpcc.warehouse`,
+			`SELECT count(*) FROM tpcc.warehouse`,
 		).Scan(&curWarehouses); err != nil {
 			return err
 		}

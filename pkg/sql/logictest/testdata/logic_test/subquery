@@ -254,17 +254,17 @@ SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
 true
 
 query III
-SELECT * FROM xyz WHERE x = (SELECT MIN(x) FROM xyz)
+SELECT * FROM xyz WHERE x = (SELECT min(x) FROM xyz)
 ----
 1 2 3
 
 query III
-SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
 ----
 10 11 12
 
 query III
-SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz WHERE EXISTS(SELECT * FROM xyz WHERE z=x+3))
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz WHERE EXISTS(SELECT * FROM xyz WHERE z=x+3))
 ----
 10 11 12
 

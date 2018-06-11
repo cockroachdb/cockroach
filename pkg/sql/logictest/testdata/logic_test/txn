@@ -94,7 +94,7 @@ statement ok
 BEGIN
 
 query error syntax error at or near ","
-SELECT COUNT(*, 1) FROM kv
+SELECT count(*, 1) FROM kv
 
 statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
@@ -562,7 +562,7 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
 SHOW TRANSACTION STATUS
@@ -583,7 +583,7 @@ COMMIT
 
 # Automatic retries for the first batch.
 statement ok
-BEGIN TRANSACTION; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+BEGIN TRANSACTION; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -594,7 +594,7 @@ statement ok
 BEGIN TRANSACTION;
 
 statement ok
-SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT 1; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -606,7 +606,7 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY HIGH; SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
 
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -629,7 +629,7 @@ statement ok
 SAVEPOINT cockroach_restart;
 
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -640,14 +640,14 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1h':::INTERVAL)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT COCKROACH_RESTART;
 
 # This is the automatic retry we care about.
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
+SELECT crdb_internal.force_retry('50ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -658,7 +658,7 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
 SHOW TRANSACTION STATUS
@@ -737,7 +737,7 @@ COMMIT
 
 # Because we rolled back, the 'savepoint' insert will not have been committed.
 query I
-SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
+SELECT count(*) FROM kv WHERE k = 'savepoint'
 ----
 0
 
@@ -977,7 +977,7 @@ statement ok
 BEGIN; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 statement ok
 ROLLBACK

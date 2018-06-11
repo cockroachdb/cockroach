@@ -150,7 +150,7 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 			}
 
 			l("read max val")
-			if err := tx.QueryRow(`SELECT MAX(val) AS m FROM mono.mono`).Scan(
+			if err := tx.QueryRow(`SELECT max(val) AS m FROM mono.mono`).Scan(
 				&exRow.val,
 			); err != nil {
 				l(err.Error())
@@ -188,7 +188,7 @@ RETURNING val, sts, node, tb`,
 	verify := func() {
 		client := clients[0]
 		var numDistinct int
-		if err := client.QueryRow("SELECT COUNT(DISTINCT(val)) FROM mono.mono").Scan(
+		if err := client.QueryRow("SELECT count(DISTINCT(val)) FROM mono.mono").Scan(
 			&numDistinct,
 		); err != nil {
 			t.Fatal(err)

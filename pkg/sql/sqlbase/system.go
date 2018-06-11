@@ -136,9 +136,9 @@ CREATE TABLE system.web_sessions (
 	"revokedAt"    TIMESTAMP,
 	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
 	"auditInfo"    STRING,
-	INDEX("expiresAt"),
-	INDEX("createdAt"),
-	FAMILY(id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
+	INDEX ("expiresAt"),
+	INDEX ("createdAt"),
+	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
 	// table_statistics is used to track statistics collected about individual columns

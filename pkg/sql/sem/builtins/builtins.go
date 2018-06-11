@@ -624,7 +624,7 @@ var builtins = map[string]builtinDefinition{
 				be, ok := sessiondata.BytesEncodeFormatFromString(format)
 				if !ok {
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
-						"only 'hex', 'escape', and 'base64' formats are supported for ENCODE")
+						"only 'hex', 'escape', and 'base64' formats are supported for encode()")
 				}
 				return tree.NewDString(lex.EncodeByteArrayToRawBytes(
 					string(data), be, true /* skipHexPrefix */)), nil
@@ -642,7 +642,7 @@ var builtins = map[string]builtinDefinition{
 				be, ok := sessiondata.BytesEncodeFormatFromString(format)
 				if !ok {
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
-						"only 'hex', 'escape', and 'base64' formats are supported for DECODE")
+						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
 				res, err := lex.DecodeRawBytesToByteArray(data, be)
 				if err != nil {
@@ -2019,7 +2019,7 @@ may increase either contention or retry errors, or both.`,
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 			return roundDecimal(x, 0)
 		}, "Rounds `val` to the nearest integer, half away from zero: "+
-			"ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3."),
+			"round(+/-2.4) = +/-2, round(+/-2.5) = +/-3."),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Float}, {"decimal_accuracy", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Float),

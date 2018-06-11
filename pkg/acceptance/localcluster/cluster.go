@@ -346,7 +346,7 @@ func (c *Cluster) waitForFullReplication() {
 
 func (c *Cluster) isReplicated() (bool, string) {
 	db := c.Nodes[0].DB()
-	rows, err := db.Query(`SELECT range_id, start_key, end_key, ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges`)
+	rows, err := db.Query(`SELECT range_id, start_key, end_key, array_length(replicas, 1) FROM crdb_internal.ranges`)
 	if err != nil {
 		// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
 		// to determine whether a cluster has up-replicated. This is relevant for the

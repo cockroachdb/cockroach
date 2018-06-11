@@ -85,7 +85,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 
 				var olTotal float64
 				if err := tx.QueryRow(fmt.Sprintf(`
-						SELECT SUM(ol_amount) FROM order_line
+						SELECT sum(ol_amount) FROM order_line
 						WHERE ol_w_id = %d AND ol_d_id = %d AND ol_o_id = %d`,
 					wID, dID, oID)).Scan(&olTotal); err != nil {
 					return err

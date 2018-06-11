@@ -26,7 +26,7 @@ import (
 // subquery returns an error.
 func TestStartSubqueriesReturnsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sql := "SELECT 1 WHERE (SELECT CRDB_INTERNAL.FORCE_ERROR('xxx', 'forced') > 0)"
+	sql := "SELECT 1 WHERE (SELECT crdb_internal.force_error('xxx', 'forced') > 0)"
 	p := makeTestPlanner()
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {

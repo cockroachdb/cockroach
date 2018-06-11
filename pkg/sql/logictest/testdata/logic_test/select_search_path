@@ -5,27 +5,27 @@
 
 # There's no table with default values in the default test database.
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+SELECT count(DISTINCT(1)) FROM pg_attrdef
 ----
 0
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+SELECT count(DISTINCT(1)) FROM pg_attribute
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_class
+SELECT count(DISTINCT(1)) FROM pg_class
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+SELECT count(DISTINCT(1)) FROM pg_namespace
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_tables
+SELECT count(DISTINCT(1)) FROM pg_tables
 ----
 1
 
@@ -49,36 +49,36 @@ statement ok
 SET DATABASE = t1
 
 query I
-SELECT COUNT(*) FROM numbers
+SELECT count(*) FROM numbers
 ----
 0
 
 query error pq: relation "words" does not exist
-SELECT COUNT(*) FROM words
+SELECT count(*) FROM words
 
 # There's no table with default values in t1.
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+SELECT count(DISTINCT(1)) FROM pg_attrdef
 ----
 0
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+SELECT count(DISTINCT(1)) FROM pg_attribute
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_class
+SELECT count(DISTINCT(1)) FROM pg_class
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+SELECT count(DISTINCT(1)) FROM pg_namespace
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_tables
+SELECT count(DISTINCT(1)) FROM pg_tables
 ----
 1
 
@@ -89,36 +89,36 @@ statement ok
 SET DATABASE = t2
 
 query error pq: relation "numbers" does not exist
-SELECT COUNT(*) FROM numbers
+SELECT count(*) FROM numbers
 
 query I
-SELECT COUNT(*) FROM words
+SELECT count(*) FROM words
 ----
 0
 
 # There's no table with default values in t2.
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+SELECT count(DISTINCT(1)) FROM pg_attrdef
 ----
 0
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+SELECT count(DISTINCT(1)) FROM pg_attribute
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_class
+SELECT count(DISTINCT(1)) FROM pg_class
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+SELECT count(DISTINCT(1)) FROM pg_namespace
 ----
 1
 
 query I
-SELECT COUNT(DISTINCT(1)) FROM pg_tables
+SELECT count(DISTINCT(1)) FROM pg_tables
 ----
 1
 

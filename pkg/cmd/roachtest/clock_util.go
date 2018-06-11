@@ -31,7 +31,7 @@ func isAlive(db *gosql.DB) bool {
 // dbUnixEpoch returns the current time in db
 func dbUnixEpoch(db *gosql.DB) (float64, error) {
 	var epoch float64
-	if err := db.QueryRow("SELECT NOW()::DECIMAL").Scan(&epoch); err != nil {
+	if err := db.QueryRow("SELECT now()::DECIMAL").Scan(&epoch); err != nil {
 		return 0, err
 	}
 	return epoch, nil

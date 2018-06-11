@@ -64,7 +64,7 @@ func TestToBackup(t *testing.T) {
 					sqlDB.Exec(t, `RESTORE data.* FROM $1`, `nodelocal:///`+dir)
 
 					var rowCount int
-					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name)).Scan(&rowCount)
+					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, data.Name)).Scan(&rowCount)
 					if rowCount != rows {
 						t.Errorf("got %d rows expected %d", rowCount, rows)
 					}

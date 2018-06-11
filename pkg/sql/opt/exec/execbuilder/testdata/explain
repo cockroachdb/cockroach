@@ -300,7 +300,7 @@ count             ·     ·
 ·                 size  2 columns, 1 row
 
 query I
-SELECT MAX("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
+SELECT max("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
 ----
 2
 
@@ -494,7 +494,7 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 
 
 query TTTTT
-EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
+EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 render               ·            ·                                                                          (z int, v int)     ·
  │                   render 0     ((agg0)[int] * (2)[int])[int]                                              ·                  ·
@@ -594,7 +594,7 @@ scan  ·       ·                                                               
 # └── emptyrow  ·         ·                            ()       ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
 render         ·         ·                      (a int)  ·
  │             render 0  (abs((-1)[int]))[int]  ·        ·
@@ -628,4 +628,4 @@ project
       └── const: 1 [type=int]
 
 statement error aggregates with DISTINCT are not supported yet
-EXPLAIN (OPT) SELECT SUM(DISTINCT x) FROM (VALUES (1), (1), (2)) AS t(x)
+EXPLAIN (OPT) SELECT sum(DISTINCT x) FROM (VALUES (1), (1), (2)) AS t(x)

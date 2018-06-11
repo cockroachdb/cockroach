@@ -40,7 +40,7 @@ project
            └── const: 5 [type=int]
 
 opt
-SELECT (SELECT COUNT(*) FROM a) > 100 AS r
+SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
 project
  ├── columns: r:7(bool)

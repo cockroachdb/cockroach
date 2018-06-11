@@ -205,7 +205,7 @@ select
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 opt
-SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING SUM(f)=10.0) a
+SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) a
 ----
 project
  ├── columns: f:3(float) r:7(float)
@@ -611,7 +611,7 @@ inner-join
 
 # Push down into GroupBy with aggregations.
 opt
-SELECT * FROM (SELECT i, COUNT(*) FROM a GROUP BY i) a WHERE i=1
+SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 ----
 group-by
  ├── columns: i:2(int!null) count:6(int)
@@ -643,7 +643,7 @@ group-by
 
 # Push down only conditions that do not depend on aggregations.
 opt
-SELECT * FROM (SELECT k, i, MAX(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
+SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) m:6(string!null)
@@ -668,7 +668,7 @@ select
 
 # Do *not* push down into scalar GroupBy.
 opt
-SELECT * FROM (SELECT COUNT(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=0
+SELECT * FROM (SELECT count(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=0
 ----
 select
  ├── columns: c:6(int!null)

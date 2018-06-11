@@ -97,9 +97,9 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// All these return the same result.
 	validationQueries := []string{
-		"SELECT COUNT(*) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT COUNT(newcol) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT COUNT(c_name) FROM workload.customer@foo AS OF SYSTEM TIME %s",
+		"SELECT count(*) FROM workload.customer AS OF SYSTEM TIME %s",
+		"SELECT count(newcol) FROM workload.customer AS OF SYSTEM TIME %s",
+		"SELECT count(c_name) FROM workload.customer@foo AS OF SYSTEM TIME %s",
 	}
 	if err := runValidationQueries(ctx, l, db, start, validationQueries, nil); err != nil {
 		return err
@@ -126,14 +126,14 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// All these return the same result.
 	validationQueries = []string{
-		"SELECT COUNT(*) FROM test.kv AS OF SYSTEM TIME %s",
-		"SELECT COUNT(v) FROM test.kv AS OF SYSTEM TIME %s",
-		"SELECT COUNT(v) FROM test.kv@foo AS OF SYSTEM TIME %s",
+		"SELECT count(*) FROM test.kv AS OF SYSTEM TIME %s",
+		"SELECT count(v) FROM test.kv AS OF SYSTEM TIME %s",
+		"SELECT count(v) FROM test.kv@foo AS OF SYSTEM TIME %s",
 	}
 	// Queries to hone in on index validation problems.
 	indexValidationQueries := []string{
-		"SELECT COUNT(k) FROM test.kv@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
-		"SELECT COUNT(v) FROM test.kv@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+		"SELECT count(k) FROM test.kv@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+		"SELECT count(v) FROM test.kv@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 	}
 	return runValidationQueries(ctx, l, db, start, validationQueries, indexValidationQueries)
 }

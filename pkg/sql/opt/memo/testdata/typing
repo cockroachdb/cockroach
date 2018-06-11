@@ -301,13 +301,13 @@ project
 
 # Function with same arguments in multiple overloads.
 build
-SELECT NOW()
+SELECT now()
 ----
 error (0A000): impure functions are not supported
 
 # Variadic function.
 build
-SELECT GREATEST(1, 2, 3, 4)
+SELECT greatest(1, 2, 3, 4)
 ----
 project
  ├── columns: greatest:1(int)
@@ -319,9 +319,9 @@ project
 # Aggregate functions.
 build
 SELECT
-    ARRAY_AGG(z), AVG(z), BOOL_AND(z=0), BOOL_OR(z=0), CONCAT_AGG(x), COUNT(z),
-    COUNT(*), MAX(x), MAX(z), SUM_INT(x::int), SUM(z), SQRDIFF(z), VARIANCE(x::int),
-    STDDEV(z), XOR_AGG(x::int), JSON_AGG(x::json), JSONB_AGG(x::jsonb)
+    array_agg(z), avg(z), bool_and(z=0), bool_or(z=0), concat_agg(x), count(z),
+    count(*), max(x), max(z), sum_int(x::int), sum(z), sqrdiff(z), variance(x::int),
+    stddev(z), xor_agg(x::int), json_agg(x::json), jsonb_agg(x::jsonb)
 FROM b
 ----
 group-by
@@ -372,7 +372,7 @@ group-by
 
 # AnyNotNull internal aggregate function.
 opt
-SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT MAX(x) FROM b WHERE y=z::int) > 'foo'
+SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE y=z::int) > 'foo'
 ----
 project
  ├── columns: x:1(int!null) x:3(string) y:2(int)

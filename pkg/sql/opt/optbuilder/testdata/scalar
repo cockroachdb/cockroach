@@ -203,7 +203,7 @@ case [type=int]
 
 
 build-scalar vars=(string)
-LENGTH(@1) = 2
+length(@1) = 2
 ----
 eq [type=bool]
  ├── function: length [type=int]

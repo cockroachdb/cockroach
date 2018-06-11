@@ -60,8 +60,8 @@ func TestAggregator(t *testing.T) {
 		expected    sqlbase.EncDatumRows
 	}{
 		{
-			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
-			// VARIANCE(@0) GROUP BY [] (no rows).
+			// SELECT min(@0), max(@0), count(@0), avg(@0), sum(@0), stddev(@0),
+			// variance(@0) GROUP BY [] (no rows).
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -110,7 +110,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT @2, COUNT(@1), GROUP BY @2.
+			// SELECT @2, count(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -140,7 +140,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT @2, COUNT(@1), GROUP BY @2.
+			// SELECT @2, count(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -169,7 +169,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT @2, COUNT(@1), GROUP BY @2 (ordering: @2+).
+			// SELECT @2, count(@1), GROUP BY @2 (ordering: @2+).
 			spec: AggregatorSpec{
 				GroupCols:        []uint32{1},
 				OrderedGroupCols: []uint32{1},
@@ -199,7 +199,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT @2, SUM(@1), GROUP BY @2.
+			// SELECT @2, sum(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -231,7 +231,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT @2, SUM(@1), GROUP BY @2 (ordering: @2+).
+			// SELECT @2, sum(@1), GROUP BY @2 (ordering: @2+).
 			spec: AggregatorSpec{
 				GroupCols:        []uint32{1},
 				OrderedGroupCols: []uint32{1},
@@ -264,7 +264,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
+			// SELECT count(@1), sum(@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -339,7 +339,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
+			// SELECT max(@1), min(@2), count(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -375,7 +375,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT MAX(@1) FILTER @2, COUNT(@3) FILTER @4, COUNT_ROWS FILTER @4
+			// SELECT max(@1) FILTER @2, count(@3) FILTER @4, COUNT_ROWS FILTER @4
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{

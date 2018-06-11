@@ -155,7 +155,7 @@ func BenchmarkCount(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			if _, err := db.Exec("SELECT COUNT(*) FROM bench.count"); err != nil {
+			if _, err := db.Exec("SELECT count(*) FROM bench.count"); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -806,7 +806,7 @@ CREATE INDEX track_created_at ON bench.track_choices (track_id, created_at);
 			if j > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "(%d, %d, NOW())", rand.Int63(), rand.Int63n(numOptions))
+			fmt.Fprintf(&buf, "(%d, %d, now())", rand.Int63(), rand.Int63n(numOptions))
 		}
 		if _, err := db.Exec(buf.String()); err != nil {
 			b.Fatal(err)
@@ -1022,7 +1022,7 @@ func BenchmarkWideTableIgnoreColumns(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			if _, err := db.Exec("SELECT COUNT(*) FROM bench.widetable WHERE f4 < 10"); err != nil {
+			if _, err := db.Exec("SELECT count(*) FROM bench.widetable WHERE f4 < 10"); err != nil {
 				b.Fatal(err)
 			}
 		}

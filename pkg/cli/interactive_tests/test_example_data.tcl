@@ -16,8 +16,8 @@ eexpect "0\r\n:/# "
 end_test
 
 start_test "Check that the startrek example is loaded."
-send "$argv sql -e 'SELECT COUNT(*) FROM startrek.quotes'\r"
-eexpect "COUNT"
+send "$argv sql -e 'SELECT count(*) FROM startrek.quotes'\r"
+eexpect "count"
 eexpect "200"
 eexpect "1 row"
 eexpect ":/# "
@@ -31,8 +31,8 @@ eexpect "0\r\n:/# "
 end_test
 
 start_test "Check that the startrek example is loaded."
-send "$argv sql -e 'SELECT COUNT(*) FROM intro.mytable'\r"
-eexpect "COUNT"
+send "$argv sql -e 'SELECT count(*) FROM intro.mytable'\r"
+eexpect "count"
 eexpect "42"
 eexpect "1 row"
 eexpect ":/# "

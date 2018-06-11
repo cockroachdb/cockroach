@@ -147,7 +147,7 @@ func verifyAccounts(t *testing.T, client *testClient) {
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
+		err := client.db.QueryRow("SELECT sum(balance) FROM bank.accounts").Scan(&sum)
 		if err != nil && !testutils.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}

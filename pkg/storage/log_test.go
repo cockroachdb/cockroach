@@ -44,7 +44,7 @@ func TestLogSplits(t *testing.T) {
 	countSplits := func() int {
 		var count int
 		err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM system.rangelog WHERE "eventType" = $1`,
+			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
 			storage.RangeLogEventType_split.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
@@ -137,7 +137,7 @@ func TestLogSplits(t *testing.T) {
 		// is embedded in the lower 15 bits. See #17560.
 		var count int
 		err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM system.rangelog WHERE ("uniqueID" & 0x7fff) = 0`).Scan(&count)
+			`SELECT count(*) FROM system.rangelog WHERE ("uniqueID" & 0x7fff) = 0`).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
