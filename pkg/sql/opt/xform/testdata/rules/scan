@@ -128,7 +128,7 @@ TABLE abc
       └── c int not null
 
 memo
-SELECT d FROM abc ORDER BY LOWER(d)
+SELECT d FROM abc ORDER BY lower(d)
 ----
 memo (optimized)
  ├── G1: (project G2 G3)

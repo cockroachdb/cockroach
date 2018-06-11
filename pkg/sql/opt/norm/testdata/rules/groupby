@@ -88,7 +88,7 @@ group-by
 
 # Group by not eliminated because it has aggregation.
 opt
-SELECT s, i, SUM(i) FROM a GROUP BY s, i
+SELECT s, i, sum(i) FROM a GROUP BY s, i
 ----
 group-by
  ├── columns: s:4(string!null) i:2(int!null) sum:6(decimal)
@@ -105,7 +105,7 @@ group-by
 # EliminateGroupByProject
 # --------------------------------------------------
 opt
-SELECT MIN(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
+SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
 ----
 project
  ├── columns: min:16(string)
@@ -129,7 +129,7 @@ project
 
 # Don't eliminate project if it computes extra column(s).
 opt
-SELECT MIN(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
+SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 ----
 project
  ├── columns: min:7(string)

@@ -158,13 +158,13 @@ a
 false
 
 query B colnames
-SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100.0)), 'ab') AS a
+SELECT (ROW(pow(1, 10.0) + 9), 'a' || 'b') = (ROW(sqrt(100.0)), 'ab') AS a
 ----
 a
 true
 
 query B colnames
-SELECT (ROW(SQRT(100.0)), 'ab') = (ROW(POW(1, 10.0) + 9), 'a' || 'b') AS a
+SELECT (ROW(sqrt(100.0)), 'ab') = (ROW(pow(1, 10.0) + 9), 'a' || 'b') AS a
 ----
 a
 true
@@ -276,9 +276,9 @@ CREATE TABLE uvw (
 
 statement ok
 INSERT INTO uvw SELECT u, v, w FROM
-  GENERATE_SERIES(0, 3) AS u,
-  GENERATE_SERIES(0, 3) AS v,
-  GENERATE_SERIES(0, 3) AS w;
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
 UPDATE uvw SET u = NULL WHERE u = 0;
 UPDATE uvw SET v = NULL WHERE v = 0;
 UPDATE uvw SET w = NULL WHERE w = 0
@@ -673,8 +673,8 @@ nnnn  nnnu  nnun  nnuu  nunn  nunu  nuun  nuuu  unnn  unnu  unun  unuu  uunn  uu
 true  true  true  true  true  true  true  true  true  true  true  true  true  true  true  true
 
 query BB colnames
-SELECT (((ROW(POW(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6) AS a
-      ,(ROW(POW(1, 10.0) + 9), 'a' || 'b') = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6) AS b
+SELECT (((ROW(pow(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6) AS a
+      ,(ROW(pow(1, 10.0) + 9), 'a' || 'b') = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6) AS b
 ----
 a     b
 true  true

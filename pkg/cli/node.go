@@ -165,27 +165,27 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 
 	rangesQuery := `
 SELECT node_id AS id,
-       SUM((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
-       SUM((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
-       SUM((metrics->>'replicas')::DECIMAL)::INT AS ranges,
-       SUM((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
-       SUM((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
+       sum((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
+       sum((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
+       sum((metrics->>'replicas')::DECIMAL)::INT AS ranges,
+       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
+       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
 	statsQuery := `
 SELECT node_id AS id,
-       SUM((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
-       SUM((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
-       SUM((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
-       SUM((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
-       SUM((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
+       sum((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
+       sum((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
+       sum((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
+       sum((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
+       sum((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
 	decommissionQuery := joinUsingID(
 		[]string{
-			`SELECT node_id AS id, SUM((metrics->>'replicas')::DECIMAL)::INT AS gossiped_replicas
+			`SELECT node_id AS id, sum((metrics->>'replicas')::DECIMAL)::INT AS gossiped_replicas
        FROM crdb_internal.kv_store_status GROUP BY node_id`,
 			`SELECT node_id AS id, decommissioning AS is_decommissioning, draining AS is_draining
        FROM crdb_internal.gossip_liveness`,

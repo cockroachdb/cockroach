@@ -172,7 +172,7 @@ sort                           ·            ·                                 
 ·                              spans        ALL                                                                                                            ·                                                                                                ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT MAX(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
+EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
 sort                           ·            ·                                                                            (max int, stddev decimal)                                                                        +max
  │                             order        +max                                                                         ·                                                                                                ·

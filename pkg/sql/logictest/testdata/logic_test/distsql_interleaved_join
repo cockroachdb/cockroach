@@ -88,14 +88,14 @@ INSERT INTO parent1 SELECT
   pid,
   mod(pid, 8)
 FROM
-  GENERATE_SERIES(1, 40) AS ID(pid)
+  generate_series(1, 40) AS ID(pid)
 
 statement ok
 INSERT INTO parent2 SELECT
   pid,
   mod(pid, 2)
 FROM
-  GENERATE_SERIES(1, 5) AS ID(pid)
+  generate_series(1, 5) AS ID(pid)
 
 # child1 has more rows than parent1.
 statement ok
@@ -104,7 +104,7 @@ INSERT INTO child1 SELECT
   cid,
   mod(cid, 66)
 FROM
-  GENERATE_SERIES(1, 150) AS ID(cid)
+  generate_series(1, 150) AS ID(cid)
 
 # Insert additional rows with no correspond parent rows to check for correctness.
 statement ok
@@ -123,7 +123,7 @@ INSERT INTO child2 SELECT
   mod(cid, 14),
   mod(cid, 7)
 FROM
-  GENERATE_SERIES(1, 15) AS ID(cid)
+  generate_series(1, 15) AS ID(cid)
 
 statement ok
 INSERT INTO child2 VALUES
@@ -139,7 +139,7 @@ INSERT INTO grandchild1 SELECT
   gcid,
   mod(gcid, 201)
 FROM
-  GENERATE_SERIES(1, 410) AS ID(gcid)
+  generate_series(1, 410) AS ID(gcid)
 
 statement ok
 INSERT INTO grandchild1 VALUES
@@ -162,7 +162,7 @@ INSERT INTO grandchild2 SELECT
   gcid,
   mod(gcid, 13)
 FROM
-  GENERATE_SERIES(1, 51) AS ID(gcid)
+  generate_series(1, 51) AS ID(gcid)
 
 ####################
 # Split our ranges #
@@ -170,22 +170,22 @@ FROM
 
 # Split at parent1 key into five parts.
 statement ok
-ALTER TABLE parent1 SPLIT AT SELECT i FROM GENERATE_SERIES(8, 32, 8) AS g(i)
+ALTER TABLE parent1 SPLIT AT SELECT i FROM generate_series(8, 32, 8) AS g(i)
 
 # Split at child1 keys in between parent1 parts (total 10 parts).
 statement ok
 ALTER TABLE child1 SPLIT AT SELECT pid1, pid1 + 40 FROM
-GENERATE_SERIES(4, 36, 8) AS g(pid1)
+generate_series(4, 36, 8) AS g(pid1)
 
 # Split at grandchild2 keys in between the 10 parts (total 20 parts).
 statement ok
 ALTER TABLE grandchild2 SPLIT AT SELECT pid1, pid1 + 40, pid1, pid1 FROM
-GENERATE_SERIES(2, 38, 4) AS g(pid1)
+generate_series(2, 38, 4) AS g(pid1)
 
 # Relocate the twenty parts to the five nodes.
 statement ok
 ALTER TABLE grandchild2 TESTING_RELOCATE
-  SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM GENERATE_SERIES(1, 39, 2) AS g(i)
+  SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
 
 # Verify data placement.
 query TTITI colnames
@@ -432,18 +432,18 @@ pid1  cid2  cid3  ca2  pid1  cid2  cid3  gcid2  gca2
 # 39.
 # We thus have 3 arithmetic series of 10 + ... + 39 and 1 arithmetic series
 # of 10 + ... + 30 or
-#     SUM(pid1) = 3 * (39 - 10 + 1) * (10 + 39)/2 + (30 - 10 + 1) * (10 + 30)/2 = 2625
-# For SUM(cid1), we notice that pid1 = cid1 % 40, thus for every additional
+#     sum(pid1) = 3 * (39 - 10 + 1) * (10 + 39)/2 + (30 - 10 + 1) * (10 + 30)/2 = 2625
+# For sum(cid1), we notice that pid1 = cid1 % 40, thus for every additional
 # round of rows under a pid1, cid1 is increased by 40.
 # For each additional round up to the 3rd (2 rounds after the first where 50 <= cid1 <= 79,
 # 90 <= cid1 <= 119) , we have an additional
 #     40 * (1 + 2) * (39 - 10 + 1) = 3600
 # For the 4th round, we have 150 - 130 + 1 = 21 rows (130 <= cid1 <= 150) each
 # additional row adds 120, thus
-#     SUM(cid1) = SUM(pid1) + 3600 + 21 * 120 = 8745
+#     sum(cid1) = sum(pid1) + 3600 + 21 * 120 = 8745
 # For each
 query RR
-SELECT SUM(parent1.pid1), SUM(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
+SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
   pid1 >= 10 AND pid1 <= 39
 ----
 2625 8745

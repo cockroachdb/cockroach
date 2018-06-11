@@ -196,7 +196,7 @@ func (t *partitioningTest) parse() error {
 func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func() error {
 	return func() error {
 		for where, expectedNodes := range t.scans {
-			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
+			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
 			log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
 				if log.V(1) {
@@ -1063,7 +1063,7 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	// and attributes/localities of those nodes). Users will also want this to
 	// be sure their partitioning is working.
 	rows, err := db.Query(
-		fmt.Sprintf(`SELECT CONCAT(tag, ' ', message) FROM [SHOW TRACE FOR %s]`, query),
+		fmt.Sprintf(`SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR %s]`, query),
 	)
 	if err != nil {
 		return err

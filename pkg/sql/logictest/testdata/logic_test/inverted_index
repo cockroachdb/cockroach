@@ -484,7 +484,7 @@ statement ok
 CREATE INVERTED INDEX dogs on users(user_profile);
 
 statement error index "dogs" is inverted and cannot be used for this query
-SELECT COUNT(*) FROM users@dogs
+SELECT count(*) FROM users@dogs
 
 query T
 SELECT user_profile from users where user_profile @> '{"first_name":"Lola"}';

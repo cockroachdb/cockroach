@@ -102,8 +102,8 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 	{
 		var rebalanceIntervalStr string
 		if err := db.QueryRow(
-			`SELECT (SELECT MAX(timestamp) FROM system.rangelog) - `+
-				`(SELECT MAX(timestamp) FROM system.eventlog WHERE "eventType"=$1)`,
+			`SELECT (SELECT max(timestamp) FROM system.rangelog) - `+
+				`(SELECT max(timestamp) FROM system.eventlog WHERE "eventType"=$1)`,
 			`node_join`, /* sql.EventLogNodeJoin */
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
@@ -115,7 +115,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 	// larger numbers are worse and potentially indicate thrashing.
 	{
 		var rangeEvents int64
-		q := `SELECT COUNT(*) from system.rangelog`
+		q := `SELECT count(*) from system.rangelog`
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 	{
 		var stdDev float64
 		if err := db.QueryRow(
-			`SELECT STDDEV(range_count) FROM crdb_internal.kv_store_status`,
+			`SELECT stddev(range_count) FROM crdb_internal.kv_store_status`,
 		).Scan(&stdDev); err != nil {
 			return err
 		}
@@ -195,7 +195,7 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 	}
 
 	if err := db.QueryRow(
-		`SELECT STDDEV(range_count) FROM crdb_internal.kv_store_status`,
+		`SELECT stddev(range_count) FROM crdb_internal.kv_store_status`,
 	).Scan(&s.ReplicaCountStdDev); err != nil {
 		return replicationStats{}, err
 	}

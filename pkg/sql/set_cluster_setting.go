@@ -110,7 +110,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		}
 		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx, "update-setting", params.p.txn,
-			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`,
+			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 			n.name, encoded, n.setting.Typ(),
 		); err != nil {
 			return err

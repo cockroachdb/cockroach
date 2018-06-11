@@ -38,7 +38,7 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT COUNT(*) FROM xyzs LIMIT 10
+SELECT count(*) FROM xyzs LIMIT 10
 ----
 limit
  ├── columns: count:5(int)

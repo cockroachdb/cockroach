@@ -25,28 +25,28 @@ INSERT INTO kv VALUES
 (8, 4, 2, 3, 3, 'A', false)
 
 query error window functions are not allowed in GROUP BY
-SELECT * FROM kv GROUP BY v, COUNT(w) OVER ()
+SELECT * FROM kv GROUP BY v, count(w) OVER ()
 
 query error window functions are not allowed in GROUP BY
-SELECT COUNT(w) OVER () FROM kv GROUP BY 1
+SELECT count(w) OVER () FROM kv GROUP BY 1
 
 query error window functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
 
 query error window functions are not allowed in LIMIT
-SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v) OVER ()
+SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
 
 query error window functions are not allowed in OFFSET
-SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v) OVER ()
+SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
 
 query error window functions are not allowed in VALUES
-INSERT INTO kv (k, v) VALUES (99, COUNT(1) OVER ())
+INSERT INTO kv (k, v) VALUES (99, count(1) OVER ())
 
 query error window functions are not allowed in WHERE
-SELECT k FROM kv WHERE AVG(k) OVER () > 1
+SELECT k FROM kv WHERE avg(k) OVER () > 1
 
 query error window functions are not allowed in HAVING
-SELECT 1 GROUP BY 1 HAVING SUM(1) OVER (PARTITION BY 1) > 1;
+SELECT 1 GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1;
 
 query R
 SELECT avg(k) OVER () FROM kv ORDER BY 1
@@ -580,7 +580,7 @@ SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v ORDER BY w) FROM k
 11  NULL  9  NULL
 
 query RIII
-SELECT AVG(k), MAX(v), MIN(w), 2 + row_number() OVER () FROM kv ORDER BY 1
+SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
 ----
 6.6666666666666666667  4  2  3
 
@@ -1497,17 +1497,17 @@ SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv
 
 # Issue #14606: correctly handle aggregation functions above the windowing level
 query I
-SELECT MAX(i) * (ROW_NUMBER() OVER (ORDER BY MAX(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
+SELECT max(i) * (row_number() OVER (ORDER BY max(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
 ----
 1
 
 query R
-SELECT (1/j) * MAX(i) * (ROW_NUMBER() OVER (ORDER BY MAX(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
+SELECT (1/j) * max(i) * (row_number() OVER (ORDER BY max(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
 ----
 0.5
 
 query R
-SELECT MAX(i) * (1/j) * (ROW_NUMBER() OVER (ORDER BY MAX(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
+SELECT max(i) * (1/j) * (row_number() OVER (ORDER BY max(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
 ----
 0.5
 

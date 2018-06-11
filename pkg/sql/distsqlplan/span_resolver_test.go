@@ -154,7 +154,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 // the lease holder cache of the server to which db is connected.
 func populateCache(db *gosql.DB, expectedNumRows int) error {
 	var numRows int
-	err := db.QueryRow(`SELECT COUNT(1) FROM test`).Scan(&numRows)
+	err := db.QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func setupRanges(
 	time.Sleep(300 * time.Millisecond)
 	// Run a select across the whole table to populate the caches with all the
 	// ranges.
-	if _, err := db.Exec(`SELECT COUNT(1) from test`); err != nil {
+	if _, err := db.Exec(`SELECT count(1) from test`); err != nil {
 		t.Fatal(err)
 	}
 

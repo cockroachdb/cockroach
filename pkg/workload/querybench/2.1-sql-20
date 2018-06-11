@@ -14,11 +14,11 @@
 --   customer:   150,000 rows
 --   lineitem: 6,001,215 rows
 
--- COUNT(*)
-SELECT COUNT(*) FROM lineitem
+-- count(*)
+SELECT count(*) FROM lineitem
 
--- COUNT(*) with filter on non-indexed column
-SELECT COUNT(*) FROM lineitem WHERE l_linenumber = 1
+-- count(*) with filter on non-indexed column
+SELECT count(*) FROM lineitem WHERE l_linenumber = 1
 
 -- SELECT *
 SELECT * FROM customer
@@ -27,31 +27,31 @@ SELECT * FROM customer
 SELECT * FROM customer ORDER BY c_address
 
 -- GROUP BY with COUNT
-SELECT l_linenumber, COUNT(*) FROM lineitem GROUP BY 1 ORDER BY 1
+SELECT l_linenumber, count(*) FROM lineitem GROUP BY 1 ORDER BY 1
 
 -- GROUP BY with MAX
-SELECT l_linenumber, MAX(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
+SELECT l_linenumber, max(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
 
 -- GROUP BY with SUM
-SELECT l_linenumber, SUM(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
+SELECT l_linenumber, sum(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
 
 -- DISTINCT
-SELECT COUNT(DISTINCT l_suppkey) FROM lineitem
+SELECT count(DISTINCT l_suppkey) FROM lineitem
 
 -- Hash join
-SELECT COUNT(*) FROM lineitem JOIN supplier ON l_suppkey = s_suppkey
+SELECT count(*) FROM lineitem JOIN supplier ON l_suppkey = s_suppkey
 
 -- Merge join
-SELECT COUNT(*) FROM lineitem@l_sk JOIN supplier@s_sk ON l_suppkey = s_suppkey
+SELECT count(*) FROM lineitem@l_sk JOIN supplier@s_sk ON l_suppkey = s_suppkey
 
--- COUNT(col)
-SELECT COUNT(c_name) FROM customer
+-- count(col)
+SELECT count(c_name) FROM customer
 
 -- Index join
-SELECT COUNT(c_name) FROM customer@c_ck
+SELECT count(c_name) FROM customer@c_ck
 
 -- Filter with expression evaluation
-SELECT COUNT(*) FROM lineitem WHERE l_discount * l_extendedprice > 10000
+SELECT count(*) FROM lineitem WHERE l_discount * l_extendedprice > 10000
 
 -- Hash join with expression evaluation
-SELECT COUNT(*) FROM supplier s1 JOIN supplier s2 ON s1.s_suppkey + 1 = s2.s_suppkey
+SELECT count(*) FROM supplier s1 JOIN supplier s2 ON s1.s_suppkey + 1 = s2.s_suppkey

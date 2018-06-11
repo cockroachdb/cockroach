@@ -11,12 +11,12 @@ CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
 
 # Split into ten parts.
 statement ok
-ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE data TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 statement ok
 CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c))
@@ -45,7 +45,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzElE-LnTAUxff9FHLXt4zx33
 
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM data as d1 NATURAL JOIN data as d2]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lV9r2zAUxd_3KcJ96kDQXNtJEz957CljS0aasodhihZdjLdUMpIMGyXffTgeVDGN5KGSR_85Oke_e-A-g1SC1vyJDOTfAYFBAgxSYJABgxmUDBqt9mSM0t0vvWAlfkM-ZVDLprXd65LBXmmC_BlsbQ8EOez4jwNtiQvSt1NgIMjy-nCyaXT9xPWfQnDLoTwyUK19OchYXhHkeGTjzT6pWv7zmnm8GHxW6lfbTH6qWk6UzCcFsiJhRcqK7r6b1uaTtZJ0MVXyP6k-VJWmilulb3GA4OPmYb173G6-3d-8v2iWXjR78Wil0oI0ibPzy2MgzoDS_cOXx9V6d1Pg5TTZWRocP32Mnn7AzJn-_IrTD6RycWP09JPxvJNo3gEzh_fdFXkHUrm8k2je6XjeaTTvgJnDe3FF3oFULu80mnc2nncWzTtg5vBeXpF3IJXLO3vTbfKK2ZZMo6ShwVZ5_eRpt21IVNSvJqNavaevWu1PNv3j5qQ7vRBkbP8V-4eV7D91AV0xesWJX5x4xemZGIfi1B977rfOvOqZXzzzigPO85hL33nFC7_zwite-sXLmNgY6FioZP6WYaBmGNUzDBQtC5j7m4aBqqG_a8Ps5fHd3wAAAP__1CT_Hg==
 
@@ -151,12 +151,12 @@ CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc
 
 # Split into ten parts.
 statement ok
-ALTER TABLE multiples SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE multiples TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Lookup join on covering secondary index
 query TTT colnames

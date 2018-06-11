@@ -33,16 +33,16 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		expr     string
 		ordering sqlbase.ColumnOrdering
 	}{
-		{`MIN(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
-		{`MAX(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
-		{`MIN(a+1)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
-		{`(MIN(a), MAX(a))`, nil},
-		{`(MIN(a), AVG(a))`, nil},
-		{`(MIN(a), COUNT(a))`, nil},
-		{`(MIN(a), SUM(a))`, nil},
-		{`(MIN(a), MIN(a))`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
-		{`(MIN(a+1), MIN(a))`, nil},
-		{`(COUNT(a), MIN(a))`, nil},
+		{`min(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`max(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
+		{`min(a+1)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`(min(a), max(a))`, nil},
+		{`(min(a), avg(a))`, nil},
+		{`(min(a), count(a))`, nil},
+		{`(min(a), sum(a))`, nil},
+		{`(min(a), min(a))`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
+		{`(min(a+1), min(a))`, nil},
+		{`(count(a), min(a))`, nil},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {

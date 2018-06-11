@@ -729,7 +729,7 @@ func TestEval(t *testing.T) {
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`},
 		{`lower('HELLO')`, `'hello'`},
-		{`UPPER('hello')`, `'HELLO'`},
+		{`UPPER('hello')`, `'HELLO'`}, // lint: uppercase function OK
 		// Array constructors.
 		{`ARRAY[]:::int[]`, `ARRAY[]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},

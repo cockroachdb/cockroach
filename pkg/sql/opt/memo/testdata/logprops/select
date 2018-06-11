@@ -95,7 +95,7 @@ select
 
 # Reduce min cardinality.
 build
-SELECT COUNT(*) FROM xy HAVING COUNT(*) = 5
+SELECT count(*) FROM xy HAVING count(*) = 5
 ----
 select
  ├── columns: count:3(int!null)
@@ -245,7 +245,7 @@ select
 
 # Test outer column in select filter that is part of a not-null constraint.
 build
-SELECT * FROM abcd WHERE (SELECT COUNT(*) FROM xy WHERE y = b) > 0
+SELECT * FROM abcd WHERE (SELECT count(*) FROM xy WHERE y = b) > 0
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)

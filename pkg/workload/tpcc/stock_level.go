@@ -85,7 +85,7 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
 			return tx.QueryRow(fmt.Sprintf(`
-				SELECT COUNT(DISTINCT(s_i_id))
+				SELECT count(DISTINCT(s_i_id))
 				FROM order_line
 				JOIN stock
 				ON s_i_id=ol_i_id

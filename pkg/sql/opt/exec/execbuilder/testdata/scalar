@@ -288,7 +288,7 @@ render     ·         ·                         (r)  ·
 #·          spans   ALL              ·    ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT LENGTH(s) FROM t
+EXPLAIN (VERBOSE) SELECT length(s) FROM t
 ----
 render     ·         ·          (length)  ·
  │         render 0  length(s)  ·         ·

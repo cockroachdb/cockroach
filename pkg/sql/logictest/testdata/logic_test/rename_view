@@ -163,7 +163,7 @@ SELECT * FROM test2.v2
 5 25
 
 statement ok
-CREATE VIEW v3 AS SELECT COUNT(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
+CREATE VIEW v3 AS SELECT count(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
 
 statement error cannot rename relation "test2.public.v" because view "test.public.v3" depends on it
 ALTER VIEW test2.v RENAME TO test2.v3

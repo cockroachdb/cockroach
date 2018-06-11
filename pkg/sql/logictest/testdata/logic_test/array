@@ -441,7 +441,7 @@ DELETE FROM a;
 # Make sure arrays originating from ARRAY_AGG work as expected.
 
 statement ok
-INSERT INTO a (SELECT ARRAY_AGG(GENERATE_SERIES) from GENERATE_SERIES(1,3))
+INSERT INTO a (SELECT array_agg(generate_series) from generate_series(1,3))
 
 query T
 SELECT * FROM a
@@ -647,7 +647,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[current_date])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -663,7 +663,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[now()])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -695,7 +695,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[uuid_v4()::uuid])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -739,13 +739,13 @@ statement ok
 DROP TABLE a
 
 query T
-SELECT * FROM UNNEST(ARRAY['a', 'B']) ORDER BY UNNEST;
+SELECT * FROM unnest(ARRAY['a', 'B']) ORDER BY UNNEST;
 ----
 B
 a
 
 query T
-SELECT * FROM UNNEST(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
+SELECT * FROM unnest(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
 ----
 a
 B
@@ -935,154 +935,154 @@ false
 # ARRAY_APPEND function
 
 query TT
-SELECT ARRAY_APPEND(ARRAY[1,2,3], 4), ARRAY_APPEND(ARRAY[1,2,3], NULL::INT)
+SELECT array_append(ARRAY[1,2,3], 4), array_append(ARRAY[1,2,3], NULL::INT)
 ----
 {1,2,3,4} {1,2,3,NULL}
 
 query TT
-SELECT ARRAY_APPEND(NULL::INT[], 4), ARRAY_APPEND(NULL::INT[], NULL::INT)
+SELECT array_append(NULL::INT[], 4), array_append(NULL::INT[], NULL::INT)
 ----
 {4} {NULL}
 
 # ARRAY_PREPEND function
 
 query TT
-SELECT ARRAY_PREPEND(4, ARRAY[1,2,3]), ARRAY_PREPEND(NULL::INT, ARRAY[1,2,3])
+SELECT array_prepend(4, ARRAY[1,2,3]), array_prepend(NULL::INT, ARRAY[1,2,3])
 ----
 {4,1,2,3} {NULL,1,2,3}
 
 query TT
-SELECT ARRAY_PREPEND(4, NULL::INT[]), ARRAY_PREPEND(NULL::INT, NULL::INT[])
+SELECT array_prepend(4, NULL::INT[]), array_prepend(NULL::INT, NULL::INT[])
 ----
 {4} {NULL}
 
 # ARRAY_CAT function
 
 query TT
-SELECT ARRAY_CAT(ARRAY[1,2,3], ARRAY[4,5,6]), ARRAY_CAT(ARRAY[1,2,3], NULL::INT[])
+SELECT array_cat(ARRAY[1,2,3], ARRAY[4,5,6]), array_cat(ARRAY[1,2,3], NULL::INT[])
 ----
 {1,2,3,4,5,6} {1,2,3}
 
 query TT
-SELECT ARRAY_CAT(NULL::INT[], ARRAY[4,5,6]), ARRAY_CAT(NULL::INT[], NULL::INT[])
+SELECT array_cat(NULL::INT[], ARRAY[4,5,6]), array_cat(NULL::INT[], NULL::INT[])
 ----
 {4,5,6} NULL
 
 # ARRAY_REMOVE function
 
 query T
-SELECT ARRAY_REMOVE(ARRAY[1,2,3,2], 2)
+SELECT array_remove(ARRAY[1,2,3,2], 2)
 ----
 {1,3}
 
 query T
-SELECT ARRAY_REMOVE(ARRAY[1,2,3,NULL::INT], NULL::INT)
+SELECT array_remove(ARRAY[1,2,3,NULL::INT], NULL::INT)
 ----
 {1,2,3}
 
 query T
-SELECT ARRAY_REMOVE(NULL::INT[], NULL::INT)
+SELECT array_remove(NULL::INT[], NULL::INT)
 ----
 NULL
 
 # ARRAY_REPLACE function
 
 query T
-SELECT ARRAY_REPLACE(ARRAY[1,2,5,4], 5, 3)
+SELECT array_replace(ARRAY[1,2,5,4], 5, 3)
 ----
 {1,2,3,4}
 
 query TT
-SELECT ARRAY_REPLACE(ARRAY[1,2,NULL,4], NULL::INT, 3), ARRAY_REPLACE(NULL::INT[], 5, 3)
+SELECT array_replace(ARRAY[1,2,NULL,4], NULL::INT, 3), array_replace(NULL::INT[], 5, 3)
 ----
 {1,2,3,4} NULL
 
 # ARRAY_POSITION function
 
 query I
-SELECT ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
 ----
 2
 
 query I
-SELECT ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc')
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc')
 ----
 NULL
 
 query I
-SELECT ARRAY_POSITION(NULL::STRING[], 'abc')
+SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
 # ARRAY_POSITIONS function
 
 query TT
-SELECT ARRAY_POSITIONS(ARRAY['A','A','B','A'], 'A'), ARRAY_POSITIONS(ARRAY['A','A','B','A'], 'C')
+SELECT array_positions(ARRAY['A','A','B','A'], 'A'), array_positions(ARRAY['A','A','B','A'], 'C')
 ----
 {1,2,4} {}
 
 query T
-SELECT ARRAY_POSITIONS(NULL::STRING[], 'A')
+SELECT array_positions(NULL::STRING[], 'A')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY('axbxc', 'x')
+SELECT string_to_array('axbxc', 'x')
 ----
 {"a","b","c"}
 
 query T
-SELECT STRING_TO_ARRAY('~a~~b~c', '~')
+SELECT string_to_array('~a~~b~c', '~')
 ----
 {"","a","","b","c"}
 
 query T
-SELECT STRING_TO_ARRAY('~foo~~bar~baz', '~', 'bar')
+SELECT string_to_array('~foo~~bar~baz', '~', 'bar')
 ----
 {"","foo","",NULL,"baz"}
 
 query T
-SELECT STRING_TO_ARRAY('xx~^~yy~^~zz', '~^~', 'yy')
+SELECT string_to_array('xx~^~yy~^~zz', '~^~', 'yy')
 ----
 {"xx",NULL,"zz"}
 
 query T
-SELECT STRING_TO_ARRAY('foo', '')
+SELECT string_to_array('foo', '')
 ----
 {"foo"}
 
 query T
-SELECT STRING_TO_ARRAY('', '')
+SELECT string_to_array('', '')
 ----
 {}
 
 query T
-SELECT STRING_TO_ARRAY('', 'foo')
+SELECT string_to_array('', 'foo')
 ----
 {}
 
 query T
-SELECT STRING_TO_ARRAY('a', NULL)
+SELECT string_to_array('a', NULL)
 ----
 {"a"}
 
 query T
-SELECT STRING_TO_ARRAY(NULL, 'a')
+SELECT string_to_array(NULL, 'a')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY(NULL, 'a', 'b')
+SELECT string_to_array(NULL, 'a', 'b')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY('a', 'foo', NULL)
+SELECT string_to_array('a', 'foo', NULL)
 ----
 {"a"}
 
 query T
-SELECT STRING_TO_ARRAY('foofoofoofoo', 'foo', 'foo')
+SELECT string_to_array('foofoofoofoo', 'foo', 'foo')
 ----
 {"","","","",""}
 

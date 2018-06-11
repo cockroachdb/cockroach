@@ -333,7 +333,7 @@ func (z *zeroSum) rangeInfo() (int, []int) {
 		z.maybeLogError(err)
 		return -1, replicas
 	}
-	rows, err := db.Query(`SELECT ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges`)
+	rows, err := db.Query(`SELECT array_length(replicas, 1) FROM crdb_internal.ranges`)
 	if err != nil {
 		z.maybeLogError(err)
 		return -1, replicas

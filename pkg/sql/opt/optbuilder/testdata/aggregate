@@ -17,8 +17,8 @@ TABLE kv
       └── k int not null
 
 build
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
-  VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
+  variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 group-by
  ├── columns: min:6(int) max:7(int) count:8(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_or:17(bool) xor_agg:19(bytes)
@@ -56,8 +56,8 @@ group-by
            └── variable: column18 [type=bytes]
 
 build
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v),
-  VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v),
+  variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 project
  ├── columns: min:5(int) max:6(int) count:7(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_and:15(bool) xor_agg:17(bytes)
@@ -97,8 +97,8 @@ project
                 └── variable: column16 [type=bytes]
 
 build
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1),
-  VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
+  variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 project
  ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:7(float) sum:8(decimal) stddev:9(decimal) variance:11(float) bool_and:13(bool) bool_or:14(bool) to_hex:17(string)
@@ -144,7 +144,7 @@ project
            └── variable: column16 [type=bytes]
 
 build
-SELECT ARRAY_AGG(1) FROM kv
+SELECT array_agg(1) FROM kv
 ----
 group-by
  ├── columns: array_agg:6(int[])
@@ -159,7 +159,7 @@ group-by
            └── variable: column5 [type=int]
 
 build
-SELECT JSON_AGG(v) FROM kv
+SELECT json_agg(v) FROM kv
 ----
 group-by
  ├── columns: json_agg:5(jsonb)
@@ -172,7 +172,7 @@ group-by
            └── variable: kv.v [type=int]
 
 build
-SELECT JSONB_AGG(1)
+SELECT jsonb_agg(1)
 ----
 group-by
  ├── columns: jsonb_agg:2(jsonb)
@@ -205,7 +205,7 @@ project
 # This should ideally return {NULL}, but this is a pathological case, and
 # Postgres has the same behavior, so it's sufficient for now.
 build
-SELECT ARRAY_AGG(NULL)
+SELECT array_agg(NULL)
 ----
 error (42725): ambiguous call: array_agg(unknown), candidates are:
 array_agg(int) -> int[]
@@ -226,7 +226,7 @@ array_agg(bool) -> bool[]
 
 # With an explicit cast, this works as expected.
 build
-SELECT ARRAY_AGG(NULL::TEXT)
+SELECT array_agg(NULL::TEXT)
 ----
 group-by
  ├── columns: array_agg:2(string[])
@@ -242,7 +242,7 @@ group-by
            └── variable: column1 [type=string]
 
 build
-SELECT (SELECT COALESCE(MAX(1), 0) FROM kv)
+SELECT (SELECT COALESCE(max(1), 0) FROM kv)
 ----
 project
  ├── columns: coalesce:8(int)
@@ -271,17 +271,17 @@ project
                                └── const: 0 [type=int]
 
 build
-SELECT COUNT(*), k FROM kv
+SELECT count(*), k FROM kv
 ----
 error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT COUNT(*) FROM kv GROUP BY s < 5
+SELECT count(*) FROM kv GROUP BY s < 5
 ----
 error (22023): unsupported comparison operator: <string> < <int>
 
 build
-SELECT COUNT(*), k FROM kv GROUP BY k
+SELECT count(*), k FROM kv GROUP BY k
 ----
 project
  ├── columns: count:5(int) k:1(int!null)
@@ -297,7 +297,7 @@ project
 
 # GROUP BY specified using column index works.
 build
-SELECT COUNT(*), k FROM kv GROUP BY 2
+SELECT count(*), k FROM kv GROUP BY 2
 ----
 project
  ├── columns: count:5(int) k:1(int!null)
@@ -312,37 +312,37 @@ project
            └── count-rows [type=int]
 
 build
-SELECT * FROM kv GROUP BY v, COUNT(w)
+SELECT * FROM kv GROUP BY v, count(w)
 ----
 error (42803): aggregate functions are not allowed in GROUP BY
 
 build
-SELECT COUNT(w) FROM kv GROUP BY 1
+SELECT count(w) FROM kv GROUP BY 1
 ----
 error (42803): aggregate functions are not allowed in GROUP BY
 
 build
-SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
+SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 ----
 error (42803): aggregate functions are not allowed in LIMIT
 
 build
-SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
+SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 ----
 error (42803): aggregate functions are not allowed in OFFSET
 
 build
-VALUES (99, COUNT(1))
+VALUES (99, count(1))
 ----
 error (42803): aggregate functions are not allowed in VALUES
 
 build
-SELECT COUNT(*), k FROM kv GROUP BY 5
+SELECT count(*), k FROM kv GROUP BY 5
 ----
 error (42P10): GROUP BY position 5 is not in select list
 
 build
-SELECT COUNT(*), k FROM kv GROUP BY 0
+SELECT count(*), k FROM kv GROUP BY 0
 ----
 error (42P10): GROUP BY position 0 is not in select list
 
@@ -353,7 +353,7 @@ error (42601): non-integer constant in GROUP BY: 'a'
 
 # Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
 build
-SELECT COUNT(*), kv.s FROM kv GROUP BY s
+SELECT count(*), kv.s FROM kv GROUP BY s
 ----
 project
  ├── columns: count:5(int) s:4(string)
@@ -368,7 +368,7 @@ project
            └── count-rows [type=int]
 
 build
-SELECT COUNT(*), s FROM kv GROUP BY kv.s
+SELECT count(*), s FROM kv GROUP BY kv.s
 ----
 project
  ├── columns: count:5(int) s:4(string)
@@ -383,7 +383,7 @@ project
            └── count-rows [type=int]
 
 build
-SELECT COUNT(*), kv.s FROM kv GROUP BY kv.s
+SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
 project
  ├── columns: count:5(int) s:4(string)
@@ -398,7 +398,7 @@ project
            └── count-rows [type=int]
 
 build
-SELECT COUNT(*), s FROM kv GROUP BY s
+SELECT count(*), s FROM kv GROUP BY s
 ----
 project
  ├── columns: count:5(int) s:4(string)
@@ -414,7 +414,7 @@ project
 
 # Grouping by more than one column works.
 build
-SELECT v, COUNT(*), w FROM kv GROUP BY v, w
+SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
 project
  ├── columns: v:2(int) count:5(int) w:3(int)
@@ -430,7 +430,7 @@ project
 
 # Grouping by more than one column using column numbers works.
 build
-SELECT v, COUNT(*), w FROM kv GROUP BY 1, 3
+SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
 project
  ├── columns: v:2(int) count:5(int) w:3(int)
@@ -446,7 +446,7 @@ project
 
 # Selecting and grouping on a function expression works.
 build
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
+SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
 project
  ├── columns: count:6(int) upper:5(string)
@@ -465,7 +465,7 @@ project
 
 # Selecting and grouping on a constant works.
 build
-SELECT COUNT(*) FROM kv GROUP BY 1+2
+SELECT count(*) FROM kv GROUP BY 1+2
 ----
 project
  ├── columns: count:6(int)
@@ -482,7 +482,7 @@ project
            └── count-rows [type=int]
 
 build
-SELECT COUNT(*) FROM kv GROUP BY length('abc')
+SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 project
  ├── columns: count:6(int)
@@ -501,7 +501,7 @@ project
 
 # Selecting a function of something which is grouped works.
 build
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
+SELECT count(*), upper(s) FROM kv GROUP BY s
 ----
 project
  ├── columns: count:5(int) upper:6(string)
@@ -520,13 +520,13 @@ project
 
 # Selecting a value that is not grouped, even if a function of it it, does not work.
 build
-SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
+SELECT count(*), s FROM kv GROUP BY upper(s)
 ----
 error (42803): column "s" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Selecting and grouping on a more complex expression works.
 build
-SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
+SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 project
  ├── columns: count:6(int) r:5(int)
@@ -547,7 +547,7 @@ project
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 build
-SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
+SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 project
  ├── columns: count:5(int) r:6(int)
@@ -568,27 +568,27 @@ project
 # TODO(rytaft): don't qualify the column name in the error message differently
 # than it was qualified in the query.
 build
-SELECT COUNT(*), k+v FROM kv GROUP BY k
+SELECT count(*), k+v FROM kv GROUP BY k
 ----
 error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT COUNT(*), k+v FROM kv GROUP BY v
+SELECT count(*), k+v FROM kv GROUP BY v
 ----
 error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
+SELECT count(*), v/(k+v) FROM kv GROUP BY k+v
 ----
 error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT k FROM kv WHERE AVG(k) > 1
+SELECT k FROM kv WHERE avg(k) > 1
 ----
 error (42803): aggregate functions are not allowed in WHERE
 
 build
-SELECT MAX(AVG(k)) FROM kv
+SELECT max(avg(k)) FROM kv
 ----
 error (42803): aggregate function calls cannot be nested
 
@@ -614,7 +614,7 @@ project
                 └── variable: kv.k [type=int]
 
 build
-SELECT COUNT(*)
+SELECT count(*)
 ----
 group-by
  ├── columns: count:1(int)
@@ -624,7 +624,7 @@ group-by
       └── count-rows [type=int]
 
 build
-SELECT COUNT(k) from kv
+SELECT count(k) from kv
 ----
 group-by
  ├── columns: count:5(int)
@@ -637,7 +637,7 @@ group-by
            └── variable: kv.k [type=int]
 
 build
-SELECT COUNT(1)
+SELECT count(1)
 ----
 group-by
  ├── columns: count:2(int)
@@ -652,7 +652,7 @@ group-by
            └── variable: column1 [type=int]
 
 build
-SELECT COUNT(1) from kv
+SELECT count(1) from kv
 ----
 group-by
  ├── columns: count:6(int)
@@ -667,12 +667,12 @@ group-by
            └── variable: column5 [type=int]
 
 build
-SELECT COUNT(k, v) FROM kv
+SELECT count(k, v) FROM kv
 ----
 error (42883): unknown signature: count(int, int)
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -689,7 +689,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v DESC
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -706,7 +706,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k) DESC
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -723,7 +723,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -746,7 +746,7 @@ sort
                 └── variable: count [type=int]
 
 build
-SELECT v FROM kv GROUP BY v ORDER BY SUM(k)
+SELECT v FROM kv GROUP BY v ORDER BY sum(k)
 ----
 sort
  ├── columns: v:2(int)
@@ -763,7 +763,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY 1 DESC
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -780,7 +780,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
+SELECT count(*), count(k), count(kv.v) FROM kv
 ----
 group-by
  ├── columns: count:5(int) count:6(int) count:7(int)
@@ -796,7 +796,7 @@ group-by
            └── variable: kv.v [type=int]
 
 build
-SELECT COUNT(kv.*) FROM kv
+SELECT count(kv.*) FROM kv
 ----
 group-by
  ├── columns: count:6(int)
@@ -815,7 +815,7 @@ group-by
            └── variable: column5 [type=tuple{int, int, int, string}]
 
 build
-SELECT COUNT((k, v)) FROM kv LIMIT 1
+SELECT count((k, v)) FROM kv LIMIT 1
 ----
 limit
  ├── columns: count:6(int)
@@ -835,7 +835,7 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT COUNT((k, v)) FROM kv OFFSET 1
+SELECT count((k, v)) FROM kv OFFSET 1
 ----
 offset
  ├── columns: count:6(int)
@@ -855,7 +855,7 @@ offset
  └── const: 1 [type=int]
 
 build
-SELECT COUNT(k)+COUNT(kv.v) AS r FROM kv
+SELECT count(k)+count(kv.v) AS r FROM kv
 ----
 project
  ├── columns: r:7(int)
@@ -876,7 +876,7 @@ project
            └── variable: column6 [type=int]
 
 build
-SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+SELECT count(NULL::int), count((NULL, NULL))
 ----
 group-by
  ├── columns: count:2(int) count:4(int)
@@ -897,7 +897,7 @@ group-by
            └── variable: column3 [type=tuple{unknown, unknown}]
 
 build
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
+SELECT min(k), max(k), min(v), max(v) FROM kv
 ----
 group-by
  ├── columns: min:5(int) max:6(int) min:7(int) max:8(int)
@@ -916,7 +916,7 @@ group-by
            └── variable: kv.v [type=int]
 
 build
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
+SELECT min(k), max(k), min(v), max(v) FROM kv WHERE k > 8
 ----
 group-by
  ├── columns: min:5(int) max:6(int) min:7(int) max:8(int)
@@ -941,7 +941,7 @@ group-by
            └── variable: kv.v [type=int]
 
 build
-SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
+SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: array_agg:5(int[]) array_agg:6(string[])
@@ -959,7 +959,7 @@ group-by
            └── variable: kv.s [type=string]
 
 build
-SELECT ARRAY_AGG(k) FROM (SELECT k FROM kv ORDER BY s)
+SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 group-by
  ├── columns: array_agg:5(int[])
@@ -995,7 +995,7 @@ group-by
            └── variable: kv.s [type=string]
 
 build
-SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
+SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
 group-by
  ├── columns: avg:5(decimal) avg:6(decimal) sum:7(decimal) sum:8(decimal)
@@ -1014,7 +1014,7 @@ group-by
            └── variable: kv.v [type=int]
 
 build
-SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
+SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
 group-by
  ├── columns: avg:6(decimal) avg:8(decimal) sum:9(decimal) sum:10(decimal)
@@ -1038,7 +1038,7 @@ group-by
            └── variable: column7 [type=decimal]
 
 build
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL AS r FROM kv
+SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv
 ----
 project
  ├── columns: r:7(decimal)
@@ -1062,7 +1062,7 @@ project
                 └── variable: column6 [type=int]
 
 build
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL AS r FROM kv WHERE w*2 = k
+SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv WHERE w*2 = k
 ----
 project
  ├── columns: r:7(decimal)
@@ -1110,7 +1110,7 @@ TABLE abc
       └── a string not null
 
 build
-SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
+SELECT min(a), min(b), min(c), min(d) FROM abc
 ----
 group-by
  ├── columns: min:5(string) min:6(float) min:7(bool) min:8(decimal)
@@ -1127,7 +1127,7 @@ group-by
            └── variable: abc.d [type=decimal]
 
 build
-SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM abc
+SELECT max(a), max(b), max(c), max(d) FROM abc
 ----
 group-by
  ├── columns: max:5(string) max:6(float) max:7(bool) max:8(decimal)
@@ -1144,7 +1144,7 @@ group-by
            └── variable: abc.d [type=decimal]
 
 build
-SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
+SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
 group-by
  ├── columns: avg:5(float) sum:6(float) avg:7(decimal) sum:8(decimal)
@@ -1174,7 +1174,7 @@ TABLE intervals
       └── a interval not null
 
 build
-SELECT SUM(a) FROM intervals
+SELECT sum(a) FROM intervals
 ----
 group-by
  ├── columns: sum:2(interval)
@@ -1185,32 +1185,32 @@ group-by
            └── variable: intervals.a [type=interval]
 
 build
-SELECT AVG(a) FROM abc
+SELECT avg(a) FROM abc
 ----
 error (42883): unknown signature: avg(string)
 
 build
-SELECT AVG(c) FROM abc
+SELECT avg(c) FROM abc
 ----
 error (42883): unknown signature: avg(bool)
 
 build
-SELECT AVG((a,c)) FROM abc
+SELECT avg((a,c)) FROM abc
 ----
 error (42883): unknown signature: avg(tuple{string, bool})
 
 build
-SELECT SUM(a) FROM abc
+SELECT sum(a) FROM abc
 ----
 error (42883): unknown signature: sum(string)
 
 build
-SELECT SUM(c) FROM abc
+SELECT sum(c) FROM abc
 ----
 error (42883): unknown signature: sum(bool)
 
 build
-SELECT SUM((a,c)) FROM abc
+SELECT sum((a,c)) FROM abc
 ----
 error (42883): unknown signature: sum(tuple{string, bool})
 
@@ -1241,7 +1241,7 @@ TABLE xyz
       └── x int not null
 
 build
-SELECT MIN(x) FROM xyz
+SELECT min(x) FROM xyz
 ----
 group-by
  ├── columns: min:4(int)
@@ -1254,7 +1254,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group-by
  ├── columns: min:4(int)
@@ -1276,7 +1276,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT MAX(x) FROM xyz
+SELECT max(x) FROM xyz
 ----
 group-by
  ├── columns: max:4(int)
@@ -1289,7 +1289,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT MAX(y) FROM xyz WHERE x = 1
+SELECT max(y) FROM xyz WHERE x = 1
 ----
 group-by
  ├── columns: max:4(int)
@@ -1308,7 +1308,7 @@ group-by
            └── variable: xyz.y [type=int]
 
 build
-SELECT MIN(y) FROM xyz WHERE x = 7
+SELECT min(y) FROM xyz WHERE x = 7
 ----
 group-by
  ├── columns: min:4(int)
@@ -1327,7 +1327,7 @@ group-by
            └── variable: xyz.y [type=int]
 
 build
-SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group-by
  ├── columns: min:4(int)
@@ -1350,7 +1350,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group-by
  ├── columns: max:4(int)
@@ -1376,7 +1376,7 @@ group-by
 # VARIANCE/STDDEV
 
 build
-SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
+SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
 ----
 project
  ├── columns: variance:4(decimal) variance:6(decimal) round:8(float)
@@ -1402,7 +1402,7 @@ project
            └── const: 14 [type=int]
 
 build
-SELECT VARIANCE(x) FROM xyz WHERE x = 10
+SELECT variance(x) FROM xyz WHERE x = 10
 ----
 group-by
  ├── columns: variance:4(decimal)
@@ -1421,7 +1421,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
+SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
 ----
 project
  ├── columns: stddev:4(decimal) stddev:6(decimal) round:8(float)
@@ -1447,7 +1447,7 @@ project
            └── const: 14 [type=int]
 
 build
-SELECT STDDEV(x) FROM xyz WHERE x = 1
+SELECT stddev(x) FROM xyz WHERE x = 1
 ----
 group-by
  ├── columns: stddev:4(decimal)
@@ -1466,7 +1466,7 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
-SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
+SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
 ----
 project
  ├── columns: avg:3(float) avg:6(float) avg:9(float)
@@ -1499,7 +1499,7 @@ project
            └── variable: column8 [type=decimal]
 
 build
-SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
+SELECT count(2::int), count(3::float), count(4::decimal)
 ----
 group-by
  ├── columns: count:2(int) count:4(int) count:6(int)
@@ -1523,7 +1523,7 @@ group-by
            └── variable: column5 [type=decimal]
 
 build
-SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
+SELECT sum(1::int), sum(2::float), sum(3::decimal)
 ----
 group-by
  ├── columns: sum:2(decimal) sum:4(float) sum:6(decimal)
@@ -1547,7 +1547,7 @@ group-by
            └── variable: column5 [type=decimal]
 
 build
-SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
+SELECT variance(1::int), variance(1::float), variance(1::decimal)
 ----
 group-by
  ├── columns: variance:2(decimal) variance:4(float) variance:6(decimal)
@@ -1571,7 +1571,7 @@ group-by
            └── variable: column5 [type=decimal]
 
 build
-SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
+SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 ----
 group-by
  ├── columns: stddev:2(decimal) stddev:4(float) stddev:6(decimal)
@@ -1659,7 +1659,7 @@ TABLE bools
       └── rowid int not null (hidden)
 
 build
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
+SELECT bool_and(b), bool_or(b) FROM bools
 ----
 group-by
  ├── columns: bool_and:3(bool) bool_or:4(bool)
@@ -1700,7 +1700,7 @@ TABLE xor_bytes
       └── rowid int not null (hidden)
 
 build
-SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM xor_bytes
+SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
 ----
 project
  ├── columns: to_hex:6(string) xor_agg:7(int)
@@ -1720,7 +1720,7 @@ project
            └── variable: column5 [type=bytes]
 
 build
-SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
+SELECT to_hex(xor_agg(a)), b, xor_agg(c) FROM xor_bytes GROUP BY b ORDER BY b
 ----
 sort
  ├── columns: to_hex:6(string) b:2(int) xor_agg:7(int)
@@ -1746,7 +1746,7 @@ sort
 # At execution time, this query will cause the error:
 # "arguments to xor must all be the same length"
 build
-SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
+SELECT xor_agg(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 ----
 group-by
  ├── columns: xor_agg:2(bytes)
@@ -1761,7 +1761,7 @@ group-by
            └── variable: column1 [type=bytes]
 
 build
-SELECT MAX(true), MIN(true)
+SELECT max(true), min(true)
 ----
 group-by
  ├── columns: max:2(bool) min:3(bool)
@@ -1778,7 +1778,7 @@ group-by
            └── variable: column1 [type=bool]
 
 build
-SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: concat_agg:5(string)
@@ -1794,7 +1794,7 @@ group-by
            └── variable: kv.s [type=string]
 
 build
-SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT json_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: json_agg:5(jsonb)
@@ -1810,7 +1810,7 @@ group-by
            └── variable: kv.s [type=string]
 
 build
-SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+SELECT jsonb_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: jsonb_agg:5(jsonb)
@@ -1868,7 +1868,7 @@ project
            └── variable: ab.a [type=int]
 
 build
-SELECT MIN(y), (b, a) AS r
+SELECT min(y), (b, a) AS r
  FROM ab, xy GROUP BY (x, (a, b))
 ----
 project
@@ -1894,7 +1894,7 @@ project
            └── variable: ab.a [type=int]
 
 build
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -1911,7 +1911,7 @@ sort
                 └── variable: kv.k [type=int]
 
 build
-SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
 sort
  ├── columns: v:2(int) count:5(int)
@@ -1927,7 +1927,7 @@ sort
            └── count-rows [type=int]
 
 build
-SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
 sort
  ├── columns: v:2(int) count:6(int)
@@ -1971,7 +1971,7 @@ project
 
 # Check that everything still works with differently qualified names
 build fully-qualify-names
-SELECT SUM(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
+SELECT sum(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
 ----
 project
  ├── columns: sum:6(decimal) v:2(int)
@@ -1991,7 +1991,7 @@ project
                 └── variable: t.public.kv.w [type=int]
 
 build fully-qualify-names
-SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
+SELECT sum(t.kv.w), lower(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP BY v, lower(kv.s), kv.k * w
 ----
 project
  ├── columns: sum:7(decimal) lower:5(string) r:8(int) v:2(int)
@@ -2111,7 +2111,7 @@ project
            └── variable: kv.v [type=int]
 
 build
-SELECT CONCAT(CONCAT(s, a), a) FROM kv, abc GROUP BY CONCAT(s, a), a
+SELECT concat(concat(s, a), a) FROM kv, abc GROUP BY concat(s, a), a
 ----
 project
  ├── columns: concat:10(string)
@@ -2137,7 +2137,7 @@ project
            └── variable: abc.a [type=string]
 
 build
-SELECT CONCAT(CONCAT(s, a), s) FROM kv, abc GROUP BY CONCAT(s, a), a
+SELECT concat(concat(s, a), s) FROM kv, abc GROUP BY concat(s, a), a
 ----
 error (42803): column "s" must appear in the GROUP BY clause or be used in an aggregate function
 
@@ -2364,7 +2364,7 @@ project
                 └── variable: kv.w [type=int]
 
 build
-SELECT 1 + MIN(v*2) AS r FROM kv GROUP BY k+3
+SELECT 1 + min(v*2) AS r FROM kv GROUP BY k+3
 ----
 project
  ├── columns: r:8(int)
@@ -2406,7 +2406,7 @@ project
            └── count-rows [type=int]
 
 build
-SELECT COUNT(UPPER(s)) FROM kv GROUP BY UPPER(s)
+SELECT count(upper(s)) FROM kv GROUP BY upper(s)
 ----
 project
  ├── columns: count:6(int)
@@ -2425,7 +2425,7 @@ project
                 └── variable: column5 [type=string]
 
 build
-SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
+SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 project
  ├── columns: sum:9(decimal)
@@ -2449,18 +2449,18 @@ project
                 └── variable: abc.d [type=decimal]
 
 build
-SELECT SUM(DISTINCT abc.d) FROM abc
+SELECT sum(DISTINCT abc.d) FROM abc
 ----
 error (0A000): aggregates with DISTINCT are not supported yet
 
 build
-SELECT SUM(abc.d) FILTER (WHERE abc.d > 0) FROM abc
+SELECT sum(abc.d) FILTER (WHERE abc.d > 0) FROM abc
 ----
 error (0A000): aggregates with FILTER are not supported yet
 
 # Check that ordering by an alias of an aggregate works.
 build
-SELECT MAX(k) AS mk FROM kv GROUP BY v ORDER BY mk
+SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY mk
 ----
 sort
  ├── columns: mk:5(int)
@@ -2479,7 +2479,7 @@ sort
                      └── variable: kv.k [type=int]
 
 build
-SELECT MAX(k) AS mk FROM kv GROUP BY v ORDER BY MAX(k)
+SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY max(k)
 ----
 sort
  ├── columns: mk:5(int)
@@ -2498,7 +2498,7 @@ sort
                      └── variable: kv.k [type=int]
 
 build
-SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v ORDER BY mk1
+SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk1
 ----
 sort
  ├── columns: mk1:5(int) mk2:5(int)
@@ -2517,7 +2517,7 @@ sort
                      └── variable: kv.k [type=int]
 
 build
-SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v ORDER BY mk2
+SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
  ├── columns: mk1:5(int) mk2:5(int)
@@ -2536,7 +2536,7 @@ sort
                      └── variable: kv.k [type=int]
 
 build
-SELECT MAX(k) AS mk1, MAX(k)/5 AS mk2 FROM kv GROUP BY v ORDER BY mk2
+SELECT max(k) AS mk1, max(k)/5 AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
  ├── columns: mk1:5(int) mk2:6(decimal)
@@ -2562,7 +2562,7 @@ sort
 # because the aggregate input expressions and grouping expressions are
 # built as part of the same projection. 
 build
-SELECT MAX((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
+SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----
 project
  ├── columns: r:8(decimal) s:9(int)
@@ -2596,7 +2596,7 @@ project
            └── variable: column6 [type=int]
 
 build
-SELECT MAX((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
+SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
  ├── columns: r:8(decimal) s:7(int)

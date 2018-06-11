@@ -819,7 +819,7 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	if _, err := tx.Exec(
-		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
+		"SELECT crdb_internal.force_retry('1s':::INTERVAL)"); !testutils.IsError(
 		err, `forced by crdb_internal\.force_retry\(\)`) {
 		t.Fatal(err)
 	}

@@ -191,7 +191,7 @@ project
            └── const: 'foo' [type=string]
 
 build
-SELECT LOWER(v) FROM kv
+SELECT lower(v) FROM kv
 ----
 project
  ├── columns: lower:3(string)
@@ -473,7 +473,7 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT * FROM xyzw LIMIT (SELECT COUNT(*) FROM abc) * 2 OFFSET (SELECT COUNT(*) FROM abc) * 3
+SELECT * FROM xyzw LIMIT (SELECT count(*) FROM abc) * 2 OFFSET (SELECT count(*) FROM abc) * 3
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)

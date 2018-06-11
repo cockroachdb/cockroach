@@ -97,7 +97,7 @@ eexpect root@
 send "BEGIN; SAVEPOINT cockroach_restart;\r\r"
 eexpect SAVEPOINT
 eexpect root@
-send "SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL);\r"
+send "SELECT crdb_internal.force_retry('1s':::INTERVAL);\r"
 eexpect "pq: restart transaction"
 eexpect root@
 eexpect "RETRY>"
