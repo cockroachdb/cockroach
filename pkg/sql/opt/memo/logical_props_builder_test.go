@@ -39,7 +39,7 @@ func TestHasCorrelatedSubquery(t *testing.T) {
 		expected bool
 	}{
 		{sql: "SELECT y FROM a WHERE 1=1", expected: false},
-		{sql: "SELECT y FROM a WHERE (SELECT COUNT(*) FROM b) > 0", expected: false},
+		{sql: "SELECT y FROM a WHERE (SELECT count(*) FROM b) > 0", expected: false},
 		{sql: "SELECT y FROM a WHERE (SELECT y) > 5", expected: true},
 		{sql: "SELECT y FROM a WHERE (SELECT True FROM b WHERE z=y)", expected: true},
 		{sql: "SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", expected: true},

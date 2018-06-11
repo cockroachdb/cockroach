@@ -5,12 +5,12 @@ CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
 
 # Split into ten parts.
 statement ok
-ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE data TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Verify data placement.
 query TTITI colnames

@@ -255,7 +255,7 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 
 	// NB: This was flaky with `SucceedsSoon`.
 	if err := retry.ForDuration(2*time.Minute, func() error {
-		const query = "SELECT COUNT(replicas) FROM crdb_internal.ranges WHERE ARRAY_POSITION(replicas, 1) IS NOT NULL"
+		const query = "SELECT count(replicas) FROM crdb_internal.ranges WHERE array_position(replicas, 1) IS NOT NULL"
 		var count int
 		if err := db.QueryRow(query).Scan(&count); err != nil {
 			t.Fatal(err)

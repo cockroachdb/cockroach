@@ -285,7 +285,7 @@ func TestShowCreateView(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (i INT, s STRING NULL, v FLOAT NOT NULL, t TIMESTAMP DEFAULT NOW());
+		CREATE TABLE t (i INT, s STRING NULL, v FLOAT NOT NULL, t TIMESTAMP DEFAULT now());
 	`); err != nil {
 		t.Fatal(err)
 	}

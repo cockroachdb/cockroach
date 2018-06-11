@@ -80,7 +80,7 @@ func registerClearRange(r *registry) {
 				//
 				// Don't lower this number, or the test may pass erroneously.
 				const minutes = 20
-				t.WorkerStatus("repeatedly running COUNT(*) on small table")
+				t.WorkerStatus("repeatedly running count(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
 					var count int
@@ -90,7 +90,7 @@ func registerClearRange(r *registry) {
 						return err
 					}
 					// If we can't aggregate over 80kb in 10s, the database is far from usable.
-					if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM tinybank.bank`).Scan(&count); err != nil {
+					if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
 					c.l.printf("read %d rows\n", count)

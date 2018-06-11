@@ -180,7 +180,7 @@ group-by
                 └── variable: xyz.z [type=float]
 
 build
-SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
+SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 group-by
  ├── columns: count:4(int)
@@ -230,7 +230,7 @@ group-by
                      └── const: 0 [type=int]
 
 build
-SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
+SELECT DISTINCT max(x) FROM xyz GROUP BY x
 ----
 group-by
  ├── columns: max:4(int)
@@ -290,7 +290,7 @@ group-by
            └── const: 3 [type=int]
 
 build
-SELECT DISTINCT MAX(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
+SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
 ----
 group-by
  ├── columns: max:4(float) r:5(int) s:6(int!null)

@@ -1117,7 +1117,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 
 	// Verify that all expected rows are present after a stop/start cycle.
 	var rowCount int
-	sqlDB.QueryRow(t, "SELECT COUNT(*) from liveness.t").Scan(&rowCount)
+	sqlDB.QueryRow(t, "SELECT count(*) from liveness.t").Scan(&rowCount)
 	if rowCount != rows {
 		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}

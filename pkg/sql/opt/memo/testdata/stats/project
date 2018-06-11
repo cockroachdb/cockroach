@@ -89,7 +89,7 @@ project
 
 # Test that the stats are calculated correctly for synthesized columns.
 build
-SELECT * FROM (SELECT CONCAT(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
+SELECT * FROM (SELECT concat(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
 ----
 select
  ├── columns: v:5(string!null)
@@ -113,7 +113,7 @@ select
 
 # Test that stats for synthesized and non-synthesized columns are combined.
 build
-SELECT * FROM (SELECT CONCAT(s, y::string), x FROM a) AS q(v, x) GROUP BY v, x
+SELECT * FROM (SELECT concat(s, y::string), x FROM a) AS q(v, x) GROUP BY v, x
 ----
 group-by
  ├── columns: v:5(string) x:1(int!null)

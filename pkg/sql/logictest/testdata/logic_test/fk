@@ -225,7 +225,7 @@ UPDATE orders SET product = '780' WHERE id = 2
 # "delivery" is interesting since it references a secondary index with different col names.
 statement ok
 CREATE TABLE delivery (
-  ts TIMESTAMP DEFAULT NOW(),
+  ts TIMESTAMP DEFAULT now(),
   "order" int,
   shipment int,
   item STRING REFERENCES products (upc),
@@ -375,7 +375,7 @@ statement error "products" is referenced by foreign key from table "orders"
 TRUNCATE products
 
 query I
-SELECT COUNT(*) FROM delivery
+SELECT count(*) FROM delivery
 ----
 4
 
@@ -383,7 +383,7 @@ statement ok
 TRUNCATE products CASCADE
 
 query I
-SELECT COUNT(*) FROM delivery
+SELECT count(*) FROM delivery
 ----
 0
 

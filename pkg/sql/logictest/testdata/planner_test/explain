@@ -298,7 +298,7 @@ count             ·     ·
 ·                 size  2 columns, 1 row
 
 query I
-SELECT MAX("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
+SELECT max("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
 ----
 2
 
@@ -504,7 +504,7 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 ·       row 1, expr 2  (6)[int]           ·                                        ·
 
 query TTTTT
-EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
+EXPLAIN (TYPES,NOEXPAND) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 render                    ·            ·                                                                          (z int, v int)        ·
  │                        render 0     ((2)[int] * (agg1)[int])[int]                                              ·                     ·
@@ -524,7 +524,7 @@ render                    ·            ·                                      
 
 
 query TTTTT
-EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
+EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 render                    ·            ·                                                                          (z int, v int)        v!=NULL; key(v)
  │                        render 0     ((2)[int] * (agg1)[int])[int]                                              ·                     ·
@@ -706,14 +706,14 @@ render         ·         ·                            (a int)  a=CONST
  └── emptyrow  ·         ·                            ()       ·
 
 query TTTTT
-EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES,NONORMALIZE) SELECT abs(2-3) AS a
 ----
 render         ·         ·                      (a int)  a=CONST
  │             render 0  (abs((-1)[int]))[int]  ·        ·
  └── emptyrow  ·         ·                      ()       ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
 render         ·         ·         (a int)  a=CONST
  │             render 0  (1)[int]  ·        ·

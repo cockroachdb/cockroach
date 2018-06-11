@@ -4,7 +4,7 @@ statement ok
 CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MAX(ordinality) FROM foo WITH ORDINALITY
+EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
 group            ·            ·                (max)           ·
  │               aggregate 0  max(ordinality)  ·               ·

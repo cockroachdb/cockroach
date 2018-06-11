@@ -112,7 +112,7 @@ statement count 3
 UPSERT INTO kv VALUES (7, 7), (3, 8), (9, 9)
 
 statement count 1
-INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(SUM(k) AS INT) FROM kv)
+INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(sum(k) AS INT) FROM kv)
 
 statement error column reference "v" is ambiguous \(candidates: excluded.v, kv.v\)
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1

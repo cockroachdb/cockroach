@@ -65,7 +65,7 @@ for i in {1..1000}; do
 done
 echo "\." >> import.sql
 psql -d testdb < import.sql
-psql -d testdb -c "SELECT COUNT(*) FROM ints" | grep "1000"
+psql -d testdb -c "SELECT count(*) FROM ints" | grep "1000"
 
 # Test that a row larger than 8192 bytes is handled OK. That's when psql splits
 # it into multiple packets.

@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	sqlparser "github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/ghemawat/stream"
 	"github.com/kisielk/gotool"
 	"github.com/pkg/errors"
@@ -69,6 +70,67 @@ func TestLint(t *testing.T) {
 		t.Skip(err)
 	}
 	pkgDir := filepath.Join(crdb.Dir, "pkg")
+
+	t.Run("TestLowercaseFunctionNames", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+		reSkipCasedFunction, err := regexp.Compile(`^(Binary file.*|[^:]+:\d+:(` +
+			`query error .*` + // OK when in logic tests
+			`|` +
+			`\s*(//|#).*` + // OK when mentioned in comment
+			`|` +
+			`.*lint: uppercase function OK` + // linter annotation at end of line
+			`))$`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := range builtins.AllBuiltinNames {
+			name := builtins.AllBuiltinNames[i]
+
+			// Exclude special forms: EXTRACT(... FROM ...), etc.
+			switch name {
+			case "extract", "trim", "overlay", "position", "substring":
+				continue
+			}
+
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				cmd, stderr, filter, err := dirCmd(crdb.Dir,
+					"git", "grep", "-nE", fmt.Sprintf(`[^a-zA-Z]%s\(`, strings.ToUpper(name)),
+					"--", "pkg")
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if err := cmd.Start(); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := stream.ForEach(filter, func(s string) {
+					if reSkipCasedFunction.MatchString(s) {
+						// OK when mentioned in comment or lint disabled.
+						return
+					}
+					if name == "family" {
+						t.Errorf("\n%s <- forbidden; use \"FAMILY (\" (with space) or lowercase %s() for the built-in function", s, name)
+					} else {
+						t.Errorf("\n%s <- forbidden; use lowercase %s() instead for SQL built-in functions", s, name)
+					}
+				}); err != nil {
+					t.Error(err)
+				}
+
+				if err := cmd.Wait(); err != nil {
+					if out := stderr.String(); len(out) > 0 {
+						t.Fatalf("err=%s, stderr=%s", err, out)
+					}
+				}
+			})
+		}
+	})
 
 	t.Run("TestCopyrightHeaders", func(t *testing.T) {
 		t.Parallel()
@@ -106,7 +168,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Error(s)
+			t.Errorf("\n%s", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -187,7 +249,7 @@ func TestLint(t *testing.T) {
 			}
 
 			if err := stream.ForEach(filter, func(s string) {
-				t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
+				t.Errorf("\n%s <- forbidden; use 'envutil' instead", s)
 			}); err != nil {
 				t.Error(err)
 			}
@@ -221,7 +283,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- forbidden; use "syncutil.{,RW}Mutex" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'syncutil.{,RW}Mutex' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -308,7 +370,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- forbidden; use "timeutil" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'timeutil' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -343,7 +405,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- forbidden; use "rpc.NewServer" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'rpc.NewServer' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -368,7 +430,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- forbidden; use "pgerror.NewErrorf" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'pgerror.NewErrorf' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -405,7 +467,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`protoutil\.Clone\(`),
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "protoutil.Clone" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Clone' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -443,7 +505,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`(json|yaml|protoutil|\.Field)\.Marshal\(`),
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "protoutil.Marshal" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -481,7 +543,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`(json|jsonpb|yaml|protoutil)\.Unmarshal\(`),
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "protoutil.Unmarshal" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Unmarshal' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -521,7 +583,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "protoutil.Message" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Message' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -545,7 +607,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- forbidden; use "yaml.UnmarshalStrict" instead`, s)
+			t.Errorf("\n%s <- forbidden; use 'yaml.UnmarshalStrict' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -572,7 +634,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`gosql "database/sql"`),
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; import "database/sql" as "gosql" to avoid confusion with "cockroach/sql"`, s)
+			t.Errorf("\n%s <- forbidden; import 'database/sql' as 'gosql' to avoid confusion with 'cockroach/sql'", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -609,7 +671,7 @@ func TestLint(t *testing.T) {
 			}),
 			stream.Xargs("misspell", "-locale", "US", "-i", strings.Join(ignoredRules, ",")),
 		), func(s string) {
-			t.Errorf(s)
+			t.Errorf("\n%s", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -641,7 +703,7 @@ func TestLint(t *testing.T) {
 				}),
 				stream.Xargs("gofmt", "-s", "-d", "-l"),
 			), func(s string) {
-				t.Error(s)
+				t.Errorf("\n%s", s)
 			}); err != nil {
 			t.Error(err)
 		}
@@ -666,7 +728,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Error(s)
+			t.Errorf("\n%s", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -703,7 +765,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- please remove the Author comment within`, s)
+			t.Errorf("\n%s <- please remove the Author comment within", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -991,7 +1053,7 @@ func TestLint(t *testing.T) {
 
 			// Test that a disallowed package is not imported.
 			if replPkg, ok := forbiddenImports[importedPkg]; ok {
-				t.Errorf(`%s <- please use %q instead of %q`, s, replPkg, importedPkg)
+				t.Errorf("\n%s <- please use %q instead of %q", s, replPkg, importedPkg)
 			}
 
 			// Test that the settings package does not import CRDB dependencies.
@@ -1072,7 +1134,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/sql/pgwire/pgwire_test\.go.*internal compiler error`),
 			stream.GrepNot(`^Please file a bug report|^https://golang.org/issue/new`),
 		), func(s string) {
-			t.Error(s)
+			t.Errorf("\n%s", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1105,7 +1167,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- unchecked error`, s)
+			t.Errorf("%s <- unchecked error", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1132,7 +1194,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- unchecked error`, s)
+			t.Errorf("%s <- unchecked error", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1162,7 +1224,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("_fsm.go.*should not use dot imports"),
 				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 			), func(s string) {
-				t.Error(s)
+				t.Errorf("\n%s", s)
 			}); err != nil {
 			t.Error(err)
 		}

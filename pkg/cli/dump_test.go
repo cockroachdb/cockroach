@@ -370,7 +370,7 @@ func TestDumpAsOf(t *testing.T) {
 	CREATE DATABASE d;
 	CREATE TABLE d.t (i int);
 	INSERT INTO d.t VALUES (1);
-	SELECT NOW();
+	SELECT now();
 `
 
 	out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})

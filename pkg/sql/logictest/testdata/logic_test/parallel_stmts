@@ -397,7 +397,7 @@ DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 # If any of the previous three statements are reordered, this result of this
 # query will not be correct.
 query I
-SELECT COUNT(*) FROM kv WHERE k = 2
+SELECT count(*) FROM kv WHERE k = 2
 ----
 1
 

@@ -73,7 +73,7 @@ func TestSetup(t *testing.T) {
 
 			for _, table := range gen.Tables() {
 				var c int
-				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table.Name)).Scan(&c)
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table.Name)).Scan(&c)
 				if c != table.InitialRows.NumTotal {
 					t.Errorf(`%s: got %d rows expected %d`,
 						table.Name, c, table.InitialRows.NumTotal)
@@ -109,7 +109,7 @@ func TestSplits(t *testing.T) {
 
 			var actual int
 			sqlDB.QueryRow(
-				t, `SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE test.bank]`,
+				t, `SELECT count(*) FROM [SHOW TESTING_RANGES FROM TABLE test.bank]`,
 			).Scan(&actual)
 			if ranges != actual {
 				t.Errorf(`expected %d got %d`, ranges, actual)

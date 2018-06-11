@@ -123,7 +123,7 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaR
 // GetSystemJobsCount queries the number of entries in the jobs table.
 func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 	var jobCount int
-	db.QueryRow(t, `SELECT COUNT(*) FROM crdb_internal.jobs`).Scan(&jobCount)
+	db.QueryRow(t, `SELECT count(*) FROM crdb_internal.jobs`).Scan(&jobCount)
 	return jobCount
 }
 

@@ -210,23 +210,23 @@ SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 #####################
 
 statement error column "y" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT DISTINCT ON(MAX(x)) y FROM xyz
+SELECT DISTINCT ON(max(x)) y FROM xyz
 
 statement error column "z" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT DISTINCT ON(MAX(x), z) MIN(y) FROM xyz
+SELECT DISTINCT ON(max(x), z) min(y) FROM xyz
 
 query I
-SELECT DISTINCT ON (MAX(x)) MIN(y) FROM xyz
+SELECT DISTINCT ON (max(x)) min(y) FROM xyz
 ----
 1
 
 query I
-SELECT DISTINCT ON (MIN(x)) MAX(y) FROM xyz
+SELECT DISTINCT ON (min(x)) max(y) FROM xyz
 ----
 5
 
 query T
-SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(c) FROM abc
+SELECT DISTINCT ON(min(a), max(b), min(c)) max(c) FROM abc
 ----
 2
 
@@ -235,17 +235,17 @@ SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(c) FROM abc
 #################
 
 statement error column "x" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT DISTINCT ON (x) MIN(x) FROM xyz GROUP BY y
+SELECT DISTINCT ON (x) min(x) FROM xyz GROUP BY y
 
 query I rowsort
-SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
+SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 1
 1
 4
 
 query I
-SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
+SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 1
 

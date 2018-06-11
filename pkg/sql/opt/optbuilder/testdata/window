@@ -25,6 +25,6 @@ SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 error (42803): aggregate function calls cannot contain window function calls
 
 build
-SELECT * FROM kv GROUP BY v, COUNT(w) OVER ()
+SELECT * FROM kv GROUP BY v, count(w) OVER ()
 ----
 error (42P20): window functions are not allowed in GROUP BY

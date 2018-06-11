@@ -8,19 +8,19 @@ statement ok
 CREATE TABLE NumToSquare (x INT PRIMARY KEY, xsquared INT)
 
 statement ok
-INSERT INTO NumToSquare SELECT i, i*i FROM GENERATE_SERIES(1, 100) AS g(i)
+INSERT INTO NumToSquare SELECT i, i*i FROM generate_series(1, 100) AS g(i)
 
 statement ok
 CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
 
 # Split into five parts.
 statement ok
-ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(1, 4) AS g(i)
+ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
 statement ok
 ALTER TABLE NumToStr TESTING_RELOCATE
-  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(0, 4) AS g(i)
+  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
 
 # Verify data placement.
 query TTTI colnames
@@ -107,19 +107,19 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc-K2zAQh-99CjNQ2AWVWP
 
 # Sum the numbers in the NumToStr table.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(y) FROM NumToStr]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT sum(y) FROM NumToStr]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE1vozAQhu_7K1bvaVeyFAzki1P2mMM2VdqeKg4uHiGkBCPbSK0i_nsFHAJRYqjgaJt3nnmMNRfkStKTOJNB9A4OBh8MARhCMCwRMxRaJWSM0vUnbWAvPxF5DFlelLbejhkSpQnRBTazJ0KEV_FxoiMJSXrhgUGSFdmpwRQ6Owv9tcvLs1XGajAcShv93nHEFYMq7bWssSIlRLxi49H_0lRTKqzSi2Wf_PL2_8-O_32I8R9irtXLXGlJmmSvdFy5G-HezzoJep3w8XfNZ77rAXRHcTXlrv3xhv7MhgPojuF6imEw3jCY2XAA3THcTDEMxxuGMxsOoDuG27kmwh3MkUyhckM3k-F-Za-eGCRTaseLUaVO6FmrpMG0y0OTazYkGdue8naxz9ujusFumDvDfi_Mb8O-mzyADpzp0B0Op_S9dIZXbvJqCnntDG_c5M0U8tb9r7yBZ-J-ZLfsuPr1HQAA__8CqbEl
 
 # Count the rows in the NumToStr table.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE2LszAQx-_Pp3iYUxcCNWrfPHXZUw-rS1_YwyLFNYMIbSJJhF2K331RD1Vpo6DHJP7zm98Y5gZcMPSjKyrwvoACARsIOEDABQILCAlkUsSolJDlJ3Vgx37AswikPMt1uR0SiIVE8G6gU31B8OAYfV9wjxFDObeAAEMdpZcKk8n0GsnfLc-vWigtgUCQa--_LzhCWBAQub5frHSUIHi0IMPhr0kiMYm0kPNFm_0WnPzjeR98HmYvT1n2U9YdkXMhGUpkrfvDwlwN7bTicHo_7_zjbEufV-O0qqHD204nb3sPvCG6HN12e7ioPbloD7whuhot6gwXdSYX7YE3RNejRd3hou7koj3whuhm0onxgLVHlQmusDM5Ht9slRMFWYL1-FEilzF-SBFXmHoZVLlqg6HS9SmtFzteH5UFNsPUGLZbYdoN22ZyD9oxpl1z2B1T98IYXprJyzHklTG8NpPXY8gb87-yep6J-ZF12WHx7y8AAP__2avBCw==
 
 # Count how many numbers contain the digit 5.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%']
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%']
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF2LnDAUhu_7K4YDy24hsBN1ZmdzNaW0RdpqcVx6UWSx5lQEx0gSS8vify_qxarMRMGCl368eV6eE84LFIKjF59RAfsBFAhYQMAGAg4Q2EFEoJQiQaWEbH7pAi7_A2xLICvKSjevIwKJkAjsBXSmcwQGYfwzxwBjjvJ-CwQ46jjLW0wps3Ms_x6L6qyF0hIIfMxyjZJtjtbmi_v5w-b25lf2G29uGWOnMHC9T0DAr3TzA0Q1AVHpV7TScYrAaE3m13uXphLTWAt5vxu2e-8_eeFz4H8_3b29yrKusl4RVSEkR4l8cH5Um9vQkazT09dn1wvvjvR6G3vQhs4fDF1hMBP1eir2iwdjzVdhraBiol5PxcNiFfZ8FfYKKibq9VQcFqtw5qtwVlAxUa-n4vG_bq4LrABVKQqFow12-eRts9mQp9itQSUqmeA3KZIW0z36ba59wVHp7ivtHtyi-9QU7IepMWwNwnQctszkCbRtTDvmsLOk984Y3pvJ-yXkB2P4YCYflpAfzbPaTlwT8yUbs6P6zb8AAAD__x4t7Hs=
 
@@ -159,6 +159,6 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqxDAQRPt8RZhaELtVde
 
 # Regression test for #20481.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFKxDAQhu8-hcxJMbBN99bTiqcF2Up3xYMUic1QAm2nTiagLH13aXPQCi3ucf7J93-BOUNHFg-mRQ_ZK2goFfRMFXpPPEbxwd5-QpYocF0fZIxLBRUxQnYGcdIgZHAy7w0WaCzyJgEFFsW4Zqrt2bWGv3ZdaIX8RzCMUA4KKMhPnxdTI2R6UP93HokFeaPnul16BwoeXevkWieLpvQS031dM9ZGiDfp3PaQPx9Ob0X-cry5XXRtL3EV6HvqPM48S83JUCpAW2O8lqfAFT4xVZMmjvnETYFFL3Gr47Dv4mr84G9Yr8LpOpyuwts_cDlcfQcAAP__-WfWZA==

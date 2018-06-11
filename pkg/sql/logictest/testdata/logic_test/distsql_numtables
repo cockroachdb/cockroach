@@ -8,22 +8,22 @@ statement ok
 CREATE TABLE NumToSquare (x INT PRIMARY KEY, xsquared INT)
 
 statement ok
-INSERT INTO NumToSquare SELECT i, i*i FROM GENERATE_SERIES(1, 100) AS g(i)
+INSERT INTO NumToSquare SELECT i, i*i FROM generate_series(1, 100) AS g(i)
 
 statement ok
 CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
 
 # Split into five parts.
 statement ok
-ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(1, 4) AS g(i)
+ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
 statement ok
 ALTER TABLE NumToStr TESTING_RELOCATE
-  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(0, 4) AS g(i)
+  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
 
 statement ok
-INSERT INTO NumToStr SELECT i, to_english(i) FROM GENERATE_SERIES(1, 100*100) AS g(i)
+INSERT INTO NumToStr SELECT i, to_english(i) FROM generate_series(1, 100*100) AS g(i)
 
 # Verify data placement.
 query TTTI colnames
@@ -105,7 +105,7 @@ nine-zero-zero-zero
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-str
-SELECT i, to_english(i*i) FROM GENERATE_SERIES(1, 100) AS g(i)
+SELECT i, to_english(i*i) FROM generate_series(1, 100) AS g(i)
 
 # Compare the results of this query to the one above.
 query IT rowsort label-sq-str
@@ -113,7 +113,7 @@ SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-2-str
-SELECT 2*i, to_english(2*i) FROM GENERATE_SERIES(1, 50) AS g(i)
+SELECT 2*i, to_english(2*i) FROM generate_series(1, 50) AS g(i)
 
 # Compare the results of this query to the one above.
 query IT rowsort label-sq-2-str
@@ -127,20 +127,20 @@ SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 # Sum the numbers in the NumToStr table. The expected result is
 #  n * n * (n * n + 1) / 2
 query R
-SELECT SUM(y) FROM NumToStr
+SELECT sum(y) FROM NumToStr
 ----
 50005000
 
 # Count the rows in the NumToStr table.
 query I
-SELECT COUNT(*) FROM NumToStr
+SELECT count(*) FROM NumToStr
 ----
 10000
 
 # Count how many numbers contain the digit 5.
 # Result calculated here: https://play.golang.org/p/e-YsJRDsXF
 query I
-SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'
+SELECT count(*) FROM NumToStr WHERE str LIKE '%five%'
 ----
 3439
 
@@ -198,14 +198,14 @@ SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
 5
 
 statement error memory budget exceeded
-SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
+SELECT y, str, repeat('test', y) FROM NumToStr ORDER BY str
 
 # Verify we use the "top K" strategy and thus don't hit OOM as above.
 statement ok
-SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str LIMIT 10
+SELECT y, str, repeat('test', y) FROM NumToStr ORDER BY str LIMIT 10
 
 # Regression test for #20481.
 query I
-SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
+SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
 ----
 10

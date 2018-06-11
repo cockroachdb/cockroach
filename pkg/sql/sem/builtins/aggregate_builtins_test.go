@@ -256,7 +256,7 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 	defer tree.MockNameTypes(map[string]types.T{
 		"a": expected,
 	})()
-	exprStr := "ARRAY_AGG(a)"
+	exprStr := "array_agg(a)"
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		t.Fatalf("%s: %v", exprStr, err)

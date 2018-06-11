@@ -47,11 +47,11 @@ func (f *Factory) hoistSelectSubquery(input, filter memo.GroupID) memo.GroupID {
 // correlated subqueries. Any found queries are hoisted into LeftJoinApply
 // or InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT (SELECT MAX(u) FROM uv WHERE u=x) FROM xy
+//   SELECT (SELECT max(u) FROM uv WHERE u=x) FROM xy
 //   =>
 //   SELECT u
 //   FROM xy
-//   INNER JOIN LATERAL (SELECT MAX(u) FROM uv WHERE u=x)
+//   INNER JOIN LATERAL (SELECT max(u) FROM uv WHERE u=x)
 //   ON True
 //
 func (f *Factory) hoistProjectSubquery(input, projections memo.GroupID) memo.GroupID {
@@ -531,8 +531,8 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 //
 //   SELECT
 //     CASE
-//       WHEN BOOL_OR(notnull) AND z IS NOT Null THEN True
-//       ELSE BOOL_OR(notnull) IS NULL THEN False
+//       WHEN bool_or(notnull) AND z IS NOT Null THEN True
+//       ELSE bool_or(notnull) IS NULL THEN False
 //       ELSE Null
 //     END
 //   FROM

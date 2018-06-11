@@ -297,7 +297,7 @@ memo (optimized)
  └── G10: (const 1)
 
 memo
-SELECT ARRAY_AGG(x) FROM (SELECT * FROM a)
+SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
 memo (optimized)
  ├── G1: (group-by G2 G3 cols=())
@@ -313,7 +313,7 @@ memo (optimized)
  └── G5: (variable a.x)
 
 memo
-SELECT ARRAY_AGG(x) FROM (SELECT * FROM a) GROUP BY y
+SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
 memo (optimized)
  ├── G1: (project G2 G3)
@@ -334,7 +334,7 @@ memo (optimized)
  └── G7: (variable a.x)
 
 memo
-SELECT ARRAY_AGG(x) FROM (SELECT * FROM a ORDER BY y)
+SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
 memo (optimized)
  ├── G1: (group-by G2 G3 cols=(),ordering=+2)

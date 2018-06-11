@@ -85,7 +85,7 @@ statement ok
 CREATE VIEW d2.v3 AS SELECT k,v FROM d1.v2
 
 statement ok
-CREATE VIEW d2.v4 AS SELECT COUNT(*) FROM d1.t1 as x JOIN d2.t1 as y ON x.k = y.k
+CREATE VIEW d2.v4 AS SELECT count(*) FROM d1.t1 as x JOIN d2.t1 as y ON x.k = y.k
 
 statement ok
 GRANT ALL ON DATABASE d1 TO testuser

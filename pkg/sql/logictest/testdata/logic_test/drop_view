@@ -32,7 +32,7 @@ statement ok
 CREATE VIEW d AS SELECT k,v FROM a
 
 statement ok
-CREATE VIEW diamond AS SELECT COUNT(*) FROM b AS b JOIN d AS d ON b.k = d.k
+CREATE VIEW diamond AS SELECT count(*) FROM b AS b JOIN d AS d ON b.k = d.k
 
 statement error cannot drop relation "d" because view "diamond" depends on it
 DROP VIEW d

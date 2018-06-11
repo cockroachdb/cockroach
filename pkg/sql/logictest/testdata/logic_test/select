@@ -129,7 +129,7 @@ SELECT v||'foo' FROM kv
 NULL
 
 query T
-SELECT LOWER(v) FROM kv
+SELECT lower(v) FROM kv
 ----
 NULL
 
@@ -282,7 +282,7 @@ SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
 
 # Multiplying by zero so the result is deterministic.
 query IIII
-SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
+SELECT * FROM xyzw LIMIT (random() * 0.0)::int OFFSET (random() * 0.0)::int
 ----
 
 query error pgcode 42601 multiple LIMIT clauses not allowed
@@ -596,7 +596,7 @@ SELECT x FROM b WHERE rowid > 0
 # ------------------------------------------------------------------------------
 statement ok
 CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
-INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
+INSERT INTO c SELECT i, to_english(i) FROM generate_series(1, 10) AS g(i)
 
 query IT rowsort
 SELECT * FROM c WHERE str >= 'moo'

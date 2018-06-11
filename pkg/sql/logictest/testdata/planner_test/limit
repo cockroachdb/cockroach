@@ -96,7 +96,7 @@ limit              ·         ·                (k, v)              k!=NULL; wea
 ·                  limit     6                ·                   ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 limit                ·            ·          (sum)      ·
  │                   count        10         ·          ·

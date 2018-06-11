@@ -39,7 +39,7 @@ root                ·          ·
 ·                   spans      ALL
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT MAX(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
 root                 ·            ·                 (a, b, c)  ·
  ├── scan            ·            ·                 (a, b, c)  ·

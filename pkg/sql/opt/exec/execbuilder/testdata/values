@@ -28,7 +28,7 @@ values  ·              ·                  (column1, column2, column3)  ·
 ·       row 1, expr 2  6                  ·                            ·
 
 query TTTTT
-EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
+EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
 values  ·              ·                 (column1)  ·
 ·       size           1 column, 4 rows  ·          ·

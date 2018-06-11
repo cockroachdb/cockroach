@@ -274,3 +274,9 @@ SELECT "Amélie", "Amélie" FROM Amelie
 ----
 Amélie Amélie
 2      1
+
+# Check that function names are also recognized case-insensitively.
+query I
+SELECT LENGTH('abc') -- lint: uppercase function OK
+----
+3

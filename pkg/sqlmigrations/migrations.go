@@ -582,7 +582,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		ctx,
 		"insert-setting",
 		nil, /* txn */
-		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', NOW(), 'm') ON CONFLICT(name) DO NOTHING`, b),
+		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	); err != nil {
 		return err
 	}

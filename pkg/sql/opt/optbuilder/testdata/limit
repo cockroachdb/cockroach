@@ -124,7 +124,7 @@ SELECT k FROM T LIMIT v
 error (42703): column "v" does not exist
 
 build
-SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 limit
  ├── columns: sum:4(decimal)

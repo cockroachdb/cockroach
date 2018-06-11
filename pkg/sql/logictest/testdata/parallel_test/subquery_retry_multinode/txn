@@ -7,4 +7,4 @@
 
 repeat 2
 statement ok
-INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T), REPEAT('x', 1000))
+INSERT INTO T VALUES ((SELECT max(k+1) FROM T), repeat('x', 1000))
