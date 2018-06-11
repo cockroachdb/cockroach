@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -138,13 +139,17 @@ func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) buil
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
 var builtins = map[string]builtinDefinition{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"length":           lengthImpls,
+	"char_length":      lengthImpls,
+	"character_length": lengthImpls,
+
+	"bit_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		stringOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
-		}, types.Int, "Calculates the number of characters in `val`."),
+			return tree.NewDInt(tree.DInt(len(s) * 8)), nil
+		}, types.Int, "Calculates the number of bits used to represent `val`."),
 		bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			return tree.NewDInt(tree.DInt(len(s))), nil
-		}, types.Int, "Calculates the number of bytes in `val`."),
+			return tree.NewDInt(tree.DInt(len(s) * 8)), nil
+		}, types.Int, "Calculates the number of bits in `val`."),
 	),
 
 	"octet_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
@@ -1066,6 +1071,80 @@ CockroachDB supports the following flags:
 			}
 			return tree.NewDString(strings.Title(strings.ToLower(s))), nil
 		}, types.String, "Capitalizes the first letter of `val`.")),
+
+	"quote_ident": makeBuiltin(defProps(),
+		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+			var buf bytes.Buffer
+			lex.EncodeRestrictedSQLIdent(&buf, s, lex.EncNoFlags)
+			return tree.NewDString(buf.String()), nil
+		}, types.String, "Return `val` suitably quoted to serve as identifier in a SQL statement.")),
+
+	"quote_literal": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:             tree.ArgTypes{{"val", types.String}},
+			ReturnType:        tree.FixedReturnType(types.String),
+			PreferredOverload: true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				return tree.NewDString(lex.EscapeSQLString(string(s))), nil
+			},
+			Info: "Return `val` suitably quoted to serve as string literal in a SQL statement.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// PostgreSQL specifies that this variant first casts to the SQL string type,
+				// and only then quotes. We can't use (Datum).String() directly.
+				d := tree.UnwrapDatum(ctx, args[0])
+				strD, err := tree.PerformCast(ctx, d, coltypes.String)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(strD.String()), nil
+			},
+			Info: "Coerce `val` to a string and then quote it as a literal.",
+		},
+	),
+
+	// quote_nullable is the same as quote_literal but accepts NULL arguments.
+	"quote_nullable": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryString,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types:             tree.ArgTypes{{"val", types.String}},
+			ReturnType:        tree.FixedReturnType(types.String),
+			PreferredOverload: true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.NewDString("NULL"), nil
+				}
+				s := tree.MustBeDString(args[0])
+				return tree.NewDString(lex.EscapeSQLString(string(s))), nil
+			},
+			Info: "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.NewDString("NULL"), nil
+				}
+				// PostgreSQL specifies that this variant first casts to the SQL string type,
+				// and only then quotes. We can't use (Datum).String() directly.
+				d := tree.UnwrapDatum(ctx, args[0])
+				strD, err := tree.PerformCast(ctx, d, coltypes.String)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(strD.String()), nil
+			},
+			Info: "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
+		},
+	),
 
 	"left": makeBuiltin(defProps(),
 		tree.Overload{
@@ -2631,6 +2710,15 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 }
+
+var lengthImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	stringOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+		return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
+	}, types.Int, "Calculates the number of characters in `val`."),
+	bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+		return tree.NewDInt(tree.DInt(len(s))), nil
+	}, types.Int, "Calculates the number of bytes in `val`."),
+)
 
 var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
 	tree.Overload{
