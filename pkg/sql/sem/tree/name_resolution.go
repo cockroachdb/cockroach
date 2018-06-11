@@ -16,6 +16,8 @@ package tree
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -484,8 +486,13 @@ func (n *UnresolvedName) ResolveFunction(
 			}
 		}
 		if !found {
+			extraMsg := ""
+			// Try a little harder.
+			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
+				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
+			}
 			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedFunctionError, "unknown function: %s()", ErrString(n))
+				pgerror.CodeUndefinedFunctionError, "unknown function: %s()%s", ErrString(n), extraMsg)
 		}
 	}
 

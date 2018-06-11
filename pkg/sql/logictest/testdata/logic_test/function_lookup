@@ -36,5 +36,5 @@ int
 
 # CockroachDB is case-preserving for quoted identifiers like pg, and
 # function names only exist in lowercase.
-query error unknown function: PG_TYPEOF()
+query error unknown function: PG_TYPEOF\(\), but pg_typeof\(\) exists
 SELECT "PG_TYPEOF"(123)
