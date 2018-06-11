@@ -1034,6 +1034,7 @@ func TestParse(t *testing.T) {
 		if d.sql != s {
 			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
 		}
+		VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
@@ -1583,6 +1584,7 @@ func TestParse2(t *testing.T) {
 		if _, err := Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
+		VerifyStatementPrettyRoundtrip(t, d.expected)
 	}
 }
 
@@ -1614,6 +1616,7 @@ func TestParseTree(t *testing.T) {
 		if _, err := Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
+		VerifyStatementPrettyRoundtrip(t, d.expected)
 	}
 }
 
@@ -1633,6 +1636,7 @@ func TestParseSyntax(t *testing.T) {
 		if _, err := Parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
+		VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
