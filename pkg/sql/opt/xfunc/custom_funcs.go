@@ -27,11 +27,19 @@ func MakeCustomFuncs(mem *memo.Memo, evalCtx *tree.EvalContext) CustomFuncs {
 	}
 }
 
+// -----------------------------------------------------------------------
+//
+// List functions
+//   General custom match and replace functions used to test and construct
+//   lists.
+//
+// -----------------------------------------------------------------------
+
 // IsSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
-func (cf *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
-	ls := listSorter{cf: cf, list: cf.mem.LookupList(list)}
+func (c *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
+	ls := listSorter{cf: c, list: c.mem.LookupList(list)}
 	for i := 0; i < int(list.Length-1); i++ {
 		if !ls.less(i, i+1) {
 			return false
@@ -43,11 +51,11 @@ func (cf *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
 // ConstructSortedUniqueList sorts the given list and removes duplicates, and
 // returns the resulting list. See the comment for listSorter.compare for
 // comparison rule details.
-func (cf *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
+func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
 	// Make a copy of the list, since it needs to stay immutable.
-	lb := MakeListBuilder(cf)
-	lb.AddItems(cf.mem.LookupList(list))
-	ls := listSorter{cf: cf, list: lb.items}
+	lb := MakeListBuilder(c)
+	lb.AddItems(c.mem.LookupList(list))
+	ls := listSorter{cf: c, list: lb.items}
 
 	// Sort the list.
 	sort.Slice(ls.list, ls.less)
@@ -61,5 +69,70 @@ func (cf *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
 		}
 	}
 	lb.setLength(n)
+	return lb.BuildList()
+}
+
+// -----------------------------------------------------------------------
+//
+// Filter functions
+//   General custom match and replace functions used to test and construct
+//   filters in Select and Join rules.
+//
+// -----------------------------------------------------------------------
+
+// IsBoundBy returns true if all outer references in the source expression are
+// bound by the destination expression. For example:
+//
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Eq (Variable a.x) (Const 1))
+//   )
+//
+// The (Eq) expression is fully bound by the (Scan a) expression because all of
+// its outer references are satisfied by the columns produced by the Scan.
+func (c *CustomFuncs) IsBoundBy(src, dst memo.GroupID) bool {
+	return c.mem.GroupProperties(src).OuterCols().SubsetOf(
+		c.mem.GroupProperties(dst).Relational.OutputCols,
+	)
+}
+
+// ExtractBoundConditions returns a new list containing only those expressions
+// from the given list that are fully bound by the given expression (i.e. all
+// outer references are satisfied by it). For example:
+//
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Filters [
+//       (Eq (Variable a.x) (Variable b.x))
+//       (Gt (Variable a.x) (Const 1))
+//     ])
+//   )
+//
+// Calling extractBoundConditions with the filter conditions list and the output
+// columns of (Scan a) would extract the (Gt) expression, since its outer
+// references only reference columns from a.
+func (c *CustomFuncs) ExtractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(list) {
+		if c.IsBoundBy(item, group) {
+			lb.AddItem(item)
+		}
+	}
+	return lb.BuildList()
+}
+
+// ExtractUnboundConditions is the inverse of extractBoundConditions. Instead of
+// extracting expressions that are bound by the given expression, it extracts
+// list expressions that have at least one outer reference that is *not* bound
+// by the given expression (i.e. it has a "free" variable).
+func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(list) {
+		if !c.IsBoundBy(item, group) {
+			lb.AddItem(item)
+		}
+	}
 	return lb.BuildList()
 }
