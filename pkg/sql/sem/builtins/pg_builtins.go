@@ -22,11 +22,8 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -668,24 +665,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"quote_ident": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ArgTypes{{"text", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				/* From the PG source code:
-				 * Can avoid quoting if ident starts with a lowercase letter or underscore
-				 * and contains only lowercase letters, digits, and underscores, *and* is
-				 * not any SQL keyword.  Otherwise, supply quotes.
-				 */
-				var buf bytes.Buffer
-				lex.EncodeRestrictedSQLIdent(&buf, string(tree.MustBeDString(args[0])), lex.EncBareStrings)
-				return tree.NewDString(buf.String()), nil
-			},
-			Info: notUsableInfo,
-		},
-	),
-
 	"obj_description": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
@@ -744,6 +723,19 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	// https://www.postgresql.org/docs/10/static/functions-string.html
+	// CockroachDB supports just UTF8 for now.
+	"pg_client_encoding": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDString("UTF8"), nil
 			},
 			Info: notUsableInfo,
 		},
