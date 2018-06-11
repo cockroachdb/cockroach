@@ -129,6 +129,12 @@ func IsReadOnly(args Request) bool {
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
 }
 
+// IsTransactional returns true if the request may be part of a
+// transaction.
+func IsTransactional(args Request) bool {
+	return (args.flags() & isTxn) != 0
+}
+
 // IsTransactionWrite returns true if the request produces write
 // intents when used within a transaction.
 func IsTransactionWrite(args Request) bool {

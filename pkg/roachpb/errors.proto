@@ -145,6 +145,8 @@ enum TransactionRetryReason {
   // A possible replay caused by duplicate begin txn or out-of-order
   // txn sequence number.
   RETRY_POSSIBLE_REPLAY = 4;
+  // An asynchronous write was observed to have failed.
+  RETRY_ASYNC_WRITE_FAILURE = 5;
 }
 
 // A TransactionRetryError indicates that the transaction must be
