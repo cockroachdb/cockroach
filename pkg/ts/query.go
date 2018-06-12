@@ -250,10 +250,10 @@ func (tsi *timeSeriesSpanIterator) truncateSpan() {
 	if tsi.inner != 0 {
 		data := tsi.span[tsi.outer]
 		size := tsi.inner
-		if tsi.isColumnar() {
+		if data.IsColumnar() {
 			data.Offset = data.Offset[:size]
 			data.Last = data.Last[:size]
-			if tsi.isRollup() {
+			if data.IsRollup() {
 				data.First = data.First[:size]
 				data.Min = data.Min[:size]
 				data.Max = data.Max[:size]
@@ -261,9 +261,9 @@ func (tsi *timeSeriesSpanIterator) truncateSpan() {
 				data.Sum = data.Sum[:size]
 				data.Variance = data.Variance[:size]
 			}
-			return
+		} else {
+			data.Samples = data.Samples[:size]
 		}
-		data.Samples = data.Samples[:size]
 		tsi.span[tsi.outer] = data
 	}
 
@@ -498,8 +498,12 @@ func (db *DB) queryChunk(
 		if err != nil {
 			return err
 		}
+		sampleSize := sizeOfSample
+		if data.IsColumnar() {
+			sampleSize = sizeOfInt32 + sizeOfFloat64
+		}
 		if err := acc.Grow(
-			ctx, sizeOfSample*int64(len(data.Samples))+sizeOfTimeSeriesData,
+			ctx, sampleSize*int64(data.SampleCount())+sizeOfTimeSeriesData,
 		); err != nil {
 			return err
 		}

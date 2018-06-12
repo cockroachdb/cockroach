@@ -50,24 +50,35 @@ import (
 // series data sent to the Cockroach time series DB is stored correctly.
 //
 // This structure maintains a single ts.DB instance which stores data in a
-// monolithic Cockroach Store. It additionally maintains a simple in-memory key
-// value map, which is used as a model of the time series data stored in
-// Cockroach. The model maintains an expected copy of all keys beginning with
-// the time series data prefix.
+// monolithic Cockroach Store. It additionally maintains a test-model, a fully
+// in-memory implementation of the CockroachDB storage and query system. The
+// test model is unoptimized and in-memory, making it easier to understand than
+// the distributed and highly-optimized system used by real queries. The model
+// is used to generate expected results for test cases automatically.
 //
 // Each test should send a series of commands to the testModelRunner. Commands
-// are dispatched to the ts.DB instance, but are also used to modify the
-// in-memory key value model. Tests should periodically compare the in-memory
-// model to the actual data stored in the cockroach engine, ensuring that the
-// data matches.
+// are dispatched to both the ts.DB instance and the test model. Queries are
+// executed against both, and the results should match exactly.
+//
+// In addition, the test model can be used to generate an expecation of the
+// on-disk layout in the ts.DB instance; the tests should periodically assert
+// that the expectation matches reality.
+//
+// Finally, testModelRunner provides a small number of sanity checks
+// (assertKeyCount) that ensure that the real data does not trivially match the
+// model due to an improperly constructed test case.
 type testModelRunner struct {
-	t     testing.TB
-	model *testmodel.ModelDB
 	*localtestcluster.LocalTestCluster
+	t                 testing.TB
 	DB                *DB
+	model             *testmodel.ModelDB
 	workerMemMonitor  *mon.BytesMonitor
 	resultMemMonitor  *mon.BytesMonitor
 	queryMemoryBudget int64
+	// firstColumnarTimestamp is a map from a string name for a series to the
+	// first timestamp at which columnar data was inserted into that timestamp.
+	// This is used when computing the expected on-disk layout from the model.
+	firstColumnarTimestamp map[string]int64
 }
 
 // newTestModelRunner creates a new testModel instance. The Start() method must
@@ -93,12 +104,13 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		st,
 	)
 	return testModelRunner{
-		t:                 t,
-		model:             testmodel.NewModelDB(),
-		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
-		workerMemMonitor:  &workerMonitor,
-		resultMemMonitor:  &resultMonitor,
-		queryMemoryBudget: math.MaxInt64,
+		t:                      t,
+		model:                  testmodel.NewModelDB(),
+		LocalTestCluster:       &localtestcluster.LocalTestCluster{},
+		workerMemMonitor:       &workerMonitor,
+		resultMemMonitor:       &resultMonitor,
+		queryMemoryBudget:      math.MaxInt64,
+		firstColumnarTimestamp: make(map[string]int64),
 	}
 }
 
@@ -136,7 +148,7 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 func (tm *testModelRunner) assertModelCorrect() {
 	tm.t.Helper()
 	actualData := tm.getActualData()
-	modelDisk := tm.getNewModelDiskLayout()
+	modelDisk := tm.getModelDiskLayout()
 	if a, e := actualData, modelDisk; !reflect.DeepEqual(a, e) {
 		for _, diff := range pretty.Diff(a, e) {
 			tm.t.Error(diff)
@@ -144,7 +156,7 @@ func (tm *testModelRunner) assertModelCorrect() {
 	}
 }
 
-func (tm *testModelRunner) getNewModelDiskLayout() map[string]roachpb.Value {
+func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 	result := make(map[string]roachpb.Value)
 	tm.model.VisitAllSeries(func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
 		// For computing the expected disk layout, only consider resolution-specific
@@ -154,21 +166,37 @@ func (tm *testModelRunner) getNewModelDiskLayout() map[string]roachpb.Value {
 			return data, false
 		}
 
-		tsdata := tspb.TimeSeriesData{
-			Name:   seriesName,
-			Source: source,
-			// Downsample data points according to resolution. Downsampling currently
-			// always uses the last data point when storing to disk.
-			Datapoints: data,
+		// The on-disk model discards all samples in each sample period except for
+		// the last one.
+		data = data.GroupByResolution(resolution.SampleDuration(), testmodel.AggregateLast)
+
+		// Depending on when column-based storage was activated, some slabs will
+		// be in row format and others in column format. Find the dividing line
+		// and generate two sets of slabs.
+		var allSlabs []roachpb.InternalTimeSeriesData
+		addSlabs := func(datapoints testmodel.DataSeries, columnar bool) {
+			tsdata := tspb.TimeSeriesData{
+				Name:       seriesName,
+				Source:     source,
+				Datapoints: datapoints,
+			}
+			slabs, err := tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration(), columnar)
+			if err != nil {
+				tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
+			}
+			allSlabs = append(allSlabs, slabs...)
 		}
 
-		slabs, err := tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration())
-		if err != nil {
-			tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
-			return data, false
+		firstColumnTime, hasColumns := tm.firstColumnarTimestamp[name]
+		if !hasColumns {
+			addSlabs(data, false)
+		} else {
+			firstColumnTime = resolution.normalizeToSlab(firstColumnTime)
+			addSlabs(data.TimeSlice(math.MinInt64, firstColumnTime), false)
+			addSlabs(data.TimeSlice(firstColumnTime, math.MaxInt64), true)
 		}
 
-		for _, slab := range slabs {
+		for _, slab := range allSlabs {
 			key := MakeDataKey(seriesName, source, resolution, slab.StartTimestampNanos)
 			keyStr := string(key)
 			var val roachpb.Value
@@ -188,7 +216,7 @@ func (tm *testModelRunner) getNewModelDiskLayout() map[string]roachpb.Value {
 // This is used to ensure that data is actually being generated in the test
 // model.
 func (tm *testModelRunner) assertKeyCount(expected int) {
-	if a, e := len(tm.getNewModelDiskLayout()), expected; a != e {
+	if a, e := len(tm.getModelDiskLayout()), expected; a != e {
 		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
 	}
 }
@@ -198,18 +226,14 @@ func (tm *testModelRunner) storeInModel(r Resolution, data tspb.TimeSeriesData) 
 		return
 	}
 
-	// Store in the new model. Record for both full-resolution data *and* a series
-	// for the specific resolution recorded. The series-specific resolution is
-	// used to simulate the expected on-disk layout of series in CockroachDB, while
-	// the full-resolution data is used to verify query results.
-	tm.model.Record(data.Name, data.Source, data.Datapoints)
-	tm.model.Record(
-		resolutionModelKey(data.Name, r),
-		data.Source,
-		testmodel.DataSeries(data.Datapoints).GroupByResolution(
-			r.SampleDuration(), testmodel.AggregateLast,
-		),
-	)
+	key := resolutionModelKey(data.Name, r)
+	if tm.DB.writeColumnar {
+		firstColumar, ok := tm.firstColumnarTimestamp[key]
+		if candidate := data.Datapoints[0].TimestampNanos; !ok || candidate < firstColumar {
+			tm.firstColumnarTimestamp[key] = candidate
+		}
+	}
+	tm.model.Record(key, data.Source, data.Datapoints)
 }
 
 // resolutionModelKey returns a string to store resolution-specific data in
@@ -244,8 +268,7 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 		tm.t.Fatalf("error storing time series data: %s", err)
 	}
 
-	// Store data in the original model.
-	// TODO(mrtracy): remove this.
+	// store data in the model.
 	for _, d := range data {
 		tm.storeInModel(r, d)
 	}
@@ -326,6 +349,7 @@ func (tm *testModelRunner) makeQuery(
 			BudgetBytes:             math.MaxInt64 / 8,
 			EstimatedSources:        currentEstimatedSources,
 			InterpolationLimitNanos: 0,
+			Columnar:                tm.DB.writeColumnar,
 		},
 		diskResolution:   diskResolution,
 		workerMemMonitor: tm.workerMemMonitor,
@@ -382,7 +406,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 
 	// Query the model.
 	modelDatapoints := mq.modelRunner.model.Query(
-		mq.Name,
+		resolutionModelKey(mq.Name, mq.diskResolution),
 		mq.Sources,
 		mq.GetDownsampler(),
 		mq.GetSourceAggregator(),
@@ -473,200 +497,195 @@ func datapoint(timestamp int64, val float64) tspb.TimeSeriesDatapoint {
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModelRunner(t)
-	tm.Start()
-	defer tm.Stop()
+	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 
-	// Basic storage operation: one data point.
-	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name: "test.metric",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(-446061360000000000, 100),
+		// Basic storage operation: one data point.
+		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+			{
+				Name: "test.metric",
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					datapoint(440000000000000000, 100),
+				},
 			},
-		},
-	})
-	tm.assertKeyCount(1)
-	tm.assertModelCorrect()
+		})
+		tm.assertKeyCount(1)
+		tm.assertModelCorrect()
 
-	// Store data with different sources, and with multiple data points that
-	// aggregate into the same key.
-	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name:   "test.metric.float",
-			Source: "cpu01",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(1428713843000000000, 100.0),
-				datapoint(1428713843000000001, 50.2),
-				datapoint(1428713843000000002, 90.9),
+		// Store data with different sources, and with multiple data points that
+		// aggregate into the same key.
+		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+			{
+				Name:   "test.metric.float",
+				Source: "cpu01",
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					datapoint(1428713843000000000, 100.0),
+					datapoint(1428713843000000001, 50.2),
+					datapoint(1428713843000000002, 90.9),
+				},
 			},
-		},
-	})
-	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name:   "test.metric.float",
-			Source: "cpu02",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(1428713843000000000, 900.8),
-				datapoint(1428713843000000001, 30.12),
-				datapoint(1428713843000000002, 72.324),
+		})
+		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+			{
+				Name:   "test.metric.float",
+				Source: "cpu02",
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					datapoint(1428713843000000000, 900.8),
+					datapoint(1428713843000000001, 30.12),
+					datapoint(1428713843000000002, 72.324),
+				},
 			},
-		},
-	})
-	tm.assertKeyCount(3)
-	tm.assertModelCorrect()
+		})
+		tm.assertKeyCount(3)
+		tm.assertModelCorrect()
 
-	// A single storage operation that stores to multiple keys, including an
-	// existing key.
-	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name: "test.metric",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(-446061360000000000, 200),
-				datapoint(450000000000000001, 1),
-				datapoint(460000000000000000, 777),
+		// A single storage operation that stores to multiple keys, including an
+		// existing key.
+		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+			{
+				Name: "test.metric",
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					datapoint(440000000000000000, 200),
+					datapoint(450000000000000001, 1),
+					datapoint(460000000000000000, 777),
+				},
 			},
-		},
+		})
+		tm.assertKeyCount(5)
+		tm.assertModelCorrect()
 	})
-	tm.assertKeyCount(5)
-	tm.assertModelCorrect()
 }
 
 // TestPollSource verifies that polled data sources are called as expected.
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModelRunner(t)
-	tm.Start()
-	defer tm.Stop()
-
-	testSource := modelDataSource{
-		model:   tm,
-		r:       Resolution10s,
-		stopper: stop.NewStopper(),
-		datasets: [][]tspb.TimeSeriesData{
-			{
+	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+		testSource := modelDataSource{
+			model:   tm,
+			r:       Resolution10s,
+			stopper: stop.NewStopper(),
+			datasets: [][]tspb.TimeSeriesData{
 				{
-					Name:   "test.metric.float",
-					Source: "cpu01",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(1428713843000000000, 100.0),
-						datapoint(1428713843000000001, 50.2),
-						datapoint(1428713843000000002, 90.9),
+					{
+						Name:   "test.metric.float",
+						Source: "cpu01",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 100.0),
+							datapoint(1428713843000000001, 50.2),
+							datapoint(1428713843000000002, 90.9),
+						},
+					},
+					{
+						Name:   "test.metric.float",
+						Source: "cpu02",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 900.8),
+							datapoint(1428713843000000001, 30.12),
+							datapoint(1428713843000000002, 72.324),
+						},
 					},
 				},
 				{
-					Name:   "test.metric.float",
-					Source: "cpu02",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(1428713843000000000, 900.8),
-						datapoint(1428713843000000001, 30.12),
-						datapoint(1428713843000000002, 72.324),
+					{
+						Name: "test.metric",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 100),
+						},
 					},
 				},
 			},
-			{
-				{
-					Name: "test.metric",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(-446061360000000000, 100),
-					},
-				},
-			},
-		},
-	}
+		}
 
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
-	<-testSource.stopper.IsStopped()
-	if a, e := testSource.calledCount, 2; a != e {
-		t.Errorf("testSource was called %d times, expected %d", a, e)
-	}
-	tm.assertKeyCount(3)
-	tm.assertModelCorrect()
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+		<-testSource.stopper.IsStopped()
+		if a, e := testSource.calledCount, 2; a != e {
+			t.Errorf("testSource was called %d times, expected %d", a, e)
+		}
+		tm.assertKeyCount(3)
+		tm.assertModelCorrect()
+	})
 }
 
 // TestDisableStorage verifies that disabling timeseries storage via the cluster
 // setting works properly.
 func TestDisableStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModelRunner(t)
-	tm.Start()
-	defer tm.Stop()
-	TimeseriesStorageEnabled.Override(&tm.Cfg.Settings.SV, false)
+	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+		TimeseriesStorageEnabled.Override(&tm.Cfg.Settings.SV, false)
 
-	// Basic storage operation: one data point.
-	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name: "test.metric",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(-446061360000000000, 100),
+		// Basic storage operation: one data point.
+		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+			{
+				Name: "test.metric",
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					datapoint(440000000000000000, 100),
+				},
 			},
-		},
+		})
+		tm.assertKeyCount(0)
+		tm.assertModelCorrect()
+
+		testSource := modelDataSource{
+			model:   tm,
+			r:       Resolution10s,
+			stopper: stop.NewStopper(),
+			datasets: [][]tspb.TimeSeriesData{
+				{
+					{
+						Name:   "test.metric.float",
+						Source: "cpu01",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 100.0),
+							datapoint(1428713843000000001, 50.2),
+							datapoint(1428713843000000002, 90.9),
+						},
+					},
+					{
+						Name:   "test.metric.float",
+						Source: "cpu02",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 900.8),
+							datapoint(1428713843000000001, 30.12),
+							datapoint(1428713843000000002, 72.324),
+						},
+					},
+				},
+				{
+					{
+						Name: "test.metric",
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							datapoint(1428713843000000000, 100),
+						},
+					},
+				},
+			},
+		}
+
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+		select {
+		case <-testSource.stopper.IsStopped():
+			t.Error("testSource data exhausted when polling should have been enabled")
+		case <-time.After(50 * time.Millisecond):
+			testSource.stopper.Stop(context.Background())
+		}
+		if a, e := testSource.calledCount, 0; a != e {
+			t.Errorf("testSource was called %d times, expected %d", a, e)
+		}
+		tm.assertKeyCount(0)
+		tm.assertModelCorrect()
 	})
-	tm.assertKeyCount(0)
-	tm.assertModelCorrect()
-
-	testSource := modelDataSource{
-		model:   tm,
-		r:       Resolution10s,
-		stopper: stop.NewStopper(),
-		datasets: [][]tspb.TimeSeriesData{
-			{
-				{
-					Name:   "test.metric.float",
-					Source: "cpu01",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(1428713843000000000, 100.0),
-						datapoint(1428713843000000001, 50.2),
-						datapoint(1428713843000000002, 90.9),
-					},
-				},
-				{
-					Name:   "test.metric.float",
-					Source: "cpu02",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(1428713843000000000, 900.8),
-						datapoint(1428713843000000001, 30.12),
-						datapoint(1428713843000000002, 72.324),
-					},
-				},
-			},
-			{
-				{
-					Name: "test.metric",
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						datapoint(-446061360000000000, 100),
-					},
-				},
-			},
-		},
-	}
-
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
-	select {
-	case <-testSource.stopper.IsStopped():
-		t.Error("testSource data exhausted when polling should have been enabled")
-	case <-time.After(50 * time.Millisecond):
-		testSource.stopper.Stop(context.Background())
-	}
-	if a, e := testSource.calledCount, 0; a != e {
-		t.Errorf("testSource was called %d times, expected %d", a, e)
-	}
-	tm.assertKeyCount(0)
-	tm.assertModelCorrect()
 }
 
 // TestPruneThreshold verifies that `PruneThreshold` returns correct result in nanoseconds
 func TestPruneThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModelRunner(t)
-	tm.Start()
-	defer tm.Stop()
-	expected := resolution10sDefaultPruneThreshold.Nanoseconds()
-	db := NewDB(nil, tm.Cfg.Settings)
-	result := db.PruneThreshold(Resolution10s)
-	if expected != result {
-		t.Errorf("prune threshold did not match expected value: %d != %d", expected, result)
-	}
+	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+		expected := resolution10sDefaultPruneThreshold.Nanoseconds()
+		db := NewDB(nil, tm.Cfg.Settings)
+		result := db.PruneThreshold(Resolution10s)
+		if expected != result {
+			t.Errorf("prune threshold did not match expected value: %d != %d", expected, result)
+		}
+	})
 }
