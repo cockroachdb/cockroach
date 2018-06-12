@@ -581,13 +581,14 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 Beg
 r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 1 CPut, 1 BeginTxn, 1 EndTxn
 
-statement ok
-CREATE TABLE t.enginestats(k INT PRIMARY KEY, v INT)
-
-query T
-SELECT message FROM [ SHOW TRACE FOR SELECT * FROM t.enginestats ] WHERE message LIKE '%InternalDelete%'
-----
-engine stats: {InternalDeleteSkippedCount:0 TimeBoundNumSSTs:0}
+## TODO(tschottdorf): re-enable
+# statement ok
+# CREATE TABLE t.enginestats(k INT PRIMARY KEY, v INT)
+#
+# query T
+# SELECT message FROM [ SHOW TRACE FOR SELECT * FROM t.enginestats ] WHERE message LIKE '%InternalDelete%'
+# ----
+# engine stats: {InternalDeleteSkippedCount:0 TimeBoundNumSSTs:0}
 
 # Check that we can run set tracing regardless of the current tracing state.
 # This is convenient; sometimes it's unclear, for example, if you previously
