@@ -54,6 +54,7 @@ const (
 	VersionImportFormats
 	VersionSecondaryLookupJoins
 	VersionClientSideWritingFlag
+	VersionColumnarTimeSeries
 
 	// Add new versions here (step one of two).
 
@@ -225,6 +226,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// server. After, it is set only by the client.
 		Key:     VersionClientSideWritingFlag,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 6},
+	},
+	{
+		// VersionColumnarTimeSeries is https://github.com/cockroachdb/cockroach/pull/26614.
+		Key:     VersionColumnarTimeSeries,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).
