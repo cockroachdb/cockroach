@@ -30,16 +30,23 @@ func registerClearRange(r *registry) {
 		// thoroughly brick the cluster.
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Status(`downloading store dumps`)
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
-			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
-			location := storeDirURL(fixtureURL, c.nodes, "2.0")
+			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
+				t.Status(`downloading store dumps`)
+				fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=2`
+				location := storeDirURL(fixtureURL, c.nodes, "2.0-6")
 
-			// Download this store dump, which measures around 2TB (across all nodes).
-			if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
-				t.Fatal(err)
+				// Download this store dump, which measures around 2TB (across all nodes).
+				if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
+					t.Fatal(err)
+				}
+				// TODO(peter): install zfs.
+				c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+			} else {
+				t.Status(`restoring store dumps`)
+				c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
