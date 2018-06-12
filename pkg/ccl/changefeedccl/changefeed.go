@@ -68,13 +68,26 @@ type emitRow struct {
 	resolved hlc.Timestamp
 }
 
-func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job) error {
-	details, err := validateChangefeed(job.Record.Details.(jobs.ChangefeedDetails))
+func runChangefeedFlow(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	details jobs.ChangefeedDetails,
+	progress jobs.ChangefeedProgress,
+	startedCh chan<- tree.Datums,
+	progressedFn func(context.Context, jobs.ProgressedFn) error,
+) error {
+	details, err := validateChangefeed(details)
 	if err != nil {
 		return err
 	}
+
 	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
-		return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
+		// Some benchmarks want to skip the job progress update for a bit more
+		// isolation.
+		if progressedFn == nil {
+			return nil
+		}
+		return progressedFn(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
 			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
 			cfDetails.Highwater = highwater
 			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
@@ -86,13 +99,21 @@ func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jo
 	// easy to later make it into a DistSQL processor.
 	//
 	// TODO(dan): Make this into a DistSQL flow.
-	progress := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed
 	changedKVsFn := exportRequestPoll(execCfg, details, progress)
 	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
-	emitRowsFn, err := emitRows(details, jobProgressedFn, rowsFn)
+	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = closeFn() }()
+
+	// We abuse the job's results channel to make CREATE CHANGEFEED wait for
+	// this before returning to the user to ensure the setup went okay. Job
+	// resumption doesn't have the same hack, but at the moment ignores results
+	// and so is currently okay. Return nil instead of anything meaningful so
+	// that if we start doing anything with the results returned by resumed
+	// jobs, then it breaks instead of returning nonsense.
+	startedCh <- tree.Datums(nil)
 
 	for {
 		if err := emitRowsFn(ctx); err != nil {
@@ -115,7 +136,7 @@ func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jo
 // The fetches are rate limited to be no more often than the
 // `changefeed.experimental_poll_interval` setting.
 func exportRequestPoll(
-	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress *jobs.ChangefeedProgress,
+	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress jobs.ChangefeedProgress,
 ) func(context.Context) (changedKVs, error) {
 	sender := execCfg.DB.GetSender()
 	var spans []roachpb.Span
@@ -260,24 +281,24 @@ func emitRows(
 	details jobs.ChangefeedDetails,
 	jobProgressedFn func(context.Context, hlc.Timestamp) error,
 	inputFn func(context.Context) ([]emitRow, error),
-) (func(context.Context) error, error) {
+) (emitFn func(context.Context) error, closeFn func() error, err error) {
 	var kafkaTopicPrefix string
 	var producer sarama.SyncProducer
 
 	sinkURI, err := url.Parse(details.SinkURI)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	switch sinkURI.Scheme {
 	case sinkSchemeKafka:
 		kafkaTopicPrefix = sinkURI.Query().Get(sinkParamTopicPrefix)
 		producer, err = getKafkaProducer(sinkURI.Host)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		defer func() { _ = producer.Close() }()
+		closeFn = producer.Close
 	default:
-		return nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
+		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
 
 	return func(ctx context.Context) error {
@@ -341,5 +362,5 @@ func emitRows(
 			}
 		}
 		return nil
-	}, nil
+	}, closeFn, nil
 }
