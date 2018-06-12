@@ -59,7 +59,7 @@ func registerCopy(r *registry) {
 			}
 
 			t.Status("create copy of Bank schema")
-			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=1 {pgurl:1}")
+			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
 
 			rangeCount := func() int {
 				var count int
