@@ -179,6 +179,29 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	}
 }
 
+func TestRegistryRunTimeout(t *testing.T) {
+	var buf syncedBuffer
+	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
+
+	r := newRegistry()
+	r.out = &buf
+
+	r.Add(testSpec{
+		Name:    `timeout`,
+		Timeout: 10 * time.Millisecond,
+		Stable:  true,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			<-ctx.Done()
+		},
+	})
+	r.Run([]string{"timeout"})
+
+	out := buf.String()
+	if !timeoutRE.MatchString(out) {
+		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
+	}
+}
+
 func TestRegistryVerifyClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string
@@ -306,6 +329,18 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Run:        dummyRun,
 			},
 			"a: unable to parse min-version: foo",
+			nil,
+		},
+		{
+			testSpec{
+				Name:    "a",
+				Timeout: time.Second,
+				SubTests: []testSpec{{
+					Name: "b",
+					Run:  dummyRun,
+				}},
+			},
+			"a: timeouts only apply to tests specifying Run",
 			nil,
 		},
 	}

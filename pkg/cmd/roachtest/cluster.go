@@ -341,6 +341,7 @@ type nodeSpec struct {
 	MachineType string
 	Zones       string
 	Geo         bool
+	Lifetime    time.Duration
 }
 
 func (s *nodeSpec) args() []string {
@@ -348,13 +349,24 @@ func (s *nodeSpec) args() []string {
 	if s.MachineType != "" {
 		args = append(args, "--gce-machine-type="+s.MachineType)
 	}
-	if s.Geo {
-		args = append(args, "--geo")
-	}
 	if s.Zones != "" {
 		args = append(args, "--gce-zones="+s.Zones)
 	}
+	if s.Geo {
+		args = append(args, "--geo")
+	}
+	if s.Lifetime != 0 {
+		args = append(args, "--lifetime="+s.Lifetime.String())
+	}
 	return args
+}
+
+func (s *nodeSpec) expiration() time.Time {
+	l := s.Lifetime
+	if l == 0 {
+		l = 12 * time.Hour
+	}
+	return timeutil.Now().Add(l)
 }
 
 type createOption interface {
@@ -407,6 +419,12 @@ func zones(s string) nodeZonesOption {
 	return nodeZonesOption(s)
 }
 
+type nodeLifetimeOption time.Duration
+
+func (o nodeLifetimeOption) apply(spec *nodeSpec) {
+	spec.Lifetime = time.Duration(o)
+}
+
 // nodes is a helper method for creating a []nodeSpec given a node count and
 // options.
 func nodes(count int, opts ...createOption) []nodeSpec {
@@ -428,12 +446,13 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // between a test and a subtest is current disallowed (see cluster.assertT). A
 // cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name      string
-	nodes     int
-	status    func(...interface{})
-	t         testI
-	l         *logger
-	destroyed chan struct{}
+	name       string
+	nodes      int
+	status     func(...interface{})
+	t          testI
+	l          *logger
+	destroyed  chan struct{}
+	expiration time.Time
 }
 
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
@@ -463,12 +482,13 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	}
 
 	c := &cluster{
-		name:      makeClusterName(t),
-		nodes:     nodes[0].Count,
-		status:    func(...interface{}) {},
-		t:         t,
-		l:         l,
-		destroyed: make(chan struct{}),
+		name:       makeClusterName(t),
+		nodes:      nodes[0].Count,
+		status:     func(...interface{}) {},
+		t:          t,
+		l:          l,
+		destroyed:  make(chan struct{}),
+		expiration: nodes[0].expiration(),
 	}
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
@@ -550,11 +570,12 @@ func (c *cluster) clone(t *test) *cluster {
 		t.Fatal(err)
 	}
 	return &cluster{
-		name:   c.name,
-		nodes:  c.nodes,
-		status: t.Status,
-		t:      t,
-		l:      l,
+		name:       c.name,
+		nodes:      c.nodes,
+		status:     t.Status,
+		t:          t,
+		l:          l,
+		expiration: c.expiration,
 	}
 }
 
