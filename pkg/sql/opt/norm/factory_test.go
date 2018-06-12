@@ -49,7 +49,7 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	scan2 := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a2, Cols: a2Cols}))
 
 	// Construct Projections with two passthrough columns.
-	pb.addPassthroughCols(f.outputCols(scan))
+	pb.addPassthroughCols(f.funcs.OutputCols(scan))
 	passthroughProj := pb.buildProjections()
 
 	// Construct Projections with one passthrough and two synthesized columns.
@@ -97,16 +97,16 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		combined := f.projectColsFromBoth(tc.left, tc.right)
+		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
 		f.checkExpr(memo.MakeNormExprView(f.mem, combined))
-		actual := f.outputCols(combined).String()
+		actual := f.funcs.OutputCols(combined).String()
 		if actual != tc.expected {
 			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
 		}
 
-		def := f.extractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
+		def := f.funcs.ExtractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
 		expectedCount := def.PassthroughCols.Len() + len(def.SynthesizedCols)
-		actualCount := f.outputCols(combined).Len()
+		actualCount := f.funcs.OutputCols(combined).Len()
 		if actualCount != expectedCount {
 			t.Errorf("expected column count: %d, actual column count: %d", expectedCount, actualCount)
 		}

@@ -106,7 +106,7 @@ func (b *projectionsBuilder) addSynthesized(elem memo.GroupID, colID opt.ColumnI
 // addSynthesized for each synthesized column in projections.
 func (b *projectionsBuilder) addProjections(projections memo.GroupID) {
 	projectionsExpr := b.f.mem.NormExpr(projections).AsProjections()
-	def := b.f.extractProjectionsOpDef(projectionsExpr.Def())
+	def := b.f.funcs.ExtractProjectionsOpDef(projectionsExpr.Def())
 	b.ensureSlices()
 	b.addPassthroughCols(def.PassthroughCols)
 
