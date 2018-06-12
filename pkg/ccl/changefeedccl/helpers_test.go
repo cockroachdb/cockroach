@@ -42,7 +42,7 @@ func createBenchmarkChangefeed(
 	s serverutils.TestServerInterface,
 	feedClock *hlc.Clock,
 	database, table string,
-	sinkURI string,
+	resultsCh chan<- tree.Datums,
 ) func() error {
 	execCfg := &sql.ExecutorConfig{
 		DB:           s.DB(),
@@ -54,10 +54,8 @@ func createBenchmarkChangefeed(
 		TableDescs: []sqlbase.TableDescriptor{
 			*sqlbase.GetTableDescriptor(execCfg.DB, database, table),
 		},
-		SinkURI: sinkURI,
 	}
 	progress := jobspb.ChangefeedProgress{}
-	startedCh := make(chan tree.Datums, 1)
 
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
@@ -65,7 +63,7 @@ func createBenchmarkChangefeed(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, startedCh, nil)
+		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, resultsCh, nil)
 	}()
 	return func() error {
 		select {

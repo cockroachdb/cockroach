@@ -57,9 +57,31 @@ func changefeedPlanHook(
 		return nil, nil, nil, nil
 	}
 
-	sinkURIFn, err := p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
-	if err != nil {
-		return nil, nil, nil, err
+	var sinkURIFn func() (string, error)
+	var header sqlbase.ResultColumns
+	if changefeedStmt.SinkURI == nil {
+		// An unspecified sink triggers a fairly radical change in behavior.
+		// Instead of setting up a system.job to emit to a sink in the
+		// background and returning immediately with the job ID, the `CREATE
+		// CHANGEFEED` blocks forever and returns all changes as rows directly
+		// over pgwire. The types of these rows are `(topic STRING, key BYTES,
+		// value BYTES)` and they correspond exactly to what would be emitted to
+		// a sink.
+		sinkURIFn = func() (string, error) { return ``, nil }
+		header = sqlbase.ResultColumns{
+			{Name: "table", Typ: types.String},
+			{Name: "key", Typ: types.Bytes},
+			{Name: "value", Typ: types.Bytes},
+		}
+	} else {
+		var err error
+		sinkURIFn, err = p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		header = sqlbase.ResultColumns{
+			{Name: "job_id", Typ: types.Int},
+		}
 	}
 
 	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedOptionExpectValues)
@@ -67,9 +89,6 @@ func changefeedPlanHook(
 		return nil, nil, nil, err
 	}
 
-	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: types.Int},
-	}
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -77,6 +96,9 @@ func changefeedPlanHook(
 		sinkURI, err := sinkURIFn()
 		if err != nil {
 			return err
+		}
+		if changefeedStmt.SinkURI != nil && sinkURI == `` {
+			return errors.New(`omit the SINK clause for inline results`)
 		}
 
 		opts, err := optsFn()
@@ -118,6 +140,15 @@ func changefeedPlanHook(
 			Opts:       opts,
 			SinkURI:    sinkURI,
 		}
+		progress := jobspb.ChangefeedProgress{
+			Highwater: highwater,
+		}
+
+		if details.SinkURI == `` {
+			return runChangefeedFlow(
+				ctx, p.ExecCfg(), details, progress, resultsCh, nil, /* progressedFn */
+			)
+		}
 
 		// Make a channel for runChangefeedFlow to signal once everything has
 		// been setup okay. This intentionally abuses what would normally be
@@ -132,10 +163,8 @@ func changefeedPlanHook(
 				}
 				return sqlDescIDs
 			}(),
-			Details: details,
-			Progress: jobspb.ChangefeedProgress{
-				Highwater: highwater,
-			},
+			Details:  details,
+			Progress: progress,
 		})
 		if err != nil {
 			return err
