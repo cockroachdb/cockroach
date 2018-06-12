@@ -876,6 +876,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
+%type <tree.Expr> opt_changefeed_sink
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -1917,13 +1918,23 @@ create_stats_stmt:
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 create_changefeed_stmt:
-  CREATE CHANGEFEED FOR targets INTO string_or_placeholder opt_with_options
+  CREATE CHANGEFEED FOR targets opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       Targets: $4.targetList(),
-      SinkURI: $6.expr(),
-      Options: $7.kvOptions(),
+      SinkURI: $5.expr(),
+      Options: $6.kvOptions(),
     }
+  }
+
+opt_changefeed_sink:
+  INTO string_or_placeholder
+  {
+    $$.val = $2.expr()
+  }
+| /* EMPTY */
+  {
+    $$.val = nil
   }
 
 // %Help: DELETE - delete rows from a table
