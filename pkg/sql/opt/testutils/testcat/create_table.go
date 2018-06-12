@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 type indexType int
@@ -43,12 +44,23 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(tn)
 
-	// Add the columns and primary index (if there is one defined).
 	tab := &Table{Name: *tn}
+	// Add the columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
 			tab.addColumn(def)
+		}
+	}
+
+	// Add the primary index (if there is one defined).
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			if def.PrimaryKey {
+				// Add the primary index over the single column.
+				tab.addPrimaryColumnIndex(string(def.Name))
+			}
 
 		case *tree.UniqueConstraintTableDef:
 			if def.PrimaryKey {
@@ -61,7 +73,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if len(tab.Indexes) == 0 {
 		rowid := &Column{Name: "rowid", Type: types.Int, Hidden: true}
 		tab.Columns = append(tab.Columns, rowid)
-		tab.addPrimaryColumnIndex(rowid)
+		tab.addPrimaryColumnIndex(rowid.Name)
 	}
 
 	// Search for other relevant definitions.
@@ -118,11 +130,6 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	typ := coltypes.CastTargetToDatumType(def.Type)
 	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
 	tt.Columns = append(tt.Columns, col)
-
-	if def.PrimaryKey {
-		// Add the primary index over the single column.
-		tt.addPrimaryColumnIndex(col)
-	}
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
@@ -137,26 +144,43 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		}
 	}
 
-	if typ != primaryIndex {
-		// Add implicit key columns from primary index.
-		for _, idxCol := range tt.Indexes[opt.PrimaryIndex].Columns {
-			// Only add columns that aren't already part of index.
-			found := false
-			for _, colDef := range def.Columns {
-				if idxCol.Column.ColName() == opt.ColumnName(colDef.Column) {
-					found = true
-				}
+	if typ == primaryIndex {
+		var pkOrdinals util.FastIntSet
+		for _, c := range idx.Columns {
+			pkOrdinals.Add(c.Ordinal)
+		}
+		// Add the rest of the columns in the table.
+		for i := range tt.Columns {
+			if !pkOrdinals.Contains(i) {
+				idx.addColumnByOrdinal(tt, i, tree.Ascending, false /* makeUnique */)
 			}
+		}
+		if len(tt.Indexes) != 0 {
+			panic("primary index should always be 0th index")
+		}
+		tt.Indexes = append(tt.Indexes, idx)
+		return
+	}
 
-			if !found {
-				// Implicit column is only part of the index's set of unique columns
-				// if the index *was not* declared as unique in the first place. The
-				// implicit columns are added to make the index unique (as well as
-				// to "cover" the primary index for lookups).
-				name := string(idxCol.Column.ColName())
-				makeUnique := typ != uniqueIndex
-				idx.addColumn(tt, name, tree.Ascending, makeUnique)
+	// Add implicit key columns from primary index.
+	pkCols := tt.Indexes[opt.PrimaryIndex].Columns[:tt.Indexes[opt.PrimaryIndex].Unique]
+	for _, pkCol := range pkCols {
+		// Only add columns that aren't already part of index.
+		found := false
+		for _, colDef := range def.Columns {
+			if pkCol.Column.ColName() == opt.ColumnName(colDef.Column) {
+				found = true
 			}
+		}
+
+		if !found {
+			// Implicit column is only part of the index's set of unique columns
+			// if the index *was not* declared as unique in the first place. The
+			// implicit columns are added to make the index unique (as well as
+			// to "cover" the primary index for lookups).
+			name := string(pkCol.Column.ColName())
+			makeUnique := typ != uniqueIndex
+			idx.addColumn(tt, name, tree.Ascending, makeUnique)
 		}
 	}
 
@@ -165,22 +189,16 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// Only add storing columns that weren't added as part of adding implicit
 		// key columns.
 		found := false
-		for _, idxCol := range tt.Indexes[opt.PrimaryIndex].Columns {
-			if opt.ColumnName(name) == idxCol.Column.ColName() {
+		for _, pkCol := range pkCols {
+			if opt.ColumnName(name) == pkCol.Column.ColName() {
 				found = true
 			}
 		}
-
 		if !found {
-			idx.addColumn(tt, string(name), tree.Ascending, false)
+			idx.addColumn(tt, string(name), tree.Ascending, false /* makeUnique */)
 		}
 	}
 
-	if typ == primaryIndex {
-		if len(tt.Indexes) != 0 {
-			panic("primary index should always be 0th index")
-		}
-	}
 	tt.Indexes = append(tt.Indexes, idx)
 }
 
@@ -199,7 +217,12 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 func (ti *Index) addColumn(
 	tt *Table, name string, direction tree.Direction, makeUnique bool,
 ) *Column {
-	ord := tt.FindOrdinal(name)
+	return ti.addColumnByOrdinal(tt, tt.FindOrdinal(name), direction, makeUnique)
+}
+
+func (ti *Index) addColumnByOrdinal(
+	tt *Table, ord int, direction tree.Direction, makeUnique bool,
+) *Column {
 	col := tt.Column(ord)
 	idxCol := opt.IndexColumn{
 		Column:     col,
@@ -215,17 +238,9 @@ func (ti *Index) addColumn(
 	return col.(*Column)
 }
 
-func (tt *Table) addPrimaryColumnIndex(col *Column) {
-	idxCol := opt.IndexColumn{
-		Column:  col,
-		Ordinal: tt.FindOrdinal(col.Name),
+func (tt *Table) addPrimaryColumnIndex(colName string) {
+	def := tree.IndexTableDef{
+		Columns: tree.IndexElemList{{Column: tree.Name(colName), Direction: tree.Ascending}},
 	}
-	tt.Indexes = append(
-		tt.Indexes,
-		&Index{
-			Name:    "primary",
-			Columns: []opt.IndexColumn{idxCol},
-			Unique:  1,
-		},
-	)
+	tt.addIndex(&def, primaryIndex)
 }
