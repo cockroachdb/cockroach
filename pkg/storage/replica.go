@@ -3396,7 +3396,9 @@ func (r *Replica) quiesce() bool {
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
 	if len(r.mu.proposals) != 0 {
-		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+		if log.V(3) {
+			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+		}
 		return false
 	}
 	if !r.mu.quiescent {
