@@ -29,3 +29,6 @@ std::string RandomBytes(size_t length);
 // Create a new AES cipher using the passed-in key.
 // Suitable for encryption only, Decrypt is not implemented.
 rocksdb_utils::BlockCipher* NewAESEncryptCipher(const enginepbccl::SecretKey* key);
+
+// Returns true if CryptoPP is using AES-NI.
+bool UsesAESNI();

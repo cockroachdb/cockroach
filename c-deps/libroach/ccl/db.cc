@@ -22,6 +22,7 @@
 #include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
+#include "crypto_utils.h"
 #include "ctr_stream.h"
 #include "key_manager.h"
 
@@ -76,6 +77,16 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();
+  }
+
+  // We have encryption options. Check whether the AES instruction set is supported.
+  if (!UsesAESNI()) {
+    // Shout loudly on standard out.
+    std::cout << std::endl
+              << "*** WARNING ***" << std::endl
+              << "Encryption requested, but no AES instruction set detected" << std::endl
+              << "Expect significant performance degradation!" << std::endl
+              << std::endl;
   }
 
   // The Go code sets the "file_registry" storage version if we specified encryption flags,

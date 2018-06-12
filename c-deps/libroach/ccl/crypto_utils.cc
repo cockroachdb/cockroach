@@ -59,3 +59,5 @@ class AESEncryptCipher : public rocksdb_utils::BlockCipher {
 rocksdb_utils::BlockCipher* NewAESEncryptCipher(const enginepbccl::SecretKey* key) {
   return new AESEncryptCipher(key->key());
 }
+
+bool UsesAESNI() { return CryptoPP::UsesAESNI(); }
