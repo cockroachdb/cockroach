@@ -1109,10 +1109,10 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify that the job lease was updated
-	rescheduledLease := jobutils.GetJobProgress(t, sqlDB, jobID)
-	if rescheduledLease.ModifiedMicros <= originalLease.ModifiedMicros {
+	rescheduledProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
+	if rescheduledProgress.ModifiedMicros <= originalLease.ModifiedMicros {
 		t.Fatalf("expecting rescheduled job to have a later modification time: %d vs %d",
-			rescheduledLease.ModifiedMicros, originalLease.ModifiedMicros)
+			rescheduledProgress.ModifiedMicros, originalLease.ModifiedMicros)
 	}
 
 	// Verify that all expected rows are present after a stop/start cycle.
@@ -1122,20 +1122,20 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}
 
-	/* TODO(dt): uncomment when import progress migrates to progress.
+	rescheduled := jobutils.GetJobPayload(t, sqlDB, jobID).Details.(*jobs.Payload_Import).Import
+
 	// Verify that all write progress coalesced into a single span
 	// encompassing the entire table.
-	spans := rescheduledLease.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress
+	spans := rescheduledProgress.Details.(*jobs.Progress_Import).Import.SpanProgress
 	if len(spans) != 1 {
 		t.Fatalf("expecting only a single progress span, had %d\n%s", len(spans), spans)
 	}
 
 	// Ensure that an entire table range is marked as complete
-	tableSpan := rescheduledLease.Details.(*jobs.Payload_Import).Import.Tables[0].Desc.TableSpan()
+	tableSpan := rescheduled.Tables[0].Desc.TableSpan()
 	if !tableSpan.EqualValue(spans[0]) {
 		t.Fatalf("expected entire table to be marked complete, had %s", spans[0])
 	}
-	*/
 }
 
 // TestImportLivenessWithLeniency tests that a temporary node liveness
@@ -1288,30 +1288,83 @@ func TestImportMysql(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	testRows, dest := getMysqldumpTestdata(t)
+	simpleTestRows, simpleFile := getSimpleMysqlDumpTestdata(t)
+	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(simpleFile, baseDir))}
+	secondTableRowCount, secondFile := getSecondMysqlDumpTestdata(t)
+	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(secondFile, baseDir))}
+	multitableFile := getMultiTableMysqlDumpTestdata(t)
+	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(multitableFile, baseDir))}
 
-	cmd := `IMPORT TABLE test_dump (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`
-	sqlDB.Exec(t, cmd, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(dest, baseDir)))
-	for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM test_dump ORDER BY i") {
-		{
-			expected, actual := testRows[idx].s, row[1]
-			if expected == injectNull {
-				expected = "NULL"
-			}
-			if expected != actual {
-				t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
-			}
-		}
+	const expectAll, expectSimple, expectSecond = 1, 2, 3
 
-		{
-			expected, actual := testRows[idx].b, row[2]
-			if expected == nil {
-				expected = []byte("NULL")
+	for _, c := range []struct {
+		name     string
+		expected int
+		query    string
+		args     []interface{}
+	}{
+		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
+		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, simple},
+		{`single table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, second},
+		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
+		{`second from multi`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, multitable},
+		{`all from multi`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitable},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
+			sqlDB.Exec(t, c.query, c.args...)
+
+			if c.expected == expectSimple || c.expected == expectAll {
+				for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM simple ORDER BY i") {
+					{
+						expected, actual := simpleTestRows[idx].s, row[1]
+						if expected == injectNull {
+							expected = "NULL"
+						}
+						if expected != actual {
+							t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
+						}
+					}
+
+					{
+						expected, actual := simpleTestRows[idx].b, row[2]
+						if expected == nil {
+							expected = []byte("NULL")
+						}
+						if !bytes.Equal(expected, []byte(actual)) {
+							t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+						}
+					}
+				}
 			}
-			if !bytes.Equal(expected, []byte(actual)) {
-				t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+
+			if c.expected == expectSecond || c.expected == expectAll {
+				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
+				if expected, actual := secondTableRowCount, len(res); expected != actual {
+					t.Fatalf("expected %d, got %d", expected, actual)
+				}
+				for _, row := range res {
+					if i, s := row[0], row[1]; i != s {
+						t.Fatalf("expected %s = %s", i, s)
+					}
+				}
 			}
-		}
+
+			if c.expected == expectSecond {
+				_, err := sqlDB.DB.Exec(`SELECT 1 FROM simple LIMIT 1`)
+				expected := "does not exist"
+				if !testutils.IsError(err, expected) {
+					t.Fatalf("expected %s, got %v", expected, err)
+				}
+			}
+			if c.expected == expectSimple {
+				_, err := sqlDB.DB.Exec(`SELECT 1 FROM second LIMIT 1`)
+				expected := "does not exist"
+				if !testutils.IsError(err, expected) {
+					t.Fatalf("expected %s, got %v", expected, err)
+				}
+			}
+		})
 	}
 }
 
