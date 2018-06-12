@@ -1270,9 +1270,10 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 
 	rnd, _ := randutil.NewPseudoRand()
 
-	// Create sstables in L6 that are half the L6 target size. Any smaller and
-	// RocksDB might choose to compact them.
-	const targetSize = 64 << 20
+	// Create sstables in L6 that are the L6 target size (due to dynamic level
+	// bytes, this is 100MiB). Any smaller and RocksDB might choose to compact
+	// them.
+	const targetSize = 100 << 20
 	const numEntries = 10000
 	const keySize = 10
 	const valueSize = (targetSize / numEntries) - keySize
@@ -1358,8 +1359,8 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	if err := batch.Put(MakeMVCCMetadataKey(makeKey("a", 0)), []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
-	if err := batch.ClearRange(MakeMVCCMetadataKey(makeKey("c", 0)),
-		MakeMVCCMetadataKey(makeKey("c", numEntries))); err != nil {
+	if err := batch.ClearRange(MakeMVCCMetadataKey(makeKey("a", numEntries)),
+		MakeMVCCMetadataKey(makeKey("c", 0))); err != nil {
 		t.Fatal(err)
 	}
 	if err := batch.Commit(true); err != nil {
@@ -1370,10 +1371,10 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// After flushing, there is a single additional L0 table that covers the
-	// entire key range.
+	// After flushing, there is a single additional L0 table that covers multiple
+	// L6 sstables.
 	verifySSTables(`
-0: "a000000000" - "c000010000"
+0: "a000000000" - "b000009999\x00"
 6: "a000000000" - "a000009999"
 6: "b000000000" - "b000009999"
 6: "c000000000" - "c000009999"
@@ -1383,11 +1384,11 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	// sstable being deleted. Prior to the hack in dbClearRange, all of the
 	// sstables would be compacted resulting in 2 L6 sstables with different
 	// boundaries than the ones below.
-	_ = db.CompactRange(makeKey("c", 0), makeKey("c", numEntries), false)
+	_ = db.CompactRange(makeKey("b", 0), makeKey("c", 0), false)
 	verifySSTables(`
 5: "a000000000" - "a000000000"
 6: "a000000000" - "a000009999"
-6: "b000000000" - "b000009999"
+6: "c000000000" - "c000009999"
 `)
 }
 

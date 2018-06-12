@@ -479,10 +479,153 @@ DBStatus DBBatch::Delete(DBKey key) {
   return kSuccess;
 }
 
+namespace {
+
+std::string findStart(rocksdb::Iterator* iter, rocksdb::Slice start, rocksdb::Slice end) {
+  iter->Seek(start);
+  if (iter->Valid() && kComparator.Compare(iter->key(), end) < 0) {
+    return iter->key().ToString();
+  }
+  return end.ToString();
+}
+
+std::string findEnd(rocksdb::Iterator* iter, rocksdb::Slice start, rocksdb::Slice end) {
+  iter->SeekForPrev(end);
+  while (iter->Valid()) {
+    if (kComparator.Compare(iter->key(), end) == 0) {
+      iter->Prev();
+      continue;
+    }
+    if (kComparator.Compare(iter->key(), start) >= 0) {
+      return iter->key().ToString();
+    }
+  }
+  return start.ToString();
+}
+
+class BatchBounds : public rocksdb::WriteBatch::Handler {
+ public:
+  BatchBounds(const std::string& start, const std::string& end)
+      : start_(start),
+        end_(end),
+        count_(0) {
+  }
+
+  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    Update(key);
+  }
+  virtual void Delete(const rocksdb::Slice& key) {
+  }
+  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    Update(key);
+  }
+  virtual rocksdb::Status DeleteRangeCF(uint32_t column_family_id, const rocksdb::Slice& begin_key,
+                                        const rocksdb::Slice& end_key) {
+    // Ignore.
+    return rocksdb::Status::OK();
+  }
+  virtual void LogData(const rocksdb::Slice& blob) { }
+
+  void Update(const rocksdb::Slice& key) {
+    if (kComparator.Compare(key, start_) < 0) {
+      return;
+    }
+    if (kComparator.Compare(key, end_) >= 0) {
+      return;
+    }
+
+    ++count_;
+    if (count_ == 1) {
+      min_ = key.ToString();
+      max_ = key.ToString();
+    } else if (kComparator.Compare(min_, key) > 0) {
+      min_ = key.ToString();
+    } else if (kComparator.Compare(max_, key) < 0) {
+      max_ = key.ToString();
+    }
+  }
+
+  int count() const { return count_; }
+  const std::string& min() const { return min_; }
+  const std::string& max() const { return max_; }
+
+ private:
+  const std::string start_;
+  const std::string end_;
+  int count_;
+  std::string min_;
+  std::string max_;
+};
+
+} // namespace
+
 DBStatus DBBatch::DeleteRange(DBKey start, DBKey end) {
-  ++updates;
+  // This is a serious hack. RocksDB generates sstables which cover an
+  // excessively large amount of the key space when range tombstones are
+  // present. The crux of the problem is that the logic for determining
+  // sstable boundaries depends on actual keys being present. So we help that
+  // logic along by adding deletions of the first key and last key covered by
+  // the range being deleted.
+  //
+  // There are two additional complications here. The first is that RocksDB
+  // will drop key deletion tombstones if it determines the deleted key is not
+  // present in a lower level sstable. This defeats the hack if we weren't
+  // careful to find the actual first key present in the range being
+  // deleted. The second problem is that RocksDB extends the end key for
+  // sstables to include the end key of range tombstones. But the range
+  // tombstone end key is exclusive while the sstable end key (largest key) is
+  // inclusive. This in turn causes RocksDB to include more tables than
+  // desired in a compaction.
+  //
+  // See TestRocksDBDeleteRangeCompaction which verifies that either this hack
+  // is working, or the upstream problem was fixed in RocksDB.
+
+  const std::string start_key = EncodeKey(start);
+  const std::string end_key = EncodeKey(end);
+  const rocksdb::Slice end_slice = end_key;
+
+  rocksdb::ReadOptions read_opts;
+  read_opts.prefix_same_as_start = false;
+  read_opts.total_order_seek = true;
+  read_opts.iterate_upper_bound = &end_slice;
+  std::unique_ptr<rocksdb::Iterator> iter(rep->NewIterator(read_opts));
+
+  auto real_start = findStart(iter.get(), start_key, end_key);
+  auto real_end = findEnd(iter.get(), start_key, end_key);
+
+  BatchBounds bounds(start_key, end_key);
+  rocksdb::Status status = batch.GetWriteBatch()->Iterate(&bounds);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  if (bounds.count() > 0) {
+    if (kComparator.Compare(real_start, bounds.min()) > 0) {
+      real_start = bounds.min();
+    }
+    if (kComparator.Compare(real_end, bounds.max()) < 0) {
+      real_end = bounds.max();
+    }
+  }
+
+  if (kComparator.Compare(real_start, real_end) >= 0) {
+    fprintf(stderr, "DeleteRange no-op: %s - %s -> %s - %s\n",
+            rocksdb::Slice(start_key).ToString().c_str(),
+            rocksdb::Slice(end_key).ToString().c_str(),
+            rocksdb::Slice(real_start).ToString().c_str(),
+            rocksdb::Slice(real_end).ToString().c_str());
+    return kSuccess;
+  }
+
+  auto real_end_key = ToDBKey(real_end);
+  std::string range_end = ToSlice(real_end_key.key).ToString();
+  range_end.append("\0", 1);
+  real_end_key.key = ToDBSlice(range_end);
+
+  updates += 3;
   has_delete_range = true;
-  batch.DeleteRange(EncodeKey(start), EncodeKey(end));
+  batch.DeleteRange(real_start, EncodeKey(real_end_key));
+  batch.Delete(real_start);
+  batch.Delete(real_end);
   return kSuccess;
 }
 
