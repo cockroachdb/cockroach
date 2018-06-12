@@ -109,6 +109,12 @@ func newTableReader(
 		tr.spans[i] = s.Span
 	}
 	tr.input = &rowFetcherWrapper{RowFetcher: &tr.fetcher}
+
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		tr.input = NewInputStatCollector(tr.input)
+		tr.finishTrace = tr.outputStatsToTrace
+	}
+
 	return tr, nil
 }
 
@@ -205,11 +211,6 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 func (tr *tableReader) Start(ctx context.Context) context.Context {
 	if tr.flowCtx.txn == nil {
 		log.Fatalf(ctx, "tableReader outside of txn")
-	}
-
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		tr.input = NewInputStatCollector(tr.input)
-		tr.finishTrace = tr.outputStatsToTrace
 	}
 
 	// Like every processor, the tableReader will have a context with a log tag
