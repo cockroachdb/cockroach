@@ -92,6 +92,7 @@ set(tests
   encoding_test.cc
   file_registry_test.cc
   merge_test.cc
+  ccl/crypto_utils_test.cc
   ccl/db_test.cc
   ccl/encrypted_env_test.cc
   ccl/key_manager_test.cc
