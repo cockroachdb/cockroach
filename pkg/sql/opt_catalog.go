@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // optCatalog implements the opt.Catalog interface over the SchemaResolver
@@ -202,8 +203,12 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) int {
 // optIndex is a wrapper around sqlbase.IndexDescriptor that caches some
 // commonly accessed information and keeps a reference to the table wrapper.
 type optIndex struct {
-	tab           *optTable
-	desc          *sqlbase.IndexDescriptor
+	tab  *optTable
+	desc *sqlbase.IndexDescriptor
+	// storedCols is the set of non-PK columns if this is the primary index,
+	// otherwise it is desc.StoreColumnIDs.
+	storedCols []sqlbase.ColumnID
+
 	numCols       int
 	numUniqueCols int
 }
@@ -220,7 +225,23 @@ func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	oi.tab = tab
 	oi.desc = desc
-	oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
+	if desc == &tab.desc.PrimaryIndex {
+		oi.storedCols = make([]sqlbase.ColumnID, 0, len(tab.desc.Columns)-len(desc.ColumnIDs))
+		var pkCols util.FastIntSet
+		for i := range desc.ColumnIDs {
+			pkCols.Add(int(desc.ColumnIDs[i]))
+		}
+		for i := range tab.desc.Columns {
+			id := tab.desc.Columns[i].ID
+			if !pkCols.Contains(int(id)) {
+				oi.storedCols = append(oi.storedCols, id)
+			}
+		}
+		oi.numCols = len(tab.desc.Columns)
+	} else {
+		oi.storedCols = desc.StoreColumnIDs
+		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
+	}
 
 	// If index is not unique, extra key columns are added.
 	oi.numUniqueCols = len(desc.ColumnIDs)
@@ -264,7 +285,7 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	}
 
 	i -= length
-	ord := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
+	ord := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 

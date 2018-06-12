@@ -109,6 +109,9 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering
 	// TODO(andyk): Use UniqueColumnCount when issues with nulls are solved,
 	//              since unique index can still have duplicate nulls.
 	cnt := index.ColumnCount()
+	if s.Index == opt.PrimaryIndex {
+		cnt = index.UniqueColumnCount()
+	}
 	if len(required) < cnt {
 		cnt = len(required)
 	}

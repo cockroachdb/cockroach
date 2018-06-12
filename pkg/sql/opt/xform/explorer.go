@@ -227,7 +227,11 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 	md := e.mem.Metadata()
 	tab := md.Table(scanOpDef.Table)
 
-	pkCols := md.IndexColumnsList(scanOpDef.Table, opt.PrimaryIndex)
+	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
+	pkCols := make(opt.ColList, primaryIndex.UniqueColumnCount())
+	for i := range pkCols {
+		pkCols[i] = md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)
+	}
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
