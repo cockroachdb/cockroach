@@ -97,7 +97,7 @@ CTRCipherStream::InitCipher(std::unique_ptr<rocksdb_utils::BlockCipher>* cipher)
         fmt::StringPrintf("unknown encryption type %d", key_->info().encryption_type()));
   }
 
-  cipher->reset(new AESEncryptCipher(key_->key()));
+  cipher->reset(NewAESEncryptCipher(key_.get()));
   return rocksdb::Status::OK();
 }
 
