@@ -119,14 +119,14 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1,2)]
       └── eq [type=bool, outer=(1,2)]
-           ├── subquery [type=tuple{int, int}, outer=(1,2)]
+           ├── subquery [type=tuple{int AS x, int AS u}, outer=(1,2)]
            │    └── max1-row
-           │         ├── columns: column13:13(tuple{int, int})
+           │         ├── columns: column13:13(tuple{int AS x, int AS u})
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
            │         └── project
-           │              ├── columns: column13:13(tuple{int, int})
+           │              ├── columns: column13:13(tuple{int AS x, int AS u})
            │              ├── outer: (1,2)
            │              ├── stats: [rows=1400]
            │              ├── union

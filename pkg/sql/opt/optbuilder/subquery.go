@@ -127,9 +127,13 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 	if len(s.cols) == 1 {
 		s.typ = s.cols[0].typ
 	} else {
-		t := types.TTuple{Types: make([]types.T, len(s.cols))}
+		t := types.TTuple{
+			Types:  make([]types.T, len(s.cols)),
+			Labels: make([]string, len(s.cols)),
+		}
 		for i := range s.cols {
 			t.Types[i] = s.cols[i].typ
+			t.Labels[i] = string(s.cols[i].name)
 		}
 		s.typ = t
 	}
@@ -182,14 +186,20 @@ func (b *Builder) buildSubqueryProjection(
 		// Wrap the subquery in a projection with a single column.
 		// col1, col2... from the subquery becomes tuple{col1, col2...} in the
 		// projection.
-		cols := make(tree.TypedExprs, len(s.cols))
+		cols := make(tree.Exprs, len(s.cols))
 		colGroups := make([]memo.GroupID, len(s.cols))
+		typ := types.TTuple{
+			Types:  make([]types.T, len(s.cols)),
+			Labels: make([]string, len(s.cols)),
+		}
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
+			typ.Labels[i] = string(s.cols[i].name)
+			typ.Types[i] = s.cols[i].ResolvedType()
 			colGroups[i] = b.factory.ConstructVariable(b.factory.InternColumnID(s.cols[i].id))
 		}
 
-		texpr := tree.NewTypedTuple(cols)
+		texpr := tree.NewTypedTuple(typ, cols)
 		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups))
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})

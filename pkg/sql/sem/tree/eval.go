@@ -3483,7 +3483,7 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 }
 
 // evalArgs evaluates just the function application's arguments.
-// A 1st result bool true indicates NULL should be propagated.
+// The returned bool indicates that the NULL should be propagated.
 func (expr *FuncExpr) evalArgs(ctx *EvalContext) (bool, Datums, error) {
 	args := make(Datums, len(expr.Exprs))
 	for i, e := range expr.Exprs {
@@ -3726,13 +3726,13 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
-	tuple := NewDTupleWithCap(len(t.Exprs))
-	for _, v := range t.Exprs {
+	tuple := NewDTupleWithLen(t.typ, len(t.Exprs))
+	for i, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		tuple.D = append(tuple.D, d)
+		tuple.D[i] = d
 	}
 	return tuple, nil
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // splitOrExpr flattens a tree of OR expressions returning all of the child
@@ -708,7 +709,7 @@ func simplifyOneAndInExpr(
 				return tree.NewTypedComparisonExpr(
 					tree.In,
 					left.TypedLeft(),
-					tree.NewDTuple(values...).SetSorted(),
+					tree.NewDTuple(types.TTuple{}, values...).SetSorted(),
 				), nil
 
 			case tree.GT:
@@ -722,7 +723,7 @@ func simplifyOneAndInExpr(
 						return tree.NewTypedComparisonExpr(
 							tree.In,
 							left.TypedLeft(),
-							tree.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(types.TTuple{}, values...).SetSorted(),
 						), nil
 					}
 				}
@@ -735,7 +736,7 @@ func simplifyOneAndInExpr(
 						return tree.NewTypedComparisonExpr(
 							tree.In,
 							left.TypedLeft(),
-							tree.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(types.TTuple{}, values...).SetSorted(),
 						), nil
 					}
 				}
@@ -750,7 +751,7 @@ func simplifyOneAndInExpr(
 					return tree.NewTypedComparisonExpr(
 						tree.In,
 						left.TypedLeft(),
-						tree.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(types.TTuple{}, values...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -767,7 +768,7 @@ func simplifyOneAndInExpr(
 					return tree.NewTypedComparisonExpr(
 						tree.In,
 						left.TypedLeft(),
-						tree.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(types.TTuple{}, values...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -783,7 +784,7 @@ func simplifyOneAndInExpr(
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(intersection...).SetSorted(),
+				tree.NewDTuple(types.TTuple{}, intersection...).SetSorted(),
 			), nil
 		}
 	}
@@ -947,7 +948,7 @@ func simplifyOneOrExpr(
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				lcmpLeft,
-				tree.NewDTuple(ldatum, rdatum).SetSorted(),
+				tree.NewDTuple(types.TTuple{}, ldatum, rdatum).SetSorted(),
 			), nil, true
 		case tree.NE:
 			// a = x OR a != y
@@ -1284,7 +1285,7 @@ func simplifyOneOrInExpr(
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(types.TTuple{}, merged...).SetSorted(),
 			), nil
 
 		case tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
@@ -1346,7 +1347,7 @@ func simplifyOneOrInExpr(
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(types.TTuple{}, merged...).SetSorted(),
 			), nil
 		}
 	}
@@ -1388,7 +1389,7 @@ func simplifyComparisonExpr(
 				return tree.NewTypedComparisonExpr(
 					tree.In,
 					left,
-					tree.NewDTuple(right.(tree.Datum)).SetSorted(),
+					tree.NewDTuple(types.TTuple{}, right.(tree.Datum)).SetSorted(),
 				), true
 			}
 			return n, true
