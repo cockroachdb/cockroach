@@ -15,9 +15,12 @@
 package xfunc
 
 import (
+	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -106,9 +109,7 @@ func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
 // The (Eq) expression is fully bound by the (Scan a) expression because all of
 // its outer references are satisfied by the columns produced by the Scan.
 func (c *CustomFuncs) IsBoundBy(src, dst memo.GroupID) bool {
-	return c.mem.GroupProperties(src).OuterCols().SubsetOf(
-		c.mem.GroupProperties(dst).Relational.OutputCols,
-	)
+	return c.OuterCols(src).SubsetOf(c.OutputCols(dst))
 }
 
 // ExtractBoundConditions returns a new list containing only those expressions
@@ -149,4 +150,126 @@ func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.Grou
 		}
 	}
 	return lb.BuildList()
+}
+
+// ----------------------------------------------------------------------
+//
+// Private extraction functions
+//   Helper functions that make extracting common private types easier.
+//
+// ----------------------------------------------------------------------
+
+// ExtractColID extracts an opt.ColumnID from the given private.
+func (c *CustomFuncs) ExtractColID(private memo.PrivateID) opt.ColumnID {
+	return c.mem.LookupPrivate(private).(opt.ColumnID)
+}
+
+// ExtractColList extracts an opt.ColList from the given private.
+func (c *CustomFuncs) ExtractColList(private memo.PrivateID) opt.ColList {
+	return c.mem.LookupPrivate(private).(opt.ColList)
+}
+
+// ExtractOrdering extracts a props.Ordering from the given private.
+func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) props.Ordering {
+	return c.mem.LookupPrivate(private).(props.Ordering)
+}
+
+// ExtractProjectionsOpDef extracts a *memo.ProjectionsOpDef from the given
+// private.
+func (c *CustomFuncs) ExtractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
+	return c.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
+}
+
+// ----------------------------------------------------------------------
+//
+// List functions
+//   Helper functions for manipulating lists.
+//
+// ----------------------------------------------------------------------
+
+// InternSingletonList interns a list containing the single given item and
+// returns its id.
+func (c *CustomFuncs) InternSingletonList(item memo.GroupID) memo.ListID {
+	b := MakeListBuilder(c)
+	b.AddItem(item)
+	return b.BuildList()
+}
+
+// ----------------------------------------------------------------------
+//
+// Property functions
+//   Helper functions used to test expression logical properties.
+//
+// ----------------------------------------------------------------------
+
+// Operator returns the type of the given group's normalized expression.
+func (c *CustomFuncs) Operator(group memo.GroupID) opt.Operator {
+	return c.mem.NormExpr(group).Operator()
+}
+
+// LookupLogical returns the given group's logical properties.
+func (c *CustomFuncs) LookupLogical(group memo.GroupID) *props.Logical {
+	return c.mem.GroupProperties(group)
+}
+
+// LookupRelational returns the given group's logical relational properties.
+func (c *CustomFuncs) LookupRelational(group memo.GroupID) *props.Relational {
+	return c.LookupLogical(group).Relational
+}
+
+// LookupScalar returns the given group's logical scalar properties.
+func (c *CustomFuncs) LookupScalar(group memo.GroupID) *props.Scalar {
+	return c.LookupLogical(group).Scalar
+}
+
+// OutputCols is a helper function that extracts the set of columns projected
+// by the given operator. In addition to extracting columns from any relational
+// operator, OutputCols can also extract columns from the Projections and
+// Aggregations scalar operators, which are used with Project and GroupBy.
+func (c *CustomFuncs) OutputCols(group memo.GroupID) opt.ColSet {
+	// Handle columns projected by relational operators.
+	logical := c.LookupLogical(group)
+	if logical.Relational != nil {
+		return c.LookupRelational(group).OutputCols
+	}
+
+	expr := c.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.AggregationsOp:
+		return opt.ColListToSet(c.ExtractColList(expr.AsAggregations().Cols()))
+
+	case opt.ProjectionsOp:
+		return c.ExtractProjectionsOpDef(expr.AsProjections().Def()).AllCols()
+
+	default:
+		panic(fmt.Sprintf("OutputCols doesn't support op %s", expr.Operator()))
+	}
+}
+
+// OuterCols returns the set of outer columns associated with the given group,
+// whether it be a relational or scalar operator.
+func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
+	return c.LookupLogical(group).OuterCols()
+}
+
+// ShortestKey returns the strong key in the given memo group that is composed
+// of the fewest columns. If there are multiple keys with the same number of
+// columns, any one of them may be returned. If there are no strong keys in the
+// group, then ShortestKey returns ok=false.
+func (c *CustomFuncs) ShortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
+	var shortest opt.ColSet
+	var shortestLen int
+	props := c.LookupLogical(group).Relational
+	for _, wk := range props.WeakKeys {
+		// A strong key requires all columns to be non-nullable.
+		if wk.SubsetOf(props.NotNullCols) {
+			l := wk.Len()
+			if !ok || l < shortestLen {
+				shortestLen = l
+				shortest = wk
+				ok = true
+			}
+		}
+	}
+	return shortest, ok
 }
