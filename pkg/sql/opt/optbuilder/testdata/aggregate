@@ -2633,19 +2633,20 @@ project
 build
 SELECT 123 r FROM kv ORDER BY max(v)
 ----
-sort
+project
  ├── columns: r:5(int!null)
  ├── ordering: +6
- └── project
-      ├── columns: r:5(int!null) column6:6(int)
-      ├── group-by
-      │    ├── columns: column6:6(int)
-      │    ├── project
-      │    │    ├── columns: v:2(int)
-      │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── aggregations
-      │         └── max [type=int]
-      │              └── variable: kv.v [type=int]
-      └── projections
-           └── const: 123 [type=int]
+ ├── sort
+ │    ├── columns: column6:6(int)
+ │    ├── ordering: +6
+ │    └── group-by
+ │         ├── columns: column6:6(int)
+ │         ├── project
+ │         │    ├── columns: v:2(int)
+ │         │    └── scan kv
+ │         │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │         └── aggregations
+ │              └── max [type=int]
+ │                   └── variable: kv.v [type=int]
+ └── projections
+      └── const: 123 [type=int]

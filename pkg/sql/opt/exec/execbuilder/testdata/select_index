@@ -153,24 +153,26 @@ output row: [2]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
-render          ·         ·          (b, a, c, d, a, c, d)     ·
- │              render 0  b          ·                         ·
- │              render 1  a          ·                         ·
- │              render 2  c          ·                         ·
- │              render 3  d          ·                         ·
- │              render 4  a          ·                         ·
- │              render 5  c          ·                         ·
- │              render 6  d          ·                         ·
- └── join       ·         ·          (a, b, c, d, a, b, c, d)  ·
-      │         type      inner      ·                         ·
-      │         equality  (b) = (b)  ·                         ·
-      ├── scan  ·         ·          (a, b, c, d)              ·
-      │         table     t@primary  ·                         ·
-      │         spans     ALL        ·                         ·
-      │         filter    b < '3'    ·                         ·
-      └── scan  ·         ·          (a, b, c, d)              ·
-·               table     t@primary  ·                         ·
-·               spans     ALL        ·                         ·
+render                ·         ·          (b, a, c, d, a, c, d)     ·
+ │                    render 0  b          ·                         ·
+ │                    render 1  a          ·                         ·
+ │                    render 2  c          ·                         ·
+ │                    render 3  d          ·                         ·
+ │                    render 4  a          ·                         ·
+ │                    render 5  c          ·                         ·
+ │                    render 6  d          ·                         ·
+ └── join             ·         ·          (a, b, c, d, a, b, c, d)  ·
+      │               type      inner      ·                         ·
+      │               equality  (b) = (b)  ·                         ·
+      ├── index-join  ·         ·          (a, b, c, d)              ·
+      │    ├── scan   ·         ·          (a, b, c)                 ·
+      │    │          table     t@bc       ·                         ·
+      │    │          spans     -/"3"      ·                         ·
+      │    └── scan   ·         ·          (a, b, c, d)              ·
+      │               table     t@primary  ·                         ·
+      └── scan        ·         ·          (a, b, c, d)              ·
+·                     table     t@primary  ·                         ·
+·                     spans     ALL        ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -575,14 +577,16 @@ INSERT INTO test2(k)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-limit           ·       ·              (id, k, v)  -k
- │              count   20             ·           ·
- └── sort       ·       ·              (id, k, v)  -k
-      │         order   -k             ·           ·
-      └── scan  ·       ·              (id, k, v)  ·
-·               table   test2@primary  ·           ·
-·               spans   ALL            ·           ·
-·               filter  k <= '100'     ·           ·
+limit                 ·      ·                        (id, k, v)  -k
+ │                    count  20                       ·           ·
+ └── sort             ·      ·                        (id, k, v)  -k
+      │               order  -k                       ·           ·
+      └── index-join  ·      ·                        (id, k, v)  ·
+           ├── scan   ·      ·                        (id, k)     ·
+           │          table  test2@test2_k_key        ·           ·
+           │          spans  /!NULL-/"100"/PrefixEnd  ·           ·
+           └── scan   ·      ·                        (id, k, v)  ·
+·                     table  test2@primary            ·           ·
 
 # Result check: The following query must not issue more than the
 # requested LIMIT K/V reads, even though an index join batches 100
@@ -595,6 +599,36 @@ SELECT regexp_replace(message, '\d\d\d\d\d+', '...PK...')
   FROM [SHOW KV TRACE FOR SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20]
  WHERE message LIKE 'fetched:%'
 ----
+fetched: /test2/test2_k_key/'001' -> /...PK...
+fetched: /test2/test2_k_key/'002' -> /...PK...
+fetched: /test2/test2_k_key/'003' -> /...PK...
+fetched: /test2/test2_k_key/'004' -> /...PK...
+fetched: /test2/test2_k_key/'005' -> /...PK...
+fetched: /test2/test2_k_key/'006' -> /...PK...
+fetched: /test2/test2_k_key/'007' -> /...PK...
+fetched: /test2/test2_k_key/'008' -> /...PK...
+fetched: /test2/test2_k_key/'009' -> /...PK...
+fetched: /test2/test2_k_key/'010' -> /...PK...
+fetched: /test2/test2_k_key/'011' -> /...PK...
+fetched: /test2/test2_k_key/'012' -> /...PK...
+fetched: /test2/test2_k_key/'013' -> /...PK...
+fetched: /test2/test2_k_key/'014' -> /...PK...
+fetched: /test2/test2_k_key/'015' -> /...PK...
+fetched: /test2/test2_k_key/'016' -> /...PK...
+fetched: /test2/test2_k_key/'017' -> /...PK...
+fetched: /test2/test2_k_key/'018' -> /...PK...
+fetched: /test2/test2_k_key/'019' -> /...PK...
+fetched: /test2/test2_k_key/'020' -> /...PK...
+fetched: /test2/test2_k_key/'021' -> /...PK...
+fetched: /test2/test2_k_key/'022' -> /...PK...
+fetched: /test2/test2_k_key/'023' -> /...PK...
+fetched: /test2/test2_k_key/'024' -> /...PK...
+fetched: /test2/test2_k_key/'025' -> /...PK...
+fetched: /test2/test2_k_key/'026' -> /...PK...
+fetched: /test2/test2_k_key/'027' -> /...PK...
+fetched: /test2/test2_k_key/'028' -> /...PK...
+fetched: /test2/test2_k_key/'029' -> /...PK...
+fetched: /test2/test2_k_key/'030' -> /...PK...
 fetched: /test2/primary/...PK.../k/v -> /'001'/42
 fetched: /test2/primary/...PK.../k/v -> /'002'/42
 fetched: /test2/primary/...PK.../k/v -> /'003'/42
@@ -768,12 +802,12 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-render     ·         ·            (f)     ·
- │         render 0  f            ·       ·
- └── scan  ·         ·            (d, f)  ·
-·          table     def@primary  ·       ·
-·          spans     /3-/4        ·       ·
-·          filter    f = 1        ·       ·
+render     ·         ·              (f)     ·
+ │         render 0  f              ·       ·
+ └── scan  ·         ·              (d, f)  ·
+·          table     def@def_f_key  ·       ·
+·          spans     /1-/2          ·       ·
+·          filter    d = 3          ·       ·
 
 # Regression test for #20504.
 query TTTTT
@@ -855,18 +889,28 @@ render           ·         ·            (x)                    ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
-scan  ·       ·              (x, y)  ·
-·     table   xy@primary     ·       ·
-·     spans   ALL            ·       ·
-·     filter  y IS NOT NULL  ·       ·
+render           ·         ·            (x, y)                 ·
+ │               render 0  x            ·                      ·
+ │               render 1  y            ·                      ·
+ └── index-join  ·         ·            (x, y, rowid[hidden])  ·
+      ├── scan   ·         ·            (y, rowid[hidden])     ·
+      │          table     xy@xy_y_idx  ·                      ·
+      │          spans     /!NULL-      ·                      ·
+      └── scan   ·         ·            (x, y, rowid[hidden])  ·
+·                table     xy@primary   ·                      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
-scan  ·       ·                     (x, y)  ·
-·     table   xy@primary            ·       ·
-·     spans   ALL                   ·       ·
-·     filter  y IS DISTINCT FROM 4  ·       ·
+render           ·         ·            (x, y)                 ·
+ │               render 0  x            ·                      ·
+ │               render 1  y            ·                      ·
+ └── index-join  ·         ·            (x, y, rowid[hidden])  ·
+      ├── scan   ·         ·            (y, rowid[hidden])     ·
+      │          table     xy@xy_y_idx  ·                      ·
+      │          spans     -/4 /5-      ·                      ·
+      └── scan   ·         ·            (x, y, rowid[hidden])  ·
+·                table     xy@primary   ·                      ·
 
 # Regression tests for #22670.
 statement ok
@@ -962,30 +1006,36 @@ output row: [5 6 7 8]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
-sort       ·       ·                 (a, b, c, d)  -c
- │         order   -c                ·             ·
- └── scan  ·       ·                 (a, b, c, d)  ·
-·          table   noncover@primary  ·             ·
-·          spans   ALL               ·             ·
-·          filter  c > 0             ·             ·
+sort             ·      ·                 (a, b, c, d)  -c
+ │               order  -c                ·             ·
+ └── index-join  ·      ·                 (a, b, c, d)  ·
+      ├── scan   ·      ·                 (a, c)        ·
+      │          table  noncover@c        ·             ·
+      │          spans  /1-               ·             ·
+      └── scan   ·      ·                 (a, b, c, d)  ·
+·                table  noncover@primary  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
-sort       ·       ·                 (a, b, c, d)  +c
- │         order   +c                ·             ·
- └── scan  ·       ·                 (a, b, c, d)  ·
-·          table   noncover@primary  ·             ·
-·          spans   ALL               ·             ·
-·          filter  c > 0             ·             ·
+index-join  ·      ·                 (a, b, c, d)  +c
+ ├── scan   ·      ·                 (a, c)        +c
+ │          table  noncover@c        ·             ·
+ │          spans  /1-               ·             ·
+ └── scan   ·      ·                 (a, b, c, d)  ·
+·           table  noncover@primary  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-scan  ·       ·                    (a, b, c, d)  ·
-·     table   noncover@primary     ·             ·
-·     spans   ALL                  ·             ·
-·     filter  (c > 0) AND (d = 8)  ·             ·
+filter           ·       ·                 (a, b, c, d)  ·
+ │               filter  d = 8             ·             ·
+ └── index-join  ·       ·                 (a, b, c, d)  ·
+      ├── scan   ·       ·                 (a, c)        ·
+      │          table   noncover@c        ·             ·
+      │          spans   /1-               ·             ·
+      └── scan   ·       ·                 (a, b, c, d)  ·
+·                table   noncover@primary  ·             ·
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -1185,18 +1235,12 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t2/primary/1 -> NULL
-fetched: /t2/primary/1/b -> 1
-fetched: /t2/primary/1/c -> 1
-fetched: /t2/primary/1/s -> '11'
-fetched: /t2/primary/2 -> NULL
-fetched: /t2/primary/2/b -> 1
-fetched: /t2/primary/2/c -> 2
-fetched: /t2/primary/2/s -> '12'
-fetched: /t2/primary/3 -> NULL
-fetched: /t2/primary/3/b -> 1
-fetched: /t2/primary/3/c -> 3
-fetched: /t2/primary/3/s -> '13'
+fetched: /t2/bc/2/1/4 -> NULL
+fetched: /t2/bc/2/2/5 -> NULL
+fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/bc/3/1/7 -> NULL
+fetched: /t2/bc/3/2/8 -> NULL
+fetched: /t2/bc/3/3/9 -> NULL
 fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
@@ -1283,46 +1327,44 @@ CREATE TABLE tab1 (
 query T
 EXPLAIN (OPT) SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
 ----
-project
+sort
  ├── columns: pk:1(int!null) col0:2(int)
- ├── stats: [rows=31]
- ├── cost: 156.85
+ ├── stats: [rows=31.43]
+ ├── cost: 473.93
  ├── keys: (1)
  ├── ordering: -1
  ├── prune: (1,2)
- └── lookup-join tab1
-      ├── columns: tab1.pk:1(int!null) tab1.col0:2(int) tab1.col3:5(int!null)
-      ├── key columns: [1]
-      ├── stats: [rows=31, distinct(5)=22]
-      ├── cost: 156.85
+ └── project
+      ├── columns: tab1.pk:1(int!null) tab1.col0:2(int)
+      ├── stats: [rows=31.43]
+      ├── cost: 409.51
       ├── keys: (1)
-      ├── ordering: -1
       ├── prune: (1,2)
-      └── sort
-           ├── columns: tab1.pk:1(int!null) tab1.col3:5(int)
-           ├── stats: [rows=31, distinct(5)=22]
-           ├── cost: 32.54
+      └── lookup-join tab1
+           ├── columns: tab1.pk:1(int!null) tab1.col0:2(int) tab1.col3:5(int!null)
+           ├── key columns: [1]
+           ├── stats: [rows=31.43, distinct(5)=22]
+           ├── cost: 409.51
            ├── keys: (1)
-           ├── ordering: -1
-           ├── prune: (1,5)
+           ├── prune: (1,2)
            └── scan tab1@idx_tab1_3
                 ├── columns: tab1.pk:1(int!null) tab1.col3:5(int)
                 ├── constraint: /5/1: [/66 - /87]
-                ├── stats: [rows=31, distinct(5)=22]
-                ├── cost: 31.00
+                ├── stats: [rows=31.43, distinct(5)=22]
+                ├── cost: 63.49
                 ├── keys: (1)
                 └── prune: (1,5)
 
-# THe index-join node should not advertise an ordering (it can cause invalid
+# The index-join node should not advertise an ordering (it can cause invalid
 # distributed plans).
 query TTTTT
 EXPLAIN (VERBOSE) SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
 ----
-render                ·         ·                (pk, col0)        ·
- │                    render 0  pk               ·                 ·
- │                    render 1  col0             ·                 ·
- └── sort             ·         ·                (pk, col0, col3)  -pk
-      │               order     -pk              ·                 ·
+sort                  ·         ·                (pk, col0)        -pk
+ │                    order     -pk              ·                 ·
+ └── render           ·         ·                (pk, col0)        ·
+      │               render 0  pk               ·                 ·
+      │               render 1  col0             ·                 ·
       └── index-join  ·         ·                (pk, col0, col3)  ·
            ├── scan   ·         ·                (pk, col3)        ·
            │          table     tab1@idx_tab1_3  ·                 ·

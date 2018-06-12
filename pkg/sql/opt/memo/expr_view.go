@@ -17,6 +17,7 @@ package memo
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -387,7 +388,8 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 func (ev ExprView) formatStats(tp treeprinter.Node, s *props.Statistics) {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "stats: [rows=%d", s.RowCount)
+	buf.WriteString("stats: [rows=")
+	printFloat(&buf, s.RowCount)
 	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
 	for _, colStat := range s.ColStats {
 		colStats = append(colStats, *colStat)
@@ -397,10 +399,22 @@ func (ev ExprView) formatStats(tp treeprinter.Node, s *props.Statistics) {
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%d", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", distinct%s=", col.Cols.String())
+		printFloat(&buf, col.DistinctCount)
 	}
 	buf.WriteString("]")
 	tp.Child(buf.String())
+}
+
+func printFloat(buf *bytes.Buffer, v float64) {
+	if v >= 100 && v <= 1e+15 || math.Abs(math.Round(v)-v) < .0001 {
+		// Omit fractional digits for integers and for large values.
+		fmt.Fprintf(buf, "%.0f", v)
+	} else if v >= 1 {
+		fmt.Fprintf(buf, "%.2f", v)
+	} else {
+		fmt.Fprintf(buf, "%.4f", v)
+	}
 }
 
 func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {

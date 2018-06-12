@@ -19,8 +19,8 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
 Tree       Field  Description
 render     ·      ·
-└── scan  ·      ·
-·          table  jobs@primary
+ └── scan  ·      ·
+·          table  jobs@jobs_status_created_idx
 ·          spans  ALL
 
 query TTTTT colnames
@@ -580,10 +580,17 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-scan  ·       ·                                                                          (x int, y int)  ·
-·     table   tt@primary                                                                 ·               ·
-·     spans   ALL                                                                        ·               ·
-·     filter  ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+render                ·         ·                             (x int, y int)                     ·
+ │                    render 0  (x)[int]                      ·                                  ·
+ │                    render 1  (y)[int]                      ·                                  ·
+ └── filter           ·         ·                             (x int, y int, rowid[hidden] int)  ·
+      │               filter    ((y)[int] > (10)[int])[bool]  ·                                  ·
+      └── index-join  ·         ·                             (x int, y int, rowid[hidden] int)  ·
+           ├── scan   ·         ·                             (x int, rowid[hidden] int)         ·
+           │          table     tt@a                          ·                                  ·
+           │          spans     /!NULL-/10                    ·                                  ·
+           └── scan   ·         ·                             (x int, y int, rowid[hidden] int)  ·
+·                     table     tt@primary                    ·                                  ·
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT

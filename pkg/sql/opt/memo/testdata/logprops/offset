@@ -166,7 +166,7 @@ offset
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── keys: (1)
- │    ├── scan xyzs
+ │    ├── scan xyzs@secondary
  │    │    ├── columns: x:1(int!null) s:4(string)
  │    │    ├── limit: 100
  │    │    ├── stats: [rows=100, distinct(1)=100]
