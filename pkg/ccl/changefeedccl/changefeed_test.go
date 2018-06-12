@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -35,12 +37,6 @@ func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
-
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
@@ -48,7 +44,7 @@ func TestChangefeedBasics(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -77,18 +73,12 @@ func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
-
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
@@ -116,12 +106,6 @@ func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
-
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
@@ -129,7 +113,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -149,12 +133,6 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
-
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
@@ -162,7 +140,7 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -185,11 +163,8 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
+	defer func(prev time.Duration) { jobs.DefaultAdoptInterval = prev }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -200,7 +175,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -221,13 +196,14 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	// PAUSE JOB is asynchronous, so wait out a few polling intervals for it to
 	// notice the pause state and shut down.
 	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
-	time.Sleep(10 * testPollingInterval)
+	time.Sleep(10 * time.Millisecond)
 
 	// Nothing should happen if the job is paused.
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
-	time.Sleep(10 * testPollingInterval)
+	time.Sleep(10 * time.Millisecond)
 	assertPayloads(t, k.Messages(), nil)
 
+	k.Reset()
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`[16]->{"a": 16, "b": "f"}`,
@@ -238,12 +214,6 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	const testPollingInterval = 10 * time.Millisecond
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = testPollingInterval
-
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
@@ -251,7 +221,7 @@ func TestChangefeedSchemaChange(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -261,7 +231,7 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (2)`)
 	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (3, 4)`)
-	time.Sleep(100 * testPollingInterval)
+	time.Sleep(100 * time.Millisecond)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`[1]->{"a": 1}`,
 		`[2]->{"a": 2, "b": null}`,
@@ -272,12 +242,32 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	// the user facing semantics of that.
 }
 
+func TestChangefeedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+	if _, err := sqlDB.DB.Exec(
+		`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://nope`,
+	); !testutils.IsError(err, `no test producer: nope`) {
+		t.Fatalf(`expected 'no test producer: nope' error got: %+v`, err)
+	}
+}
+
 // testKafkaProducer is an implementation of sarama.SyncProducer used for
 // testing.
 type testKafkaProducer struct {
 	mu struct {
 		syncutil.Mutex
-		msgs []*sarama.ProducerMessage
+		msgs   []*sarama.ProducerMessage
+		closed bool
 	}
 	flushCh chan struct{}
 }
@@ -286,13 +276,23 @@ func newTestKafkaProducer() *testKafkaProducer {
 	return &testKafkaProducer{flushCh: make(chan struct{}, 1)}
 }
 
+func (k *testKafkaProducer) Reset() {
+	k.mu.Lock()
+	k.mu.closed = false
+	k.mu.Unlock()
+}
+
 // SendMessage implements the KafkaProducer interface.
 func (k *testKafkaProducer) SendMessage(
 	msg *sarama.ProducerMessage,
 ) (partition int32, offset int64, err error) {
 	k.mu.Lock()
 	k.mu.msgs = append(k.mu.msgs, msg)
+	closed := k.mu.closed
 	k.mu.Unlock()
+	if closed {
+		return 0, 0, errors.New(`cannot send to closed producer`)
+	}
 	return 0, 0, nil
 }
 
@@ -300,7 +300,11 @@ func (k *testKafkaProducer) SendMessage(
 func (k *testKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 	k.mu.Lock()
 	msgLen := len(k.mu.msgs)
+	closed := k.mu.closed
 	k.mu.Unlock()
+	if closed {
+		return errors.New(`cannot send to closed producer`)
+	}
 	if msgLen == 0 {
 		// Make sure that WaitUntilNewMessages (which wakes up on the fluchCh
 		// trigger) always gets at least one full scan. Without this check,
@@ -329,6 +333,9 @@ func (k *testKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 
 // Close implements the KafkaProducer interface.
 func (k *testKafkaProducer) Close() error {
+	k.mu.Lock()
+	k.mu.closed = true
+	k.mu.Unlock()
 	return nil
 }
 
