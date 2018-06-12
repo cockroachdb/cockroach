@@ -2039,7 +2039,7 @@ func writeRandomTimeSeriesDataToRange(
 			data = append(data, d)
 		}
 		for _, d := range data {
-			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
+			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), false)
 			if err != nil {
 				t.Fatal(err)
 			}

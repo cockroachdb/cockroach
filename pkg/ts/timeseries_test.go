@@ -131,7 +131,7 @@ func TestToInternal(t *testing.T) {
 	}
 
 	for i, tc := range tcases {
-		actual, err := tc.input.ToInternal(tc.keyDuration, tc.sampleDuration)
+		actual, err := tc.input.ToInternal(tc.keyDuration, tc.sampleDuration, false)
 		if !testutils.IsError(err, tc.expectedError) {
 			t.Errorf("expected error %q from case %d, got %v", tc.expectedError, i, err)
 		}
@@ -150,7 +150,7 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		tsdp(5*time.Hour+5*time.Minute, -1.0),
 		tsdp(5*time.Hour+5*time.Minute, -2.0),
 	)
-	internal, err := ts.ToInternal(Resolution10s.SlabDuration(), Resolution10s.SampleDuration())
+	internal, err := ts.ToInternal(Resolution10s.SlabDuration(), Resolution10s.SampleDuration(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
