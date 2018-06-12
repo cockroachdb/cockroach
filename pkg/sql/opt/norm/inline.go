@@ -43,13 +43,13 @@ func (c *CustomFuncs) HasDuplicateRefs(target memo.GroupID) bool {
 		if !expr.IsScalar() {
 			// Don't try to count references within correlated subqueries.
 			// Uncorrelated subqueries never have references.
-			return !c.f.outerCols(group).Empty()
+			return !c.OuterCols(group).Empty()
 		}
 
 		switch expr.Operator() {
 		case opt.VariableOp:
 			// Count Variable references.
-			colID := c.f.extractColID(expr.AsVariable().Col())
+			colID := c.ExtractColID(expr.AsVariable().Col())
 			if refs.Contains(int(colID)) {
 				return true
 			}
@@ -58,7 +58,7 @@ func (c *CustomFuncs) HasDuplicateRefs(target memo.GroupID) bool {
 
 		case opt.ProjectionsOp:
 			// Process the pass-through columns, in addition to the children.
-			def := c.f.extractProjectionsOpDef(expr.AsProjections().Def())
+			def := c.ExtractProjectionsOpDef(expr.AsProjections().Def())
 			if def.PassthroughCols.Intersects(refs) {
 				return true
 			}
@@ -107,7 +107,7 @@ func (c *CustomFuncs) CanInline(group memo.GroupID) bool {
 func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.GroupID {
 	projectionsExpr := c.f.mem.NormExpr(projections).AsProjections()
 	projectionsElems := c.f.mem.LookupList(projectionsExpr.Elems())
-	projectionsDef := c.f.extractProjectionsOpDef(projectionsExpr.Def())
+	projectionsDef := c.ExtractProjectionsOpDef(projectionsExpr.Def())
 
 	// Recursively walk the tree looking for references to projection expressions
 	// that need to be replaced.
@@ -115,7 +115,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 	replace = func(child memo.GroupID) memo.GroupID {
 		expr := c.f.mem.NormExpr(child)
 		if !expr.IsScalar() {
-			if !c.f.outerCols(child).Empty() {
+			if !c.OuterCols(child).Empty() {
 				// Should have prevented this in hasDuplicateRefs/canInline.
 				panic("cannot inline references within correlated subqueries")
 			}
@@ -124,7 +124,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 
 		switch expr.Operator() {
 		case opt.VariableOp:
-			varColID := c.f.extractColID(expr.AsVariable().Col())
+			varColID := c.ExtractColID(expr.AsVariable().Col())
 			for i, id := range projectionsDef.SynthesizedCols {
 				if varColID == id {
 					return projectionsElems[i]
@@ -135,7 +135,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 		case opt.ProjectionsOp:
 			pb := projectionsBuilder{f: c.f}
 			targetProjections := expr.AsProjections()
-			targetDef := c.f.extractProjectionsOpDef(targetProjections.Def())
+			targetDef := c.ExtractProjectionsOpDef(targetProjections.Def())
 			targetPassthroughCols := targetDef.PassthroughCols
 			targetSynthesizedCols := targetDef.SynthesizedCols
 			targetElems := c.f.mem.LookupList(targetProjections.Elems())

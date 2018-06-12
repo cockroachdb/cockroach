@@ -23,18 +23,18 @@ import (
 // NeededCols returns the set of columns needed by the given group. It is an
 // alias for outerCols that's used for clarity with the UnusedCols patterns.
 func (c *CustomFuncs) NeededCols(group memo.GroupID) opt.ColSet {
-	return c.f.outerCols(group)
+	return c.OuterCols(group)
 }
 
 // NeededCols2 unions the set of columns needed by either of the given groups.
 func (c *CustomFuncs) NeededCols2(left, right memo.GroupID) opt.ColSet {
-	return c.f.outerCols(left).Union(c.f.outerCols(right))
+	return c.OuterCols(left).Union(c.OuterCols(right))
 }
 
 // NeededCols3 unions the set of columns needed by any of the given groups.
 func (c *CustomFuncs) NeededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
-	cols := c.f.outerCols(group1).Union(c.f.outerCols(group2))
-	cols.UnionWith(c.f.outerCols(group3))
+	cols := c.OuterCols(group1).Union(c.OuterCols(group2))
+	cols.UnionWith(c.OuterCols(group3))
 	return cols
 }
 
@@ -45,7 +45,7 @@ func (c *CustomFuncs) NeededCols3(group1, group2, group3 memo.GroupID) opt.ColSe
 func (c *CustomFuncs) NeededColsGroupBy(aggs memo.GroupID, def memo.PrivateID) opt.ColSet {
 	groupByDef := c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
 	colSet := groupByDef.GroupingCols.Union(groupByDef.Ordering.ColSet())
-	return c.f.outerCols(aggs).Union(colSet)
+	return c.OuterCols(aggs).Union(colSet)
 }
 
 // NeededColsLimit unions the columns needed by Projections with the columns in
@@ -53,14 +53,14 @@ func (c *CustomFuncs) NeededColsGroupBy(aggs memo.GroupID, def memo.PrivateID) o
 func (c *CustomFuncs) NeededColsLimit(
 	projections memo.GroupID, ordering memo.PrivateID,
 ) opt.ColSet {
-	return c.f.outerCols(projections).Union(c.f.extractOrdering(ordering).ColSet())
+	return c.OuterCols(projections).Union(c.ExtractOrdering(ordering).ColSet())
 }
 
 // NeededColsRowNumber unions the columns needed by Projections with the columns
 // in the Ordering of a RowNumber operator.
 func (c *CustomFuncs) NeededColsRowNumber(projections memo.GroupID, def memo.PrivateID) opt.ColSet {
 	rowNumberDef := c.f.mem.LookupPrivate(def).(*memo.RowNumberDef)
-	return c.f.outerCols(projections).Union(rowNumberDef.Ordering.ColSet())
+	return c.OuterCols(projections).Union(rowNumberDef.Ordering.ColSet())
 }
 
 // CanPruneCols returns true if the target group has extra columns that are not
@@ -82,9 +82,9 @@ func (c *CustomFuncs) CanPruneCols(target memo.GroupID, neededCols opt.ColSet) b
 func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
 	switch c.f.mem.NormExpr(target).Operator() {
 	case opt.ProjectionsOp, opt.AggregationsOp:
-		return c.f.outputCols(target)
+		return c.OutputCols(target)
 	}
-	return c.f.lookupLogical(target).Relational.Rule.PruneCols
+	return c.LookupLogical(target).Relational.Rule.PruneCols
 }
 
 // PruneCols creates an expression that discards any outputs columns of the
@@ -106,13 +106,13 @@ func (c *CustomFuncs) PruneCols(target memo.GroupID, neededCols opt.ColSet) memo
 	case opt.AggregationsOp:
 		groups, cols := filterColList(
 			c.f.mem.LookupList(targetExpr.AsAggregations().Aggs()),
-			c.f.extractColList(targetExpr.AsAggregations().Cols()),
+			c.ExtractColList(targetExpr.AsAggregations().Cols()),
 			neededCols,
 		)
 		return c.f.ConstructAggregations(c.f.InternList(groups), c.f.InternColList(cols))
 
 	case opt.ProjectionsOp:
-		def := c.f.extractProjectionsOpDef(targetExpr.AsProjections().Def())
+		def := c.ExtractProjectionsOpDef(targetExpr.AsProjections().Def())
 		groups, cols := filterColList(
 			c.f.mem.LookupList(targetExpr.AsProjections().Elems()),
 			def.SynthesizedCols,
@@ -130,7 +130,7 @@ func (c *CustomFuncs) PruneCols(target memo.GroupID, neededCols opt.ColSet) memo
 		// Get the subset of the target group's output columns that should not be
 		// pruned. Don't prune if the target output column is needed by a higher-
 		// level expression, or if it's not part of the PruneCols set.
-		colSet := c.f.outputCols(target).Difference(c.candidatePruneCols(target).Difference(neededCols))
+		colSet := c.OutputCols(target).Difference(c.candidatePruneCols(target).Difference(neededCols))
 		return c.f.ConstructSimpleProject(target, colSet)
 	}
 }
@@ -138,7 +138,7 @@ func (c *CustomFuncs) PruneCols(target memo.GroupID, neededCols opt.ColSet) memo
 // pruneScanCols constructs a new Scan operator based on the given existing Scan
 // operator, but projecting only the needed columns.
 func (c *CustomFuncs) pruneScanCols(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
-	colSet := c.f.outputCols(scan).Intersection(neededCols)
+	colSet := c.OutputCols(scan).Intersection(neededCols)
 	scanExpr := c.f.mem.NormExpr(scan).AsScan()
 	existing := c.f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
 	new := memo.ScanOpDef{Table: existing.Table, Cols: colSet}
@@ -150,7 +150,7 @@ func (c *CustomFuncs) pruneScanCols(scan memo.GroupID, neededCols opt.ColSet) me
 // containing only the needed columns. Other columns are discarded.
 func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	valuesExpr := c.f.mem.NormExpr(values).AsValues()
-	existingCols := c.f.extractColList(valuesExpr.Cols())
+	existingCols := c.ExtractColList(valuesExpr.Cols())
 	newCols := make(opt.ColList, 0, neededCols.Len())
 
 	existingRows := c.f.mem.LookupList(valuesExpr.Rows())

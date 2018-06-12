@@ -108,7 +108,7 @@ func (c *CustomFuncs) ReplaceListItem(list memo.ListID, search, replace memo.Gro
 // HasColType returns true if the given expression has a static type that's
 // equivalent to the requested coltype.
 func (c *CustomFuncs) HasColType(group memo.GroupID, colTyp memo.PrivateID) bool {
-	srcTyp, _ := coltypes.DatumTypeToColumnType(c.f.lookupScalar(group).Type)
+	srcTyp, _ := coltypes.DatumTypeToColumnType(c.LookupScalar(group).Type)
 	dstTyp := c.f.mem.LookupPrivate(colTyp).(coltypes.T)
 	if reflect.TypeOf(srcTyp) != reflect.TypeOf(dstTyp) {
 		return false
@@ -131,8 +131,8 @@ func (c *CustomFuncs) BoolType() memo.PrivateID {
 // overload and is therefore legal to construct. For example, while
 // (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
 func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.GroupID) bool {
-	leftType := c.f.lookupScalar(left).Type
-	rightType := c.f.lookupScalar(right).Type
+	leftType := c.LookupScalar(left).Type
+	rightType := c.LookupScalar(right).Type
 	return memo.BinaryOverloadExists(opt.MinusOp, rightType, leftType)
 }
 
@@ -154,7 +154,7 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.Group
 // of the subquery. It is an "outer column" for the subquery (see the comment on
 // RelationalProps.OuterCols for more details).
 func (c *CustomFuncs) HasOuterCols(group memo.GroupID) bool {
-	return !c.f.outerCols(group).Empty()
+	return !c.OuterCols(group).Empty()
 }
 
 // OnlyConstants returns true if the scalar expression is a "constant
@@ -162,24 +162,24 @@ func (c *CustomFuncs) HasOuterCols(group memo.GroupID) bool {
 // See the CommuteConst pattern comment for more details.
 func (c *CustomFuncs) OnlyConstants(group memo.GroupID) bool {
 	// TODO(andyk): Consider impact of "impure" functions with side effects.
-	return c.f.lookupScalar(group).OuterCols.Empty()
+	return c.LookupScalar(group).OuterCols.Empty()
 }
 
 // HasNoCols returns true if the group has zero output columns.
 func (c *CustomFuncs) HasNoCols(group memo.GroupID) bool {
-	return c.f.outputCols(group).Empty()
+	return c.OutputCols(group).Empty()
 }
 
 // HasSameCols returns true if the two groups have an identical set of output
 // columns.
 func (c *CustomFuncs) HasSameCols(left, right memo.GroupID) bool {
-	return c.f.outputCols(left).Equals(c.f.outputCols(right))
+	return c.OutputCols(left).Equals(c.OutputCols(right))
 }
 
 // HasSubsetCols returns true if the left group's output columns are a subset of
 // the right group's output columns.
 func (c *CustomFuncs) HasSubsetCols(left, right memo.GroupID) bool {
-	return c.f.outputCols(left).SubsetOf(c.f.outputCols(right))
+	return c.OutputCols(left).SubsetOf(c.OutputCols(right))
 }
 
 // HasZeroRows returns true if the given group never returns any rows.
@@ -206,7 +206,7 @@ func (c *CustomFuncs) HasOneOrMoreRows(group memo.GroupID) bool {
 // HasCorrelatedSubquery returns true if the given scalar group contains a
 // subquery within its subtree that has at least one outer column.
 func (c *CustomFuncs) HasCorrelatedSubquery(group memo.GroupID) bool {
-	return c.f.lookupScalar(group).HasCorrelatedSubquery
+	return c.LookupScalar(group).HasCorrelatedSubquery
 }
 
 // ----------------------------------------------------------------------
@@ -223,15 +223,15 @@ func (c *CustomFuncs) HasCorrelatedSubquery(group memo.GroupID) bool {
 // be added as passthrough columns to the new Projections operator.
 func (c *CustomFuncs) ProjectColsFromBoth(left, right memo.GroupID) memo.GroupID {
 	pb := projectionsBuilder{f: c.f}
-	if c.f.operator(left) == opt.ProjectionsOp {
+	if c.Operator(left) == opt.ProjectionsOp {
 		pb.addProjections(left)
 	} else {
-		pb.addPassthroughCols(c.f.outputCols(left))
+		pb.addPassthroughCols(c.OutputCols(left))
 	}
-	if c.f.operator(right) == opt.ProjectionsOp {
+	if c.Operator(right) == opt.ProjectionsOp {
 		pb.addProjections(right)
 	} else {
-		pb.addPassthroughCols(c.f.outputCols(right))
+		pb.addPassthroughCols(c.OutputCols(right))
 	}
 	return pb.buildProjections()
 }
@@ -255,7 +255,7 @@ func (c *CustomFuncs) ProjectColsFromBoth(left, right memo.GroupID) memo.GroupID
 // references one of its columns. But the (Eq) expression is not correlated
 // with the (Scan b) expression.
 func (c *CustomFuncs) IsCorrelated(src, dst memo.GroupID) bool {
-	return c.f.outerCols(src).Intersects(c.f.outputCols(dst))
+	return c.OuterCols(src).Intersects(c.OutputCols(dst))
 }
 
 // ConcatFilters creates a new Filters operator that contains conditions from
@@ -358,7 +358,7 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 // the set of given column values are unique and not null.
 func (c *CustomFuncs) ColsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 	colSet := c.f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols
-	props := c.f.lookupLogical(group).Relational
+	props := c.LookupLogical(group).Relational
 	for _, weakKey := range props.WeakKeys {
 		if weakKey.SubsetOf(colSet) && weakKey.SubsetOf(props.NotNullCols) {
 			return true
@@ -609,23 +609,23 @@ func (c *CustomFuncs) SimplifyCoalesce(args memo.ListID) memo.GroupID {
 // allows one of those inputs to be null. If not, then the binary operator will
 // simply be replaced by null.
 func (c *CustomFuncs) AllowNullArgs(op opt.Operator, left, right memo.GroupID) bool {
-	leftType := c.f.lookupScalar(left).Type
-	rightType := c.f.lookupScalar(right).Type
+	leftType := c.LookupScalar(left).Type
+	rightType := c.LookupScalar(right).Type
 	return memo.BinaryAllowsNullArgs(op, leftType, rightType)
 }
 
 // FoldNullUnary replaces the unary operator with a typed null value having the
 // same type as the unary operator would have.
 func (c *CustomFuncs) FoldNullUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
-	typ := c.f.lookupScalar(input).Type
+	typ := c.LookupScalar(input).Type
 	return c.f.ConstructNull(c.f.InternType(memo.InferUnaryType(op, typ)))
 }
 
 // FoldNullBinary replaces the binary operator with a typed null value having
 // the same type as the binary operator would have.
 func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
-	leftType := c.f.lookupScalar(left).Type
-	rightType := c.f.lookupScalar(right).Type
+	leftType := c.LookupScalar(left).Type
+	rightType := c.LookupScalar(right).Type
 	return c.f.ConstructNull(c.f.InternType(memo.InferBinaryType(op, leftType, rightType)))
 }
 

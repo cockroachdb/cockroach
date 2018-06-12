@@ -15,14 +15,10 @@
 package norm
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -149,18 +145,6 @@ func (f *Factory) Metadata() *opt.Metadata {
 	return f.mem.Metadata()
 }
 
-// ConstructSimpleProject is a convenience wrapper for calling
-// ConstructProject when there are no synthesized columns.
-func (f *Factory) ConstructSimpleProject(
-	input memo.GroupID, passthroughCols opt.ColSet,
-) memo.GroupID {
-	def := memo.ProjectionsOpDef{PassthroughCols: passthroughCols}
-	return f.ConstructProject(
-		input,
-		f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def)),
-	)
-}
-
 // InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.
@@ -186,152 +170,29 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 
 // ----------------------------------------------------------------------
 //
-// Private extraction functions
-//   Helper functions that make extracting common private types easier.
-//
-// ----------------------------------------------------------------------
-
-func (f *Factory) extractColID(private memo.PrivateID) opt.ColumnID {
-	return f.mem.LookupPrivate(private).(opt.ColumnID)
-}
-
-func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
-	return f.mem.LookupPrivate(private).(opt.ColList)
-}
-
-func (f *Factory) extractOrdering(private memo.PrivateID) props.Ordering {
-	return f.mem.LookupPrivate(private).(props.Ordering)
-}
-
-func (f *Factory) extractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
-	return f.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
-}
-
-// ----------------------------------------------------------------------
-//
-// List functions
-//   Helper functions for manipulating lists.
-//
-// ----------------------------------------------------------------------
-
-// internSingletonList interns a list containing the single given item and
-// returns its id.
-func (f *Factory) internSingletonList(item memo.GroupID) memo.ListID {
-	b := xfunc.MakeListBuilder(&f.funcs.CustomFuncs)
-	b.AddItem(item)
-	return b.BuildList()
-}
-
-// ----------------------------------------------------------------------
-//
-// Property functions
-//   Helper functions used to test expression logical properties.
-//
-// ----------------------------------------------------------------------
-
-// operator returns the type of the given group's normalized expression.
-func (f *Factory) operator(group memo.GroupID) opt.Operator {
-	return f.mem.NormExpr(group).Operator()
-}
-
-// lookupLogical returns the given group's logical properties.
-func (f *Factory) lookupLogical(group memo.GroupID) *props.Logical {
-	return f.mem.GroupProperties(group)
-}
-
-// lookupRelational returns the given group's logical relational properties.
-func (f *Factory) lookupRelational(group memo.GroupID) *props.Relational {
-	return f.lookupLogical(group).Relational
-}
-
-// lookupScalar returns the given group's logical scalar properties.
-func (f *Factory) lookupScalar(group memo.GroupID) *props.Scalar {
-	return f.lookupLogical(group).Scalar
-}
-
-// outputCols is a helper function that extracts the set of columns projected
-// by the given operator. In addition to extracting columns from any relational
-// operator, outputCols can also extract columns from the Projections and
-// Aggregations scalar operators, which are used with Project and GroupBy.
-func (f *Factory) outputCols(group memo.GroupID) opt.ColSet {
-	// Handle columns projected by relational operators.
-	logical := f.lookupLogical(group)
-	if logical.Relational != nil {
-		return f.lookupRelational(group).OutputCols
-	}
-
-	expr := f.mem.NormExpr(group)
-	switch expr.Operator() {
-	case opt.AggregationsOp:
-		return opt.ColListToSet(f.extractColList(expr.AsAggregations().Cols()))
-
-	case opt.ProjectionsOp:
-		return f.extractProjectionsOpDef(expr.AsProjections().Def()).AllCols()
-
-	default:
-		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.Operator()))
-	}
-}
-
-// outerCols returns the set of outer columns associated with the given group,
-// whether it be a relational or scalar operator.
-func (f *Factory) outerCols(group memo.GroupID) opt.ColSet {
-	return f.lookupLogical(group).OuterCols()
-}
-
-// shortestKey returns the strong key in the given memo group that is composed
-// of the fewest columns. If there are multiple keys with the same number of
-// columns, any one of them may be returned. If there are no strong keys in the
-// group, then shortestKey returns ok=false.
-func (f *Factory) shortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
-	var shortest opt.ColSet
-	var shortestLen int
-	props := f.lookupLogical(group).Relational
-	for _, wk := range props.WeakKeys {
-		// A strong key requires all columns to be non-nullable.
-		if wk.SubsetOf(props.NotNullCols) {
-			l := wk.Len()
-			if !ok || l < shortestLen {
-				shortestLen = l
-				shortest = wk
-				ok = true
-			}
-		}
-	}
-	return shortest, ok
-}
-
-// ensureKey finds the shortest strong key for the input memo group. If no
-// strong key exists, then ensureKey wraps the input in a RowNumber operator,
-// which provides a key column by uniquely numbering the rows. ensureKey returns
-// the input group (perhaps wrapped by RowNumber) and the set of columns that
-// form the shortest available key.
-func (f *Factory) ensureKey(in memo.GroupID) (out memo.GroupID, key opt.ColSet) {
-	key, ok := f.shortestKey(in)
-	if ok {
-		return in, key
-	}
-
-	colID := f.Metadata().AddColumn("rownum", types.Int)
-	def := &memo.RowNumberDef{ColID: colID}
-	out = f.ConstructRowNumber(in, f.InternRowNumberDef(def))
-	key.Add(int(colID))
-	return out, key
-}
-
-// ----------------------------------------------------------------------
-//
 // Projection construction functions
 //   General helper functions to construct Projections.
 //
 // ----------------------------------------------------------------------
+
+// ConstructSimpleProject is a convenience wrapper for calling
+// ConstructProject when there are no synthesized columns.
+func (f *Factory) ConstructSimpleProject(
+	input memo.GroupID, passthroughCols opt.ColSet,
+) memo.GroupID {
+	def := memo.ProjectionsOpDef{PassthroughCols: passthroughCols}
+	return f.ConstructProject(
+		input,
+		f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def)),
+	)
+}
 
 // projectExtraCol constructs a new Project operator that passes through all
 // columns in the given "in" expression, and then adds the given "extra"
 // expression as an additional column.
 func (f *Factory) projectExtraCol(in, extra memo.GroupID, extraID opt.ColumnID) memo.GroupID {
 	pb := projectionsBuilder{f: f}
-	pb.addPassthroughCols(f.outputCols(in))
+	pb.addPassthroughCols(f.funcs.OutputCols(in))
 	pb.addSynthesized(extra, extraID)
 	return f.ConstructProject(in, pb.buildProjections())
 }

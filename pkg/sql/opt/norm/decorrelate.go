@@ -41,7 +41,7 @@ func (c *CustomFuncs) HoistSelectSubquery(input, filter memo.GroupID) memo.Group
 	hoister.init(c.f.evalCtx, c.f, input)
 	replaced := hoister.hoistAll(filter)
 	sel := c.f.ConstructSelect(hoister.input(), replaced)
-	return c.f.ConstructSimpleProject(sel, c.f.outputCols(input))
+	return c.f.ConstructSimpleProject(sel, c.OutputCols(input))
 }
 
 // HoistProjectSubquery searches the Project operator's projections for
@@ -89,7 +89,7 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	hoister.init(c.f.evalCtx, c.f, right)
 	replaced := hoister.hoistAll(on)
 	join := c.ConstructApplyJoin(op, left, hoister.input(), replaced)
-	return c.f.ConstructSimpleProject(join, c.f.outputCols(left).Union(c.f.outputCols(right)))
+	return c.f.ConstructSimpleProject(join, c.OutputCols(left).Union(c.OutputCols(right)))
 }
 
 // HoistValuesSubquery searches the Values operator's projections for correlated
@@ -243,14 +243,14 @@ func (c *CustomFuncs) HoistCorrelatedScalarGroupBy(left, input, aggs memo.GroupI
 	// If the left join input didn't have a strong key, wrap it with a RowNumber
 	// operator to ensure that a key is available.
 	var shortestKey opt.ColSet
-	left, shortestKey = c.f.ensureKey(left)
+	left, shortestKey = c.ensureKey(left)
 
 	// Construct the output list of aggregate functions.
-	extraColSet := c.f.outputCols(left).Difference(shortestKey)
+	extraColSet := c.OutputCols(left).Difference(shortestKey)
 
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	aggsColList := c.f.extractColList(aggsExpr.Cols())
+	aggsColList := c.ExtractColList(aggsExpr.Cols())
 
 	outElems := make([]memo.GroupID, len(aggsColList), len(aggsColList)+extraColSet.Len())
 	outColList := make(opt.ColList, len(outElems), cap(outElems))
@@ -292,13 +292,31 @@ func (c *CustomFuncs) HoistCorrelatedScalarGroupBy(left, input, aggs memo.GroupI
 	)
 }
 
+// ensureKey finds the shortest strong key for the input memo group. If no
+// strong key exists, then ensureKey wraps the input in a RowNumber operator,
+// which provides a key column by uniquely numbering the rows. ensureKey returns
+// the input group (perhaps wrapped by RowNumber) and the set of columns that
+// form the shortest available key.
+func (c *CustomFuncs) ensureKey(in memo.GroupID) (out memo.GroupID, key opt.ColSet) {
+	key, ok := c.ShortestKey(in)
+	if ok {
+		return in, key
+	}
+
+	colID := c.f.Metadata().AddColumn("rownum", types.Int)
+	def := &memo.RowNumberDef{ColID: colID}
+	out = c.f.ConstructRowNumber(in, c.f.InternRowNumberDef(def))
+	key.Add(int(colID))
+	return out, key
+}
+
 // ensureNotNullCol searches for a not-null output column in the given group. If
 // such a column does not exist, it synthesizes a new True constant column that
 // is not-null. ensureNotNullCol returns an output group, which is the input
 // group possibly wrapped in a new Project, and the id of the not-null column
 // that it located or synthesized.
 func (c *CustomFuncs) ensureNotNullCol(in memo.GroupID) (out memo.GroupID, colID opt.ColumnID) {
-	id, ok := c.f.lookupLogical(in).Relational.NotNullCols.Next(0)
+	id, ok := c.LookupLogical(in).Relational.NotNullCols.Next(0)
 	if ok {
 		return in, opt.ColumnID(id)
 	}
@@ -512,7 +530,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 				trueProjection,
 			),
 			r.f.ConstructAggregations(
-				r.f.internSingletonList(
+				r.f.funcs.InternSingletonList(
 					r.f.ConstructAnyNotNull(
 						r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
 					),
@@ -638,18 +656,18 @@ func (r *subqueryHoister) constructGroupByAny(
 					),
 				),
 				r.f.ConstructProjections(
-					r.f.internSingletonList(r.f.ConstructIsNot(inputVar, nullVal)),
+					r.f.funcs.InternSingletonList(r.f.ConstructIsNot(inputVar, nullVal)),
 					r.f.InternProjectionsOpDef(&notNullCols),
 				),
 			),
 			r.f.ConstructAggregations(
-				r.f.internSingletonList(r.f.ConstructBoolOr(notNullVar)),
+				r.f.funcs.InternSingletonList(r.f.ConstructBoolOr(notNullVar)),
 				r.f.InternColList(opt.ColList{aggColID}),
 			),
 			r.f.InternGroupByDef(&memo.GroupByDef{}),
 		),
 		r.f.ConstructProjections(
-			r.f.internSingletonList(
+			r.f.funcs.InternSingletonList(
 				r.f.ConstructCase(
 					r.f.ConstructTrue(),
 					r.f.InternList([]memo.GroupID{
