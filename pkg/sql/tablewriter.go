@@ -489,6 +489,17 @@ func (tu *tableUpserter) finalize(
 				}
 			}
 
+			checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
+			if len(checkHelper.Exprs) > 0 {
+				if err := checkHelper.LoadRow(tu.updateColIDtoRowIndex, updateValues, false); err != nil {
+					return nil, err
+				}
+
+				if err := checkHelper.Check(tu.evalCtx); err != nil {
+					return nil, err
+				}
+			}
+
 			// Queue the update in KV. This also returns an "update row"
 			// containing the updated values for every column in the
 			// table. This is useful for RETURNING, which we collect below.
