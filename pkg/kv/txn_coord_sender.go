@@ -126,12 +126,9 @@ type TxnCoordSender struct {
 	mu struct {
 		syncutil.Mutex
 
-		// tracking is set if the TxnCoordSender has a heartbeat loop running for
-		// the transaction record. It also means that the TxnCoordSender is
-		// accumulating intents for the transaction.
-		// tracking is set by the client just before a BeginTransaction request is
-		// sent. If set, an EndTransaction will also be sent eventually to clean up.
-		tracking bool
+		// hbRunning is set if the TxnCoordSender has a heartbeat loop running for
+		// the transaction record.
+		hbRunning bool
 
 		// meta contains all coordinator state which may be passed between
 		// distributed TxnCoordSenders via MetaRelease() and MetaAugment().
@@ -431,17 +428,13 @@ func (tc *TxnCoordSender) Send(
 
 		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
 		if hasBegin {
-			// If there's a BeginTransaction, we need to start the heartbeat loop and
-			// intent tracking.
+			// If there's a BeginTransaction, we need to start the heartbeat loop.
 			// Perhaps surprisingly, this needs to be done even if the batch has both
 			// a BeginTransaction and an EndTransaction. Although on batch success the
-			// heartbeat loop will be stopped right away, on error we might need both
-			// the intents and the heartbeat loop:
-			// - on retriable error, we need to keep around the intents for cleanup in
-			// subsequent epochs.
-			// - on non-retriable error, we need to keep around the intents as the
-			// client is expected to send an EndTransaction(commit=false) to cleanup.
-			if err := tc.startTracking(ctx); err != nil {
+			// heartbeat loop will be stopped right away, on retriable errors we need the
+			// heartbeat loop: the intents and txn record should be kept in place just
+			// like for non-1PC txns.
+			if err := tc.startHeartbeatLoop(ctx); err != nil {
 				return nil, roachpb.NewError(err)
 			}
 		}
@@ -1013,7 +1006,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			tc.mu.txnEnd = nil
 		}
 		duration, restarts, status := tc.finalTxnStatsLocked()
-		tc.mu.tracking = false
+		tc.mu.hbRunning = false
 		tc.mu.Unlock()
 		tc.updateStats(duration, restarts, status)
 	}()
@@ -1143,12 +1136,12 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	return true
 }
 
-// startTracking starts a heartbeat loop and tracking of intents.
-func (tc *TxnCoordSender) startTracking(ctx context.Context) error {
+// startHeartbeatLoop starts a heartbeat loop in a different goroutine.
+func (tc *TxnCoordSender) startHeartbeatLoop(ctx context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	tc.mu.tracking = true
+	tc.mu.hbRunning = true
 	tc.mu.firstUpdateNanos = tc.clock.PhysicalNow()
 
 	// Only heartbeat the txn record if we're the root transaction.
@@ -1183,7 +1176,7 @@ func (tc *TxnCoordSender) startTracking(ctx context.Context) error {
 func (tc *TxnCoordSender) IsTracking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.mu.tracking
+	return tc.mu.hbRunning
 }
 
 // updateState updates the transaction state in both the success and
@@ -1343,12 +1336,11 @@ func (tc *TxnCoordSender) updateState(
 	// a serializable retry error. We can use the set of read spans to
 	// avoid retrying the transaction if all the spans can be updated to
 	// the current transaction timestamp.
-	if tc.mu.tracking {
-		// Adding the intents even on error reduces the likelihood of dangling
-		// intents blocking concurrent writers for extended periods of time.
-		// See #3346.
-		tc.appendAndCondenseIntentsLocked(ctx, ba, br)
-	}
+	//
+	// Adding the intents even on error reduces the likelihood of dangling
+	// intents blocking concurrent writers for extended periods of time.
+	// See #3346.
+	tc.appendAndCondenseIntentsLocked(ctx, ba, br)
 
 	// Update our record of this transaction, even on error.
 	tc.mu.meta.Txn.Update(&newTxn)
