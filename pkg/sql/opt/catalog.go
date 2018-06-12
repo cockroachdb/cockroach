@@ -184,17 +184,22 @@ func FormatCatalogTable(tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.IndexCount(); i++ {
-		formatCatalogIndex(tab.Index(i), child)
+		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
 	}
 }
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(idx Index, tp treeprinter.Node) {
+func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 	child := tp.Childf("INDEX %s", idx.IdxName())
 
 	var buf bytes.Buffer
-	for i := 0; i < idx.ColumnCount(); i++ {
+	colCount := idx.ColumnCount()
+	if isPrimary {
+		// Omit the "stored" columns from the primary index.
+		colCount = idx.UniqueColumnCount()
+	}
+	for i := 0; i < colCount; i++ {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
