@@ -84,6 +84,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
         <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
         <Metric name="cr.store.range.removes" title="Removes" nonNegativeRate />
+        <Metric name="cr.store.leases.transfers.success" title="Lease Transfers" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
