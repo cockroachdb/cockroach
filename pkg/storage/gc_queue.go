@@ -803,6 +803,9 @@ func RunGC(
 			return GCInfo{}, err
 		} else if !ok {
 			break
+		} else if ctx.Err() != nil {
+			// Stop iterating if our context has expired.
+			return GCInfo{}, err
 		}
 		iterKey := iter.Key()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
