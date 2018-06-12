@@ -1681,3 +1681,54 @@ func TestOnePCErrorTracking(t *testing.T) {
 		return nil
 	})
 }
+
+// Test that the TxnCoordSender accumulates intents even if it hasn't seen a
+// BeginTransaction. It didn't use to.
+// The TxnCoordSender can send (and get a response for) a write before it sees a
+// BeginTransaction because of racing requests going through the client.Txn. One
+// of them will get a BeginTransaction, but others might overtake it and get to
+// the TxnCoordSender first.
+func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	sender := &mockSender{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	factory := NewTxnCoordSenderFactory(
+		ambient,
+		cluster.MakeTestingClusterSettings(),
+		sender,
+		clock,
+		false, /* linearizable */
+		stopper,
+		MakeTxnMetrics(metric.TestSampleInterval),
+	)
+	key := roachpb.Key("a")
+	txn := roachpb.MakeTransaction(
+		"test txn",
+		key,
+		roachpb.UserPriority(0),
+		enginepb.SERIALIZABLE,
+		clock.Now(),
+		clock.MaxOffset().Nanoseconds(),
+	)
+	tcs := factory.New(client.RootTxn, &txn)
+	txnHeader := roachpb.Header{
+		Txn: &txn,
+	}
+	if _, pErr := client.SendWrappedWith(
+		ctx, tcs, txnHeader, &roachpb.PutRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: key,
+			},
+		},
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if numSpans := len(tcs.GetMeta().Intents); numSpans != 1 {
+		t.Fatalf("expected 1 intent span, got: %d", numSpans)
+	}
+}
