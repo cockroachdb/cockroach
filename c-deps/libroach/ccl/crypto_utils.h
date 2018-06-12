@@ -8,9 +8,11 @@
 
 #pragma once
 
-#include <cryptopp/aes.h>
 #include <string>
 #include "../rocksdbutils/env_encryption.h"
+#include "ccl/storageccl/engineccl/enginepbccl/key_registry.pb.h"
+
+namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
 /*
  * These provide various crypto primitives. They currently use CryptoPP.
@@ -22,30 +24,8 @@ std::string HexString(const std::string& s);
 
 // RandomBytes returns `length` bytes of data from a pseudo-random number generator.
 // This is non-blocking.
-// TODO(mberhault): it would be good to have a blocking version (/dev/random on *nix),
-// but to do it properly we might want to pre-read in the background.
 std::string RandomBytes(size_t length);
 
-// AES block cipher using CryptoPP: encryption only.
-class AESEncryptCipher : public rocksdb_utils::BlockCipher {
- public:
-  // The key must have a valid length (16/24/32 bytes) or CryptoPP will fail.
-  AESEncryptCipher(const std::string& key) : enc_((byte*)key.data(), key.size()) {}
-
-  virtual ~AESEncryptCipher();
-
-  // Blocksize is fixed for AES.
-  virtual size_t BlockSize() override;
-
-  // Encrypt a block of data.
-  // Length of data is equal to BlockSize().
-  virtual rocksdb::Status Encrypt(char* data) override;
-
-  // Decrypt a block of data.
-  // Length of data is equal to BlockSize().
-  // NOT IMPLEMENTED: this is not needed for CTR mode so remains unimplemented.
-  virtual rocksdb::Status Decrypt(char* data) override;
-
- private:
-  CryptoPP::AES::Encryption enc_;
-};
+// Create a new AES cipher using the passed-in key.
+// Suitable for encryption only, Decrypt is not implemented.
+rocksdb_utils::BlockCipher* NewAESEncryptCipher(const enginepbccl::SecretKey* key);
