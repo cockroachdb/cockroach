@@ -13,12 +13,16 @@ dump t f g
 CREATE TABLE f (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 
 CREATE TABLE g (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 
@@ -36,12 +40,16 @@ dump t
 CREATE TABLE f (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 
 CREATE TABLE g (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 

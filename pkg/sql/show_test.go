@@ -79,6 +79,8 @@ func TestShowCreateTable(t *testing.T) {
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP NULL DEFAULT now(),
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -98,6 +100,8 @@ func TestShowCreateTable(t *testing.T) {
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP NULL DEFAULT now(),
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -114,6 +118,8 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT ck CHECK (i > 0)
@@ -142,6 +148,8 @@ func TestShowCreateTable(t *testing.T) {
 	f FLOAT NULL,
 	s STRING NULL,
 	d DATE NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
 	UNIQUE INDEX %[1]s_d_key (d ASC),
 	FAMILY "primary" (i, f, d, rowid),
@@ -164,6 +172,8 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	a INT NULL,
 	b INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX c (a ASC, b DESC),
 	FAMILY "primary" (a, b, rowid)
 )`,
@@ -181,6 +191,8 @@ func TestShowCreateTable(t *testing.T) {
 	i INT NULL,
 	j INT NULL,
 	k INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
 	INDEX t7_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
@@ -197,6 +209,8 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 			expect: `CREATE TABLE %s (
 	x INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
 	INDEX t8_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)

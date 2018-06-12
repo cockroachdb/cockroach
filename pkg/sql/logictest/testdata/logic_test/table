@@ -449,6 +449,8 @@ SHOW CREATE TABLE test.null_default
 ----
 test.public.null_default  CREATE TABLE null_default (
                           ts TIMESTAMP NULL DEFAULT NULL,
+                          rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
                           FAMILY "primary" (ts, rowid)
 )
 

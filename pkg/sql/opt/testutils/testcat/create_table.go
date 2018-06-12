@@ -116,7 +116,7 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
-	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
+	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable, Hidden: def.Hidden}
 	tt.Columns = append(tt.Columns, col)
 
 	if def.PrimaryKey {

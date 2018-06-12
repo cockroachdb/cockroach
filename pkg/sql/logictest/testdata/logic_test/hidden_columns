@@ -1,0 +1,102 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE t (x INT NOT VISIBLE);
+  CREATE TABLE kv (
+    k INT PRIMARY KEY NOT VISIBLE,
+    v INT NOT VISIBLE
+  )
+
+# Verify that hidden columns can be explicitly inserted into.
+
+statement ok
+INSERT INTO t(x) VALUES (123)
+
+statement ok
+INSERT INTO kv(k,v) VALUES (123,456);
+
+# Verify that hidden columns cannot be implicitly inserted into
+
+statement error INSERT has more expressions than target columns, 1 expressions for 0 targets
+INSERT INTO t VALUES (123)
+
+statement error INSERT has more expressions than target columns, 2 expressions for 0 targets
+INSERT INTO kv VALUES (111, 222)
+
+# Verify the right columns are hidden.
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   x INT NOT VISIBLE NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   x INT NOT VISIBLE NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that stars expand to no columns.
+
+query I
+SELECT 42, * FROM t
+----
+42
+
+query I
+SELECT 42, * FROM kv
+----
+42
+
+# Check that the hidden column can be selected explicitly.
+
+query II
+SELECT 42, x FROM t
+----
+42  123
+
+# Check that ALTER can make hidden columns visible.
+
+statement ok
+ALTER TABLE kv ALTER v SET VISIBLE
+
+query TT
+SHOW CREATE TABLE kv
+----
+kv  CREATE TABLE kv (
+    k INT NOT VISIBLE NOT NULL,
+    v INT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (k ASC),
+    FAMILY "primary" (k, v)
+)
+
+# Check that ALTER can even make rowid visible.
+
+statement ok
+ALTER TABLE t ALTER rowid SET VISIBLE
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   x INT NOT VISIBLE NULL,
+   rowid INT NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that rowid is properly auto-selected by star expansion.
+
+query I
+SELECT rowid-rowid FROM (SELECT * FROM t)
+----
+0

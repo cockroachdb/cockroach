@@ -203,9 +203,11 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE t (
-     a STRING COLLATE en NULL,
-     FAMILY "primary" (a, rowid)
-   )
+   a STRING COLLATE en NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (a, rowid)
+)
 
 statement ok
 INSERT INTO t VALUES

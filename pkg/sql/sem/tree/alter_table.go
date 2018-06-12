@@ -65,6 +65,7 @@ func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableDropStored) alterTableCmd()         {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
+func (*AlterTableSetHidden) alterTableCmd()          {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionBy) alterTableCmd()        {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
@@ -78,6 +79,7 @@ var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableDropStored{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
+var _ AlterTableCmd = &AlterTableSetHidden{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionBy{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
@@ -195,6 +197,28 @@ func (node *AlterTableDropColumn) Format(ctx *FmtCtx) {
 	if node.DropBehavior != DropDefault {
 		ctx.Printf(" %s", node.DropBehavior)
 	}
+}
+
+// AlterTableSetHidden represents a SET [NOT] VISIBLE command.
+type AlterTableSetHidden struct {
+	Column Name
+	Hidden bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetHidden) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" SET")
+	if node.Hidden {
+		ctx.WriteString(" NOT")
+	}
+	ctx.WriteString(" VISIBLE")
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetHidden) GetColumn() Name {
+	return node.Column
 }
 
 // AlterTableDropConstraint represents a DROP CONSTRAINT command.

@@ -2546,6 +2546,9 @@ func (desc *ColumnDescriptor) SQLString() string {
 	f.FormatNameP(&desc.Name)
 	f.WriteByte(' ')
 	f.WriteString(desc.Type.SQLString())
+	if desc.Hidden {
+		f.WriteString(" NOT VISIBLE")
+	}
 	if desc.Nullable {
 		f.WriteString(" NULL")
 	} else {

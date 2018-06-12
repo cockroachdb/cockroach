@@ -11,6 +11,8 @@ dump t f --dump-mode=both
 CREATE TABLE f (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 
@@ -24,6 +26,8 @@ dump t f --dump-mode=schema
 CREATE TABLE f (
 	x INT NULL,
 	y INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (x, y, rowid)
 );
 

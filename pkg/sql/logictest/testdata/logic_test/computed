@@ -10,12 +10,14 @@ CREATE TABLE with_no_column_refs (
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
-with_no_column_refs CREATE TABLE with_no_column_refs (
-                      a INT NULL,
-                      b INT NULL,
-                      c INT NULL AS (3) STORED,
-                      FAMILY "primary" (a, b, c, rowid)
-                    )
+with_no_column_refs  CREATE TABLE with_no_column_refs (
+                     a INT NULL,
+                     b INT NULL,
+                     c INT NULL AS (3) STORED,
+                     rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                     FAMILY "primary" (a, b, c, rowid)
+)
 
 statement ok
 CREATE TABLE extra_parens (
@@ -27,12 +29,14 @@ CREATE TABLE extra_parens (
 query TT
 SHOW CREATE TABLE extra_parens
 ----
-extra_parens CREATE TABLE extra_parens (
-                a INT NULL,
-                b INT NULL,
-                c INT NULL AS ((3)) STORED,
-                FAMILY "primary" (a, b, c, rowid)
-              )
+extra_parens  CREATE TABLE extra_parens (
+              a INT NULL,
+              b INT NULL,
+              c INT NULL AS ((3)) STORED,
+              rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+              FAMILY "primary" (a, b, c, rowid)
+)
 
 
 statement error cannot write directly to computed column "c"
@@ -79,13 +83,15 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    a INT NULL DEFAULT 3:::INT,
-    b INT NULL DEFAULT 7:::INT,
-    c INT NULL AS (a) STORED,
-    d INT NULL AS (a + b) STORED,
-    FAMILY "primary" (a, b, c, d, rowid)
-  )
+x  CREATE TABLE x (
+   a INT NULL DEFAULT 3:::INT,
+   b INT NULL DEFAULT 7:::INT,
+   c INT NULL AS (a) STORED,
+   d INT NULL AS (a + b) STORED,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (a, b, c, d, rowid)
+)
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
@@ -587,11 +593,13 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    a INT NULL,
-    b INT NULL AS (a) STORED,
-    FAMILY "primary" (a, b, rowid)
-  )
+x  CREATE TABLE x (
+   a INT NULL,
+   b INT NULL AS (a) STORED,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (a, b, rowid)
+)
 
 statement ok
 DROP TABLE x
@@ -609,11 +617,13 @@ ALTER TABLE x RENAME COLUMN a TO c
 query TT
 SHOW CREATE TABLE x
 ----
-x CREATE TABLE x (
-    c INT NULL,
-    b INT NULL AS (c) STORED,
-    FAMILY "primary" (c, b, rowid)
-  )
+x  CREATE TABLE x (
+   c INT NULL,
+   b INT NULL AS (c) STORED,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (c, b, rowid)
+)
 
 statement ok
 DROP TABLE x
@@ -648,10 +658,12 @@ query TT
 SHOW CREATE TABLE x
 ----
 x  CREATE TABLE x (
-    a INT NULL,
-    b INT NULL AS (a * 2) STORED,
-    c INT NULL AS (a + 4) STORED,
-    FAMILY "primary" (a, b, rowid, c)
+   a INT NULL,
+   b INT NULL AS (a * 2) STORED,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   c INT NULL AS (a + 4) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (a, b, rowid, c)
 )
 
 statement ok

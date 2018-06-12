@@ -381,9 +381,11 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-     b INT[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+   b INT[] NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (b, rowid)
+)
 
 statement ok
 DROP TABLE a
@@ -452,9 +454,11 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-     b INT[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+   b INT[] NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (b, rowid)
+)
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -523,9 +527,11 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-    b SMALLINT[] NULL,
-    FAMILY "primary" (b, rowid)
-  )
+   b SMALLINT[] NULL,
+   rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (b, rowid)
+)
 
 statement error integer out of range for type SMALLINT \(column "b"\)
 INSERT INTO a VALUES (ARRAY[100000])

@@ -224,7 +224,11 @@ func (n *createViewNode) makeViewTableDesc(
 		if err != nil {
 			return desc, err
 		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{
+			Name:   tree.Name(colRes.Name),
+			Hidden: colRes.Hidden,
+			Type:   colType,
+		}
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}

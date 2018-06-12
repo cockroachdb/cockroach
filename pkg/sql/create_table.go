@@ -921,7 +921,11 @@ func makeTableDescIfAs(
 		if err != nil {
 			return desc, err
 		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{
+			Name:   tree.Name(colRes.Name),
+			Hidden: colRes.Hidden,
+			Type:   colType,
+		}
 		columnTableDef.Nullable.Nullability = tree.SilentNull
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]

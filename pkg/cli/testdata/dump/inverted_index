@@ -18,6 +18,8 @@ dump d t
 CREATE TABLE t (
 	a JSON NULL,
 	b JSON NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INVERTED INDEX idx (a),
 	INVERTED INDEX idx2 (b),
 	FAMILY "primary" (a, b, rowid)

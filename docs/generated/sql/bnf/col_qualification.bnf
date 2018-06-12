@@ -7,6 +7,7 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens reference_actions
 	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'STORED'
+	| 'CONSTRAINT' constraint_name 'NOT' 'VISIBLE'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'UNIQUE'
@@ -15,6 +16,7 @@ col_qualification ::=
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens reference_actions
 	| 'AS' '(' a_expr ')' 'STORED'
+	| 'NOT' 'VISIBLE'
 	| 'COLLATE' collation_name
 	| 'FAMILY' family_name
 	| 'CREATE' 'FAMILY' family_name

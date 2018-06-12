@@ -13,6 +13,8 @@ dump d
 ----
 CREATE TABLE ";" (
 	";" INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX ";_;_idx" (";" ASC),
 	FAMILY "primary" (";", rowid)
 );

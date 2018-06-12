@@ -537,7 +537,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str> UPDATE UPSERT USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
+%token <str> VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VISIBLE VARYING VIRTUAL
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -1104,6 +1104,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
+//   ALTER TABLE ... ALTER [COLUMN] <colname> SET [NOT] VISIBLE
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
@@ -1372,7 +1373,17 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetDefault{ColumnKeyword: $2.bool(), Column: tree.Name($3), Default: $4.expr()}
   }
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT VISIBLE
+| ALTER opt_column column_name SET NOT VISIBLE
+  {
+    $$.val = &tree.AlterTableSetHidden{Column: tree.Name($3), Hidden: true}
+  }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET VISIBLE
+| ALTER opt_column column_name SET VISIBLE
+  {
+    $$.val = &tree.AlterTableSetHidden{Column: tree.Name($3), Hidden: false}
+  }
+ // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column column_name DROP NOT NULL
   {
     $$.val = &tree.AlterTableDropNotNull{ColumnKeyword: $2.bool(), Column: tree.Name($3)}
@@ -3822,6 +3833,10 @@ col_qualification_elem:
  {
     sqllex.Error("syntax error: use AS ( <expr> ) STORED")
     return 1
+ }
+| NOT VISIBLE
+ {
+    $$.val = tree.HiddenConstraint{}
  }
 
 index_def:
@@ -8129,6 +8144,7 @@ unreserved_keyword:
 | VALIDATE
 | VALUE
 | VARYING
+| VISIBLE
 | WITHIN
 | WITHOUT
 | WRITE

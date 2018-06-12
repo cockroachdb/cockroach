@@ -43,6 +43,8 @@ CREATE TABLE b (
 
 CREATE TABLE a (
 	i INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX a_auto_index_fk_i_ref_b (i ASC),
 	FAMILY "primary" (i, rowid)
 );
@@ -79,6 +81,8 @@ CREATE TABLE d (
 
 CREATE TABLE c (
 	i INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	INDEX c_auto_index_fk_i_ref_d (i ASC),
 	FAMILY "primary" (i, rowid)
 );

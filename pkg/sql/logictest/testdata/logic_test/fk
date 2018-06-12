@@ -237,15 +237,17 @@ query TT
 SHOW CREATE TABLE delivery
 ----
 delivery  CREATE TABLE delivery (
-              ts TIMESTAMP NULL DEFAULT now(),
-              "order" INT NULL,
-              shipment INT NULL,
-              item STRING NULL,
-              CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
-              INDEX delivery_item_idx (item ASC),
-              CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
-              INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
-              FAMILY "primary" (ts, "order", shipment, item, rowid)
+          ts TIMESTAMP NULL DEFAULT now(),
+          "order" INT NULL,
+          shipment INT NULL,
+          item STRING NULL,
+          rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+          CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
+          INDEX delivery_item_idx (item ASC),
+          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+          INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
+          FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
 statement ok
@@ -591,12 +593,14 @@ query TT
 SHOW CREATE TABLE refpairs
 ----
 refpairs  CREATE TABLE refpairs (
-    a INT NULL,
-    b STRING NULL,
-    c INT NULL,
-    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
-    INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
-    FAMILY "primary" (a, b, c, rowid)
+          a INT NULL,
+          b STRING NULL,
+          c INT NULL,
+          rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+          CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
+          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
+          FAMILY "primary" (a, b, c, rowid)
 )
 
 statement error pgcode 23503 foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
@@ -803,13 +807,15 @@ query TT
 SHOW CREATE TABLE refers
 ----
 refers  CREATE TABLE refers (
-    a INT NULL,
-    b INT NULL,
-    INDEX another_idx (b ASC),
-    CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
-    INDEX refers_auto_index_fk_a_ref_referee (a ASC),
-    INDEX foo (a ASC),
-    FAMILY "primary" (a, b, rowid)
+        a INT NULL,
+        b INT NULL,
+        rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        INDEX another_idx (b ASC),
+        CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
+        INDEX refers_auto_index_fk_a_ref_referee (a ASC),
+        INDEX foo (a ASC),
+        FAMILY "primary" (a, b, rowid)
 )
 
 statement ok

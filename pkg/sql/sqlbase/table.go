@@ -179,6 +179,7 @@ func MakeColumnDefDescs(
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
+		Hidden:   d.Hidden,
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
 

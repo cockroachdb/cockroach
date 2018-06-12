@@ -842,6 +842,7 @@ unreserved_keyword ::=
 	| 'VALIDATE'
 	| 'VALUE'
 	| 'VARYING'
+	| 'VISIBLE'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1769,6 +1770,8 @@ alter_table_cmd ::=
 	| 'ADD' 'COLUMN' column_def
 	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
 	| 'ALTER' opt_column column_name alter_column_default
+	| 'ALTER' opt_column column_name 'SET' 'NOT' 'VISIBLE'
+	| 'ALTER' opt_column column_name 'SET' 'VISIBLE'
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
@@ -1991,6 +1994,7 @@ col_qualification_elem ::=
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens reference_actions
 	| 'AS' '(' a_expr ')' 'STORED'
+	| 'NOT' 'VISIBLE'
 
 family_name ::=
 	name

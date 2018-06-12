@@ -61,5 +61,7 @@ SHOW CREATE TABLE ";--dontask"
               a INT NULL,
               b INT NULL,
               c INT NULL,
+              rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
               FAMILY "primary" (a, b, c, rowid)
 )

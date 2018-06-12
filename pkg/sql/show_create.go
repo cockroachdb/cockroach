@@ -193,20 +193,16 @@ func (p *planner) showCreateTable(
 	f.WriteString("CREATE TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	primaryKeyIsOnVisibleColumn := false
-	for i, col := range desc.VisibleColumns() {
+	for i, col := range desc.Columns {
 		if i != 0 {
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
 		f.WriteString(col.SQLString())
-		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
-			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
-			// is on a visible column (not rowid).
-			primaryKeyIsOnVisibleColumn = true
-		}
 	}
-	if primaryKeyIsOnVisibleColumn {
+	if len(desc.PrimaryIndex.ColumnIDs) > 0 {
+		// Virtual tables do not have PK columns. Do not print a
+		// constraint in this case.
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(f.Buffer, desc.PrimaryIndex.Name)
 		f.WriteString(" ")

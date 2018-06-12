@@ -390,6 +390,8 @@ func TestDumpAsOf(t *testing.T) {
 	const want1 = `dump d t
 CREATE TABLE t (
 	i INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, rowid)
 );
 
@@ -412,7 +414,9 @@ INSERT INTO t (i) VALUES
 	const want2 = `dump d t
 CREATE TABLE t (
 	i INT NULL,
+	rowid INT NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	j INT NULL DEFAULT 2:::INT,
+	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, rowid, j)
 );
 

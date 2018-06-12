@@ -567,6 +567,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTableSetHidden:
+			col, dropped, err := n.tableDesc.FindColumnByName(t.GetColumn())
+			if err != nil {
+				return err
+			}
+			if dropped {
+				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
+			}
+			if err := applyColumnMutation(n.tableDesc, &col, t, params); err != nil {
+				return err
+			}
+			n.tableDesc.UpdateColumnDescriptor(col)
+			descriptorChanged = true
+
 		case *tree.AlterTableInjectStats:
 			sd, ok := n.statsData[i]
 			if !ok {
@@ -757,6 +771,9 @@ func applyColumnMutation(
 
 	case *tree.AlterTableDropStored:
 		col.ComputeExpr = nil
+
+	case *tree.AlterTableSetHidden:
+		col.Hidden = t.Hidden
 	}
 	return nil
 }
