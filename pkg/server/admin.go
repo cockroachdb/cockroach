@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1106,7 +1106,7 @@ func (s *adminServer) Jobs(
 	if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}
-	if req.Type != jobs.TypeUnspecified {
+	if req.Type != jobspb.TypeUnspecified {
 		q.Append(" AND type = $", req.Type.String())
 	}
 	q.Append("ORDER BY created DESC")

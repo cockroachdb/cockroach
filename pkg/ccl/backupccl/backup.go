@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -1050,13 +1051,13 @@ func backupPlanHook(
 				}
 				return sqlDescIDs
 			}(),
-			Details: jobs.BackupDetails{
+			Details: jobspb.BackupDetails{
 				StartTime:        startTime,
 				EndTime:          endTime,
 				URI:              to,
 				BackupDescriptor: descBytes,
 			},
-			Progress: jobs.BackupProgress{},
+			Progress: jobspb.BackupProgress{},
 		})
 		if err != nil {
 			return err
@@ -1074,7 +1075,7 @@ type backupResumer struct {
 func (b *backupResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.BackupDetails)
+	details := job.Record.Details.(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
@@ -1131,7 +1132,7 @@ func (b *backupResumer) OnTerminal(
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
-		details := job.Record.Details.(jobs.BackupDetails)
+		details := job.Record.Details.(jobspb.BackupDetails)
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
@@ -1165,8 +1166,8 @@ func (b *backupResumer) OnTerminal(
 
 var _ jobs.Resumer = &backupResumer{}
 
-func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeBackup {
+func backupResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeBackup {
 		return nil
 	}
 

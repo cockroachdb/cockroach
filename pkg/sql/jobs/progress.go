@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -42,7 +43,7 @@ type ProgressLogger struct {
 	Job           *Job
 	StartFraction float32
 	TotalChunks   int
-	ProgressedFn  func(context.Context, ProgressDetails)
+	ProgressedFn  func(context.Context, jobspb.ProgressDetails)
 
 	// The remaining fields are for internal use only.
 	completedChunks      int
@@ -64,7 +65,7 @@ func (jpl *ProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.lastReportedAt = timeutil.Now()
 	jpl.lastReportedFraction = fraction
-	return jpl.Job.Progressed(ctx, func(ctx context.Context, details ProgressDetails) float32 {
+	return jpl.Job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 		if jpl.ProgressedFn != nil {
 			jpl.ProgressedFn(ctx, details)
 		}
