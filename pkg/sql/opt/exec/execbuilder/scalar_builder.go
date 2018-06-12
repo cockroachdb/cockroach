@@ -114,7 +114,7 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedE
 		return memo.ExtractConstDatum(ev), nil
 	}
 
-	typedExprs := make([]tree.TypedExpr, ev.ChildCount())
+	typedExprs := make(tree.Exprs, ev.ChildCount())
 	var err error
 	for i := 0; i < ev.ChildCount(); i++ {
 		typedExprs[i], err = b.buildScalar(ctx, ev.Child(i))
@@ -122,7 +122,8 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedE
 			return nil, err
 		}
 	}
-	return tree.NewTypedTuple(typedExprs), nil
+	typ := ev.Logical().Scalar.Type.(types.TTuple)
+	return tree.NewTypedTuple(typ, typedExprs), nil
 }
 
 func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {

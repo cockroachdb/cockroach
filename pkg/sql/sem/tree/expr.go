@@ -730,20 +730,15 @@ type Tuple struct {
 	// ROW ( ... ).
 	Row bool
 
-	types types.TTuple
+	typ types.TTuple
 }
 
 // NewTypedTuple returns a new Tuple that is verified to be well-typed.
-func NewTypedTuple(typedExprs TypedExprs) *Tuple {
-	node := &Tuple{
-		Exprs: make(Exprs, len(typedExprs)),
-		types: types.TTuple{Types: make([]types.T, len(typedExprs))},
+func NewTypedTuple(typ types.TTuple, typedExprs Exprs) *Tuple {
+	return &Tuple{
+		Exprs: typedExprs,
+		typ:   typ,
 	}
-	for i := range typedExprs {
-		node.Exprs[i] = typedExprs[i].(Expr)
-		node.types.Types[i] = typedExprs[i].ResolvedType()
-	}
-	return node
 }
 
 // Format implements the NodeFormatter interface.
@@ -773,7 +768,7 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 
 // ResolvedType implements the TypedExpr interface.
 func (node *Tuple) ResolvedType() types.T {
-	return node.types
+	return node.typ
 }
 
 // Truncate returns a new Tuple that contains only a prefix of the original
@@ -784,7 +779,7 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 	return &Tuple{
 		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
 		Row:   node.Row,
-		types: types.TTuple{Types: append([]types.T(nil), node.types.Types[:prefix]...)},
+		typ:   types.TTuple{Types: append([]types.T(nil), node.typ.Types[:prefix]...)},
 	}
 }
 
@@ -796,11 +791,11 @@ func (node *Tuple) Project(set util.FastIntSet) *Tuple {
 	t := &Tuple{
 		Exprs: make(Exprs, 0, set.Len()),
 		Row:   node.Row,
-		types: types.TTuple{Types: make([]types.T, 0, set.Len())},
+		typ:   types.TTuple{Types: make([]types.T, 0, set.Len())},
 	}
 	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
 		t.Exprs = append(t.Exprs, node.Exprs[i])
-		t.types.Types = append(t.types.Types, node.types.Types[i])
+		t.typ.Types = append(t.typ.Types, node.typ.Types[i])
 	}
 	return t
 }

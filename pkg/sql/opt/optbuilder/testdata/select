@@ -668,7 +668,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int AS a, int AS b})
            │    ├── values
            │    │    ├── columns: column1:1(int) column2:2(int)
            │    │    └── tuple [type=tuple{int, int}]
@@ -711,7 +711,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int AS a, int AS b})
                 │    ├── values
                 │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    └── tuple [type=tuple{int, int}]
@@ -759,7 +759,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int AS a, int AS b})
            │    ├── select
            │    │    ├── columns: column1:1(int!null) column2:2(int)
            │    │    ├── values
@@ -814,7 +814,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int AS a, int AS b})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
@@ -869,7 +869,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int AS a, int AS b})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
@@ -924,7 +924,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int AS a, int AS b})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
