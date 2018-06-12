@@ -24,22 +24,31 @@ import (
 
 func registerClearRange(r *registry) {
 	r.Add(testSpec{
-		Name:  `clearrange`,
-		Nodes: nodes(10),
+		Name:       `clearrange`,
+		MinVersion: `v2.1.0`,
+		Nodes:      nodes(10),
 		// At the time of writing, #24029 is still open and this test does indeed
 		// thoroughly brick the cluster.
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Status(`downloading store dumps`)
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
-			fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
-			location := storeDirURL(fixtureURL, c.nodes, "2.0")
+			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
+				// TODO(peter): install zfs with 'roachprod reformat zfs'.
+				t.Status(`downloading store dumps`)
+				fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=4`
+				location := storeDirURL(fixtureURL, c.nodes, "2.0-8")
 
-			// Download this store dump, which measures around 2TB (across all nodes).
-			if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
-				t.Fatal(err)
+				// Download this store dump, which measures around 2TB (across all nodes).
+				if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
+					t.Fatal(err)
+				}
+				// TODO(peter): re-enable once zfs intallation is automatic.
+				// c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+			} else {
+				t.Status(`restoring store dumps`)
+				c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
