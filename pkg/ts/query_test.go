@@ -33,6 +33,7 @@ func runTestCaseMultipleFormats(t *testing.T, testCase func(*testing.T, testMode
 	t.Run("Row Format", func(t *testing.T) {
 		tm := newTestModelRunner(t)
 		tm.Start()
+		tm.DB.forceRowFormat = true
 		defer tm.Stop()
 		testCase(t, tm)
 	})
@@ -40,7 +41,6 @@ func runTestCaseMultipleFormats(t *testing.T, testCase func(*testing.T, testMode
 	t.Run("Column Format", func(t *testing.T) {
 		tm := newTestModelRunner(t)
 		tm.Start()
-		tm.DB.writeColumnar = true
 		defer tm.Stop()
 		testCase(t, tm)
 	})
