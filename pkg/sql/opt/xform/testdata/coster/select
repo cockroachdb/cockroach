@@ -15,12 +15,12 @@ SELECT k, s FROM a WHERE s >= 'foo'
 select
  ├── columns: k:1(int!null) s:3(string!null)
  ├── stats: [rows=333]
- ├── cost: 1010.00
+ ├── cost: 1070.00
  ├── keys: (1)
  ├── scan a
  │    ├── columns: k:1(int!null) s:3(string)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1000.00
+ │    ├── cost: 1060.00
  │    └── keys: (1)
  └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
       └── a.s >= 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]

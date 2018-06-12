@@ -73,7 +73,7 @@ select
            └── select
                 ├── columns: k:3(int!null) u:4(float) v:5(string)
                 ├── outer: (1,2)
-                ├── stats: [rows=12]
+                ├── stats: [rows=12.35]
                 ├── keys: (3)
                 ├── select
                 │    ├── columns: k:3(int!null) u:4(float) v:5(string)
@@ -222,7 +222,7 @@ SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
 ----
 select
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=12]
+ ├── stats: [rows=12.35]
  ├── project
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  │    ├── stats: [rows=111]

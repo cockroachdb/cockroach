@@ -77,7 +77,7 @@ limit           ·       ·          (k, v)  -v
  └── sort       ·       ·          (k, v)  -v
       │         order   -v         ·       ·
       └── scan  ·       ·          (k, v)  ·
-·               table   t@primary  ·       ·
+·               table   t@t_v_idx  ·       ·
 ·               spans   ALL        ·       ·
 
 query TTTTT
@@ -124,6 +124,6 @@ EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
 filter     ·       ·          (k)  ·
  │         filter  k != 2     ·    ·
  └── scan  ·       ·          (k)  ·
-·          table   t@primary  ·    ·
+·          table   t@t_v_idx  ·    ·
 ·          spans   ALL        ·    ·
 ·          limit   5          ·    ·

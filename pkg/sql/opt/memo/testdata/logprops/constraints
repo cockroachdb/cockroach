@@ -79,7 +79,7 @@ SELECT * FROM a WHERE x = 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1, distinct(1)=1]
+ ├── stats: [rows=1.43, distinct(1)=1]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -93,7 +93,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=4, distinct(1)=3]
+ ├── stats: [rows=4.29, distinct(1)=3]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -110,7 +110,7 @@ SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=0.0020, distinct(1)=0.0020, distinct(2)=0.0020]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
@@ -127,7 +127,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=0.0184, distinct(1)=0.0184, distinct(2)=0.0184]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
@@ -151,7 +151,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37]
+ ├── stats: [rows=37.04]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
@@ -173,7 +173,7 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37]
+ ├── stats: [rows=37.04]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
@@ -248,7 +248,7 @@ SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=4, distinct(1)=3]
+ ├── stats: [rows=4.29, distinct(1)=3]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -276,7 +276,7 @@ SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=2, distinct(1)=2]
+ ├── stats: [rows=2.86, distinct(1)=2]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -299,7 +299,7 @@ SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1]
+ ├── stats: [rows=0.9524, distinct(1)=0.9524]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -544,7 +544,7 @@ SELECT * FROM abc WHERE b
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── stats: [rows=1.43, distinct(2)=1]
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
@@ -556,7 +556,7 @@ SELECT * FROM abc WHERE NOT b
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── stats: [rows=1.43, distinct(2)=1]
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
@@ -569,7 +569,7 @@ SELECT * FROM abc WHERE a > 5 AND b
 ----
 select
  ├── columns: a:1(int!null) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── stats: [rows=0.4762, distinct(2)=0.4762]
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
@@ -656,7 +656,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
 scan c@v
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50] [/5/100 - /5/100]
- ├── stats: [rows=4, distinct(3)=3]
+ ├── stats: [rows=4.29, distinct(3)=3]
  └── keys: (1)
 
 # A tuple with NULL in it can't match anything, so it should be excluded from the constraints.
@@ -666,7 +666,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, NULL))
 scan c@v
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50]
- ├── stats: [rows=2, distinct(3)=2]
+ ├── stats: [rows=2.86, distinct(3)=2]
  └── keys: (1)
 
 # TODO(justin): ideally we would be normalizing away the 2 on the LHS here to
@@ -676,12 +676,12 @@ SELECT * FROM c WHERE (v, 2) IN ((1, 2), (3, 50), (5, 100))
 ----
 select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
- ├── stats: [rows=4, distinct(3)=3]
+ ├── stats: [rows=4.29, distinct(3)=3]
  ├── keys: (1)
  ├── scan c@v
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── constraint: /3/2/1: [/1 - /1] [/3 - /3] [/5 - /5]
- │    ├── stats: [rows=4, distinct(3)=3]
+ │    ├── stats: [rows=4.29, distinct(3)=3]
  │    └── keys: (1)
  └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
       └── in [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
@@ -707,12 +707,12 @@ SELECT * FROM c WHERE (v, u + v) IN ((1, 2), (3, 50), (5, 100))
 ----
 select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
- ├── stats: [rows=4, distinct(3)=3]
+ ├── stats: [rows=4.29, distinct(3)=3]
  ├── keys: (1)
  ├── scan c@v
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── constraint: /3/2/1: [/1 - /1] [/3 - /3] [/5 - /5]
- │    ├── stats: [rows=4, distinct(3)=3]
+ │    ├── stats: [rows=4.29, distinct(3)=3]
  │    └── keys: (1)
  └── filters [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
       └── in [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
@@ -737,7 +737,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (k, 50), (5, 100))
 ----
 select
  ├── columns: k:1(int!null) u:2(int!null) v:3(int)
- ├── stats: [rows=4, distinct(2)=3]
+ ├── stats: [rows=4.29, distinct(2)=3]
  ├── keys: (1)
  ├── scan c
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)

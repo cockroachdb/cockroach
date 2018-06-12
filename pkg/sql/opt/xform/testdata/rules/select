@@ -66,11 +66,11 @@ memo (optimized)
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── "[presentation: k:1]"
  │         ├── best: (scan a,cols=(1),constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.04
  ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
  │    └── ""
  │         ├── best: (scan a,cols=(1))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
  ├── G5: (variable a.k)
@@ -94,16 +94,16 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 333.00
+ │         └── cost: 350.00
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
- │         └── cost: 333.00
+ │         └── cost: 350.00
  ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan a,cols=(1,3))
- │         └── cost: 1000.00
+ │         └── cost: 1050.00
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable a.v)
@@ -127,21 +127,21 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.00
+ │         └── cost: 0.00
  ├── G2: (select G4 G5) (select G6 G7) (scan a@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 1.00
+ │         └── cost: 0.00
  ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1000.00
+ │         └── cost: 1050.00
  ├── G5: (filters G9 G8)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a,cols=(1,2),constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.05
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
@@ -174,21 +174,21 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.01
+ │         └── cost: 1.51
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 1.01
+ │         └── cost: 1.51
  ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1000.00
+ │         └── cost: 1050.00
  ├── G5: (filters G8 G9)
  ├── G6: (scan a@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.50
  ├── G7: (filters G9)
  ├── G8: (eq G13 G11)
  ├── G9: (eq G10 G11)
@@ -206,12 +206,12 @@ project
  └── select
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
-      ├── scan a@u
+      ├── scan a@v
       │    ├── columns: k:1(int!null) u:2(int) v:3(int)
-      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── constraint: /3: [/5 - /5]
       │    └── keys: (1) weak(3)
-      └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
-           └── a.v = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -220,26 +220,26 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.01
+ │         └── cost: 1.07
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
  │    └── ""
- │         ├── best: (select G6 G7)
- │         └── cost: 1.01
+ │         ├── best: (select G8 G9)
+ │         └── cost: 1.07
  ├── G3: (projections a.k)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1060.00
  ├── G5: (filters G11 G10)
  ├── G6: (scan a@u,constrained)
  │    └── ""
  │         ├── best: (scan a@u,constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.51
  ├── G7: (filters G10)
  ├── G8: (scan a@v,constrained)
  │    └── ""
  │         ├── best: (scan a@v,constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.06
  ├── G9: (filters G11)
  ├── G10: (eq G12 G13)
  ├── G11: (eq G14 G15)
@@ -303,24 +303,24 @@ memo (optimized)
  ├── G1: (select G2 G3) (lookup-join G4 b,keyCols=[1],lookupCols=(2))
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (lookup-join G4 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 5.01
+ │         └── cost: 5.09
  ├── G2: (scan b) (lookup-join G5 b,keyCols=[1],lookupCols=(3)) (lookup-join G6 b,keyCols=[1],lookupCols=(2))
  │    └── ""
  │         ├── best: (scan b)
- │         └── cost: 1000.00
+ │         └── cost: 1060.00
  ├── G3: (filters G7)
  ├── G4: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.04
  ├── G5: (scan b@u,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G6: (scan b@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G7: (eq G8 G9)
  ├── G8: (variable b.v)
  └── G9: (const 1)
@@ -363,30 +363,30 @@ memo (optimized)
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (select G4 G5)
- │         └── cost: 5.02
+ │         └── cost: 5.10
  ├── G2: (scan b) (lookup-join G6 b,keyCols=[1],lookupCols=(3)) (lookup-join G7 b,keyCols=[1],lookupCols=(2))
  │    └── ""
  │         ├── best: (scan b)
- │         └── cost: 1000.00
+ │         └── cost: 1060.00
  ├── G3: (filters G8 G10)
  ├── G4: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
  │    └── ""
  │         ├── best: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 5.01
+ │         └── cost: 5.09
  ├── G5: (filters G10)
  ├── G6: (scan b@u,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G7: (scan b@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G8: (eq G11 G13)
  ├── G9: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.04
  ├── G10: (eq G12 G13)
  ├── G11: (variable b.v)
  ├── G12: (plus G14 G15)

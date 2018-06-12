@@ -23,12 +23,12 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2(float!null)
  ├── stats: [rows=1000]
- ├── cost: 1099.66
+ ├── cost: 1149.66
  ├── ordering: -2
  └── scan a
       ├── columns: f:2(float!null)
       ├── stats: [rows=1000]
-      └── cost: 1000.00
+      └── cost: 1050.00
 
 # Test sort on 0 rows.
 opt

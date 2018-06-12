@@ -180,10 +180,10 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (SELECT a+a/a-1 FROM abc) AS sub(a) WHERE a > 1 OFFSET 1]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-output row: [3]
+fetched: /abc/foo/'one' -> /1
+fetched: /abc/foo/'three' -> /3
+fetched: /abc/foo/'two' -> /2
+output row: [2]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub]
