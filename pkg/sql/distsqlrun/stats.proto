@@ -41,3 +41,9 @@ message HashJoinerStats {
   int64 max_allocated_mem = 4;
   int64 max_allocated_disk = 5;
 }
+
+// AggregatorStats are the stats collected during an aggregator run.
+message AggregatorStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+}
