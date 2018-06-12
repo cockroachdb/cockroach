@@ -46,9 +46,6 @@ import (
 // dependency between the server and kv packages. These tests rely on
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
-// Addendum: I don't think the rationale above applies ever since
-// TestServerInterface was introduced and all packages became able to create
-// TestServers.
 
 func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
