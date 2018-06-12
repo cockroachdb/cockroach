@@ -248,7 +248,7 @@ func importPlanHook(
 	}
 
 	var createFileFn func() (string, error)
-	if importStmt.CreateDefs == nil {
+	if !importStmt.Bundle && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
 			return nil, nil, nil, err
@@ -285,28 +285,46 @@ func importPlanHook(
 			return err
 		}
 
-		// Normalize must be called regardles of whether there is a
-		// transform because it prepares a TableName with the right
-		// structure and stores it back into the statement AST, which we
-		// need later when computing the job title.
-		name, err := importStmt.Table.Normalize()
-		if err != nil {
-			return errors.Wrap(err, "normalize create table")
+		var table *tree.TableName
+		if importStmt.Table.TableNameReference != nil {
+			// Normalize must be called regardles of whether there is a
+			// transform because it prepares a TableName with the right
+			// structure and stores it back into the statement AST, which we
+			// need later when computing the job title.
+			table, err = importStmt.Table.Normalize()
+			if err != nil {
+				return errors.Wrap(err, "normalize create table")
+			}
 		}
-		parentID := defaultCSVParentID
+
 		transform := opts[importOptionTransform]
-		if transform == "" {
-			found, descI, err := name.ResolveTarget(ctx,
+
+		var parentID sqlbase.ID
+		if transform != "" {
+			// If we're not ingesting the data, we don't care what DB we pick.
+			parentID = defaultCSVParentID
+		} else if table != nil {
+			// We have a target table, so it might specify a DB in its name.
+			found, descI, err := table.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
+
 			if err != nil {
 				return errors.Wrap(err, "resolving target import name")
 			}
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
-				return errors.Errorf("database does not exist: %q", name)
+				return errors.Errorf("database does not exist: %q", table)
 			}
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
+		} else {
+			// No target table means we're importing whatever we find into the session
+			// database, so it must exist.
+			dbDesc, err := sql.ResolveDatabase(ctx, p, p.SessionData().Database, true /*required*/)
+			if err != nil {
+				return errors.Wrap(err, "could not resolve current database")
+			}
+			parentID = dbDesc.ID
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -429,37 +447,77 @@ func importPlanHook(
 			sstSize = sz
 		}
 
-		var create *tree.CreateTable
-		if importStmt.CreateDefs != nil {
-			create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+		var tableDescs []*sqlbase.TableDescriptor
+		var jobDesc string
+		if importStmt.Bundle {
+			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			reader, err := store.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+
+			var match string
+			if table != nil {
+				match = table.TableName.String()
+			}
+			switch format.Format {
+			case roachpb.IOFileFormat_Mysqldump:
+				evalCtx := &p.ExtendedEvalContext().EvalContext
+				tableDescs, err = readMysqlCreateTable(reader, evalCtx, parentID, match)
+			default:
+				// should be unreachable based on current parser rules.
+				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
+			}
+			if err != nil {
+				return err
+			}
+
+			descStr, err := importJobDescription(importStmt, nil, files, opts)
+			if err != nil {
+				return err
+			}
+			jobDesc = descStr
 		} else {
-			filename, err := createFileFn()
+			if table == nil {
+				// should be unreachable based on current parser rules.
+				return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
+			}
+			var create *tree.CreateTable
+			if importStmt.CreateDefs != nil {
+				create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+			} else {
+				filename, err := createFileFn()
+				if err != nil {
+					return err
+				}
+				create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+				if err != nil {
+					return err
+				}
+
+				if parsed, err := create.Table.Normalize(); err != nil {
+					return errors.Wrap(err, "normalize create table")
+				} else if table.TableName != parsed.TableName {
+					return errors.Errorf("importing table %s, but file specifies a schema for table %s", table.TableName, parsed.TableName)
+				}
+			}
+
+			tbl, err := MakeSimpleTableDescriptor(
+				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
 			if err != nil {
 				return err
 			}
-			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+			tableDescs = []*sqlbase.TableDescriptor{tbl}
+			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
 			if err != nil {
 				return err
 			}
-
-			if named, err := importStmt.Table.Normalize(); err != nil {
-				return errors.Wrap(err, "normalize import table")
-			} else if parsed, err := create.Table.Normalize(); err != nil {
-				return errors.Wrap(err, "normalize create table")
-			} else if named.TableName != parsed.TableName {
-				return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)
-			}
-		}
-
-		tableDesc, err := MakeSimpleTableDescriptor(
-			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
-		if err != nil {
-			return err
-		}
-
-		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
-		if err != nil {
-			return err
+			jobDesc = descStr
 		}
 
 		if transform != "" {
@@ -474,42 +532,39 @@ func importPlanHook(
 				return err
 			}
 		} else {
-			if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
-				return err
+			for _, tableDesc := range tableDescs {
+				if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
+					return err
+				}
 			}
-
 			// Verification steps have passed, generate a new table ID if we're
 			// restoring. We do this last because we want to avoid calling
 			// GenerateUniqueDescID if there's any kind of error above.
 			// Reserving a table ID now means we can avoid the rekey work during restore.
-			tableDesc.ID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-			if err != nil {
-				return err
+			for _, tableDesc := range tableDescs {
+				tableDesc.ID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
-		var nullifVal *jobs.ImportDetails_Table_Nullif
-		if format.Csv.NullEncoding != nil {
-			nullifVal = &jobs.ImportDetails_Table_Nullif{Nullif: *format.Csv.NullEncoding}
+		tableDetails := make([]jobs.ImportDetails_Table, len(tableDescs))
+		for i := range tableDescs {
+			tableDetails[i].Desc = tableDescs[i]
 		}
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
-				Tables: []jobs.ImportDetails_Table{{
-					Format:        format,
-					Desc:          tableDesc,
-					URIs:          files,
-					BackupPath:    transform,
-					ParentID:      parentID,
-					SSTSize:       sstSize,
-					Walltime:      walltime,
-					LegacyComma:   format.Csv.Comma,
-					LegacyComment: format.Csv.Comment,
-					LegacyNullif:  nullifVal,
-					LegacySkip:    format.Csv.Skip,
-				}},
+				URIs:       files,
+				Format:     format,
+				ParentID:   parentID,
+				Tables:     tableDetails,
+				BackupPath: transform,
+				SSTSize:    sstSize,
+				Walltime:   walltime,
 			},
 			Progress: jobs.ImportProgress{},
 		})
@@ -527,6 +582,7 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
+	tables map[string]*sqlbase.TableDescriptor,
 	tableDesc *sqlbase.TableDescriptor,
 	transformOnly string,
 	format roachpb.IOFileFormat,
@@ -554,6 +610,7 @@ func doDistributedCSVTransform(
 		p,
 		job,
 		sql.NewRowResultWriter(rows),
+		tables,
 		tableDesc,
 		files,
 		transformOnly,
@@ -640,26 +697,17 @@ type importResumer struct {
 func (r *importResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Record.Details.(jobs.ImportDetails)
 	p := phs.(sql.PlanHookState)
+
+	// TODO(dt): consider looking at the legacy fields used in 2.0.
+
 	walltime := details.Walltime
 	transform := details.BackupPath
 	files := details.URIs
-	tableDesc := details.Desc
 	parentID := details.ParentID
 	sstSize := details.SSTSize
-
 	format := details.Format
-	if format.Format == roachpb.IOFileFormat_Unknown {
-		format.Format = roachpb.IOFileFormat_CSV
-		format.Csv.Comma = details.LegacyComma
-		format.Csv.Comment = details.LegacyComment
-		format.Csv.Skip = details.LegacySkip
-		if details.LegacyNullif != nil {
-			format.Csv.NullEncoding = &details.LegacyNullif.Nullif
-		}
-
-	}
 
 	if sstSize == 0 {
 		// The distributed importer will correctly chunk up large ranges into
@@ -672,8 +720,21 @@ func (r *importResumer) Resume(
 		// smaller since there are fewer overall ranges.
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
+
+	var tableDesc *sqlbase.TableDescriptor
+	var tables map[string]*sqlbase.TableDescriptor
+
+	if len(details.Tables) == 1 {
+		tableDesc = details.Tables[0].Desc
+	} else if len(details.Tables) > 1 {
+		tables = make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+		for _, i := range details.Tables {
+			tables[i.Desc.Name] = i.Desc
+		}
+	}
+
 	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tableDesc, transform, format, walltime, sstSize,
+		ctx, job, files, p, parentID, tables, tableDesc, transform, format, walltime, sstSize,
 	)
 }
 
@@ -682,7 +743,7 @@ func (r *importResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Record.Details.(jobs.ImportDetails)
 	if details.BackupPath != "" {
 		return nil
 	}
@@ -692,32 +753,40 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 		return err
 	}
 	b := txn.NewBatch()
-	tableDesc := details.Desc
-	tableDesc.State = sqlbase.TableDescriptor_DROP
-	b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+	for _, tbl := range details.Tables {
+		tableDesc := tbl.Desc
+		tableDesc.State = sqlbase.TableDescriptor_DROP
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+	}
 	return txn.Run(ctx, b)
 }
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Record.Details.(jobs.ImportDetails)
 
-	if details.BackupPath == "" {
-		// Write the new TableDescriptors and flip the namespace entries over to
-		// them. After this call, any queries on a table will be served by the newly
-		// imported data.
-		if err := backupccl.WriteTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username, r.settings); err != nil {
-			return errors.Wrapf(err, "creating table %q", details.Desc.Name)
-		}
+	if details.BackupPath != "" {
+		return nil
 	}
 
+	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
+	for i := range details.Tables {
+		toWrite[i] = details.Tables[i].Desc
+	}
+
+	// Write the new TableDescriptors and flip the namespace entries over to
+	// them. After this call, any queries on a table will be served by the newly
+	// imported data.
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Record.Username, r.settings); err != nil {
+		return errors.Wrapf(err, "creating tables")
+	}
 	return nil
 }
 
 func (r *importResumer) OnTerminal(
 	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Record.Details.(jobs.ImportDetails)
 
 	if transform := details.BackupPath; transform != "" {
 		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)

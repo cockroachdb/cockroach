@@ -178,3 +178,14 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Pro
 	}
 	return ret
 }
+
+// GetJobPayload loads the Payload message associated with the job.
+func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Payload {
+	ret := &jobs.Payload{}
+	var buf []byte
+	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	if err := protoutil.Unmarshal(buf, ret); err != nil {
+		t.Fatal(err)
+	}
+	return ret
+}

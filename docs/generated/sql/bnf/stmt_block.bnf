@@ -98,7 +98,9 @@ insert_stmt ::=
 	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
 import_stmt ::=
-	'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	'IMPORT' import_bundle_format '(' string_or_placeholder ')'
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_bundle_format '(' string_or_placeholder ')'
+	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
 pause_stmt ::=
@@ -327,9 +329,9 @@ explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
 import_data_format ::=
-	'CSV'
+	import_bundle_format
+	| 'CSV'
 	| 'MYSQLOUTFILE'
-	| 'MYSQLDUMP'
 	| 'PGCOPY'
 
 privileges ::=
@@ -354,6 +356,9 @@ insert_rest ::=
 on_conflict ::=
 	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list where_clause
 	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
+
+import_bundle_format ::=
+	'MYSQLDUMP'
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*

@@ -21,6 +21,7 @@ type Import struct {
 	CreateDefs TableDefs
 	FileFormat string
 	Files      Exprs
+	Bundle     bool
 	Options    KVOptions
 }
 
@@ -28,23 +29,35 @@ var _ Statement = &Import{}
 
 // Format implements the NodeFormatter interface.
 func (node *Import) Format(ctx *FmtCtx) {
-	ctx.WriteString("IMPORT TABLE ")
-	ctx.FormatNode(&node.Table)
+	ctx.WriteString("IMPORT ")
 
-	if node.CreateFile != nil {
-		ctx.WriteString(" CREATE USING ")
-		ctx.FormatNode(node.CreateFile)
-		ctx.WriteString(" ")
-	} else {
+	if node.Bundle {
+		if node.Table.TableNameReference != nil {
+			ctx.FormatNode(&node.Table)
+			ctx.WriteString(" FROM ")
+		}
+		ctx.WriteString(node.FileFormat)
 		ctx.WriteString(" (")
-		ctx.FormatNode(&node.CreateDefs)
-		ctx.WriteString(") ")
-	}
+		ctx.FormatNode(&node.Files)
+		ctx.WriteString(")")
+	} else {
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(&node.Table)
 
-	ctx.WriteString(node.FileFormat)
-	ctx.WriteString(" DATA (")
-	ctx.FormatNode(&node.Files)
-	ctx.WriteString(")")
+		if node.CreateFile != nil {
+			ctx.WriteString(" CREATE USING ")
+			ctx.FormatNode(node.CreateFile)
+			ctx.WriteString(" ")
+		} else {
+			ctx.WriteString(" (")
+			ctx.FormatNode(&node.CreateDefs)
+			ctx.WriteString(") ")
+		}
+		ctx.WriteString(node.FileFormat)
+		ctx.WriteString(" DATA (")
+		ctx.FormatNode(&node.Files)
+		ctx.WriteString(")")
+	}
 
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
