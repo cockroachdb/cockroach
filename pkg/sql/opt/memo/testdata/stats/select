@@ -63,10 +63,10 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=1]
+ ├── stats: [rows=0]
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
-      ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+      ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
       ├── keys: (3)
       ├── scan b
       │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
@@ -157,18 +157,18 @@ SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 ----
 project
  ├── columns: sum:4(decimal)
- ├── stats: [rows=99]
+ ├── stats: [rows=100]
  └── group-by
       ├── columns: z:2(int!null) sum:4(decimal)
       ├── grouping columns: z:2(int!null)
-      ├── stats: [rows=99, distinct(2)=99]
+      ├── stats: [rows=100, distinct(2)=100]
       ├── keys: (2)
       ├── project
       │    ├── columns: x:1(int!null) z:2(int!null)
-      │    ├── stats: [rows=2000, distinct(2)=99]
+      │    ├── stats: [rows=2000, distinct(2)=100]
       │    └── select
       │         ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
-      │         ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=99]
+      │         ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=100]
       │         ├── keys: (3)
       │         ├── scan b
       │         │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
