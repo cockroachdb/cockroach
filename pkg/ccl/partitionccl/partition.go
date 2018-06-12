@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -325,11 +326,11 @@ func selectPartitionExprsByName(
 		return nil
 	}
 
-	var colVars tree.TypedExprs
+	var colVars tree.Exprs
 	{
 		// The recursive calls of selectPartitionExprsByName don't pass though
 		// the column ordinal references, so reconstruct them here.
-		colVars = make(tree.TypedExprs, len(prefixDatums)+int(partDesc.NumColumns))
+		colVars = make(tree.Exprs, len(prefixDatums)+int(partDesc.NumColumns))
 		for i := range colVars {
 			col, err := tableDesc.FindActiveColumnByID(idxDesc.ColumnIDs[i])
 			if err != nil {
@@ -363,7 +364,8 @@ func selectPartitionExprsByName(
 				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
 				// we can simply exclude them from the expr.
 				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
-					tree.NewTypedTuple(colVars[:len(allDatums)]), tree.NewDTuple(allDatums...))
+					tree.NewTypedTuple(types.TTuple{}, colVars[:len(allDatums)]),
+					tree.NewDTuple(types.TTuple{}, allDatums...))
 				partValueExprs[len(t.Datums)] = append(partValueExprs[len(t.Datums)], exprAndPartName{
 					expr: partValueExpr,
 					name: l.Name,

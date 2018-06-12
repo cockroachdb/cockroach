@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // splitOrExpr flattens a tree of OR expressions returning all of the child
@@ -699,30 +700,35 @@ func simplifyOneAndInExpr(
 				return tree.DBoolFalse, nil
 
 			case tree.NE:
+				typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple)
 				if found {
 					if len(values) < 2 {
 						return tree.DBoolFalse, nil
 					}
 					values = remove(values, i)
+					typ = typ.Remove(i)
 				}
 				return tree.NewTypedComparisonExpr(
 					tree.In,
 					left.TypedLeft(),
-					tree.NewDTuple(values...).SetSorted(),
+					tree.NewDTuple(typ, values...).SetSorted(),
 				), nil
 
 			case tree.GT:
 				if i < len(values) {
+					typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple)
 					if found {
 						values = values[i+1:]
+						typ = typ.RemovePrefix(i + 1)
 					} else {
 						values = values[i:]
+						typ = typ.RemovePrefix(i)
 					}
 					if len(values) > 0 {
 						return tree.NewTypedComparisonExpr(
 							tree.In,
 							left.TypedLeft(),
-							tree.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(typ, values...).SetSorted(),
 						), nil
 					}
 				}
@@ -731,11 +737,12 @@ func simplifyOneAndInExpr(
 			case tree.GE:
 				if i < len(values) {
 					values = values[i:]
+					typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple).RemovePrefix(i)
 					if len(values) > 0 {
 						return tree.NewTypedComparisonExpr(
 							tree.In,
 							left.TypedLeft(),
-							tree.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(typ, values...).SetSorted(),
 						), nil
 					}
 				}
@@ -747,10 +754,11 @@ func simplifyOneAndInExpr(
 						return tree.DBoolFalse, nil
 					}
 					values = values[:i]
+					typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple).RemoveSuffix(i)
 					return tree.NewTypedComparisonExpr(
 						tree.In,
 						left.TypedLeft(),
-						tree.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(typ, values...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -764,10 +772,11 @@ func simplifyOneAndInExpr(
 						return tree.DBoolFalse, nil
 					}
 					values = values[:i]
+					typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple).RemoveSuffix(i)
 					return tree.NewTypedComparisonExpr(
 						tree.In,
 						left.TypedLeft(),
-						tree.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(typ, values...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -776,14 +785,15 @@ func simplifyOneAndInExpr(
 		case tree.In:
 			// Both of our tuples are sorted. Intersect the lists.
 			rtuple := right.Right.(*tree.DTuple)
-			intersection := intersectSorted(evalCtx, values, rtuple.D)
+			typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple)
+			typ, intersection := intersectSorted(evalCtx, typ, values, rtuple.D)
 			if len(intersection) == 0 {
 				return tree.DBoolFalse, nil
 			}
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(intersection...).SetSorted(),
+				tree.NewDTuple(typ, intersection...).SetSorted(),
 			), nil
 		}
 	}
@@ -947,7 +957,7 @@ func simplifyOneOrExpr(
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				lcmpLeft,
-				tree.NewDTuple(ldatum, rdatum).SetSorted(),
+				tree.NewDTuple(types.TTuple{}, ldatum, rdatum).SetSorted(),
 			), nil, true
 		case tree.NE:
 			// a = x OR a != y
@@ -1278,13 +1288,14 @@ func simplifyOneOrInExpr(
 		switch right.Operator {
 		case tree.EQ:
 			datum := right.Right.(tree.Datum)
+			typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple)
 			// We keep the tuples for an IN expression in sorted order. So now we just
 			// merge the two sorted lists.
-			merged := mergeSorted(evalCtx, ltuple.D, tree.Datums{datum})
+			typ, merged := mergeSorted(evalCtx, typ, ltuple.D, tree.Datums{datum})
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(typ, merged...).SetSorted(),
 			), nil
 
 		case tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
@@ -1342,11 +1353,12 @@ func simplifyOneOrInExpr(
 		case tree.In:
 			// We keep the tuples for an IN expression in sorted order. So now we
 			// just merge the two sorted lists.
-			merged := mergeSorted(evalCtx, ltuple.D, right.Right.(*tree.DTuple).D)
+			typ := types.UnwrapType(ltuple.ResolvedType()).(types.TTuple)
+			typ, merged := mergeSorted(evalCtx, typ, ltuple.D, right.Right.(*tree.DTuple).D)
 			return tree.NewTypedComparisonExpr(
 				tree.In,
 				left.TypedLeft(),
-				tree.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(typ, merged...).SetSorted(),
 			), nil
 		}
 	}
@@ -1388,7 +1400,7 @@ func simplifyComparisonExpr(
 				return tree.NewTypedComparisonExpr(
 					tree.In,
 					left,
-					tree.NewDTuple(right.(tree.Datum)).SetSorted(),
+					tree.NewDTuple(types.TTuple{}, right.(tree.Datum)).SetSorted(),
 				), true
 			}
 			return n, true
@@ -1504,52 +1516,95 @@ func makePrefixRange(prefix tree.DString, datum tree.TypedExpr, complete bool) t
 	)
 }
 
-func mergeSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
-	r := make(tree.Datums, 0, len(a)+len(b))
+func mergeSorted(
+	evalCtx *tree.EvalContext, typ types.TTuple, a, b tree.Datums,
+) (types.TTuple, tree.Datums) {
+	clen := len(a) + len(b)
+	r := make(tree.Datums, 0, clen)
+	rt := types.TTuple{Types: make([]types.T, 0, clen)}
+	if typ.Labels != nil {
+		rt.Labels = make([]string, 0, clen)
+	}
 	for len(a) > 0 || len(b) > 0 {
 		if len(a) == 0 {
 			r = append(r, b...)
+			for _, bd := range b {
+				rt.Types = append(rt.Types, bd.ResolvedType())
+				if rt.Labels != nil {
+					rt.Labels = append(rt.Labels, "")
+				}
+			}
 			break
 		}
 		if len(b) == 0 {
 			r = append(r, a...)
+			rt.Types = append(rt.Types, typ.Types...)
+			if rt.Labels != nil {
+				rt.Labels = append(rt.Labels, typ.Labels...)
+			}
 			break
 		}
 		switch a[0].Compare(evalCtx, b[0]) {
 		case -1:
 			r = append(r, a[0])
+			rt.Types = append(rt.Types, typ.Types[0])
+			if rt.Labels != nil {
+				rt.Labels = append(rt.Labels, typ.Labels[0])
+			}
 			a = a[1:]
+			typ = typ.RemovePrefix(1)
 		case 0:
 			r = append(r, a[0])
+			rt.Types = append(rt.Types, typ.Types[0])
+			if rt.Labels != nil {
+				rt.Labels = append(rt.Labels, typ.Labels[0])
+			}
 			a = a[1:]
+			typ = typ.RemovePrefix(1)
 			b = b[1:]
 		case 1:
 			r = append(r, b[0])
+			rt.Types = append(rt.Types, b[0].ResolvedType())
+			if rt.Labels != nil {
+				rt.Labels = append(rt.Labels, "")
+			}
 			b = b[1:]
 		}
 	}
-	return r
+	return rt, r
 }
 
-func intersectSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
+func intersectSorted(
+	evalCtx *tree.EvalContext, typ types.TTuple, a, b tree.Datums,
+) (types.TTuple, tree.Datums) {
 	n := len(a)
 	if n > len(b) {
 		n = len(b)
 	}
 	r := make(tree.Datums, 0, n)
+	rt := types.TTuple{Types: make([]types.T, 0, n)}
+	if typ.Labels != nil {
+		rt.Labels = make([]string, 0, n)
+	}
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(evalCtx, b[0]) {
 		case -1:
 			a = a[1:]
+			typ = typ.RemovePrefix(1)
 		case 0:
 			r = append(r, a[0])
+			rt.Types = append(rt.Types, typ.Types[0])
+			if rt.Labels != nil {
+				rt.Labels = append(rt.Labels, typ.Labels[0])
+			}
 			a = a[1:]
+			typ = typ.RemovePrefix(1)
 			b = b[1:]
 		case 1:
 			b = b[1:]
 		}
 	}
-	return r
+	return rt, r
 }
 
 func remove(a tree.Datums, i int) tree.Datums {

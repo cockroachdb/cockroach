@@ -234,6 +234,12 @@ func TestNormalizeExpr(t *testing.T) {
 		{`j->'s' = jv`, `(j->'s') = jv`},
 		{`j->s = jv`, `(j->s) = jv`},
 		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
+		// We want to check that constant-folded tuples preserve their
+		// labels.  However unfortunately the pretty-printed repr of a
+		// tuple does not include the labels. So use pg_typeof to reveal
+		// them.
+		// TODO(knz): simplify this when bug #26624 is solved.
+		{`pg_typeof((ROW (1) AS a))`, `'tuple{int AS a}'`},
 	}
 
 	semaCtx := tree.MakeSemaContext(true /* privileged */)

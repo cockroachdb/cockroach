@@ -734,16 +734,11 @@ type Tuple struct {
 }
 
 // NewTypedTuple returns a new Tuple that is verified to be well-typed.
-func NewTypedTuple(typedExprs TypedExprs) *Tuple {
-	node := &Tuple{
-		Exprs: make(Exprs, len(typedExprs)),
-		types: types.TTuple{Types: make([]types.T, len(typedExprs))},
+func NewTypedTuple(typ types.TTuple, typedExprs Exprs) *Tuple {
+	return &Tuple{
+		Exprs: typedExprs,
+		types: typ,
 	}
-	for i := range typedExprs {
-		node.Exprs[i] = typedExprs[i].(Expr)
-		node.types.Types[i] = typedExprs[i].ResolvedType()
-	}
-	return node
 }
 
 // Format implements the NodeFormatter interface.
