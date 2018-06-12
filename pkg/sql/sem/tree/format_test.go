@@ -246,7 +246,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	if err != nil {
 		b.Fatalf("error reading grammar: %v", err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes))
+	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes), false)
 	if err != nil {
 		b.Fatalf("error instantiating RSG: %v", err)
 	}
