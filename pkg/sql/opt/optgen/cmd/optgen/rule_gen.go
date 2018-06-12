@@ -745,8 +745,8 @@ func (g *ruleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 		ref := customFunc.Args[0].(*lang.RefExpr)
 		g.w.write("%s.mem.%s(%s).Operator()", g.thisVar, g.exprLookup, ref.Label)
 	} else {
-		funcName := unTitle(string(customFunc.Name))
-		g.w.write("%s.%s(", g.thisVar, funcName)
+		funcName := string(customFunc.Name)
+		g.w.write("%s.funcs.%s(", g.thisVar, funcName)
 		for index, arg := range customFunc.Args {
 			if index != 0 {
 				g.w.write(", ")

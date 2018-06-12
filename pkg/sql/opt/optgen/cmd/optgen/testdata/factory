@@ -265,11 +265,11 @@ func (_f *Factory) ConstructEq(
 				if _constExpr2 != nil {
 					_constExpr3 := _f.mem.NormExpr(right).AsConst()
 					if _constExpr3 != nil {
-						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
+						if !_f.funcs.IsInvalidBinary(opt.MinusOp, right, leftRight) {
 							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeVarPlus) {
 								_group = _f.ConstructEq(
 									leftLeft,
-									_f.constructBinary(opt.MinusOp, right, leftRight),
+									_f.funcs.ConstructBinary(opt.MinusOp, right, leftRight),
 								)
 								_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 								if _f.appliedRule != nil {
@@ -310,11 +310,11 @@ func (_f *Factory) ConstructLt(
 				if _constExpr2 != nil {
 					_constExpr3 := _f.mem.NormExpr(right).AsConst()
 					if _constExpr3 != nil {
-						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
+						if !_f.funcs.IsInvalidBinary(opt.MinusOp, right, leftRight) {
 							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeVarPlus) {
 								_group = _f.ConstructLt(
 									leftLeft,
-									_f.constructBinary(opt.MinusOp, right, leftRight),
+									_f.funcs.ConstructBinary(opt.MinusOp, right, leftRight),
 								)
 								_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 								if _f.appliedRule != nil {
@@ -483,11 +483,11 @@ func (_f *Factory) ConstructFunc(
 				item := _item
 				_variableExpr := _f.mem.NormExpr(_item).AsVariable()
 				if _variableExpr == nil {
-					if _f.isEmpty(item) {
+					if _f.funcs.IsEmpty(item) {
 						if _f.matchedRule == nil || _f.matchedRule(opt.Concat) {
 							_group = _f.ConstructFunc(
 								m.mem.InternPrivate(tree.NewDString("concat")),
-								_f.removeListItem(args, item),
+								_f.funcs.RemoveListItem(args, item),
 							)
 							_f.mem.AddAltFingerprint(_funcExpr.Fingerprint(), _group)
 							if _f.appliedRule != nil {
@@ -637,7 +637,7 @@ func (_f *Factory) ConstructSelect(
 									t,
 									u,
 								)),
-								memo.DynamicID(_f.custom(item, opt.SelectOp)),
+								memo.DynamicID(_f.funcs.Custom(item, opt.SelectOp)),
 							},
 						)
 						_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -826,7 +826,7 @@ func (_f *Factory) ConstructList(
 										empty := _listExpr5.Items()
 										if _listExpr5.Items().Length == 0 {
 											if _f.matchedRule == nil || _f.matchedRule(opt.List) {
-												_group = _f.construct(any, first, last, single, empty)
+												_group = _f.funcs.Construct(any, first, last, single, empty)
 												_f.mem.AddAltFingerprint(_listExpr.Fingerprint(), _group)
 												if _f.appliedRule != nil {
 													_f.appliedRule(opt.List, _group, 0)
@@ -914,7 +914,7 @@ func (_f *Factory) ConstructJoin(
 	// [ConstructList]
 	{
 		if _f.matchedRule == nil || _f.matchedRule(opt.ConstructList) {
-			_group = _f.construct(_f.mem.InternList([]memo.GroupID{}), _f.mem.InternList([]memo.GroupID{left}), _f.mem.InternList([]memo.GroupID{left, right}), _f.mem.InternList([]memo.GroupID{_f.mem.InternList([]memo.GroupID{on})}))
+			_group = _f.funcs.Construct(_f.mem.InternList([]memo.GroupID{}), _f.mem.InternList([]memo.GroupID{left}), _f.mem.InternList([]memo.GroupID{left, right}), _f.mem.InternList([]memo.GroupID{_f.mem.InternList([]memo.GroupID{on})}))
 			_f.mem.AddAltFingerprint(_joinExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
 				_f.appliedRule(opt.ConstructList, _group, 0)
@@ -1289,7 +1289,7 @@ func (_f *Factory) ConstructPlus(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if !_f.hasNullableArgs(opt.PlusOp, _f.anotherFunc(_f.mem.NormExpr(left).Operator())) {
+			if !_f.funcs.HasNullableArgs(opt.PlusOp, _f.funcs.AnotherFunc(_f.mem.NormExpr(left).Operator())) {
 				if _f.matchedRule == nil || _f.matchedRule(opt.Fold) {
 					_group = _f.ConstructNull()
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
@@ -1320,7 +1320,7 @@ func (_f *Factory) ConstructMinus(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if !_f.hasNullableArgs(opt.MinusOp, _f.anotherFunc(_f.mem.NormExpr(left).Operator())) {
+			if !_f.funcs.HasNullableArgs(opt.MinusOp, _f.funcs.AnotherFunc(_f.mem.NormExpr(left).Operator())) {
 				if _f.matchedRule == nil || _f.matchedRule(opt.Fold) {
 					_group = _f.ConstructNull()
 					_f.mem.AddAltFingerprint(_minusExpr.Fingerprint(), _group)
@@ -1485,9 +1485,9 @@ func (_f *Factory) ConstructNot(
 			right := _expr.ChildGroup(_f.mem, 1)
 			_containsExpr := _f.mem.NormExpr(input).AsContains()
 			if _containsExpr == nil {
-				if _f.someOtherCondition(input) {
+				if _f.funcs.SomeOtherCondition(input) {
 					if _f.matchedRule == nil || _f.matchedRule(opt.Invert) {
-						_group = _f.invert(_f.mem.NormExpr(input).Operator(), left, right)
+						_group = _f.funcs.Invert(_f.mem.NormExpr(input).Operator(), left, right)
 						_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
 						if _f.appliedRule != nil {
 							_f.appliedRule(opt.Invert, _group, 0)
