@@ -323,6 +323,37 @@ type TTuple struct {
 	Labels []string
 }
 
+// RemovePrefix removes the first n items from the tuple type.
+func (t TTuple) RemovePrefix(n int) TTuple {
+	t.Types = t.Types[n:]
+	if t.Labels != nil {
+		t.Labels = t.Labels[n:]
+	}
+	return t
+}
+
+// RemoveSuffix removes the items after the position n from the tuple type.
+func (t TTuple) RemoveSuffix(n int) TTuple {
+	t.Types = t.Types[:n]
+	if t.Labels != nil {
+		t.Labels = t.Labels[:n]
+	}
+	return t
+}
+
+// Remove remotes the item at the specified position in the tuple type.
+func (t TTuple) Remove(i int) TTuple {
+	r := TTuple{Types: make([]T, len(t.Types)-1)}
+	copy(r.Types, t.Types[:i])
+	copy(r.Types[i:], t.Types[i+1:])
+	if t.Labels != nil {
+		r.Labels = make([]string, len(t.Labels)-1)
+		copy(r.Labels, t.Labels[:i])
+		copy(r.Labels[i:], t.Labels[i+1:])
+	}
+	return r
+}
+
 // String implements the fmt.Stringer interface.
 func (t TTuple) String() string {
 	var buf bytes.Buffer

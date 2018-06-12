@@ -3726,13 +3726,13 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
-	tuple := NewDTupleWithCap(len(t.Exprs))
-	for _, v := range t.Exprs {
+	tuple := NewDTupleWithLen(t.types, len(t.Exprs))
+	for i, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		tuple.D = append(tuple.D, d)
+		tuple.D[i] = d
 	}
 	return tuple, nil
 }

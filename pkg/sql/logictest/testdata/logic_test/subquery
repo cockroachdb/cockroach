@@ -27,8 +27,8 @@ SELECT 1 + (SELECT 1)
 ----
 2
 
-query error unsupported binary operator: <int> \+ <tuple{int, int}>
-SELECT 1 + (SELECT 1, 2)
+query error unsupported binary operator: <int> \+ <tuple{int AS a, int AS b}>
+SELECT 1 + (SELECT 1 AS a, 2 AS b)
 
 query B
 SELECT (1, 2, 3) IN (SELECT 1, 2, 3)
@@ -145,11 +145,11 @@ true
 query error pgcode 42601 subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
 
-query error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
-SELECT 1 IN (SELECT 1, 2)
+query error unsupported comparison operator: <int> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT 1 IN (SELECT 1 AS a, 2 AS b)
 
 query error unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
-SELECT (1, 2) IN (SELECT 1)
+SELECT (1, 2) IN (SELECT 1 AS a)
 
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
@@ -160,7 +160,7 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
-query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int, int, int}}>
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
 SELECT (1, 2) IN (SELECT * FROM abc)
 
 query B
