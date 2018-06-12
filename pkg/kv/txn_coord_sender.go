@@ -77,9 +77,8 @@ const (
 	// done indicates the transaction has been completed via end
 	// transaction and can no longer be used.
 	done
-	// aborted indicates the transaction was aborted or abandoned (e.g.
-	// from timeout, heartbeat failure, context cancelation, txn abort
-	// or restart, etc.)
+	// aborted indicates the transaction was aborted. All requests other than
+	// rollbacks are rejected.
 	aborted
 )
 
@@ -314,6 +313,12 @@ func (tcf *TxnCoordSenderFactory) WrappedSender() client.Sender {
 // Metrics returns the factory's metrics struct.
 func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 	return tcf.metrics
+}
+
+// SetHeartbeatInterval changes the heartbeat interval used by future
+// TxnCoordSender's created by this factory.
+func (tcf *TxnCoordSenderFactory) SetHeartbeatInterval(interval time.Duration) {
+	tcf.heartbeatInterval = interval
 }
 
 // GetMeta is part of the client.TxnSender interface.
@@ -1062,7 +1067,7 @@ func abortTxnAsync(
 			)
 			if pErr != nil {
 				log.VErrEventf(ctx, 1,
-					"abort due to inactivity failed for %s: %s ", txn, pErr)
+					"async abort failed for %s: %s ", txn, pErr)
 			}
 		},
 	); err != nil {
@@ -1112,16 +1117,26 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
+		tc.mu.Lock()
 		// If the error contains updated txn info, ingest it. For example, we might
 		// find out this way that the transaction has been Aborted in the meantime
-		// (e.g. someone else pushed it).
+		// (e.g. someone else pushed it), in which case it's up to us to clean up.
 		if errTxn := pErr.GetTxn(); errTxn != nil {
-			tc.mu.Lock()
 			tc.mu.meta.Txn.Update(errTxn)
-			tc.mu.Unlock()
 		}
+		status := tc.mu.meta.Txn.Status
+		if status == roachpb.ABORTED {
+			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+			// NB: We use context.Background() here because we don't want a canceled
+			// context to interrupt the aborting.
+			abortCtx := tc.AnnotateCtx(context.Background())
+			// Clone the intents and the txn to avoid data races.
+			intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
+			abortTxnAsync(abortCtx, tc.mu.meta.Txn.Clone(), intentSpans, tc.wrapped, tc.stopper)
+		}
+		tc.mu.Unlock()
 
-		return tc.mu.meta.Txn.Status == roachpb.PENDING
+		return status == roachpb.PENDING
 	}
 	txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 
