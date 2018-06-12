@@ -22,16 +22,18 @@ import (
 // and returns a RowFetcher initialized with that table. This RowFetcher's
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
-//
-// TODO(dan): Actually cache things.
 type rowFetcherCache struct {
 	leaseMgr *sql.LeaseManager
+	fetchers map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
 
 	a sqlbase.DatumAlloc
 }
 
 func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
-	return &rowFetcherCache{leaseMgr: leaseMgr}
+	return &rowFetcherCache{
+		leaseMgr: leaseMgr,
+		fetchers: make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
+	}
 }
 
 func (c *rowFetcherCache) RowFetcherForKey(
@@ -52,6 +54,9 @@ func (c *rowFetcherCache) RowFetcherForKey(
 	}
 	if err := c.leaseMgr.Release(tableDesc); err != nil {
 		return nil, err
+	}
+	if rf, ok := c.fetchers[tableDesc]; ok {
+		return rf, nil
 	}
 
 	// TODO(dan): Allow for decoding a subset of the columns.
@@ -77,5 +82,9 @@ func (c *rowFetcherCache) RowFetcherForKey(
 	); err != nil {
 		return nil, err
 	}
+	// TODO(dan): Bound the size of the cache. Resolved notifications will let
+	// us evict anything for timestamps entirely before the notification. Then
+	// probably an LRU just in case?
+	c.fetchers[tableDesc] = &rf
 	return &rf, nil
 }

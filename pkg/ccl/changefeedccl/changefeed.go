@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,7 +106,11 @@ func runChangefeedFlow(
 	if err != nil {
 		return err
 	}
-	defer func() { _ = closeFn() }()
+	defer func() {
+		if err := closeFn(); err != nil {
+			log.Warningf(ctx, "failed to close changefeed sink: %+v", err)
+		}
+	}()
 
 	// We abuse the job's results channel to make CREATE CHANGEFEED wait for
 	// this before returning to the user to ensure the setup went okay. Job
@@ -208,9 +213,10 @@ func kvsToRows(
 
 	var output []emitRow
 	var kvs sqlbase.SpanKVFetcher
+	var scratch bufalloc.ByteAllocator
 	return func(ctx context.Context) ([]emitRow, error) {
-		// Reuse output and kvs to save allocations.
-		output, kvs.KVs = output[:0], kvs.KVs[:0]
+		// Reuse output, kvs, scratch to save allocations.
+		output, kvs.KVs, scratch = output[:0], kvs.KVs[:0], scratch[:0]
 
 		input, err := inputFn(ctx)
 		if err != nil {
@@ -237,13 +243,15 @@ func kvsToRows(
 				if log.V(3) {
 					log.Infof(ctx, "changed key %s", unsafeKey)
 				}
-
+				var key, value []byte
+				scratch, key = scratch.Copy(unsafeKey.Key, 0 /* extraCap */)
+				scratch, value = scratch.Copy(it.UnsafeValue(), 0 /* extraCap */)
 				// TODO(dan): Handle tables with multiple column families.
-				kvs.KVs = append(kvs.KVs[0:], roachpb.KeyValue{
-					Key: append([]byte(nil), unsafeKey.Key...),
+				kvs.KVs = append(kvs.KVs, roachpb.KeyValue{
+					Key: key,
 					Value: roachpb.Value{
 						Timestamp: unsafeKey.Timestamp,
-						RawBytes:  append([]byte(nil), it.UnsafeValue()...),
+						RawBytes:  value,
 					},
 				})
 				if err := rf.StartScanFrom(ctx, &kvs); err != nil {
@@ -259,8 +267,9 @@ func kvsToRows(
 					if r.row == nil {
 						break
 					}
-					r.deleted = rf.RowIsDeleted()
+					r.row = append(tree.Datums(nil), r.row...)
 
+					r.deleted = rf.RowIsDeleted()
 					r.rowTimestamp = unsafeKey.Timestamp
 					output = append(output, r)
 				}
@@ -301,6 +310,7 @@ func emitRows(
 		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
 
+	var key, value bytes.Buffer
 	return func(ctx context.Context) error {
 		inputs, err := inputFn(ctx)
 		if err != nil {
@@ -308,6 +318,9 @@ func emitRows(
 		}
 		for _, input := range inputs {
 			if input.row != nil {
+				key.Reset()
+				value.Reset()
+
 				keyColumns := input.tableDesc.PrimaryIndex.ColumnNames
 				jsonKeyRaw := make([]interface{}, len(keyColumns))
 				jsonValueRaw := make(map[string]interface{}, len(input.row))
@@ -325,9 +338,7 @@ func emitRows(
 				if err != nil {
 					return err
 				}
-				var key bytes.Buffer
 				jsonKey.Format(&key)
-				var value bytes.Buffer
 				if !input.deleted && envelopeType(details.Opts[optEnvelope]) == optEnvelopeRow {
 					jsonValue, err := json.MakeJSON(jsonValueRaw)
 					if err != nil {
