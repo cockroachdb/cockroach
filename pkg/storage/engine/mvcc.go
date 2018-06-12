@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const (
@@ -1666,9 +1664,13 @@ func mvccScanInternal(
 	var ownIter bool
 	var withStats bool
 	if iter == nil {
-		if sp := opentracing.SpanFromContext(ctx); sp != nil && !tracing.IsBlackHoleSpan(sp) {
-			withStats = true
-		}
+		// TODO(tschottdorf): re-enable this once performance is confirmed to not
+		// take a 10x hit on large count(*) queries.
+
+		// if sp := opentracing.SpanFromContext(ctx); sp != nil && !tracing.IsBlackHoleSpan(sp) {
+		// 	withStats = true
+		// }
+
 		iter = engine.NewIterator(IterOptions{WithStats: withStats})
 		ownIter = true
 	}
