@@ -704,3 +704,161 @@ CREATE TABLE uu (x INT CHECK (generate_series(1, 3) < 3))
 
 statement error generator functions are not allowed in computed column
 CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)
+
+subtest correlated_srf
+
+statement ok
+CREATE TABLE vals (x INT, y INT, INDEX woo (x, y));
+   INSERT INTO vals VALUES (3, 4), (NULL, NULL), (5, 6);
+
+query III colnames
+SELECT x, generate_series(1,x), generate_series(1,2) FROM vals ORDER BY 1,2,3
+----
+x     generate_series  generate_series
+NULL  NULL             1
+NULL  NULL             2
+3     1                1
+3     2                2
+3     3                NULL
+5     1                1
+5     2                2
+5     3                NULL
+5     4                NULL
+5     5                NULL
+
+# Check that the expression is still valid if the dependent name
+# is not otherwise rendered (needed column elision).
+query I colnames rowsort
+SELECT generate_series(1,x) FROM vals
+----
+generate_series
+1
+2
+3
+1
+2
+3
+4
+5
+
+# Check that the number of rows is still correct
+# even if the SRF is not needed.
+query I
+SELECT count(*) FROM (SELECT generate_series(1,x) FROM vals)
+----
+8
+
+query TI colnames
+SELECT relname, unnest(indkey) FROM pg_class, pg_index WHERE pg_class.oid = pg_index.indrelid ORDER BY relname, unnest
+----
+relname  unnest
+t        2
+u        2
+vals     1
+vals     2
+vals     3
+
+query T
+SELECT information_schema._pg_expandarray(indkey) FROM pg_index ORDER BY x, n
+----
+(1,2)
+(2,1)
+(2,1)
+(2,2)
+(3,1)
+
+# The following query needs indclass to become an oidvector.
+# See bug #26504.
+# query III
+# SELECT
+#     indexrelid,
+#     (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
+#     (information_schema._pg_expandarray(indclass)).n AS operator_argument_position
+# FROM
+#     pg_index
+# ----
+
+statement ok
+CREATE TABLE j(x INT, y JSON);
+  INSERT INTO j VALUES
+     (1, '{"a":123,"b":456}'),
+     (2, '{"c":111,"d":222}')
+
+query IT
+SELECT x, y->>json_object_keys(y) FROM j
+----
+1  123
+1  456
+2  111
+2  222
+
+
+# The following needs some more tuple support to work. #24866
+# query TTI
+# SELECT   a.attname, a.atttypid, atttypmod
+#     FROM pg_catalog.pg_class ct
+#     JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
+#     JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+#     JOIN (
+#       SELECT i.indexrelid, i.indrelid, i.indisprimary,
+#              information_schema._pg_expandarray(i.indkey) AS keys
+#         FROM pg_catalog.pg_index i
+#         ) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
+#    WHERE true
+#      AND n.nspname = 'information_schema'
+#      AND ct.relname = 'columns'
+#      AND i.indisprimary
+# ORDER BY a.attnum
+# ----
+
+# Ditto #24866
+# query TTTBTTIITTTTT
+# SELECT NULL AS table_cat,
+#        n.nspname AS table_schem,
+#        ct.relname AS TABLE_NAME,
+#        NOT i.indisunique AS non_unique,
+#        NULL AS index_qualifier,
+#        ci.relname AS index_name,
+#        CASE i.indisclustered
+#          WHEN TRUE THEN 1
+#          ELSE CASE am.amname
+#            WHEN 'hash' THEN 2
+#            ELSE 3
+#          END
+#        END AS TYPE,
+#        (i.KEYS).n AS ordinal_position,
+#        trim(BOTH '"' FROM pg_catalog.pg_get_indexdef(ci.oid, (i.KEYS).n, FALSE)) AS COLUMN_NAME,
+#        CASE am.amcanorder
+#          WHEN TRUE THEN CASE i.indoption[(i.keys).n - 1] & 1
+#            WHEN 1 THEN 'D'
+#            ELSE 'A'
+#          END
+#          ELSE NULL
+#        END AS asc_or_desc,
+#        ci.reltuples AS CARDINALITY,
+#        ci.relpages AS pages,
+#        pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
+# FROM pg_catalog.pg_class ct
+# JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+# JOIN (
+#   SELECT i.indexrelid,
+#          i.indrelid,
+#          i.indoption,
+#          i.indisunique,
+#          i.indisclustered,
+#          i.indpred,
+#          i.indexprs,
+#          information_schema._pg_expandarray(i.indkey) AS KEYS
+#   FROM pg_catalog.pg_index i
+# ) i
+#   ON (ct.oid = i.indrelid)
+# JOIN pg_catalog.pg_class ci ON (ci.oid = i.indexrelid)
+# JOIN pg_catalog.pg_am am ON (ci.relam = am.oid)
+# WHERE TRUE
+#   AND n.nspname = 'public'
+#   AND ct.relname = 'act_de_databasechangelog'
+# ORDER BY non_unique,
+#          TYPE,
+#          index_name,
+#          ordinal_position
+# ----
