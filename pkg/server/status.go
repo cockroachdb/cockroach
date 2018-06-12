@@ -1546,6 +1546,16 @@ func (s *statusServer) Stores(
 	return resp, nil
 }
 
+func (s *statusServer) Queries(
+	ctx context.Context, req *serverpb.QueriesRequest,
+) (*serverpb.QueriesResponse, error) {
+	stmtStats := s.admin.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
+
+	return &serverpb.QueriesResponse{
+		Queries: stmtStats,
+	}, nil
+}
+
 // jsonWrapper provides a wrapper on any slice data type being
 // marshaled to JSON. This prevents a security vulnerability
 // where a phishing attack can trick a user's browser into
