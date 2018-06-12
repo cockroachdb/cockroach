@@ -78,9 +78,10 @@ func registerKV(r *registry) {
 
 func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
-		Name:   "kv/quiescence/nodes=3",
-		Nodes:  nodes(4),
-		Stable: false, // added 6/7/2018
+		Name:       "kv/quiescence/nodes=3",
+		Nodes:      nodes(4),
+		MinVersion: "2.1.0",
+		Stable:     false, // added 6/7/2018
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
