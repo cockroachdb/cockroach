@@ -27,8 +27,10 @@ var _ Statement = &CreateChangefeed{}
 func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE CHANGEFEED FOR ")
 	ctx.FormatNode(&node.Targets)
-	ctx.WriteString(" INTO ")
-	ctx.FormatNode(node.SinkURI)
+	if node.SinkURI != nil {
+		ctx.WriteString(" INTO ")
+		ctx.FormatNode(node.SinkURI)
+	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
