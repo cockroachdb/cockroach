@@ -97,6 +97,24 @@ echo "\." >> import.sql
 psql -d testdb < import.sql
 psql -d testdb -c "SELECT COUNT(*) FROM ints" | grep "1000"
 
+# Test that a row larger than 8192 bytes is handled OK. That's when psql splits
+# it into multiple packets.
+echo "Testing large row"
+psql -d testdb -c "create table large_strings (s string)"
+row=$(eval printf '=%.0s' {1..10000})
+echo 'copy large_strings from stdin;' > import.sql
+echo $row>> import.sql
+echo "\." >> import.sql
+psql -d testdb < import.sql
+psql -d testdb -c "select count(*) from large_strings" | grep "1"
+psql -d testdb -c "select length(s) from large_strings" | grep "10000"
+
+# Test that attempting to copy into a missing table returns the expected error
+# to the client. It didn't use to.
+echo 'Testing copy error'
+output="$(psql -d testdb -c 'copy missing from stdin' 2>&1 || true)"
+echo $output | grep 'relation "missing" does not exist'
+
 # Test that CREATE TABLE AS returns tag SELECT, not CREATE (#20227).
 psql -d testdb -c "CREATE TABLE ctas AS SELECT 1" | grep "SELECT"
 

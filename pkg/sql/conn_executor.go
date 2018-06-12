@@ -1282,7 +1282,9 @@ func (ex *connExecutor) execCopyIn(
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: err}
+		return ev, payload, nil
 	}
 	if err := cm.run(ctx); err != nil {
 		// TODO(andrei): We don't have a retriable error story for the copy machine.

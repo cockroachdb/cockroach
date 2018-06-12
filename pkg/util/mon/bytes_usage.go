@@ -501,6 +501,10 @@ func (b *BoundAccount) Close(ctx context.Context) {
 // error. This is better than calling ClearAccount then GrowAccount because if
 // the Clear succeeds and the Grow fails the original item becomes invisible
 // from the perspective of the monitor.
+//
+// If one is interested in specifying the new size of the account as a whole (as
+// opposed to resizing one object among many in the account), ResizeTo() should
+// be used.
 func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 	delta := newSz - oldSz
 	switch {
@@ -510,6 +514,11 @@ func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 		b.Shrink(ctx, -delta)
 	}
 	return nil
+}
+
+// ResizeTo resizes (grows or shrinks) the account to a specified size.
+func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
+	return b.Resize(ctx, b.used, newSz)
 }
 
 // Grow is an accessor for b.mon.GrowAccount.
