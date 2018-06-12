@@ -99,5 +99,8 @@ func (n *distSQLWrapper) Values() tree.Datums {
 }
 
 func (n *distSQLWrapper) Close(ctx context.Context) {
+	// Make sure the channel is drained and closed.
+	for range n.resultRows {
+	}
 	n.plan.Close(ctx)
 }
