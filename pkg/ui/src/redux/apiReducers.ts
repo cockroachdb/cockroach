@@ -240,6 +240,14 @@ const storesReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshStores = storesReducerObj.refresh;
 
+const queriesReducerObj = new CachedDataReducer(
+  api.getQueries,
+  "queries",
+  moment.duration(5, "m"),
+  moment.duration(1, "m"),
+);
+export const refreshQueries = queriesReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -265,6 +273,7 @@ export interface APIReducersState {
   commandQueue: KeyedCachedDataReducerState<api.CommandQueueResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
+  queries: CachedDataReducerState<api.QueriesResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -292,6 +301,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
+  [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

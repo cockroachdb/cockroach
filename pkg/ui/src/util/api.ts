@@ -94,6 +94,8 @@ export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresRespo
 
 export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
 
+export type QueriesResponseMessage = protos.cockroach.server.serverpb.QueriesResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -329,4 +331,9 @@ export function userLogout(timeout?: moment.Duration): Promise<UserLogoutRespons
 // getStores returns information about a node's stores.
 export function getStores(req: StoresRequestMessage, timeout?: moment.Duration): Promise<StoresResponseMessage> {
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
+}
+
+// getQueries returns queries the cluster has recently executed, and some stats about them.
+export function getQueries(timeout?: moment.Duration): Promise<QueriesResponseMessage> {
+  return timeoutFetch(serverpb.QueriesResponse, `${API_PREFIX}/queries`, null, timeout);
 }
