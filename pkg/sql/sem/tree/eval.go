@@ -3475,41 +3475,41 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
-	args, err := expr.evalArgs(ctx)
-	if err != nil || args == nil {
+	nullArg, args, err := expr.evalArgs(ctx)
+	if err != nil || nullArg {
 		return nil, err
 	}
-	return expr.fn.Generator(ctx, args.D)
+	return expr.fn.Generator(ctx, args)
 }
 
 // evalArgs evaluates just the function application's arguments.
-// A nil DTuple indicates NULL.
-func (expr *FuncExpr) evalArgs(ctx *EvalContext) (*DTuple, error) {
-	args := NewDTupleWithCap(len(expr.Exprs))
-	for _, e := range expr.Exprs {
+// A 1st result bool true indicates NULL should be propagated.
+func (expr *FuncExpr) evalArgs(ctx *EvalContext) (bool, Datums, error) {
+	args := make(Datums, len(expr.Exprs))
+	for i, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 		if arg == DNull && !expr.fnProps.NullableArgs {
-			return nil, nil
+			return true, nil, nil
 		}
-		args.D = append(args.D, arg)
+		args[i] = arg
 	}
-	return args, nil
+	return false, args, nil
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
-	args, err := expr.evalArgs(ctx)
+	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if args == nil {
+	if nullResult {
 		return DNull, err
 	}
 
-	res, err := expr.fn.Fn(ctx, args.D)
+	res, err := expr.fn.Fn(ctx, args)
 	if err != nil {
 		// If we are facing a retry error, in particular those generated
 		// by crdb_internal.force_retry(), propagate it unchanged, so that
