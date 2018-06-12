@@ -232,7 +232,8 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		// We're at a version that supports lease sequence numbers.
 		switch {
 		case s2 < s1:
-			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s", prevLease, newLease)
+			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
+				log.Safe(prevLease), log.Safe(newLease))
 		case s2 == s1:
 			// If the sequence numbers are the same, make sure they're actually
 			// the same lease. This can happen when callers are using
@@ -240,14 +241,15 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 			// splitPostApply. It can also happen during lease extensions.
 			if !prevLease.Equivalent(newLease) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
-					prevLease, newLease)
+					log.Safe(prevLease), log.Safe(newLease))
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1:
 			// Snapshots will never call leasePostApply, so we always expect
 			// leases to increment one at a time here.
-			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s", prevLease, newLease)
+			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
+				log.Safe(prevLease), log.Safe(newLease))
 		}
 	}
 
