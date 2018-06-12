@@ -61,9 +61,10 @@ type DB struct {
 	// eligible for deletion. Thresholds are specified in nanoseconds.
 	pruneThresholdByResolution map[Resolution]func() int64
 
-	// writeColumnar is set to true if the database should write in columnar
-	// format. Currently only set to true in tests.
-	writeColumnar bool
+	// forceRowFormat is set to true if the database should write in the old row
+	// format, regardless of the current cluster setting. Currently only set to
+	// true in tests to verify backwards compatibility.
+	forceRowFormat bool
 }
 
 // NewDB creates a new DB instance.
@@ -183,7 +184,7 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
 	for _, d := range data {
-		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), db.writeColumnar)
+		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), db.WriteColumnar())
 		if err != nil {
 			return err
 		}
@@ -247,4 +248,10 @@ func (db *DB) PruneThreshold(r Resolution) int64 {
 // Metrics gets the TimeSeriesMetrics structure used by this DB instance.
 func (db *DB) Metrics() *TimeSeriesMetrics {
 	return db.metrics
+}
+
+// WriteColumnar returns true if this DB should write data in the newer columnar
+// format.
+func (db *DB) WriteColumnar() bool {
+	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
 }
