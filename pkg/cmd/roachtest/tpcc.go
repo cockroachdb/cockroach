@@ -281,7 +281,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 				// Kill one node at a time.
 				ch := Chaos{
-					Timer:        Periodic{Down: 1 * time.Second, Up: 90 * time.Second},
+					Timer:        Periodic{Period: 90 * time.Second, DownTime: 1 * time.Second},
 					Target:       roachNodes.randNode,
 					Stopper:      loadDone,
 					DrainAndQuit: true,
