@@ -25,15 +25,14 @@ project set    ·  ·
  └── emptyrow  ·  ·
 
 subtest multiple_SRFs
-# See #20511
 
-# query TTT
-# EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
-# ----
-# join            ·     ·
-# │              type  cross
-# ├── generator  ·     ·
-# └── generator  ·     ·
+query TTTTT
+EXPLAIN (VERBOSE) SELECT generate_series(1, 2), generate_series(1, 2)
+----
+project set    ·         ·                      (generate_series, generate_series)  ·
+ │             render 0  generate_series(1, 2)  ·                                   ·
+ │             render 1  generate_series(1, 2)  ·                                   ·
+ └── emptyrow  ·         ·                      ()                                  ·
 
 statement ok
 CREATE TABLE t (a string)
@@ -41,27 +40,94 @@ CREATE TABLE t (a string)
 statement ok
 CREATE TABLE u (b string)
 
-# query TTT
-# EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
-# ----
-# render                    ·         ·
-# │                        render 0  a
-# │                        render 1  b
-# │                        render 2  generate_series
-# │                        render 3  generate_series
-# └── join                 ·         ·
-#      │                   type      cross
-#      ├── join            ·         ·
-#      │    │              type      cross
-#      │    ├── join       ·         ·
-#      │    │    │         type      cross
-#      │    │    ├── scan  ·         ·
-#      │    │    │         table     t@primary
-#      │    │    │         spans     ALL
-#      │    │    └── scan  ·         ·
-#      │    │              table     u@primary
-#      │    │              spans     ALL
-#      │    └── generator  ·         ·
-#      │                   expr      generate_series(1, 2)
-#      └── generator       ·         ·
-#·                         expr      generate_series(3, 4)
+query TTTTT
+EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+----
+render               ·         ·                                  (a, b, generate_series, generate_series)                                                ·
+ │                   render 0  test.public.t.a                    ·                                                                                       ·
+ │                   render 1  test.public.u.b                    ·                                                                                       ·
+ │                   render 2  generate_series_0.generate_series  ·                                                                                       ·
+ │                   render 3  generate_series_1.generate_series  ·                                                                                       ·
+ └── project set     ·         ·                                  (a, rowid[hidden,omitted], b, rowid[hidden,omitted], generate_series, generate_series)  ·
+      │              render 0  generate_series(1, 2)              ·                                                                                       ·
+      │              render 1  generate_series(3, 4)              ·                                                                                       ·
+      └── join       ·         ·                                  (a, rowid[hidden,omitted], b, rowid[hidden,omitted])                                    ·
+           │         type      cross                              ·                                                                                       ·
+           ├── scan  ·         ·                                  (a, rowid[hidden,omitted])                                                              rowid!=NULL; key(rowid)
+           │         table     t@primary                          ·                                                                                       ·
+           │         spans     ALL                                ·                                                                                       ·
+           └── scan  ·         ·                                  (b, rowid[hidden,omitted])                                                              rowid!=NULL; key(rowid)
+·                    table     u@primary                          ·                                                                                       ·
+·                    spans     ALL                                ·                                                                                       ·
+
+subtest corr_SRFs
+
+# Check that sources get omitted properly.
+query TTT
+SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, 3) FROM t]
+----
+render            ·                                  (generate_series)
+ │                generate_series_0.generate_series  ·
+ └── project set  ·                                  (a[omitted], rowid[hidden,omitted], generate_series)
+      │           generate_series(1, 3)              ·
+      └── scan    ·                                  (a[omitted], rowid[hidden,omitted])
+·                 t@primary                          ·
+·                 ALL                                ·
+
+# Check that SRFs get omitted properly.
+query TTT
+SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT a FROM (SELECT a, generate_series(1, 3) FROM t)]
+----
+render                 ·                      (a)
+ │                     a                      ·
+ └── render            ·                      (a, generate_series[omitted])
+      │                test.public.t.a        ·
+      │                NULL                   ·
+      └── project set  ·                      (a, rowid[hidden,omitted], generate_series[omitted])
+           │           generate_series(1, 3)  ·
+           └── scan    ·                      (a, rowid[hidden,omitted])
+·                      t@primary              ·
+·                      ALL                    ·
+
+# Check that an omitted column in the render doesn't cause the omitted
+# column to disappear from underneath the SRF.
+query TTT
+SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT generate_series(1, length(a)) FROM t)]
+----
+group                       ·                                            (count)
+ │                          count_rows()                                 ·
+ └── render                 ·                                            ()
+      └── render            ·                                            (generate_series[omitted])
+           │                NULL                                         ·
+           └── project set  ·                                            (a, rowid[hidden,omitted], generate_series[omitted])
+                │           generate_series(1, length(test.public.t.a))  ·
+                └── scan    ·                                            (a, rowid[hidden,omitted])
+·                           t@primary                                    ·
+·                           ALL                                          ·
+
+query TTT
+SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)) FROM t]
+----
+render            ·                                            (generate_series)
+ │                generate_series_0.generate_series            ·
+ └── project set  ·                                            (a, rowid[hidden,omitted], generate_series)
+      │           generate_series(1, length(test.public.t.a))  ·
+      └── scan    ·                                            (a, rowid[hidden,omitted])
+·                 t@primary                                    ·
+·                 ALL                                          ·
+
+# Check that the unary source gets processed properly.
+query TTT
+SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)), crdb_internal.unary_table(), generate_series(1, 3) FROM t]
+----
+render            ·                                            (generate_series, "crdb_internal.unary_table", generate_series)
+ │                generate_series_0.generate_series            ·
+ │                ()                                           ·
+ │                generate_series_2.generate_series            ·
+ └── project set  ·                                            (a, rowid[hidden,omitted], generate_series, generate_series)
+      │           generate_series(1, length(test.public.t.a))  ·
+      │           crdb_internal.unary_table()                  ·
+      │           generate_series(1, 3)                        ·
+      └── scan    ·                                            (a, rowid[hidden,omitted])
+·                 t@primary                                    ·
+·                 ALL                                          ·
