@@ -89,9 +89,9 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 				r.emit(actual)
 			}
 		} else if d.Expected != actual {
-			t.Fatalf("%s: %s\nexpected:\n%s\nfound:\n%s", d.Pos, d.Input, d.Expected, actual)
+			t.Fatalf("\n%s: %s\nexpected:\n%s\nfound:\n%s", d.Pos, d.Input, d.Expected, actual)
 		} else if testing.Verbose() {
-			fmt.Printf("%s:\n%s\n----\n%s", d.Pos, d.Input, actual)
+			fmt.Printf("\n%s:\n%s\n----\n%s", d.Pos, d.Input, actual)
 		}
 	}
 
