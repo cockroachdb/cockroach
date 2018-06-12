@@ -1502,6 +1502,16 @@ func (s *adminServer) ReplicaMatrix(
 	return resp, nil
 }
 
+func (s *adminServer) Queries(
+	ctx context.Context, req *serverpb.QueriesRequest,
+) (*serverpb.QueriesResponse, error) {
+	stmtStats := s.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
+
+	return &serverpb.QueriesResponse{
+		Queries: stmtStats,
+	}, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
