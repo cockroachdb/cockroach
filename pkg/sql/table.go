@@ -733,18 +733,3 @@ func (p *planner) writeTableDescToBatch(
 	b.Put(descKey, descVal)
 	return nil
 }
-
-// bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.
-func (p *planner) bumpTableVersion(ctx context.Context, tn *tree.TableName) error {
-	var tableDesc *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(tn,
-			p.ObjectLookupFlags(ctx, true /*required*/))
-	})
-	if err != nil {
-		return err
-	}
-
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
-}
