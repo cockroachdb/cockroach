@@ -2,6 +2,7 @@ import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
+import { Link } from "react-router";
 
 import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
@@ -32,11 +33,13 @@ interface QueriesPageState {
   sortSetting: SortSetting;
 }
 
-function StatementSummary(props: { query: string }) {
-  const summary = summarize(props.query);
+function StatementLink(props: { statement: string }) {
+  const summary = summarize(props.statement);
 
   return (
-    <div title={ props.query }>{ shortStatement(summary, props.query) }</div>
+    <Link to={ `/statement/${encodeURIComponent(props.statement)}` }>
+      <div title={ props.statement }>{ shortStatement(summary, props.statement) }</div>
+    </Link>
   );
 }
 
@@ -46,6 +49,7 @@ function shortStatement(summary: StatementSummary, original: string) {
     case "insert": return "INSERT INTO " + summary.table;
     case "select": return "SELECT FROM " + summary.table;
     case "delete": return "DELETE FROM " + summary.table;
+    case "create": return "CREATE TABLE " + summary.table;
     default: return original;
   }
 }
@@ -54,7 +58,7 @@ const QUERIES_COLUMNS: ColumnDescriptor<CollectedStatementStatistics$Properties>
   {
     title: "Query",
     className: "queries-table__col-query-text",
-    cell: (query) => <StatementSummary query={ query.key.query } />,
+    cell: (query) => <StatementLink statement={ query.key.query } />,
     sort: (query) => query.key.query,
   },
   {
