@@ -76,7 +76,7 @@ select
  └── filters [type=bool]
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column5:5(tuple{int, int})
+           │    ├── columns: column5:5(tuple{int AS k, int AS v})
            │    ├── scan kv
            │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
            │    └── projections

@@ -148,7 +148,8 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 			default:
 				// The result from plan.Values() is only valid until the next call to
 				// plan.Next(), so make a copy.
-				valuesCopy := tree.NewDTupleWithLen(len(values))
+				typ := s.subquery.ResolvedType().(types.TTuple)
+				valuesCopy := tree.NewDTupleWithLen(typ, len(values))
 				copy(valuesCopy.D, values)
 				rows.D = append(rows.D, valuesCopy)
 			}
@@ -181,7 +182,11 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 		case 1:
 			result = values[0]
 		default:
-			valuesCopy := tree.NewDTupleWithLen(len(values))
+			// We can skip initializing the Types sub-field here: it will be
+			// populated upon first access to DTuple.ResolvedType(), as per
+			// contract of DTuple.typ.
+			typ := s.subquery.ResolvedType().(types.TTuple)
+			valuesCopy := tree.NewDTupleWithLen(typ, len(values))
 			copy(valuesCopy.D, values)
 			result = valuesCopy
 		}
@@ -437,9 +442,13 @@ func (v *subqueryVisitor) extractSubquery(
 	if len(cols) == 1 {
 		sub.SetType(cols[0].Typ)
 	} else {
-		colTypes := types.TTuple{Types: make([]types.T, len(cols))}
+		colTypes := types.TTuple{
+			Types:  make([]types.T, len(cols)),
+			Labels: make([]string, len(cols)),
+		}
 		for i, col := range cols {
 			colTypes.Types[i] = col.Typ
+			colTypes.Labels[i] = col.Name
 		}
 		sub.SetType(colTypes)
 	}

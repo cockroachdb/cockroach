@@ -395,6 +395,18 @@ func (c *CustomFuncs) LimitGeMaxRows(limit memo.PrivateID, input memo.GroupID) b
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
 }
 
+// HasColsInOrdering returns true if all columns that appear in an ordering
+// are output columns of the given group.
+func (c *CustomFuncs) HasColsInOrdering(input memo.GroupID, ordering memo.PrivateID) bool {
+	outCols := c.OutputCols(input)
+	for _, ordCol := range c.ExtractOrdering(ordering) {
+		if !outCols.Contains(int(ordCol.ID())) {
+			return false
+		}
+	}
+	return true
+}
+
 // ----------------------------------------------------------------------
 //
 // Boolean Rules

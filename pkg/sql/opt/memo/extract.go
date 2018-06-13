@@ -45,7 +45,8 @@ func ExtractConstDatum(ev ExprView) tree.Datum {
 		for i := range datums {
 			datums[i] = ExtractConstDatum(ev.Child(i))
 		}
-		return tree.NewDTuple(datums...)
+		typ := ev.Logical().Scalar.Type.(types.TTuple)
+		return tree.NewDTuple(typ, datums...)
 
 	case opt.ArrayOp:
 		elementType := ev.Logical().Scalar.Type.(types.TArray).Typ
