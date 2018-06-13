@@ -1,4 +1,3 @@
-import d3 from "d3";
 import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
