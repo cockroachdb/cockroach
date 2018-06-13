@@ -19,11 +19,12 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
+
+var weakKeysAnnID = opt.NewTableAnnID()
 
 // logicalPropsBuilder is a helper class that consolidates the code that derives
 // a parent expression's logical properties from those of its children.
@@ -99,27 +100,42 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	md := ev.Metadata()
 	def := ev.Private().(*ScanOpDef)
 
+	// Output Columns
+	// --------------
 	// Scan output columns are stored in the definition.
-	logical.Relational.OutputCols = def.Cols
+	relational.OutputCols = def.Cols
 
+	// Not Null Columns
+	// ----------------
 	// Initialize not-NULL columns from the table schema.
-	logical.Relational.NotNullCols = tableNotNullCols(md, def.Table)
-	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
+	relational.NotNullCols = tableNotNullCols(md, def.Table)
+	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
+	// Outer Columns
+	// -------------
+	// Scan operator never has outer columns.
+
+	// Weak Keys
+	// ---------
 	// Initialize weak keys from the table schema.
-	logical.Relational.WeakKeys = md.TableWeakKeys(def.Table)
-	filterWeakKeys(logical.Relational)
+	relational.WeakKeys = b.makeTableWeakKeys(md, def.Table)
+	filterWeakKeys(relational)
 
+	// Cardinality
+	// -----------
 	// Don't bother setting cardinality from scan's HardLimit or Constraint,
 	// since those are created by exploration patterns and won't ever be the
 	// basis for the logical props on a newly created memo group.
-	logical.Relational.Cardinality = props.AnyCardinality
+	relational.Cardinality = props.AnyCardinality
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildScan(def)
 
 	return logical
@@ -127,33 +143,55 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
 	filterProps := ev.childGroup(1).logical.Scalar
 
-	// Inherit input properties as starting point.
-	*logical.Relational = *inputProps
+	// Output Columns
+	// --------------
+	// Inherit output columns from input.
+	relational.OutputCols = inputProps.OutputCols
 
-	if filterProps.Constraints != nil && filterProps.Constraints != constraint.Unconstrained {
+	// Not Null Columns
+	// ----------------
+	// A column can become not null due to a null rejecting filter expression:
+	//
+	//   SELECT y FROM xy WHERE y=5
+	//
+	// "y" cannot be null because the SQL equality operator rejects nulls.
+	relational.NotNullCols = inputProps.NotNullCols
+	if filterProps.Constraints != nil {
 		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols()
 		if !constraintNotNullCols.Empty() {
-			logical.Relational.NotNullCols = logical.Relational.NotNullCols.Union(constraintNotNullCols)
-			logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
+			relational.NotNullCols = relational.NotNullCols.Union(constraintNotNullCols)
+			relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		}
 	}
 
+	// Outer Columns
+	// -------------
 	// Any outer columns from the filter that are not bound by the input columns
 	// are outer columns for the Select expression, in addition to any outer
 	// columns inherited from the input expression.
 	if !filterProps.OuterCols.SubsetOf(inputProps.OutputCols) {
-		logical.Relational.OuterCols = filterProps.OuterCols.Difference(inputProps.OutputCols)
-		logical.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+		relational.OuterCols = filterProps.OuterCols.Difference(inputProps.OutputCols)
 	}
+	relational.OuterCols.UnionWith(inputProps.OuterCols)
 
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input.
+	relational.WeakKeys = inputProps.WeakKeys
+
+	// Cardinality
+	// -----------
 	// Select filter can filter any or all rows.
-	logical.Relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
+	relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildSelect(ev.Child(1), &inputProps.Stats)
 
 	return logical
@@ -161,19 +199,24 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
 	projectionProps := ev.childGroup(1).logical.Scalar
 	projections := ev.Child(1)
 	projectionsDef := ev.Child(1).Private().(*ProjectionsOpDef)
 
+	// Output Columns
+	// --------------
 	// Use output columns from projection list.
-	logical.Relational.OutputCols = projectionsDef.AllCols()
+	relational.OutputCols = projectionsDef.AllCols()
 
+	// Not Null Columns
+	// ----------------
 	// Inherit not null columns from input, but only use those that are also
 	// output columns.
-	logical.Relational.NotNullCols = inputProps.NotNullCols.Copy()
-	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
+	relational.NotNullCols = inputProps.NotNullCols.Copy()
+	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
 	// Also add any column that projects a constant value, since the optimizer
 	// sometimes constructs these in order to guarantee a not-null column.
@@ -181,27 +224,35 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 		child := projections.Child(i)
 		if child.IsConstValue() {
 			if ExtractConstDatum(child) != tree.DNull {
-				logical.Relational.NotNullCols.Add(int(projectionsDef.SynthesizedCols[i]))
+				relational.NotNullCols.Add(int(projectionsDef.SynthesizedCols[i]))
 			}
 		}
 	}
 
+	// Outer Columns
+	// -------------
 	// Any outer columns from the projection list that are not bound by the input
 	// columns are outer columns from the Project expression, in addition to any
 	// outer columns inherited from the input expression.
 	if !projectionProps.OuterCols.SubsetOf(inputProps.OutputCols) {
-		logical.Relational.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
+		relational.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
 	}
-	logical.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+	relational.OuterCols.UnionWith(inputProps.OuterCols)
 
+	// Weak Keys
+	// ---------
 	// Inherit weak keys that are composed entirely of output columns.
-	logical.Relational.WeakKeys = inputProps.WeakKeys
-	filterWeakKeys(logical.Relational)
+	relational.WeakKeys = inputProps.WeakKeys
+	filterWeakKeys(relational)
 
+	// Cardinality
+	// -----------
 	// Inherit cardinality from input.
-	logical.Relational.Cardinality = inputProps.Cardinality
+	relational.Cardinality = inputProps.Cardinality
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildProject(&inputProps.Stats)
 
 	return logical
@@ -209,21 +260,26 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	leftProps := ev.childGroup(0).logical.Relational
 	rightProps := ev.childGroup(1).logical.Relational
 	onProps := ev.childGroup(2).logical.Scalar
 
+	// Output Columns
+	// --------------
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
-	logical.Relational.OutputCols = leftProps.OutputCols.Copy()
+	relational.OutputCols = leftProps.OutputCols.Copy()
 	switch ev.Operator() {
 	case opt.SemiJoinOp, opt.AntiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 
 	default:
-		logical.Relational.OutputCols.UnionWith(rightProps.OutputCols)
+		relational.OutputCols.UnionWith(rightProps.OutputCols)
 	}
 
+	// Not Null Columns
+	// ----------------
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
 	switch ev.Operator() {
@@ -231,7 +287,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
-		logical.Relational.NotNullCols = rightProps.NotNullCols.Copy()
+		relational.NotNullCols = rightProps.NotNullCols.Copy()
 	}
 
 	// Right/full outer joins can result in left columns becoming null.
@@ -240,49 +296,57 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
 
 	default:
-		logical.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
+		relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
+	// Outer Columns
+	// -------------
 	// Any outer columns from the filter that are not bound by the input columns
 	// are outer columns for the Join expression, in addition to any outer columns
 	// inherited from the input expressions.
 	inputCols := leftProps.OutputCols.Union(rightProps.OutputCols)
 	if !onProps.OuterCols.SubsetOf(inputCols) {
-		logical.Relational.OuterCols = onProps.OuterCols.Difference(inputCols)
+		relational.OuterCols = onProps.OuterCols.Difference(inputCols)
 	}
 	if ev.IsJoinApply() {
 		// Outer columns of right side of apply join can be bound by output
 		// columns of left side of apply join.
 		if !rightProps.OuterCols.SubsetOf(leftProps.OutputCols) {
-			logical.Relational.OuterCols.UnionWith(rightProps.OuterCols.Difference(leftProps.OutputCols))
+			relational.OuterCols.UnionWith(rightProps.OuterCols.Difference(leftProps.OutputCols))
 		}
 	} else {
-		logical.Relational.OuterCols.UnionWith(rightProps.OuterCols)
+		relational.OuterCols.UnionWith(rightProps.OuterCols)
 	}
-	logical.Relational.OuterCols.UnionWith(leftProps.OuterCols)
+	relational.OuterCols.UnionWith(leftProps.OuterCols)
 
+	// Weak Keys
+	// ---------
 	// TODO(andyk): Need to derive additional weak keys for joins, for example
 	//              when weak keys on both sides are equivalent cols.
 	switch ev.Operator() {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		logical.Relational.WeakKeys = leftProps.WeakKeys
+		relational.WeakKeys = leftProps.WeakKeys
 
 	default:
 		// If cardinality of one side is <= 1, then inherit other side's keys.
 		if rightProps.Cardinality.IsZeroOrOne() {
-			logical.Relational.WeakKeys = leftProps.WeakKeys
+			relational.WeakKeys = leftProps.WeakKeys
 		}
 		if leftProps.Cardinality.IsZeroOrOne() {
-			logical.Relational.WeakKeys = logical.Relational.WeakKeys.Combine(rightProps.WeakKeys)
+			relational.WeakKeys = relational.WeakKeys.Combine(rightProps.WeakKeys)
 		}
 	}
 
+	// Cardinality
+	// -----------
 	// Calculate cardinality of each join type.
-	logical.Relational.Cardinality = calcJoinCardinality(
+	relational.Cardinality = calcJoinCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
 
 	return logical
@@ -290,34 +354,50 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
-
-	// Inherit input properties as starting point.
-	*logical.Relational = *inputProps
-
 	md := ev.Metadata()
 	def := ev.Private().(*LookupJoinDef)
 
+	// Output Columns
+	// --------------
 	// Lookup join output columns are the union between the input columns and the
 	// retrieved columns.
 	logical.Relational.OutputCols = inputProps.OutputCols.Union(def.LookupCols)
 
+	// Not Null Columns
+	// ----------------
 	// Add not-NULL columns from the table schema, and filter out any not-NULL
 	// columns from the input that are not projected by the lookup join.
-	logical.Relational.NotNullCols = tableNotNullCols(md, def.Table)
-	logical.Relational.NotNullCols.IntersectionWith(inputProps.NotNullCols)
-	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
+	relational.NotNullCols = tableNotNullCols(md, def.Table)
+	relational.NotNullCols.IntersectionWith(inputProps.NotNullCols)
+	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
-	// Add weak keys from the table schema. There may already be some weak keys
-	// present from the input index.
-	tableWeakKeys := md.TableWeakKeys(def.Table)
-	for _, weakKey := range tableWeakKeys {
-		logical.Relational.WeakKeys.Add(weakKey)
+	// Outer Columns
+	// -------------
+	// Inherit outer columns from input.
+	relational.OuterCols = inputProps.OuterCols
+
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input and add additional weak keys from the table
+	// schema. Only include weak keys that are composed of columns that are
+	// projected by the lookup join operator.
+	relational.WeakKeys = inputProps.WeakKeys.Copy()
+	for _, weakKey := range b.makeTableWeakKeys(md, def.Table) {
+		relational.WeakKeys.Add(weakKey)
 	}
-	filterWeakKeys(logical.Relational)
+	filterWeakKeys(relational)
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Cardinality
+	// -----------
+	// Inherit cardinality from input.
+	relational.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildLookupJoin(&inputProps.Stats)
 
 	return logical
@@ -325,25 +405,33 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
 	aggProps := ev.childGroup(1).logical.Scalar
 
+	// Output Columns
+	// --------------
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
 	groupingColSet := ev.Private().(*GroupByDef).GroupingCols
 	aggColList := ev.Child(1).Private().(opt.ColList)
-	logical.Relational.OutputCols = groupingColSet.Union(opt.ColListToSet(aggColList))
+	relational.OutputCols = groupingColSet.Union(opt.ColListToSet(aggColList))
 
+	// Not Null Columns
+	// ----------------
 	// Propagate not null setting from input columns that are being grouped.
-	logical.Relational.NotNullCols = inputProps.NotNullCols.Copy()
-	logical.Relational.NotNullCols.IntersectionWith(groupingColSet)
+	relational.NotNullCols = inputProps.NotNullCols.Intersection(groupingColSet)
 
+	// Outer Columns
+	// -------------
 	// Any outer columns from aggregation expressions that are not bound by the
 	// input columns are outer columns.
-	logical.Relational.OuterCols = aggProps.OuterCols.Difference(inputProps.OutputCols)
-	logical.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+	relational.OuterCols = aggProps.OuterCols.Difference(inputProps.OutputCols)
+	relational.OuterCols.UnionWith(inputProps.OuterCols)
 
+	// Weak Keys
+	// ---------
 	// Scalar group by has no grouping columns and always a single row.
 	if !groupingColSet.Empty() {
 		// The grouping columns always form a key because the GroupBy operation
@@ -353,24 +441,28 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 		// the grouping column set contains every output column (except aggregate
 		// columns, which aren't relevant since they're newly synthesized).
 		if inputProps.WeakKeys.ContainsSubsetOf(groupingColSet) {
-			logical.Relational.WeakKeys = inputProps.WeakKeys
-			filterWeakKeys(logical.Relational)
+			relational.WeakKeys = inputProps.WeakKeys
+			filterWeakKeys(relational)
 		} else {
-			logical.Relational.WeakKeys = opt.WeakKeys{groupingColSet}
+			relational.WeakKeys = props.WeakKeys{groupingColSet}
 		}
 	}
 
+	// Cardinality
+	// -----------
 	if groupingColSet.Empty() {
 		// Scalar GroupBy returns exactly one row.
-		logical.Relational.Cardinality = props.OneCardinality
+		relational.Cardinality = props.OneCardinality
 	} else {
 		// GroupBy acts like a filter, never returning more rows than the input
 		// has. However, if the input has at least one row, then at least one row
 		// will also be returned by GroupBy.
-		logical.Relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
+		relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
 	}
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildGroupBy(&inputProps.Stats, groupingColSet)
 
 	return logical
@@ -378,6 +470,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	leftProps := ev.childGroup(0).logical.Relational
 	rightProps := ev.childGroup(1).logical.Relational
@@ -387,9 +480,13 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 			len(colMap.Out), len(colMap.Left), len(colMap.Right)))
 	}
 
-	// Set the new output columns.
-	logical.Relational.OutputCols = opt.ColListToSet(colMap.Out)
+	// Output Columns
+	// --------------
+	// Output columns are stored in the definition.
+	relational.OutputCols = opt.ColListToSet(colMap.Out)
 
+	// Not Null Columns
+	// ----------------
 	// Columns have to be not-null on both sides to be not-null in result.
 	// colMap matches columns on the left and right sides of the operator
 	// with the output columns, since OutputCols are not ordered and may
@@ -397,19 +494,29 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 	for i := range colMap.Out {
 		if leftProps.NotNullCols.Contains(int((colMap.Left)[i])) &&
 			rightProps.NotNullCols.Contains(int((colMap.Right)[i])) {
-			logical.Relational.NotNullCols.Add(int((colMap.Out)[i]))
+			relational.NotNullCols.Add(int((colMap.Out)[i]))
 		}
 	}
 
+	// Outer Columns
+	// -------------
 	// Outer columns from either side are outer columns for set operation.
-	logical.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
+	relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
+	// Weak Keys
+	// ---------
+	// Set operators do not currently have any weak keys.
+
+	// Cardinality
+	// -----------
 	// Calculate cardinality of the set operator.
-	logical.Relational.Cardinality = calcSetCardinality(
+	relational.Cardinality = calcSetCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return logical
@@ -417,20 +524,37 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
+	// Output Columns
+	// --------------
 	// Use output columns that are attached to the values op.
-	logical.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
+	relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
 	// Union outer columns from all row expressions.
 	for i := 0; i < ev.ChildCount(); i++ {
-		logical.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
+		relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
 
+	// Weak Keys
+	// ---------
+	// Values operator does not currently have any weak keys.
+
+	// Cardinality
+	// -----------
 	// Cardinality is number of tuples in the Values operator.
 	card := uint32(ev.ChildCount())
-	logical.Relational.Cardinality = props.Cardinality{Min: card, Max: card}
+	relational.Cardinality = props.Cardinality{Min: card, Max: card}
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildValues()
 
 	return logical
@@ -438,11 +562,34 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	def := ev.Private().(*ExplainOpDef)
-	logical.Relational.OutputCols = opt.ColListToSet(def.ColList)
-	logical.Relational.Cardinality = props.AnyCardinality
 
+	// Output Columns
+	// --------------
+	// Output columns are stored in the definition.
+	relational.OutputCols = opt.ColListToSet(def.ColList)
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// EXPLAIN doesn't allow outer columns.
+
+	// Weak Keys
+	// ---------
+	// Explain operator does not currently have any weak keys.
+
+	// Cardinality
+	// -----------
+	// Don't make any assumptions about cardinality of output.
+	relational.Cardinality = props.AnyCardinality
+
+	// Statistics
+	// ----------
 	// Zero value for Stats is ok for Explain.
 
 	return logical
@@ -450,11 +597,34 @@ func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	def := ev.Private().(*ShowTraceOpDef)
-	logical.Relational.OutputCols = opt.ColListToSet(def.ColList)
-	logical.Relational.Cardinality = props.AnyCardinality
 
+	// Output Columns
+	// --------------
+	// Output columns are stored in the definition.
+	relational.OutputCols = opt.ColListToSet(def.ColList)
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// SHOW TRACE doesn't allow outer columns.
+
+	// Weak Keys
+	// ---------
+	// ShowTrace operator does not currently have any weak keys.
+
+	// Cardinality
+	// -----------
+	// Don't make any assumptions about cardinality of output.
+	relational.Cardinality = props.AnyCardinality
+
+	// Statistics
+	// ----------
 	// Zero value for Stats is ok for ShowTrace.
 
 	return logical
@@ -462,30 +632,53 @@ func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
 	limit := ev.Child(1)
 	limitProps := limit.Logical().Scalar
 
-	// Start with pass-through props from input.
-	*logical.Relational = *inputProps
+	// Output Columns
+	// --------------
+	// Output columns are inherited from input.
+	relational.OutputCols = inputProps.OutputCols
 
-	// Inherit outer columns from limit expression.
-	if !limitProps.OuterCols.Empty() {
-		logical.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
+	// Not Null Columns
+	// ----------------
+	// Not null columns are inherited from input.
+	relational.NotNullCols = inputProps.NotNullCols
+
+	// Outer Columns
+	// -------------
+	// Inherit outer columns from input, and add any outer columns from the limit
+	// expression,
+	if limitProps.OuterCols.Empty() {
+		relational.OuterCols = inputProps.OuterCols
+	} else {
+		relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input.
+	relational.WeakKeys = inputProps.WeakKeys
+
+	// Cardinality
+	// -----------
 	// Limit puts a cap on the number of rows returned by input.
+	relational.Cardinality = inputProps.Cardinality
 	if limit.Operator() == opt.ConstOp {
 		constLimit := int64(*limit.Private().(*tree.DInt))
 		if constLimit <= 0 {
-			logical.Relational.Cardinality = props.ZeroCardinality
+			relational.Cardinality = props.ZeroCardinality
 		} else if constLimit < math.MaxUint32 {
-			logical.Relational.Cardinality = logical.Relational.Cardinality.AtMost(uint32(constLimit))
+			relational.Cardinality = relational.Cardinality.AtMost(uint32(constLimit))
 		}
 	}
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildLimit(limit, &inputProps.Stats)
 
 	return logical
@@ -493,31 +686,54 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
 	offset := ev.Child(1)
 	offsetProps := offset.Logical().Scalar
 
-	// Start with pass-through props from input.
-	*logical.Relational = *inputProps
+	// Output Columns
+	// --------------
+	// Output columns are inherited from input.
+	relational.OutputCols = inputProps.OutputCols
 
-	// Inherit outer columns from offset expression.
-	if !offsetProps.OuterCols.Empty() {
-		logical.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
+	// Not Null Columns
+	// ----------------
+	// Not null columns are inherited from input.
+	relational.NotNullCols = inputProps.NotNullCols
+
+	// Outer Columns
+	// -------------
+	// Inherit outer columns from input, and add any outer columns from the offset
+	// expression,
+	if offsetProps.OuterCols.Empty() {
+		relational.OuterCols = inputProps.OuterCols
+	} else {
+		relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input.
+	relational.WeakKeys = inputProps.WeakKeys
+
+	// Cardinality
+	// -----------
 	// Offset decreases the number of rows that are passed through from input.
+	relational.Cardinality = inputProps.Cardinality
 	if offset.Operator() == opt.ConstOp {
 		constOffset := int64(*offset.Private().(*tree.DInt))
 		if constOffset > 0 {
 			if constOffset > math.MaxUint32 {
 				constOffset = math.MaxUint32
 			}
-			logical.Relational.Cardinality = inputProps.Cardinality.Skip(uint32(constOffset))
+			relational.Cardinality = inputProps.Cardinality.Skip(uint32(constOffset))
 		}
 	}
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildOffset(offset, &inputProps.Stats)
 
 	return logical
@@ -525,16 +741,38 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
 
-	// Start with pass-through props from input.
-	*logical.Relational = *inputProps
+	// Output Columns
+	// --------------
+	// Output columns are inherited from input.
+	relational.OutputCols = inputProps.OutputCols
 
-	// Max1Row ensures that zero or one row is returned by input.
-	logical.Relational.Cardinality = logical.Relational.Cardinality.AtMost(1)
+	// Not Null Columns
+	// ----------------
+	// Not null columns are inherited from input.
+	relational.NotNullCols = inputProps.NotNullCols
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Outer Columns
+	// -------------
+	// Outer columns are inherited from input.
+	relational.OuterCols = inputProps.OuterCols
+
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input.
+	relational.WeakKeys = inputProps.WeakKeys
+
+	// Cardinality
+	// -----------
+	// Max1Row ensures that zero or one row is returned from input.
+	relational.Cardinality = inputProps.Cardinality.AtMost(1)
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildMax1Row(&inputProps.Stats)
 
 	return logical
@@ -542,21 +780,43 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
-	*logical.Relational = *inputProps
 	def := ev.Private().(*RowNumberDef)
 
-	logical.Relational.OutputCols = logical.Relational.OutputCols.Copy()
-	logical.Relational.OutputCols.Add(int(def.ColID))
+	// Output Columns
+	// --------------
+	// An extra output column is added to those projectd by input operator.
+	relational.OutputCols = inputProps.OutputCols.Copy()
+	relational.OutputCols.Add(int(def.ColID))
 
-	logical.Relational.NotNullCols = logical.Relational.NotNullCols.Copy()
-	logical.Relational.NotNullCols.Add(int(def.ColID))
+	// Not Null Columns
+	// ----------------
+	// The new output column is not null, and other columns inherit not null
+	// property from input.
+	relational.NotNullCols = inputProps.NotNullCols.Copy()
+	relational.NotNullCols.Add(int(def.ColID))
 
-	logical.Relational.WeakKeys = logical.Relational.WeakKeys.Copy()
-	logical.Relational.WeakKeys.Add(util.MakeFastIntSet(int(def.ColID)))
+	// Outer Columns
+	// -------------
+	// Outer columns are inherited from input.
+	relational.OuterCols = inputProps.OuterCols
 
-	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	// Weak Keys
+	// ---------
+	// Inherit weak keys from input, and add additional key for the new column.
+	relational.WeakKeys = inputProps.WeakKeys.Copy()
+	relational.WeakKeys.Add(util.MakeFastIntSet(int(def.ColID)))
+
+	// Cardinality
+	// -----------
+	// Inherit cardinality from input.
+	relational.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildRowNumber(&inputProps.Stats)
 
 	return logical
@@ -564,25 +824,26 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 
 func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	logical := props.Logical{Scalar: &props.Scalar{Type: InferType(ev)}}
+	scalar := logical.Scalar
 
 	switch ev.Operator() {
 	case opt.VariableOp:
 		// Variable introduces outer column.
-		logical.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
+		scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return logical
 
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
 		// Inherit outer columns from input query.
-		logical.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
+		scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
 
 		// Any has additional scalar value that can contain outer references.
 		if ev.Operator() == opt.AnyOp {
 			cols := ev.childGroup(1).logical.Scalar.OuterCols
-			logical.Scalar.OuterCols = logical.Scalar.OuterCols.Union(cols)
+			scalar.OuterCols = scalar.OuterCols.Union(cols)
 		}
 
-		if !logical.Scalar.OuterCols.Empty() {
-			logical.Scalar.HasCorrelatedSubquery = true
+		if !scalar.OuterCols.Empty() {
+			scalar.HasCorrelatedSubquery = true
 		}
 		return logical
 	}
@@ -594,34 +855,65 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 
 		// Propagate HasCorrelatedSubquery up the scalar expression tree.
 		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
-			logical.Scalar.HasCorrelatedSubquery = true
+			scalar.HasCorrelatedSubquery = true
 		}
 	}
 
 	switch ev.Operator() {
 	case opt.ProjectionsOp:
 		// For a ProjectionsOp, the passthrough cols are also outer cols.
-		logical.Scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
+		scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
 
 	case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
 		// Calculate constraints for any expressions that could be filters.
 		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: b.evalCtx}
-		logical.Scalar.Constraints, logical.Scalar.TightConstraints = cb.buildConstraints(ev)
+		scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(ev)
+		if scalar.Constraints.IsUnconstrained() {
+			scalar.Constraints, scalar.TightConstraints = nil, false
+		}
 	}
 	return logical
+}
+
+// makeTableWeakKeys returns the weak key column combinations on the given
+// table. Weak keys are derived lazily and are cached in the metadata, since
+// they may be accessed multiple times during query optimization. For more
+// details, see RelationalProps.WeakKeys.
+func (b *logicalPropsBuilder) makeTableWeakKeys(
+	md *opt.Metadata, tabID opt.TableID,
+) props.WeakKeys {
+	weakKeys, ok := md.TableAnnotation(tabID, weakKeysAnnID).(props.WeakKeys)
+	if ok {
+		// Already made.
+		return weakKeys
+	}
+
+	// Make now and annotate the metadata table with it for next time.
+	tab := md.Table(tabID)
+	weakKeys = make(props.WeakKeys, 0, tab.IndexCount())
+	for idx := 0; idx < tab.IndexCount(); idx++ {
+		var cs opt.ColSet
+		index := tab.Index(idx)
+		for col := 0; col < index.UniqueColumnCount(); col++ {
+			cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
+		}
+		weakKeys.Add(cs)
+	}
+	md.SetTableAnnotation(tabID, weakKeysAnnID, weakKeys)
+	return weakKeys
 }
 
 // filterWeakKeys ensures that each weak key is a subset of the output columns.
 // It respects immutability by making a copy of the weak keys if they need to be
 // updated.
 func filterWeakKeys(relational *props.Relational) {
-	var filtered opt.WeakKeys
+	var filtered props.WeakKeys
 	for i, weakKey := range relational.WeakKeys {
 		// Discard weak keys that have columns that are not part of the output
 		// column set.
 		if !weakKey.SubsetOf(relational.OutputCols) {
 			if filtered == nil {
-				filtered = make(opt.WeakKeys, i, len(relational.WeakKeys)-1)
+				filtered = make(props.WeakKeys, i, len(relational.WeakKeys)-1)
 				copy(filtered, relational.WeakKeys[:i])
 			}
 		} else {

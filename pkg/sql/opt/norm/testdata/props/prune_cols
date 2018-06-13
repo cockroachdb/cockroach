@@ -127,7 +127,7 @@ project
       ├── left-join-apply
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int)
       │    ├── keys: (1)
-      │    ├── prune: (2-4,7)
+      │    ├── prune: (2-4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       │    │    ├── keys: (1)
@@ -136,7 +136,6 @@ project
       │    │    ├── columns: r:7(int)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
-      │    │    ├── prune: (7)
       │    │    └── project
       │    │         ├── columns: r:7(int)
       │    │         ├── outer: (1)
@@ -411,7 +410,6 @@ project
            └── max1-row
                 ├── columns: r:5(int!null)
                 ├── cardinality: [0 - 1]
-                ├── prune: (5)
                 └── project
                      ├── columns: r:5(int!null)
                      ├── prune: (5)
