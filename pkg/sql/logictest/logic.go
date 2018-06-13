@@ -944,7 +944,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					CheckStmtStringChange: true,
 				},
 				Store: &storage.StoreTestingKnobs{
-					BootstrapVersion: cfg.bootstrapVersion,
+					// The consistency queue makes a lot of noisy logs during logic tests.
+					DisableConsistencyQueue: true,
+					BootstrapVersion:        cfg.bootstrapVersion,
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
