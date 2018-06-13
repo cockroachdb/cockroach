@@ -188,13 +188,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 		if os.ImplicitTxn.Get() {
-			autoCommitErr := ex.handleAutoCommit(ctx, stmt.AST)
-			if autoCommitErr != nil {
-				retEv, retPayload = ex.makeErrEvent(autoCommitErr, stmt.AST)
-				return
-			}
-			retEv = eventTxnFinish{}
-			retPayload = eventTxnFinishPayload{commit: true}
+			retEv, retPayload = ex.handleAutoCommit(ctx, stmt.AST)
 			return
 		}
 	}()
@@ -1133,19 +1127,20 @@ func (ex *connExecutor) addActiveQuery(
 //
 // Args:
 // stmt: The statement that we just ran.
-func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statement) error {
+func (ex *connExecutor) handleAutoCommit(
+	ctx context.Context, stmt tree.Statement,
+) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
-		return nil
+		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
 		if err := knob(ctx, stmt.String()); err != nil {
-			return err
+			return ex.makeErrEvent(err, stmt)
 		}
 	}
-	err := txn.Commit(ctx)
-	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
-	return err
+
+	return ex.commitSQLTransaction(ctx, stmt)
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
