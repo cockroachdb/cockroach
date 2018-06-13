@@ -165,6 +165,74 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 	return unconstrained, false
 }
 
+// buildConstraintForTupleIn handles the case where we have a tuple IN another
+// tuple, for instance:
+//
+//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
+//
+// This function is a less powerful version of makeSpansForTupleIn, since it
+// does not operate on a particular index.  The <tight> return value indicates
+// if the spans are exactly equivalent to the expression (and not weaker).
+// Assumes that ev is an InOp and both children are TupleOps.
+func (cb *constraintsBuilder) buildConstraintForTupleIn(
+	ev ExprView,
+) (_ *constraint.Set, tight bool) {
+	lhs, rhs := ev.Child(0), ev.Child(1)
+
+	tight = true
+	var sp constraint.Span
+	cols := make([]opt.OrderingColumn, 0, lhs.ChildCount())
+	colIdxsInLHS := make([]int, 0, lhs.ChildCount())
+	for i, n := 0, lhs.ChildCount(); i < n; i++ {
+		if colID, ok := lhs.Child(i).Private().(opt.ColumnID); ok {
+			cols = append(cols, opt.MakeOrderingColumn(colID, false /* descending */))
+			colIdxsInLHS = append(colIdxsInLHS, i)
+		} else {
+			// If one of the LHS entries is not a bare column then our constraints
+			// are no longer tight.
+			tight = false
+		}
+	}
+
+	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx.Columns.Init(cols)
+	c := contradiction
+	vals := make(tree.Datums, len(colIdxsInLHS))
+	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		val := rhs.Child(i)
+
+		if val.Operator() != opt.TupleOp {
+			return unconstrained, false
+		}
+
+		hasNull := false
+		for j := range colIdxsInLHS {
+			elem := val.Child(colIdxsInLHS[j])
+			if !elem.IsConstValue() {
+				return unconstrained, false
+			}
+			datum := ExtractConstDatum(elem)
+			if datum == tree.DNull {
+				hasNull = true
+				break
+			}
+			vals[j] = datum
+		}
+
+		// Nothing can match a tuple containing a NULL, so it introduces no
+		// constraints.
+		if hasNull {
+			continue
+		}
+
+		key := constraint.MakeCompositeKey(vals...)
+		sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		c = c.Union(cb.evalCtx, constraint.SingleSpanConstraint(&keyCtx, &sp))
+	}
+
+	return c, tight
+}
+
 func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	ev ExprView,
 ) (_ *constraint.Set, tight bool) {
@@ -301,7 +369,8 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 			// Tuple inequality.
 			return cb.buildConstraintForTupleInequality(ev)
 
-			//TODO(radu): case opt.InOp:
+		case opt.InOp:
+			return cb.buildConstraintForTupleIn(ev)
 		}
 	}
 	if child0.Operator() == opt.VariableOp {
