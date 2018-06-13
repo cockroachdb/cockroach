@@ -211,6 +211,9 @@ func (expr *FuncExpr) CopyNode() *FuncExpr {
 			}
 			windowDef.OrderBy = newOrderBy
 		}
+		if windowDef.Frame != nil {
+			windowDef.Frame = windowDef.Frame.Copy()
+		}
 	}
 	return &exprCopy
 }
@@ -249,6 +252,28 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 				ret.WindowDef.OrderBy[i].Expr = e
 			}
 		}
+		if expr.WindowDef.Frame != nil && expr.WindowDef.Frame.Bounds != nil {
+			startBound, endBound := expr.WindowDef.Frame.Bounds.StartBound, expr.WindowDef.Frame.Bounds.EndBound
+			if startBound.OffsetExpr != nil {
+				e, changed := WalkExpr(v, startBound.OffsetExpr)
+				if changed {
+					if ret == expr {
+						ret = expr.CopyNode()
+					}
+					ret.WindowDef.Frame.Bounds.StartBound.OffsetExpr = e
+				}
+			}
+			if endBound != nil && endBound.OffsetExpr != nil {
+				e, changed := WalkExpr(v, endBound.OffsetExpr)
+				if changed {
+					if ret == expr {
+						ret = expr.CopyNode()
+					}
+					ret.WindowDef.Frame.Bounds.EndBound.OffsetExpr = e
+				}
+			}
+		}
+
 	}
 	if expr.Filter != nil {
 		e, changed := WalkExpr(v, expr.Filter)
