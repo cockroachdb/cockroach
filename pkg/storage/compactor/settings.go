@@ -69,7 +69,7 @@ var thresholdBytes = settings.RegisterByteSizeSetting(
 	256<<20, // more than 256MiB will trigger
 )
 
-// ThresholdBytesUsedFraction is the fraction of total logical
+// thresholdBytesUsedFraction is the fraction of total logical
 // bytes used which are up for suggested reclamation, after which
 // the compactor will begin processing (taking compactor min
 // interval into account). Note that this threshold handles the case
