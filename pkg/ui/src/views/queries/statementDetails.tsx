@@ -1,31 +1,34 @@
 import d3 from "d3";
+import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouterState } from "react-router";
+import { RouterState } from "react-router";
 import { createSelector } from "reselect";
 
 import { refreshQueries } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import * as protos from "src/js/protos";
 
 import { countBarChart, latencyBarChart } from "./barCharts";
 
+type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+
 interface StatementDetailsOwnProps {
-  queries: CachedDataReducerState<QueriesResponseMessage>;
+  statement: StatementStatistics;
   refreshQueries: typeof refreshQueries;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
 
 interface NumericStat {
-  mean: number;
-  squared_diffs: number;
+  mean?: number;
+  squared_diffs?: number;
 }
 
 function variance(stat: NumericStat, count: number) {
@@ -37,15 +40,15 @@ interface NumericStatRow {
   value: NumericStat;
 }
 
-interface NumericStatTable {
+interface NumericStatTableProps {
   rows: NumericStatRow[];
   count: number;
-  format: (number) => string;
+  format: (v: number) => string;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
   static defaultProps = {
-    format: v => `${v}`,
+    format: (v: number) => `${v}`,
   };
 
   render() {
@@ -60,7 +63,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
         </thead>
         <tbody style={{ textAlign: "right" }}>
           {
-            this.props.rows.map(row => {
+            this.props.rows.map((row: NumericStatRow) => {
               return (
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
@@ -137,7 +140,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
                 <div className="details-bar">{ latencyBar(this.props.statement) }</div>
                 <NumericStatTable
                   count={ count }
-                  format={ v => Duration(v * 1e9) }
+                  format={ (v: number) => Duration(v * 1e9) }
                   rows={[
                     { name: "Overall", value: stats.service_lat },
                     { name: "Parse", value: stats.parse_lat },
@@ -151,7 +154,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
                 <h3>Row Count</h3>
                 <NumericStatTable
                   count={ count }
-                  format={ v => Math.round(v) }
+                  format={ (v: number) => "" + Math.round(v) }
                   rows={[
                     { name: "Rows", value: stats.num_rows },
                   ]}
