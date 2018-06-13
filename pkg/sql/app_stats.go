@@ -133,8 +133,7 @@ func (a *appStats) recordStatement(
 	s.Lock()
 	s.data.Count++
 	if err != nil {
-		s.data.LastErr = err.Error()
-		s.data.LastErrRedacted = log.Redact(err)
+		s.data.SensitiveInfo.LastErr = err.Error()
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
@@ -338,15 +337,10 @@ func (s *sqlStats) getStmtStats(
 				data := stats.data
 				stats.Unlock()
 
-				if data.LastErr != "" {
-					// We have a redacted version in lastErrRedacted -- this one is not ok
-					// to report as-in though.
-					data.LastErr = "scrubbed"
-				}
-
 				if scrub {
 					// Quantize the counts to avoid leaking information that way.
 					quantizeCounts(&data)
+					data.SensitiveInfo = data.SensitiveInfo.GetScrubbedCopy()
 				}
 
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
