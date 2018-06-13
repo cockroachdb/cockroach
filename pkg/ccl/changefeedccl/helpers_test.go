@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,13 +50,13 @@ func createBenchmarkChangefeed(
 		Clock:        feedClock,
 		LeaseManager: s.LeaseManager().(*sql.LeaseManager),
 	}
-	details := jobs.ChangefeedDetails{
+	details := jobspb.ChangefeedDetails{
 		TableDescs: []sqlbase.TableDescriptor{
 			*sqlbase.GetTableDescriptor(execCfg.DB, database, table),
 		},
 		SinkURI: sinkURI,
 	}
-	progress := jobs.ChangefeedProgress{}
+	progress := jobspb.ChangefeedProgress{}
 	startedCh := make(chan tree.Datums, 1)
 
 	ctx, cancel := context.WithCancel(ctx)

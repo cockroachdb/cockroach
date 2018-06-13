@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -179,7 +180,7 @@ func (r *Registry) makeJobID() int64 {
 func (r *Registry) StartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
-	resumer, err := getResumeHook(detailsType(WrapPayloadDetails(record.Details)), r.settings)
+	resumer, err := getResumeHook(jobspb.DetailsType(jobspb.WrapPayloadDetails(record.Details)), r.settings)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -335,7 +336,7 @@ func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error 
 			// and fail to clear/set that field appropriately. Thus it seems that the
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
-			if payload.Type() == TypeSchemaChange && !strings.HasPrefix(job.Record.Description, "ROLL BACK") {
+			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(job.Record.Description, "ROLL BACK") {
 				return job.WithTxn(txn).canceled(ctx, NoopFn)
 			}
 		}
@@ -401,11 +402,11 @@ type Resumer interface {
 // each time the job is started/resumed, so it can hold state. The Resume
 // method is always ran, and can set state on the Resumer that can be used
 // by the other methods.
-type ResumeHookFn func(Type, *cluster.Settings) Resumer
+type ResumeHookFn func(jobspb.Type, *cluster.Settings) Resumer
 
 var resumeHooks []ResumeHookFn
 
-func getResumeHook(typ Type, settings *cluster.Settings) (Resumer, error) {
+func getResumeHook(typ jobspb.Type, settings *cluster.Settings) (Resumer, error) {
 	for _, hook := range resumeHooks {
 		if resumer := hook(typ, settings); resumer != nil {
 			return resumer, nil
@@ -613,14 +614,14 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 	return nil
 }
 
-func (r *Registry) newLease() *Lease {
+func (r *Registry) newLease() *jobspb.Lease {
 	nodeID := r.nodeID.Get()
 	if nodeID == 0 {
 		panic("jobs.Registry has empty node ID")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return &Lease{NodeID: nodeID, Epoch: r.mu.epoch}
+	return &jobspb.Lease{NodeID: nodeID, Epoch: r.mu.epoch}
 }
 
 func (r *Registry) cancelAll(ctx context.Context) {
