@@ -892,8 +892,11 @@ func (b *logicalPropsBuilder) makeTableWeakKeys(
 	tab := md.Table(tabID)
 	weakKeys = make(props.WeakKeys, 0, tab.IndexCount())
 	for idx := 0; idx < tab.IndexCount(); idx++ {
-		var cs opt.ColSet
 		index := tab.Index(idx)
+		if index.IsInverted() {
+			continue
+		}
+		var cs opt.ColSet
 		for col := 0; col < index.UniqueColumnCount(); col++ {
 			cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
 		}
