@@ -5,34 +5,38 @@ import React from "react";
 import { Duration } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 
-const longToInt = d => FixLong(d).toInt();
+import * as protos from "src/js/protos";
+
+type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+
+const longToInt = (d: number | Long) => FixLong(d).toInt();
 
 const countBars = [
-  bar("count-first-try", "First Try Count", d => longToInt(d.stats.first_attempt_count)),
-  bar("count-retry", "Retry Count", d => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
+  bar("count-first-try", "First Try Count", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
+  bar("count-retry", "Retry Count", (d: StatementStatistics) => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
 ];
 
 const rowsBars = [
-  bar("rows", "Mean Number of Rows", d => d.stats.num_rows.mean),
+  bar("rows", "Mean Number of Rows", (d: StatementStatistics) => d.stats.num_rows.mean),
 ];
 
 const latencyBars = [
-  bar("latency-parse", "Mean Parse Latency", d => d.stats.parse_lat.mean),
-  bar("latency-plan", "Mean Planning Latency", d => d.stats.plan_lat.mean),
-  bar("latency-run", "Mean Run Latency", d => d.stats.run_lat.mean),
-  bar("latency-overhead", "Mean Overhead Latency", d => d.stats.overhead_lat.mean),
+  bar("latency-parse", "Mean Parse Latency", (d: StatementStatistics) => d.stats.parse_lat.mean),
+  bar("latency-plan", "Mean Planning Latency", (d: StatementStatistics) => d.stats.plan_lat.mean),
+  bar("latency-run", "Mean Run Latency", (d: StatementStatistics) => d.stats.run_lat.mean),
+  bar("latency-overhead", "Mean Overhead Latency", (d: StatementStatistics) => d.stats.overhead_lat.mean),
 ];
 
-function bar(name, title, value) {
+function bar(name: string, title: string, value: (d: StatementStatistics) => number) {
   return { name, title, value };
 }
 
-function makeBarChart<T, D>(
-  accessors: { name: string, value: (T) => D }[],
-  formatter: (D) => string = (x: any) => `${x}`,
+function makeBarChart(
+  accessors: { name: string, title: string, value: (d: StatementStatistics) => number }[],
+  formatter: (d: number) => string = (x) => `${x}`,
 ) {
-  return function barChart(rows: T[] = []) {
-    function getTotal(d) {
+  return function barChart(rows: StatementStatistics[] = []) {
+    function getTotal(d: StatementStatistics) {
       return _.sum(_.map(accessors, ({ value }) => value(d)));
     }
 
@@ -42,7 +46,7 @@ function makeBarChart<T, D>(
       .domain([0, extent[1]])
       .range([0, 100]);
 
-    return function renderBarChart(d) {
+    return function renderBarChart(d: StatementStatistics) {
       if (rows.length === 0) {
         scale.domain([0, getTotal(d)]);
       }
@@ -70,5 +74,5 @@ function makeBarChart<T, D>(
 }
 
 export const countBarChart = makeBarChart(countBars);
-export const rowsBarChart = makeBarChart(rowsBars, v => Math.round(v));
+export const rowsBarChart = makeBarChart(rowsBars, v => "" + Math.round(v));
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9));
