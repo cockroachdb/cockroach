@@ -756,6 +756,34 @@ func TestParse(t *testing.T) {
 		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t`},
 		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t`},
 
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (RANGE CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t`},
+		{`SELECT avg(1) OVER (w ROWS UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t`},
+		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t`},
+
 		{`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION ALL SELECT 1 FROM t`},
@@ -1988,6 +2016,83 @@ HINT: try \h RESTORE`,
 SELECT max(a ORDER BY b) FROM ab
                        ^
 HINT: See: https://github.com/cockroachdb/cockroach/issues/23620`,
+		},
+		{
+			`SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t`,
+			`RANGE PRECEDING is only supported with UNBOUNDED at or near "preceding"
+SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
+                            ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
+			`RANGE FOLLOWING is only supported with UNBOUNDED at or near "following"
+SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+                                                            ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t`,
+			`RANGE PRECEDING is only supported with UNBOUNDED at or near "preceding"
+SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
+                                                            ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t`,
+			`RANGE FOLLOWING is only supported with UNBOUNDED at or near "following"
+SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
+                                                            ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t`,
+			`frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
+                                   ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t`,
+			`frame starting from following row cannot end with current row at or near "following"
+SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
+                           ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
+			`frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+                                                                   ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t`,
+			`frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
+                                                                   ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t`,
+			`frame starting from current row cannot have preceding rows at or near "preceding"
+SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
+                                                   ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t`,
+			`frame starting from following row cannot have preceding rows at or near "preceding"
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
+                                                   ^
+`,
+		},
+		{
+			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t`,
+			`frame starting from following row cannot have preceding rows at or near "row"
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
+                                                         ^
+`,
 		},
 	}
 	for _, d := range testData {
