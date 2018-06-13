@@ -24,7 +24,21 @@
     text-align right
     top -2px
 
-  .full
+  &__bar
     display inline-block
-    background-color steelblue
     height 100%
+
+  .count-first-try
+    background-color $link-color
+  .count-retry
+    background-color $alert-color
+  .rows
+    background-color $link-color
+  .latency-parse
+    background-color $alert-color
+  .latency-plan
+    background-color $warning-color
+  .latency-run
+    background-color $link-color
+  .latency-overhead
+    background-color $alert-color
