@@ -36,6 +36,7 @@ type ledger struct {
 	customers     int
 	parallelStmts bool
 	interleaved   bool
+	inlineArgs    bool
 	splits        int
 	mix           string
 
@@ -63,6 +64,7 @@ var ledgerMeta = workload.Meta{
 		g.flags.IntVar(&g.customers, `customers`, 1000, `Number of customers`)
 		g.flags.BoolVar(&g.parallelStmts, `parallel-stmts`, false, `Use parallel statement execution`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
+		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.mix, `mix`,
 			`balance=50,withdrawal=37,deposit=12,reversal=0`,
