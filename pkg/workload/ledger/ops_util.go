@@ -113,8 +113,8 @@ func insertTransaction(
 	return tID, err
 }
 
-func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [4]int, tID string) error {
-	amount1, amount2 := randAmount(rng), randAmount(rng)
+func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [2]int, tID string) error {
+	amount1 := randAmount(rng)
 	sysAmount := 88.433571
 	ts := timeutil.Now()
 
@@ -123,13 +123,9 @@ func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [4]int, tI
 			amount, system_amount, created_ts, transaction_id, customer_id, money_type
 		) VALUES
 			($1 , $2 , $3 , $4 , $5 , $6 ),
-			($7 , $8 , $9 , $10, $11, $12),
-			($13, $14, $15, $16, $17, $18),
-			($19, $20, $21, $22, $23, $24)`),
+			($7 , $8 , $9 , $10, $11, $12)`),
 		amount1, sysAmount, ts, tID, cIDs[0], cashMoneyType,
 		-amount1, -sysAmount, ts, tID, cIDs[1], cashMoneyType,
-		amount2, sysAmount, ts, tID, cIDs[2], cashMoneyType,
-		-amount2, -sysAmount, ts, tID, cIDs[3], cashMoneyType,
 	)
 	return err
 }
