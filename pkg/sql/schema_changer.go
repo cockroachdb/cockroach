@@ -330,6 +330,86 @@ func DropTableDesc(
 	})
 }
 
+// truncateTable deletes all of the data in the specified table.
+func (sc *SchemaChanger) truncateTable(
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	table *sqlbase.TableDescriptor,
+	evalCtx *extendedEvalContext,
+) error {
+	// If DropTime isn't set, assume this drop request is from a version
+	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
+	if table.DropTime == 0 {
+		return truncateTableInChunks(ctx, table, sc.db, false /* traceKV */)
+	}
+
+	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
+	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	// ClearRange requests lays down RocksDB range deletion tombstones that have
+	// serious performance implications (#24029). It is crucial that a single
+	// store never has more than a few dozen tombstones. The logic below attempts
+	// to bound the number of tombstones in one store by sending the ClearRange
+	// requests to each range in the table in small, sequential batches every 5s
+	// rather than letting DistSender send them all in parallel, to hopefully give
+	// the compaction queue time to compact the range tombstones away in between
+	// requests.
+	//
+	// As written, this approach has several deficiencies. It does not actually
+	// wait for the compaction queue to compact the tombstones away before sending
+	// the next request. It is likely insufficient if multiple DROP TABLEs are in
+	// flight at once. It does not save its progress in case the coordinator goes
+	// down. These deficiences could be addressed, but this code is only a
+	// stopgap: we expect that RocksDB tombstones can be made cheap enough that we
+	// won't need to rate limit ClearRange commands in the near future.
+
+	// These numbers were chosen empirically for the clearrange roachtest and
+	// could certainly use more tuning.
+	const batchSize = 20
+	const waitTime = time.Second
+
+	var n int
+	lastKey := tableSpan.Key
+	ri := kv.NewRangeIterator(sc.execCfg.DistSender)
+	for ri.Seek(ctx, tableSpan.Key, kv.Ascending); ; ri.Next(ctx) {
+		if !ri.Valid() {
+			return ri.Error().GoError()
+		}
+
+		// This call is a no-op unless the lease is nearly expired.
+		if err := sc.ExtendLease(ctx, lease); err != nil {
+			return err
+		}
+
+		if n++; n >= batchSize || !ri.NeedAnother(tableSpan) {
+			endKey := ri.Desc().EndKey
+			if tableSpan.EndKey.Less(endKey) {
+				endKey = tableSpan.EndKey
+			}
+			var b client.Batch
+			b.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    lastKey.AsRawKey(),
+					EndKey: endKey.AsRawKey(),
+				},
+			})
+			log.VEventf(ctx, 2, "ClearRange %s - %s", lastKey, endKey)
+			if err := sc.db.Run(ctx, &b); err != nil {
+				return err
+			}
+			n = 0
+			lastKey = endKey
+			time.Sleep(waitTime)
+		}
+
+		if !ri.NeedAnother(tableSpan) {
+			break
+		}
+	}
+
+	return nil
+}
+
 // maybe Add/Drop a table depending on the state of a table descriptor.
 // This method returns true if the table is deleted.
 func (sc *SchemaChanger) maybeAddDrop(
@@ -337,6 +417,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 	inSession bool,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	table *sqlbase.TableDescriptor,
+	evalCtx *extendedEvalContext,
 ) (bool, error) {
 	if table.Dropped() {
 		if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -371,7 +452,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 			}
 		}
 		// Do all the hard work of deleting the table data and the table ID.
-		if err := truncateTableInChunks(ctx, table, sc.db, false /* traceKV */); err != nil {
+		if err := sc.truncateTable(ctx, lease, table, evalCtx); err != nil {
 			return false, err
 		}
 
@@ -501,7 +582,7 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
-	if drop, err := sc.maybeAddDrop(ctx, inSession, &lease, tableDesc); err != nil {
+	if drop, err := sc.maybeAddDrop(ctx, inSession, &lease, tableDesc, evalCtx); err != nil {
 		return err
 	} else if drop {
 		needRelease = false

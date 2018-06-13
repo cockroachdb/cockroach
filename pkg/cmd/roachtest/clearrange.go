@@ -18,6 +18,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerClearRange(r *registry) {
@@ -79,7 +81,7 @@ func registerClearRange(r *registry) {
 				// above didn't brick the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 20
+				const minutes = 60
 				t.WorkerStatus("repeatedly running count(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
@@ -90,10 +92,11 @@ func registerClearRange(r *registry) {
 						return err
 					}
 					// If we can't aggregate over 80kb in 10s, the database is far from usable.
+					start := timeutil.Now()
 					if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
-					c.l.printf("read %d rows\n", count)
+					c.l.printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
 					t.WorkerProgress(float64(i+1) / float64(minutes))
 					select {
 					case <-after:
