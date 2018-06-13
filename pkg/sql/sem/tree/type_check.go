@@ -1016,7 +1016,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 		)
 	}
 
-	expr.types = types.TTuple{Types: make([]types.T, len(expr.Exprs))}
+	expr.typ = types.TTuple{Types: make([]types.T, len(expr.Exprs))}
 	for i, subExpr := range expr.Exprs {
 		desiredElem := types.Any
 		if t, ok := desired.(types.TTuple); ok && len(t.Types) > i {
@@ -1027,7 +1027,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 			return nil, err
 		}
 		expr.Exprs[i] = typedExpr
-		expr.types.Types[i] = typedExpr.ResolvedType()
+		expr.typ.Types[i] = typedExpr.ResolvedType()
 	}
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
@@ -1042,9 +1042,9 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 			}
 		}
 
-		expr.types.Labels = make([]string, len(expr.Labels))
+		expr.typ.Labels = make([]string, len(expr.Labels))
 		for i := range expr.Labels {
-			expr.types.Labels[i] = lex.NormalizeName(expr.Labels[i])
+			expr.typ.Labels[i] = lex.NormalizeName(expr.Labels[i])
 		}
 	}
 	return expr, nil
@@ -1229,7 +1229,7 @@ func typeCheckAndRequireTupleElems(
 	ctx *SemaContext, expr Expr, required types.T,
 ) (TypedExpr, error) {
 	tuple := expr.(*Tuple)
-	tuple.types = types.TTuple{Types: make([]types.T, len(tuple.Exprs))}
+	tuple.typ = types.TTuple{Types: make([]types.T, len(tuple.Exprs))}
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is equivalent (or may be inferred) to the required type.
 		typedExpr, err := typeCheckAndRequire(ctx, subExpr, required, "tuple element")
@@ -1237,7 +1237,7 @@ func typeCheckAndRequireTupleElems(
 			return nil, err
 		}
 		tuple.Exprs[i] = typedExpr
-		tuple.types.Types[i] = typedExpr.ResolvedType()
+		tuple.typ.Types[i] = typedExpr.ResolvedType()
 	}
 	return tuple, nil
 }
@@ -1434,10 +1434,10 @@ func typeCheckComparisonOp(
 		typedLeft := typedSubExprs[0]
 		typedSubExprs = typedSubExprs[1:]
 
-		rightTuple.types = types.TTuple{Types: make([]types.T, len(typedSubExprs))}
+		rightTuple.typ = types.TTuple{Types: make([]types.T, len(typedSubExprs))}
 		for i, typedExpr := range typedSubExprs {
 			rightTuple.Exprs[i] = typedExpr
-			rightTuple.types.Types[i] = retType
+			rightTuple.typ.Types[i] = retType
 		}
 		if switched {
 			return rightTuple, typedLeft, fn, false, nil
@@ -1747,8 +1747,8 @@ func typeCheckTupleComparison(
 	if err := checkTupleHasLength(right, tupLen); err != nil {
 		return nil, nil, err
 	}
-	left.types = types.TTuple{Types: make([]types.T, tupLen)}
-	right.types = types.TTuple{Types: make([]types.T, tupLen)}
+	left.typ = types.TTuple{Types: make([]types.T, tupLen)}
+	right.typ = types.TTuple{Types: make([]types.T, tupLen)}
 	for elemIdx := range left.Exprs {
 		leftSubExpr := left.Exprs[elemIdx]
 		rightSubExpr := right.Exprs[elemIdx]
@@ -1759,9 +1759,9 @@ func typeCheckTupleComparison(
 				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
-		left.types.Types[elemIdx] = leftSubExprTyped.ResolvedType()
+		left.typ.Types[elemIdx] = leftSubExprTyped.ResolvedType()
 		right.Exprs[elemIdx] = rightSubExprTyped
-		right.types.Types[elemIdx] = rightSubExprTyped.ResolvedType()
+		right.typ.Types[elemIdx] = rightSubExprTyped.ResolvedType()
 	}
 	return left, right, nil
 }
@@ -1818,7 +1818,7 @@ func typeCheckSameTypedTupleExprs(
 		resTypes.Types[elemIdx] = resType
 	}
 	for tupleIdx, expr := range exprs {
-		expr.(*Tuple).types = resTypes
+		expr.(*Tuple).typ = resTypes
 		typedExprs[tupleIdx] = expr.(TypedExpr)
 	}
 	return typedExprs, resTypes, nil

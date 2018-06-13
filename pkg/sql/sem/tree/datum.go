@@ -2473,24 +2473,36 @@ func (d *DJSON) Size() uintptr {
 type DTuple struct {
 	D Datums
 
+	// sorted indicates that the values in D are pre-sorted.
+	// This is used to accelerate IN comparisons.
 	sorted bool
+
+	// typ is the tuple's type.
+	//
+	// The Types sub-field can be initially uninitialized, and is then
+	// populated upon first invocation of ResolvedTypes(). If
+	// initialized it must have the same arity as D.
+	//
+	// The Labels sub-field can be left nil. If populated, it must have
+	// the same arity as D.
+	//
+	// TODO(knz): this ought to be a pointer when #26680 is resolved.
+	// Also when it becomes a pointer a nil value should be valid and
+	// the tuple type auto-computed when ResolvedType() is called the
+	// first time.
+	typ types.TTuple
 }
 
 // NewDTuple creates a *DTuple with the provided datums. When creating a new
 // DTuple with Datums that are known to be sorted in ascending order, chain
 // this call with DTuple.SetSorted.
-func NewDTuple(d ...Datum) *DTuple {
-	return &DTuple{D: d}
+func NewDTuple(typ types.TTuple, d ...Datum) *DTuple {
+	return &DTuple{D: d, typ: typ}
 }
 
 // NewDTupleWithLen creates a *DTuple with the provided length.
-func NewDTupleWithLen(l int) *DTuple {
-	return &DTuple{D: make(Datums, l)}
-}
-
-// NewDTupleWithCap creates a *DTuple with the provided capacity.
-func NewDTupleWithCap(c int) *DTuple {
-	return &DTuple{D: make(Datums, 0, c)}
+func NewDTupleWithLen(typ types.TTuple, l int) *DTuple {
+	return &DTuple{D: make(Datums, l), typ: typ}
 }
 
 // AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
@@ -2509,11 +2521,13 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() types.T {
-	typ := types.TTuple{Types: make([]types.T, len(d.D))}
-	for i, v := range d.D {
-		typ.Types[i] = v.ResolvedType()
+	if d.typ.Types == nil {
+		d.typ.Types = make([]types.T, len(d.D))
+		for i, v := range d.D {
+			d.typ.Types[i] = v.ResolvedType()
+		}
 	}
-	return typ
+	return d.typ
 }
 
 // Compare implements the Datum interface.
@@ -2556,7 +2570,7 @@ func (d *DTuple) Prev(ctx *EvalContext) (Datum, bool) {
 	// zero or more values that are a minimum and a maximum value of the
 	// same type exists, and the first element before that has a prev
 	// value.
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMin(ctx) {
@@ -2587,7 +2601,7 @@ func (d *DTuple) Next(ctx *EvalContext) (Datum, bool) {
 	// zero or more values that are a maximum and a minimum value of the
 	// same type exists, and the first element before that has a next
 	// value.
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMax(ctx) {
@@ -2606,7 +2620,7 @@ func (d *DTuple) Next(ctx *EvalContext) (Datum, bool) {
 
 // Max implements the Datum interface.
 func (d *DTuple) Max(ctx *EvalContext) (Datum, bool) {
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
 		m, ok := v.Max(ctx)
 		if !ok {
@@ -2619,7 +2633,7 @@ func (d *DTuple) Max(ctx *EvalContext) (Datum, bool) {
 
 // Min implements the Datum interface.
 func (d *DTuple) Min(ctx *EvalContext) (Datum, bool) {
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
 		m, ok := v.Min(ctx)
 		if !ok {
@@ -2655,6 +2669,7 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 // TODO(bram): We don't format tuples in the same way as postgres. See #25522.
+// TODO(knz): this is broken if the tuple is labeled. See #26624.
 func (d *DTuple) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
 		ctx.WriteString("ROW()")

@@ -80,9 +80,9 @@ project
                                └── const: 1 [type=int]
 
 build
-SELECT 1 + (SELECT 1, 2) AS r
+SELECT 1 + (SELECT 1 AS a, 2 AS b) AS r
 ----
-error (22023): unsupported binary operator: <int> + <tuple{int, int}>
+error (22023): unsupported binary operator: <int> + <tuple{int AS a, int AS b}>
 
 build
 SELECT (1, 2, 3) IN (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
@@ -94,7 +94,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int, int})
+           │    ├── columns: column4:4(tuple{int AS a, int AS b, int AS c})
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
            │    │    ├── values
@@ -126,11 +126,11 @@ project
            │    ├── const: 1 [type=int]
            │    ├── const: 2 [type=int]
            │    └── const: 3 [type=int]
-           └── subquery [type=tuple{int, int, int}]
+           └── subquery [type=tuple{int AS a, int AS b, int AS c}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int, int})
+                     ├── columns: column4:4(tuple{int AS a, int AS b, int AS c})
                      └── project
-                          ├── columns: column4:4(tuple{int, int, int})
+                          ├── columns: column4:4(tuple{int AS a, int AS b, int AS c})
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
@@ -158,11 +158,11 @@ project
            │    ├── const: 1 [type=int]
            │    ├── const: 2 [type=int]
            │    └── const: 3 [type=int]
-           └── subquery [type=tuple{int, int, int}]
+           └── subquery [type=tuple{int AS a, int AS b, int AS c}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int, int})
+                     ├── columns: column4:4(tuple{int AS a, int AS b, int AS c})
                      └── project
-                          ├── columns: column4:4(tuple{int, int, int})
+                          ├── columns: column4:4(tuple{int AS a, int AS b, int AS c})
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
@@ -186,11 +186,11 @@ project
  │    └── tuple [type=tuple{}]
  └── projections
       └── eq [type=bool]
-           ├── subquery [type=tuple{int, int, int}]
+           ├── subquery [type=tuple{int AS x, int AS y, int AS z}]
            │    └── max1-row
-           │         ├── columns: column7:7(tuple{int, int, int})
+           │         ├── columns: column7:7(tuple{int AS x, int AS y, int AS z})
            │         └── project
-           │              ├── columns: column7:7(tuple{int, int, int})
+           │              ├── columns: column7:7(tuple{int AS x, int AS y, int AS z})
            │              ├── project
            │              │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
            │              │    ├── values
@@ -204,11 +204,11 @@ project
            │                        ├── variable: x [type=int]
            │                        ├── variable: y [type=int]
            │                        └── variable: z [type=int]
-           └── subquery [type=tuple{int, int, int}]
+           └── subquery [type=tuple{int AS a, int AS b, int AS c}]
                 └── max1-row
-                     ├── columns: column8:8(tuple{int, int, int})
+                     ├── columns: column8:8(tuple{int AS a, int AS b, int AS c})
                      └── project
-                          ├── columns: column8:8(tuple{int, int, int})
+                          ├── columns: column8:8(tuple{int AS a, int AS b, int AS c})
                           ├── project
                           │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
                           │    ├── values
@@ -289,7 +289,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column5:5(tuple{int, int})
+           │    ├── columns: column5:5(tuple{int AS c, int AS d})
            │    ├── project
            │    │    ├── columns: c:1(int!null) d:2(int!null)
            │    │    ├── values
@@ -301,11 +301,11 @@ project
            │         └── tuple [type=tuple{int, int}]
            │              ├── variable: c [type=int]
            │              └── variable: d [type=int]
-           └── subquery [type=tuple{int, int}]
+           └── subquery [type=tuple{int AS a, int AS b}]
                 └── max1-row
-                     ├── columns: column6:6(tuple{int, int})
+                     ├── columns: column6:6(tuple{int AS a, int AS b})
                      └── project
-                          ├── columns: column6:6(tuple{int, int})
+                          ├── columns: column6:6(tuple{int AS a, int AS b})
                           ├── project
                           │    ├── columns: a:3(int!null) b:4(int!null)
                           │    ├── values
@@ -331,11 +331,11 @@ project
  │    └── tuple [type=tuple{}]
  └── projections
       └── in [type=bool]
-           ├── subquery [type=tuple{int, int}]
+           ├── subquery [type=tuple{int AS a, int AS b}]
            │    └── max1-row
-           │         ├── columns: column3:3(tuple{int, int})
+           │         ├── columns: column3:3(tuple{int AS a, int AS b})
            │         └── project
-           │              ├── columns: column3:3(tuple{int, int})
+           │              ├── columns: column3:3(tuple{int AS a, int AS b})
            │              ├── project
            │              │    ├── columns: a:1(int!null) b:2(int!null)
            │              │    ├── values
@@ -366,7 +366,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int})
+           │    ├── columns: column4:4(tuple{int AS b, int AS c})
            │    ├── project
            │    │    ├── columns: b:1(int!null) c:2(int!null)
            │    │    ├── values
@@ -436,11 +436,11 @@ project
            │         └── tuple [type=tuple{int, int}]
            │              ├── const: 1 [type=int]
            │              └── const: 2 [type=int]
-           └── subquery [type=tuple{int, int}]
+           └── subquery [type=tuple{int AS a, int AS b}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int})
+                     ├── columns: column4:4(tuple{int AS a, int AS b})
                      └── project
-                          ├── columns: column4:4(tuple{int, int})
+                          ├── columns: column4:4(tuple{int AS a, int AS b})
                           ├── project
                           │    ├── columns: a:2(int!null) b:3(int!null)
                           │    ├── values
@@ -509,7 +509,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int AS a, int AS b})
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
@@ -552,7 +552,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int AS a, int AS b})
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
@@ -597,7 +597,7 @@ project
       └── not [type=bool]
            └── any: ne [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int AS a, int AS b})
                 │    ├── project
                 │    │    ├── columns: a:1(int!null) b:2(int!null)
                 │    │    ├── values
@@ -621,7 +621,7 @@ error (42601): subquery must return only one column, found 2
 build
 SELECT 1 IN (SELECT 1 AS a, 2 AS b) AS r
 ----
-error (22023): unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
+error (22023): unsupported comparison operator: <int> IN <tuple{tuple{int AS a, int AS b}}>
 
 build
 SELECT (1, 2) IN (SELECT 1 AS a) AS r
@@ -641,7 +641,7 @@ TABLE abc
 build
 SELECT (1, 2) IN (SELECT * FROM abc) AS r
 ----
-error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int, int, int}}>
+error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
 
 build
 SELECT (1, 2) IN (SELECT a, b FROM abc) AS r
@@ -653,7 +653,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int})
+           │    ├── columns: column4:4(tuple{int AS a, int AS b})
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int)
            │    │    └── scan abc
@@ -676,7 +676,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int})
+           │    ├── columns: column4:4(tuple{int AS a, int AS b})
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int)
            │    │    └── select
