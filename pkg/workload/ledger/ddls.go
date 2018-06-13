@@ -48,17 +48,12 @@ const (
 		transaction_id STRING(255)   NOT NULL REFERENCES transaction,
 		system_amount  DECIMAL(24,7)     NULL,
 		created_ts     TIMESTAMP     NOT NULL,
-		money_type     STRING(1)     NOT NULL,
-
-		INDEX entry_auto_index_fk_customer    (customer_id ASC),
-		INDEX entry_auto_index_fk_transaction (transaction_id ASC)
+		money_type     STRING(1)     NOT NULL
 	)`
 	ledgerSessionSchema = `(
 		session_id       STRING                   NOT NULL PRIMARY KEY,
 		expiry_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
 		data             STRING                   NOT NULL,
-		last_update      TIMESTAMP                NOT NULL,
-
-		INDEX expiry_timestamp_idx (expiry_timestamp ASC)
+		last_update      TIMESTAMP                NOT NULL
 	)`
 )
