@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -549,7 +550,7 @@ func importPlanHook(
 			}
 		}
 
-		tableDetails := make([]jobs.ImportDetails_Table, len(tableDescs))
+		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
 		for i := range tableDescs {
 			tableDetails[i].Desc = tableDescs[i]
 		}
@@ -557,7 +558,7 @@ func importPlanHook(
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
-			Details: jobs.ImportDetails{
+			Details: jobspb.ImportDetails{
 				URIs:       files,
 				Format:     format,
 				ParentID:   parentID,
@@ -566,7 +567,7 @@ func importPlanHook(
 				SSTSize:    sstSize,
 				Walltime:   walltime,
 			},
-			Progress: jobs.ImportProgress{},
+			Progress: jobspb.ImportProgress{},
 		})
 		if err != nil {
 			return err
@@ -625,8 +626,8 @@ func doDistributedCSVTransform(
 		// job progress to coerce out the correct error type. If the update succeeds
 		// then return the original error, otherwise return this error instead so
 		// it can be cleaned up at a higher level.
-		if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-			d := details.(*jobs.Progress_Import).Import
+		if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			d := details.(*jobspb.Progress_Import).Import
 			return d.Completed()
 		}); err != nil {
 			return err
@@ -697,7 +698,7 @@ type importResumer struct {
 func (r *importResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.ImportDetails)
+	details := job.Record.Details.(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 
 	// TODO(dt): consider looking at the legacy fields used in 2.0.
@@ -743,7 +744,7 @@ func (r *importResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobs.ImportDetails)
+	details := job.Record.Details.(jobspb.ImportDetails)
 	if details.BackupPath != "" {
 		return nil
 	}
@@ -763,7 +764,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Record.Details.(jobs.ImportDetails)
+	details := job.Record.Details.(jobspb.ImportDetails)
 
 	if details.BackupPath != "" {
 		return nil
@@ -786,7 +787,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 func (r *importResumer) OnTerminal(
 	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := job.Record.Details.(jobs.ImportDetails)
+	details := job.Record.Details.(jobspb.ImportDetails)
 
 	if transform := details.BackupPath; transform != "" {
 		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)
@@ -816,8 +817,8 @@ func (r *importResumer) OnTerminal(
 
 var _ jobs.Resumer = &importResumer{}
 
-func importResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeImport {
+func importResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeImport {
 		return nil
 	}
 

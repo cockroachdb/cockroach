@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -50,8 +51,8 @@ func TestRoundtripJob(t *testing.T) {
 		Description:   "beep boop",
 		Username:      "robot",
 		DescriptorIDs: sqlbase.IDs{42},
-		Details:       jobs.RestoreDetails{},
-		Progress:      jobs.RestoreProgress{},
+		Details:       jobspb.RestoreDetails{},
+		Progress:      jobspb.RestoreProgress{},
 	})
 	if err := storedJob.Created(ctx); err != nil {
 		t.Fatal(err)
@@ -124,7 +125,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	// receive on it will block until a job is running.
 	resumeCalled := make(chan struct{})
 	var lock syncutil.Mutex
-	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.AddResumeHook(func(_ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
 		lock.Lock()
 		hookCallCount++
 		lock.Unlock()
@@ -143,7 +144,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	for i := 0; i < jobCount; i++ {
 		nodeid := roachpb.NodeID(i + 1)
-		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobs.BackupDetails{}, Progress: jobs.BackupProgress{}})
+		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -233,7 +234,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 
 	resumeCh := make(chan int64)
 	defer jobs.ResetResumeHooks()()
-	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.AddResumeHook(func(_ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{OnResume: func(job *jobs.Job) error {
 			resumeCh <- *job.ID()
 			return nil
@@ -244,16 +245,16 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	payload, err := protoutil.Marshal(&jobs.Payload{
-		Lease:   &jobs.Lease{NodeID: 1, Epoch: 1},
-		Details: jobs.WrapPayloadDetails(jobs.BackupDetails{}),
+	payload, err := protoutil.Marshal(&jobspb.Payload{
+		Lease:   &jobspb.Lease{NodeID: 1, Epoch: 1},
+		Details: jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	progress, err := protoutil.Marshal(&jobs.Progress{
-		Details: jobs.WrapProgressDetails(jobs.BackupProgress{}),
+	progress, err := protoutil.Marshal(&jobspb.Progress{
+		Details: jobspb.WrapProgressDetails(jobspb.BackupProgress{}),
 	})
 	if err != nil {
 		t.Fatal(err)

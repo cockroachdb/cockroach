@@ -18,11 +18,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,34 +50,18 @@ type Job struct {
 
 	mu struct {
 		syncutil.Mutex
-		payload  Payload
-		progress Progress
+		payload  jobspb.Payload
+		progress jobspb.Progress
 	}
 }
-
-// Details is a marker interface for job details proto structs.
-type Details interface{}
-
-var _ Details = BackupDetails{}
-var _ Details = RestoreDetails{}
-var _ Details = SchemaChangeDetails{}
-var _ Details = ChangefeedDetails{}
-
-// ProgressDetails is a marker interface for job progress details proto structs.
-type ProgressDetails interface{}
-
-var _ ProgressDetails = BackupProgress{}
-var _ ProgressDetails = RestoreProgress{}
-var _ ProgressDetails = SchemaChangeProgress{}
-var _ ProgressDetails = ChangefeedProgress{}
 
 // Record stores the job fields that are not automatically managed by Job.
 type Record struct {
 	Description   string
 	Username      string
 	DescriptorIDs sqlbase.IDs
-	Details       Details
-	Progress      ProgressDetails
+	Details       jobspb.Details
+	Progress      jobspb.ProgressDetails
 }
 
 // Status represents the status of a job in the system.jobs table.
@@ -146,23 +130,23 @@ func (j *Job) Created(ctx context.Context) error {
 	return j.created(ctx, j.registry.makeJobID(), nil)
 }
 
-func (j *Job) created(ctx context.Context, id int64, lease *Lease) error {
-	payload := &Payload{
+func (j *Job) created(ctx context.Context, id int64, lease *jobspb.Lease) error {
+	payload := &jobspb.Payload{
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
-		Details:       WrapPayloadDetails(j.Record.Details),
+		Details:       jobspb.WrapPayloadDetails(j.Record.Details),
 		Lease:         lease,
 	}
-	progress := &Progress{
-		Details: WrapProgressDetails(j.Record.Progress),
+	progress := &jobspb.Progress{
+		Details: jobspb.WrapProgressDetails(j.Record.Progress),
 	}
 	return j.insert(ctx, id, payload, progress)
 }
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
 		if *status != StatusPending {
 			// Already started - do nothing.
 			return false, nil
@@ -176,16 +160,16 @@ func (j *Job) Started(ctx context.Context) error {
 // ProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
-type ProgressedFn func(ctx context.Context, details ProgressDetails) float32
+type ProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) float32
 
 // DetailProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
-type DetailProgressedFn func(ctx context.Context, details Details, progress ProgressDetails) float32
+type DetailProgressedFn func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32
 
 // FractionUpdater returns a ProgressedFn that returns its argument.
 func FractionUpdater(f float32) ProgressedFn {
-	return func(ctx context.Context, details ProgressDetails) float32 {
+	return func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 		return f
 	}
 }
@@ -198,7 +182,7 @@ func FractionUpdater(f float32) ProgressedFn {
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
 	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
+		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 			if *status != StatusRunning {
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}
@@ -216,7 +200,7 @@ func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
 
 // DetailProgressed is similar to Progressed but also updates the job's Details.
 func (j *Job) DetailProgressed(ctx context.Context, progressedFn DetailProgressedFn) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 		if *status != StatusRunning {
 			return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 		}
@@ -235,7 +219,7 @@ func (j *Job) DetailProgressed(ctx context.Context, progressedFn DetailProgresse
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
 func (j *Job) paused(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
 		if *status == StatusPaused {
 			// Already paused - do nothing.
 			return false, nil
@@ -252,7 +236,7 @@ func (j *Job) paused(ctx context.Context) error {
 // currently paused. It does not directly resume the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
 func (j *Job) resumed(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
 		if *status == StatusRunning {
 			// Already resumed - do nothing.
 			return false, nil
@@ -266,7 +250,7 @@ func (j *Job) resumed(ctx context.Context) error {
 		*status = StatusRunning
 		// NB: A nil lease indicates the job is not resumable, whereas an empty
 		// lease is always considered expired.
-		payload.Lease = &Lease{}
+		payload.Lease = &jobspb.Lease{}
 		return true, nil
 	})
 }
@@ -277,7 +261,7 @@ func (j *Job) resumed(ctx context.Context) error {
 func (j *Job) canceled(
 	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
 		if *status == StatusCanceled {
 			// Already canceled - do nothing.
 			return false, nil
@@ -307,7 +291,7 @@ var NoopFn func(context.Context, *client.Txn, *Job) error
 func (j *Job) Failed(
 	ctx context.Context, err error, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, _ *Progress) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
@@ -329,7 +313,7 @@ func (j *Job) Failed(
 func (j *Job) Succeeded(
 	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
@@ -348,8 +332,8 @@ func (j *Job) Succeeded(
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *Payload, _ *Progress) (bool, error) {
-		payload.Details = WrapPayloadDetails(details)
+	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
+		payload.Details = jobspb.WrapPayloadDetails(details)
 		return true, nil
 	})
 }
@@ -357,8 +341,8 @@ func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
 	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, _ *Status, _ *Payload, progress *Progress) (bool, error) {
-			progress.Details = WrapProgressDetails(details)
+		func(_ *client.Txn, _ *Status, _ *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+			progress.Details = jobspb.WrapProgressDetails(details)
 			return true, nil
 		},
 	)
@@ -366,7 +350,7 @@ func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
 
 // Payload returns the most recently sent Payload for this Job. Will return an
 // empty Payload until Created() is called on a new Job.
-func (j *Job) Payload() Payload {
+func (j *Job) Payload() jobspb.Payload {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.payload
@@ -374,7 +358,7 @@ func (j *Job) Payload() Payload {
 
 // Progress returns the most recently sent Progress for this Job. Will return an
 // empty Progress until Created() is called on a new Job.
-func (j *Job) Progress() Progress {
+func (j *Job) Progress() jobspb.Progress {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.progress
@@ -403,7 +387,7 @@ func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn
 	return j.registry.db.Txn(ctx, fn)
 }
 
-func (j *Job) initialize(payload *Payload, progress *Progress) (err error) {
+func (j *Job) initialize(payload *jobspb.Payload, progress *jobspb.Progress) (err error) {
 	j.Record.Description = payload.Description
 	j.Record.Username = payload.Username
 	j.Record.DescriptorIDs = payload.DescriptorIDs
@@ -421,8 +405,8 @@ func (j *Job) initialize(payload *Payload, progress *Progress) (err error) {
 }
 
 func (j *Job) load(ctx context.Context) error {
-	var payload *Payload
-	var progress *Progress
+	var payload *jobspb.Payload
+	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, stmt, *j.id)
@@ -444,7 +428,9 @@ func (j *Job) load(ctx context.Context) error {
 	return j.initialize(payload, progress)
 }
 
-func (j *Job) insert(ctx context.Context, id int64, payload *Payload, progress *Progress) error {
+func (j *Job) insert(
+	ctx context.Context, id int64, payload *jobspb.Payload, progress *jobspb.Progress,
+) error {
 	if j.id != nil {
 		// Already created - do nothing.
 		return nil
@@ -480,7 +466,8 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload, progress *
 }
 
 func (j *Job) update(
-	ctx context.Context, updateFn func(*client.Txn, *Status, *Payload, *Progress) (bool, error),
+	ctx context.Context,
+	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (bool, error),
 ) error {
 	return j.updateRow(ctx, updateProgressAndDetails, updateFn)
 }
@@ -490,14 +477,14 @@ const updateProgressOnly, updateProgressAndDetails = true, false
 func (j *Job) updateRow(
 	ctx context.Context,
 	progressOnly bool,
-	updateFn func(*client.Txn, *Status, *Payload, *Progress) (bool, error),
+	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (bool, error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
 	}
 
-	var payload *Payload
-	var progress *Progress
+	var payload *jobspb.Payload
+	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, selectStmt, *j.id)
@@ -577,8 +564,8 @@ func (j *Job) updateRow(
 	return nil
 }
 
-func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload, progress *Progress) (bool, error) {
+func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 		if *status != StatusRunning {
 			return false, errors.Errorf("job %d no longer running", *j.id)
 		}
@@ -594,126 +581,10 @@ func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
 	})
 }
 
-// Type returns the payload's job type.
-func (p *Payload) Type() Type {
-	return detailsType(p.Details)
-}
-
-func detailsType(d isPayload_Details) Type {
-	switch d.(type) {
-	case *Payload_Backup:
-		return TypeBackup
-	case *Payload_Restore:
-		return TypeRestore
-	case *Payload_SchemaChange:
-		return TypeSchemaChange
-	case *Payload_Import:
-		return TypeImport
-	case *Payload_Changefeed:
-		return TypeChangefeed
-	default:
-		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
-	}
-}
-
-// WrapPayloadDetails wraps a Details object in the protobuf wrapper struct
-// necessary to make it usable as the Details field of a Payload.
-//
-// Providing an unknown details type indicates programmer error and so causes a
-// panic.
-func WrapPayloadDetails(details Details) interface {
-	isPayload_Details
-} {
-	switch d := details.(type) {
-	case BackupDetails:
-		return &Payload_Backup{Backup: &d}
-	case RestoreDetails:
-		return &Payload_Restore{Restore: &d}
-	case SchemaChangeDetails:
-		return &Payload_SchemaChange{SchemaChange: &d}
-	case ImportDetails:
-		return &Payload_Import{Import: &d}
-	case ChangefeedDetails:
-		return &Payload_Changefeed{Changefeed: &d}
-	default:
-		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
-	}
-}
-
-// WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
-// struct necessary to make it usable as the Details field of a Progress.
-//
-// Providing an unknown details type indicates programmer error and so causes a
-// panic.
-func WrapProgressDetails(details ProgressDetails) interface {
-	isProgress_Details
-} {
-	switch d := details.(type) {
-	case BackupProgress:
-		return &Progress_Backup{Backup: &d}
-	case RestoreProgress:
-		return &Progress_Restore{Restore: &d}
-	case SchemaChangeProgress:
-		return &Progress_SchemaChange{SchemaChange: &d}
-	case ImportProgress:
-		return &Progress_Import{Import: &d}
-	case ChangefeedProgress:
-		return &Progress_Changefeed{Changefeed: &d}
-	default:
-		panic(fmt.Sprintf("jobs.WrapProgressDetails: unknown details type %T", d))
-	}
-}
-
-// UnwrapDetails returns the details object stored within the payload's Details
-// field, discarding the protobuf wrapper struct.
-//
-// Unlike in WrapPayloadDetails, an unknown details type may simply indicate
-// that the Payload originated on a node aware of more details types, and so the
-// error is returned to the caller.
-func (p *Payload) UnwrapDetails() (Details, error) {
-	switch d := p.Details.(type) {
-	case *Payload_Backup:
-		return *d.Backup, nil
-	case *Payload_Restore:
-		return *d.Restore, nil
-	case *Payload_SchemaChange:
-		return *d.SchemaChange, nil
-	case *Payload_Import:
-		return *d.Import, nil
-	case *Payload_Changefeed:
-		return *d.Changefeed, nil
-	default:
-		return nil, errors.Errorf("jobs.Payload: unsupported details type %T", d)
-	}
-}
-
-// UnwrapDetails returns the details object stored within the progress' Details
-// field, discarding the protobuf wrapper struct.
-//
-// Unlike in WrapProgressDetails, an unknown details type may simply indicate
-// that the Payload originated on a node aware of more details types, and so the
-// error is returned to the caller.
-func (p *Progress) UnwrapDetails() (ProgressDetails, error) {
-	switch d := p.Details.(type) {
-	case *Progress_Backup:
-		return *d.Backup, nil
-	case *Progress_Restore:
-		return *d.Restore, nil
-	case *Progress_SchemaChange:
-		return *d.SchemaChange, nil
-	case *Progress_Import:
-		return *d.Import, nil
-	case *Progress_Changefeed:
-		return *d.Changefeed, nil
-	default:
-		return nil, errors.Errorf("jobs.Progress: unsupported details type %T", d)
-	}
-}
-
 // UnmarshalPayload unmarshals and returns the Payload encoded in the input
 // datum, which should be a tree.DBytes.
-func UnmarshalPayload(datum tree.Datum) (*Payload, error) {
-	payload := &Payload{}
+func UnmarshalPayload(datum tree.Datum) (*jobspb.Payload, error) {
+	payload := &jobspb.Payload{}
 	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
@@ -727,8 +598,8 @@ func UnmarshalPayload(datum tree.Datum) (*Payload, error) {
 
 // UnmarshalProgress unmarshals and returns the Progress encoded in the input
 // datum, which should be a tree.DBytes.
-func UnmarshalProgress(datum tree.Datum) (*Progress, error) {
-	progress := &Progress{}
+func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
+	progress := &jobspb.Progress{}
 	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
@@ -738,14 +609,6 @@ func UnmarshalProgress(datum tree.Datum) (*Progress, error) {
 		return nil, err
 	}
 	return progress, nil
-}
-
-func (t Type) String() string {
-	// Protobufs, by convention, use CAPITAL_SNAKE_CASE for enum identifiers.
-	// Since Type's string representation is used as a SHOW JOBS output column, we
-	// simply swap underscores for spaces in the identifier for very SQL-esque
-	// names, like "BACKUP" and "SCHEMA CHANGE".
-	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
 }
 
 // RunAndWaitForTerminalState runs a closure and potentially tracks its progress
@@ -835,45 +698,4 @@ func RunAndWaitForTerminalState(
 		}
 		return jobID, status, nil
 	}
-}
-
-// Completed returns the total complete percent of processing this table. There
-// are two phases: sampling, SST writing. The SST phase is divided into two
-// stages: read CSV, write SST. Thus, the entire progress can be measured
-// by (sampling + read csv + write sst) progress. Since there are multiple
-// distSQL processors running these stages, we assign slots to each one, and
-// they are in charge of updating their portion of the progress. Since we read
-// over CSV files twice (once for sampling, once for SST writing), we must
-// indicate which phase we are in. This is done using the SamplingProgress
-// slice, which is empty if we are in the second stage (and can thus be
-// implied as complete).
-func (d ImportProgress) Completed() float32 {
-	const (
-		// These ratios are approximate after running simple benchmarks.
-		samplingPhaseContribution = 0.1
-		readStageContribution     = 0.65
-		writeStageContribution    = 0.25
-	)
-
-	sum := func(fs []float32) float32 {
-		var total float32
-		for _, f := range fs {
-			total += f
-		}
-		return total
-	}
-	sampling := sum(d.SamplingProgress) * samplingPhaseContribution
-	if len(d.SamplingProgress) == 0 {
-		// SamplingProgress is empty iff we are in the second phase. If so, the
-		// first phase is implied as fully complete.
-		sampling = samplingPhaseContribution
-	}
-	read := sum(d.ReadProgress) * readStageContribution
-	write := sum(d.WriteProgress) * writeStageContribution
-	completed := sampling + read + write
-	// Float addition can round such that the sum is > 1.
-	if completed > 1 {
-		completed = 1
-	}
-	return completed
 }

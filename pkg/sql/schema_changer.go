@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -907,8 +908,9 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				return err
 			}
 
-			details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+			details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
 			if !ok {
+				// TODO(mjibson): should this be `job`, not `sc.job`?
 				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Record.Details)
 			}
 			details.ResumeSpanList[i].ResumeSpans = nil

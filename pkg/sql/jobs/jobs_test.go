@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,7 +47,7 @@ import (
 type expectation struct {
 	DB                *gosql.DB
 	Record            jobs.Record
-	Type              jobs.Type
+	Type              jobspb.Type
 	Before            time.Time
 	FractionCompleted float32
 	Error             string
@@ -65,11 +66,11 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return err
 	}
 
-	var payload jobs.Payload
+	var payload jobspb.Payload
 	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
 		return err
 	}
-	var progress jobs.Progress
+	var progress jobspb.Progress
 	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	var lock syncutil.Mutex
 	var e, a Counters
 
-	mockJob := jobs.Record{Details: jobs.ImportDetails{}, Progress: jobs.ImportProgress{}}
+	mockJob := jobs.Record{Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{}}
 
 	check := func(t *testing.T) {
 		t.Helper()
@@ -246,7 +247,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		},
 	}
 
-	jobs.AddResumeHook(func(typ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
 		return dummy
 	})
 
@@ -549,8 +550,8 @@ func TestJobLifecycle(t *testing.T) {
 	defaultRecord := jobs.Record{
 		// Job does not accept an empty Details field, so arbitrarily provide
 		// ImportDetails.
-		Details:  jobs.ImportDetails{},
-		Progress: jobs.ImportProgress{},
+		Details:  jobspb.ImportDetails{},
+		Progress: jobspb.ImportProgress{},
 	}
 
 	createDefaultJob := func() (*jobs.Job, expectation) {
@@ -565,9 +566,9 @@ func TestJobLifecycle(t *testing.T) {
 		return nil
 	}}
 
-	jobs.AddResumeHook(func(typ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
 		switch typ {
-		case jobs.TypeImport:
+		case jobspb.TypeImport:
 			return dummy
 		}
 		return nil
@@ -594,8 +595,8 @@ func TestJobLifecycle(t *testing.T) {
 			Description:   "There's a snake in my boot!",
 			Username:      "Woody Pride",
 			DescriptorIDs: []sqlbase.ID{1, 2, 3},
-			Details:       jobs.RestoreDetails{},
-			Progress:      jobs.RestoreProgress{},
+			Details:       jobspb.RestoreDetails{},
+			Progress:      jobspb.RestoreProgress{},
 		})
 
 		if err := woodyJob.Created(ctx); err != nil {
@@ -632,13 +633,13 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.Progressed(ctx, func(_ context.Context, details jobs.ProgressDetails) float32 {
-			details.(*jobs.Progress_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+		if err := woodyJob.Progressed(ctx, func(_ context.Context, details jobspb.ProgressDetails) float32 {
+			details.(*jobspb.Progress_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
 			return 1.0
 		}); err != nil {
 			t.Fatal(err)
 		}
-		woodyExp.Record.Progress = jobs.RestoreProgress{LowWaterMark: roachpb.Key("mariana")}
+		woodyExp.Record.Progress = jobspb.RestoreProgress{LowWaterMark: roachpb.Key("mariana")}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
@@ -659,17 +660,17 @@ func TestJobLifecycle(t *testing.T) {
 		buzzExp := expectation{
 			DB:     sqlDB,
 			Record: buzzRecord,
-			Type:   jobs.TypeBackup,
+			Type:   jobspb.TypeBackup,
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
 		buzzJob := registry.NewJob(buzzRecord)
 
 		// Test modifying the job details before calling `Created`.
-		buzzJob.Record.Details = jobs.BackupDetails{}
-		buzzExp.Record.Details = jobs.BackupDetails{}
-		buzzJob.Record.Progress = jobs.BackupProgress{}
-		buzzExp.Record.Progress = jobs.BackupProgress{}
+		buzzJob.Record.Details = jobspb.BackupDetails{}
+		buzzExp.Record.Details = jobspb.BackupDetails{}
+		buzzJob.Record.Progress = jobspb.BackupProgress{}
+		buzzExp.Record.Progress = jobspb.BackupProgress{}
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -709,8 +710,8 @@ func TestJobLifecycle(t *testing.T) {
 			Description:   "The toys! The toys are alive!",
 			Username:      "Sid Phillips",
 			DescriptorIDs: []sqlbase.ID{6, 6, 6},
-			Details:       jobs.RestoreDetails{},
-			Progress:      jobs.RestoreProgress{},
+			Details:       jobspb.RestoreDetails{},
+			Progress:      jobspb.RestoreProgress{},
 		})
 
 		if err := sidJob.Created(ctx); err != nil {
@@ -1017,13 +1018,13 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("set details works", func(t *testing.T) {
 		job, exp := createJob(jobs.Record{
-			Details:  jobs.RestoreDetails{},
-			Progress: jobs.RestoreProgress{},
+			Details:  jobspb.RestoreDetails{},
+			Progress: jobspb.RestoreProgress{},
 		})
 		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
-		newDetails := jobs.RestoreDetails{URIs: []string{"new"}}
+		newDetails := jobspb.RestoreDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
 		if err := job.SetDetails(ctx, newDetails); err != nil {
 			t.Fatal(err)
@@ -1035,13 +1036,13 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("set progress works", func(t *testing.T) {
 		job, exp := createJob(jobs.Record{
-			Details:  jobs.RestoreDetails{},
-			Progress: jobs.RestoreProgress{},
+			Details:  jobspb.RestoreDetails{},
+			Progress: jobspb.RestoreProgress{},
 		})
 		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
-		newDetails := jobs.RestoreProgress{LowWaterMark: []byte{42}}
+		newDetails := jobspb.RestoreProgress{LowWaterMark: []byte{42}}
 		exp.Record.Progress = newDetails
 		if err := job.SetProgress(ctx, newDetails); err != nil {
 			t.Fatal(err)
@@ -1053,8 +1054,8 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("cannot pause or resume schema changes", func(t *testing.T) {
 		job, _ := createJob(jobs.Record{
-			Details:  jobs.SchemaChangeDetails{},
-			Progress: jobs.SchemaChangeProgress{},
+			Details:  jobspb.SchemaChangeDetails{},
+			Progress: jobspb.SchemaChangeProgress{},
 		})
 		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
 			t.Fatalf("unexpected %v", err)
@@ -1077,7 +1078,7 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	mockJob := jobs.Record{Details: jobs.BackupDetails{}, Progress: jobs.BackupProgress{}}
+	mockJob := jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}}
 	tests := []struct {
 		name   string
 		status jobs.Status
