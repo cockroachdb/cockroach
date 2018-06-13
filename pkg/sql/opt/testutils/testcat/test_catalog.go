@@ -217,6 +217,11 @@ func (ti *Index) IdxName() string {
 	return ti.Name
 }
 
+// IsInverted is part of the opt.Index interface.
+func (ti *Index) IsInverted() bool {
+	return false
+}
+
 // ColumnCount is part of the opt.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
