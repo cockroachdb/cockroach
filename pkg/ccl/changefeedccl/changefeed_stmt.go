@@ -32,6 +32,7 @@ func init() {
 type envelopeType string
 
 const (
+	optCursor   = `cursor`
 	optEnvelope = `envelope`
 
 	optEnvelopeKeyOnly envelopeType = `key_only`
@@ -42,6 +43,7 @@ const (
 )
 
 var changefeedOptionExpectValues = map[string]bool{
+	optCursor:   true,
 	optEnvelope: true,
 }
 
@@ -83,9 +85,10 @@ func changefeedPlanHook(
 
 		now := p.ExecCfg().Clock.Now()
 		var highwater hlc.Timestamp
-		if changefeedStmt.AsOf.Expr != nil {
+		if cursor, ok := opts[optCursor]; ok {
+			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if highwater, err = sql.EvalAsOfTimestamp(nil, changefeedStmt.AsOf, now); err != nil {
+			if highwater, err = sql.EvalAsOfTimestamp(nil, asOf, now); err != nil {
 				return err
 			}
 		}

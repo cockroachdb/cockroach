@@ -459,7 +459,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str> CACHE CANCEL CASCADE CASE CAST CHAR
+%token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -473,7 +473,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str> ELSE EMIT ENCODING END ESCAPE EXCEPT
-%token <str> EXISTS EXPERIMENTAL_CHANGEFEED EXECUTE EXPERIMENTAL
+%token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
@@ -1917,17 +1917,12 @@ create_stats_stmt:
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 create_changefeed_stmt:
-  CREATE EXPERIMENTAL_CHANGEFEED EMIT targets TO string_or_placeholder opt_as_of_clause opt_with_options
+  CREATE CHANGEFEED FOR targets INTO string_or_placeholder opt_with_options
   {
-    /* SKIP DOC */
-    // TODO(dan): This reuses the `AS OF SYSTEM TIME` syntax for convenience,
-    // but it means something different here than SELECT and BACKUP. On the
-    // other hand, RESTORE already stretches the definition a bit. Revisit.
     $$.val = &tree.CreateChangefeed{
       Targets: $4.targetList(),
       SinkURI: $6.expr(),
-      AsOf: $7.asOfClause(),
-      Options: $8.kvOptions(),
+      Options: $7.kvOptions(),
     }
   }
 
@@ -7940,6 +7935,7 @@ unreserved_keyword:
 | CACHE
 | CANCEL
 | CASCADE
+| CHANGEFEED
 | CLUSTER
 | COLUMNS
 | COMMENT
@@ -7972,7 +7968,6 @@ unreserved_keyword:
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
-| EXPERIMENTAL_CHANGEFEED
 | EXPERIMENTAL_FINGERPRINTS
 | EXPERIMENTAL_RANGES
 | EXPERIMENTAL_RELOCATE
