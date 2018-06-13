@@ -159,6 +159,7 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
+	t.Skip("#26661")
 
 	defer func(prev time.Duration) { jobs.DefaultAdoptInterval = prev }(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
