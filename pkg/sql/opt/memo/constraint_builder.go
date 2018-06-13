@@ -165,6 +165,107 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 	return unconstrained, false
 }
 
+// buildConstraintForTupleIn handles the case where we have a tuple IN another
+// tuple, for instance:
+//
+//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
+//
+// This function is a less powerful version of makeSpansForTupleIn, since it
+// does not operate on a particular index.  The <tight> return value indicates
+// if the spans are exactly equivalent to the expression (and not weaker).
+// Assumes that ev is an InOp and both children are TupleOps.
+func (cb *constraintsBuilder) buildConstraintForTupleIn(
+	ev ExprView,
+) (_ *constraint.Set, tight bool) {
+	lhs, rhs := ev.Child(0), ev.Child(1)
+
+	// We can only constrain here if every element of rhs is a TupleOp.
+	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		val := rhs.Child(i)
+		if val.Operator() != opt.TupleOp {
+			return unconstrained, false
+		}
+	}
+
+	var sp constraint.Span
+	constrainedCols := make([]opt.OrderingColumn, 0, lhs.ChildCount())
+	colIdxsInLHS := make([]int, 0, lhs.ChildCount())
+	for i, n := 0, lhs.ChildCount(); i < n; i++ {
+		if colID, ok := lhs.Child(i).Private().(opt.ColumnID); ok {
+			// We can't constrain a column if it's compared to anything besides a constant.
+			allConstant := true
+			for j, m := 0, rhs.ChildCount(); j < m; j++ {
+				val := rhs.Child(j)
+
+				if val.Operator() != opt.TupleOp {
+					return unconstrained, false
+				}
+
+				if !val.Child(i).IsConstValue() {
+					allConstant = false
+					break
+				}
+			}
+
+			if allConstant {
+				constrainedCols = append(
+					constrainedCols,
+					opt.MakeOrderingColumn(colID, false /* descending */),
+				)
+				colIdxsInLHS = append(colIdxsInLHS, i)
+			}
+		}
+	}
+
+	// If any of the LHS entries are not constrained then our constraints are not
+	// tight.
+	tight = (len(constrainedCols) == lhs.ChildCount())
+
+	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx.Columns.Init(constrainedCols)
+	var spans constraint.Spans
+	spans.Alloc(len(constrainedCols))
+	vals := make(tree.Datums, len(colIdxsInLHS))
+	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		val := rhs.Child(i)
+
+		hasNull := false
+		for j := range colIdxsInLHS {
+			elem := val.Child(colIdxsInLHS[j])
+			datum := ExtractConstDatum(elem)
+			if datum == tree.DNull {
+				hasNull = true
+				break
+			}
+			vals[j] = datum
+		}
+
+		// Nothing can match a tuple containing a NULL, so it introduces no
+		// constraints.
+		if hasNull {
+			// TODO(justin): consider redefining "tight" so that this is included in
+			// it.  The spans are not "exactly equivalent" in the presence of NULLs,
+			// because of examples like the following:
+			//   (x, y) IN ((1, 2), (NULL, 4))
+			// is not the same as
+			//   (x, y) IN ((1, 2)),
+			// because the former is NULL (not false) on (3,4).
+			tight = false
+			continue
+		}
+
+		key := constraint.MakeCompositeKey(vals...)
+		sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		spans.Append(&sp)
+	}
+
+	spans.SortAndMerge(&keyCtx)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+	return constraint.SingleConstraint(&c), tight
+}
+
 func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	ev ExprView,
 ) (_ *constraint.Set, tight bool) {
@@ -301,7 +402,8 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 			// Tuple inequality.
 			return cb.buildConstraintForTupleInequality(ev)
 
-			//TODO(radu): case opt.InOp:
+		case opt.InOp:
+			return cb.buildConstraintForTupleIn(ev)
 		}
 	}
 	if child0.Operator() == opt.VariableOp {
