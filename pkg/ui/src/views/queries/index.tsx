@@ -55,11 +55,33 @@ function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
+const longToInt = d => FixLong(d).toInt();
+
+const countBars = [
+  bar("count-first-try", "First Try Count", d => longToInt(d.stats.first_attempt_count)),
+  bar("count-retry", "Retry Count", d => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
+];
+
+const rowsBars = [
+  bar("rows", "Mean Number of Rows", d => d.stats.num_rows.mean),
+];
+
+const latencyBars = [
+  bar("latency-parse", "Mean Parse Latency", d => d.stats.parse_lat.mean),
+  bar("latency-plan", "Mean Planning Latency", d => d.stats.plan_lat.mean),
+  bar("latency-run", "Mean Run Latency", d => d.stats.run_lat.mean),
+  bar("latency-overhead", "Mean Overhead Latency", d => d.stats.overhead_lat.mean),
+];
+
+function bar(name, title, value) {
+  return { name, title, value };
+}
+
 function makeQueriesColumns(queries: CollectedStatementStatistics$Properties[])
     : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
-  const countBar = makeBarChart(queries, d => FixLong(d.stats.count).toInt());
-  const rowsBar = makeBarChart(queries, d => d.stats.num_rows.mean, v => Math.round(v));
-  const latencyBar = makeBarChart(queries, d => d.stats.service_lat.mean, v => Duration(v * 1e9));
+  const countBar = makeBarChart(queries, countBars);
+  const rowsBar = makeBarChart(queries, rowsBars, v => Math.round(v));
+  const latencyBar = makeBarChart(queries, latencyBars, v => Duration(v * 1e9));
 
   return [
     {
@@ -86,20 +108,38 @@ function makeQueriesColumns(queries: CollectedStatementStatistics$Properties[])
   ];
 }
 
-function makeBarChart<T, D>(rows: []T, accessor: (T) => D, formatter: (D) => string = (x: any) => `${x}`) {
-  const extent = d3.extent(rows, accessor);
+function makeBarChart<T, D>(
+  rows: T[],
+  accessors: { name: string, value: (T) => D }[],
+  formatter: (D) => string = (x: any) => `${x}`,
+) {
+  function getTotal(d) {
+    return _.sum(_.map(accessors, ({ value }) => value(d)));
+  }
+
+  const extent = d3.extent(rows, getTotal);
 
   const scale = d3.scale.linear()
     .domain(extent)
     .range([0, 100]);
 
   return function renderBarChart(d) {
-    const v = accessor(d);
+    let bars = accessors.map(({ name, title, value }) => {
+      const v = value(d);
+      return (
+        <div
+          key={ name + v }
+          className={ name + " bar-chart__bar" }
+          style={{ width: scale(v) + "%" }}
+          title={ title + ": " + formatter(v) }
+        />
+      );
+    });
 
     return (
       <div className="bar-chart">
-        <div className="label">{ formatter(v) }</div>
-        <div className="full" style={{ width: scale(v) + "%" }} />
+        <div className="label">{ formatter(getTotal(d)) }</div>
+        { bars }
       </div>
     );
   };
