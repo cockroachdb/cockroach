@@ -27,8 +27,12 @@ func (r Resolution) String() string {
 	switch r {
 	case Resolution10s:
 		return "10s"
+	case Resolution30m:
+		return "30m"
 	case resolution1ns:
 		return "1ns"
+	case resolution50ns:
+		return "50ns"
 	case resolutionInvalid:
 		return "BAD"
 	}
@@ -36,13 +40,20 @@ func (r Resolution) String() string {
 }
 
 // Resolution enumeration values are directly serialized and persisted into
-// system keys; these values must never be altered or reordered.
+// system keys; these values must never be altered or reordered. If new rollup
+// resolutions are added, the IsRollup() method must be modified as well.
 const (
 	// Resolution10s stores data with a sample resolution of 10 seconds.
 	Resolution10s Resolution = 1
+	// Resolution30m stores roll-up data from a higher resolution at a sample
+	// resolution of 30 minutes.
+	Resolution30m Resolution = 2
 	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
 	// only for testing.
-	resolution1ns Resolution = 999
+	resolution1ns Resolution = 998
+	// resolution50ns stores roll-up data from the 1ns resolution at a sample
+	// resolution of 50 nanoseconds. Used for testing.
+	resolution50ns Resolution = 999
 	// resolutionInvalid is an invalid resolution used only for testing. It causes
 	// an error to be thrown in certain methods. It is invalid because its sample
 	// period is not a divisor of its slab period.
@@ -54,7 +65,9 @@ const (
 // nanoseconds.
 var sampleDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Second * 10),
+	Resolution30m:     int64(time.Minute * 30),
 	resolution1ns:     1,  // 1ns resolution only for tests.
+	resolution50ns:    50, // 50ns rollup only for tests.
 	resolutionInvalid: 10, // Invalid resolution.
 }
 
@@ -64,7 +77,9 @@ var sampleDurationByResolution = map[Resolution]int64{
 // expressed in nanoseconds.
 var slabDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Hour),
-	resolution1ns:     10, // 1ns resolution only for tests.
+	Resolution30m:     int64(time.Hour * 24),
+	resolution1ns:     10,   // 1ns resolution only for tests.
+	resolution50ns:    1000, // 50ns rollup only for tests.
 	resolutionInvalid: 11,
 }
 
@@ -87,6 +102,13 @@ func (r Resolution) SlabDuration() int64 {
 		panic(fmt.Sprintf("no slab duration found for resolution value %v", r))
 	}
 	return duration
+}
+
+// IsRollup returns true if this resolution contains rollup data: statistical
+// values about a large number of samples taken over a long period, such as
+// the min, max and sum.
+func (r Resolution) IsRollup() bool {
+	return r == Resolution30m || r == resolution50ns
 }
 
 func normalizeToPeriod(timestampNanos int64, period int64) int64 {
