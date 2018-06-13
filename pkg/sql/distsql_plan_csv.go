@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -244,7 +245,7 @@ func LoadCSV(
 
 	// Determine if we need to run the sampling plan or not.
 
-	details := job.Record.Details.(jobs.ImportDetails)
+	details := job.Record.Details.(jobspb.ImportDetails)
 	samples := details.Samples
 	if samples == nil {
 		var err error
@@ -379,13 +380,13 @@ func LoadCSV(
 	// Clear SamplingProgress and prep second stage job details for progress
 	// tracking.
 	if err := job.DetailProgressed(ctx,
-		func(ctx context.Context, details jobs.Details, progress jobs.ProgressDetails) float32 {
-			prog := progress.(*jobs.Progress_Import).Import
+		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
+			prog := progress.(*jobspb.Progress_Import).Import
 			prog.SamplingProgress = nil
 			prog.ReadProgress = make([]float32, len(inputSpecs))
 			prog.WriteProgress = make([]float32, len(p.ResultRouters))
 
-			d := details.(*jobs.Payload_Import).Import
+			d := details.(*jobspb.Payload_Import).Import
 			d.Samples = samples
 			return prog.Completed()
 		},
@@ -466,8 +467,8 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-		d := details.(*jobs.Progress_Import).Import
+	if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		d := details.(*jobspb.Progress_Import).Import
 		d.SamplingProgress = make([]float32, len(csvSpecs))
 		return d.Completed()
 	}); err != nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -72,8 +73,8 @@ type emitRow struct {
 func runChangefeedFlow(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	details jobs.ChangefeedDetails,
-	progress jobs.ChangefeedProgress,
+	details jobspb.ChangefeedDetails,
+	progress jobspb.ChangefeedProgress,
 	startedCh chan<- tree.Datums,
 	progressedFn func(context.Context, jobs.ProgressedFn) error,
 ) error {
@@ -88,8 +89,8 @@ func runChangefeedFlow(
 		if progressedFn == nil {
 			return nil
 		}
-		return progressedFn(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
+		return progressedFn(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			cfDetails := details.(*jobspb.Progress_Changefeed).Changefeed
 			cfDetails.Highwater = highwater
 			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
 			return 0.0
@@ -141,7 +142,7 @@ func runChangefeedFlow(
 // The fetches are rate limited to be no more often than the
 // `changefeed.experimental_poll_interval` setting.
 func exportRequestPoll(
-	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress jobs.ChangefeedProgress,
+	execCfg *sql.ExecutorConfig, details jobspb.ChangefeedDetails, progress jobspb.ChangefeedProgress,
 ) func(context.Context) (changedKVs, error) {
 	sender := execCfg.DB.GetSender()
 	var spans []roachpb.Span
@@ -206,7 +207,7 @@ func exportRequestPoll(
 // The returned closure is not threadsafe.
 func kvsToRows(
 	execCfg *sql.ExecutorConfig,
-	details jobs.ChangefeedDetails,
+	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (changedKVs, error),
 ) func(context.Context) ([]emitRow, error) {
 	rfCache := newRowFetcherCache(execCfg.LeaseManager)
@@ -287,7 +288,7 @@ func kvsToRows(
 // be repeatedly called to advance the changefeed. The returned closure is not
 // threadsafe.
 func emitRows(
-	details jobs.ChangefeedDetails,
+	details jobspb.ChangefeedDetails,
 	jobProgressedFn func(context.Context, hlc.Timestamp) error,
 	inputFn func(context.Context) ([]emitRow, error),
 ) (emitFn func(context.Context) error, closeFn func() error, err error) {

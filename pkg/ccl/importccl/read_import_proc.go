@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -412,8 +412,8 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-				d := details.(*jobs.Progress_Import).Import
+			return job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				d := details.(*jobspb.Progress_Import).Import
 				slotpct := pct * cp.spec.Progress.Contribution
 				if len(d.SamplingProgress) > 0 {
 					d.SamplingProgress[cp.spec.Progress.Slot] = slotpct
@@ -450,7 +450,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			return err
 		}
 		progress := job.Progress()
-		if details, ok := progress.Details.(*jobs.Progress_Import); ok {
+		if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
 			completedSpans.Add(details.Import.SpanProgress...)
 		} else {
 			return errors.Errorf("unexpected progress type %T", progress)

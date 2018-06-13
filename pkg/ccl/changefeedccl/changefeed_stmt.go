@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -112,7 +113,7 @@ func changefeedPlanHook(
 			}
 		}
 
-		details := jobs.ChangefeedDetails{
+		details := jobspb.ChangefeedDetails{
 			TableDescs: tableDescs,
 			Opts:       opts,
 			SinkURI:    sinkURI,
@@ -132,7 +133,7 @@ func changefeedPlanHook(
 				return sqlDescIDs
 			}(),
 			Details: details,
-			Progress: jobs.ChangefeedProgress{
+			Progress: jobspb.ChangefeedProgress{
 				Highwater: highwater,
 			},
 		})
@@ -160,7 +161,7 @@ func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
 	return tree.AsStringWithFlags(changefeed, tree.FmtAlwaysQualifyTableNames)
 }
 
-func validateChangefeed(details jobs.ChangefeedDetails) (jobs.ChangefeedDetails, error) {
+func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
 	if details.Opts == nil {
 		// The proto MarshalTo method omits the Opts field if the map is empty.
 		// So, if no options were specified by the user, Opts will be nil when
@@ -174,13 +175,13 @@ func validateChangefeed(details jobs.ChangefeedDetails) (jobs.ChangefeedDetails,
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
 	default:
-		return jobs.ChangefeedDetails{}, errors.Errorf(
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])
 	}
 
 	for _, tableDesc := range details.TableDescs {
 		if len(tableDesc.Families) != 1 {
-			return jobs.ChangefeedDetails{}, errors.Errorf(
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`only tables with 1 column family are currently supported: %s has %d`,
 				tableDesc.Name, len(tableDesc.Families))
 		}
@@ -195,8 +196,8 @@ func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
-	details := job.Record.Details.(jobs.ChangefeedDetails)
-	progress := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed
+	details := job.Record.Details.(jobspb.ChangefeedDetails)
+	progress := job.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
 	return runChangefeedFlow(ctx, execCfg, details, *progress, startedCh, job.Progressed)
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
@@ -206,8 +207,8 @@ func (b *changefeedResumer) OnTerminal(
 ) {
 }
 
-func changefeedResumeHook(typ jobs.Type, _ *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeChangefeed {
+func changefeedResumeHook(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeChangefeed {
 		return nil
 	}
 	return &changefeedResumer{}

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -470,7 +471,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobspb.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -485,7 +486,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobspb.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
@@ -677,23 +678,23 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 }
 
 func createAndWaitForJob(
-	db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details, progress jobs.ProgressDetails,
+	db *gosql.DB, descriptorIDs []sqlbase.ID, details jobspb.Details, progress jobspb.ProgressDetails,
 ) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
-	payload, err := protoutil.Marshal(&jobs.Payload{
+	payload, err := protoutil.Marshal(&jobspb.Payload{
 		Username:      security.RootUser,
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
-		Details:       jobs.WrapPayloadDetails(details),
-		Lease:         &jobs.Lease{NodeID: 1},
+		Details:       jobspb.WrapPayloadDetails(details),
+		Lease:         &jobspb.Lease{NodeID: 1},
 	})
 	if err != nil {
 		return err
 	}
 
-	progressBytes, err := protoutil.Marshal(&jobs.Progress{
+	progressBytes, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros: now,
-		Details:        jobs.WrapProgressDetails(progress),
+		Details:        jobspb.WrapProgressDetails(progress),
 	})
 	if err != nil {
 		return err
@@ -757,11 +758,11 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
 			t.Fatal(err)
 		}
-		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobs.BackupDetails{
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobspb.BackupDetails{
 			EndTime:          tc.Servers[0].Clock().Now(),
 			URI:              "nodelocal:///backup",
 			BackupDescriptor: backupDesc,
-		}, jobs.BackupProgress{}); err != nil {
+		}, jobspb.BackupProgress{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -800,15 +801,15 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{restoreTableID}, jobs.RestoreDetails{
-			TableRewrites: map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite{
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{restoreTableID}, jobspb.RestoreDetails{
+			TableRewrites: map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite{
 				backupTableDesc.ID: {
 					ParentID: sqlbase.ID(restoreDatabaseID),
 					TableID:  restoreTableID,
 				},
 			},
 			URIs: []string{restoreDir},
-		}, jobs.RestoreProgress{
+		}, jobspb.RestoreProgress{
 			LowWaterMark: restoreLowWaterMark,
 		}); err != nil {
 			t.Fatal(err)
@@ -836,12 +837,12 @@ func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}
-	var payload jobs.Progress
+	var payload jobspb.Progress
 	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
 		return nil, err
 	}
 	switch d := payload.Details.(type) {
-	case *jobs.Progress_Restore:
+	case *jobspb.Progress_Restore:
 		return d.Restore.LowWaterMark, nil
 	default:
 		return nil, errors.Errorf("unexpected job details type %T", d)

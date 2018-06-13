@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -601,11 +602,11 @@ func (p *planner) createSchemaChangeJob(
 	if err != nil {
 		return sqlbase.InvalidMutationID, err
 	}
-	var spanList []jobs.ResumeSpanList
+	var spanList []jobspb.ResumeSpanList
 	for i := 0; i < len(tableDesc.Mutations); i++ {
 		if tableDesc.Mutations[i].MutationID == mutationID {
 			spanList = append(spanList,
-				jobs.ResumeSpanList{
+				jobspb.ResumeSpanList{
 					ResumeSpans: []roachpb.Span{span},
 				},
 			)
@@ -615,8 +616,8 @@ func (p *planner) createSchemaChangeJob(
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
-		Progress:      jobs.SchemaChangeProgress{},
+		Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+		Progress:      jobspb.SchemaChangeProgress{},
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {

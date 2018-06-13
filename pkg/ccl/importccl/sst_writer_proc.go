@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -99,7 +100,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err != nil {
 			return err
 		}
-		samples := job.Payload().Details.(*jobs.Payload_Import).Import.Samples
+		samples := job.Payload().Details.(*jobspb.Payload_Import).Import.Samples
 
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
@@ -251,8 +252,8 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// There's no direct way to return an error from the Progressed()
 			// callback when decoding the span.End key.
 			var progressErr error
-			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-				d := details.(*jobs.Progress_Import).Import
+			if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				d := details.(*jobspb.Progress_Import).Import
 				d.WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
 
 				// Fold the newly-completed span into existing progress.  Since

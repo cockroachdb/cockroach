@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -98,7 +99,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		}
 	}
 
-	details := jobs.SchemaChangeDetails{ResumeSpanList: []jobs.ResumeSpanList{
+	details := jobspb.SchemaChangeDetails{ResumeSpanList: []jobspb.ResumeSpanList{
 		{ResumeSpans: resumeSpans}}}
 
 	job, err := registry.LoadJob(ctx, jobID)

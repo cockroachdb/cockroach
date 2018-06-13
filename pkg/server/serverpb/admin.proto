@@ -18,7 +18,7 @@ option go_package = "serverpb";
 
 import "config/zone.proto";
 import "roachpb/app_stats.proto";
-import "sql/jobs/jobs.proto";
+import "sql/jobs/jobspb/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
 import "storage/log.proto";
@@ -428,7 +428,7 @@ message LivenessResponse {
 message JobsRequest {
   int32 limit = 1;
   string status = 2;
-  cockroach.sql.jobs.Type type = 3;
+  cockroach.sql.jobs.jobspb.Type type = 3;
 }
 
 // JobsResponse contains the job record for each matching job.

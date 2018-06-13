@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1091,20 +1092,20 @@ func TestAdminAPIJobs(t *testing.T) {
 	testJobs := []struct {
 		id       int64
 		status   jobs.Status
-		details  jobs.Details
-		progress jobs.ProgressDetails
+		details  jobspb.Details
+		progress jobspb.ProgressDetails
 	}{
-		{1, jobs.StatusRunning, jobs.RestoreDetails{}, jobs.RestoreProgress{}},
-		{2, jobs.StatusRunning, jobs.BackupDetails{}, jobs.BackupProgress{}},
-		{3, jobs.StatusSucceeded, jobs.BackupDetails{}, jobs.BackupProgress{}},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
 	}
 	for _, job := range testJobs {
-		payload := jobs.Payload{Details: jobs.WrapPayloadDetails(job.details)}
+		payload := jobspb.Payload{Details: jobspb.WrapPayloadDetails(job.details)}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)
 		}
-		progress := jobs.Progress{Details: jobs.WrapProgressDetails(job.progress)}
+		progress := jobspb.Progress{Details: jobspb.WrapProgressDetails(job.progress)}
 		progressBytes, err := protoutil.Marshal(&progress)
 		if err != nil {
 			t.Fatal(err)
@@ -1127,10 +1128,10 @@ func TestAdminAPIJobs(t *testing.T) {
 		{"jobs?status=succeeded", append([]int64{3}, existingIDs...)},
 		{"jobs?status=pending", []int64{}},
 		{"jobs?status=garbage", []int64{}},
-		{fmt.Sprintf("jobs?type=%d", jobs.TypeBackup), []int64{3, 2}},
-		{fmt.Sprintf("jobs?type=%d", jobs.TypeRestore), []int64{1}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{3, 2}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}},
 		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}},
-		{fmt.Sprintf("jobs?status=running&type=%d", jobs.TypeBackup), []int64{2}},
+		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}},
 	}
 	for i, testCase := range testCases {
 		var res serverpb.JobsResponse

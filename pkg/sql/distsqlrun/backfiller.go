@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,7 +154,7 @@ func GetResumeSpansFromJob(
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't find job %d", jobID)
 	}
-	details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+	details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
 	if !ok {
 		return nil, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Record.Details)
 	}
@@ -189,7 +190,7 @@ func SetResumeSpansInJob(
 		return errors.Wrapf(err, "can't find job %d", jobID)
 	}
 
-	details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+	details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
 	if !ok {
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Record.Details)
 	}
