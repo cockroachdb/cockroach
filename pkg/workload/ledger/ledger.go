@@ -36,6 +36,7 @@ type ledger struct {
 	customers     int
 	parallelStmts bool
 	interleaved   bool
+	splits        int
 	mix           string
 
 	txs  []tx
@@ -62,6 +63,7 @@ var ledgerMeta = workload.Meta{
 		g.flags.IntVar(&g.customers, `customers`, 1000, `Number of customers`)
 		g.flags.BoolVar(&g.parallelStmts, `parallel-stmts`, false, `Use parallel statement execution`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
+		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.mix, `mix`,
 			`balance=50,withdrawal=37,deposit=12,reversal=0`,
 			`Weights for the transaction mix.`)
@@ -107,8 +109,10 @@ func (w *ledger) Tables() []workload.Table {
 			w.customers,
 			w.ledgerCustomerInitialRow,
 		),
-		// TODO(nvanbenschoten): pre-split tables.
-		// Splits: workload.Tuples(),
+		Splits: workload.Tuples(
+			numTxnsPerCustomer*w.splits,
+			w.ledgerCustomerSplitRow,
+		),
 	}
 	transaction := workload.Table{
 		Name:   `transaction`,
@@ -117,8 +121,10 @@ func (w *ledger) Tables() []workload.Table {
 			numTxnsPerCustomer*w.customers,
 			w.ledgerTransactionInitialRow,
 		),
-		// TODO(nvanbenschoten): pre-split tables.
-		// Splits: workload.Tuples(),
+		Splits: workload.Tuples(
+			w.splits,
+			w.ledgerTransactionSplitRow,
+		),
 	}
 	entry := workload.Table{
 		Name:   `entry`,
@@ -127,8 +133,10 @@ func (w *ledger) Tables() []workload.Table {
 			numEntriesPerCustomer*w.customers,
 			w.ledgerEntryInitialRow,
 		),
-		// TODO(nvanbenschoten): pre-split tables.
-		// Splits: workload.Tuples(),
+		Splits: workload.Tuples(
+			numEntriesPerCustomer*w.splits,
+			w.ledgerEntrySplitRow,
+		),
 	}
 	session := workload.Table{
 		Name:   `session`,
@@ -137,8 +145,10 @@ func (w *ledger) Tables() []workload.Table {
 			w.customers,
 			w.ledgerSessionInitialRow,
 		),
-		// TODO(nvanbenschoten): pre-split tables.
-		// Splits: workload.Tuples(),
+		Splits: workload.Tuples(
+			w.splits,
+			w.ledgerSessionSplitRow,
+		),
 	}
 	return []workload.Table{
 		customer, transaction, entry, session,
