@@ -17,8 +17,14 @@ package ledger
 
 import (
 	gosql "database/sql"
+	"database/sql/driver"
+	"fmt"
 	"math/rand"
+	"regexp"
+	"strings"
 	"time"
+
+	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -28,6 +34,44 @@ func maybeParallelize(config *ledger, stmt string) string {
 		return stmt + " RETURNING NOTHING"
 	}
 	return stmt
+}
+
+var sqlParamRE = regexp.MustCompile(`\$(\d+)`)
+var replacedSQLParams syncmap.Map
+
+func replaceSQLParams(s string) string {
+	// Memoize the result.
+	if res, ok := replacedSQLParams.Load(s); ok {
+		return res.(string)
+	}
+
+	res := sqlParamRE.ReplaceAllString(s, "'%[${1}]v'")
+	replacedSQLParams.Store(s, res)
+	return res
+}
+
+func maybeInlineStmtArgs(
+	config *ledger, query string, args ...interface{},
+) (string, []interface{}) {
+	if !config.inlineArgs {
+		return query, args
+	}
+	queryFmt := replaceSQLParams(query)
+	for i, arg := range args {
+		if v, ok := arg.(driver.Valuer); ok {
+			val, err := v.Value()
+			if err != nil {
+				panic(err)
+			}
+			args[i] = val
+		}
+	}
+	return strings.Replace(
+			strings.Replace(
+				fmt.Sprintf(queryFmt, args...),
+				" UTC", "", -1), // remove UTC suffix from timestamps.
+			`'<nil>'`, `NULL`, -1), // fix NULL values.
+		nil
 }
 
 type customer struct {
@@ -44,7 +88,7 @@ type customer struct {
 }
 
 func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
-	rows, err := tx.Query(`
+	stmt, args := maybeInlineStmtArgs(config, `
 		SELECT
 			id,
 			identifier,
@@ -58,7 +102,9 @@ func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
 			sequence_number
 		FROM customer
 		WHERE id = $1 AND IS_ACTIVE = true`,
-		id)
+		id,
+	)
+	rows, err := tx.Query(stmt, args...)
 	if err != nil {
 		return customer{}, err
 	}
@@ -85,7 +131,7 @@ func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
 }
 
 func updateBalance(config *ledger, tx *gosql.Tx, c customer) error {
-	_, err := tx.Exec(maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		UPDATE customer SET
 			balance         = $1,
 			credit_limit    = $2,
@@ -95,6 +141,7 @@ func updateBalance(config *ledger, tx *gosql.Tx, c customer) error {
 		WHERE id = $6`),
 		c.balance, c.creditLimit, c.isActive, c.name, c.sequence, c.id,
 	)
+	_, err := tx.Exec(stmt, args...)
 	return err
 }
 
@@ -102,7 +149,8 @@ func insertTransaction(
 	config *ledger, tx *gosql.Tx, rng *rand.Rand, username string,
 ) (string, error) {
 	tID := randPaymentID(rng)
-	_, err := tx.Exec(maybeParallelize(config, `
+
+	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		INSERT INTO transaction (
 			tcomment, context, response, reversed_by, created_ts, 
 			transaction_type_reference, username, external_id
@@ -110,6 +158,7 @@ func insertTransaction(
 		nil, randContext(rng), randResponse(rng), nil,
 		timeutil.Now(), txnTypeReference, username, tID,
 	)
+	_, err := tx.Exec(stmt, args...)
 	return tID, err
 }
 
@@ -118,7 +167,7 @@ func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [2]int, tI
 	sysAmount := 88.433571
 	ts := timeutil.Now()
 
-	_, err := tx.Exec(maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		INSERT INTO entry (
 			amount, system_amount, created_ts, transaction_id, customer_id, money_type
 		) VALUES
@@ -127,11 +176,12 @@ func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [2]int, tI
 		amount1, sysAmount, ts, tID, cIDs[0], cashMoneyType,
 		-amount1, -sysAmount, ts, tID, cIDs[1], cashMoneyType,
 	)
+	_, err := tx.Exec(stmt, args...)
 	return err
 }
 
 func getSession(config *ledger, tx *gosql.Tx, id int) error {
-	rows, err := tx.Query(`
+	stmt, args := maybeInlineStmtArgs(config, `
 		SELECT
 			session_id,
 			expiry_timestamp,
@@ -139,7 +189,9 @@ func getSession(config *ledger, tx *gosql.Tx, id int) error {
 			last_update
 		FROM session
 		WHERE session_id = ?`,
-		id)
+		id,
+	)
+	rows, err := tx.Query(stmt, args...)
 	if err != nil {
 		return err
 	}
@@ -152,11 +204,12 @@ func getSession(config *ledger, tx *gosql.Tx, id int) error {
 }
 
 func insertSession(config *ledger, tx *gosql.Tx, rng *rand.Rand) error {
-	_, err := tx.Exec(maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		INSERT INTO session (
 			data, expiry_timestamp, last_update, session_id
 		) VALUES (?, ?, ?, ?)`),
 		randSessionData(rng), randTimestamp(rng), timeutil.Now(), randSessionID(rng),
 	)
+	_, err := tx.Exec(stmt, args...)
 	return err
 }
