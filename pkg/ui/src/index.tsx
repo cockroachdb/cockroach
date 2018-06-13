@@ -18,7 +18,7 @@ import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr,
 } from "src/util/constants";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -53,6 +53,7 @@ import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import QueriesPage from "src/views/queries";
+import StatementDetails from "src/views/queries/statementDetails";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -122,13 +123,19 @@ ReactDOM.render(
           </Route>
         </Route>
 
+        { /* statement statistics */ }
+        <Route path="queries" component={ QueriesPage } />
+        <Route path="statement">
+          <IndexRedirect to="queries" />
+          <Route path={ `:${statementAttr}` } component={ StatementDetails } />
+        </Route>
+
         { /* debug pages */ }
         <Route path="debug">
           <IndexRoute component={Debug} />
           <Route path="redux" component={ReduxDebug} />
           <Route path="chart" component={CustomChart} />
         </Route>
-        <Route path="queries" component={ QueriesPage } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
@@ -147,7 +154,6 @@ ReactDOM.render(
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
           <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
-
         </Route>
 
         { /* old route redirects */ }
