@@ -52,15 +52,8 @@ import (
 func (ts TimeSeriesData) ToInternal(
 	keyDuration, sampleDuration int64, columnar bool,
 ) ([]roachpb.InternalTimeSeriesData, error) {
-	if keyDuration%sampleDuration != 0 {
-		return nil, fmt.Errorf(
-			"sample duration %d does not evenly divide key duration %d",
-			sampleDuration, keyDuration)
-	}
-	if keyDuration < sampleDuration {
-		return nil, fmt.Errorf(
-			"sample duration %d is not less than or equal to key duration %d",
-			sampleDuration, keyDuration)
+	if err := VerifySlabAndSampleDuration(keyDuration, sampleDuration); err != nil {
+		return nil, err
 	}
 
 	// This slice must be preallocated to avoid reallocation on `append` because
@@ -98,4 +91,22 @@ func (ts TimeSeriesData) ToInternal(
 	}
 
 	return result, nil
+}
+
+// VerifySlabAndSampleDuration verifies that he supplied slab resolution is
+// compatible with the supplied sample resolution, returning an error if they
+// are not compatible.
+func VerifySlabAndSampleDuration(slabDuration, sampleDuration int64) error {
+	if slabDuration%sampleDuration != 0 {
+		return fmt.Errorf(
+			"sample duration %d does not evenly divide key duration %d",
+			sampleDuration, slabDuration)
+	}
+	if slabDuration < sampleDuration {
+		return fmt.Errorf(
+			"sample duration %d is not less than or equal to key duration %d",
+			sampleDuration, slabDuration)
+	}
+
+	return nil
 }

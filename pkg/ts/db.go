@@ -18,14 +18,12 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -179,7 +177,6 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 	var kvs []roachpb.KeyValue
 	var totalSizeOfKvs int64
 	var totalSamples int64
-	sizeOfTimestamp := int64(unsafe.Sizeof(hlc.Timestamp{}))
 
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
@@ -203,7 +200,53 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 		}
 	}
 
-	// Send the individual internal merge requests.
+	if err := db.storeKvs(ctx, kvs); err != nil {
+		return err
+	}
+
+	db.metrics.WriteSamples.Inc(totalSamples)
+	db.metrics.WriteBytes.Inc(totalSizeOfKvs)
+	return nil
+}
+
+// storeRollup writes the supplied time series rollup data to the cockroach
+// server.
+func (db *DB) storeRollup(ctx context.Context, r Resolution, data []rollupData) error {
+	if TimeseriesStorageEnabled.Get(&db.st.SV) {
+		if err := db.tryStoreRollup(ctx, r, data); err != nil {
+			db.metrics.WriteErrors.Inc(1)
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *DB) tryStoreRollup(ctx context.Context, r Resolution, data []rollupData) error {
+	var kvs []roachpb.KeyValue
+
+	for _, d := range data {
+		idatas, err := d.toInternal(r.SlabDuration(), r.SampleDuration())
+		if err != nil {
+			return err
+		}
+		for _, idata := range idatas {
+			var value roachpb.Value
+			if err := value.SetProto(&idata); err != nil {
+				return err
+			}
+			key := MakeDataKey(d.name, d.source, r, idata.StartTimestampNanos)
+			kvs = append(kvs, roachpb.KeyValue{
+				Key:   key,
+				Value: value,
+			})
+		}
+	}
+
+	return db.storeKvs(ctx, kvs)
+	// TODO(mrtracy): metrics for rollups stored
+}
+
+func (db *DB) storeKvs(ctx context.Context, kvs []roachpb.KeyValue) error {
 	b := &client.Batch{}
 	for _, kv := range kvs {
 		b.AddRawRequest(&roachpb.MergeRequest{
@@ -214,13 +257,7 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 		})
 	}
 
-	if err := db.db.Run(ctx, b); err != nil {
-		return err
-	}
-
-	db.metrics.WriteSamples.Inc(totalSamples)
-	db.metrics.WriteBytes.Inc(totalSizeOfKvs)
-	return nil
+	return db.db.Run(ctx, b)
 }
 
 // computeThresholds returns a map of timestamps for each resolution supported

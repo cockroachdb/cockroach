@@ -27,8 +27,12 @@ func (r Resolution) String() string {
 	switch r {
 	case Resolution10s:
 		return "10s"
+	case Resolution30mRUP:
+		return "30mRUP"
 	case resolution1ns:
 		return "1ns"
+	case resolution50nsRUP:
+		return "50nsRUP"
 	case resolutionInvalid:
 		return "BAD"
 	}
@@ -40,6 +44,12 @@ func (r Resolution) String() string {
 const (
 	// Resolution10s stores data with a sample resolution of 10 seconds.
 	Resolution10s Resolution = 1
+	// Resolution30mRUP stores roll-up data from a higher resolution at a sample
+	// resolution of 30 minutes.
+	Resolution30mRUP Resolution = 2
+	// resolution50nsRUP stores roll-up data from the 1ns resolution at a sample
+	// resolution of 50 nanoseconds. Used for testing.
+	resolution50nsRUP Resolution = 998
 	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
 	// only for testing.
 	resolution1ns Resolution = 999
@@ -54,7 +64,9 @@ const (
 // nanoseconds.
 var sampleDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Second * 10),
+	Resolution30mRUP:  int64(time.Minute * 30),
 	resolution1ns:     1,  // 1ns resolution only for tests.
+	resolution50nsRUP: 50, // 50ns rollup only for tests.
 	resolutionInvalid: 10, // Invalid resolution.
 }
 
@@ -64,7 +76,9 @@ var sampleDurationByResolution = map[Resolution]int64{
 // expressed in nanoseconds.
 var slabDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Hour),
-	resolution1ns:     10, // 1ns resolution only for tests.
+	Resolution30mRUP:  int64(time.Hour * 24),
+	resolution1ns:     10,   // 1ns resolution only for tests.
+	resolution50nsRUP: 1000, // 50ns rollup only for tests.
 	resolutionInvalid: 11,
 }
 
@@ -87,6 +101,13 @@ func (r Resolution) SlabDuration() int64 {
 		panic(fmt.Sprintf("no slab duration found for resolution value %v", r))
 	}
 	return duration
+}
+
+// IsRollup returns true if this resolution contains rollup data: statistical
+// values about a large number of samples taken over a long period, such as
+// the min, max and sum.
+func (r Resolution) IsRollup() bool {
+	return r == Resolution30mRUP || r == resolution50nsRUP
 }
 
 func normalizeToPeriod(timestampNanos int64, period int64) int64 {

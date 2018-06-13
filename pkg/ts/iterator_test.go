@@ -147,6 +147,8 @@ func makeInternalColumnData(
 			// value.
 			if len(valuesForSample) > 1 {
 				result.Variance[count-1] = computeVariance()
+			} else {
+				valuesForSample = valuesForSample[:0]
 			}
 
 			result.Offset = append(result.Offset, offset)
