@@ -157,11 +157,14 @@ func (td *tableDeleter) deleteAllRows(
 	return td.deleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
 }
 
-// deleteAllRowsFast employs a ClearRange KV API call to delete the
-// underlying data quickly. Unlike DeleteRange, ClearRange doesn't
-// leave tombstone data on individual keys, instead using a more
-// efficient ranged tombstone, preventing unnecessary write
-// amplification.
+// deleteAllRowsFast uses the DelRange KV request to delete data quickly,
+// relative to deleteAllRowsScan.
+//
+// Note that this method leaves a RocksDB deletion tombstone on every key in the
+// table, resulting in substantial write amplification. When possible, the
+// schema changer avoids using a tableDeleter entirely in favor of the
+// ClearRange KV request, which uses RocksDB range deletion tombstones to avoid
+// write amplification.
 func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
 ) (roachpb.Span, error) {
@@ -175,38 +178,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 			EndKey: tablePrefix.PrefixEnd(),
 		}
 	}
-	// If DropTime isn't set, assume this drop request is from a version
-	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
-	if td.tableDesc().DropTime == 0 {
-		return td.legacyDeleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
-	}
 
-	log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
-	// ClearRange cannot be run in a transaction, so create a
-	// non-transactional batch to send the request.
-	b := &client.Batch{}
-	// TODO(tschottdorf): this might need a cluster migration.
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    resume.Key,
-			EndKey: resume.EndKey,
-		},
-	})
-	if err := td.txn.DB().Run(ctx, b); err != nil {
-		return resume, err
-	}
-	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
-		return resume, err
-	}
-	return roachpb.Span{}, nil
-}
-
-// legacyDeleteAllRowsFast handles cases where no GC deadline is set
-// and so deletion must fall back to relying on DeleteRange and the
-// eventual range GC cycle.
-func (td *tableDeleter) legacyDeleteAllRowsFast(
-	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
-) (roachpb.Span, error) {
 	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
