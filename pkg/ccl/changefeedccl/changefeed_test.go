@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -50,7 +49,7 @@ func TestChangefeedBasics(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name())
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO $1`, `kafka://`+t.Name())
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
@@ -89,7 +88,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 		k := newTestKafkaProducer()
 		testProducersHook[testHost+`_row`] = k
 		sqlDB.Exec(t,
-			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='row'`,
+			`CREATE CHANGEFEED FOR DATABASE d INTO $1 WITH envelope='row'`,
 			`kafka://`+testHost+`_row`)
 		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->{"a": 1, "b": "a"}`})
 	})
@@ -97,7 +96,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 		k := newTestKafkaProducer()
 		testProducersHook[testHost+`_key_only`] = k
 		sqlDB.Exec(t,
-			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='key_only'`,
+			`CREATE CHANGEFEED FOR DATABASE d INTO $1 WITH envelope='key_only'`,
 			`kafka://`+testHost+`_key_only`)
 		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->`})
 	})
@@ -122,7 +121,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO bar VALUES (2, 'b')`)
 
-	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1`, `kafka://`+t.Name())
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR DATABASE d INTO $1`, `kafka://`+t.Name())
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`[1]->{"a": 1, "b": "a"}`,
@@ -150,10 +149,7 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
-	sqlDB.Exec(t,
-		fmt.Sprintf(`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1 AS OF SYSTEM TIME %s`, ts),
-		`kafka://`+t.Name(),
-	)
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH cursor=$2`, `kafka://`+t.Name(), ts)
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`[2]->{"a": 2, "b": "after"}`,
@@ -183,7 +179,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
 
 	var jobID int
-	sqlDB.QueryRow(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name()).Scan(&jobID)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1`, `kafka://`+t.Name()).Scan(&jobID)
 
 	<-k.flushCh
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
@@ -226,7 +222,7 @@ func TestChangefeedSchemaChange(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name())
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO $1`, `kafka://`+t.Name())
 
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (1)`)
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
@@ -256,7 +252,7 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 	if _, err := sqlDB.DB.Exec(
-		`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://nope`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
 	); !testutils.IsError(err, `no test producer: nope`) {
 		t.Fatalf(`expected 'no test producer: nope' error got: %+v`, err)
 	}
