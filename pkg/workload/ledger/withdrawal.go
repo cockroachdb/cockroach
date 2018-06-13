@@ -37,7 +37,7 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 		db,
 		nil, /* txopts */
 		func(tx *gosql.Tx) error {
-			c, err := getBalance(config, tx, cID)
+			c, err := getBalance(tx, config, cID, false /* historical */)
 			if err != nil {
 				return err
 			}
@@ -51,12 +51,12 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 			}
 			c.sequence++
 
-			tID, err := insertTransaction(config, tx, rng, c.identifier)
+			tID, err := insertTransaction(tx, config, rng, c.identifier)
 			if err != nil {
 				return err
 			}
 
-			if err := updateBalance(config, tx, c); err != nil {
+			if err := updateBalance(tx, config, c); err != nil {
 				return err
 			}
 
@@ -64,7 +64,7 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				cID,
 				randInt(rng, 0, config.customers-1),
 			}
-			if err := insertEntries(config, tx, rng, cIDs, tID); err != nil {
+			if err := insertEntries(tx, config, rng, cIDs, tID); err != nil {
 				return err
 			}
 

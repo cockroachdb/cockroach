@@ -29,6 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// querier is the common interface to execute queries on a DB, Tx, or Conn.
+type querier interface {
+	Exec(query string, args ...interface{}) (gosql.Result, error)
+	Query(query string, args ...interface{}) (*gosql.Rows, error)
+	QueryRow(query string, args ...interface{}) *gosql.Row
+}
+
 func maybeParallelize(config *ledger, stmt string) string {
 	if config.parallelStmts {
 		return stmt + " RETURNING NOTHING"
@@ -87,7 +94,11 @@ type customer struct {
 	sequence         int
 }
 
-func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
+func getBalance(q querier, config *ledger, id int, historical bool) (customer, error) {
+	aostSpec := ""
+	if historical {
+		aostSpec = " AS OF SYSTEM TIME '-10s'"
+	}
 	stmt, args := maybeInlineStmtArgs(config, `
 		SELECT
 			id,
@@ -100,11 +111,12 @@ func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
 			balance,
 			credit_limit,
 			sequence_number
-		FROM customer
+		FROM customer`+
+		aostSpec+`
 		WHERE id = $1 AND IS_ACTIVE = true`,
 		id,
 	)
-	rows, err := tx.Query(stmt, args...)
+	rows, err := q.Query(stmt, args...)
 	if err != nil {
 		return customer{}, err
 	}
@@ -130,7 +142,7 @@ func getBalance(config *ledger, tx *gosql.Tx, id int) (customer, error) {
 	return c, rows.Err()
 }
 
-func updateBalance(config *ledger, tx *gosql.Tx, c customer) error {
+func updateBalance(q querier, config *ledger, c customer) error {
 	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		UPDATE customer SET
 			balance         = $1,
@@ -141,13 +153,11 @@ func updateBalance(config *ledger, tx *gosql.Tx, c customer) error {
 		WHERE id = $6`),
 		c.balance, c.creditLimit, c.isActive, c.name, c.sequence, c.id,
 	)
-	_, err := tx.Exec(stmt, args...)
+	_, err := q.Exec(stmt, args...)
 	return err
 }
 
-func insertTransaction(
-	config *ledger, tx *gosql.Tx, rng *rand.Rand, username string,
-) (string, error) {
+func insertTransaction(q querier, config *ledger, rng *rand.Rand, username string) (string, error) {
 	tID := randPaymentID(rng)
 
 	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
@@ -158,11 +168,11 @@ func insertTransaction(
 		nil, randContext(rng), randResponse(rng), nil,
 		timeutil.Now(), txnTypeReference, username, tID,
 	)
-	_, err := tx.Exec(stmt, args...)
+	_, err := q.Exec(stmt, args...)
 	return tID, err
 }
 
-func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [2]int, tID string) error {
+func insertEntries(q querier, config *ledger, rng *rand.Rand, cIDs [2]int, tID string) error {
 	amount1 := randAmount(rng)
 	sysAmount := 88.433571
 	ts := timeutil.Now()
@@ -176,11 +186,11 @@ func insertEntries(config *ledger, tx *gosql.Tx, rng *rand.Rand, cIDs [2]int, tI
 		amount1, sysAmount, ts, tID, cIDs[0], cashMoneyType,
 		-amount1, -sysAmount, ts, tID, cIDs[1], cashMoneyType,
 	)
-	_, err := tx.Exec(stmt, args...)
+	_, err := q.Exec(stmt, args...)
 	return err
 }
 
-func getSession(config *ledger, tx *gosql.Tx, id int) error {
+func getSession(q querier, config *ledger, id int) error {
 	stmt, args := maybeInlineStmtArgs(config, `
 		SELECT
 			session_id,
@@ -191,7 +201,7 @@ func getSession(config *ledger, tx *gosql.Tx, id int) error {
 		WHERE session_id = ?`,
 		id,
 	)
-	rows, err := tx.Query(stmt, args...)
+	rows, err := q.Query(stmt, args...)
 	if err != nil {
 		return err
 	}
@@ -203,13 +213,13 @@ func getSession(config *ledger, tx *gosql.Tx, id int) error {
 	return rows.Err()
 }
 
-func insertSession(config *ledger, tx *gosql.Tx, rng *rand.Rand) error {
+func insertSession(q querier, config *ledger, rng *rand.Rand) error {
 	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		INSERT INTO session (
 			data, expiry_timestamp, last_update, session_id
 		) VALUES (?, ?, ?, ?)`),
 		randSessionData(rng), randTimestamp(rng), timeutil.Now(), randSessionID(rng),
 	)
-	_, err := tx.Exec(stmt, args...)
+	_, err := q.Exec(stmt, args...)
 	return err
 }
