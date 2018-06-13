@@ -20,8 +20,8 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -152,12 +152,14 @@ type windowRun struct {
 
 	windowValues [][]tree.Datum
 	curRowIdx    int
+	windowFrames []*tree.WindowFrame
 
 	windowsAcc mon.BoundAccount
 }
 
 func (n *windowNode) startExec(params runParams) error {
 	n.run.windowsAcc = params.EvalContext().Mon.MakeBoundAccount()
+
 	return nil
 }
 
@@ -271,13 +273,14 @@ func (p *planner) constructWindowDefinitions(
 	for _, windowDef := range sc.Window {
 		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
-			return errors.Errorf("window %q is already defined", name)
+			return pgerror.NewErrorf(pgerror.CodeWindowingError, "window %q is already defined", name)
 		}
 		namedWindowSpecs[name] = windowDef
 	}
 
+	n.run.windowFrames = make([]*tree.WindowFrame, len(n.funcs))
 	// Construct window definitions for each window function application.
-	for _, windowFn := range n.funcs {
+	for idx, windowFn := range n.funcs {
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
 		if err != nil {
 			return err
@@ -320,7 +323,7 @@ func (p *planner) constructWindowDefinitions(
 			}
 		}
 
-		windowFn.windowDef = windowDef
+		n.run.windowFrames[idx] = windowDef.Frame
 	}
 	return nil
 }
@@ -352,7 +355,7 @@ func constructWindowDef(
 
 	referencedSpec, ok := namedWindowSpecs[refName]
 	if !ok {
-		return def, errors.Errorf("window %q does not exist", refName)
+		return def, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
 	}
 	if !modifyRef {
 		return *referencedSpec, nil
@@ -360,17 +363,23 @@ func constructWindowDef(
 
 	// referencedSpec.Partitions is always used.
 	if len(def.Partitions) > 0 {
-		return def, errors.Errorf("cannot override PARTITION BY clause of window %q", refName)
+		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
 	}
 	def.Partitions = referencedSpec.Partitions
 
 	// referencedSpec.OrderBy is used if set.
 	if len(referencedSpec.OrderBy) > 0 {
 		if len(def.OrderBy) > 0 {
-			return def, errors.Errorf("cannot override ORDER BY clause of window %q", refName)
+			return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
 		}
 		def.OrderBy = referencedSpec.OrderBy
 	}
+
+	if referencedSpec.Frame != nil {
+		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
+	}
+	// TODO(yuzefovich): check the logic above, maybe we need to do or to check something else.
+
 	return def, nil
 }
 
@@ -454,7 +463,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 	}
 	// The number of aggregation functions that need to be replaced with IndexedVars
 	// is unknown, so we collect them here and bind them to an IndexedVarHelper later.
-	// We use a map indexed by render index to leverage addOrMergeRender's deduplication
+	// We use a map indexed by render index to leverage addOrReuseRender's deduplication
 	// of identical aggregate functions.
 	aggIVars := make(map[int]*tree.IndexedVar)
 
@@ -564,6 +573,11 @@ type allPeers struct{}
 // allPeers implements the peerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) bool { return true }
 
+type noPeers struct{}
+
+// noPeers implements the peerGroupChecker interface.
+func (noPeers) InSameGroup(i, j int) bool { return false }
+
 // peerGroupChecker can check if a pair of row indexes within a partition are
 // in the same peer group.
 type peerGroupChecker interface {
@@ -609,6 +623,38 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 	var scratchBytes []byte
 	var scratchDatum []tree.Datum
 	for windowIdx, windowFn := range n.funcs {
+		frameRun := &tree.WindowFrameRun{}
+		if n.run.windowFrames[windowIdx] != nil {
+			frameRun.Frame = n.run.windowFrames[windowIdx]
+			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
+			// so we need to make sure these expressions are evaluated before using offsets.
+			bounds := frameRun.Frame.Bounds
+			if bounds.StartBound.OffsetExpr != nil {
+				typedStartOffset := bounds.StartBound.OffsetExpr.(tree.TypedExpr)
+				dStartOffset, err := typedStartOffset.Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				startOffset := int(tree.MustBeDInt(dStartOffset))
+				if startOffset < 0 {
+					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
+				}
+				frameRun.StartBoundOffset = startOffset
+			}
+			if bounds.EndBound != nil && bounds.EndBound.OffsetExpr != nil {
+				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
+				dEndOffset, err := typedEndOffset.Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				endOffset := int(tree.MustBeDInt(dEndOffset))
+				if endOffset < 0 {
+					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
+				}
+				frameRun.EndBoundOffset = endOffset
+			}
+		}
+
 		partitions := make(map[string][]tree.IndexedRow)
 
 		if len(windowFn.partitionIdxs) == 0 {
@@ -686,9 +732,10 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
-			// Since we only support two types of window frames (see TODO above), we only
-			// need two possible types of peerGroupChecker's to help determine peer groups
-			// for given tuples.
+			// In order to calculate aggregates over a particular window frame,
+			// we need a way to 'reset' the aggregate, so this constructor will be used for that.
+			aggConstructor := windowFn.expr.GetAggregateConstructor()
+
 			var peerGrouper peerGroupChecker
 			if windowFn.columnOrdering != nil {
 				// If an ORDER BY clause is provided, order the partition and use the
@@ -707,32 +754,39 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				// for functions with syntactically equivalent PARTITION BY and ORDER BY clauses.
 				sort.Sort(sorter)
 				peerGrouper = sorter
+			} else if frameRun.Frame != nil && frameRun.Frame.Mode == tree.ROWS {
+				// If ORDER BY clause is not provided and Frame is specified with ROWS mode,
+				// any row has no peers.
+				peerGrouper = noPeers{}
 			} else {
-				// If no ORDER BY clause is provided, all rows in the partition are peers.
+				// If ORDER BY clause is not provided and either no Frame is provided or Frame is
+				// specified with RANGE mode, all rows are peers.
 				peerGrouper = allPeers{}
 			}
 
-			// Iterate over peer groups within partition using a window frame.
-			frame := tree.WindowFrame{
-				Rows:        partition,
-				ArgIdxStart: windowFn.argIdxStart,
-				ArgCount:    windowFn.argCount,
-				RowIdx:      0,
+			frameRun.Rows = partition
+			frameRun.ArgIdxStart = windowFn.argIdxStart
+			frameRun.ArgCount = windowFn.argCount
+			frameRun.RowIdx = 0
+
+			if frameRun.Frame != nil {
+				builtins.AddAggregateConstructorToFramableAggregate(builtin, aggConstructor)
 			}
-			for frame.RowIdx < len(partition) {
+
+			for frameRun.RowIdx < len(partition) {
 				// Compute the size of the current peer group.
-				frame.FirstPeerIdx = frame.RowIdx
-				frame.PeerRowCount = 1
-				for ; frame.FirstPeerIdx+frame.PeerRowCount < len(partition); frame.PeerRowCount++ {
-					cur := frame.FirstPeerIdx + frame.PeerRowCount
+				frameRun.FirstPeerIdx = frameRun.RowIdx
+				frameRun.PeerRowCount = 1
+				for ; frameRun.FirstPeerIdx+frameRun.PeerRowCount < frameRun.PartitionSize(); frameRun.PeerRowCount++ {
+					cur := frameRun.FirstPeerIdx + frameRun.PeerRowCount
 					if !peerGrouper.InSameGroup(cur, cur-1) {
 						break
 					}
 				}
 
 				// Perform calculations on each row in the current peer group.
-				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(ctx, evalCtx, frame)
+				for ; frameRun.RowIdx < frameRun.FirstPeerIdx+frameRun.PeerRowCount; frameRun.RowIdx++ {
+					res, err := builtin.Compute(ctx, evalCtx, frameRun)
 					if err != nil {
 						return err
 					}
@@ -744,7 +798,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					}
 
 					// Save result into n.run.windowValues, indexed by original row index.
-					valRowIdx := partition[frame.RowIdx].Idx
+					valRowIdx := partition[frameRun.RowIdx].Idx
 					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
 			}
@@ -843,7 +897,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = fmt.Errorf("window function calls cannot be nested under %s()", &t.Func)
+					v.err = pgerror.NewErrorf(pgerror.CodeWindowingError, "window function calls cannot be nested")
 					return false, expr
 				}
 			}
@@ -913,7 +967,6 @@ type windowFuncHolder struct {
 	argIdxStart int // index of the window function's first arguments in window.wrappedValues
 	argCount    int // number of arguments taken by the window function
 
-	windowDef      tree.WindowDef
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
 }

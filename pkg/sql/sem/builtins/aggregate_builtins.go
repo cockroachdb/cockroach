@@ -156,7 +156,7 @@ var aggregates = map[string]builtinDefinition{
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
 			WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
-				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
+				return newFramableAggregateWindow(newCountRowsAggregate(params, evalCtx))
 			},
 			Info: "Calculates the number of rows.",
 		},
@@ -318,7 +318,7 @@ func makeAggOverloadWithReturnType(
 		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
-			return newAggregateWindow(f(params, evalCtx))
+			return newFramableAggregateWindow(f(params, evalCtx))
 		},
 		Info: info,
 	}

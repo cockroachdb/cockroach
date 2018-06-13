@@ -541,6 +541,18 @@ func (node *Limit) Format(ctx *FmtCtx) {
 	}
 }
 
+// RowsFromExpr represents a ROWS FROM(...) expression.
+type RowsFromExpr struct {
+	Items Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RowsFromExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("ROWS FROM (")
+	ctx.FormatNode(&node.Items)
+	ctx.WriteByte(')')
+}
+
 // Window represents a WINDOW clause.
 type Window []*WindowDef
 
@@ -562,6 +574,7 @@ type WindowDef struct {
 	RefName    Name
 	Partitions Exprs
 	OrderBy    OrderBy
+	Frame      *WindowFrame
 }
 
 // Format implements the NodeFormatter interface.
@@ -590,21 +603,108 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 			ctx.WriteString(orderByStr[1:])
 		}
 		needSpaceSeparator = true
-		_ = needSpaceSeparator // avoid compiler warning until TODO below is addressed.
 	}
-	// TODO(nvanbenschoten): Support Window Frames.
-	// if node.Frame != nil {}
-	ctx.WriteByte(')')
+	if node.Frame != nil {
+		if needSpaceSeparator {
+			ctx.WriteRune(' ')
+		}
+		ctx.FormatNode(node.Frame)
+	}
+	ctx.WriteRune(')')
 }
 
-// RowsFromExpr represents a ROWS FROM(...) expression.
-type RowsFromExpr struct {
-	Items Exprs
+// WindowFrameMode indicates which mode of framing is used.
+type WindowFrameMode int
+
+const (
+	// RANGE is the mode of specifying frame in terms of logical range (e.g. 100 units cheaper).
+	RANGE WindowFrameMode = iota
+	// ROWS is the mode of specifying frame in terms of physical offsets (e.g. 1 row before etc).
+	ROWS
+)
+
+// WindowFrameBoundType indicates which type of boundary is used.
+type WindowFrameBoundType int
+
+const (
+	// UnboundedPreceding represents UNBOUNDED PRECEDING type of boundary.
+	UnboundedPreceding WindowFrameBoundType = iota
+	// ValuePreceding represents 'value' PRECEDING type of boundary.
+	ValuePreceding
+	// CurrentRow represents CURRENT ROW type of boundary.
+	CurrentRow
+	// ValueFollowing represents 'value' FOLLOWING type of boundary.
+	ValueFollowing
+	// UnboundedFollowing represents UNBOUNDED FOLLOWING type of boundary.
+	UnboundedFollowing
+)
+
+// WindowFrameBound specifies the offset and the type of boundary.
+type WindowFrameBound struct {
+	BoundType  WindowFrameBoundType
+	OffsetExpr Expr
+}
+
+// WindowFrameBounds specifies boundaries of the window frame.
+// The row at StartBound is included whereas the row at EndBound is not.
+type WindowFrameBounds struct {
+	StartBound *WindowFrameBound
+	EndBound   *WindowFrameBound
+}
+
+// WindowFrame represents static state of window frame over which calculations are made.
+type WindowFrame struct {
+	Mode   WindowFrameMode   // the mode of framing being used
+	Bounds WindowFrameBounds // the bounds of the frame
+}
+
+func (boundary *WindowFrameBound) write(ctx *FmtCtx) {
+	switch boundary.BoundType {
+	case UnboundedPreceding:
+		ctx.WriteString("UNBOUNDED PRECEDING")
+	case ValuePreceding:
+		ctx.FormatNode(boundary.OffsetExpr)
+		ctx.WriteString(" PRECEDING")
+	case CurrentRow:
+		ctx.WriteString("CURRENT ROW")
+	case ValueFollowing:
+		ctx.FormatNode(boundary.OffsetExpr)
+		ctx.WriteString(" FOLLOWING")
+	case UnboundedFollowing:
+		ctx.WriteString("UNBOUNDED FOLLOWING")
+	default:
+		panic("unexpected WindowFrameBoundType")
+	}
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RowsFromExpr) Format(ctx *FmtCtx) {
-	ctx.WriteString("ROWS FROM (")
-	ctx.FormatNode(&node.Items)
-	ctx.WriteByte(')')
+func (wf *WindowFrame) Format(ctx *FmtCtx) {
+	switch wf.Mode {
+	case RANGE:
+		ctx.WriteString("RANGE ")
+	case ROWS:
+		ctx.WriteString("ROWS ")
+	default:
+		panic("unexpected WindowFrameMode")
+	}
+	if wf.Bounds.EndBound != nil {
+		ctx.WriteString("BETWEEN ")
+		wf.Bounds.StartBound.write(ctx)
+		ctx.WriteString(" AND ")
+		wf.Bounds.EndBound.write(ctx)
+	} else {
+		wf.Bounds.StartBound.write(ctx)
+	}
+}
+
+// Copy returns a deep copy of wf.
+func (wf *WindowFrame) Copy() *WindowFrame {
+	frameCopy := &WindowFrame{Mode: wf.Mode}
+	startBoundCopy := *wf.Bounds.StartBound
+	frameCopy.Bounds = WindowFrameBounds{&startBoundCopy, nil}
+	if wf.Bounds.EndBound != nil {
+		endBoundCopy := *wf.Bounds.EndBound
+		frameCopy.Bounds.EndBound = &endBoundCopy
+	}
+	return frameCopy
 }
