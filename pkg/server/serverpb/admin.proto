@@ -553,6 +553,8 @@ message QueriesRequest {
 
 message QueriesResponse {
   repeated cockroach.sql.CollectedStatementStatistics queries = 1 [(gogoproto.nullable) = false];
+   // Timestamp of the last stats reset.
+   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer

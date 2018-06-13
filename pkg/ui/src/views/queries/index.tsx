@@ -9,6 +9,7 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { Duration } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
+import Print from "src/views/reports/containers/range/print";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
@@ -85,13 +86,14 @@ class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
       // This should really be handled by a loader component.
       return null;
     }
-    const queries = this.props.queries.data.queries;
+    const { queries, last_reset } = this.props.queries.data;
 
     return (
       <div className="queries-screen">
         <span className="queries-screen__last-hour-note">
           {queries.length} query fingerprints.
-          Query history is only maintained for the past hour.
+          Query history is only maintained for about an hour.
+          History last cleared {Print.Timestamp(last_reset)}.
         </span>
 
         <QueriesSortedTable

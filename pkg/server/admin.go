@@ -1506,9 +1506,11 @@ func (s *adminServer) Queries(
 	ctx context.Context, req *serverpb.QueriesRequest,
 ) (*serverpb.QueriesResponse, error) {
 	stmtStats := s.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
+	lastReset := s.server.pgServer.SQLServer.GetStmtStatsLastReset()
 
 	return &serverpb.QueriesResponse{
-		Queries: stmtStats,
+		Queries:   stmtStats,
+		LastReset: lastReset,
 	}, nil
 }
 
