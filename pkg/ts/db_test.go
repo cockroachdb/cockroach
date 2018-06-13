@@ -168,7 +168,9 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 
 		// The on-disk model discards all samples in each sample period except for
 		// the last one.
-		data = data.GroupByResolution(resolution.SampleDuration(), testmodel.AggregateLast)
+		if !resolution.IsRollup() {
+			data = data.GroupByResolution(resolution.SampleDuration(), testmodel.AggregateLast)
+		}
 
 		// Depending on when column-based storage was activated, some slabs will
 		// be in row format and others in column format. Find the dividing line
@@ -180,20 +182,32 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 				Source:     source,
 				Datapoints: datapoints,
 			}
-			slabs, err := tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration(), columnar)
+			// Convert rollup resolutions before converting to slabs.
+			var slabs []roachpb.InternalTimeSeriesData
+			var err error
+			if resolution.IsRollup() {
+				rollup := computeRollupsFromData(tsdata, resolution.SampleDuration())
+				slabs, err = rollup.toInternal(resolution.SlabDuration(), resolution.SampleDuration())
+			} else {
+				slabs, err = tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration(), columnar)
+			}
 			if err != nil {
 				tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
 			}
 			allSlabs = append(allSlabs, slabs...)
 		}
 
-		firstColumnTime, hasColumns := tm.firstColumnarTimestamp[name]
-		if !hasColumns {
-			addSlabs(data, false)
+		if resolution.IsRollup() {
+			addSlabs(data, true)
 		} else {
-			firstColumnTime = resolution.normalizeToSlab(firstColumnTime)
-			addSlabs(data.TimeSlice(math.MinInt64, firstColumnTime), false)
-			addSlabs(data.TimeSlice(firstColumnTime, math.MaxInt64), true)
+			firstColumnTime, hasColumns := tm.firstColumnarTimestamp[name]
+			if !hasColumns {
+				addSlabs(data, false)
+			} else {
+				firstColumnTime = resolution.normalizeToSlab(firstColumnTime)
+				addSlabs(data.TimeSlice(math.MinInt64, firstColumnTime), false)
+				addSlabs(data.TimeSlice(firstColumnTime, math.MaxInt64), true)
+			}
 		}
 
 		for _, slab := range allSlabs {
@@ -264,11 +278,25 @@ func getResolutionFromKey(key string) (Resolution, string, bool) {
 // in both the model and the system under test.
 func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesData) {
 	// Store data in the system under test.
-	if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
-		tm.t.Fatalf("error storing time series data: %s", err)
+	if r.IsRollup() {
+		// For rollup resolutions, compute the rollupData from the time series
+		// data and store the rollup data.
+		var rdata []rollupData
+		for _, d := range data {
+			rdata = append(rdata, computeRollupsFromData(d, r.SampleDuration()))
+		}
+		if err := tm.DB.storeRollup(context.TODO(), r, rdata); err != nil {
+			tm.t.Fatalf("error storing time series rollups: %s", err)
+		}
+	} else {
+		if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
+			tm.t.Fatalf("error storing time series data: %s", err)
+		}
 	}
 
-	// store data in the model.
+	// store data in the model. Even for rollup resolutoins we store the original
+	// data points in the model, with the expectation that queries will be
+	// identical to those based on rollups.
 	for _, d := range data {
 		tm.storeInModel(r, d)
 	}
