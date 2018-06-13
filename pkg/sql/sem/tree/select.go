@@ -564,6 +564,7 @@ type WindowDef struct {
 	RefName    Name
 	Partitions Exprs
 	OrderBy    OrderBy
+	Frame      *WindowFrame
 }
 
 // Format implements the NodeFormatter interface.
@@ -592,9 +593,13 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 			ctx.WriteString(orderByStr[1:])
 		}
 		needSpaceSeparator = true
-		_ = needSpaceSeparator // avoid compiler warning until TODO below is addressed.
 	}
-	// TODO(nvanbenschoten): Support Window Frames.
-	// if node.Frame != nil {}
+
+	if node.Frame != nil {
+		if needSpaceSeparator {
+			ctx.WriteRune(' ')
+		}
+		ctx.FormatNode(node.Frame)
+	}
 	ctx.WriteRune(')')
 }

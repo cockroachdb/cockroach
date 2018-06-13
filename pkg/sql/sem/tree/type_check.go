@@ -587,6 +587,24 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			}
 			expr.WindowDef.OrderBy[i].Expr = typedOrderBy
 		}
+		if expr.WindowDef.Frame != nil {
+			bounds := expr.WindowDef.Frame.Bounds
+			startBound, endBound := bounds.StartBound, bounds.EndBound
+			if startBound.OffsetExpr != nil {
+				typedStartOffsetExpr, err := startBound.OffsetExpr.TypeCheck(ctx, types.Int)
+				if err != nil {
+					return nil, err
+				}
+				startBound.OffsetExpr = typedStartOffsetExpr
+			}
+			if endBound != nil && endBound.OffsetExpr != nil {
+				typedEndOffsetExpr, err := endBound.OffsetExpr.TypeCheck(ctx, types.Int)
+				if err != nil {
+					return nil, err
+				}
+				endBound.OffsetExpr = typedEndOffsetExpr
+			}
+		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		if def.Class == WindowClass {

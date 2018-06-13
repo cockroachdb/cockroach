@@ -2022,7 +2022,7 @@ prefixed_column_path ::=
 	| name '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
 window_specification ::=
-	'(' opt_existing_window_name opt_partition_clause opt_sort_clause ')'
+	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
 
 window_name ::=
 	name
@@ -2095,6 +2095,11 @@ opt_partition_clause ::=
 	'PARTITION' 'BY' expr_list
 	| 
 
+opt_frame_clause ::=
+	'RANGE' frame_extent
+	| 'ROWS' frame_extent
+	| 
+
 index_hints_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
@@ -2123,3 +2128,14 @@ join_outer ::=
 
 partition_name ::=
 	unrestricted_name
+
+frame_extent ::=
+	frame_bound
+	| 'BETWEEN' frame_bound 'AND' frame_bound
+
+frame_bound ::=
+	'UNBOUNDED' 'PRECEDING'
+	| 'UNBOUNDED' 'FOLLOWING'
+	| 'CURRENT' 'ROW'
+	| a_expr 'PRECEDING'
+	| a_expr 'FOLLOWING'
