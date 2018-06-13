@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -393,6 +394,19 @@ func (c *CustomFuncs) LimitGeMaxRows(limit memo.PrivateID, input memo.GroupID) b
 	limitVal := int64(*c.f.mem.LookupPrivate(limit).(*tree.DInt))
 	maxRows := c.f.mem.GroupProperties(input).Relational.Cardinality.Max
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
+}
+
+// HasColumnsInOrdering returns true if all columns that appear in an ordering
+// are output columns of the given group.
+func (c *CustomFuncs) HasColumnsInOrdering(input memo.GroupID, ordering memo.PrivateID) bool {
+	ord := c.f.mem.LookupPrivate(ordering).(props.Ordering)
+	outCols := c.f.mem.GroupProperties(input).Relational.OutputCols
+	for i := range ord {
+		if !outCols.Contains(int(ord[i].ID())) {
+			return false
+		}
+	}
+	return true
 }
 
 // ----------------------------------------------------------------------

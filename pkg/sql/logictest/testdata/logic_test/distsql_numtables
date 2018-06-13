@@ -198,11 +198,11 @@ SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
 5
 
 statement error memory budget exceeded
-SELECT y, str, repeat('test', y) FROM NumToStr ORDER BY str
+SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 
 # Verify we use the "top K" strategy and thus don't hit OOM as above.
 statement ok
-SELECT y, str, repeat('test', y) FROM NumToStr ORDER BY str LIMIT 10
+SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 
 # Regression test for #20481.
 query I
