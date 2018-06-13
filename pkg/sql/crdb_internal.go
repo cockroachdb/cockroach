@@ -585,8 +585,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 				s.Lock()
 				errString := tree.DNull
-				if s.data.LastErr != "" {
-					errString = tree.NewDString(s.data.LastErr)
+				if s.data.SensitiveInfo.LastErr != "" {
+					errString = tree.NewDString(s.data.SensitiveInfo.LastErr)
 				}
 				err := addRow(
 					nodeID,
