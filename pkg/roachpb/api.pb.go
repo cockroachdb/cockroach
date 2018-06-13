@@ -104,6 +104,7 @@
 		BatchRequest
 		BatchResponse
 		StatementStatistics
+		SensitiveInfo
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
