@@ -1211,6 +1211,25 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	return newErr
 }
 
+// BumpEpochAfterConcurrentRetryErrorLocked bumps the transaction epoch manually
+// and resets the transaction state away from txnError. This is meant to be used
+// after synchronizing concurrent actors using a txn when a retryable error is
+// seen.
+//
+// TODO(andrei): this should go away once we move to a TxnAttempt model.
+func (txn *Txn) BumpEpochAfterConcurrentRetryErrorLocked() {
+	// Invalidate any writes performed by any workers after the retry updated
+	// the txn's proto but before we synchronized (some of these writes might
+	// have been performed at the wrong epoch).
+	txn.Proto().BumpEpoch()
+
+	// The txn might have entered the txnError state after the epoch was bumped.
+	// Reset the state for the retry.
+	if txn.mu.state == txnError {
+		txn.mu.state = txnWriteInOldEpoch
+	}
+}
+
 // updateStateOnRetryableErrLocked updates the Transaction proto inside txn.
 //
 // This method is safe to call repeatedly for requests from the same txn epoch.
