@@ -1510,14 +1510,16 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			select {
 			case decommissionSem <- struct{}{}:
 				s.stopper.RunWorker(ctx, func(context.Context) {
+					// Don't use the passed in ctx because there is an associated timeout
+					// meant to be used when heartbeating.
+					ctx := context.Background()
+
 					defer func() {
 						<-decommissionSem
 					}()
 
-					// Don't use ctx because there is an associated timeout
-					// meant to be used when heartbeating.
-					if _, err := s.Drain(context.Background(), GracefulDrainModes); err != nil {
-						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
+					if _, err := s.Drain(ctx, GracefulDrainModes); err != nil {
+						log.Warningf(ctx, "failed to set Draining when Decommissioning: %s", err)
 					}
 				})
 			default:
