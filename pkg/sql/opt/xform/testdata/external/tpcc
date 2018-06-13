@@ -71,9 +71,9 @@ TABLE district
       └── d_id int not null
 
 exec-ddl
-ALTER TABLE warehouse INJECT STATISTICS '[
+ALTER TABLE district INJECT STATISTICS '[
   {
-    "columns": ["w_id"],
+    "columns": ["d_w_id"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
     "distinct_count": 10
@@ -544,14 +544,14 @@ SELECT w_tax FROM warehouse WHERE w_id = 10
 ----
 project
  ├── columns: w_tax:8(decimal)
- ├── stats: [rows=10]
- ├── cost: 10.00
+ ├── stats: [rows=1]
+ ├── cost: 1.00
  ├── prune: (8)
  └── scan warehouse
       ├── columns: warehouse.w_id:1(int!null) warehouse.w_tax:8(decimal)
       ├── constraint: /1: [/10 - /10]
-      ├── stats: [rows=10, distinct(1)=1]
-      ├── cost: 10.00
+      ├── stats: [rows=1, distinct(1)=1]
+      ├── cost: 1.00
       ├── keys: (1)
       └── prune: (8)
 
@@ -591,31 +591,27 @@ scan item
 opt format=show-all
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
-WHERE (s_i_id, s_w_id) IN ((1000, 10), (900, 8), (1100, 6), (1500, 4), (1400, 8))
+WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
 ----
-project
+sort
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)
- ├── stats: [rows=333333]
- ├── cost: 250.50
+ ├── stats: [rows=50]
+ ├── cost: 52.82
  ├── ordering: +1
  ├── prune: (1,3,8,14-17)
- └── lookup-join stock
-      ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
-      ├── key columns: [2 1]
-      ├── stats: [rows=333333]
-      ├── cost: 250.50
-      ├── keys: (1,2)
-      ├── ordering: +1
-      ├── prune: (3,8,14-17)
-      └── scan stock@secondary
-           ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null)
-           ├── constraint: /1/2: [/900/8 - /900/8] [/1000/10 - /1000/10] [/1100/6 - /1100/6] [/1400/8 - /1400/8] [/1500/4 - /1500/4]
+ └── project
+      ├── columns: stock.s_i_id:1(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
+      ├── stats: [rows=50]
+      ├── cost: 50.00
+      ├── prune: (1,3,8,14-17)
+      └── scan stock
+           ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
+           ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
            ├── stats: [rows=50, distinct(1)=5]
            ├── cost: 50.00
            ├── keys: (1,2)
-           ├── ordering: +1
-           └── prune: (1,2)
+           └── prune: (3,8,14-17)
 
 # --------------------------------------------------
 # 2.5 The Payment Transaction
@@ -912,34 +908,34 @@ group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1178.00
+ ├── cost: 110.30
  ├── prune: (22)
  ├── select
  │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int) sum_d_ytd:21(decimal!null)
- │    ├── stats: [rows=777]
- │    ├── cost: 1178.00
+ │    ├── stats: [rows=1]
+ │    ├── cost: 110.30
  │    ├── full-join
  │    │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal) district.d_w_id:11(int) sum_d_ytd:21(decimal)
- │    │    ├── stats: [rows=7000]
- │    │    ├── cost: 1108.00
+ │    │    ├── stats: [rows=10]
+ │    │    ├── cost: 110.20
  │    │    ├── prune: (9,21)
  │    │    ├── scan warehouse
  │    │    │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal)
- │    │    │    ├── stats: [rows=100]
- │    │    │    ├── cost: 100.00
+ │    │    │    ├── stats: [rows=10]
+ │    │    │    ├── cost: 10.00
  │    │    │    ├── keys: (1)
  │    │    │    └── prune: (1,9)
  │    │    ├── group-by
  │    │    │    ├── columns: district.d_w_id:11(int!null) sum_d_ytd:21(decimal)
  │    │    │    ├── grouping columns: district.d_w_id:11(int!null)
- │    │    │    ├── stats: [rows=700, distinct(11)=700]
- │    │    │    ├── cost: 1000.00
+ │    │    │    ├── stats: [rows=10, distinct(11)=10]
+ │    │    │    ├── cost: 100.00
  │    │    │    ├── keys: (11)
  │    │    │    ├── prune: (21)
  │    │    │    ├── scan district
  │    │    │    │    ├── columns: district.d_w_id:11(int!null) district.d_ytd:19(decimal)
- │    │    │    │    ├── stats: [rows=1000, distinct(11)=700]
- │    │    │    │    ├── cost: 1000.00
+ │    │    │    │    ├── stats: [rows=100, distinct(11)=10]
+ │    │    │    │    ├── cost: 100.00
  │    │    │    │    └── prune: (11,19)
  │    │    │    └── aggregations [outer=(19)]
  │    │    │         └── sum [type=decimal, outer=(19)]
@@ -962,8 +958,8 @@ ORDER BY d_w_id, d_id
 ----
 scan district
  ├── columns: d_next_o_id:11(int)
- ├── stats: [rows=1000]
- ├── cost: 1000.00
+ ├── stats: [rows=100]
+ ├── cost: 100.00
  ├── keys: (1,2)
  ├── ordering: +2,+1
  └── prune: (1,2,11)
