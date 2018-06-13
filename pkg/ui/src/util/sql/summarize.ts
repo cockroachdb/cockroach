@@ -6,7 +6,7 @@ export interface StatementSummary {
   error?: string;
 }
 
-const keywords = {
+const keywords: { [key: string]: RegExp } = {
   update: /^update\s+(\S+)/i,
   select: /^select.+from\s+(\S+)/i,
   insert: /^insert\s+into\s+([^ \t(]+)/i,
