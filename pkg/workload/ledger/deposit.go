@@ -37,7 +37,7 @@ func (bal deposit) run(config *ledger, db *gosql.DB) (interface{}, error) {
 		db,
 		nil, /* txopts */
 		func(tx *gosql.Tx) error {
-			c, err := getBalance(config, tx, cID)
+			c, err := getBalance(tx, config, cID, false /* historical */)
 			if err != nil {
 				return err
 			}
@@ -46,12 +46,12 @@ func (bal deposit) run(config *ledger, db *gosql.DB) (interface{}, error) {
 			c.balance += amount
 			c.sequence++
 
-			tID, err := insertTransaction(config, tx, rng, c.identifier)
+			tID, err := insertTransaction(tx, config, rng, c.identifier)
 			if err != nil {
 				return err
 			}
 
-			if err := updateBalance(config, tx, c); err != nil {
+			if err := updateBalance(tx, config, c); err != nil {
 				return err
 			}
 
@@ -59,7 +59,7 @@ func (bal deposit) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				cID,
 				randInt(rng, 0, config.customers-1),
 			}
-			return insertEntries(config, tx, rng, cIDs, tID)
+			return insertEntries(tx, config, rng, cIDs, tID)
 		})
 	return nil, err
 }

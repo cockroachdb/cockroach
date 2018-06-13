@@ -32,14 +32,15 @@ type ledger struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed          int64
-	customers     int
-	parallelStmts bool
-	interleaved   bool
-	inlineArgs    bool
-	splits        int
-	fks           bool
-	mix           string
+	seed              int64
+	customers         int
+	parallelStmts     bool
+	interleaved       bool
+	inlineArgs        bool
+	splits            int
+	fks               bool
+	historicalBalance bool
+	mix               string
 
 	txs  []tx
 	deck []int // contains indexes into the txs slice
@@ -68,6 +69,7 @@ var ledgerMeta = workload.Meta{
 		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.historicalBalance, `historical-balance`, false, `Perform balance txns using historical reads`)
 		g.flags.StringVar(&g.mix, `mix`,
 			`balance=50,withdrawal=37,deposit=12,reversal=0`,
 			`Weights for the transaction mix.`)

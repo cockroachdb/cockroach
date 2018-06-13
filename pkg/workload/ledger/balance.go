@@ -16,11 +16,9 @@
 package ledger
 
 import (
-	"context"
 	gosql "database/sql"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -32,13 +30,6 @@ func (bal balance) run(config *ledger, db *gosql.DB) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	cID := config.randCustomer(rng)
 
-	err := crdb.ExecuteTx(
-		context.Background(),
-		db,
-		nil, /* txopts */
-		func(tx *gosql.Tx) error {
-			_, err := getBalance(config, tx, cID)
-			return err
-		})
+	_, err := getBalance(db, config, cID, config.historicalBalance)
 	return nil, err
 }
