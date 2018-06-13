@@ -145,11 +145,13 @@ func (p *PlaceholderInfo) Value(name string) (TypedExpr, bool) {
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
-	t, ok := p.Types[name]
-	if ok && !typ.Equivalent(t) {
-		return pgerror.NewErrorf(
-			pgerror.CodeDatatypeMismatchError,
-			"placeholder %s already has type %s, cannot assign %s", name, t, typ)
+	if t, ok := p.Types[name]; ok {
+		if !typ.Equivalent(t) {
+			return pgerror.NewErrorf(
+				pgerror.CodeDatatypeMismatchError,
+				"placeholder %s already has type %s, cannot assign %s", name, t, typ)
+		}
+		return nil
 	}
 	p.Types[name] = typ
 	if _, ok := p.TypeHints[name]; !ok {
