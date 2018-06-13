@@ -117,6 +117,7 @@
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
+		ExplainTreePlanNode
 		Span
 		Value
 		KeyValue
