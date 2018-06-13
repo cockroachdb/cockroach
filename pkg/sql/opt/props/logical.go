@@ -57,6 +57,21 @@ type Relational struct {
 	// derived from filters that are NULL-intolerant.
 	NotNullCols opt.ColSet
 
+	// OuterCols is the set of columns that are referenced by variables within
+	// this relational sub-expression, but are not bound within the scope of
+	// the expression. For example:
+	//
+	//   SELECT *
+	//   FROM a
+	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
+	//
+	// For the inner SELECT expression, a.x is an outer column, meaning that it
+	// is defined "outside" the SELECT expression (hence the name "outer"). The
+	// SELECT expression binds the b.x and b.y references, so they are not
+	// part of the outer column set. The outer SELECT binds the a.x column, and
+	// so its outer column set is empty.
+	OuterCols opt.ColSet
+
 	// WeakKeys are the column sets which form weak keys and are subsets of the
 	// expression's output columns. A weak key set cannot contain any other weak
 	// key set (it would be redundant).
@@ -77,22 +92,7 @@ type Relational struct {
 	// An empty key is valid (an empty key implies there is at most one row). Note
 	// that an empty key is always the only key in the set, since it's a subset of
 	// every other key (i.e. every other key would be redundant).
-	WeakKeys opt.WeakKeys
-
-	// OuterCols is the set of columns that are referenced by variables within
-	// this relational sub-expression, but are not bound within the scope of
-	// the expression. For example:
-	//
-	//   SELECT *
-	//   FROM a
-	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
-	//
-	// For the inner SELECT expression, a.x is an outer column, meaning that it
-	// is defined "outside" the SELECT expression (hence the name "outer"). The
-	// SELECT expression binds the b.x and b.y references, so they are not
-	// part of the outer column set. The outer SELECT binds the a.x column, and
-	// so its outer column set is empty.
-	OuterCols opt.ColSet
+	WeakKeys WeakKeys
 
 	// Cardinality is the number of rows that can be returned from this relational
 	// expression. The number of rows will always be between the inclusive Min and
@@ -102,7 +102,7 @@ type Relational struct {
 
 	// Stats is the set of statistics that apply to this relational expression.
 	// See opt/statistics.go and statistics_builder.go for more details.
-	Stats opt.Statistics
+	Stats Statistics
 
 	// Rule encapsulates the set of properties that are maintained to assist
 	// with specific sets of transformation rules. They are not intended to be
