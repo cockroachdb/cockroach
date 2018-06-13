@@ -113,6 +113,7 @@
 		RangeFeedError
 		RangeFeedEvent
 		StatementStatistics
+		SensitiveInfo
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
