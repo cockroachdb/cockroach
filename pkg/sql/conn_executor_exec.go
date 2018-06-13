@@ -677,9 +677,9 @@ func (ex *connExecutor) execStmtInParallel(
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-
+		copiedPlan := ex.sampleLogicalPlan(stmt, false /* useDistSQL */, planner)
 		ex.recordStatementSummary(
-			planner, stmt, false /* distSQLUsed*/, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, copiedPlan, false /* distSQLUsed*/, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -812,6 +812,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
+	copiedPlan := ex.sampleLogicalPlan(stmt, distributePlan, planner)
+
 	if ex.sessionData.DistSQLMode != sessiondata.DistSQLOff {
 		needClose = false
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
@@ -826,7 +828,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return err
 	}
 	ex.recordStatementSummary(
-		planner, stmt, distributePlan, optimizerPlanned,
+		planner, stmt, copiedPlan, distributePlan, optimizerPlanned,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
 		&ex.server.EngineMetrics,
 	)
@@ -834,6 +836,28 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
 
+	return nil
+}
+
+// TODO(vilterp) add a comment
+func (ex *connExecutor) sampleLogicalPlan(
+	stmt Statement, useDistSQL bool, planner *planner,
+) *roachpb.PlanNode {
+	// TODO(vilterp): introduce and check a cluster setting to turn this off
+
+	stats := ex.appStats.getStatsForStmt(stmt, useDistSQL, nil, false /* createIfNonexistent */)
+
+	doTheThing := true
+	if stats != nil {
+		stats.Lock()
+		defer stats.Unlock()
+
+		doTheThing = stats.data.Count%saveFingerprintPlanOnceEvery == 0
+	}
+
+	if doTheThing {
+		return getPlanTree(context.Background(), planner.curPlan)
+	}
 	return nil
 }
 

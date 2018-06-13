@@ -95,8 +95,13 @@ func (s stmtKey) flags() string {
 	return b.String()
 }
 
+// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
+// we save the plan again.
+const saveFingerprintPlanOnceEvery = 1000
+
 func (a *appStats) recordStatement(
 	stmt Statement,
+	plan *roachpb.PlanNode,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
@@ -125,13 +130,16 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(key)
+	s := a.getStatsForStmt(stmt, distSQLUsed, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
 	s.data.Count++
 	if err != nil {
 		s.data.SensitiveInfo.LastErr = err.Error()
+	}
+	if plan != nil {
+		s.data.SensitiveInfo.MostRecentPlan = *plan
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
@@ -148,12 +156,27 @@ func (a *appStats) recordStatement(
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
-func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
+func (a *appStats) getStatsForStmt(
+	stmt Statement, useDistSQL bool, err error, createIfNonexistent bool,
+) *stmtStats {
+	// Construct the key for this statement.
+	key := stmtKey{failed: err != nil, distSQLUsed: useDistSQL}
+	if stmt.AnonymizedStr != "" {
+		// Use the cached anonymized string.
+		key.stmt = stmt.AnonymizedStr
+	} else {
+		key.stmt = anonymizeStmt(stmt)
+	}
+
+	return a.getStatsForStmtWithKey(key, createIfNonexistent)
+}
+
+func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	s, ok := a.stmts[key]
-	if !ok {
+	if !ok && createIfNonexistent {
 		s = &stmtStats{}
 		a.stmts[key] = s
 	}
@@ -325,7 +348,9 @@ func (s *sqlStats) getStmtStats(
 				data := stats.data
 				stats.Unlock()
 
-				data.SensitiveInfo = data.SensitiveInfo.GetScrubbedCopy()
+				if scrub {
+					data.SensitiveInfo = data.SensitiveInfo.GetScrubbedCopy()
+				}
 
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}

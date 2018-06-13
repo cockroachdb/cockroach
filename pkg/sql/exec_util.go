@@ -1622,6 +1622,7 @@ func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
 // RecordStatement is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) RecordStatement(
 	stmt Statement,
+	plan *roachpb.PlanNode,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
@@ -1630,7 +1631,7 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
 	s.appStats.recordStatement(
-		stmt, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
+		stmt, plan, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, ovhLat)
 }
 

@@ -75,6 +75,9 @@ message SensitiveInfo {
   // LastErr collects the last error encountered.
   // It is only reported once it's been redacted.
   optional string last_err = 1 [(gogoproto.nullable) = false];
+
+  // MostRecentPlan is the logical plan which was most recently captured for this query.
+  optional PlanNode most_recent_plan = 12 [(gogoproto.nullable) = false];
 }
 
 message NumericStat {
@@ -100,4 +103,21 @@ message StatementStatisticsKey {
 message CollectedStatementStatistics {
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+}
+
+message PlanNode {
+  // Name is the type of node this is, e.g. "scan" or "index-join".
+  optional string name = 1 [(gogoproto.nullable) = false];
+
+  message Attr {
+    optional string key = 1 [(gogoproto.nullable) = false];
+    optional string value = 2 [(gogoproto.nullable) = false];
+  }
+
+  // Attrs are attributes of this plan node.
+  // Often there are many attributes with the same key, e.g. "render".
+  repeated Attr attrs = 2;
+
+  // Children are the nodes that feed into this one, e.g. two scans for a join.
+  repeated PlanNode children = 3;
 }
