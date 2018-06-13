@@ -400,6 +400,8 @@ func (*Execute) StatementType() StatementType { return Unknown }
 // StatementTag returns a short string identifying the type of statement.
 func (*Execute) StatementTag() string { return "EXECUTE" }
 
+func (*Execute) independentFromParallelizedPriors() {}
+
 // StatementType implements the Statement interface.
 func (*Explain) StatementType() StatementType { return Rows }
 
