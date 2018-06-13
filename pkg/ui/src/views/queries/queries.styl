@@ -1,4 +1,5 @@
 @require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
 
 .queries-table
   &__col-query-text
@@ -16,6 +17,9 @@
   height 1em
   margin-left 5em
   position relative
+
+  &--singleton
+    width calc(100% - 5em)
 
   .label
     position absolute
@@ -42,3 +46,9 @@
     background-color $link-color
   .latency-overhead
     background-color $alert-color
+
+.numeric-stats-table
+  @extend $table-base
+
+.details-bar
+  margin 12px 0
