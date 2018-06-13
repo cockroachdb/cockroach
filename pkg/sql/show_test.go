@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -694,22 +694,22 @@ func TestShowJobs(t *testing.T) {
 
 	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
 	// row struct directly.
-	inPayload, err := protoutil.Marshal(&jobs.Payload{
+	inPayload, err := protoutil.Marshal(&jobspb.Payload{
 		Description:    in.description,
 		StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
 		FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
 		Username:       in.username,
-		Lease: &jobs.Lease{
+		Lease: &jobspb.Lease{
 			NodeID: 7,
 		},
 		Error:   in.err,
-		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
+		Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	inProgress, err := protoutil.Marshal(&jobs.Progress{
+	inProgress, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
 		FractionCompleted: in.fractionCompleted,
 	})

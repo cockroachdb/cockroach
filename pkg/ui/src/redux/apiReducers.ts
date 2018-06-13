@@ -130,7 +130,7 @@ export const livenessReducerObj = new CachedDataReducer(
 );
 export const refreshLiveness = livenessReducerObj.refresh;
 
-export const jobsKey = (status: string, type: protos.cockroach.sql.jobs.Type, limit: number) =>
+export const jobsKey = (status: string, type: protos.cockroach.sql.jobs.jobspb.Type, limit: number) =>
   `${encodeURIComponent(status)}/${encodeURIComponent(type.toString())}/${encodeURIComponent(limit.toString())}`;
 
 const jobsRequestKey = (req: api.JobsRequestMessage): string =>

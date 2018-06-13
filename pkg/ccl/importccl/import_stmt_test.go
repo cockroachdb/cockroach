@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -590,7 +591,7 @@ func TestImportCSVStmt(t *testing.T) {
 			}
 			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
 
-			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobspb.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", ")),
 			}); err != nil {
@@ -1074,7 +1075,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}
 	// Fetch the new job ID and lease since we know it's running now.
 	var jobID int64
-	originalLease := &jobs.Progress{}
+	originalLease := &jobspb.Progress{}
 	{
 		var expectedLeaseBytes []byte
 		sqlDB.QueryRow(
@@ -1098,7 +1099,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 
 	// Ensure that partial progress has been recorded
 	partialProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
-	if len(partialProgress.Details.(*jobs.Progress_Import).Import.SpanProgress) == 0 {
+	if len(partialProgress.Details.(*jobspb.Progress_Import).Import.SpanProgress) == 0 {
 		t.Fatal("no partial import progress detected")
 	}
 
@@ -1122,11 +1123,11 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}
 
-	rescheduled := jobutils.GetJobPayload(t, sqlDB, jobID).Details.(*jobs.Payload_Import).Import
+	rescheduled := jobutils.GetJobPayload(t, sqlDB, jobID).Details.(*jobspb.Payload_Import).Import
 
 	// Verify that all write progress coalesced into a single span
 	// encompassing the entire table.
-	spans := rescheduledProgress.Details.(*jobs.Progress_Import).Import.SpanProgress
+	spans := rescheduledProgress.Details.(*jobspb.Progress_Import).Import.SpanProgress
 	if len(spans) != 1 {
 		t.Fatalf("expecting only a single progress span, had %d\n%s", len(spans), spans)
 	}
@@ -1205,7 +1206,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	}
 	// Fetch the new job ID and lease since we know it's running now.
 	var jobID int64
-	originalLease := &jobs.Payload{}
+	originalLease := &jobspb.Payload{}
 	{
 		var expectedLeaseBytes []byte
 		sqlDB.QueryRow(

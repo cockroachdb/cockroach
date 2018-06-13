@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -48,7 +49,7 @@ func WaitForJob(db *gosql.DB, jobID int64) error {
 		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			jobFailedErr = errors.New("job failed")
-			payload := &jobs.Payload{}
+			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
 			}
@@ -129,7 +130,7 @@ func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 
 // VerifySystemJob checks that that job records are created as expected.
 func VerifySystemJob(
-	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
+	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobspb.Type, expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
@@ -169,8 +170,8 @@ func VerifySystemJob(
 }
 
 // GetJobProgress loads the Progress message associated with the job.
-func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Progress {
-	ret := &jobs.Progress{}
+func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
+	ret := &jobspb.Progress{}
 	var buf []byte
 	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
@@ -180,8 +181,8 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Pro
 }
 
 // GetJobPayload loads the Payload message associated with the job.
-func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Payload {
-	ret := &jobs.Payload{}
+func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Payload {
+	ret := &jobspb.Payload{}
 	var buf []byte
 	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {

@@ -23,8 +23,8 @@ import spinner from "assets/spinner.gif";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
-type JobType = protos.cockroach.sql.jobs.Type;
-const jobType = protos.cockroach.sql.jobs.Type;
+type JobType = protos.cockroach.sql.jobs.jobspb.Type;
+const jobType = protos.cockroach.sql.jobs.jobspb.Type;
 
 const JobsRequest = protos.cockroach.server.serverpb.JobsRequest;
 

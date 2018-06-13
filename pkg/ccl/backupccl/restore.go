@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type tableRewriteMap map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite
+type tableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
 
 const (
 	restoreOptIntoDB               = "into_db"
@@ -324,7 +325,7 @@ func allocateTableRewrites(
 				}
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
-				tableRewrites[table.ID] = &jobs.RestoreDetails_TableRewrite{ParentID: parentID}
+				tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: parentID}
 			}
 		}
 		return nil
@@ -350,9 +351,9 @@ func allocateTableRewrites(
 		if err != nil {
 			return nil, err
 		}
-		tableRewrites[db.ID] = &jobs.RestoreDetails_TableRewrite{TableID: newID}
+		tableRewrites[db.ID] = &jobspb.RestoreDetails_TableRewrite{TableID: newID}
 		for _, tableID := range needsNewParentIDs[db.Name] {
-			tableRewrites[tableID] = &jobs.RestoreDetails_TableRewrite{ParentID: newID}
+			tableRewrites[tableID] = &jobspb.RestoreDetails_TableRewrite{ParentID: newID}
 		}
 	}
 
@@ -1020,7 +1021,7 @@ func restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	lowWaterMark := job.Progress().Details.(*jobs.Progress_Restore).Restore.LowWaterMark
+	lowWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.LowWaterMark
 	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
@@ -1035,9 +1036,9 @@ func restore(
 		Job:           job,
 		TotalChunks:   len(importSpans),
 		StartFraction: job.FractionCompleted(),
-		ProgressedFn: func(progressedCtx context.Context, details jobs.ProgressDetails) {
+		ProgressedFn: func(progressedCtx context.Context, details jobspb.ProgressDetails) {
 			switch d := details.(type) {
-			case *jobs.Progress_Restore:
+			case *jobspb.Progress_Restore:
 				mu.Lock()
 				if mu.lowWaterMark >= 0 {
 					d.Restore.LowWaterMark = importSpans[mu.lowWaterMark].Key
@@ -1330,14 +1331,14 @@ func doRestorePlan(
 			}
 			return sqlDescIDs
 		}(),
-		Details: jobs.RestoreDetails{
+		Details: jobspb.RestoreDetails{
 			EndTime:       endTime,
 			TableRewrites: tableRewrites,
 			URIs:          from,
 			TableDescs:    tables,
 			OverrideDB:    opts[restoreOptIntoDB],
 		},
-		Progress: jobs.RestoreProgress{},
+		Progress: jobspb.RestoreProgress{},
 	})
 	if err != nil {
 		return err
@@ -1346,7 +1347,7 @@ func doRestorePlan(
 }
 
 func loadBackupSQLDescs(
-	ctx context.Context, details jobs.RestoreDetails, settings *cluster.Settings,
+	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
 ) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
@@ -1374,7 +1375,7 @@ type restoreResumer struct {
 func (r *restoreResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.RestoreDetails)
+	details := job.Record.Details.(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
 	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
@@ -1405,7 +1406,7 @@ func (r *restoreResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobs.RestoreDetails)
+	details := job.Record.Details.(jobspb.RestoreDetails)
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -1455,8 +1456,8 @@ func (r *restoreResumer) OnTerminal(
 
 var _ jobs.Resumer = &restoreResumer{}
 
-func restoreResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeRestore {
+func restoreResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeRestore {
 		return nil
 	}
 
