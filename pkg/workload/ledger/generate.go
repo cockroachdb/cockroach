@@ -18,6 +18,7 @@ package ledger
 import (
 	"encoding/binary"
 	"hash"
+	"math"
 	"math/rand"
 	"strconv"
 
@@ -53,6 +54,12 @@ func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
 	}
 }
 
+func (w *ledger) ledgerCustomerSplitRow(splitIdx int) []interface{} {
+	return []interface{}{
+		(splitIdx + 1) * (w.customers / w.splits),
+	}
+}
+
 func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
@@ -71,6 +78,14 @@ func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {
 		randTimestamp(rng), // systimestamp
 		nil,                // reversed_by
 		randResponse(rng),  // response
+	}
+}
+
+func (w *ledger) ledgerTransactionSplitRow(splitIdx int) []interface{} {
+	rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+	u := uuid.FromUint128(uint128.FromInts(rng.Uint64(), rng.Uint64()))
+	return []interface{}{
+		paymentIDPrefix + u.String(),
 	}
 }
 
@@ -109,6 +124,12 @@ func (w *ledger) ledgerEntryInitialRow(rowIdx int) []interface{} {
 	}
 }
 
+func (w *ledger) ledgerEntrySplitRow(splitIdx int) []interface{} {
+	return []interface{}{
+		(splitIdx + 1) * (int(math.MaxInt64) / w.splits),
+	}
+}
+
 func (w *ledger) ledgerSessionInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
@@ -118,6 +139,13 @@ func (w *ledger) ledgerSessionInitialRow(rowIdx int) []interface{} {
 		randTimestamp(rng),   // expiry_timestamp
 		randSessionData(rng), // data
 		randTimestamp(rng),   // last_update
+	}
+}
+
+func (w *ledger) ledgerSessionSplitRow(splitIdx int) []interface{} {
+	rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+	return []interface{}{
+		randSessionID(rng),
 	}
 }
 
