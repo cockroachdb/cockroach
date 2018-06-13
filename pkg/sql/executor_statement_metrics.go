@@ -88,6 +88,7 @@ func (EngineMetrics) MetricStruct() {}
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
+	plan planTop,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	rowsAffected int,
@@ -135,7 +136,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt, distSQLUsed, automaticRetryCount, rowsAffected, err,
+		stmt, plan, distSQLUsed, automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 

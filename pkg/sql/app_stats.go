@@ -91,8 +91,13 @@ func (s stmtKey) flags() string {
 	return b.String()
 }
 
+// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
+// we save the plan again.
+const saveFingerprintPlanOnceEvery = 1000
+
 func (a *appStats) recordStatement(
 	stmt Statement,
+	plan planTop,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	numRows int,
@@ -133,6 +138,9 @@ func (a *appStats) recordStatement(
 	s.data.Count++
 	if err != nil {
 		s.data.SensitiveInfo.LastErr = err.Error()
+	}
+	if s.data.Count%saveFingerprintPlanOnceEvery == 1 {
+		s.data.SensitiveInfo.MostRecentPlan = *getPlanTree(context.Background(), plan)
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
