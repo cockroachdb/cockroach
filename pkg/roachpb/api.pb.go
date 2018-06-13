@@ -117,6 +117,7 @@
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
+		PlanNode
 		Span
 		Value
 		KeyValue

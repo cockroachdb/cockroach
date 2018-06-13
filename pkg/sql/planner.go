@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -580,6 +581,7 @@ type sqlStatsCollector interface {
 	// RecordStatement record stats for one statement.
 	RecordStatement(
 		stmt Statement,
+		plan *roachpb.PlanNode,
 		distSQLUsed bool,
 		optUsed bool,
 		automaticRetryCount int,

@@ -694,8 +694,11 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 
-		var flags planFlags
 		shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+		copiedPlan := ex.sampleLogicalPlan(
+			stmt, shouldUseDistSQL, false /* optimizerUsed */, planner)
+
+		var flags planFlags
 		if shouldUseDistSQL {
 			if distributePlan {
 				flags.Set(planFlagDistributed)
@@ -712,7 +715,7 @@ func (ex *connExecutor) execStmtInParallel(
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 		ex.recordStatementSummary(
-			planner, stmt, flags, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, copiedPlan, flags, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -836,6 +839,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.mu.Unlock()
 
 	shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+	copiedPlan := ex.sampleLogicalPlan(stmt, shouldUseDistSQL, flags.IsSet(planFlagOptUsed), planner)
 
 	if shouldUseDistSQL {
 		if distributePlan {
@@ -855,7 +859,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return err
 	}
 	ex.recordStatementSummary(
-		planner, stmt, flags,
+		planner, stmt, copiedPlan, flags,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
 		&ex.server.EngineMetrics,
 	)
@@ -864,6 +868,36 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	return nil
+}
+
+// sampleLogicalPlan returns a serialized representation of a statement's logical plan.
+// The returned PlanNode will be nil if plan should not be sampled.
+func (ex *connExecutor) sampleLogicalPlan(
+	stmt Statement, useDistSQL bool, optimizerUsed bool, planner *planner,
+) *roachpb.PlanNode {
+	if !sampleLogicalPlans.Get(&ex.appStats.st.SV) {
+		return nil
+	}
+
+	if ex.saveLogicalPlan(stmt, useDistSQL, optimizerUsed) {
+		return planToTree(context.Background(), planner.curPlan)
+	}
+	return nil
+}
+
+// saveLogicalPlan returns if we should save this as a sample logical plan
+// for its corresponding fingerprint. We use `saveFingerprintPlanOnceEvery`
+// to assess how frequently to sample logical plans.
+func (ex *connExecutor) saveLogicalPlan(stmt Statement, useDistSQL bool, optimizerUsed bool) bool {
+	stats := ex.appStats.getStatsForStmt(stmt, useDistSQL, optimizerUsed, nil, false /* createIfNonexistent */)
+	if stats == nil {
+		// Save logical plan the first time we see new statement fingerprint.
+		return true
+	}
+	stats.Lock()
+	defer stats.Unlock()
+
+	return stats.data.Count%saveFingerprintPlanOnceEvery == 0
 }
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner

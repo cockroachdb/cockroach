@@ -79,6 +79,12 @@ var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	false,
 )
 
+var sampleLogicalPlans = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.sample_logical_plans",
+	"periodically save a logical plan for each fingerprint",
+	true,
+)
+
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
 }
@@ -97,8 +103,13 @@ func (s stmtKey) flags() string {
 	return b.String()
 }
 
+// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
+// we save the plan again.
+const saveFingerprintPlanOnceEvery = 1000
+
 func (a *appStats) recordStatement(
 	stmt Statement,
+	plan *roachpb.PlanNode,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
@@ -122,6 +133,9 @@ func (a *appStats) recordStatement(
 	s.data.Count++
 	if err != nil {
 		s.data.SensitiveInfo.LastErr = err.Error()
+	}
+	if plan != nil {
+		s.data.SensitiveInfo.MostRecentPlan = *plan
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++

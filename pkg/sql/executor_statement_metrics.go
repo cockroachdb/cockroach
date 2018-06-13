@@ -17,6 +17,7 @@ package sql
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -96,6 +97,7 @@ func (EngineMetrics) MetricStruct() {}
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
+	plan *roachpb.PlanNode,
 	planFlags planFlags,
 	automaticRetryCount int,
 	rowsAffected int,
@@ -153,7 +155,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt,
+		stmt, plan,
 		planFlags.IsSet(planFlagDistributed), planFlags.IsSet(planFlagOptUsed),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
