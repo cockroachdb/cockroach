@@ -1,12 +1,12 @@
 import { assert } from "chai";
 
 import {
-  flatten, layoutTree, sumValuesUnderPaths, TreePath, LayoutNode,
+  flatten, layoutTreeHorizontal, sumValuesUnderPaths, TreePath, LayoutCell,
 } from "./tree";
 
 describe("tree", () => {
 
-  describe("layoutTree", () => {
+  describe("layoutTreeHorizontal", () => {
 
     it("lays out a simple tree", () => {
       const tree = {
@@ -19,14 +19,14 @@ describe("tree", () => {
 
       // |   a   |
       // | b | c |
-      const expectedLayout: LayoutNode<string>[][] = [
+      const expectedLayout: LayoutCell<string>[][] = [
         [ { width: 2, data: "a", path: [], isCollapsed: false, isPlaceholder: false, isLeaf: false } ],
         [
           { width: 1, path: ["b"], data: "b", isCollapsed: false, isPlaceholder: false, isLeaf: true },
           { width: 1, path: ["c"], data: "c", isCollapsed: false, isPlaceholder: false, isLeaf: true },
         ],
       ];
-      assert.deepEqual(layoutTree(tree, []), expectedLayout);
+      assert.deepEqual(layoutTreeHorizontal(tree, []), expectedLayout);
     });
 
     it("lays out a tree of inconsistent depth, inserting a placeholder", () => {
@@ -57,7 +57,7 @@ describe("tree", () => {
           { width: 1, path: ["c", "e"], data: "e", isCollapsed: false, isPlaceholder: false, isLeaf: true },
         ],
       ];
-      const actualLayout = layoutTree(tree, []);
+      const actualLayout = layoutTreeHorizontal(tree, []);
       assert.deepEqual(actualLayout, expectedLayout);
     });
 
@@ -96,7 +96,7 @@ describe("tree", () => {
           { width: 1, path: ["e", "g"], data: "g", isCollapsed: false, isPlaceholder: false, isLeaf: true },
         ],
       ];
-      const actualLayout = layoutTree(tree, []);
+      const actualLayout = layoutTreeHorizontal(tree, []);
       assert.deepEqual(actualLayout, expectedLayout);
 
       // Collapse e:
@@ -113,19 +113,19 @@ describe("tree", () => {
           { width: 1, path: ["e"], data: "e", isCollapsed: false, isPlaceholder: true, isLeaf: false },
         ],
       ];
-      const actualLayoutCollapseE = layoutTree(tree, [["e"]]);
+      const actualLayoutCollapseE = layoutTreeHorizontal(tree, [["e"]]);
       assert.deepEqual(actualLayoutCollapseE, expectedLayoutCollapseE);
 
       // Collapse e and b:
       // |     a     |
       // |  b  |  e  |
-      const expectedLayoutCollapseBE: LayoutNode<string>[][] = [
+      const expectedLayoutCollapseBE: LayoutCell<string>[][] = [
         [ { width: 2, data: "a", path: [], isCollapsed: false, isPlaceholder: false, isLeaf: false } ],
         [ { width: 1, path: ["b"], data: "b", isCollapsed: true, isPlaceholder: false, isLeaf: false },
           { width: 1, path: ["e"], data: "e", isCollapsed: true, isPlaceholder: false, isLeaf: false },
         ],
       ];
-      const actualLayoutCollapseBE = layoutTree(tree, [["b"], ["e"]]);
+      const actualLayoutCollapseBE = layoutTreeHorizontal(tree, [["b"], ["e"]]);
       assert.deepEqual(actualLayoutCollapseBE, expectedLayoutCollapseBE);
 
     });

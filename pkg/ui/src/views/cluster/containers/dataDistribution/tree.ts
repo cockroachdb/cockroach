@@ -12,7 +12,24 @@ export function isLeaf<T>(t: TreeNode<T>): boolean {
   return !_.has(t, "children");
 }
 
-export interface LayoutNode<T> {
+/**
+ * A Layout is a 2d (row, column) array of LayoutCells, for rendering
+ * a tree to the screen horizontally.
+ *
+ * E.g. the layout intended to be rendered as
+ *
+ *   |   a   |
+ *   | b | c |
+ *
+ * Is represented as:
+ *
+ *    [ [             <LayoutCell for a>         ],
+ *     [ <LayoutCell for b>, <LayoutCell for c> ] ]
+ *
+ */
+export type Layout<T> = LayoutCell<T>[][];
+
+export interface LayoutCell<T> {
   width: number;
   path: TreePath;
   isCollapsed: boolean;
@@ -22,7 +39,7 @@ export interface LayoutNode<T> {
 }
 
 /**
- * layoutTree turns a tree into a tabular, horizontal layout.
+ * layoutTreeHorizontal turns a tree into a tabular, horizontal layout.
  * For instance, the tree
  *
  *   a/
@@ -33,11 +50,6 @@ export interface LayoutNode<T> {
  *
  *   |   a   |
  *   | b | c |
- *
- * The layout is returned as a 2d array of LayoutNodes:
- *
- *   [ [             <LayoutNode for a>         ],
- *     [ <LayoutNode for b>, <LayoutNode for c> ] ]
  *
  * If the tree is of uneven depth, leaf nodes are pushed to the bottom and placeholder elements
  * are returned to maintain the rectangularity of the table.
@@ -56,10 +68,10 @@ export interface LayoutNode<T> {
  *   |   b   | <P> |
  *   | c | d |  e  |
  *
- * Where <P> is a LayoutNode with `isPlaceholder: true`.
+ * Where <P> is a LayoutCell with `isPlaceholder: true`.
  *
  * Further, if part of the tree is collapsed (specified by the `collapsedPaths` argument), its
- * LayoutNodes are returned with `isCollapsed: true`, and placeholders are returned to maintain
+ * LayoutCells are returned with `isCollapsed: true`, and placeholders are returned to maintain
  * rectangularity.
  *
  * The tree
@@ -84,74 +96,62 @@ export interface LayoutNode<T> {
  *   |   b   |  e  |
  *   | c | d | <P> |
  *
- * Where <P> is a LayoutNode with `isPlaceholder: true` and e is a LayoutNode with
+ * Where <P> is a LayoutCell with `isPlaceholder: true` and e is a LayoutCell with
  * `isCollapsed: true`.
  *
  */
-export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): LayoutNode<T>[][] {
-  const depth = getDepth(root);
-  function recur(node: TreeNode<T>, pathToThis: TreePath): LayoutNode<T>[][] {
-    const depthUnderThis = depth - pathToThis.length;
-    const placeholderRows = _.range(depthUnderThis).reverse().map(() => (
-      [
-        {
+export function layoutTreeHorizontal<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): Layout<T> {
+  const height = expandedHeight(root, collapsedPaths);
+  function recur(node: TreeNode<T>, pathToThis: TreePath): Layout<T> {
+    const heightUnderThis = height - pathToThis.length;
+
+    const placeholdersLayout: Layout<T> = repeat(heightUnderThis, [{
+      width: 1,
+      path: pathToThis,
+      data: node.data,
+      isPlaceholder: true,
+      isCollapsed: false,
+      isLeaf: false,
+    }]);
+
+    // Put placeholders above this cell if it's a leaf.
+    if (isLeaf(node)) {
+      return verticalConcatLayouts([
+        placeholdersLayout,
+        layoutFromCell({
           width: 1,
           path: pathToThis,
           data: node.data,
-          isPlaceholder: true,
+          isPlaceholder: false,
           isCollapsed: false,
-          isLeaf: false,
-        },
-      ]
-    ));
-
-    if (isLeaf(node)) {
-      return [
-        ...placeholderRows,
-        [
-          {
-            width: 1,
-            path: pathToThis,
-            data: node.data,
-            isPlaceholder: false,
-            isCollapsed: false,
-            isLeaf: true,
-          },
-        ],
-      ];
+          isLeaf: true,
+        }),
+      ]);
     }
 
+    // Put placeholders below this if it's a collapsed internal node.
     const isCollapsed = deepIncludes(collapsedPaths, pathToThis);
     if (isCollapsed) {
-      return [
-        [
-          {
-            width: 1,
-            path: pathToThis,
-            data: node.data,
-            isPlaceholder: false,
-            isCollapsed: true,
-            isLeaf: false,
-          },
-        ],
-        ...placeholderRows,
-      ];
+      return verticalConcatLayouts([
+        layoutFromCell({
+          width: 1,
+          path: pathToThis,
+          data: node.data,
+          isPlaceholder: false,
+          isCollapsed: true,
+          isLeaf: false,
+        }),
+        placeholdersLayout,
+      ]);
     }
 
     const childLayouts = node.children.map((childNode) => (
       recur(childNode, [...pathToThis, childNode.name])
     ));
-    const transposedChildLayouts = _.range(depth).map(() => ([]));
 
-    _.forEach(childLayouts, (childLayout) => {
-      _.forEach(childLayout, (row, rowIdx) => {
-        _.forEach(row, (col) => {
-          transposedChildLayouts[rowIdx].push(col);
-        });
-      });
-    });
+    const childrenLayout = horizontalConcatLayouts(childLayouts);
 
-    const currentNode = {
+    const currentCell = {
       width: _.sumBy(childLayouts, (cl) => cl[0][0].width),
       data: node.data,
       path: pathToThis,
@@ -160,26 +160,71 @@ export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): La
       isLeaf: false,
     };
 
-    return [
-      [ currentNode ],
-      ...transposedChildLayouts,
-    ];
+    return verticalConcatLayouts([
+      layoutFromCell(currentCell),
+      childrenLayout,
+    ]);
   }
 
-  const recurRes = recur(root, []);
-  return removePlaceholdersFromEnd(recurRes);
+  return recur(root, []);
 }
 
-function removePlaceholdersFromEnd<T>(arr: LayoutNode<T>[][]): LayoutNode<T>[][] {
-  const output: LayoutNode<T>[][] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const row = arr[i];
-    if (row.every((cell) => cell.isPlaceholder)) {
-      return output;
-    }
-    output.push(row);
+/**
+ * horizontalConcatLayouts takes an array of layouts and returns
+ * a new layout composed of its inputs laid out side by side.
+ *
+ * E.g.
+ *
+ *   horizontalConcatLayouts([ |   a   |  |   d   |
+ *                             | b | c |, | e | f | ])
+ *
+ * yields
+ *
+ *   |   a   |   d   |
+ *   | b | c | e | f |
+ */
+function horizontalConcatLayouts<T>(layouts: Layout<T>[]): Layout<T> {
+  if (layouts.length === 0) {
+    return [];
   }
+  const output = _.range(layouts[0].length).map(() => ([]));
+
+  _.forEach(layouts, (childLayout) => {
+    _.forEach(childLayout, (row, rowIdx) => {
+      _.forEach(row, (col) => {
+        output[rowIdx].push(col);
+      });
+    });
+  });
+
   return output;
+}
+
+/**
+ * verticalConcatLayouts takes an array of layouts and returns
+ * a new layout composed of its inptus laid out vertically.
+ *
+ * E.g.
+ *
+ *   verticalConcatLayouts([ |   a   |  |   d   |
+ *                           | b | c |, | e | f | ])
+ *
+ * yields
+ *
+ *   |   a   |
+ *   | b | c |
+ *   |   d   |
+ *   | e | f |
+ */
+function verticalConcatLayouts<T>(layouts: Layout<T>[]): Layout<T> {
+  const output: Layout<T> = [];
+  return _.concat(output, ...layouts);
+}
+
+function layoutFromCell<T>(cell: LayoutCell<T>): Layout<T> {
+  return [
+    [cell],
+  ];
 }
 
 export interface FlattenedNode<T> {
@@ -317,8 +362,21 @@ function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath)
   recur(root, []);
 }
 
-function getDepth<T>(root: TreeNode<T>): number {
-  return _.max(getLeafPaths(root).map((p) => p.length));
+/**
+ * expandedHeight returns the height of the "uncollapsed" part of the tree,
+ * i.e. the height of the tree where collapsed internal nodes count as leaf nodes.
+ */
+function expandedHeight<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): number {
+  let maxHeight = 0;
+  visitNodes(root, (_node, path) => {
+    const depth = path.length;
+    if (depth > maxHeight) {
+      maxHeight = depth;
+    }
+    const nodeCollapsed = deepIncludes(collapsedPaths, path);
+    return !nodeCollapsed; // Only continue the traversal if the node is expanded.
+  });
+  return maxHeight;
 }
 
 /**
@@ -351,13 +409,6 @@ function getLeafPathsUnderPath<T>(root: TreeNode<T>, path: TreePath): TreePath[]
     return true;
   });
   return output;
-}
-
-/**
- * getLeafPaths returns paths to all leaves under `root`.
- */
-function getLeafPaths<T>(root: TreeNode<T>): TreePath[] {
-  return getLeafPathsUnderPath(root, []);
 }
 
 /**
@@ -432,4 +483,16 @@ export function sumValuesUnderPaths<R, C>(
  */
 export function deepIncludes<T>(array: T[], val: T): boolean {
   return _.some(array, (v) => _.isEqual(val, v));
+}
+
+/**
+ * repeat returns an array with the given element repeated `times`
+ * times. Sadly, `_.repeat` only works for strings.
+ */
+function repeat<T>(times: number, item: T): T[] {
+  const output: T[] = [];
+  for (let i = 0; i < times; i++) {
+    output.push(item);
+  }
+  return output;
 }

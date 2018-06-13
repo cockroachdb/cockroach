@@ -5,10 +5,10 @@ import classNames from "classnames";
 import {
   TreeNode,
   TreePath,
-  layoutTree,
+  layoutTreeHorizontal,
   flatten,
   sumValuesUnderPaths,
-  LayoutNode,
+  LayoutCell,
   FlattenedNode,
 } from "./tree";
 import { cockroach } from "src/js/protos";
@@ -69,7 +69,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     });
   }
 
-  colLabel(col: LayoutNode<NodeDescriptor$Properties>): string {
+  colLabel(col: LayoutCell<NodeDescriptor$Properties>): string {
     if (col.isPlaceholder) {
       return null;
     }
@@ -106,7 +106,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     } = this.state;
 
     const flattenedRows = flatten(rows, collapsedRows, true /* includeNodes */);
-    const headerRows = layoutTree(cols, collapsedCols);
+    const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
 
     return (
