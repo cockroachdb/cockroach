@@ -1613,7 +1613,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []string) error {
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.Columns {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1633,7 +1633,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *TableDescriptor, indexColNames
 	}
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.Columns {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)

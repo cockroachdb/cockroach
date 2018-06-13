@@ -694,6 +694,30 @@ decomputed_column  CREATE TABLE decomputed_column (
                    FAMILY "primary" (a, b)
 )
 
+# Test for https://github.com/cockroachdb/cockroach/issues/26483
+# We try to create a unique column on an un-indexable type.
+statement ok
+CREATE TABLE b26483()
+
+statement error unimplemented: column c is of type ARRAY and thus is not indexable
+ALTER TABLE b26483 ADD COLUMN c INT[] UNIQUE
+
+# As above, but performed in a transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE b26483_tx()
+
+statement ok
+ALTER TABLE b26483_tx ADD COLUMN c INT[]
+
+statement error unimplemented: column c is of type ARRAY and thus is not indexable
+CREATE INDEX on b26483_tx (c)
+
+statement ok
+ROLLBACK
+
 # Verify that auditing can be enabled by root, and cannot be disabled by non-root.
 
 statement ok
