@@ -1,0 +1,82 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fluentd-config
+  namespace: kube-system
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+  containers.input.conf: |-
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /var/log/containers.log.pos
+      # Tags at this point are in the format of:
+      # reform.var.log.containers.<POD_NAME>_<NAMESPACE_NAME>_<CONTAINER_NAME>-<CONTAINER_ID>.log
+      tag reform.*
+      read_from_head true
+      format multi_format
+      <pattern>
+        format json
+        time_key time
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </pattern>
+      <pattern>
+        format /^(?<time>.+) (?<stream>stdout|stderr) [^ ]* (?<log>.*)$/
+        time_format %Y-%m-%dT%H:%M:%S.%N%:z
+      </pattern>
+    </source>
+
+    <filter reform.**>
+      @type parser
+      format /^(?<severity>\w)(?<time>\d{4} [^\s]*)\s+(?<pid>\d+)\s+(?<source>[^ \]]+)\] (?<log>.*)/
+      reserve_data true
+      suppress_parse_error_log true
+      emit_invalid_record_to_error false
+      key_name log
+    </filter>
+
+    <filter reform.**>
+      @type parser
+      key_name log
+      reserve_data true
+      suppress_parse_error_log true
+      emit_invalid_record_to_error false
+      format multi_format
+      <pattern>
+        # CockroachDB log format
+        format /^(?<severity>\w{1})(?<time>\d{6}\s\d{2}:\d{2}:\d{2})\.\d{6}\s*(?<log>.*)/
+        time_key time
+        time_format %y%m%d %H:%M:%S
+      </pattern>
+    </filter>
+
+    <match reform.var.log.containers.cockroachdb**>
+      @type record_reformer
+      enable_ruby true
+      tag parsed.${tag_suffix[1]}
+      <record>
+        severity ${ if (record["severity"] == "E") then "error" elsif (record["severity"] == "W") then "warning" elsif (record["severity"] == "I") then "info" elsif (record["severity"] == "D") then "debug" else record["severity"] end}
+      </record>
+    </match>
+
+    <match reform.**>
+      @type record_reformer
+      enable_ruby true
+      tag parsed.${tag_suffix[1]}
+    </match>
+
+    <match parsed.**>
+      @type record_reformer
+      enable_ruby true
+      # Tags at this point are in the format of:
+      # 'raw.kubernetes.<POD_NAME>_<NAMESPACE_NAME>_<CONTAINER_NAME>'.
+      tag raw.kubernetes.${tag_suffix[4].split('-')[0..-2].join('-')}
+    </match>
+
+    <match raw.kubernetes.**>
+      #########
+      # NOTE: You must replace this with your log inject pipeline
+      #########
+      type stdout
+    </match>
