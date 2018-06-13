@@ -10,7 +10,8 @@ const keywords = {
   update: /^update\s+(\S+)/i,
   select: /^select.+from\s+(\S+)/i,
   insert: /^insert\s+into\s+([^ \t(]+)/i,
-  delete: /^delete\s+from\s+(\S+)/i
+  delete: /^delete\s+from\s+(\S+)/i,
+  create: /^create\s+table\s+(\S+)/i,
 };
 
 // summarize takes a string SQL statement and produces a structured summary
