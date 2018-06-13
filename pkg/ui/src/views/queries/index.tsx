@@ -1,3 +1,4 @@
+import d3 from "d3";
 import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
@@ -54,29 +55,55 @@ function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
-const QUERIES_COLUMNS: ColumnDescriptor<CollectedStatementStatistics$Properties>[] = [
-  {
-    title: "Query",
-    className: "queries-table__col-query-text",
-    cell: (query) => <StatementLink statement={ query.key.query } />,
-    sort: (query) => query.key.query,
-  },
-  {
-    title: "Count",
-    cell: (query) => FixLong(query.stats.count).toInt(),
-    sort: (query) => FixLong(query.stats.count).toInt(),
-  },
-  {
-    title: "Avg Rows",
-    cell: (query) => Math.round(query.stats.num_rows.mean),
-    sort: (query) => query.stats.num_rows.mean,
-  },
-  {
-    title: "Avg Latency",
-    cell: (query) => Duration(query.stats.service_lat.mean * 1e9),
-    sort: (query) => query.stats.service_lat.mean,
-  },
-];
+function makeQueriesColumns(queries: CollectedStatementStatistics$Properties[])
+    : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
+  const countBar = makeBarChart(queries, d => FixLong(d.stats.count).toInt());
+  const rowsBar = makeBarChart(queries, d => d.stats.num_rows.mean, v => Math.round(v));
+  const latencyBar = makeBarChart(queries, d => d.stats.service_lat.mean, v => Duration(v * 1e9));
+
+  return [
+    {
+      title: "Query",
+      className: "queries-table__col-query-text",
+      cell: (query) => <StatementLink statement={ query.key.query } />,
+      sort: (query) => query.key.query,
+    },
+    {
+      title: "Count",
+      cell: countBar,
+      sort: (query) => FixLong(query.stats.count).toInt(),
+    },
+    {
+      title: "Avg Rows",
+      cell: rowsBar,
+      sort: (query) => query.stats.num_rows.mean,
+    },
+    {
+      title: "Avg Latency",
+      cell: latencyBar,
+      sort: (query) => query.stats.service_lat.mean,
+    },
+  ];
+}
+
+function makeBarChart<T, D>(rows: []T, accessor: (T) => D, formatter: (D) => string = (x: any) => `${x}`) {
+  const extent = d3.extent(rows, accessor);
+
+  const scale = d3.scale.linear()
+    .domain(extent)
+    .range([0, 100]);
+
+  return function renderBarChart(d) {
+    const v = accessor(d);
+
+    return (
+      <div className="bar-chart">
+        <div className="label">{ formatter(v) }</div>
+        <div className="full" style={{ width: scale(v) + "%" }} />
+      </div>
+    );
+  };
+}
 
 class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
 
@@ -122,7 +149,7 @@ class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
         <QueriesSortedTable
           className="queries-table"
           data={queries}
-          columns={QUERIES_COLUMNS}
+          columns={makeQueriesColumns(queries)}
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
