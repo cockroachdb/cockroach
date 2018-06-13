@@ -38,6 +38,7 @@ type ledger struct {
 	interleaved   bool
 	inlineArgs    bool
 	splits        int
+	fks           bool
 	mix           string
 
 	txs  []tx
@@ -66,6 +67,7 @@ var ledgerMeta = workload.Meta{
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.StringVar(&g.mix, `mix`,
 			`balance=50,withdrawal=37,deposit=12,reversal=0`,
 			`Weights for the transaction mix.`)
@@ -87,6 +89,20 @@ func (w *ledger) Hooks() workload.Hooks {
 				return errors.Errorf("interleaved tables are not yet supported")
 			}
 			return initializeMix(w)
+		},
+		PostLoad: func(sqlDB *gosql.DB) error {
+			if w.fks {
+				fkStmts := []string{
+					`alter table entry add foreign key (customer_id) references customer (id)`,
+					`alter table entry add foreign key (transaction_id) references transaction (external_id)`,
+				}
+				for _, fkStmt := range fkStmts {
+					if _, err := sqlDB.Exec(fkStmt); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		},
 	}
 }

@@ -44,8 +44,8 @@ const (
 	ledgerEntrySchema = `(
 		id             INT           NOT NULL PRIMARY KEY DEFAULT unique_rowid(),
 		amount         DECIMAL(20,3)     NULL,
-		customer_id    INT               NULL REFERENCES customer,
-		transaction_id STRING(255)   NOT NULL REFERENCES transaction,
+		customer_id    INT               NULL,
+		transaction_id STRING(255)   NOT NULL,
 		system_amount  DECIMAL(24,7)     NULL,
 		created_ts     TIMESTAMP     NOT NULL,
 		money_type     STRING(1)     NOT NULL
