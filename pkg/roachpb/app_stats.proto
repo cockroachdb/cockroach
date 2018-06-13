@@ -45,11 +45,12 @@ message StatementStatistics {
   // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 max_retries = 3 [(gogoproto.nullable) = false];
 
-  // LastErr collects the last error encountered.
-  optional string last_err = 4 [(gogoproto.nullable) = false];
+  // DEPRECATED: LastErr collects the last error encountered.
+  // Use sensitive_info.last_err instead.
+  optional string legacy_last_err = 4 [(gogoproto.nullable) = false];
 
-  // LastErrRedacted collects the last error, redacted for reporting.
-  optional string last_err_redacted = 11 [(gogoproto.nullable) = false];
+  // DEPRECATED: LastErrRedacted collects the last error, redacted for reporting.
+  optional string legacy_last_err_redacted = 11 [(gogoproto.nullable) = false];
 
   // NumRows collects the number of rows returned or observed.
   optional NumericStat num_rows = 5 [(gogoproto.nullable) = false];
@@ -73,7 +74,17 @@ message StatementStatistics {
   // variance for the overhead cannot be derived from the variance of the separate latencies.
   optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
 
+  // SensitiveInfo is info that needs to be scrubbed or redacted before being
+  // sent to the reg cluster.
+  optional SensitiveInfo sensitive_info = 12 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
+}
+
+message SensitiveInfo {
+  // LastErr collects the last error encountered.
+  // It is only reported once it's been redacted.
+  optional string last_err = 1 [(gogoproto.nullable) = false];
 }
 
 message NumericStat {
