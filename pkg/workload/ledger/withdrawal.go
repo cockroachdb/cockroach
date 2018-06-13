@@ -60,10 +60,8 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				return err
 			}
 
-			cIDs := [4]int{
+			cIDs := [2]int{
 				cID,
-				randInt(rng, 0, config.customers-1),
-				randInt(rng, 0, config.customers-1),
 				randInt(rng, 0, config.customers-1),
 			}
 			if err := insertEntries(config, tx, rng, cIDs, tID); err != nil {
