@@ -67,6 +67,10 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
+		if tab.Index(i).IsInverted() {
+			// Ignore inverted indexes for now.
+			continue
+		}
 		indexCols := md.IndexColumns(scanOpDef.Table, i)
 
 		// If the alternate index includes the set of needed columns (def.Cols),
