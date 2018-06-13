@@ -222,6 +222,8 @@ type tableUpserter struct {
 	conflictIndex sqlbase.IndexDescriptor
 	anyComputed   bool
 
+	evalCtx *tree.EvalContext
+
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	evaler *upsertHelper
 
@@ -242,6 +244,8 @@ type tableUpserter struct {
 // init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
+
+	tu.evalCtx = evalCtx
 
 	err := tu.tableUpserterBase.init(txn, evalCtx)
 	if err != nil {
@@ -475,6 +479,7 @@ func (tu *tableUpserter) updateConflictingRow(
 ) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
 	// First compute all the updates via SET (or the pseudo-SET generated
 	// for UPSERT statements).
+
 	updateValues, err := tu.evaler.eval(insertRow, conflictingRowValues, tu.updateValues)
 	if err != nil {
 		return nil, nil, err
@@ -503,6 +508,17 @@ func (tu *tableUpserter) updateConflictingRow(
 		// of updateValues.
 		updateValues, err = tu.evaler.evalComputedCols(newValues, updateValues)
 		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// check CHECK constraints
+	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
+	if len(checkHelper.Exprs) > 0 {
+		if err := checkHelper.LoadRow(tu.updateColIDtoRowIndex, updateValues, false); err != nil {
+			return nil, nil, err
+		}
+		if err := checkHelper.Check(tu.evalCtx); err != nil {
 			return nil, nil, err
 		}
 	}
