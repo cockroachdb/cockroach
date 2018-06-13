@@ -14,6 +14,7 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
+import { summarize, StatementSummary } from "src/util/sql/summarize";
 
 import * as protos from "src/js/protos";
 import "./queries.styl";
@@ -31,11 +32,29 @@ interface QueriesPageState {
   sortSetting: SortSetting;
 }
 
+function StatementSummary(props: { query: string }) {
+  const summary = summarize(props.query);
+
+  return (
+    <div title={ props.query }>{ shortStatement(summary, props.query) }</div>
+  );
+}
+
+function shortStatement(summary: StatementSummary, original: string) {
+  switch (summary.statement) {
+    case "update": return "UPDATE " + summary.table;
+    case "insert": return "INSERT INTO " + summary.table;
+    case "select": return "SELECT FROM " + summary.table;
+    case "delete": return "DELETE FROM " + summary.table;
+    default: return original;
+  }
+}
+
 const QUERIES_COLUMNS: ColumnDescriptor<CollectedStatementStatistics$Properties>[] = [
   {
     title: "Query",
     className: "queries-table__col-query-text",
-    cell: (query) => query.key.query,
+    cell: (query) => <StatementSummary query={ query.key.query } />,
     sort: (query) => query.key.query,
   },
   {
