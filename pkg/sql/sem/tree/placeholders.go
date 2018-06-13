@@ -158,16 +158,18 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
-	t, ok := p.Types[name]
-	if ok && !typ.Equivalent(t) {
+	if t, ok := p.Types[name]; ok {
 		// If we already have a *value* for this expression, then we're good to go.
 		// This can happen when we're running statements with placeholders from the
 		// internal executor, which directly assigns placeholder values and types.
 		// If the directly-assigned placeholder value is null, then the type
 		// assigned will be NULL. We should set it properly rather than fail.
-		if _, ok := p.Value(name); !ok {
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
+		if !typ.Equivalent(t) {
+			return pgerror.NewErrorf(
+				pgerror.CodeDatatypeMismatchError,
+				"placeholder %s already has type %s, cannot assign %s", name, t, typ)
 		}
+		return nil
 	}
 	p.Types[name] = typ
 	if _, ok := p.TypeHints[name]; !ok {
