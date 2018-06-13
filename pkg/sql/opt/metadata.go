@@ -200,8 +200,11 @@ func (md *Metadata) TableWeakKeys(tabID TableID) WeakKeys {
 	if mdTab.weakKeys == nil {
 		mdTab.weakKeys = make(WeakKeys, 0, mdTab.tab.IndexCount())
 		for idx := 0; idx < mdTab.tab.IndexCount(); idx++ {
-			var cs ColSet
 			index := mdTab.tab.Index(idx)
+			if index.IsInverted() {
+				continue
+			}
+			var cs ColSet
 			for col := 0; col < index.UniqueColumnCount(); col++ {
 				cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
 			}

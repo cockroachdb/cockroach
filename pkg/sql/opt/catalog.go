@@ -81,6 +81,9 @@ type Index interface {
 	// IdxName is the name of the index.
 	IdxName() string
 
+	// IsInverted returns true if this is a JSON inverted index.
+	IsInverted() bool
+
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
 	// clause), as well as implicitly added primary key columns.
