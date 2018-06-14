@@ -1521,6 +1521,7 @@ func errIsRetriable(err error) bool {
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
+	ex.server.StatementCounters.FailureCount.Inc(1)
 	retriable := errIsRetriable(err)
 	if retriable {
 		if _, inOpen := ex.machine.CurState().(stateOpen); !inOpen {
@@ -2019,6 +2020,7 @@ type StatementCounters struct {
 	DdlCount         *metric.Counter
 	MiscCount        *metric.Counter
 	QueryCount       *metric.Counter
+	FailureCount     *metric.Counter
 }
 
 func makeStatementCounters() StatementCounters {
@@ -2034,6 +2036,7 @@ func makeStatementCounters() StatementCounters {
 		DdlCount:         metric.NewCounter(MetaDdl),
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
+		FailureCount:     metric.NewCounter(MetaFailure),
 	}
 }
 
