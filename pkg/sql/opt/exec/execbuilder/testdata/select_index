@@ -467,16 +467,14 @@ render     ·         ·          (b)     ·
 ·          table     abcd@abcd  ·       ·
 ·          spans     /1/4-/1/5  ·       ·
 
-# TODO(radu): in this case, we're not preferring abcd, unlike 2.0
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-render     ·         ·                           (b)     ·
- │         render 0  b                           ·       ·
- └── scan  ·         ·                           (a, b)  ·
-·          table     abcd@adb                    ·       ·
-·          spans     /1-/3                       ·       ·
-·          filter    (a, b) IN ((1, 4), (2, 9))  ·       ·
+render     ·         ·                     (b)     ·
+ │         render 0  b                     ·       ·
+ └── scan  ·         ·                     (a, b)  ·
+·          table     abcd@abcd             ·       ·
+·          spans     /1/4-/1/5 /2/9-/2/10  ·       ·
 
 statement ok
 CREATE TABLE ab (
@@ -885,17 +883,9 @@ scan  ·      ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
-render                ·         ·                                                               (x, y)                 ·
- │                    render 0  x                                                               ·                      ·
- │                    render 1  y                                                               ·                      ·
- └── filter           ·         ·                                                               (x, y, rowid[hidden])  ·
-      │               filter    (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))  ·                      ·
-      └── index-join  ·         ·                                                               (x, y, rowid[hidden])  ·
-           ├── scan   ·         ·                                                               (y, rowid[hidden])     ·
-           │          table     xy@xy_y_idx                                                     ·                      ·
-           │          spans     /1-/3                                                           ·                      ·
-           └── scan   ·         ·                                                               (x, y, rowid[hidden])  ·
-·                     table     xy@primary                                                      ·                      ·
+scan  ·      ·          (x, y)  ·
+·     table  xy@xy_idx  ·       ·
+·     spans  /1/1-/1/3  ·       ·
 
 # ------------------------------------------------------------------------------
 # Non-covering index
