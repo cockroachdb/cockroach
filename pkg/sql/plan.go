@@ -780,8 +780,12 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
+	case *tree.ShowTraceForStatement:
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"SHOW TRACE FOR <stmt> is only supported at the top level",
+		).SetHintf("you can use SHOW TRACE FOR SESSION in sub-queries")
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
 	case *tree.ShowUsers:
@@ -901,8 +905,12 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
+	case *tree.ShowTraceForStatement:
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"SHOW TRACE FOR <stmt> is only supported at the top level",
+		).SetHintf("you can use SHOW TRACE FOR SESSION in sub-queries")
 	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)
 	case *tree.ShowTransactionStatus:

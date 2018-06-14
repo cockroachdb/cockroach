@@ -362,7 +362,7 @@ func TestShowTraceAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	query = fmt.Sprintf("select count(1) from [show kv trace for session] "+
+	query = fmt.Sprintf("SELECT count(1) FROM [SHOW KV TRACE FOR SESSION] "+
 		"where message = 'output row: [%d]'", val1)
 	if err := db.QueryRow(query).Scan(&i); err != nil {
 		t.Fatal(err)

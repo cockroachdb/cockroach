@@ -84,6 +84,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
+				"consuming rows",
 				"dist sender",
 				"/cockroach.roachpb.Internal/Batch",
 			},
@@ -148,6 +149,7 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"flow",
 				"table reader",
+				"consuming rows",
 				"dist sender",
 				"/cockroach.roachpb.Internal/Batch",
 			},
@@ -164,14 +166,16 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := sqlDB.Exec("SHOW TRACE FOR SELECT * FROM test.foo"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"starting plan",
 				"consuming rows",
 				"dist sender",
 				"/cockroach.roachpb.Internal/Batch",
@@ -183,8 +187,11 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := sqlDB.Exec("SHOW TRACE FOR SELECT * FROM test.foo"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -192,7 +199,6 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"flow",
 				"table reader",
-				"starting plan",
 				"consuming rows",
 				"dist sender",
 				"/cockroach.roachpb.Internal/Batch",
@@ -214,8 +220,12 @@ func TestTrace(t *testing.T) {
 				// Deleting from a multi-range table will result in a 2PC transaction
 				// and will split the underlying BatchRequest/BatchResponse. Tracing
 				// in the presence of multi-part batches is what we want to test here.
+				if _, err := sqlDB.Exec("SHOW TRACE FOR DELETE FROM test.bar"); err != nil {
+					t.Fatal(err)
+				}
+
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
@@ -325,11 +335,27 @@ func TestTrace(t *testing.T) {
 								if ignoreSpans[op] {
 									continue
 								}
+
+								remainingErr := false
 								if r >= len(test.expSpans) {
-									t.Fatalf("extra span: %s", op)
+									t.Errorf("extra span: %s", op)
+									remainingErr = true
 								}
 								if op != test.expSpans[r] {
-									t.Fatalf("expected span: %q, got: %q", test.expSpans[r], op)
+									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
+									remainingErr = true
+								}
+								if remainingErr {
+									for rows.Next() {
+										if err := rows.Scan(&op); err != nil {
+											t.Fatal(err)
+										}
+										if ignoreSpans[op] {
+											continue
+										}
+										t.Errorf("remaining span: %q", op)
+									}
+									return
 								}
 								r++
 							}
@@ -529,9 +555,12 @@ func TestTraceFromErrorReplica(t *testing.T) {
 	}
 
 	// Query through n4 and look for a redirect log message from n1.
+	if _, err := n4.Exec("SHOW TRACE FOR SELECT * FROM foo"); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := n4.Query(
 		`SELECT tag, message
-			 FROM [SHOW TRACE FOR SELECT * FROM test.foo]
+			 FROM [SHOW TRACE FOR SESSION]
 				WHERE tag LIKE '%n1%' AND
 						 message LIKE '%NotLeaseHolderError%'
 		`)

@@ -2299,12 +2299,13 @@ CREATE TABLE d.t (
 		"u": "fetched: /t/u/1 -> /11/2",
 	} {
 		{
+			if _, err := sqlDB.Exec(fmt.Sprintf(`SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s`, indexName)); err != nil {
+				t.Error(err)
+				continue
+			}
 			rows, err := sqlDB.Query(
-				fmt.Sprintf(
-					`SELECT message FROM [SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s] `+
-						`WHERE message LIKE 'fetched:%%'`,
-					indexName,
-				))
+				`SELECT message FROM [SHOW KV TRACE FOR SESSION] ` +
+					`WHERE message LIKE 'fetched:%'`)
 			if err != nil {
 				t.Error(err)
 				continue

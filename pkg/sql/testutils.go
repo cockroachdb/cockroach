@@ -58,6 +58,7 @@ func CreateTestTableDescriptor(
 func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {
 	return extendedEvalContext{
 		EvalContext: tree.MakeTestingEvalContext(st),
+		Tracing:     &SessionTracing{},
 	}
 }
 

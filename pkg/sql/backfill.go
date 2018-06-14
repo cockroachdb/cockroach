@@ -522,6 +522,7 @@ func (sc *SchemaChanger) distBackfill(
 				func(ts hlc.Timestamp) {
 					_ = sc.clock.Update(ts)
 				},
+				evalCtx.Tracing,
 			)
 			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(

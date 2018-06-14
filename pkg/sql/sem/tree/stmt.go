@@ -685,12 +685,20 @@ func (*ShowDatabases) StatementTag() string { return "SHOW DATABASES" }
 func (*ShowDatabases) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
-func (*ShowTrace) StatementType() StatementType { return Rows }
+func (*ShowTraceForSession) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowTrace) StatementTag() string { return "SHOW TRACE" }
+func (*ShowTraceForSession) StatementTag() string { return "SHOW TRACE FOR SESSION" }
 
-func (*ShowTrace) hiddenFromStats() {}
+func (*ShowTraceForSession) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
+func (*ShowTraceForStatement) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTraceForStatement) StatementTag() string { return "SHOW TRACE" }
+
+func (*ShowTraceForStatement) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*ShowGrants) StatementType() StatementType { return Rows }
@@ -959,7 +967,8 @@ func (n *ShowSessions) String() string              { return AsString(n) }
 func (n *ShowSyntax) String() string                { return AsString(n) }
 func (n *ShowTableStats) String() string            { return AsString(n) }
 func (n *ShowTables) String() string                { return AsString(n) }
-func (n *ShowTrace) String() string                 { return AsString(n) }
+func (n *ShowTraceForSession) String() string       { return AsString(n) }
+func (n *ShowTraceForStatement) String() string     { return AsString(n) }
 func (n *ShowTransactionStatus) String() string     { return AsString(n) }
 func (n *ShowUsers) String() string                 { return AsString(n) }
 func (n *ShowVar) String() string                   { return AsString(n) }

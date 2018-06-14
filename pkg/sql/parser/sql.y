@@ -1020,17 +1020,11 @@ stmt_block:
 stmt_list:
   stmt_list ';' stmt
   {
-    if $3.stmt() != nil {
-      $$.val = append($1.stmts(), $3.stmt())
-    }
+     $$.val = maybeExpandStatement($1.stmts(), $3.stmt())
   }
 | stmt
   {
-    if $1.stmt() != nil {
-      $$.val = []tree.Statement{$1.stmt()}
-    } else {
-      $$.val = []tree.Statement(nil)
-    }
+     $$.val = maybeExpandStatement(nil, $1.stmt())
   }
 
 stmt:
@@ -3017,26 +3011,32 @@ show_jobs_stmt:
 show_trace_stmt:
   SHOW opt_compact TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
+    $$.val = &tree.ShowTraceForSession{TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
   }
 | SHOW opt_compact TRACE error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact KV TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceKV, Compact: $2.bool() }
+    $$.val = &tree.ShowTraceForSession{TraceType: tree.ShowTraceKV, Compact: $2.bool() }
   }
 | SHOW opt_compact KV error // SHOW HELP: SHOW TRACE
+| SHOW opt_compact EXPERIMENTAL_REPLICA TRACE FOR SESSION
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowTraceForSession{TraceType: tree.ShowTraceReplica, Compact: $2.bool() }
+  }
+| SHOW opt_compact EXPERIMENTAL_REPLICA error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
+    $$.val = &tree.ShowTraceForStatement{Statement: $5.stmt(), ShowTraceForSession: &tree.ShowTraceForSession{TraceType: tree.ShowTraceRaw, Compact: $2.bool()}}
   }
 | SHOW opt_compact KV TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $6.stmt(), TraceType: tree.ShowTraceKV, Compact: $2.bool() }
+    $$.val = &tree.ShowTraceForStatement{Statement: $6.stmt(), ShowTraceForSession: &tree.ShowTraceForSession{TraceType: tree.ShowTraceKV, Compact: $2.bool()}}
   }
-| SHOW EXPERIMENTAL_REPLICA TRACE FOR explainable_stmt
+| SHOW opt_compact EXPERIMENTAL_REPLICA TRACE FOR explainable_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceReplica}
+    $$.val = &tree.ShowTraceForStatement{Statement: $6.stmt(), ShowTraceForSession: &tree.ShowTraceForSession{TraceType: tree.ShowTraceReplica, Compact: $2.bool()}}
   }
 
 opt_compact:
