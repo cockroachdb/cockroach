@@ -2019,6 +2019,7 @@ type StatementCounters struct {
 	DdlCount         *metric.Counter
 	MiscCount        *metric.Counter
 	QueryCount       *metric.Counter
+	FailureCount     *metric.Counter
 }
 
 func makeStatementCounters() StatementCounters {
@@ -2034,6 +2035,7 @@ func makeStatementCounters() StatementCounters {
 		DdlCount:         metric.NewCounter(MetaDdl),
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
+		FailureCount:     metric.NewCounter(MetaFailure),
 	}
 }
 
