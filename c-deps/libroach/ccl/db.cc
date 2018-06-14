@@ -64,6 +64,42 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     return rocksdb::Status::OK();
   }
 
+  virtual std::string GetActiveDataKeyID() override {
+    // Look up the current data key.
+    if (data_key_manager_ == nullptr) {
+      // No data key manager: plaintext.
+      return kPlainKeyID;
+    }
+
+    auto active_key_info = data_key_manager_->CurrentKeyInfo();
+    if (active_key_info == nullptr) {
+      // Plaintext.
+      return kPlainKeyID;
+    }
+    return active_key_info->key_id();
+  }
+
+  virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry,
+                                            std::string* id) override {
+    if (entry == nullptr) {
+      *id = kPlainKeyID;
+      return rocksdb::Status::OK();
+    }
+
+    enginepbccl::EncryptionSettings enc_settings;
+    if (!enc_settings.ParseFromString(entry->encryption_settings())) {
+      return rocksdb::Status::InvalidArgument("failed to parse encryption settings");
+    }
+
+    if (enc_settings.key_id() == "") {
+      *id = kPlainKeyID;
+    } else {
+      *id = enc_settings.key_id();
+    }
+
+    return rocksdb::Status::OK();
+  }
+
  private:
   // KeyManagers are needed to get key information but are not owned by the StatsHandler.
   KeyManager* store_key_manager_;

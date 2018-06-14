@@ -26,6 +26,10 @@ class EnvStatsHandler {
   virtual ~EnvStatsHandler() {}
 
   virtual rocksdb::Status GetEncryptionStats(std::string* stats) = 0;
+  // Get the ID of the active data key, or "plain" if none.
+  virtual std::string GetActiveDataKeyID() = 0;
+  // Get the key ID in use by this file, or "plain" if none.
+  virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry, std::string* id) = 0;
 };
 
 // EnvManager manages all created Envs, as well as the file registry.
