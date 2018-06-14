@@ -28,3 +28,14 @@ rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& file
   }
   return status;
 }
+
+std::string PathAppend(const std::string& path1, const std::string& path2) {
+  if (path2.size() == 0) {
+    return path1;
+  }
+  if ((path1.size() > 0 && path1[path1.size() - 1] == '/') || path2[0] == '/') {
+    // Separator is present at end of path1, or beginning of path2).
+    return path1 + path2;
+  }
+  return path1 + '/' + path2;
+}

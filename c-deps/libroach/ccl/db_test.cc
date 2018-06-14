@@ -49,6 +49,10 @@ TEST(LibroachCCL, DBOpen) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.total_files, 0);
+    EXPECT_EQ(stats.total_bytes, 0);
+    EXPECT_EQ(stats.active_files, 0);
+    EXPECT_EQ(stats.active_bytes, 0);
 
     DBClose(db);
   }
@@ -79,6 +83,15 @@ TEST(LibroachCCL, DBOpen) {
         enc_status.ParseFromArray(stats.encryption_status.data, stats.encryption_status.len));
     EXPECT_STREQ(enc_status.active_store_key().key_id().c_str(), "plain");
     EXPECT_STREQ(enc_status.active_data_key().key_id().c_str(), "plain");
+
+    // Make sure the file/bytes stats are non-zero and all marked as using the active key.
+    EXPECT_NE(stats.total_files, 0);
+    EXPECT_NE(stats.total_bytes, 0);
+    EXPECT_NE(stats.active_files, 0);
+    EXPECT_NE(stats.active_bytes, 0);
+
+    EXPECT_EQ(stats.total_files, stats.active_files);
+    EXPECT_EQ(stats.total_bytes, stats.active_bytes);
 
     DBClose(db);
   }
