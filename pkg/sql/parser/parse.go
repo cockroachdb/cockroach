@@ -44,6 +44,36 @@ func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
 	return parseWithDepth(1, sql)
 }
 
+// maybeExpandStatement is responsible for substituting single statements at the top level into
+// zero, one or multiple statements.
+func maybeExpandStatement(list []tree.Statement, stmt tree.Statement) []tree.Statement {
+	if stmt == nil {
+		return list
+	}
+
+	switch s := stmt.(type) {
+	case *tree.ShowTraceForStatement:
+		// A top-level SHOW TRACE FOR ... is syntactic sugar for
+		// SET tracing = ...; <stmt>; SET tracing = off; SHOW TRACE FOR SESSION
+		// Non top-level uses are rejected during planning.
+		tracingOpts := tree.Exprs{tree.NewStrVal("on")}
+		if s.TraceType == tree.ShowTraceKV {
+			tracingOpts = append(tracingOpts, tree.NewStrVal("kv"))
+		}
+		list = append(list,
+			&tree.SetTracing{Values: tracingOpts},
+			s.Statement,
+			&tree.SetTracing{Values: tree.Exprs{tree.NewStrVal("off")}},
+			s.ShowTraceForSession,
+		)
+
+	default:
+		// In the regular case, we just use the statement as-is.
+		list = append(list, stmt)
+	}
+	return list
+}
+
 func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {

@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // showTraceNode is a planNode that processes session trace data; it can
@@ -56,22 +54,8 @@ type showTraceNode struct {
 // ShowTrace shows the current stored session trace, or the trace of a given
 // query.
 // Privileges: None.
-func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
-	// For the SHOW TRACE FOR <query> version, build a plan for the inner
-	// statement.
-	// For the SHOW TRACE FOR SESSION version, stmtPlan stays nil.
-	var stmtPlan planNode
-	var stmtType tree.StatementType
-	if n.Statement != nil {
-		stmtType = n.Statement.StatementType()
-		var err error
-		stmtPlan, err = p.newPlan(ctx, n.Statement, nil)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	node := p.makeShowTraceNode(stmtPlan, stmtType, n.Compact, n.TraceType == tree.ShowTraceKV)
+func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (planNode, error) {
+	node := p.makeShowTraceNode(n.Compact, n.TraceType == tree.ShowTraceKV)
 
 	if n.TraceType == tree.ShowTraceReplica {
 		// Wrap the showTraceNode in a showTraceReplicaNode.
@@ -88,12 +72,8 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, e
 // kvTrancingEnabled: If set, the trace will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
-func (p *planner) makeShowTraceNode(
-	plan planNode, stmtType tree.StatementType, compact bool, kvTracingEnabled bool,
-) *showTraceNode {
+func (p *planner) makeShowTraceNode(compact bool, kvTracingEnabled bool) *showTraceNode {
 	n := &showTraceNode{
-		plan:             plan,
-		stmtType:         stmtType,
 		kvTracingEnabled: kvTracingEnabled,
 		compact:          compact,
 	}
@@ -112,45 +92,16 @@ type traceRun struct {
 
 	resultRows []tree.Datums
 	curRow     int
-
-	// stopTracing is set if this node started tracing on the
-	// session. If it is set, then Close() must call it.
-	stopTracing func() error
 }
 
 func (n *showTraceNode) startExec(params runParams) error {
-	if n.plan == nil {
-		return nil
-	}
-	if params.extendedEvalCtx.Tracing.Enabled() {
-		return errTracingAlreadyEnabled
-	}
-	if err := params.extendedEvalCtx.Tracing.StartTracing(
-		tracing.SnowballRecording, n.kvTracingEnabled,
-	); err != nil {
-		return err
-	}
-	n.run.stopTracing = params.extendedEvalCtx.Tracing.StopTracing
-
-	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
-	defer sp.Finish()
-	params.ctx = startCtx
-	return startExec(params, n.plan)
+	return nil
 }
 
 func (n *showTraceNode) Next(params runParams) (bool, error) {
 	if !n.run.execDone {
 		// Get all the data upfront and process the traces. Subsequent
 		// invocations of Next() will merely return the results.
-		if n.plan != nil {
-			n.runChildPlan(params)
-
-			if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
-				return false, err
-			}
-			n.run.stopTracing = nil
-		}
-
 		traceRows, err := params.extendedEvalCtx.Tracing.getSessionTrace()
 		if err != nil {
 			return false, err
@@ -164,44 +115,6 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 	}
 	n.run.curRow++
 	return true, nil
-}
-
-// runChildPlan runs the enclosed plan inside a child span.
-func (n *showTraceNode) runChildPlan(params runParams) {
-	consumeCtx, sp := tracing.ChildSpan(params.ctx, "consuming rows")
-	defer sp.Finish()
-
-	slowPath := true
-	if a, ok := n.plan.(planNodeFastPath); ok {
-		if count, res := a.FastPathResults(); res {
-			log.VEventf(consumeCtx, 2, "fast path - rows affected: %d", count)
-			slowPath = false
-		}
-	}
-	if slowPath {
-		for {
-			hasNext, err := n.plan.Next(params)
-			if err != nil {
-				log.VEventf(consumeCtx, 2, "execution failed: %v", err)
-				break
-			}
-			if !hasNext {
-				break
-			}
-
-			values := n.plan.Values()
-			if n.kvTracingEnabled {
-				log.VEventf(consumeCtx, 2, "output row: %s", values)
-			}
-		}
-	}
-	log.VEventf(consumeCtx, 2, "plan completed execution")
-
-	// Release the plan's resources early.
-	n.plan.Close(consumeCtx)
-	n.plan = nil
-
-	log.VEventf(consumeCtx, 2, "resources released, stopping trace")
 }
 
 // processTraceRows populates n.resultRows.
@@ -296,15 +209,7 @@ func (n *showTraceNode) Values() tree.Datums {
 }
 
 func (n *showTraceNode) Close(ctx context.Context) {
-	if n.plan != nil {
-		n.plan.Close(ctx)
-	}
 	n.run.resultRows = nil
-	if n.run.stopTracing != nil {
-		if err := n.run.stopTracing(); err != nil {
-			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
-		}
-	}
 }
 
 var errTracingAlreadyEnabled = errors.New(

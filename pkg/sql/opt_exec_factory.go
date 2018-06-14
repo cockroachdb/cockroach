@@ -491,17 +491,8 @@ func (ef *execFactory) ConstructExplain(
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.
-func (ef *execFactory) ConstructShowTrace(
-	typ tree.ShowTraceType, compact bool, input exec.Node,
-) (exec.Node, error) {
-	var inputPlan planNode
-	if input != nil {
-		inputPlan = input.(planNode)
-	}
-
-	// TODO(radu): we hardcode tree.Rows because the optimizer doesn't yet support
-	// statements with other types.
-	node := ef.planner.makeShowTraceNode(inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
+func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (exec.Node, error) {
+	node := ef.planner.makeShowTraceNode(compact, typ == tree.ShowTraceKV)
 
 	if typ == tree.ShowTraceReplica {
 		// Wrap the showTraceNode in a showTraceReplicaNode.

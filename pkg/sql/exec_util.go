@@ -651,8 +651,7 @@ func isAsOf(
 		}
 
 		asOf = sc.From.AsOf
-	case *tree.ShowTrace:
-		return isAsOf(s.Statement, evalCtx, max)
+
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
