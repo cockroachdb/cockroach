@@ -40,12 +40,12 @@ var maxTxnIntentsBytes = settings.RegisterIntSetting(
 	256*1000,
 )
 
-// txnIntentCollector is an implementation of txnReqInterceptor. It collects
-// write intent spans from transactional requests and attaches them to
-// EndTransaction requests to ensure that they are resolved after the
-// transaction completes.
+// txnIntentCollector is a txnInterceptor that collects write intentspans
+// from transactional requests and attaches them to EndTransaction requests
+// to ensure that they are resolved after the transaction completes.
 type txnIntentCollector struct {
-	st *cluster.Settings
+	st      *cluster.Settings
+	wrapped lockedSender
 
 	// intents stores key spans affected by this transaction through
 	// this coordinator. These spans allow the coordinator to set the
@@ -60,94 +60,72 @@ type txnIntentCollector struct {
 	intentsSizeBytes int64
 }
 
-var _ txnReqInterceptor = &txnIntentCollector{}
-
-// beforeSendLocked implements the txnReqInterceptor interface.
-func (ic *txnIntentCollector) beforeSendLocked(
+// SendLocked implements the lockedSender interface.
+func (ic *txnIntentCollector) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (roachpb.BatchRequest, *roachpb.Error) {
-	rArgs, hasET := ba.GetArg(roachpb.EndTransaction)
-	if !hasET {
-		// No-op.
-		return ba, nil
-	}
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
+		et := rArgs.(*roachpb.EndTransactionRequest)
+		if len(et.IntentSpans) > 0 {
+			return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
+		}
+		if len(et.Key) != 0 {
+			return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
+		}
+		et.Key = ba.Txn.Key
 
-	et := rArgs.(*roachpb.EndTransactionRequest)
-	if len(et.IntentSpans) > 0 {
-		// TODO(tschottdorf): it may be useful to allow this later.
-		// That would be part of a possible plan to allow txns which
-		// write on multiple coordinators.
-		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
-	}
-	if len(et.Key) != 0 {
-		return ba, roachpb.NewErrorf("EndTransaction must not have a Key set")
-	}
-	et.Key = ba.Txn.Key
+		// Defensively set distinctSpans to false if we had any previous
+		// writes in this transaction. This effectively limits the distinct
+		// spans optimization to 1pc transactions.
+		distinctSpans := len(ic.intents) == 0
 
-	// Defensively set distinctSpans to false if we had any previous
-	// writes in this transaction. This effectively limits the distinct
-	// spans optimization to 1pc transactions.
-	distinctSpans := len(ic.intents) == 0
+		// We can't pass in a batch response here to better limit the key
+		// spans as we don't know what is going to be affected. This will
+		// affect queries such as `DELETE FROM my.table LIMIT 10` when
+		// executed as a 1PC transaction. e.g.: a (BeginTransaction,
+		// DeleteRange, EndTransaction) batch.
+		ic.appendAndCondenseIntents(ctx, ba, nil)
 
-	// We can't pass in a batch response here to better limit the key
-	// spans as we don't know what is going to be affected. This will
-	// affect queries such as `DELETE FROM my.table LIMIT 10` when
-	// executed as a 1PC transaction. e.g.: a (BeginTransaction,
-	// DeleteRange, EndTransaction) batch.
-	if err := ic.appendAndCondenseIntentsLocked(ctx, ba, nil); err != nil {
-		return ba, roachpb.NewError(err)
-	}
+		// Populate et.IntentSpans, taking into account both any existing
+		// and new writes, and taking care to perform proper deduplication.
+		et.IntentSpans = append([]roachpb.Span(nil), ic.intents...)
+		// TODO(peter): Populate DistinctSpans on all batches, not just batches
+		// which contain an EndTransactionRequest.
+		var distinct bool
+		et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
+		ba.Header.DistinctSpans = distinct && distinctSpans
 
-	// Populate et.IntentSpans, taking into account both any existing
-	// and new writes, and taking care to perform proper deduplication.
-	et.IntentSpans = append([]roachpb.Span(nil), ic.intents...)
-	// TODO(peter): Populate DistinctSpans on all batches, not just batches
-	// which contain an EndTransactionRequest.
-	var distinct bool
-	et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
-	ba.Header.DistinctSpans = distinct && distinctSpans
-
-	if len(et.IntentSpans) == 0 {
-		// If there aren't any intents, then there's factually no
-		// transaction to end. Read-only txns have all of their state
-		// in the client.
-		return ba, roachpb.NewErrorf("cannot commit a read-only transaction")
-	}
-	if log.V(3) {
-		for _, intent := range et.IntentSpans {
-			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+		if len(et.IntentSpans) == 0 {
+			// If there aren't any intents, then there's factually no
+			// transaction to end. Read-only txns have all of their state
+			// in the client.
+			return nil, roachpb.NewErrorf("cannot commit a read-only transaction")
+		}
+		if log.V(3) {
+			for _, intent := range et.IntentSpans {
+				log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+			}
 		}
 	}
 
-	return ba, nil
-}
+	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
+	br, pErr := ic.wrapped.SendLocked(ctx, ba)
 
-// maybeRetrySend implements the txnReqInterceptor interface.
-func (*txnIntentCollector) maybeRetrySend(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	// No-op.
-	return br, pErr
-}
-
-// afterSendLocked implements the txnReqInterceptor interface.
-func (ic *txnIntentCollector) afterSendLocked(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Append the intents from the current request to our txn meta.
-	if err := ic.appendAndCondenseIntentsLocked(ctx, ba, br); err != nil {
-		log.VEventf(ctx, 2, "failed to condense intent spans (%s); skipping", err)
-	}
+	ic.appendAndCondenseIntents(ctx, ba, br)
 	return br, pErr
 }
 
-// populateMetaLocked implements the txnReqInterceptor interface.
+// setWrapped implements the txnInterceptor interface.
+func (ic *txnIntentCollector) setWrapped(wrapped lockedSender) { ic.wrapped = wrapped }
+
+// populateMetaLocked implements the txnInterceptor interface.
 func (ic *txnIntentCollector) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 	// Copy mutable state so access is safe for the caller.
 	meta.Intents = append([]roachpb.Span(nil), ic.intents...)
 }
 
-// augmentMetaLocked implements the txnReqInterceptor interface.
+// augmentMetaLocked implements the txnInterceptor interface.
 func (ic *txnIntentCollector) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	// Do not modify existing intent slices when copying.
 	ic.intents, _ = roachpb.MergeSpans(
@@ -160,17 +138,17 @@ func (ic *txnIntentCollector) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	}
 }
 
-// epochRetryLocked implements the txnReqInterceptor interface.
-func (*txnIntentCollector) epochRetryLocked() {
+// epochBumpedLocked implements the txnInterceptor interface.
+func (*txnIntentCollector) epochBumpedLocked() {
 	// No-op. Intents are tracked cumulatively across epochs on retries.
 }
 
-// closeLocked implements the txnReqInterceptor interface.
+// closeLocked implements the txnInterceptor interface.
 func (*txnIntentCollector) closeLocked() {}
 
-func (ic *txnIntentCollector) appendAndCondenseIntentsLocked(
+func (ic *txnIntentCollector) appendAndCondenseIntents(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
-) error {
+) {
 	// Adding the intents even on error reduces the likelihood of dangling
 	// intents blocking concurrent writers for extended periods of time. See
 	// #3346.
@@ -178,14 +156,13 @@ func (ic *txnIntentCollector) appendAndCondenseIntentsLocked(
 		ic.intents = append(ic.intents, span)
 		ic.intentsSizeBytes += int64(len(span.Key) + len(span.EndKey))
 	})
-	condensedIntents, condensedIntentsSize, err := ic.maybeCondenseIntentSpans(
+	if condensedIntents, condensedIntentsSize, err := ic.maybeCondenseIntentSpans(
 		ctx, ic.intents, ic.intentsSizeBytes,
-	)
-	if err != nil {
-		return err
+	); err != nil {
+		log.VEventf(ctx, 2, "failed to condense intent spans (%s); skipping", err)
+	} else {
+		ic.intents, ic.intentsSizeBytes = condensedIntents, condensedIntentsSize
 	}
-	ic.intents, ic.intentsSizeBytes = condensedIntents, condensedIntentsSize
-	return nil
 }
 
 type spanBucket struct {
