@@ -72,18 +72,18 @@ group           ·            ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-group                ·            ·                             (count)                                                       ·
- │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
- └── render          ·            ·                             ("(k, v, w, s)")                                              ·
-      │              render 0     (a.k, a.v, a.w, a.s)          ·                                                             ·
-      └── join       ·            ·                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
-           │         type         cross                         ·                                                             ·
-           ├── scan  ·            ·                             (k, v, w, s)                                                  k!=NULL; key(k)
-           │         table        kv@primary                    ·                                                             ·
-           │         spans        ALL                           ·                                                             ·
-           └── scan  ·            ·                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
-·                    table        kv@primary                    ·                                                             ·
-·                    spans        ALL                           ·                                                             ·
+group                ·            ·                                             (count)                                                       ·
+ │                   aggregate 0  count(DISTINCT ((k, v, w, s) AS k, v, w, s))  ·                                                             ·
+ └── render          ·            ·                                             ("((k, v, w, s) AS k, v, w, s)")                              ·
+      │              render 0     ((a.k, a.v, a.w, a.s) AS k, v, w, s)          ·                                                             ·
+      └── join       ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
+           │         type         cross                                         ·                                                             ·
+           ├── scan  ·            ·                                             (k, v, w, s)                                                  k!=NULL; key(k)
+           │         table        kv@primary                                    ·                                                             ·
+           │         spans        ALL                                           ·                                                             ·
+           └── scan  ·            ·                                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
+·                    table        kv@primary                                    ·                                                             ·
+·                    spans        ALL                                           ·                                                             ·
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [

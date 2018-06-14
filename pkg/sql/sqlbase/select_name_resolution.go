@@ -48,12 +48,12 @@ type NameResolutionVisitor struct {
 
 var _ tree.Visitor = &NameResolutionVisitor{}
 
-func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
+func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {
 	exprs := make(tree.Exprs, len(texprs))
 	for i, e := range texprs {
 		exprs[i] = e
 	}
-	return &tree.Tuple{Exprs: exprs}
+	return &tree.Tuple{Exprs: exprs, Labels: labels}
 }
 
 // VisitPre implements tree.Visitor.
@@ -66,9 +66,18 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 	case tree.UnqualifiedStar:
 		v.foundDependentVars = true
 
+	case *tree.TupleStar:
+		// TupleStars at the top level of a SELECT clause are replaced
+		// when the select's renders are prepared. If we encounter one
+		// here during expression analysis, it's being used as an argument
+		// to an inner expression. In that case, we just report its tuple
+		// operand unchanged.
+		v.foundStars = true
+		return v.VisitPre(t.Expr)
+
 	case *tree.AllColumnsSelector:
 		v.foundStars = true
-		// AllColumnsSelector at the top level of a SELECT clause are
+		// AllColumnsSelectors at the top level of a SELECT clause are
 		// replaced when the select's renders are prepared. If we
 		// encounter one here during expression analysis, it's being used
 		// as an argument to an inner expression/function. In that case,
@@ -79,7 +88,7 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
 		//    SELECT count(DISTINCT kv.*) FROM kv -> SELECT count(DISTINCT (k, v)) FROM kv
 		//
-		_, exprs, err := expandStar(context.TODO(), v.sources, t, v.iVarHelper)
+		cols, exprs, err := expandStar(context.TODO(), v.sources, t, v.iVarHelper)
 		if err != nil {
 			v.err = err
 			return false, expr
@@ -91,8 +100,13 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		}
 		// We return an untyped tuple because name resolution occurs
 		// before type checking, and type checking will resolve the
-		// tuple's type.
-		return false, makeUntypedTuple(exprs)
+		// tuple's type. However we need to preserve the labels in
+		// case of e.g. `SELECT (kv.*).v`.
+		labels := make([]string, len(exprs))
+		for i := range exprs {
+			labels[i] = cols[i].Name
+		}
+		return false, makeUntypedTuple(labels, exprs)
 
 	case *tree.IndexedVar:
 		// If the indexed var is a standalone ordinal reference, ensure it
@@ -280,12 +294,59 @@ func expandStar(
 	return columns, exprs, nil
 }
 
+// expandTupleStar returns the array of column metadata and
+// name expressions that correspond to the expansion of a column
+// access star, e.g. `(E).*`.
+func expandTupleStar(
+	ctx context.Context,
+	analyzeExpr AnalyzeExprFunction,
+	t *tree.TupleStar,
+	info MultiSourceInfo,
+	ivarHelper tree.IndexedVarHelper,
+) (columns ResultColumns, exprs []tree.TypedExpr, err error) {
+	// Star expansion will bypass computeRender(), so we are responsible
+	// for expression analysis.
+	normalized, err := analyzeExpr(ctx, t.Expr,
+		info, ivarHelper,
+		types.Any /* desiredType */, false, /* requireType */
+		"SELECT" /* typingContext */)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	typ := normalized.ResolvedType()
+	tType, ok := typ.(types.TTuple)
+	if !ok || tType.Labels == nil {
+		return nil, nil, tree.NewTypeIsNotCompositeError(typ)
+	}
+
+	// If the sub-expression is a tuple constructor, we'll de-tuplify below.
+	// Otherwise we'll re-evaluate the expression multiple times.
+	tTuple, isTuple := normalized.(*tree.Tuple)
+
+	columns = make(ResultColumns, len(tType.Types))
+	exprs = make([]tree.TypedExpr, len(tType.Types))
+	for i, colType := range tType.Types {
+		columns[i].Typ = colType
+		columns[i].Name = tType.Labels[i]
+		if isTuple {
+			// De-tuplify: ((a,b,c)).* -> a, b, c
+			exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
+		} else {
+			// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
+			exprs[i] = tree.NewTypedColumnAccessExpr(normalized, tType.Labels[i], i)
+		}
+	}
+	return columns, exprs, nil
+}
+
 // CheckRenderStar handles the case where the target specification contains a
 // SQL star (UnqualifiedStar or AllColumnsSelector). We match the prefix of the
 // name to one of the tables in the query and then expand the "*" into a list
 // of columns. A ResultColumns and Expr pair is returned for each column.
 func CheckRenderStar(
 	ctx context.Context,
+	analyzeExpr AnalyzeExprFunction,
 	target tree.SelectExpr,
 	info MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
@@ -295,7 +356,11 @@ func CheckRenderStar(
 		return false, nil, nil, nil
 	}
 
-	switch v.(type) {
+	switch t := v.(type) {
+	case *tree.TupleStar:
+		columns, exprs, err = expandTupleStar(ctx, analyzeExpr, t, info, ivarHelper)
+		return true, columns, exprs, err
+
 	case tree.UnqualifiedStar, *tree.AllColumnsSelector:
 		if target.As != "" {
 			return false, nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -304,7 +369,6 @@ func CheckRenderStar(
 
 		columns, exprs, err = expandStar(ctx, info, v, ivarHelper)
 		return true, columns, exprs, err
-	default:
-		return false, nil, nil, nil
 	}
+	return false, nil, nil, nil
 }

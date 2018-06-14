@@ -484,7 +484,7 @@ func (s *expandArrayValueGenerator) Next() (bool, error) {
 func (s *expandArrayValueGenerator) Values() tree.Datums {
 	// Expand array's index is 1 based.
 	s.buf[0] = s.avg.array.Array[s.avg.nextIndex]
-	*s.buf[1].(*tree.DInt) = tree.DInt(s.avg.nextIndex + 1)
+	s.buf[1] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
 	return s.buf[:]
 }
 
@@ -560,7 +560,7 @@ func (s *subscriptsValueGenerator) Next() (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Values() tree.Datums {
 	// Generate Subscript's indexes are 1 based.
-	*s.buf[0].(*tree.DInt) = tree.DInt(s.avg.nextIndex + 1)
+	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
 	return s.buf[:]
 }
 
