@@ -82,6 +82,20 @@ func (s *Scanner) Tokens(f func(token int)) {
 	}
 }
 
+// Until returns the position of token or 0 if it is not found.
+func (s *Scanner) Until(token int) int {
+	var t int
+	for {
+		t = s.Lex(&s.tokBuf)
+		switch t {
+		case 0:
+			return 0
+		case token:
+			return s.pos
+		}
+	}
+}
+
 // Lex lexes a token from input.
 func (s *Scanner) Lex(lval *sqlSymType) int {
 	// The core lexing takes place in scan(). Here we do a small bit of post
