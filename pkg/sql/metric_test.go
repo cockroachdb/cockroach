@@ -30,6 +30,7 @@ import (
 
 type queryCounter struct {
 	query              string
+	expectError        bool
 	txnBeginCount      int64
 	selectCount        int64
 	distSQLSelectCount int64
@@ -38,6 +39,7 @@ type queryCounter struct {
 	deleteCount        int64
 	ddlCount           int64
 	miscCount          int64
+	failureCount       int64
 	txnCommitCount     int64
 	txnRollbackCount   int64
 	txnAbortCount      int64
@@ -56,8 +58,15 @@ func TestQueryCounts(t *testing.T) {
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
 		{query: "CREATE DATABASE mt", ddlCount: 1},
-		{query: "CREATE TABLE mt.n (num INTEGER)", ddlCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
+		// Test failure (uniqueness violation).
+		{query: "INSERT INTO mt.n VALUES (3)", failureCount: 1, insertCount: 1, expectError: true},
+		// Test failure (planning error).
+		{
+			query:        "INSERT INTO nonexistent VALUES (3)",
+			failureCount: 1, insertCount: 1, expectError: true,
+		},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "DELETE FROM mt.n", deleteCount: 1},
 		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
@@ -78,7 +87,7 @@ func TestQueryCounts(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.query, func(t *testing.T) {
-			if _, err := sqlDB.Exec(tc.query); err != nil {
+			if _, err := sqlDB.Exec(tc.query); err != nil && !tc.expectError {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
 			}
 
@@ -116,6 +125,9 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMisc, accum.miscCount, tc.miscCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 		})
