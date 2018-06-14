@@ -2262,6 +2262,7 @@ CREATE TABLE d.t (
   INDEX i (a) STORING (b),
   UNIQUE INDEX u (a) STORING (b)
 );
+SET distsql = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2298,16 +2299,16 @@ CREATE TABLE d.t (
 		"i": "fetched: /t/i/1/11/2 -> NULL",
 		"u": "fetched: /t/u/1 -> /11/2",
 	} {
-		{
+		t.Run("index scan", func(t *testing.T) {
+			if _, err := sqlDB.Exec(fmt.Sprintf(`SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s`, indexName)); err != nil {
+				t.Fatal(err)
+			}
+
 			rows, err := sqlDB.Query(
-				fmt.Sprintf(
-					`SELECT message FROM [SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s] `+
-						`WHERE message LIKE 'fetched:%%'`,
-					indexName,
-				))
+				`SELECT message FROM [SHOW KV TRACE FOR SESSION] ` +
+					`WHERE message LIKE 'fetched:%'`)
 			if err != nil {
-				t.Error(err)
-				continue
+				t.Fatal(err)
 			}
 			defer rows.Close()
 			count := 0
@@ -2326,12 +2327,11 @@ CREATE TABLE d.t (
 			} else if count != 1 {
 				t.Errorf("expected one row but read %d", count)
 			}
-		}
-		{
+		})
+		t.Run("data scan", func(t *testing.T) {
 			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT k, a, b FROM d.t@%s;`, indexName))
 			if err != nil {
-				t.Error(err)
-				continue
+				t.Fatal(err)
 			}
 			defer rows.Close()
 			count := 0
@@ -2356,7 +2356,7 @@ CREATE TABLE d.t (
 			if err := sqlutils.RunScrub(sqlDB, "d", "t"); err != nil {
 				t.Fatal(err)
 			}
-		}
+		})
 	}
 }
 

@@ -89,7 +89,7 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.ExplainOp:
 		return b.buildExplainProps(ev)
 
-	case opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ShowTraceForSessionOp:
 		return b.buildShowTraceProps(ev)
 
 	case opt.RowNumberOp:

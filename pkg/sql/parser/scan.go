@@ -43,7 +43,9 @@ type Scanner struct {
 	lastTok   sqlSymType
 	nextTok   *sqlSymType
 	lastError *scanErr
-	stmts     []tree.Statement
+
+	// stmts contains the list of statements at the end of parsing.
+	stmts []tree.Statement
 
 	initialized bool
 }

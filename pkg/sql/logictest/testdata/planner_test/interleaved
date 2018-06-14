@@ -123,8 +123,11 @@ INSERT INTO p1_1 VALUES (2, '2', '2.11', 2), (3, '3', '3.11', 3)
 statement ok
 INSERT INTO p0 VALUES (2, '2', '2.0', 2), (3, '3', '3.0', 3), (5, '5', '5.0', 5)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM p1_0; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM p1_0]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /p1_0/primary/2/'2'/s2 -> /'2.01'

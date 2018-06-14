@@ -174,7 +174,7 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
 
 	default:
