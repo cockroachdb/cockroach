@@ -716,7 +716,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// reaching into the server objects and closing all the
 		// connections while they're in use. That would be more in line
 		// with the expected effect of a log.Fatal.
-		stopper.Stop(ctx)
+		stopper.Stop(shutdownCtx)
 		// The logging goroutine is now responsible for killing this
 		// process, so just block this goroutine.
 		select {}
