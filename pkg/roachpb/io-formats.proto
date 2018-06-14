@@ -26,6 +26,7 @@ message IOFileFormat {
     MysqlOutfile = 2;
     Mysqldump = 3;
     PgCopy = 4;
+    PgDump = 5;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];

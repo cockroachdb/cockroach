@@ -510,7 +510,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
-%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PGCOPY PLACING
+%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PGCOPY PGDUMP PLACING
 %token <str> PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str> QUERIES QUERY
@@ -1598,6 +1598,10 @@ import_bundle_format:
   {
     $$ = "MYSQLDUMP"
   }
+| PGDUMP
+  {
+    $$ = "PGDUMP"
+  }
 
 import_data_format:
   import_bundle_format
@@ -1628,6 +1632,7 @@ import_data_format:
 //    MYSQLOUTFILE
 //    MYSQLDUMP (mysqldump's SQL output)
 //    PGCOPY
+//    PGDUMP
 //
 // Options:
 //    distributed = '...'
@@ -8060,6 +8065,7 @@ unreserved_keyword:
 | PAUSE
 | PHYSICAL
 | PGCOPY
+| PGDUMP
 | PLANS
 | PRECEDING
 | PREPARE
