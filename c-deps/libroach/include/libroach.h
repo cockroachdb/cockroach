@@ -227,6 +227,10 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 // Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// Implements the partial merge operator on a single pair of values. update is
+// merged with existing. This method is provided for invocation from Go code.
+DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
+
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
 // struct is changed, both places need to be updated.

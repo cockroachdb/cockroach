@@ -644,7 +644,7 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   return DBIterGetState(iter);
 }
 
-DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
+DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
   new_value->len = 0;
 
   cockroach::storage::engine::enginepb::MVCCMetadata meta;
@@ -657,11 +657,21 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(&meta, update_meta, true, NULL)) {
+  if (!MergeValues(&meta, update_meta, full_merge, NULL)) {
     return ToDBString("incompatible merge values");
   }
   return MergeResult(&meta, new_value);
 }
+
+
+DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
+   return DBMerge(existing, update, new_value, true);
+}
+
+DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
+  return DBMerge(existing, update, new_value, false);
+}
+
 
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.

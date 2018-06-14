@@ -217,11 +217,11 @@ func TestGoMerge(t *testing.T) {
 		}
 	}
 
-	testCasesTimeSeries := []struct {
-		existing, update, expected []byte
-	}{
+	// Each time series test case is a list of byte slice. The last byte slice
+	// is the expected result; all preceding slices will be merged together
+	// to generate the actual result.
+	testCasesTimeSeries := [][][]byte{
 		{
-			nil,
 			timeSeriesRow(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
@@ -230,7 +230,6 @@ func TestGoMerge(t *testing.T) {
 			}...),
 		},
 		{
-			nil,
 			timeSeriesRow(testtime, 1000, []tsSample{
 				{2, 1, 5, 5, 5},
 				{1, 1, 5, 5, 5},
@@ -299,7 +298,6 @@ func TestGoMerge(t *testing.T) {
 		// Column Tests.
 		// Basic initial merge.
 		{
-			nil,
 			timeSeriesColumn(testtime, 1000, false, []tsColumnSample{
 				{offset: 2, last: 1},
 				{offset: 6, last: 1},
@@ -311,7 +309,6 @@ func TestGoMerge(t *testing.T) {
 		},
 		// Ensure initial merge sorts and deduplicates.
 		{
-			nil,
 			timeSeriesColumn(testtime, 1000, false, []tsColumnSample{
 				{offset: 6, last: 1},
 				{offset: 2, last: 1},
@@ -331,7 +328,6 @@ func TestGoMerge(t *testing.T) {
 		// Specially constructed sort case: ensure permutation sorting system is
 		// working.
 		{
-			nil,
 			timeSeriesColumn(testtime, 1000, false, []tsColumnSample{
 				{offset: 3, last: 3},
 				{offset: 1, last: 1},
@@ -478,37 +474,47 @@ func TestGoMerge(t *testing.T) {
 		},
 	}
 
-	for i, c := range testCasesTimeSeries {
-		expectedTS := unmarshalTimeSeries(t, c.expected)
-		updateTS := unmarshalTimeSeries(t, c.update)
-
-		// Directly test the C++ implementation of merging using goMerge.  goMerge
-		// operates directly on marshaled bytes.
-		result, err := goMerge(c.existing, c.update)
-		if err != nil {
-			t.Errorf("goMerge error on case %d: %s", i, err.Error())
-			continue
-		}
-		resultTS := unmarshalTimeSeries(t, result)
-		if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
-			t.Errorf("goMerge returned wrong result on case %d: expected %v, returned %v", i, e, a)
+	for _, c := range testCasesTimeSeries {
+		expectedTS := unmarshalTimeSeries(t, c[len(c)-1])
+		var operands []roachpb.InternalTimeSeriesData
+		for _, bytes := range c[:len(c)-1] {
+			operands = append(operands, unmarshalTimeSeries(t, bytes))
 		}
 
-		// Test the MergeInternalTimeSeriesData method separately.
-		if c.existing == nil {
-			resultTS, err = MergeInternalTimeSeriesData(updateTS)
-		} else {
-			existingTS := unmarshalTimeSeries(t, c.existing)
-			resultTS, err = MergeInternalTimeSeriesData(existingTS, updateTS)
-		}
-		if err != nil {
-			t.Errorf("MergeInternalTimeSeriesData error on case %d: %s", i, err.Error())
-			continue
-		}
-		if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
-			t.Errorf("MergeInternalTimeSeriesData returned wrong result on case %d: expected %v, returned %v",
-				i, e, a)
-		}
+		t.Run("", func(t *testing.T) {
+			// Test merging the operands under several conditions:
+			// + With and without using the partial merge operator (which combines
+			// operands quickly with the expectation that they will be properly merged
+			// eventually).
+			// + With and without merging into an initial nil value. Note that some
+			// tests have only one operand and are only run when merging into nil.
+			for _, partialMerge := range []bool{true, false} {
+				for _, mergeIntoNil := range []bool{true, false} {
+					if !mergeIntoNil && len(operands) == 1 {
+						continue
+					}
+
+					resultTS, err := MergeInternalTimeSeriesData(mergeIntoNil, partialMerge, operands...)
+					if err != nil {
+						t.Errorf(
+							"MergeInternalTimeSeriesData mergeIntoNil=%t partial=%t error: %s",
+							mergeIntoNil,
+							partialMerge,
+							err.Error(),
+						)
+					}
+					if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+						t.Errorf(
+							"MergeInternalTimeSeriesData  mergeIntoNil=%t partial=%t returned wrong result got %v, wanted %v",
+							mergeIntoNil,
+							partialMerge,
+							a,
+							e,
+						)
+					}
+				}
+			}
+		})
 	}
 }
 
