@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	gojson "encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -154,6 +155,66 @@ func TestChangefeedCursor(t *testing.T) {
 	})
 }
 
+func TestChangefeedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	var ts0 string
+	sqlDB.QueryRow(t,
+		`BEGIN; INSERT INTO foo VALUES (0); SELECT cluster_logical_timestamp(); COMMIT`,
+	).Scan(&ts0)
+
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH timestamps`)
+	defer closeFeedRowsHack(t, sqlDB, rows)
+
+	var ts1 string
+	sqlDB.QueryRow(t,
+		`BEGIN; INSERT INTO foo VALUES (1); SELECT cluster_logical_timestamp(); COMMIT`,
+	).Scan(&ts1)
+
+	assertPayloads(t, rows, []string{
+		`foo: [0]->{"__crdb__": {"updated": "` + ts0 + `"}, "a": 0}`,
+		`foo: [1]->{"__crdb__": {"updated": "` + ts1 + `"}, "a": 1}`,
+	})
+
+	// Check that we eventually get a resolved timestamp greater than ts1.
+	for {
+		if !rows.Next() {
+			t.Fatal(`expected a resolved timestamp notification`)
+		}
+		var ignored interface{}
+		var value []byte
+		if err := rows.Scan(&ignored, &ignored, &value); err != nil {
+			t.Fatal(err)
+		}
+
+		var valueRaw struct {
+			CRDB struct {
+				Resolved string `json:"resolved"`
+			} `json:"__crdb__"`
+		}
+		if err := gojson.Unmarshal(value, &valueRaw); err != nil {
+			t.Fatal(err)
+		}
+
+		// This will work until 2033, then we need to parse it into a decimal to
+		// do the compare.
+		if strings.Compare(valueRaw.CRDB.Resolved, ts1) > 0 {
+			break
+		}
+	}
+}
+
 func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
@@ -226,12 +287,16 @@ func assertPayloads(t *testing.T, rows *gosql.Rows, expected []string) {
 
 	var actual []string
 	for len(actual) < len(expected) && rows.Next() {
-		var topic string
+		var topic gosql.NullString
 		var key, value []byte
 		if err := rows.Scan(&topic, &key, &value); err != nil {
 			t.Fatalf(`%+v`, err)
 		}
-		actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
+		if !topic.Valid {
+			// Ignore resolved timestamp notifications.
+			continue
+		}
+		actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic.String, key, value))
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf(`%+v`, err)
