@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -336,5 +337,52 @@ func TestScanError(t *testing.T) {
 		if !testutils.IsError(pgerror.NewError(pgerror.CodeInternalError, lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
+	}
+}
+
+func TestScanUntil(t *testing.T) {
+	tests := []struct {
+		s     string
+		until int
+		pos   int
+	}{
+		{
+			``,
+			0,
+			0,
+		},
+		{
+			`;`,
+			';',
+			1,
+		},
+		{
+			`;`,
+			'a',
+			0,
+		},
+		{
+			"123;",
+			';',
+			4,
+		},
+		{
+			`
+--SELECT 1, 2, 3;
+SELECT 4, 5;
+--blah`,
+			';',
+			31,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%c: %q", tc.until, tc.s), func(t *testing.T) {
+			s := MakeScanner(tc.s)
+			pos := s.Until(tc.until)
+			if pos != tc.pos {
+				t.Fatalf("got %d; expected %d", pos, tc.pos)
+			}
+		})
 	}
 }
