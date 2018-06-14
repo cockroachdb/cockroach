@@ -79,18 +79,18 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 			panic(builderError{err})
 		}
 
-		// Special handling for "*" and "<table>.*".
+		// Special handling for "*", "<table>.*" and "(Expr).*".
 		if v, ok := e.Expr.(tree.VarName); ok {
 			switch v.(type) {
-			case tree.UnqualifiedStar, *tree.AllColumnsSelector:
+			case tree.UnqualifiedStar, *tree.AllColumnsSelector, *tree.TupleStar:
 				if e.As != "" {
 					panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 						"%q cannot be aliased", tree.ErrString(v))})
 				}
 
-				exprs := b.expandStar(e.Expr, inScope)
-				for _, e := range exprs {
-					b.buildScalarProjection(e, "", inScope, outScope)
+				labels, exprs := b.expandStar(e.Expr, inScope)
+				for i, e := range exprs {
+					b.buildScalarProjection(e, labels[i], inScope, outScope)
 				}
 				continue
 			}

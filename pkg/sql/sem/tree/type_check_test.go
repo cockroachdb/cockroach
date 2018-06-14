@@ -144,6 +144,11 @@ func TestTypeCheck(t *testing.T) {
 		{`((ROW (1) AS a)).a`, `1:::INT`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT`},
+		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
+		{`(generate_series(1,3)).generate_series`, `(generate_series(1:::INT, 3:::INT)).generate_series`},
+		{`(generate_series(1,3)).*`, `generate_series(1:::INT, 3:::INT)`},
+		{`((ROW (1) AS a)).*`, `(ROW(1:::INT) AS a)`},
+		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
@@ -243,12 +248,8 @@ func TestTypeCheckError(t *testing.T) {
 			`could not identify column "x" in tuple{int AS a, string AS b}`,
 		},
 		{
-			`((ROW (1) AS a)).*`,
-			`star expansion of tuples is not supported`,
-		},
-		{
-			`((('1', 2) AS a, b)).*`,
-			`star expansion of tuples is not supported`,
+			`(pg_get_keywords()).foo`,
+			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
 		},
 	}
 	for _, d := range testData {

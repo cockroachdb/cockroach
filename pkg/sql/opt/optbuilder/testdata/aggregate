@@ -801,7 +801,7 @@ SELECT count(kv.*) FROM kv
 group-by
  ├── columns: count:6(int)
  ├── project
- │    ├── columns: column5:5(tuple{int, int, int, string})
+ │    ├── columns: column5:5(tuple{int AS k, int AS v, int AS w, string AS s})
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -812,7 +812,7 @@ group-by
  │              └── variable: kv.s [type=string]
  └── aggregations
       └── count [type=int]
-           └── variable: column5 [type=tuple{int, int, int, string}]
+           └── variable: column5 [type=tuple{int AS k, int AS v, int AS w, string AS s}]
 
 build
 SELECT count((k, v)) FROM kv LIMIT 1

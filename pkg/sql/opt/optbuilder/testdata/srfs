@@ -197,12 +197,12 @@ error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
 build
 SELECT (1).*
 ----
-error (42804): type int is not composite
+error (42809): type int is not composite
 
 build
 SELECT ('a').*
 ----
-error (42804): type string is not composite
+error (42809): type string is not composite
 
 build
 SELECT (unnest(ARRAY[]:::INT[])).*

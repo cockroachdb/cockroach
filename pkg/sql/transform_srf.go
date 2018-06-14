@@ -68,21 +68,7 @@ func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode t
 		return false, expr
 	}
 
-	switch t := expr.(type) {
-	case *tree.ColumnAccessExpr:
-		fe, ok := t.Expr.(*tree.FuncExpr)
-		if !ok {
-			// If there is no function inside the column access expression, then it
-			// will be dealt with elsewhere.
-			return false, expr
-		}
-		newFe := *fe
-		newFe.EscapeSRF = true
-		newCAE := *t
-		newCAE.Expr = &newFe
-		expr = &newCAE
-
-	case *tree.FuncExpr:
+	if t, ok := expr.(*tree.FuncExpr); ok {
 		// For each SRF encountered on the way down, remember the nesting
 		// level. It will be decreased on the way up in VisitPost()
 		// below.
@@ -102,44 +88,14 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	if v.err != nil {
 		return expr
 	}
-	switch t := expr.(type) {
-	case *tree.ColumnAccessExpr:
-		// TODO(knz): support arbitrary composite expressions.
-		fe, ok := t.Expr.(*tree.FuncExpr)
-		if !ok || !fe.EscapeSRF {
-			v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programmer error: invalid Walk recursion on ColumnAccessExpr")
-			return expr
-		}
-		fd, err := v.lookupSRF(fe)
-		if err != nil {
-			v.err = err
-			return expr
-		}
-		if fd == nil {
-			v.err = pgerror.UnimplementedWithIssueErrorf(24866,
-				"composite-returning scalar functions: %q", tree.ErrString(t.Expr))
-			return expr
-		}
-		newExpr, err := v.transformSRF(fe, fd, t)
-		if err != nil {
-			v.err = err
-			return expr
-		}
-		v.seenSRF--
-		return newExpr
-
-	case *tree.FuncExpr:
-		if t.EscapeSRF {
-			return expr
-		}
+	if t, ok := expr.(*tree.FuncExpr); ok {
 		fd, err := v.lookupSRF(t)
 		if err != nil {
 			v.err = err
 			return expr
 		}
 		if fd != nil {
-			newExpr, err := v.transformSRF(t, fd, nil /* columnAccess */)
+			newExpr, err := v.transformSRF(t, fd)
 			if err != nil {
 				v.err = err
 				return expr
@@ -247,7 +203,7 @@ func (p *planner) rewriteSRFs(
 }
 
 func (v *srfExtractionVisitor) transformSRF(
-	srf *tree.FuncExpr, fd *tree.FunctionDefinition, columnAccessExpr *tree.ColumnAccessExpr,
+	srf *tree.FuncExpr, fd *tree.FunctionDefinition,
 ) (tree.Expr, error) {
 	if v.seenSRF > 1 {
 		return nil, pgerror.UnimplementedWithIssueErrorf(26234, "nested set-returning functions")
@@ -268,33 +224,6 @@ func (v *srfExtractionVisitor) transformSRF(
 
 	// Bump the column count for the next SRF collected.
 	v.numColumns += len(fd.ReturnLabels)
-
-	// Now decide what to render.
-	if columnAccessExpr != nil {
-		// Syntax: (tbl).colname or (tbl).*
-		if columnAccessExpr.Star {
-			// (tbl).*
-			// We want all the columns as separate renders. Let the star
-			// expansion that occurs later do the job.
-			return &tree.AllColumnsSelector{TableName: tree.MakeUnresolvedName(srfSourceName)}, nil
-		}
-		// (tbl).colname
-		// We just want one column. Render that. For user friendliness,
-		// check that the label exists.
-		found := false
-		for _, l := range fd.ReturnLabels {
-			if l == columnAccessExpr.ColName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"could not identify column %q in record data type",
-				tree.ErrNameString(&columnAccessExpr.ColName))
-		}
-		return tree.NewColumnItem(&tblName, tree.Name(columnAccessExpr.ColName)), nil
-	}
 
 	// Just the SRF name. Check whether we have just one column or more.
 	if len(fd.ReturnLabels) == 1 {
