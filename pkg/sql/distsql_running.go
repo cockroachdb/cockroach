@@ -264,6 +264,8 @@ type distSQLReceiver struct {
 
 	rangeCache *kv.RangeDescriptorCache
 	leaseCache *kv.LeaseHolderCache
+	tracing    *SessionTracing
+	cleanup    func()
 
 	// The transaction in which the flow producing data for this
 	// receiver runs. The distSQLReceiver updates the transaction in
@@ -335,15 +337,19 @@ func makeDistSQLReceiver(
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
+	tracing *SessionTracing,
 ) *distSQLReceiver {
+	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := &distSQLReceiver{
-		ctx:          ctx,
+		ctx:          consumeCtx,
+		cleanup:      cleanup,
 		resultWriter: resultWriter,
 		rangeCache:   rangeCache,
 		leaseCache:   leaseCache,
 		txn:          txn,
 		updateClock:  updateClock,
 		stmtType:     stmtType,
+		tracing:      tracing,
 	}
 	// When the root transaction finishes (i.e. it is abandoned, aborted, or
 	// committed), ensure the flow is canceled so that we don't return results to
@@ -448,6 +454,7 @@ func (r *distSQLReceiver) Push(
 		}
 		r.row[i] = row[resIdx].Datum
 	}
+	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
 		r.commErr = commErr
@@ -476,6 +483,7 @@ func (r *distSQLReceiver) ProducerDone() {
 		panic("double close")
 	}
 	r.closed = true
+	r.cleanup()
 }
 
 // updateCaches takes information about some ranges that were mis-planned and
@@ -527,5 +535,6 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		return
 	}
 	dsp.FinalizePlan(&planCtx, &plan)
+
 	dsp.Run(&planCtx, txn, &plan, recv, evalCtx)
 }

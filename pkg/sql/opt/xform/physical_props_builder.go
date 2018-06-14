@@ -144,9 +144,7 @@ func (b physicalPropsBuilder) buildChildProps(
 	// parent and the operator itself does not require any properties.
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
-		case opt.LimitOp, opt.OffsetOp,
-			opt.ExplainOp, opt.ShowTraceOp,
-			opt.RowNumberOp, opt.GroupByOp:
+		case opt.LimitOp, opt.OffsetOp, opt.ExplainOp, opt.RowNumberOp, opt.GroupByOp:
 			// These operations can require an ordering of some child even if there is
 			// no ordering requirement on themselves.
 		default:
@@ -194,11 +192,6 @@ func (b physicalPropsBuilder) buildChildProps(
 	case opt.ExplainOp:
 		if nth == 0 {
 			childProps = b.mem.LookupPrivate(mexpr.AsExplain().Def()).(*memo.ExplainOpDef).Props
-		}
-
-	case opt.ShowTraceOp:
-		if nth == 0 {
-			childProps = b.mem.LookupPrivate(mexpr.AsShowTrace().Def()).(*memo.ShowTraceOpDef).Props
 		}
 
 		// ************************* WARNING *************************

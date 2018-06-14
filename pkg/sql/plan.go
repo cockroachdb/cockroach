@@ -780,7 +780,7 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
@@ -901,7 +901,7 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)

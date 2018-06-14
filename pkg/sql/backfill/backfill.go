@@ -135,6 +135,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
+	traceKV bool,
 ) (roachpb.Key, error) {
 	fkTables, _ := sqlbase.TablesNeededForFKs(
 		ctx,
@@ -194,7 +195,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, false, /* traceKV */
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -241,7 +242,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 		}
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, false, /* traceKV */
+			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -351,6 +352,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	tableDesc sqlbase.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
+	traceKV bool,
 ) ([]sqlbase.IndexEntry, roachpb.Key, error) {
 	entries := make([]sqlbase.IndexEntry, 0, chunkSize*int64(len(ib.added)))
 
@@ -363,7 +365,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := ib.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, false, /* traceKV */
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, err
@@ -410,14 +412,18 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
+	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize)
+	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize, traceKV)
 	if err != nil {
 		return nil, err
 	}
 	batch := txn.NewBatch()
 
 	for _, entry := range entries {
+		if traceKV {
+			log.VEventf(ctx, 2, "InitPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
+		}
 		batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
 	}
 	writeBatch := txn.Run

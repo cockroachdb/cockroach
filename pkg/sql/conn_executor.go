@@ -1857,7 +1857,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// TODO(andrei): figure out how session tracing should interact with schema
 		// changes.
 		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
-			ex.Ctx(), ex.server.cfg,
+			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
 		); schemaChangeErr != nil {
 			// We got a schema change error. We'll return it to the client as the
 			// result of the current statement - which is either the DDL statement or
