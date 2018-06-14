@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// txnBatchWrapper is a txnReqInterceptor that catches requests that produced
+// txnBatchWrapper is a txnInterceptor that catches requests that produced
 // OpRequiresTxnErrors and re-runs them in the context of a transaction.
 //
 // TODO(tschottdorf): this handling is somewhat awkward but unless we want to
@@ -34,23 +34,16 @@ import (
 // through a TxnCoordSender at all. This would allow us to get rid of this
 // interceptor.
 type txnBatchWrapper struct {
-	tcf *TxnCoordSenderFactory
+	wrapped lockedSender
+	tcf     *TxnCoordSenderFactory
 }
 
-var _ txnReqInterceptor = &txnBatchWrapper{}
-
-// beforeSendLocked implements the txnReqInterceptor interface.
-func (*txnBatchWrapper) beforeSendLocked(
+// SendLocked implements the lockedSender interface.
+func (bw *txnBatchWrapper) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (roachpb.BatchRequest, *roachpb.Error) {
-	// No-op.
-	return ba, nil
-}
-
-// maybeRetrySend implements the txnReqInterceptor interface.
-func (bw *txnBatchWrapper) maybeRetrySend(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
+	br, pErr := bw.wrapped.SendLocked(ctx, ba)
 	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
 		return br, pErr
 	}
@@ -82,22 +75,17 @@ func (bw *txnBatchWrapper) maybeRetrySend(
 	return br, nil
 }
 
-// afterSendLocked implements the txnReqInterceptor interface.
-func (*txnBatchWrapper) afterSendLocked(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	// No-op.
-	return br, pErr
-}
+// setWrapped implements the txnInterceptor interface.
+func (bw *txnBatchWrapper) setWrapped(wrapped lockedSender) { bw.wrapped = wrapped }
 
-// populateMetaLocked implements the txnReqInterceptor interface.
+// populateMetaLocked implements the txnInterceptor interface.
 func (*txnBatchWrapper) populateMetaLocked(meta *roachpb.TxnCoordMeta) {}
 
-// augmentMetaLocked implements the txnReqInterceptor interface.
+// augmentMetaLocked implements the txnInterceptor interface.
 func (*txnBatchWrapper) augmentMetaLocked(meta roachpb.TxnCoordMeta) {}
 
-// epochRetryLocked implements the txnReqInterceptor interface.
+// epochRetryLocked implements the txnInterceptor interface.
 func (*txnBatchWrapper) epochRetryLocked() {}
 
-// closeLocked implements the txnReqInterceptor interface.
+// closeLocked implements the txnInterceptor interface.
 func (*txnBatchWrapper) closeLocked() {}

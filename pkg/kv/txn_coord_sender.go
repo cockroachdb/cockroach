@@ -16,6 +16,7 @@ package kv
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -138,15 +139,16 @@ type TxnCoordSender struct {
 
 	// An ordered stack of pluggable request interceptors that can transform
 	// batch requests and responses while each maintaining targeted state.
-	// The stack is stored in an array and each txnReqInterceptor implementation
+	// The stack is stored in an array and each txnInterceptor implementation
 	// is embedded in the interceptorAlloc struct, so the entire stack is
 	// allocated together with TxnCoordSender without any additional heap
 	// allocations necessary.
-	interceptorStack [3]txnReqInterceptor
+	interceptorStack [3]txnInterceptor
 	interceptorAlloc struct {
 		txnIntentCollector
 		txnSpanRefresher
 		txnBatchWrapper
+		txnLockGatekeeper // not in interceptorStack array.
 	}
 
 	// typ specifies whether this transaction is the top level,
@@ -156,29 +158,24 @@ type TxnCoordSender struct {
 
 var _ client.TxnSender = &TxnCoordSender{}
 
-// txnReqInterceptors are pluggable request interceptors that transform requests
-// and responses and can perform operations in the context of a transaction.
-type txnReqInterceptor interface {
-	// beforeSendLocked transforms a request batch before it is sent. It will
-	// always be called under the TxnCoordSender's lock.
-	beforeSendLocked(
-		ctx context.Context, ba roachpb.BatchRequest,
-	) (roachpb.BatchRequest, *roachpb.Error)
+// lockedSender is like a client.Sender but requires the called to hold the
+// TxnCoordSender lock to send requests.
+type lockedSender interface {
+	SendLocked(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+}
 
-	// maybeRetrySend inspects the response batch and error and optionally
-	// retries the send.
-	maybeRetrySend(
-		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-	) (*roachpb.BatchResponse, *roachpb.Error)
+// txnInterceptors are pluggable request interceptors that transform requests
+// and responses and can perform operations in the context of a transaction. A
+// TxnCoordSender maintains a stack of txnInterceptors that it calls into under
+// lock whenever it sends a request.
+type txnInterceptor interface {
+	lockedSender
 
-	// afterSendLocked transforms a response batch and error after it is sent.
-	// It will always be called under the TxnCoordSender's lock.
-	afterSendLocked(
-		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-	) (*roachpb.BatchResponse, *roachpb.Error)
+	// setWrapped sets the txnInterceptor wrapped lockedSender.
+	setWrapped(wrapped lockedSender)
 
 	// populateMetaLocked populates the provided TxnCoordMeta with any
-	// internal state that the txnReqInterceptor contains. This is used
+	// internal state that the txnInterceptor contains. This is used
 	// to serialize the interceptor's state so that it can be passed to
 	// other TxnCoordSenders within a distributed transaction.
 	populateMetaLocked(meta *roachpb.TxnCoordMeta)
@@ -197,6 +194,25 @@ type txnReqInterceptor interface {
 	// TODO(nvanbenschoten): this won't be used until txnPipeliner. Remove
 	// if that never goes in.
 	closeLocked()
+}
+
+// txnLockGatekeeper is a lockedSender that sits at the bottom of the
+// TxnCoordSender's interceptor stack and handles unlocking the TxnCoordSender's
+// mutex when sending a request and locking the TxnCoordSender's mutex when
+// receiving a response. It allows the entire txnInterceptor stack to operate
+// under lock without needing to worry about unlocking at the correct time.
+type txnLockGatekeeper struct {
+	wrapped client.Sender
+	mu      sync.Locker // shared with TxnCoordSender
+}
+
+// SendLocked implements the lockedSender interface.
+func (gs *txnLockGatekeeper) SendLocked(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	gs.mu.Unlock()
+	defer gs.mu.Lock()
+	return gs.wrapped.Send(ctx, ba)
 }
 
 // TxnMetrics holds all metrics relating to KV transactions.
@@ -320,7 +336,11 @@ func (tcf *TxnCoordSenderFactory) New(
 		TxnCoordSenderFactory: tcf,
 	}
 
-	// Create a stack of request/response interceptors.
+	// Create a stack of request/response interceptors. All of the objects in
+	// this stack are pre-allocated on the TxnCoordSender struct, so this just
+	// initializes the interceptors and pieces them together. It then adds a
+	// txnLockGatekeeper at the bottom of the stack to connect it with the
+	// TxnCoordSender's wrapped sender.
 	var ri *RangeIterator
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		ri = NewRangeIterator(ds)
@@ -331,23 +351,32 @@ func (tcf *TxnCoordSenderFactory) New(
 	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:           tcf.st,
-		mu:           &tcs.mu,
 		refreshValid: true,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
 		canAutoRetry:     typ == client.RootTxn,
-		wrapped:          tcs.wrapped,
 		autoRetryCounter: tcs.metrics.AutoRetries,
 	}
 	tcs.interceptorAlloc.txnBatchWrapper = txnBatchWrapper{
 		tcf: tcf,
 	}
-	tcs.interceptorStack = [...]txnReqInterceptor{
+	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
+		mu:      &tcs.mu,
+		wrapped: tcs.wrapped,
+	}
+	tcs.interceptorStack = [...]txnInterceptor{
 		&tcs.interceptorAlloc.txnIntentCollector,
 		&tcs.interceptorAlloc.txnSpanRefresher,
 		&tcs.interceptorAlloc.txnBatchWrapper,
+	}
+	for i, reqInt := range tcs.interceptorStack {
+		if i < len(tcs.interceptorStack)-1 {
+			reqInt.setWrapped(tcs.interceptorStack[i+1])
+		} else {
+			reqInt.setWrapped(&tcs.interceptorAlloc.txnLockGatekeeper)
+		}
 	}
 
 	// If a transaction was passed in bind the TxnCoordSender to it.
@@ -436,6 +465,8 @@ func (tc *TxnCoordSender) Send(
 
 	startNS := tc.clock.PhysicalNow()
 
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	if ba.Txn != nil {
 		if tc.mu.txn.ID == (uuid.UUID{}) {
 			log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
@@ -447,7 +478,7 @@ func (tc *TxnCoordSender) Send(
 		}
 
 		// If this request is part of a transaction...
-		if err := tc.validateTxnForBatch(ctx, &ba); err != nil {
+		if err := tc.validateTxnForBatchLocked(ctx, &ba); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
@@ -463,96 +494,38 @@ func (tc *TxnCoordSender) Send(
 			// heartbeat loop will be stopped right away, on retriable errors we need the
 			// heartbeat loop: the intents and txn record should be kept in place just
 			// like for non-1PC txns.
-			if err := tc.startHeartbeatLoop(ctx); err != nil {
+			if err := tc.startHeartbeatLoopLocked(ctx); err != nil {
 				return nil, roachpb.NewError(err)
 			}
 		}
 
-		var pErr *roachpb.Error
-		ba, pErr = func() (roachpb.BatchRequest, *roachpb.Error) {
-			tc.mu.Lock()
-			defer tc.mu.Unlock()
+		// Copy a few fields from the request's txn. This is technically only
+		// required during the first send, as these fields are set before
+		// the first send and can't change afterwards. Keeping these fields in
+		// sync between the TxnCoordSender and the client.Txn is needed because,
+		// when the TxnCoordSender synthesizes TransactionAbortedErrors, it
+		// creates a new proto that it passes to the client.Txn and then these
+		// fields are used when creating that proto that will then be used for the
+		// client.Txn. On subsequent retries of the transaction, it's important
+		// for the values of these fields to have been preserved because that
+		// makes future calls to txn.SetIsolation() and such no-ops.
+		// If this makes no sense it's because the TxnCoordSender having a copy of
+		// the Transaction proto generally makes no sense.
+		tc.mu.txn.Name = ba.Txn.Name
+		tc.mu.txn.Isolation = ba.Txn.Isolation
+		tc.mu.txn.Priority = ba.Txn.Priority
 
-			// Copy a few fields from the request's txn. This is technically only
-			// required during the first send, as these fields are set before
-			// the first send and can't change afterwards. Keeping these fields in
-			// sync between the TxnCoordSender and the client.Txn is needed because,
-			// when the TxnCoordSender synthesizes TransactionAbortedErrors, it
-			// creates a new proto that it passes to the client.Txn and then these
-			// fields are used when creating that proto that will then be used for the
-			// client.Txn. On subsequent retries of the transaction, it's important
-			// for the values of these fields to have been preserved because that
-			// makes future calls to txn.SetIsolation() and such no-ops.
-			// If this makes no sense it's because the TxnCoordSender having a copy of
-			// the Transaction proto generally makes no sense.
-			tc.mu.txn.Name = ba.Txn.Name
-			tc.mu.txn.Isolation = ba.Txn.Isolation
-			tc.mu.txn.Priority = ba.Txn.Priority
-
-			if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
-				return ba, pErr
-			}
-
-			// Update the command count.
-			tc.mu.commandCount += int32(len(ba.Requests))
-
-			// Allow each interceptor to modify the request.
-			for _, reqInt := range tc.interceptorStack {
-				ba, pErr = reqInt.beforeSendLocked(ctx, ba)
-				if pErr != nil {
-					return ba, pErr
-				}
-			}
-			return ba, nil
-		}()
-		if pErr != nil {
+		if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
 			return nil, pErr
 		}
+
+		// Update the command count.
+		tc.mu.commandCount += int32(len(ba.Requests))
 	}
 
-	// Send the command through wrapped sender, handling retry
-	// opportunities in case of error.
-	br, pErr := tc.wrapped.Send(ctx, ba)
-	if pErr != nil {
-		// With mixed success, we can't attempt a retry without potentially
-		// succeeding at the same conditional put or increment request
-		// twice; return the wrapped error instead. Because the dist sender
-		// splits up batches to send to multiple ranges in parallel, and
-		// then combines the results, partial success makes it very
-		// difficult to determine what can be retried.
-		if msErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
-			pErr = msErr.Wrapped
-			log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, pErr)
-		} else {
-			// Allow each interceptor to decide whether to retry the request.
-			for i := len(tc.interceptorStack) - 1; i >= 0; i-- {
-				reqInt := tc.interceptorStack[i]
-				br, pErr = reqInt.maybeRetrySend(ctx, &ba, br, pErr)
-			}
-		}
-	}
-
-	br, pErr = func() (*roachpb.BatchResponse, *roachpb.Error) {
-		if ba.Txn == nil {
-			// Not a transactional request.
-			// TODO(andrei): this should be removed once non-transactional
-			// requests are eliminated from using the TxnCoordSender.
-			return br, pErr
-		}
-
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-
-		// Allow each interceptor to update internal state based on the response
-		// and optionally modify it. Iterate in reverse order to "unwrap" the
-		// interceptor stack.
-		for i := len(tc.interceptorStack) - 1; i >= 0; i-- {
-			reqInt := tc.interceptorStack[i]
-			br, pErr = reqInt.afterSendLocked(ctx, ba, br, pErr)
-		}
-
-		return br, tc.updateStateLocked(ctx, startNS, ba, br, pErr)
-	}()
+	// Send the command through the txnInterceptor stack.
+	br, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
+	pErr = tc.updateStateLocked(ctx, startNS, ba, br, pErr)
 	if pErr != nil {
 		log.VEventf(ctx, 2, "error: %s", pErr)
 		return nil, pErr
@@ -589,7 +562,6 @@ func (tc *TxnCoordSender) Send(
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
-		tc.mu.Lock()
 		tc.mu.txn = br.Txn.Clone()
 		_, hasBT := ba.GetArg(roachpb.BeginTransaction)
 		onePC := br.Txn.Status == roachpb.COMMITTED && hasBT
@@ -597,7 +569,6 @@ func (tc *TxnCoordSender) Send(
 			tc.metrics.Commits1PC.Inc(1)
 		}
 		tc.cleanupTxnLocked(ctx, done)
-		tc.mu.Unlock()
 	}
 	return br, nil
 }
@@ -636,10 +607,12 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	}
 }
 
-// validateTxn validates properties of a txn specified on a request.
-// The transaction is expected to be initialized by the time it reaches
-// the TxnCoordSender.
-func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
+// validateTxnForBatchLocked validates properties of a txn specified on
+// a request. The transaction is expected to be initialized by the time
+// it reaches the TxnCoordSender.
+func (tc *TxnCoordSender) validateTxnForBatchLocked(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) error {
 	if len(ba.Requests) == 0 {
 		return errors.Errorf("empty batch with txn")
 	}
@@ -777,25 +750,15 @@ func (tc *TxnCoordSender) abortTxnAsyncLocked() {
 		Poison: true,
 	})
 
-	// Allow each interceptor to modify the request, as usual. This is
-	// important because we need the txnIntentCollector to append intents
-	// to the EndTransaction request.
-	for _, reqInt := range tc.interceptorStack {
-		var pErr *roachpb.Error
-		ba, pErr = reqInt.beforeSendLocked(ctx, ba)
-		if pErr != nil {
-			log.Warning(ctx, pErr)
-			return
-		}
-	}
-
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
 	if err := tc.stopper.RunAsyncTask(
 		ctx, "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
-			// Use the wrapped sender since we already cleaned up the txn
-			// and have prevented any other requests from being send through
-			// the TxnCoordSender.
-			_, pErr := tc.wrapped.Send(ctx, ba)
+			// Send the abort request through the interceptor stack. This is
+			// important because we need the txnIntentCollector to append
+			// intents to the EndTransaction request.
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			_, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
 			if pErr != nil {
 				log.VErrEventf(ctx, 1,
 					"abort due to inactivity failed for %s: %s ", txn, pErr)
@@ -872,11 +835,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	return true
 }
 
-// startHeartbeatLoop starts a heartbeat loop in a different goroutine.
-func (tc *TxnCoordSender) startHeartbeatLoop(ctx context.Context) error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
+// startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
+func (tc *TxnCoordSender) startHeartbeatLoopLocked(ctx context.Context) error {
 	tc.mu.hbRunning = true
 	tc.mu.firstUpdateNanos = tc.clock.PhysicalNow()
 
@@ -931,6 +891,12 @@ func (tc *TxnCoordSender) updateStateLocked(
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
 ) *roachpb.Error {
+
+	if ba.Txn == nil {
+		// Not a transactional request.
+		return pErr
+	}
+
 	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction
 	if pErr == nil {
