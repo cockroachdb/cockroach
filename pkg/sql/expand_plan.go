@@ -704,7 +704,18 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *projectSetNode:
-		n.source = p.simplifyOrderings(n.source, nil)
+		// We propagate down any ordering constraint relative to the
+		// source. We don't propagate orderings expressed over the SRF
+		// results.
+		var desiredUp sqlbase.ColumnOrdering
+		for _, colOrder := range usefulOrdering {
+			if colOrder.ColIdx >= n.numColsInSource {
+				break
+			}
+			desiredUp = append(desiredUp, colOrder)
+		}
+		n.source = p.simplifyOrderings(n.source, desiredUp)
+		n.computePhysicalProps()
 
 	case *indexJoinNode:
 		// Passing through usefulOrdering here is fine because indexJoinNodes
