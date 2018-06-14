@@ -96,6 +96,8 @@ export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLog
 
 export type QueriesResponseMessage = protos.cockroach.server.serverpb.QueriesResponse;
 
+export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -336,4 +338,9 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
 // getQueries returns queries the cluster has recently executed, and some stats about them.
 export function getQueries(timeout?: moment.Duration): Promise<QueriesResponseMessage> {
   return timeoutFetch(serverpb.QueriesResponse, `${API_PREFIX}/queries`, null, timeout);
+}
+
+// getDataDistribution returns information about how replicas are distributed across nodes.
+export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
+  return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
 }
