@@ -2333,6 +2333,19 @@ func goMerge(existing, update []byte) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
+// goPartialMerge takes existing and update byte slices that are expected to
+// be marshaled roachpb.Values and performs a partial merge using C++ code,
+// marshaled roachpb.Value or an error.
+func goPartialMerge(existing, update []byte) ([]byte, error) {
+	var result C.DBString
+	status := C.DBPartialMergeOne(goToCSlice(existing), goToCSlice(update), &result)
+	if status.data != nil {
+		return nil, errors.Errorf("%s: existing=%q, update=%q",
+			cStringToGoString(status), existing, update)
+	}
+	return cStringToGoBytes(result), nil
+}
+
 func emptyKeyError() error {
 	return errors.Errorf("attempted access to empty key")
 }
