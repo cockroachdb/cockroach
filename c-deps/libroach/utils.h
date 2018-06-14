@@ -22,3 +22,7 @@
 // On non-OK status, the original file has not been touched.
 rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename,
                                       const std::string& contents);
+
+// PathAppend takes two path components and returns the new path
+// with a separator if not already present.
+std::string PathAppend(const std::string& path1, const std::string& path2);

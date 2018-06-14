@@ -40,6 +40,11 @@ enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
   return key;
 }
 
+rocksdb::Status WriteAES128KeyFile(rocksdb::Env* env, const std::string& filename) {
+  return rocksdb::WriteStringToFile(env, RandomBytes(16 + kKeyIDLength), filename,
+                                    true /* should_sync */);
+}
+
 MemKeyManager::~MemKeyManager() {}
 
 std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::CurrentKey() {
