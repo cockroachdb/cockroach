@@ -172,8 +172,11 @@ func (ex *connExecutor) prepare(
 	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
 	// the prepared statement outlives the txn. I hope that it's not used for
 	// anything other than getting a timestamp.
-	txn := client.NewTxn(ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
-
+	txn := ex.state.mu.txn
+	if txn == nil {
+		txn = client.NewTxn(ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	}
+	commit := ex.state.mu.txn == nil
 	// Create a plan for the statement to figure out the typing, then close the
 	// plan.
 	if err := func() error {
@@ -219,11 +222,15 @@ func (ex *connExecutor) prepare(
 		prepared.Types = p.semaCtx.Placeholders.Types
 		return nil
 	}(); err != nil {
-		txn.CleanupOnError(ctx, err)
+		if commit {
+			txn.CleanupOnError(ctx, err)
+		}
 		return nil, err
 	}
-	if err := txn.CommitOrCleanup(ctx); err != nil {
-		return nil, err
+	if commit {
+		if err := txn.CommitOrCleanup(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	// Account for the memory used by this prepared statement: for now we are just
