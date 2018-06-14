@@ -251,6 +251,16 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
+      <DebugTable heading="Additional Debugging Commands">
+        <DebugTableRow title="Run Range Through Queue">
+          <tr className="debug-inner-table__row">
+            curl {window.location.protocol === 'https:' ? '-k' : ''} -H 'Content-Type: application/json' -X POST -d '{'{'}"queue": "consistencyChecker", "rangeId": 1}' {window.location.protocol + '//' + window.location.host + '/_admin/v1/queue'}
+          </tr>
+          <tr className="debug-inner-table__row">
+            curl {window.location.protocol === 'https:' ? '-k' : ''} -H 'Content-Type: application/json' -X POST -d '{'{'}"nodeId": 1, "queue": "gc", "rangeId": 1, "skip_should_queue": true}' {window.location.protocol + '//' + window.location.host + '/_admin/v1/queue'}
+          </tr>
+        </DebugTableRow>
+      </DebugTable>
       <DebugTable heading="UI Debugging">
         <DebugTableRow title="Redux State">
           <DebugTableLink
