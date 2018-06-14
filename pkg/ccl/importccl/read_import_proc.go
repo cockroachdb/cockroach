@@ -393,6 +393,17 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			return
 		}
 		conv = c
+	case roachpb.IOFileFormat_PgDump:
+		tables := cp.spec.Tables
+		if !cp.spec.TableDesc.IsEmpty() {
+			tables = map[string]*sqlbase.TableDescriptor{cp.spec.TableDesc.Name: &cp.spec.TableDesc}
+		}
+		c, err := newPgDumpReader(kvCh, tables, evalCtx)
+		if err != nil {
+			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
+			return
+		}
+		conv = c
 	default:
 		err := errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)

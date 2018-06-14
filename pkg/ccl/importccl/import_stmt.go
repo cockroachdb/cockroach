@@ -425,6 +425,8 @@ func importPlanHook(
 			if override, ok := opts[pgCopyNull]; ok {
 				format.PgCopy.Null = override
 			}
+		case "PGDUMP":
+			format.Format = roachpb.IOFileFormat_PgDump
 		default:
 			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 		}
@@ -470,6 +472,9 @@ func importPlanHook(
 			case roachpb.IOFileFormat_Mysqldump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
 				tableDescs, err = readMysqlCreateTable(reader, evalCtx, parentID, match)
+			case roachpb.IOFileFormat_PgDump:
+				evalCtx := &p.ExtendedEvalContext().EvalContext
+				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime)
 			default:
 				// should be unreachable based on current parser rules.
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
