@@ -13,8 +13,8 @@
 // permissions and limitations under the License.
 
 #include "file_registry.h"
-#include "../fmt.h"
-#include "../utils.h"
+#include "fmt.h"
+#include "utils.h"
 
 using namespace cockroach;
 
@@ -24,7 +24,7 @@ FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool re
     : env_(env),
       db_dir_(db_dir),
       read_only_(read_only),
-      registry_path_(db_dir_ + "/" + kFileRegistryFilename) {}
+      registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {}
 
 rocksdb::Status FileRegistry::CheckNoRegistryFile() {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -117,8 +117,10 @@ std::string FileRegistry::TransformPath(const std::string& filename) {
   return filename.substr(prefixLength);
 }
 
-std::unique_ptr<enginepb::FileEntry> FileRegistry::GetFileEntry(const std::string& filename) {
-  std::string newName = TransformPath(filename);
+std::unique_ptr<enginepb::FileEntry> FileRegistry::GetFileEntry(const std::string& filename,
+                                                                bool relative) {
+  std::string newName =
+      relative ? TransformPath(PathAppend(db_dir_, filename)) : TransformPath(filename);
 
   std::unique_lock<std::mutex> l(mu_);
   assert(registry_ != nullptr);

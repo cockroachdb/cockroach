@@ -50,6 +50,56 @@ TEST(FileRegistry, TransformPath) {
   }
 }
 
+TEST(FileRegistry, RelativePaths) {
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+
+  FileRegistry reg(env.get(), "/base", false);
+  ASSERT_OK(reg.Load());
+
+  // Create a few file entries.
+  std::vector<std::string> files = {
+      "/base/foo",
+      "/base/dir1/bar",
+      "/base/dir1/dir2/baz",
+  };
+  for (auto f : files) {
+    auto entry = std::unique_ptr<enginepb::FileEntry>(new enginepb::FileEntry());
+    EXPECT_OK(reg.SetFileEntry(f, std::move(entry)));
+    EXPECT_NE(nullptr, reg.GetFileEntry(f));
+  }
+
+  struct TestCase {
+    std::string path;
+    bool relative;
+    bool found;
+  };
+
+  std::vector<TestCase> test_cases = {
+      // Full paths.
+      {"/base/foo", false, true},
+      {"/base/dir1/bar", false, true},
+      {"/base/dir1/dir2/baz", false, true},
+      // Relative paths with separator.
+      {"/foo", true, true},
+      {"/dir1/bar", true, true},
+      {"/dir1/dir2/baz", true, true},
+      // Relative paths without separator.
+      {"foo", true, true},
+      {"dir1/bar", true, true},
+      {"dir1/dir2/baz", true, true},
+      // We don't sanitize paths, so a few things break:
+      {"../base/foo", true, false},  // ..
+      {"/dir1//bar", true, false},   // multiple separators
+  };
+
+  int test_num = 0;
+  for (auto t : test_cases) {
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
+    bool found = (reg.GetFileEntry(t.path, t.relative) != nullptr);
+    EXPECT_EQ(t.found, found);
+  }
+}
+
 TEST(FileRegistry, FileOps) {
   std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
 

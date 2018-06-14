@@ -10,6 +10,7 @@
 #include "../db.h"
 #include "../file_registry.h"
 #include "../testutils.h"
+#include "../utils.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
 #include "ctr_stream.h"
@@ -17,6 +18,8 @@
 
 using namespace cockroach;
 using namespace testutils;
+
+namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
 TEST(LibroachCCL, DBOpenHook) {
   DBOptions db_opts;
@@ -49,6 +52,10 @@ TEST(LibroachCCL, DBOpen) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.total_files, 0);
+    EXPECT_EQ(stats.total_bytes, 0);
+    EXPECT_EQ(stats.active_key_files, 0);
+    EXPECT_EQ(stats.active_key_bytes, 0);
 
     DBClose(db);
   }
@@ -74,11 +81,20 @@ TEST(LibroachCCL, DBOpen) {
     EXPECT_STRNE(stats.encryption_status.data, NULL);
 
     // Now parse the status protobuf.
-    cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus enc_status;
+    enginepbccl::EncryptionStatus enc_status;
     ASSERT_TRUE(
         enc_status.ParseFromArray(stats.encryption_status.data, stats.encryption_status.len));
     EXPECT_STREQ(enc_status.active_store_key().key_id().c_str(), "plain");
     EXPECT_STREQ(enc_status.active_data_key().key_id().c_str(), "plain");
+
+    // Make sure the file/bytes stats are non-zero and all marked as using the active key.
+    EXPECT_NE(stats.total_files, 0);
+    EXPECT_NE(stats.total_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
+
+    EXPECT_EQ(stats.total_files, stats.active_key_files);
+    EXPECT_EQ(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
   }
@@ -139,6 +155,99 @@ TEST(LibroachCCL, ReadOnly) {
     // Try to write it again.
     EXPECT_EQ(ToString(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value"))),
               "Not implemented: Not supported operation in read only mode.");
+
+    DBClose(db);
+  }
+}
+
+TEST(LibroachCCL, EncryptionStats) {
+  // We need a real directory.
+  TempDirHandler dir;
+  ASSERT_TRUE(dir.Init());
+
+  // Write a key.
+  ASSERT_OK(WriteAES128KeyFile(rocksdb::Env::Default(), dir.Path("aes-128.key")));
+
+  {
+    // Encryption options specified, but plaintext.
+    DBOptions db_opts = defaultDBOptions();
+    DBEngine* db;
+    db_opts.use_file_registry = true;
+
+    cockroach::ccl::baseccl::EncryptionOptions enc_opts;
+    enc_opts.set_key_source(cockroach::ccl::baseccl::KeyFiles);
+    enc_opts.mutable_key_files()->set_current_key("plain");
+    enc_opts.mutable_key_files()->set_old_key("plain");
+
+    std::string tmpstr;
+    ASSERT_TRUE(enc_opts.SerializeToString(&tmpstr));
+    db_opts.extra_options = ToDBSlice(tmpstr);
+
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STRNE(stats.encryption_status.data, NULL);
+
+    // Write a key.
+    EXPECT_STREQ(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value")).data, NULL);
+    // Force a compaction.
+    ASSERT_EQ(DBCompact(db).data, nullptr);
+
+    // Now parse the status protobuf.
+    enginepbccl::EncryptionStatus enc_status;
+    ASSERT_TRUE(
+        enc_status.ParseFromArray(stats.encryption_status.data, stats.encryption_status.len));
+    EXPECT_EQ(enc_status.active_store_key().encryption_type(), enginepbccl::Plaintext);
+    EXPECT_EQ(enc_status.active_data_key().encryption_type(), enginepbccl::Plaintext);
+
+    // Make sure the file/bytes stats are non-zero and all marked as using the active key.
+    EXPECT_NE(stats.total_files, 0);
+    EXPECT_NE(stats.total_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
+
+    EXPECT_EQ(stats.total_files, stats.active_key_files);
+    EXPECT_EQ(stats.total_bytes, stats.active_key_bytes);
+
+    DBClose(db);
+  }
+
+  {
+    // Re-open the DB with AES encryption.
+    DBOptions db_opts = defaultDBOptions();
+    DBEngine* db;
+    db_opts.use_file_registry = true;
+
+    cockroach::ccl::baseccl::EncryptionOptions enc_opts;
+    enc_opts.set_key_source(cockroach::ccl::baseccl::KeyFiles);
+    enc_opts.mutable_key_files()->set_current_key(dir.Path("aes-128.key"));
+    enc_opts.mutable_key_files()->set_old_key("plain");
+
+    std::string tmpstr;
+    ASSERT_TRUE(enc_opts.SerializeToString(&tmpstr));
+    db_opts.extra_options = ToDBSlice(tmpstr);
+
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STRNE(stats.encryption_status.data, NULL);
+
+    // Now parse the status protobuf.
+    enginepbccl::EncryptionStatus enc_status;
+    ASSERT_TRUE(
+        enc_status.ParseFromArray(stats.encryption_status.data, stats.encryption_status.len));
+    EXPECT_EQ(enc_status.active_store_key().encryption_type(), enginepbccl::AES128_CTR);
+    EXPECT_EQ(enc_status.active_data_key().encryption_type(), enginepbccl::AES128_CTR);
+
+    // Make sure the file/bytes stats are non-zero.
+    EXPECT_NE(stats.total_files, 0);
+    EXPECT_NE(stats.total_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
+
+    // However, we won't be at the total as we have the SST from the plaintext run still around.
+    EXPECT_NE(stats.total_files, stats.active_key_files);
+    EXPECT_NE(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
   }
