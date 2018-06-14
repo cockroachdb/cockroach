@@ -203,6 +203,13 @@ func (gt *grpcTransport) send(
 	ctx context.Context, client batchClient,
 ) (*roachpb.BatchResponse, error) {
 	reply, err := func() (*roachpb.BatchResponse, error) {
+		// Bail out early if the context is already canceled. (GRPC will
+		// detect this pretty quickly, but the first check of the context
+		// in the local server comes pretty late)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		gt.opts.metrics.SentCount.Inc(1)
 		if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
 			log.VEvent(ctx, 2, "sending request to local server")
