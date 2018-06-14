@@ -17,6 +17,8 @@ package distsqlrun
 import (
 	"time"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -53,6 +55,15 @@ func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 	isc.StallTime += timeutil.Since(start)
 	return row, meta
+}
+
+// StatsForQueryPlan is a utility method that returns a list of the InputStats'
+// stats to output on a query plan.
+func (is InputStats) StatsForQueryPlan() []string {
+	return []string{
+		fmt.Sprintf("rows read: %d", is.NumRows),
+		fmt.Sprintf("stall time: %v", is.RoundStallTime()),
+	}
 }
 
 // RoundStallTime returns the InputStats' StallTime rounded to the nearest
