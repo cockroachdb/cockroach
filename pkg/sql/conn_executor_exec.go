@@ -65,16 +65,16 @@ func (ex *connExecutor) execStmt(
 	pinfo *tree.PlaceholderInfo,
 	pos CmdPos,
 ) (fsm.Event, fsm.EventPayload, error) {
+	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
+		log.HasSpanOrEvent(ctx) {
+		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
+	}
+
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
 		err := ex.runObserverStatement(ctx, stmt, res)
 		return nil, nil, err
-	}
-
-	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
-		log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
 	}
 
 	queryID := ex.generateID()
@@ -495,7 +495,10 @@ func (ex *connExecutor) execStmtInParallel(
 		p:               planner,
 	}
 
-	if err := planner.makePlan(ctx, stmt); err != nil {
+	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
+	err := planner.makePlan(ctx, stmt)
+	ex.sessionTracing.TracePlanEnd(ctx, err)
+	if err != nil {
 		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
@@ -534,9 +537,11 @@ func (ex *connExecutor) execStmtInParallel(
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
+		ex.sessionTracing.TraceExecStart(ctx, "local")
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
-
+		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
+
 		ex.recordStatementSummary(
 			planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
@@ -573,6 +578,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, stmt Statement, planner *planner, res RestrictedCommandResult,
 ) error {
 
+	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 	var err error
 	optMode := ex.sessionData.OptimizerMode
@@ -596,6 +602,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	ex.sessionTracing.TracePlanEnd(ctx, err)
 	if err != nil {
 		res.SetError(err)
 		return nil
@@ -611,6 +618,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
+	ex.sessionTracing.TracePlanCheckStart(ctx)
 	useDistSQL := false
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
@@ -619,6 +627,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ctx, ex.sessionData.DistSQLMode == sessiondata.DistSQLAlways,
 		)
 		if err != nil {
+			ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
 			res.SetError(err)
 			return nil
 		}
@@ -626,11 +635,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			useDistSQL, err = shouldUseDistSQL(
 				ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 			if err != nil {
+				ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
 				res.SetError(err)
 				return nil
 			}
 		}
 	}
+	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, useDistSQL)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
@@ -649,10 +660,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.mu.Unlock()
 
 	if useDistSQL {
+		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res)
 	} else {
+		ex.sessionTracing.TraceExecStart(ctx, "local")
 		err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 	}
+	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 	if err != nil {
 		return err
@@ -730,14 +744,20 @@ func (ex *connExecutor) execWithLocalEngine(
 		res.IncrementRowsAffected(count)
 		return nil
 	case tree.Rows:
+		consumeCtx, cleanup := ex.sessionTracing.TraceExecConsume(ctx)
+		defer cleanup()
+
 		var commErr error
+		var count int
 		queryErr := ex.forEachRow(params, planner.curPlan.plan, func(values tree.Datums) error {
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
 					return err
 				}
 			}
-			commErr = res.AddRow(ctx, values)
+			ex.sessionTracing.TraceExecRowsResult(consumeCtx, values)
+			count++
+			commErr = res.AddRow(consumeCtx, values)
 			return commErr
 		})
 		if commErr != nil {
@@ -768,6 +788,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		func(ts hlc.Timestamp) {
 			_ = ex.server.cfg.Clock.Update(ts)
 		},
+		&ex.sessionTracing,
 	)
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, planner.txn, planner.curPlan.plan, recv, planner.ExtendedEvalContext(),
@@ -1045,9 +1066,15 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 	traceKV := false
 	recordingType := tracing.SnowballRecording
 	enableMode := true
+	assertOff := false
+	showResults := false
 
 	for _, s := range modes {
 		switch strings.ToLower(s) {
+		case "assert_off":
+			assertOff = true
+		case "results":
+			showResults = true
 		case "on":
 			enableMode = true
 		case "off":
@@ -1065,7 +1092,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 	if !enableMode {
 		return ex.sessionTracing.StopTracing()
 	}
-	return ex.sessionTracing.StartTracing(recordingType, traceKV)
+	return ex.sessionTracing.StartTracing(recordingType, traceKV, showResults, assertOff)
 }
 
 // addActiveQuery adds a running query to the list of running queries.

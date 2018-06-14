@@ -77,6 +77,7 @@ func (n *distSQLWrapper) startExec(params runParams) error {
 		func(ts hlc.Timestamp) {
 			_ = execCfg.Clock.Update(ts)
 		},
+		params.p.ExtendedEvalContext().Tracing,
 	)
 	go func() {
 		execCfg.DistSQLPlanner.PlanAndRun(

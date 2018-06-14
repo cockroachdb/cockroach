@@ -378,6 +378,9 @@ func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 func countRowsAffected(params runParams, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
+			if params.extendedEvalCtx.Tracing.Enabled() {
+				log.VEvent(params.ctx, 2, "fast path completed")
+			}
 			return count, nil
 		}
 	}
@@ -654,8 +657,7 @@ func isAsOf(
 		}
 
 		asOf = sc.From.AsOf
-	case *tree.ShowTrace:
-		return isAsOf(s.Statement, evalCtx, max)
+
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -872,7 +874,7 @@ func (scc *schemaChangerCollection) reset() {
 //
 // The list of closures is cleared after (attempting) execution.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, cfg *ExecutorConfig,
+	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
 ) error {
 	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
 		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
@@ -885,7 +887,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.testingKnobs = cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now())
+			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
@@ -958,6 +960,11 @@ type SessionTracing struct {
 	// operators to the current context.
 	kvTracingEnabled bool
 
+	// showResults is set when result tracing is active. This is set
+	// automatically by SHOW TRACE FOR <stmt>, or manually
+	// by SET TRACING = ..., results
+	showResults bool
+
 	// If recording==true, recordingType indicates the type of the current
 	// recording.
 	recordingType tracing.RecordingType
@@ -1013,9 +1020,14 @@ func (st *SessionTracing) getRecording() []tracing.RecordedSpan {
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the messages
 //   are per-row.
-func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
+func (st *SessionTracing) StartTracing(
+	recType tracing.RecordingType, kvTracingEnabled, showResults, assertOff bool,
+) error {
 	if st.enabled {
-		// We're already tracing. No-op.
+		// We're already tracing.
+		if assertOff {
+			return errTracingAlreadyEnabled
+		}
 		return nil
 	}
 
@@ -1031,6 +1043,7 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingE
 
 	st.enabled = true
 	st.kvTracingEnabled = kvTracingEnabled
+	st.showResults = showResults
 	st.recordingType = recType
 
 	// Now hijack the conn's ctx with one that has a recording span.
@@ -1063,6 +1076,9 @@ func (st *SessionTracing) StopTracing() error {
 		return nil
 	}
 	st.enabled = false
+	st.kvTracingEnabled = false
+	st.showResults = false
+	st.recordingType = tracing.NoRecording
 
 	var spans []tracing.RecordedSpan
 
@@ -1096,6 +1112,82 @@ func (st *SessionTracing) KVTracingEnabled() bool {
 // Enabled checks whether session tracing is currently enabled.
 func (st *SessionTracing) Enabled() bool {
 	return st.enabled
+}
+
+// TracePlanStart conditionally emits a trace message at the moment
+// logical planning starts.
+func (st *SessionTracing) TracePlanStart(ctx context.Context, stmtTag string) {
+	if st.enabled {
+		log.VEventf(ctx, 2, "planning starts: %s", stmtTag)
+	}
+}
+
+// TracePlanEnd conditionally emits a trace message at the moment
+// logical planning ends.
+func (st *SessionTracing) TracePlanEnd(ctx context.Context, err error) {
+	if st.enabled {
+		log.VEvent(ctx, 2, "planning ends")
+		if err != nil {
+			log.VEventf(ctx, 2, "planning error: %v", err)
+		}
+	}
+}
+
+// TracePlanCheckStart conditionally emits a trace message at the
+// moment the test of which execution engine to use starts.
+func (st *SessionTracing) TracePlanCheckStart(ctx context.Context) {
+	if st.enabled {
+		log.VEvent(ctx, 2, "checking distributability")
+	}
+}
+
+// TracePlanCheckEnd conditionally emits a trace message at the moment
+// the engine check ends.
+func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist bool) {
+	if st.enabled {
+		if err != nil {
+			log.VEventf(ctx, 2, "distributability check error: %v", err)
+		} else {
+			log.VEventf(ctx, 2, "distributable plan: %v", dist)
+		}
+	}
+}
+
+// TraceExecStart conditionally emits a trace message at the moment
+// plan execution starts.
+func (st *SessionTracing) TraceExecStart(ctx context.Context, engine string) {
+	if st.enabled {
+		log.VEventf(ctx, 2, "execution starts: %s", engine)
+	}
+}
+
+// TraceExecConsume creates a context for TraceExecRowsResult below.
+func (st *SessionTracing) TraceExecConsume(ctx context.Context) (context.Context, func()) {
+	if st.enabled {
+		consumeCtx, sp := tracing.ChildSpan(ctx, "consuming rows")
+		return consumeCtx, sp.Finish
+	}
+	return ctx, func() {}
+}
+
+// TraceExecRowsResult conditionally emits a trace message for a single output row.
+func (st *SessionTracing) TraceExecRowsResult(ctx context.Context, values tree.Datums) {
+	if st.enabled && st.showResults {
+		log.VEventf(ctx, 2, "output row: %s", values)
+	}
+}
+
+// TraceExecEnd conditionally emits a trace message at the moment
+// plan execution completes.
+func (st *SessionTracing) TraceExecEnd(ctx context.Context, err error, count int) {
+	if st.enabled {
+		log.VEventf(ctx, 2, "execution ends")
+		if err != nil {
+			log.VEventf(ctx, 2, "execution failed after %d rows: %v", count, err)
+		} else {
+			log.VEventf(ctx, 2, "rows affected: %d", count)
+		}
+	}
 }
 
 // extractMsgFromRecord extracts the message of the event, which is either in an
@@ -1184,8 +1276,8 @@ var logMessageRE = regexp.MustCompile(
 // |            7          |
 // +-----------------------+
 //
-// Note that what's described above is not the order in which SHOW TRACE FOR ...
-// displays the information.
+// Note that what's described above is not the order in which SHOW TRACE FOR SESSION
+// displays the information: SHOW TRACE will sort by the age column.
 func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error) {
 	// Get all the log messages, in the right order.
 	var allLogs []logRecordRow

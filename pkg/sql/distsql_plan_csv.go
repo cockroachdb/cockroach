@@ -77,6 +77,7 @@ func PlanAndRunExport(
 	recv := makeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
 		execCfg.RangeDescriptorCache, execCfg.LeaseHolderCache, txn, func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
 
 	dsp.Run(&planCtx, txn, &p, recv, evalCtx)
@@ -404,6 +405,7 @@ func LoadCSV(
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
@@ -524,6 +526,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once

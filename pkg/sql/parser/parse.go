@@ -44,6 +44,47 @@ func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
 	return parseWithDepth(1, sql)
 }
 
+var statementTracingOpts = tree.Exprs{
+	tree.NewStrVal("assert_off"),
+	tree.NewStrVal("on"),
+	tree.NewStrVal("results"),
+	tree.NewStrVal("kv"),
+}
+
+// maybeExpandStatement is responsible for substituting single statements at the top level into
+// zero, one or multiple statements.
+func maybeExpandStatement(list []tree.Statement, stmt tree.Statement) []tree.Statement {
+	if stmt == nil {
+		return list
+	}
+
+	switch s := stmt.(type) {
+	case *tree.ShowTraceForStatement:
+		// A top-level SHOW TRACE FOR ... is syntactic sugar for
+		//    SET tracing = assert_off, on, results [, kv];
+		//    <stmt>;
+		//    SET tracing = off;
+		//    SHOW TRACE FOR SESSION
+		// Non top-level uses are rejected during planning.
+		tracingOpts := statementTracingOpts
+		if s.TraceType != tree.ShowTraceKV {
+			// Remove the "kv" option at the end.
+			tracingOpts = tracingOpts[:len(tracingOpts)-1]
+		}
+		list = append(list,
+			&tree.SetTracing{Values: tracingOpts},
+			s.Statement,
+			&tree.SetTracing{Values: tree.Exprs{tree.NewStrVal("off")}},
+			s.ShowTraceForSession,
+		)
+
+	default:
+		// In the regular case, we just use the statement as-is.
+		list = append(list, stmt)
+	}
+	return list
+}
+
 func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {

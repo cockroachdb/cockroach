@@ -39,8 +39,11 @@ render         ·         ·            (a)      a=CONST
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
 
+statement ok
+SHOW KV TRACE FOR SELECT 1
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 output row: [1]
