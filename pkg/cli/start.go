@@ -764,7 +764,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	case sig := <-signalCh:
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process.
-		log.Shout(ctx, log.Severity_ERROR, fmt.Sprintf(
+		log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
 			"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint))
 		handleSignalDuringShutdown(sig)
 		panic("unreachable")
