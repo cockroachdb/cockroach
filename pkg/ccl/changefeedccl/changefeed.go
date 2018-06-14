@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"net/url"
 	"time"
 
@@ -41,6 +42,10 @@ var changefeedPollInterval = settings.RegisterDurationSetting(
 func init() {
 	changefeedPollInterval.Hide()
 }
+
+const (
+	jsonMetaSentinel = `__crdb__`
+)
 
 type changedKVs struct {
 	// sst, if non-nil, is an sstable with mvcc key values as returned by
@@ -326,6 +331,11 @@ func emitRows(
 				keyColumns := input.tableDesc.PrimaryIndex.ColumnNames
 				jsonKeyRaw := make([]interface{}, len(keyColumns))
 				jsonValueRaw := make(map[string]interface{}, len(input.row))
+				if _, ok := details.Opts[optTimestamps]; ok {
+					jsonValueRaw[jsonMetaSentinel] = map[string]interface{}{
+						`updated`: tree.TimestampToDecimal(input.rowTimestamp).Decimal.String(),
+					}
+				}
 				for i := range input.row {
 					jsonValueRaw[input.tableDesc.Columns[i].Name], err = tree.AsJSON(input.row[i])
 					if err != nil {
@@ -358,10 +368,31 @@ func emitRows(
 				}
 			}
 			if input.resolved != (hlc.Timestamp{}) {
+				// NB: To minimize the chance that a user sees duplicates from
+				// below this resolved timestamp, keep this update of the
+				// highwater mark before emitting the resolved timestamp to the
+				// sink.
 				if err := jobProgressedFn(ctx, input.resolved); err != nil {
 					return err
 				}
-				// TODO(dan): Emit resolved timestamps to the sink.
+
+				if _, ok := details.Opts[optTimestamps]; ok {
+					resolvedMetaRaw := map[string]interface{}{
+						jsonMetaSentinel: map[string]interface{}{
+							`resolved`: tree.TimestampToDecimal(input.resolved).Decimal.String(),
+						},
+					}
+					resolvedMeta, err := gojson.Marshal(resolvedMetaRaw)
+					if err != nil {
+						return err
+					}
+
+					// TODO(dan): Emit more fine-grained (table level) resolved
+					// timestamps.
+					if err := sink.EmitResolvedTimestamp(ctx, resolvedMeta); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		return nil
