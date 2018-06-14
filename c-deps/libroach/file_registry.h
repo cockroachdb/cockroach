@@ -40,6 +40,8 @@ class FileRegistry {
   FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool read_only);
   ~FileRegistry() {}
 
+  const std::string db_dir() { return db_dir_; }
+
   // Returns OK if the registry file does not exist.
   // An error could mean the file exists, or I/O error.
   rocksdb::Status CheckNoRegistryFile();
@@ -52,7 +54,9 @@ class FileRegistry {
   std::unordered_set<int> GetUsedEnvTypes();
 
   // Returns the FileEntry for the specified file.
-  std::unique_ptr<enginepb::FileEntry> GetFileEntry(const std::string& filename);
+  // If 'relative' is true, the path is relative to 'db_dir'.
+  std::unique_ptr<enginepb::FileEntry> GetFileEntry(const std::string& filename,
+                                                    bool relative = false);
 
   // Insert 'entry' under 'filename' and persist the registry.
   rocksdb::Status SetFileEntry(const std::string& filename,

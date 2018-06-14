@@ -310,6 +310,13 @@ typedef struct {
 
 // DBEnvStatsResult contains Env stats (filesystem layer).
 typedef struct {
+  // Basic file encryption stats:
+  // Files/bytes across all rocksdb files.
+  uint64_t total_files;
+  uint64_t total_bytes;
+  // Files/bytes using the active data key.
+  uint64_t active_key_files;
+  uint64_t active_key_bytes;
   // encryption status (CCL only).
   // This is a serialized enginepbccl/stats.proto:EncryptionStatus
   DBString encryption_status;

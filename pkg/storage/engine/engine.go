@@ -349,6 +349,14 @@ type Stats struct {
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
 type EnvStats struct {
+	// TotalFiles is the total number of files reported by rocksdb.
+	TotalFiles uint64
+	// TotalBytes is the total size of files reported by rocksdb.
+	TotalBytes uint64
+	// ActiveKeyFiles is the number of files using the active data key.
+	ActiveKeyFiles uint64
+	// ActiveKeyBytes is the size of files using the active data key.
+	ActiveKeyBytes uint64
 	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
 }

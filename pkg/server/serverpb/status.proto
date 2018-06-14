@@ -600,6 +600,14 @@ message StoreDetails {
   // encryption_status is a serialized
   // ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf.
   bytes encryption_status = 2;
+
+  // Basic file stats when encryption is enabled.
+  // Total files/bytes.
+  uint64 total_files = 3;
+  uint64 total_bytes = 4;
+  // Files/bytes using the active data key.
+  uint64 active_key_files = 5;
+  uint64 active_key_bytes = 6;
 }
 
 message StoresResponse {
