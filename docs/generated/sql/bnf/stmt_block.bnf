@@ -360,6 +360,7 @@ on_conflict ::=
 
 import_bundle_format ::=
 	'MYSQLDUMP'
+	| 'PGDUMP'
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -759,6 +760,7 @@ unreserved_keyword ::=
 	| 'PAUSE'
 	| 'PHYSICAL'
 	| 'PGCOPY'
+	| 'PGDUMP'
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'
