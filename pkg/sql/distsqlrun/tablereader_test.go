@@ -329,16 +329,17 @@ func TestLimitScans(t *testing.T) {
 	const limit = 3
 	post := PostProcessSpec{Limit: limit}
 
-	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("root", tracing.Recordable)
 	tracing.StartRecording(sp, tracing.SnowballRecording)
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	flowCtx.EvalCtx.CtxProvider = tree.FixedCtxProvider{Context: ctx}
+
+	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tr.Start(ctx)
 	rows := 0
