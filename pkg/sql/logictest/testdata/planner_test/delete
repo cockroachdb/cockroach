@@ -29,18 +29,27 @@ DELETE FROM kv RETURNING k, v
 1 2
 7 8
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@foo; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@foo]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@bar; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@bar]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 

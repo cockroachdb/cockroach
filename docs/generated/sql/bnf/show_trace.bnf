@@ -3,7 +3,3 @@ show_trace_stmt ::=
 	| 'SHOW'  'TRACE' 'FOR' 'SESSION'
 	| 'SHOW' 'COMPACT' 'KV' 'TRACE' 'FOR' 'SESSION'
 	| 'SHOW'  'KV' 'TRACE' 'FOR' 'SESSION'
-	| 'SHOW' 'COMPACT' 'TRACE' 'FOR' explainable_stmt
-	| 'SHOW'  'TRACE' 'FOR' explainable_stmt
-	| 'SHOW' 'COMPACT' 'KV' 'TRACE' 'FOR' explainable_stmt
-	| 'SHOW'  'KV' 'TRACE' 'FOR' explainable_stmt

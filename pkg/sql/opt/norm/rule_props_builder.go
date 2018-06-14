@@ -87,7 +87,7 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 	case opt.RowNumberOp:
 		b.buildRowNumberProps(ev)
 
-	case opt.ExplainOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around the Explain (it's not capable
 		// of pruning columns or of passing through Project operators).

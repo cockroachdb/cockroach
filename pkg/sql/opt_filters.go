@@ -300,11 +300,6 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
-	case *distSQLWrapper:
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
-		}
-
 	case *explainDistSQLNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -312,13 +307,6 @@ func (p *planner) propagateFilters(
 
 	case *explainPlanNode:
 		if n.optimized {
-			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-				return plan, extraFilter, err
-			}
-		}
-
-	case *showTraceNode:
-		if n.plan != nil {
 			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 				return plan, extraFilter, err
 			}
@@ -394,6 +382,7 @@ func (p *planner) propagateFilters(
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:

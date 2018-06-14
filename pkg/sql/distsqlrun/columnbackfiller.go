@@ -80,6 +80,7 @@ func (cb *columnBackfiller) runChunk(
 			defer cb.flowCtx.testingKnobs.RunAfterBackfillChunk()
 		}
 
+		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
 		key, err = cb.RunColumnBackfillChunk(
 			ctx,
@@ -88,7 +89,8 @@ func (cb *columnBackfiller) runChunk(
 			cb.backfiller.spec.OtherTables,
 			sp,
 			chunkSize,
-			true, /*alsoCommit*/
+			true,  /*alsoCommit*/
+			false, /*traceKV*/
 		)
 		return err
 	})

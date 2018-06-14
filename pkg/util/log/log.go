@@ -197,7 +197,7 @@ func V(level int32) bool {
 // enabled or whether a trace.EventLog or a trace.Trace (i.e. sp.netTr) is
 // attached to ctx. In particular, if some OpenTracing collection is enabled
 // (e.g. LightStep), that, by itself, does NOT cause the expensive messages to
-// be enabled. SHOW TRACE FOR <stmt> and friends, on the other hand, does cause
+// be enabled. "SET tracing" and friends, on the other hand, does cause
 // these messages to be enabled, as it shows that a user has expressed
 // particular interest in a trace.
 //

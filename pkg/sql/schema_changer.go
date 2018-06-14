@@ -540,6 +540,7 @@ func (sc *SchemaChanger) drainNames(
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
+	ctx = log.WithLogTag(ctx, "scExec", "")
 	if log.V(2) {
 		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
 			sc.tableID, sc.mutationID)
@@ -1181,7 +1182,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
 			for tableID, sc := range schemaChangers {
 				if timeutil.Since(sc.execAfter) > 0 {
-					evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
+					evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now(), &SessionTracing{})
 
 					execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
 					err := sc.exec(execCtx, false /* inSession */, &evalCtx)
@@ -1387,9 +1388,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
+func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extendedEvalContext {
 	dummyLocation := time.UTC
 	evalCtx := extendedEvalContext{
+		Tracing: tracing,
 		EvalContext: tree.EvalContext{
 			SessionData: &sessiondata.SessionData{
 				SearchPath: sqlbase.DefaultSearchPath,

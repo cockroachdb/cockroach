@@ -197,9 +197,6 @@ type ShowTraceOpDef struct {
 
 	// ColList stores the column IDs for the SHOW TRACE columns.
 	ColList opt.ColList
-
-	// Props stores the required physical properties for the enclosed expression.
-	Props props.Physical
 }
 
 // RowNumberDef defines the value of the Def private field of the RowNumber

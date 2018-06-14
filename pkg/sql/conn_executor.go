@@ -1821,7 +1821,6 @@ func (ex *connExecutor) resetPlanner(
 func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	ev fsm.Event, payload fsm.EventPayload, res ResultBase, pos CmdPos,
 ) (advanceInfo, error) {
-
 	var implicitTxn bool
 	if os, ok := ex.machine.CurState().(stateOpen); ok {
 		implicitTxn = os.ImplicitTxn.Get()
@@ -1852,10 +1851,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if len(ex.extraTxnState.schemaChangers.schemaChangers) > 0 {
 			ex.extraTxnState.tables.releaseLeases(ex.Ctx())
 		}
-		// TODO(andrei): figure out how session tracing should interact with schema
-		// changes.
 		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
-			ex.Ctx(), ex.server.cfg,
+			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
 		); schemaChangeErr != nil {
 			// We got a schema change error. We'll return it to the client as the
 			// result of the current statement - which is either the DDL statement or

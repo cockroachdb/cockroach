@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -70,13 +71,16 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	var spans []tracing.RecordedSpan
 	if n.analyze {
-		// If tracing is already enabled, don't call StopTracing at the end.
-		shouldStopTracing := !params.extendedEvalCtx.Tracing.Enabled()
-
+		if params.extendedEvalCtx.Tracing.Enabled() {
+			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				"cannot run EXPLAIN ANALYZE while tracing is enabled")
+		}
 		// Start tracing. KV tracing is not enabled because we are only interested
 		// in stats present on the spans. Noop if tracing is already enabled.
 		if err := params.extendedEvalCtx.Tracing.StartTracing(
-			tracing.SnowballRecording, false, /* kvTracingEnabled */
+			tracing.SnowballRecording,
+			false, /* kvTracingEnabled */
+			false, /* showResults */
 		); err != nil {
 			return err
 		}
@@ -100,14 +104,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			func(ts hlc.Timestamp) {
 				_ = execCfg.Clock.Update(ts)
 			},
+			params.p.ExtendedEvalContext().Tracing,
 		)
 		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.p.ExtendedEvalContext())
 
 		spans = params.extendedEvalCtx.Tracing.getRecording()
-		if shouldStopTracing {
-			if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
-				return err
-			}
+		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
+			return err
 		}
 	}
 

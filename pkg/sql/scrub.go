@@ -559,6 +559,7 @@ func scrubRunDistSQL(
 		func(ts hlc.Timestamp) {
 			_ = p.ExecCfg().Clock.Update(ts)
 		},
+		p.extendedEvalCtx.Tracing,
 	)
 
 	p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx)

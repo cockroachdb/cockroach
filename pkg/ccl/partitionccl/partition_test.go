@@ -1062,9 +1062,10 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	// doing this directly (running a query and getting back the nodes it ran on
 	// and attributes/localities of those nodes). Users will also want this to
 	// be sure their partitioning is working.
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR %s]`, query),
-	)
+	if _, err := db.Exec(fmt.Sprintf(`SET tracing = on; %s; SET tracing = off`, query)); err != nil {
+		return err
+	}
+	rows, err := db.Query(`SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR SESSION]`)
 	if err != nil {
 		return err
 	}

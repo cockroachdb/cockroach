@@ -140,27 +140,6 @@ func doExpandPlan(
 		explainParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
 
-	case *showTraceNode:
-		// SHOW TRACE only shows the execution trace of the plan, and wants to do
-		// so "as if" plan was at the top level w.r.t spool semantics.
-		showTraceParams := noParamsBase
-		showTraceParams.atTop = true
-		n.plan, err = doExpandPlan(ctx, p, showTraceParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
-		// Check if we can use distSQL for the wrapped plan and this is not a kv
-		// trace. distSQL does not handle kv tracing because this option is not
-		// plumbed down to the tableReader level.
-		// TODO(asubiotto): Handle kv tracing in distSQL.
-		if ok, _ := p.prepareForDistSQLSupportCheck(ctx, false /* returnError */); ok {
-			if useDistSQL, err := shouldUseDistSQL(
-				ctx, p.SessionData().DistSQLMode, p.ExecCfg().DistSQLPlanner, n.plan,
-			); useDistSQL && err == nil && !n.kvTracingEnabled {
-				n.plan = p.newDistSQLWrapper(n.plan, n.stmtType)
-			}
-		}
-
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
@@ -384,6 +363,7 @@ func doExpandPlan(
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 	case nil:
 
@@ -686,13 +666,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *serializeNode:
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
 
-	case *distSQLWrapper:
-		n.plan = p.simplifyOrderings(n.plan, nil)
-
 	case *explainDistSQLNode:
-		n.plan = p.simplifyOrderings(n.plan, nil)
-
-	case *showTraceNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *showTraceReplicaNode:
@@ -884,6 +858,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:

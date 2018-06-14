@@ -314,7 +314,6 @@ func (ps *privateStorage) internShowTraceOpDef(def *ShowTraceOpDef) PrivateID {
 		ps.keyBuf.WriteByte(0)
 	}
 	ps.keyBuf.writeColList(def.ColList)
-	ps.keyBuf.WriteString(def.Props.Fingerprint())
 	typ := (*ShowTraceOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id

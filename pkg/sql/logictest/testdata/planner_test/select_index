@@ -21,8 +21,11 @@ INSERT INTO t VALUES
   (2, 'two', 22, 'bar'),
   (3, 'three', 33, 'blah')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/2/'two' -> NULL
@@ -30,8 +33,11 @@ fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a IN (1, 3); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a IN (1, 3)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -43,8 +49,11 @@ fetched: /t/primary/3/'three'/c -> 33
 fetched: /t/primary/3/'three'/d -> 'blah'
 output row: [3 'three' 33 'blah']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE d = 'foo' OR d = 'bar'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d = 'foo' OR d = 'bar']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -52,8 +61,11 @@ output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22)); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -61,15 +73,21 @@ output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) = ('foo', 11); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) = ('foo', 11)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a < 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a < 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -77,8 +95,11 @@ fetched: /t/primary/1/'one'/c -> 11
 fetched: /t/primary/1/'one'/d -> 'foo'
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a <= (1 + 1); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a <= (1 + 1)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -90,8 +111,11 @@ fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b FROM t WHERE b > 't'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t WHERE b > 't']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/bc/'three'/33/3 -> NULL
@@ -99,8 +123,11 @@ output row: [3 'three']
 fetched: /t/bc/'two'/22/2 -> NULL
 output row: [2 'two']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE d < ('b' || 'l'); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d < ('b' || 'l')]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -110,8 +137,11 @@ output row: [2 'two' 22 'bar']
 # index. Note that the index "dc" was chosen because it contains fewer
 # keys per row than the primary key index while still containing all
 # of the needed columns.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE c = 22]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -120,8 +150,11 @@ fetched: /t/dc/'blah'/33/3/'three' -> NULL
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 
 # Use the descending index
+statement ok
+SET tracing = on,kv,results; SELECT a FROM t ORDER BY a DESC; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t ORDER BY a DESC]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_desc/3/'three' -> NULL
@@ -132,8 +165,11 @@ fetched: /t/a_desc/1/'one' -> NULL
 output row: [1]
 
 # Use the descending index with multiple spans.
+statement ok
+SET tracing = on,kv,results; SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_desc/3/'three' -> NULL
@@ -173,22 +209,31 @@ INSERT INTO t VALUES
   (1, 'b', NULL, NULL),
   (1, 'c', NULL, NULL)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a > 0 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 0 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a > 1 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
@@ -197,8 +242,11 @@ EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 norows  ·  ·
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'b' -> NULL
@@ -217,22 +265,31 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 AND a < 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 AND a < 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -240,8 +297,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 2 OR a < 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 2 OR a < 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -249,8 +309,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a <= 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a <= 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -258,8 +321,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a <= 3 OR a < 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a <= 3 OR a < 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -267,8 +333,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a > 3 OR a >= 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a > 3 OR a >= 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -276,8 +345,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 OR a > 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 OR a > 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -285,8 +357,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a = 3 OR a = 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a = 3 OR a = 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -294,8 +369,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a > 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a > 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -303,8 +381,11 @@ output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a + 1 = 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -558,9 +639,12 @@ limit              ·      ·
 # reading from the end (ORDER BY k DESC) so we should see 20 values
 # from 030 to 011 (thus not 001-010).
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20; SET tracing = off
+
 query T
 SELECT regexp_replace(message, '\d\d\d\d\d+', '...PK...')
-  FROM [SHOW KV TRACE FOR SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20]
+  FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%'
 ----
 fetched: /test2/test2_k_key/'030' -> /...PK...
@@ -875,8 +959,11 @@ index-join  ·      ·
  └── scan   ·      ·
 ·           table  noncover@primary
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE b = 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /noncover/b/2/1 -> NULL
@@ -896,8 +983,11 @@ index-join  ·      ·
  └── scan   ·      ·
 ·           table  noncover@primary
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE c = 7]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /noncover/c/7 -> /5
@@ -1048,8 +1138,11 @@ index-join  ·       ·
 ·           table   t2@primary
 
 # We do NOT look up the table row for '21' and '23'.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
@@ -1075,8 +1168,11 @@ index-join  ·       ·
 ·           table   t2@primary
 
 # We do NOT look up the table row for '22'.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
@@ -1094,8 +1190,11 @@ fetched: /t2/primary/6/s -> '23'
 output row: [6 2 3 '23']
 
 # We do NOT look up the table row for '22'.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
@@ -1112,8 +1211,11 @@ fetched: /t2/primary/6/s -> '23'
 output row: [6 2 3 '23']
 
 # We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32')); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL

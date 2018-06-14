@@ -173,14 +173,8 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		if n.sourcePlan != nil {
 			p.applyLimit(n.sourcePlan, numRows, soft)
 		}
-	case *distSQLWrapper:
-		p.applyLimit(n.plan, numRows, soft)
 	case *explainDistSQLNode:
 		p.setUnlimited(n.plan)
-	case *showTraceNode:
-		if n.plan != nil {
-			p.setUnlimited(n.plan)
-		}
 	case *showTraceReplicaNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
@@ -231,6 +225,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:

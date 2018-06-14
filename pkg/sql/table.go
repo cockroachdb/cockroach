@@ -726,7 +726,14 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if p.Tables().isCreatedTable(tableDesc.ID) {
-		if err := runSchemaChangesInTxn(ctx, p.txn, p.Tables(), p.execCfg, p.EvalContext(), tableDesc); err != nil {
+		if err := runSchemaChangesInTxn(ctx,
+			p.txn,
+			p.Tables(),
+			p.execCfg,
+			p.EvalContext(),
+			tableDesc,
+			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		); err != nil {
 			return err
 		}
 	} else {

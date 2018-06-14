@@ -31,16 +31,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 			setNeededColumns(n.sourcePlan, allColumns(n.sourcePlan))
 		}
 
-	case *distSQLWrapper:
-		setNeededColumns(n.plan, allColumns(n.plan))
-
 	case *explainDistSQLNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
-
-	case *showTraceNode:
-		if n.plan != nil {
-			setNeededColumns(n.plan, allColumns(n.plan))
-		}
 
 	case *showTraceReplicaNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
@@ -283,6 +275,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:

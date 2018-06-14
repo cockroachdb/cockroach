@@ -39,11 +39,6 @@ render         ·         ·            (a)      ·
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
 
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-output row: [1]
 
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT 1 a

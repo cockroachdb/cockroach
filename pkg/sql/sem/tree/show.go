@@ -108,27 +108,20 @@ const (
 	ShowTraceReplica ShowTraceType = "EXPERIMENTAL_REPLICA TRACE"
 )
 
-// ShowTrace represents a SHOW TRACE FOR <stmt>/SESSION statement.
-type ShowTrace struct {
-	// If statement is nil, this is asking for the session trace.
-	Statement Statement
+// ShowTraceForSession represents a SHOW TRACE FOR SESSION statement.
+type ShowTraceForSession struct {
 	TraceType ShowTraceType
 	Compact   bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowTrace) Format(ctx *FmtCtx) {
+func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.Compact {
 		ctx.WriteString("COMPACT ")
 	}
 	ctx.WriteString(string(node.TraceType))
-	ctx.WriteString(" FOR ")
-	if node.Statement == nil {
-		ctx.WriteString("SESSION")
-	} else {
-		ctx.FormatNode(node.Statement)
-	}
+	ctx.WriteString(" FOR SESSION")
 }
 
 // ShowIndex represents a SHOW INDEX statement.

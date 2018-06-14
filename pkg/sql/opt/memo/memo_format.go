@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -323,24 +322,6 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		}
 
 	case *ExplainOpDef:
-		if mode == formatMemo {
-			propsStr := t.Props.String()
-			if propsStr != "" {
-				fmt.Fprintf(f.buf, " %s", propsStr)
-			}
-		}
-
-	case *ShowTraceOpDef:
-		if t.Compact {
-			f.buf.WriteString(" compact")
-		}
-		switch t.Type {
-		case tree.ShowTraceKV:
-			f.buf.WriteString(" kv")
-		case tree.ShowTraceReplica:
-			f.buf.WriteString(" replica")
-		}
-
 		if mode == formatMemo {
 			propsStr := t.Props.String()
 			if propsStr != "" {
