@@ -800,7 +800,15 @@ func RunGC(
 						// chunk and start a new one.
 						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
-							if err := gcer.GC(ctx, batchGCKeys); err != nil {
+
+							err := gcer.GC(ctx, batchGCKeys)
+
+							// Succeed or fail, allow releasing the memory backing batchGCKeys.
+							iter.ResetAllocator()
+							batchGCKeys = nil
+							batchGCKeysBytes = 0
+
+							if err != nil {
 								// Even though we are batching the GC process, it's
 								// safe to continue because we bumped the GC
 								// thresholds. We may leave some inconsistent history
@@ -808,10 +816,6 @@ func RunGC(
 								log.Warning(ctx, err)
 								return
 							}
-							// Allow releasing the memory backing batchGCKeys.
-							iter.ResetAllocator()
-							batchGCKeys = nil
-							batchGCKeysBytes = 0
 						}
 					}
 					// Add the key to the batch at the GC timestamp, unless it was already added.
@@ -831,6 +835,9 @@ func RunGC(
 			return GCInfo{}, err
 		} else if !ok {
 			break
+		} else if ctx.Err() != nil {
+			// Stop iterating if our context has expired.
+			return GCInfo{}, err
 		}
 		iterKey := iter.Key()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
