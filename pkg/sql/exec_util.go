@@ -169,6 +169,9 @@ var (
 	MetaQuery = metric.Metadata{
 		Name: "sql.query.count",
 		Help: "Number of SQL queries"}
+	MetaFailure = metric.Metadata{
+		Name: "sql.failure.count",
+		Help: "Number of statements resulting in a planning or runtime error"}
 )
 
 // NodeInfo contains metadata about the executing node and cluster.

@@ -90,6 +90,10 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
 		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		switch ev.(type) {
+		case eventNonRetriableErr:
+			ex.server.StatementCounters.FailureCount.Inc(1)
+		}
 	case stateAborted, stateRestartWait:
 		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
 	case stateCommitWait:
