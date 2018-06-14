@@ -131,3 +131,22 @@ render            ·                                            (generate_series
       └── scan    ·                                            (a, rowid[hidden,omitted])
 ·                 t@primary                                    ·
 ·                 ALL                                          ·
+
+subtest srf_source_order
+
+# Check that SRFs do not abuse their source's ordering.
+
+statement ok
+CREATE TABLE v(x INT PRIMARY KEY)
+
+query TTTTT
+EXPLAIN(VERBOSE) SELECT x, generate_series(3, x, -1) FROM v
+ORDER BY 1, 2;
+----
+sort              ·         ·                                        (x, generate_series)  x!=NULL; +x,+generate_series
+ │                order     +x,+generate_series                      ·                     ·
+ └── project set  ·         ·                                        (x, generate_series)  x!=NULL; +x
+      │           render 0  generate_series(3, test.public.v.x, -1)  ·                     ·
+      └── scan    ·         ·                                        (x)                   x!=NULL; key(x); +x
+·                 table     v@primary                                ·                     ·
+·                 spans     ALL                                      ·                     ·

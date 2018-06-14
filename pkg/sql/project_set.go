@@ -69,6 +69,9 @@ type projectSetNode struct {
 	// each entry in `exprs`.
 	numColsPerGen []int
 
+	// props are the ordering, key props etc.
+	props physicalProps
+
 	run projectSetRun
 }
 
@@ -338,4 +341,13 @@ func (n *projectSetNode) Close(ctx context.Context) {
 			gen.Close()
 		}
 	}
+}
+
+func (n *projectSetNode) computePhysicalProps() {
+	// We can pass through properties because projectSetNode preserves
+	// all input columns, and they come first.
+	n.props = planPhysicalProps(n.source)
+	// However any key in the source is destroyed because rows may repeat
+	// multiple times.
+	n.props.weakKeys = nil
 }
