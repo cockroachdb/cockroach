@@ -32,7 +32,7 @@ import (
 
 func TestShowTraceReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const numNodes = 3
+	const numNodes = 4
 
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = 1
@@ -41,15 +41,14 @@ func TestShowTraceReplica(t *testing.T) {
 	ctx := context.Background()
 	tsArgs := func(node string) base.TestServerArgs {
 		return base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}},
-			},
+			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},
 		}
 	}
 	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
 		0: tsArgs(`n1`),
 		1: tsArgs(`n2`),
 		2: tsArgs(`n3`),
+		3: tsArgs(`n4`),
 	}}
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
@@ -59,6 +58,7 @@ func TestShowTraceReplica(t *testing.T) {
 	tc.WaitForNodeStatuses(t)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, `ALTER RANGE "default" EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n4]'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
@@ -70,6 +70,7 @@ func TestShowTraceReplica(t *testing.T) {
 	tests := []struct {
 		query    string
 		expected [][]string
+		distinct bool
 	}{
 		{
 			// Read-only
@@ -87,22 +88,31 @@ func TestShowTraceReplica(t *testing.T) {
 			expected: [][]string{{`2`, `2`}, {`2`, `2`}},
 		},
 		{
-			// Admin command
+			// Admin command. We use distinct because the ALTER statement is
+			// DDL and cause event log / job ranges to be touched too.
 			query:    `ALTER TABLE d.t3 SCATTER`,
-			expected: [][]string{{`3`, `3`}},
+			expected: [][]string{{`4`, `4`}, {`3`, `3`}},
+			distinct: true,
 		},
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		for _, test := range tests {
-			query := fmt.Sprintf(
-				`SELECT node_id, store_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR %s]`,
-				test.query)
-			actual := sqlDB.QueryStr(t, query)
-			if !reflect.DeepEqual(actual, test.expected) {
-				return errors.Errorf(`%s: got %v expected %v`, test.query, actual, test.expected)
-			}
-		}
-		return nil
-	})
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			testutils.SucceedsSoon(t, func() error {
+				_ = sqlDB.Exec(t, fmt.Sprintf(`SET tracing = on; %s; SET tracing = off`, test.query))
+
+				distinct := ""
+				if test.distinct {
+					distinct = "DISTINCT"
+				}
+				actual := sqlDB.QueryStr(t,
+					fmt.Sprintf(`SELECT %s node_id, store_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION]`, distinct),
+				)
+				if !reflect.DeepEqual(actual, test.expected) {
+					return errors.Errorf(`%s: got %v expected %v`, test.query, actual, test.expected)
+				}
+				return nil
+			})
+		})
+	}
 }

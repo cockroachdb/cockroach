@@ -159,28 +159,26 @@ type planNodeFastPath interface {
 }
 
 var _ planNode = &alterIndexNode{}
-var _ planNode = &alterTableNode{}
 var _ planNode = &alterSequenceNode{}
+var _ planNode = &alterTableNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
-var _ planNode = &createTableNode{}
-var _ planNode = &createViewNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
+var _ planNode = &createTableNode{}
+var _ planNode = &CreateUserNode{}
+var _ planNode = &createViewNode{}
 var _ planNode = &delayedNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
-var _ planNode = &dropTableNode{}
-var _ planNode = &dropViewNode{}
 var _ planNode = &dropSequenceNode{}
-var _ planNode = &zeroNode{}
-var _ planNode = &unaryNode{}
-var _ planNode = &distSQLWrapper{}
+var _ planNode = &dropTableNode{}
+var _ planNode = &DropUserNode{}
+var _ planNode = &dropViewNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
-var _ planNode = &showTraceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
@@ -196,17 +194,18 @@ var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
 var _ planNode = &serializeNode{}
-var _ planNode = &showRangesNode{}
 var _ planNode = &showFingerprintsNode{}
+var _ planNode = &showRangesNode{}
+var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
 var _ planNode = &upsertNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
-var _ planNode = &CreateUserNode{}
-var _ planNode = &DropUserNode{}
+var _ planNode = &zeroNode{}
 
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}
@@ -517,9 +516,6 @@ func startExec(params runParams, plan planNode) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
 			switch p.(type) {
-			case *distSQLWrapper:
-				// Do not recurse: the plan is executed in distSQL.
-				return false, nil
 			case *explainPlanNode, *explainDistSQLNode:
 				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
 				return false, nil
@@ -780,7 +776,7 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
@@ -901,7 +897,7 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)

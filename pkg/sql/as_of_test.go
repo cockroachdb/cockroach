@@ -314,9 +314,7 @@ func TestAsOfRetry(t *testing.T) {
 	}
 }
 
-// Test that SHOW TRACE FOR SELECT ... AS OF SYSTEM TIME works.
-// AS OF SYSTEM TIME is generally only accepted at the topmost level of a query,
-// but SHOW TRACE FOR is a special case.
+// Test that tracing works with SELECT ... AS OF SYSTEM TIME.
 func TestShowTraceAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -350,20 +348,16 @@ func TestShowTraceAsOfTime(t *testing.T) {
 	}
 
 	// We now run a traced historical query and expect to see val1 instead of the
-	// more recent val2. We play some tricks for testing this; we run a SHOW KV
-	// TRACE so that rows like "output row: [<foo>]" are part of the results. And
-	// then we look for a particular such row. Unfortunately we can't easily do
-	// this on the original query because SELECT ... FROM [SHOW TRACE FOR ... AS
-	// OF SYSTEM TIME ... ) WHERE ...  is not supported because of AS OF SYSTEM
-	// TIME limitations. So, we cheat and we use a subsequent SHOW TRACE FOR
-	// SESSION, which will present the results recorded by the first query.
-	query := fmt.Sprintf("SHOW KV TRACE FOR SELECT x FROM test.t AS OF SYSTEM TIME %s", tsVal1)
+	// more recent val2. We play some tricks for testing this; we run SET tracing = results
+	// so that rows like "output row: [<foo>]" are part of the results. And
+	// then we look for a particular such row.
+	query := fmt.Sprintf("SET tracing = on,results; SELECT x FROM test.t AS OF SYSTEM TIME %s; SET tracing = off", tsVal1)
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
 
-	query = fmt.Sprintf("select count(1) from [show kv trace for session] "+
-		"where message = 'output row: [%d]'", val1)
+	query = fmt.Sprintf("SELECT count(1) FROM [SHOW KV TRACE FOR SESSION] "+
+		"WHERE message = 'output row: [%d]'", val1)
 	if err := db.QueryRow(query).Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != 1 {

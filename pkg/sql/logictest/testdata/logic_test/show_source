@@ -249,18 +249,8 @@ SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
 ----
 timestamp age message tag loc operation span
 
-query TTTTTTT colnames
-SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
-----
-timestamp  age  message  tag  loc  operation  span
-
 query TTTT colnames
 SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
-----
-age  message  tag  operation
-
-query TTTT colnames
-SELECT * FROM [SHOW COMPACT TRACE FOR SELECT 1] LIMIT 0
 ----
 age  message  tag  operation
 
