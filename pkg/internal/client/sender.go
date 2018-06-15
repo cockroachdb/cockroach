@@ -83,15 +83,15 @@ type TxnSender interface {
 // TxnSenderFactory is the interface used to create new instances
 // of TxnSender.
 type TxnSenderFactory interface {
-	// New returns a new instance of TxnSender.
+	// TransactionalSender returns a sender to be used for transactional requests.
 	// typ specifies whether the sender is the root or one of potentially many
 	// child "leaf" nodes in a tree of transaction objects, as is created during a
 	// DistSQL flow.
-	// txn is the transaction whose requests this sender will carry. It can be nil
-	// if the sender will not be used for transactional requests.
-	New(typ TxnType, txn *roachpb.Transaction) TxnSender
-	// WrappedSender returns the TxnSenderFactory's wrapped Sender.
-	WrappedSender() Sender
+	// txn is the transaction whose requests this sender will carry.
+	TransactionalSender(typ TxnType, txn *roachpb.Transaction) TxnSender
+	// NonTransactionalSender returns a sender to be used for non-transactional
+	// requests. Generally this is a sender that TransactionalSender() wraps.
+	NonTransactionalSender() Sender
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
@@ -132,14 +132,34 @@ func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
 // as TxnSenderFactories. This is a helper mechanism to facilitate testing.
 type TxnSenderFactoryFunc func(TxnType) TxnSender
 
-// New calls f().
-func (f TxnSenderFactoryFunc) New(typ TxnType, _ *roachpb.Transaction) TxnSender {
+var _ TxnSenderFactory = TxnSenderFactoryFunc(nil)
+
+// TransactionalSender is part of TxnSenderFactory.
+func (f TxnSenderFactoryFunc) TransactionalSender(typ TxnType, _ *roachpb.Transaction) TxnSender {
 	return f(typ)
 }
 
-// WrappedSender is not implemented for TxnSenderFactoryFunc.
-func (f TxnSenderFactoryFunc) WrappedSender() Sender {
-	panic("unimplemented")
+// NonTransactionalSender is part of TxnSenderFactory.
+func (f TxnSenderFactoryFunc) NonTransactionalSender() Sender {
+	return nil
+}
+
+// NonTransactionalFactoryFunc is a TxnSenderFactory that cannot, in fact,
+// create any transactional senders, only non-transactional ones.
+type NonTransactionalFactoryFunc SenderFunc
+
+var _ TxnSenderFactory = NonTransactionalFactoryFunc(nil)
+
+// TransactionalSender is part of the TxnSenderFactory.
+func (f NonTransactionalFactoryFunc) TransactionalSender(
+	typ TxnType, _ *roachpb.Transaction,
+) TxnSender {
+	panic("not supported ")
+}
+
+// NonTransactionalSender is part of the TxnSenderFactory.
+func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
+	return SenderFunc(f)
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch

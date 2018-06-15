@@ -176,7 +176,7 @@ func NewTxnWithProto(
 	proto.AssertInitialized(context.TODO())
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.Proto = proto
-	txn.mu.sender = db.factory.New(typ, &proto)
+	txn.mu.sender = db.factory.TransactionalSender(typ, &proto)
 	return txn
 }
 
@@ -1258,7 +1258,7 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		txn.mu.state = txnReadOnly
 
 		// Create a new txn sender.
-		txn.mu.sender = txn.db.factory.New(txn.typ, newTxn)
+		txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, newTxn)
 	} else {
 		// Update the transaction proto with the one to be used for the next
 		// attempt. The txn inside pErr was correctly prepared for this by

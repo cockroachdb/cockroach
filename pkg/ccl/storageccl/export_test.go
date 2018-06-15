@@ -51,7 +51,7 @@ func TestExportCmd(t *testing.T) {
 			MVCCFilter: mvccFilter,
 			ReturnSST:  true,
 		}
-		res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+		res, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
@@ -185,7 +185,7 @@ func TestExportGCThreshold(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
-	_, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+	_, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
 		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
 	}
