@@ -1173,7 +1173,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := client.SendWrappedWith(context.Background(), s.DB().GetSender(),
+		if _, pErr := client.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -1214,7 +1214,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 			PrevLease: curLease,
 		}
-		if _, pErr := client.SendWrapped(context.Background(), s.DB().GetSender(), &leaseReq); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Unblock the read.
@@ -1234,7 +1234,7 @@ func LeaseInfo(
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-	reply, pErr := client.SendWrappedWith(context.Background(), db.GetSender(), roachpb.Header{
+	reply, pErr := client.SendWrappedWith(context.Background(), db.NonTransactionalSender(), roachpb.Header{
 		ReadConsistency: readConsistency,
 	}, leaseInfoReq)
 	if pErr != nil {
@@ -1366,7 +1366,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	}
 	_, pErr := client.SendWrappedWith(
 		context.Background(),
-		s.DB().GetSender(),
+		s.DB().NonTransactionalSender(),
 		roachpb.Header{UserPriority: 42},
 		&leaseReq,
 	)
