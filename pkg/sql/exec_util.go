@@ -1113,17 +1113,33 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 	return "<event missing in trace message>"
 }
 
+const (
+	// span_idx    INT NOT NULL,        -- The span's index.
+	traceSpanIdxCol = iota
+	// message_idx INT NOT NULL,        -- The message's index within its span.
+	_
+	// timestamp   TIMESTAMPTZ NOT NULL,-- The message's timestamp.
+	traceTimestampCol
+	// duration    INTERVAL,            -- The span's duration.
+	//                                  -- NULL if the span was not finished at the time
+	//                                  -- the trace has been collected.
+	traceDurationCol
+	// operation   STRING NULL,         -- The span's operation.
+	traceOpCol
+	// loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
+	traceLocCol
+	// tag         STRING NOT NULL,     -- The logging tag, if any.
+	traceTagCol
+	// message     STRING NOT NULL,     -- The logged message.
+	traceMsgCol
+	// age         INTERVAL NOT NULL    -- The age of the message.
+	traceAgeCol
+	// traceNumCols must be the last item in the enumeration.
+	traceNumCols
+)
+
 // traceRow is the type of a single row in the session_trace vtable.
-// The columns are as follows:
-// - span_idx
-// - message_idx
-// - timestamp
-// - duration
-// - operation
-// - location
-// - tag
-// - message
-type traceRow [8]tree.Datum
+type traceRow [traceNumCols]tree.Datum
 
 // A regular expression to split log messages.
 // It has three parts:
@@ -1192,25 +1208,30 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 	}
 
 	// Transform the log messages into table rows.
+	// We need to populate "operation" later because it is only
+	// set for the first row in each span.
+	opMap := make(map[tree.DInt]*tree.DString)
+	durMap := make(map[tree.DInt]*tree.DInterval)
 	var res []traceRow
+	var minTimestamp, zeroTime time.Time
 	for _, lrr := range allLogs {
 		// The "operation" column is only set for the first row in span.
-		var operation tree.Datum
+		// We'll populate the rest below.
 		if lrr.index == 0 {
-			operation = tree.NewDString(lrr.span.Operation)
-		} else {
-			operation = tree.DNull
-		}
-		var dur tree.Datum
-		if lrr.index == 0 && lrr.span.Duration != 0 {
-			dur = &tree.DInterval{
-				Duration: duration.Duration{
-					Nanos: lrr.span.Duration.Nanoseconds(),
-				},
+			spanIdx := tree.DInt(lrr.span.index)
+			opMap[spanIdx] = tree.NewDString(lrr.span.Operation)
+			if lrr.span.Duration != 0 {
+				durMap[spanIdx] = &tree.DInterval{
+					Duration: duration.Duration{
+						Nanos: lrr.span.Duration.Nanoseconds(),
+					},
+				}
 			}
-		} else {
-			// Span was not finished.
-			dur = tree.DNull
+		}
+
+		// We'll need the lowest timestamp to compute ages below.
+		if minTimestamp == zeroTime || lrr.timestamp.Before(minTimestamp) {
+			minTimestamp = lrr.timestamp
 		}
 
 		// Split the message into component parts.
@@ -1228,14 +1249,39 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
 			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
 			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
-			dur,       // duration
-			operation, // operation
+			tree.DNull,                              // duration, will be populated below
+			tree.DNull,                              // operation, will be populated below
 			tree.NewDString(lrr.msg[loc[2]:loc[3]]), // location
 			tree.NewDString(lrr.msg[loc[4]:loc[5]]), // tag
 			tree.NewDString(lrr.msg[loc[6]:loc[7]]), // message
+			tree.DNull,                              // age, will be populated below
 		}
 		res = append(res, row)
 	}
+
+	if len(res) == 0 {
+		// Nothing to do below. Shortcut.
+		return res, nil
+	}
+
+	// Populate the operation and age columns.
+	for i := range res {
+		spanIdx := res[i][traceSpanIdxCol]
+
+		if opStr, ok := opMap[*(spanIdx.(*tree.DInt))]; ok {
+			res[i][traceOpCol] = opStr
+		}
+
+		if dur, ok := durMap[*(spanIdx.(*tree.DInt))]; ok {
+			res[i][traceDurationCol] = dur
+		}
+
+		ts := res[i][traceTimestampCol].(*tree.DTimestampTZ)
+		res[i][traceAgeCol] = &tree.DInterval{
+			Duration: duration.Duration{Nanos: ts.Sub(minTimestamp).Nanoseconds()},
+		}
+	}
+
 	return res, nil
 }
 

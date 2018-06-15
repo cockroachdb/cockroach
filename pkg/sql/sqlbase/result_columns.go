@@ -122,7 +122,7 @@ var ExplainOptColumns = ResultColumns{
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},
-	{Name: "age", Typ: types.Interval},
+	{Name: "age", Typ: types.Interval}, // Note GetTraceAgeColumnIdx below.
 	{Name: "message", Typ: types.String},
 	{Name: "tag", Typ: types.String},
 	{Name: "loc", Typ: types.String},
@@ -133,10 +133,19 @@ var ShowTraceColumns = ResultColumns{
 // ShowCompactTraceColumns are the result columns of a
 // SHOW COMPACT [KV] TRACE statement.
 var ShowCompactTraceColumns = ResultColumns{
-	{Name: "age", Typ: types.Interval},
+	{Name: "age", Typ: types.Interval}, // Note GetTraceAgeColumnIdx below.
 	{Name: "message", Typ: types.String},
 	{Name: "tag", Typ: types.String},
 	{Name: "operation", Typ: types.String},
+}
+
+// GetTraceAgeColumnIdx retrieves the index of the age column
+// depending on whether the compact format is used.
+func GetTraceAgeColumnIdx(compact bool) int {
+	if compact {
+		return 0
+	}
+	return 1
 }
 
 // ShowReplicaTraceColumns are the result columns of a

@@ -19,12 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -71,11 +70,23 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, e
 		}
 	}
 
-	node := p.makeShowTraceNode(stmtPlan, stmtType, n.Compact, n.TraceType == tree.ShowTraceKV)
+	var node planNode = p.makeShowTraceNode(
+		stmtPlan, stmtType, n.Compact, n.TraceType == tree.ShowTraceKV)
+
+	// Ensure the messages are sorted in age order, so that the user
+	// does not get confused.
+	ageColIdx := sqlbase.GetTraceAgeColumnIdx(n.Compact)
+	node = &sortNode{
+		plan:    node,
+		columns: planColumns(node),
+		ordering: sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
+		},
+		needSort: true,
+	}
 
 	if n.TraceType == tree.ShowTraceReplica {
-		// Wrap the showTraceNode in a showTraceReplicaNode.
-		return p.makeShowTraceReplicaNode(node), nil
+		node = &showTraceReplicaNode{plan: node}
 	}
 	return node, nil
 }
@@ -205,47 +216,15 @@ func (n *showTraceNode) runChildPlan(params runParams) {
 }
 
 // processTraceRows populates n.resultRows.
+// This code must be careful not to overwrite traceRows,
+// because this is a shared slice which will be reused
+// by subsequent SHOW TRACE FOR SESSION statements.
 func (n *showTraceNode) processTraceRows(evalCtx *tree.EvalContext, traceRows []traceRow) {
-	// The schema of the trace rows mirrors that of the
-	// crdb_internal.session_trace table:
-	const (
-		// span_idx    INT NOT NULL,        -- The span's index.
-		spanIdxCol = iota
-		// message_idx INT NOT NULL,        -- The message's index within its span.
-		_
-		// timestamp   TIMESTAMPTZ NOT NULL,-- The message's timestamp.
-		timestampCol
-		// duration    INTERVAL,            -- The span's duration. Set only on the first
-		//                                  -- (dummy) message on a span.
-		//                                  -- NULL if the span was not finished at the time
-		//                                  -- the trace has been collected.
-		_
-		// operation   STRING NULL,         -- The span's operation. Set only on
-		//                                  -- the first (dummy) message in a span.
-		opCol
-		// loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
-		locCol
-		// tag         STRING NOT NULL,     -- The logging tag, if any.
-		tagCol
-		// message     STRING NOT NULL      -- The logged message.
-		msgCol
-	)
-
-	// Get the operation ID for each spanIdx (it is present only in the first
-	// message of a span).
-	opMap := make(map[tree.DInt]*tree.DString)
-	for _, r := range traceRows {
-		if r[opCol] != tree.DNull {
-			spanIdx := *r[spanIdxCol].(*tree.DInt)
-			opMap[spanIdx] = r[opCol].(*tree.DString)
-		}
-	}
-
 	// Filter trace rows based on the message (in the SHOW KV TRACE case)
 	if n.kvTracingEnabled {
-		res := traceRows[:0]
+		res := make([]traceRow, 0, len(traceRows))
 		for _, r := range traceRows {
-			msg := r[msgCol].(*tree.DString)
+			msg := r[traceMsgCol].(*tree.DString)
 			if kvMsgRegexp.MatchString(string(*msg)) {
 				res = append(res, r)
 			}
@@ -256,28 +235,16 @@ func (n *showTraceNode) processTraceRows(evalCtx *tree.EvalContext, traceRows []
 		return
 	}
 
-	// Sort the trace rows based on timestamp.
-	sort.Slice(traceRows, func(i, j int) bool {
-		return traceRows[i][timestampCol].Compare(
-			evalCtx,
-			traceRows[j][timestampCol],
-		) < 0
-	})
-
 	// Render the final rows.
 	n.run.resultRows = make([]tree.Datums, len(traceRows))
-	minTs := traceRows[0][timestampCol].(*tree.DTimestampTZ)
 	for i, r := range traceRows {
-		ts := r[timestampCol].(*tree.DTimestampTZ)
-		age := &tree.DInterval{Duration: duration.Duration{Nanos: ts.Sub(minTs.Time).Nanoseconds()}}
-		loc := r[locCol]
-		tag := r[tagCol]
-		msg := r[msgCol]
-		spanIdx := r[spanIdxCol]
-		op := tree.DNull
-		if opStr, ok := opMap[*(spanIdx.(*tree.DInt))]; ok {
-			op = opStr
-		}
+		ts := r[traceTimestampCol].(*tree.DTimestampTZ)
+		loc := r[traceLocCol]
+		tag := r[traceTagCol]
+		msg := r[traceMsgCol]
+		spanIdx := r[traceSpanIdxCol]
+		op := r[traceOpCol]
+		age := r[traceAgeCol]
 
 		if !n.compact {
 			n.run.resultRows[i] = tree.Datums{ts, age, msg, tag, loc, op, spanIdx}
