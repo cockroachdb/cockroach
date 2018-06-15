@@ -676,7 +676,7 @@ func backup(
 				StartTime:     span.start,
 				MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
-			rawRes, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+			rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 			if pErr != nil {
 				return pErr.GoError()
 			}
@@ -1198,7 +1198,7 @@ func getAllRevisions(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
 	}
-	resp, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}

@@ -74,15 +74,30 @@ func (s *Store) TestSender() client.Sender {
 // testSenderFactory is an implementation of the
 // client.TxnSenderFactory interface.
 type testSenderFactory struct {
-	store *Store
+	store        *Store
+	nonTxnSender *testSender
 }
 
-func (f *testSenderFactory) New(typ client.TxnType, _ *roachpb.Transaction) client.TxnSender {
+func (f *testSenderFactory) TransactionalSender(
+	typ client.TxnType, _ *roachpb.Transaction,
+) client.TxnSender {
 	return &testSender{store: f.store}
 }
 
-func (f *testSenderFactory) WrappedSender() client.Sender {
-	return f.store
+func (f *testSenderFactory) NonTransactionalSender() client.Sender {
+	if f.nonTxnSender != nil {
+		return f.nonTxnSender
+	}
+	f.nonTxnSender = &testSender{store: f.store}
+	return f.nonTxnSender
+}
+
+func (f *testSenderFactory) setStore(s *Store) {
+	f.store = s
+	if f.nonTxnSender != nil {
+		// monkey-patch an already created Sender, helping with test bootstrapping.
+		f.nonTxnSender.store = s
+	}
 }
 
 // testSender is an implementation of the client.TxnSender interface
@@ -165,7 +180,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	factory := &testSenderFactory{}
 	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	factory.store = store
+	factory.setStore(store)
 	if err := store.Bootstrap(
 		context.TODO(), roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cfg.Settings.Version.BootstrapVersion(),
 	); err != nil {

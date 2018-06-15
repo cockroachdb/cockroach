@@ -137,7 +137,7 @@ func (n *scatterNode) startExec(params runParams) error {
 		RequestHeader:   roachpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 		RandomizeLeases: true,
 	}
-	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
+	res, pErr := client.SendWrapped(params.ctx, db.NonTransactionalSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}

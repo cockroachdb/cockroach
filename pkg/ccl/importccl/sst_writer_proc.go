@@ -182,7 +182,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						scatterReq := &roachpb.AdminScatterRequest{
 							RequestHeader: roachpb.RequestHeaderFromSpan(sst.span),
 						}
-						if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
+						if _, pErr := client.SendWrapped(ctx, sp.db.NonTransactionalSender(), scatterReq); pErr != nil {
 							// TODO(dan): Unfortunately, Scatter is still too unreliable to
 							// fail the IMPORT when Scatter fails. I'm uncomfortable that
 							// this could break entirely and not start failing the tests,
