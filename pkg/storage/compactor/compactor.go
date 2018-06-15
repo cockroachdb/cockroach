@@ -130,16 +130,16 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					return
 
 				case <-c.ch:
-					// A new suggestion was made. Examine the compaction queue,
-					// which returns the number of bytes queued.
-					if bytesQueued, err := c.examineQueue(ctx); err != nil {
-						log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
-					} else if bytesQueued > 0 {
-						log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
-					} else {
-						// Queue is empty, don't set the timer. This can happen only at startup.
-						break
-					}
+					// // A new suggestion was made. Examine the compaction queue,
+					// // which returns the number of bytes queued.
+					// if bytesQueued, err := c.examineQueue(ctx); err != nil {
+					// 	log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
+					// } else if bytesQueued > 0 {
+					// 	log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
+					// } else {
+					// 	// Queue is empty, don't set the timer. This can happen only at startup.
+					// 	break
+					// }
 					// Set the wait timer if not already set.
 					if !isFast {
 						isFast = true
@@ -148,21 +148,27 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 
 				case <-timer.C:
 					timer.Read = true
-					ok, err := c.processSuggestions(ctx)
-					if err != nil {
-						log.Warningf(ctx, "failed processing suggested compactions: %s", err)
+
+					if err := c.eng.Flush(); err != nil {
+						log.Warningf(ctx, "failed to flush memtable: %s", err)
+						continue
 					}
-					if ok {
-						// The queue was processed, so either it's empty or contains suggestions
-						// that were skipped for now. Revisit when they are certainly expired.
-						isFast = false
-						timer.Reset(c.maxAge())
-						break
-					}
-					// More work to do, revisit after minInterval. Note that basically
-					// `ok == (err == nil)` but this refactor is left for a future commit.
-					isFast = true
-					timer.Reset(c.minInterval())
+
+					// ok, err := c.processSuggestions(ctx)
+					// if err != nil {
+					// 	log.Warningf(ctx, "failed processing suggested compactions: %s", err)
+					// }
+					// if ok {
+					// 	// The queue was processed, so either it's empty or contains suggestions
+					// 	// that were skipped for now. Revisit when they are certainly expired.
+					// 	isFast = false
+					// 	timer.Reset(c.maxAge())
+					// 	break
+					// }
+					// // More work to do, revisit after minInterval. Note that basically
+					// // `ok == (err == nil)` but this refactor is left for a future commit.
+					// isFast = true
+					// timer.Reset(c.minInterval())
 				}
 			}
 		})
@@ -317,7 +323,7 @@ func (c *Compactor) fetchSuggestions(
 			dataIter.Seek(engine.MakeMVCCMetadataKey(sc.StartKey))
 			if ok, err := dataIter.Valid(); err != nil {
 				return false, err
-			} else if ok && dataIter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(sc.EndKey)) {
+			} else if ok && true || dataIter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(sc.EndKey)) {
 				// The suggested compaction span has live keys remaining. This is a
 				// strong indicator that compacting this range will be significantly
 				// more expensive than we expected when the compaction was suggested, as
