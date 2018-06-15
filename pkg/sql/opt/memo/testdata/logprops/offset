@@ -162,7 +162,7 @@ offset
  ├── stats: [rows=0]
  ├── keys: (1)
  ├── select
- │    ├── columns: x:1(int!null) s:4(string)
+ │    ├── columns: x:1(int!null=const) s:4(string)
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── keys: (1)

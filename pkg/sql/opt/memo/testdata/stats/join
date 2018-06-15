@@ -181,7 +181,7 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
  ├── stats: [rows=400000]
  └── select
-      ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)
+      ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null=const) rowid:7(int!null)
       ├── stats: [rows=400000, distinct(6)=1]
       ├── inner-join
       │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)

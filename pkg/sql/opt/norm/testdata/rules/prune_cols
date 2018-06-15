@@ -156,7 +156,7 @@ opt
 SELECT k, i FROM a WHERE k=1 AND i<5
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null)
+ ├── columns: k:1(int!null=const) i:2(int!null)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
@@ -208,7 +208,7 @@ project
       ├── project
       │    ├── columns: f:5(float) i:2(int)
       │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) a.f:3(float)
+      │    │    ├── columns: k:1(int!null=const) i:2(int) a.f:3(float)
       │    │    ├── constraint: /1: [/5 - /5]
       │    │    └── keys: (1)
       │    └── projections [outer=(2,3)]
@@ -223,7 +223,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 project
  ├── columns: f:3(float) r:6(float)
  ├── select
- │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
+ │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null=const)
  │    ├── keys: (1)
  │    ├── group-by
  │    │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal)

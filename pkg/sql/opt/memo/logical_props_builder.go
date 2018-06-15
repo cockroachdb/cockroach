@@ -172,6 +172,23 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 		}
 	}
 
+	// Constant Columns
+	// ----------------
+	// A column can become constant via equality constraints:
+	//
+	//    SELECT y FROM xy WHERE y=5 ORDER BY z
+	//
+	// This can be useful to infer in the case where there's an index on (y, z),
+	// in which case no sort is required.
+	relational.ConstantCols = inputProps.ConstantCols
+	if filterProps.Constraints != nil {
+		constraintConstantCols := filterProps.Constraints.ExtractConstCols(b.evalCtx)
+		if !constraintConstantCols.Empty() {
+			relational.ConstantCols = relational.ConstantCols.Union(constraintConstantCols)
+			relational.ConstantCols.IntersectionWith(relational.OutputCols)
+		}
+	}
+
 	// Outer Columns
 	// -------------
 	// Any outer columns from the filter that are not bound by the input columns

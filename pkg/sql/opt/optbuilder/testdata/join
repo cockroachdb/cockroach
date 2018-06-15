@@ -2333,7 +2333,7 @@ build
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
+ ├── columns: x:1(int!null=const) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
  ├── inner-join
  │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  │    ├── scan xyu
@@ -2633,7 +2633,7 @@ build
 SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
 select
- ├── columns: a:1(int!null) a:2(int)
+ ├── columns: a:1(int!null=const) a:2(int)
  ├── left-join
  │    ├── columns: l.a:1(int!null) r.a:2(int)
  │    ├── scan l
@@ -2653,7 +2653,7 @@ build
 SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
 select
- ├── columns: a:1(int) a:2(int!null)
+ ├── columns: a:1(int) a:2(int!null=const)
  ├── right-join
  │    ├── columns: l.a:1(int) r.a:2(int!null)
  │    ├── scan l
@@ -2675,7 +2675,7 @@ SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
 project
  ├── columns: a:1(int!null)
  └── select
-      ├── columns: l.a:1(int!null) r.a:2(int)
+      ├── columns: l.a:1(int!null=const) r.a:2(int)
       ├── left-join
       │    ├── columns: l.a:1(int!null) r.a:2(int)
       │    ├── scan l
@@ -2697,7 +2697,7 @@ SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
 project
  ├── columns: a:2(int!null)
  └── select
-      ├── columns: l.a:1(int) r.a:2(int!null)
+      ├── columns: l.a:1(int) r.a:2(int!null=const)
       ├── right-join
       │    ├── columns: l.a:1(int) r.a:2(int!null)
       │    ├── scan l

@@ -296,7 +296,7 @@ sort
  └── project
       ├── columns: column5:5(decimal!null)
       └── select
-           ├── columns: v:2(int) column5:5(decimal!null)
+           ├── columns: v:2(int) column5:5(decimal!null=const)
            ├── group-by
            │    ├── columns: v:2(int) column5:5(decimal)
            │    ├── grouping columns: v:2(int)

@@ -105,7 +105,7 @@ project
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  └── select
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null=const)
       ├── stats: [rows=1000, distinct(5)=1]
       ├── keys: (1) weak(3,4)
       ├── left-join-apply
@@ -170,7 +170,7 @@ right-join
  │    ├── stats: [rows=1000]
  │    ├── keys: (1) weak(3,4)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
+ │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int=const)
  │         ├── stats: [rows=1000, distinct(8)=1]
  │         ├── keys: (1) weak(3,4)
  │         ├── left-join-apply
@@ -473,7 +473,7 @@ semi-join
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1000]
  ├── select
- │    ├── columns: cnt:5(int!null)
+ │    ├── columns: cnt:5(int!null=const)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1, distinct(5)=1]
  │    ├── group-by

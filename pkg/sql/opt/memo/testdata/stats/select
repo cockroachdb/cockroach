@@ -65,7 +65,7 @@ project
  ├── columns: x:1(int!null) z:2(int!null)
  ├── stats: [rows=0]
  └── select
-      ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── columns: x:1(int!null=const) z:2(int!null=const) rowid:3(int!null)
       ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
       ├── keys: (3)
       ├── scan b
@@ -113,7 +113,7 @@ build
 SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null)
+ ├── columns: x:1(int!null) y:2(int!null=const)
  ├── stats: [rows=10, distinct(2)=1]
  ├── keys: (1)
  ├── scan a

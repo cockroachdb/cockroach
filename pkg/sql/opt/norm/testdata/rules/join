@@ -77,7 +77,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.s='foo'
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb) x:6(int!null) y:7(int)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null=const) j:5(jsonb)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -96,7 +96,7 @@ SELECT * FROM a RIGHT JOIN b ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND a.
 right-join
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null=const) j:5(jsonb)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -135,7 +135,7 @@ semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── keys: (1)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null=const) j:5(jsonb)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -177,7 +177,7 @@ inner-join
  │    ├── columns: x:1(int!null) y:2(int)
  │    └── keys: (1)
  ├── select
- │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string!null) j:7(jsonb)
+ │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string!null=const) j:7(jsonb)
  │    ├── keys: (3)
  │    ├── scan a
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
@@ -196,7 +196,7 @@ left-join
  │    ├── columns: x:1(int!null) y:2(int)
  │    └── keys: (1)
  ├── select
- │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string!null) j:7(jsonb)
+ │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string!null=const) j:7(jsonb)
  │    ├── keys: (3)
  │    ├── scan a
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
@@ -276,7 +276,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.i=1 AND b.y=1
 inner-join
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int!null=const) f:3(float) s:4(string) j:5(jsonb)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -284,7 +284,7 @@ inner-join
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  ├── select
- │    ├── columns: x:6(int!null) y:7(int!null)
+ │    ├── columns: x:6(int!null) y:7(int!null=const)
  │    ├── keys: (6)
  │    ├── scan b
  │    │    ├── columns: x:6(int!null) y:7(int)
@@ -330,7 +330,7 @@ semi-join-apply
  │    ├── outer: (2)
  │    ├── keys: (3)
  │    ├── select
- │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string!null) a.j:7(jsonb)
+ │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string!null=const) a.j:7(jsonb)
  │    │    ├── keys: (3)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
@@ -338,7 +338,7 @@ semi-join-apply
  │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
  │    │         └── a.s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
  │    ├── select
- │    │    ├── columns: a.k:8(int!null) a.i:9(int!null) a.f:10(float) a.s:11(string) a.j:12(jsonb)
+ │    │    ├── columns: a.k:8(int!null) a.i:9(int!null=const) a.f:10(float) a.s:11(string) a.j:12(jsonb)
  │    │    ├── keys: (8)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float) a.s:11(string) a.j:12(jsonb)
@@ -397,7 +397,7 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) sum:7(decimal!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) sum:7(decimal!null=const)
       ├── keys: (1)
       ├── group-by
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) sum:7(decimal)
@@ -533,7 +533,7 @@ opt
 SELECT s FROM (VALUES (1, 2)) INNER JOIN a ON s='foo'
 ----
 select
- ├── columns: s:6(string!null)
+ ├── columns: s:6(string!null=const)
  ├── scan a
  │    └── columns: s:6(string)
  └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
@@ -546,7 +546,7 @@ opt
 SELECT s FROM a INNER JOIN (SELECT count(*) FROM b) ON s='foo'
 ----
 select
- ├── columns: s:4(string!null)
+ ├── columns: s:4(string!null=const)
  ├── scan a
  │    └── columns: s:4(string)
  └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]

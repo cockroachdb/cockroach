@@ -262,6 +262,21 @@ func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
+// ExtractConstCols returns a set of columns which can only have one value
+// for the constraints in the set to hold.
+func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	var res opt.ColSet
+
+	for i, n := 0, s.Length(); i < n; i++ {
+		c := s.Constraint(i)
+		pre := c.ExactPrefix(evalCtx)
+		for j := 0; j < pre; j++ {
+			res.Add(int(c.Columns.Get(j).ID()))
+		}
+	}
+	return res
+}
+
 // allocConstraint allocates space for a new constraint in the set and returns
 // a pointer to it. The first constraint is stored inline, and subsequent
 // constraints are stored in the otherConstraints slice.

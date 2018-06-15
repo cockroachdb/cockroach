@@ -42,7 +42,7 @@ build
 SELECT * FROM kv WHERE v IN (6)
 ----
 select
- ├── columns: k:1(int!null) v:2(int!null)
+ ├── columns: k:1(int!null) v:2(int!null=const)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
  └── filters [type=bool]
@@ -252,7 +252,7 @@ SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
 project
  ├── columns: a:1(int!null) b:2(int!null)
  └── select
-      ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
+      ├── columns: a:1(int!null=const) b:2(int!null=const) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── filters [type=bool]

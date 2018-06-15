@@ -300,7 +300,7 @@ Initial expression
    ├── columns: s:4(string!null) k:1(int!null)
    ├── keys: (1)
    └── select
-        ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
+        ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null=const) j:5(jsonb)
         ├── keys: (1) (3,4)
         ├── scan a
         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -315,7 +315,7 @@ SimplifyFilters
     ├── columns: s:4(string!null) k:1(int!null)
     ├── keys: (1)
     └── select
-         ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
+         ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null=const) j:5(jsonb)
          ├── keys: (1) (3,4)
          ├── scan a
          │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -332,8 +332,8 @@ PruneSelectCols
     ├── columns: s:4(string!null) k:1(int!null)
     ├── keys: (1)
     └── select
-  -      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
-  +      ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+  -      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null=const) j:5(jsonb)
+  +      ├── columns: k:1(int!null) f:3(float!null) s:4(string!null=const)
          ├── keys: (1) (3,4)
          ├── scan a
   -      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -350,7 +350,7 @@ GenerateIndexScans
     ├── columns: s:4(string!null) k:1(int!null)
     ├── keys: (1)
     └── select
-         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null=const)
          ├── keys: (1) (3,4)
   -      ├── scan a
   +      ├── scan a@secondary
@@ -370,7 +370,7 @@ ConstrainScan
     ├── columns: s:4(string!null) k:1(int!null)
     ├── keys: (1)
     └── select
-         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null=const)
          ├── keys: (1) (3,4)
          ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
@@ -393,7 +393,7 @@ SimplifyFilters
     ├── keys: (1)
   - └── select
   + └── scan a@secondary
-         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null=const)
   -      ├── keys: (1) (3,4)
   -      ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
@@ -412,7 +412,7 @@ Final best expression
    ├── columns: s:4(string!null) k:1(int!null)
    ├── keys: (1)
    └── scan a@secondary
-        ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+        ├── columns: k:1(int!null) f:3(float!null) s:4(string!null=const)
         ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
         └── keys: (1) (3,4)
 

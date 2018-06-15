@@ -29,7 +29,7 @@ opt
 SELECT * FROM t WHERE a IS NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int=const) b:2(bool) c:3(string)
  ├── stats: [rows=1.43, distinct(1)=1]
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
@@ -57,7 +57,7 @@ opt
 SELECT * FROM t WHERE b IS NULL AND c IS NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool=const) c:3(string=const)
  ├── stats: [rows=0.0020, distinct(2)=0.0020, distinct(3)=0.0020]
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)

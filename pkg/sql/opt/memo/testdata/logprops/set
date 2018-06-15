@@ -58,7 +58,7 @@ intersect
       ├── stats: [rows=1.43, distinct(3-5)=1.43]
       ├── keys: (5)
       └── select
-           ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
+           ├── columns: u:3(int!null=const) v:4(int!null) rowid:5(int!null)
            ├── stats: [rows=1.43, distinct(3)=1, distinct(3-5)=1.43]
            ├── keys: (5)
            ├── scan uv
@@ -93,7 +93,7 @@ except
            ├── columns: u:3(int!null) v:4(int!null)
            ├── stats: [rows=1.43, distinct(3,4)=1.43]
            └── select
-                ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
+                ├── columns: u:3(int!null=const) v:4(int!null) rowid:5(int!null)
                 ├── stats: [rows=1.43, distinct(3)=1, distinct(3,4)=1.43]
                 ├── keys: (5)
                 ├── scan uv

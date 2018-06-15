@@ -548,7 +548,7 @@ project
  ├── cost: 1.11
  ├── prune: (8)
  └── scan warehouse
-      ├── columns: warehouse.w_id:1(int!null) warehouse.w_tax:8(decimal)
+      ├── columns: warehouse.w_id:1(int!null=const) warehouse.w_tax:8(decimal)
       ├── constraint: /1: [/10 - /10]
       ├── stats: [rows=1, distinct(1)=1]
       ├── cost: 1.11
@@ -566,7 +566,7 @@ project
  ├── cost: 0.00
  ├── prune: (6,14,16)
  └── scan customer
-      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_last:6(string) customer.c_credit:14(string) customer.c_discount:16(decimal)
+      ├── columns: customer.c_id:1(int!null=const) customer.c_d_id:2(int!null=const) customer.c_w_id:3(int!null=const) customer.c_last:6(string) customer.c_credit:14(string) customer.c_discount:16(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
       ├── cost: 0.00
@@ -640,7 +640,7 @@ sort
       ├── cost: 0.00
       ├── prune: (1,4)
       └── scan customer@customer_idx
-           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
+           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null=const) customer.c_w_id:3(int!null=const) customer.c_first:4(string) customer.c_last:6(string!null=const)
            ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
            ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(6)=0]
            ├── cost: 0.00
@@ -667,7 +667,7 @@ project
  ├── cost: 0.00
  ├── prune: (4-6,17)
  └── scan customer
-      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string) customer.c_balance:17(decimal)
+      ├── columns: customer.c_id:1(int!null=const) customer.c_d_id:2(int!null=const) customer.c_w_id:3(int!null=const) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string) customer.c_balance:17(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
       ├── cost: 0.00
@@ -692,14 +692,14 @@ sort
       ├── cost: 0.00
       ├── prune: (1,4,5,17)
       └── lookup-join customer
-           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null) customer.c_balance:17(decimal)
+           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null=const) customer.c_w_id:3(int!null=const) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null=const) customer.c_balance:17(decimal)
            ├── key columns: [3 2 1]
            ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(6)=0]
            ├── cost: 0.00
            ├── keys: (1-3)
            ├── prune: (1,4,5,17)
            └── scan customer@customer_idx
-                ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
+                ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null=const) customer.c_w_id:3(int!null=const) customer.c_first:4(string) customer.c_last:6(string!null=const)
                 ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
                 ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(6)=0]
                 ├── cost: 0.00
@@ -729,21 +729,21 @@ project
       ├── ordering: -1
       ├── prune: (5,6)
       ├── sort
-      │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null=const) "order".o_w_id:3(int!null=const) "order".o_c_id:4(int!null=const) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
       │    ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(4)=0]
       │    ├── cost: 0.01
       │    ├── keys: (1-3)
       │    ├── ordering: -1
       │    ├── prune: (1,5,6)
       │    └── lookup-join order
-      │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null=const) "order".o_w_id:3(int!null=const) "order".o_c_id:4(int!null=const) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
       │         ├── key columns: [3 2 1]
       │         ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(4)=0]
       │         ├── cost: 0.00
       │         ├── keys: (1-3)
       │         ├── prune: (1,5,6)
       │         └── scan order@secondary
-      │              ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null)
+      │              ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null=const) "order".o_w_id:3(int!null=const) "order".o_c_id:4(int!null=const)
       │              ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
       │              ├── stats: [rows=0, distinct(2)=0, distinct(3)=0, distinct(4)=0]
       │              ├── cost: 0.00
@@ -762,7 +762,7 @@ project
  ├── cost: 0.00
  ├── prune: (5-9)
  └── scan order_line
-      ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null) order_line.ol_supply_w_id:6(int) order_line.ol_delivery_d:7(timestamp) order_line.ol_quantity:8(int) order_line.ol_amount:9(decimal)
+      ├── columns: order_line.ol_o_id:1(int!null=const) order_line.ol_d_id:2(int!null=const) order_line.ol_w_id:3(int!null=const) order_line.ol_i_id:5(int!null) order_line.ol_supply_w_id:6(int) order_line.ol_delivery_d:7(timestamp) order_line.ol_quantity:8(int) order_line.ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
       ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
       ├── cost: 0.00
@@ -806,14 +806,14 @@ project
       ├── keys: (1-3)
       ├── ordering: +1
       ├── sort
-      │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null=const) new_order.no_w_id:3(int!null=const)
       │    ├── stats: [rows=0.1429, distinct(2)=0.1429, distinct(3)=0.1429]
       │    ├── cost: 0.16
       │    ├── keys: (1-3)
       │    ├── ordering: +1
       │    ├── prune: (1)
       │    └── scan new_order
-      │         ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │         ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null=const) new_order.no_w_id:3(int!null=const)
       │         ├── constraint: /3/2/1: [/10/100 - /10/100]
       │         ├── stats: [rows=0.1429, distinct(2)=0.1429, distinct(3)=0.1429]
       │         ├── cost: 0.15
@@ -833,7 +833,7 @@ group-by
  ├── cost: 0.00
  ├── prune: (11)
  ├── scan order_line
- │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_amount:9(decimal)
+ │    ├── columns: order_line.ol_o_id:1(int!null=const) order_line.ol_d_id:2(int!null=const) order_line.ol_w_id:3(int!null=const) order_line.ol_amount:9(decimal)
  │    ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
  │    ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
  │    ├── cost: 0.00
@@ -861,7 +861,7 @@ project
  ├── cost: 0.16
  ├── prune: (11)
  └── scan district
-      ├── columns: district.d_id:1(int!null) district.d_w_id:2(int!null) district.d_next_o_id:11(int)
+      ├── columns: district.d_id:1(int!null=const) district.d_w_id:2(int!null=const) district.d_next_o_id:11(int)
       ├── constraint: /2/1: [/10/100 - /10/100]
       ├── stats: [rows=0.1429, distinct(1)=0.1429, distinct(2)=0.1429]
       ├── cost: 0.16
@@ -1150,7 +1150,7 @@ except-all
       ├── keys: (4-6)
       ├── prune: (4-6)
       └── select
-           ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null) "order".o_carrier_id:9(int)
+           ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null) "order".o_carrier_id:9(int=const)
            ├── stats: [rows=1.43, distinct(9)=1]
            ├── cost: 327000.00
            ├── keys: (4-6)
@@ -1184,7 +1184,7 @@ except-all
  │    ├── keys: (1-3)
  │    ├── prune: (1-3)
  │    └── select
- │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int=const)
  │         ├── stats: [rows=1.43, distinct(6)=1]
  │         ├── cost: 327000.00
  │         ├── keys: (1-3)
@@ -1326,7 +1326,7 @@ group-by
  │    │    │    ├── keys: (1-3)
  │    │    │    ├── prune: (1-3)
  │    │    │    └── select
- │    │    │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │    │    │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int=const)
  │    │    │         ├── stats: [rows=1.43, distinct(6)=1]
  │    │    │         ├── cost: 327000.00
  │    │    │         ├── keys: (1-3)
@@ -1347,7 +1347,7 @@ group-by
  │    │    │    ├── cost: 1150000.00
  │    │    │    ├── prune: (9-11)
  │    │    │    └── select
- │    │    │         ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
+ │    │    │         ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp=const)
  │    │    │         ├── stats: [rows=1.43, distinct(15)=1]
  │    │    │         ├── cost: 1150000.00
  │    │    │         ├── prune: (9-11)

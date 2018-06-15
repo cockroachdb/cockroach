@@ -264,7 +264,7 @@ sort
  └── project
       ├── columns: a:1(int!null) b:2(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+           ├── columns: a:1(int!null) b:2(int!null=const) c:3(bool)
            ├── scan t
            │    └── columns: a:1(int!null) b:2(int) c:3(bool)
            └── filters [type=bool]
@@ -292,7 +292,7 @@ sort
  └── project
       ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
       ├── select
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+      │    ├── columns: a:1(int!null) b:2(int!null=const) c:3(bool)
       │    ├── scan t
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       │    └── filters [type=bool]
@@ -677,7 +677,7 @@ sort
  └── project
       ├── columns: c:3(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null=const) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── filters [type=bool]
@@ -694,7 +694,7 @@ sort
  └── project
       ├── columns: c:3(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null=const) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── filters [type=bool]
@@ -713,7 +713,7 @@ sort
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null=const) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── filters [type=bool]

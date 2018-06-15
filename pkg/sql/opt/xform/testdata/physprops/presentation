@@ -29,7 +29,7 @@ opt
 SELECT a.y, a.x, a.y y2 FROM a WHERE y=1
 ----
 select
- ├── columns: y:2(int!null) x:1(int!null) y2:2(int!null)
+ ├── columns: y:2(int!null=const) x:1(int!null) y2:2(int!null=const)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]

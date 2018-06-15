@@ -983,7 +983,7 @@ group-by
  ├── project
  │    ├── columns: s:4(string)
  │    └── select
- │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string=const)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         └── filters [type=bool]
@@ -1296,7 +1296,7 @@ group-by
  ├── project
  │    ├── columns: y:2(int)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │         ├── columns: x:1(int!null=const) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │         └── filters [type=bool]
@@ -1315,7 +1315,7 @@ group-by
  ├── project
  │    ├── columns: y:2(int)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │         ├── columns: x:1(int!null=const) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │         └── filters [type=bool]
@@ -1409,7 +1409,7 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │         ├── columns: x:1(int!null=const) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │         └── filters [type=bool]
@@ -1454,7 +1454,7 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null)
  │    └── select
- │         ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │         ├── columns: x:1(int!null=const) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │         └── filters [type=bool]

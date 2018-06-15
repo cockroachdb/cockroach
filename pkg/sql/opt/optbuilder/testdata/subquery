@@ -783,7 +783,7 @@ build
 SELECT * FROM abc WHERE a = 7
 ----
 select
- ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── columns: a:1(int!null=const) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── filters [type=bool]
@@ -917,7 +917,7 @@ project
            └── project
                 ├── columns: r:3(int!null)
                 ├── select
-                │    ├── columns: k:1(int!null) v:2(string)
+                │    ├── columns: k:1(int!null=const) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── filters [type=bool]
@@ -939,7 +939,7 @@ project
            └── project
                 ├── columns: r:3(int!null)
                 ├── select
-                │    ├── columns: k:1(int!null) v:2(string)
+                │    ├── columns: k:1(int!null=const) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── filters [type=bool]
@@ -1094,7 +1094,7 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
 ----
 select
- ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null=const) moo2:2(int) moo3:3(int)
  ├── values
  │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
  │    ├── tuple [type=tuple{int, int, int}]
@@ -1202,7 +1202,7 @@ project
                 ├── project
                 │    ├── columns: xyz.x:4(int!null)
                 │    └── select
-                │         ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                │         ├── columns: xyz.x:4(int!null=const) xyz.y:5(int) xyz.z:6(int)
                 │         ├── scan xyz
                 │         │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                 │         └── filters [type=bool]
@@ -1219,7 +1219,7 @@ limit
  ├── project
  │    ├── columns: xyz.x:1(int!null)
  │    └── select
- │         ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+ │         ├── columns: xyz.x:1(int!null=const) xyz.y:2(int) xyz.z:3(int)
  │         ├── scan xyz
  │         │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
  │         └── filters [type=bool]
@@ -1232,7 +1232,7 @@ limit
            └── project
                 ├── columns: xyz.x:4(int!null)
                 └── select
-                     ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                     ├── columns: xyz.x:4(int!null=const) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      └── filters [type=bool]
@@ -1258,7 +1258,7 @@ offset
            └── project
                 ├── columns: xyz.x:4(int!null)
                 └── select
-                     ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                     ├── columns: xyz.x:4(int!null=const) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      └── filters [type=bool]
