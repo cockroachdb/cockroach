@@ -448,6 +448,15 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 	}
 }
 
+func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	var res opt.ColSet
+	pre := c.ExactPrefix(evalCtx)
+	for j := 0; j < pre; j++ {
+		res.Add(int(c.Columns.Get(j).ID()))
+	}
+	return res
+}
+
 // ExtractNotNullCols returns a set of columns that cannot be NULL when the
 // constraint holds.
 func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {

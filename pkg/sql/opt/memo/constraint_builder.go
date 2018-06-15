@@ -224,7 +224,9 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
 	keyCtx.Columns.Init(constrainedCols)
 	var spans constraint.Spans
-	spans.Alloc(len(constrainedCols))
+	spans.Alloc(rhs.ChildCount())
+
+	keyCtx.Columns.Init(constrainedCols)
 	vals := make(tree.Datums, len(colIdxsInLHS))
 	for i, n := 0, rhs.ChildCount(); i < n; i++ {
 		val := rhs.Child(i)
