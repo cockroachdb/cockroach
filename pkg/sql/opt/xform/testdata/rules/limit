@@ -177,7 +177,7 @@ limit
  │         ├── key columns: [1]
  │         ├── keys: (1)
  │         └── scan kuv@secondary
- │              ├── columns: k:1(int!null) u:2(int)
+ │              ├── columns: k:1(int!null) u:2(int!null)
  │              ├── constraint: /2/1: [/2 - /9]
  │              └── keys: (1)
  └── const: 5 [type=int]

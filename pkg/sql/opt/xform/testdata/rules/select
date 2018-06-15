@@ -161,7 +161,7 @@ project
       ├── columns: k:1(int!null) u:2(int!null)
       ├── keys: (1)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int)
+      │    ├── columns: k:1(int!null) u:2(int!null)
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1)
       └── filters [type=bool, outer=(1,2)]
@@ -207,9 +207,9 @@ project
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@v
-      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
       │    ├── constraint: /3: [/5 - /5]
-      │    └── keys: (1) weak(3)
+      │    └── keys: (1) (3)
       └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
            └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
 
@@ -259,7 +259,7 @@ project
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
       │    ├── constraint: /2/1: (/NULL - ]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -292,9 +292,9 @@ lookup-join b
  ├── key columns: [1]
  ├── keys: (1) (3)
  └── scan b@v
-      ├── columns: k:1(int!null) v:3(int)
+      ├── columns: k:1(int!null) v:3(int!null)
       ├── constraint: /3: [/1 - /1]
-      └── keys: (1) weak(3)
+      └── keys: (1) (3)
 
 memo
 SELECT * FROM b WHERE v = 1
@@ -350,9 +350,9 @@ select
  │    ├── key columns: [1]
  │    ├── keys: (1) weak(3)
  │    └── scan b@v
- │         ├── columns: k:1(int!null) v:3(int)
+ │         ├── columns: k:1(int!null) v:3(int!null)
  │         ├── constraint: /3: [/1 - /1]
- │         └── keys: (1) weak(3)
+ │         └── keys: (1) (3)
  └── filters [type=bool, outer=(1,2)]
       └── (b.k + b.u) = 1 [type=bool, outer=(1,2)]
 

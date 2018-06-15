@@ -84,7 +84,7 @@ lookup-join abc
  ├── cost: 7.27
  ├── keys: (1)
  └── scan abc@c_idx
-      ├── columns: a:1(int!null) c:3(int)
+      ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=1.43, distinct(3)=1]
       ├── cost: 1.49
