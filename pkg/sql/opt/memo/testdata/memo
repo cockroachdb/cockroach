@@ -351,3 +351,42 @@ memo (optimized)
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
+
+memo
+SELECT DISTINCT "Field" FROM [EXPLAIN SELECT 123 AS k]
+----
+memo (optimized)
+ ├── G1: (group-by G2 G3 cols=(3))
+ │    └── "[presentation: Field:3]"
+ │         ├── best: (group-by G2 G3 cols=(3))
+ │         └── cost: 0.01
+ ├── G2: (explain G4 [presentation: k:1])
+ │    └── ""
+ │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
+ │         └── cost: 0.01
+ ├── G3: (aggregations)
+ ├── G4: (project G5 G6)
+ │    └── "[presentation: k:1]"
+ │         ├── best: (project G5 G6)
+ │         └── cost: 0.01
+ ├── G5: (values G7)
+ │    └── ""
+ │         ├── best: (values G7)
+ │         └── cost: 0.01
+ ├── G6: (projections G8)
+ ├── G7: (tuple)
+ └── G8: (const 123)
+
+memo
+SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
+----
+memo (optimized)
+ ├── G1: (group-by G2 G3 cols=(4))
+ │    └── "[presentation: tag:4]"
+ │         ├── best: (group-by G2 G3 cols=(4))
+ │         └── cost: 0.00
+ ├── G2: (show-trace-for-session)
+ │    └── ""
+ │         ├── best: (show-trace-for-session)
+ │         └── cost: 0.00
+ └── G3: (aggregations)
