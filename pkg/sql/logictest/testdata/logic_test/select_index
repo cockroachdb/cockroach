@@ -541,3 +541,39 @@ SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
 3
 2
 1
+
+statement ok
+CREATE TABLE tab1 (
+      pk INTEGER NOT NULL,
+      col0 INTEGER NULL,
+      col1 FLOAT NULL,
+      col2 STRING NULL,
+      col3 INTEGER NULL,
+      col4 FLOAT NULL,
+      col5 STRING NULL,
+      CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+      INDEX idx_tab1_0 (col0 ASC),
+      INDEX idx_tab1_1 (col1 ASC),
+      INDEX idx_tab1_3 (col3 ASC),
+      INDEX idx_tab1_4 (col4 ASC),
+      FAMILY "primary" (pk, col0, col1, col2, col3, col4, col5)
+)
+
+statement ok
+INSERT INTO tab1(pk, col0, col3) VALUES
+  (1, 65, 65),
+  (2, 87, 87),
+  (3, 70, 70),
+  (4, 88, 88),
+  (5, 69, 69),
+  (6, 72, 72),
+  (7, 82, 82)
+
+query II
+SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
+----
+7 82
+6 72
+5 69
+3 70
+2 87

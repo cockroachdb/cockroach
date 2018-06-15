@@ -297,3 +297,30 @@ func (c *CustomFuncs) LimitScanDef(def, limit memo.PrivateID) memo.PrivateID {
 	defCopy.HardLimit = int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
 	return c.e.mem.InternScanOpDef(&defCopy)
 }
+
+// HasOrderingCols returns true if the output columns produced by a group
+// contain all columns in an ordering.
+func (c *CustomFuncs) HasOrderingCols(input memo.GroupID, ordering memo.PrivateID) bool {
+	outCols := c.OutputCols(input)
+	for _, c := range c.ExtractOrdering(ordering) {
+		if !outCols.Contains(int(c.ID())) {
+			return false
+		}
+	}
+	return true
+}
+
+// OneResultPerInput returns true if the given LookupJoinOp always produces
+// exactly one row for each input row.
+func (c *CustomFuncs) OneResultPerInput(def memo.PrivateID) bool {
+	lookupJoinDef := c.e.mem.LookupPrivate(def).(*memo.LookupJoinDef)
+
+	// We always have exactly one result per input when this is an index join.
+	//
+	// TODO(radu): in general, we need to check if the keyCols are associated with
+	// a foreign key constraint.
+	//
+	// TODO(radu): we also know to have exactly one result per input if we have a
+	// left lookup join and the KeyCols form a key in the table.
+	return lookupJoinDef.IsIndexJoin(c.e.mem.Metadata())
+}
