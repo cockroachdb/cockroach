@@ -150,6 +150,8 @@ Cockroach cluster with existing data.
 	storeGenCmd.Flags().IntVarP(
 		&stores, "stores", "n", stores, "number of stores to distribute data across")
 	storeGenCmd.Flags().SetInterspersed(false) // ignore workload flags
+	storeGenCmd.Flags().BoolVarP(
+		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
 
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
