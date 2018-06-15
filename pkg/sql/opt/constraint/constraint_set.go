@@ -266,6 +266,19 @@ func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
+// ExtractConstCols returns a set of columns which can only have one value
+// for the constraints in the set to hold.
+func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	if s == Unconstrained || s == Contradiction {
+		return opt.ColSet{}
+	}
+	res := s.Constraint(0).ExtractConstCols(evalCtx)
+	for i := 1; i < s.Length(); i++ {
+		res.UnionWith(s.Constraint(i).ExtractConstCols(evalCtx))
+	}
+	return res
+}
+
 // allocConstraint allocates space for a new constraint in the set and returns
 // a pointer to it. The first constraint is stored inline, and subsequent
 // constraints are stored in the otherConstraints slice.
