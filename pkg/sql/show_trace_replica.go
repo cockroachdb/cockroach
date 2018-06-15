@@ -28,6 +28,15 @@ import (
 // tracing (via SHOW TRACE) to report the replicas of all kv events that occur
 // during its execution. It is used as the top-level node for SHOW
 // EXPERIMENTAL_REPLICA TRACE FOR statements.
+//
+// TODO(dan): This works by selecting trace lines matching certain event
+// logs in command execution, which is possibly brittle. A much better
+// system would be to set the `ReturnRangeInfo` flag on all kv requests and
+// use the `RangeInfo`s that come back. Unfortunately, we wanted to get
+// _some_ version of this into 2.0 for partitioning users, but the RangeInfo
+// plumbing would have sunk the project. It's also possible that the
+// sovereignty work may require the RangeInfo plumbing and we should revisit
+// this then.
 type showTraceReplicaNode struct {
 	optColumnsSlot
 
@@ -37,18 +46,6 @@ type showTraceReplicaNode struct {
 	run struct {
 		values tree.Datums
 	}
-}
-
-func (p *planner) makeShowTraceReplicaNode(plan *showTraceNode) planNode {
-	// TODO(dan): This works by selecting trace lines matching certain event
-	// logs in command execution, which is possibly brittle. A much better
-	// system would be to set the `ReturnRangeInfo` flag on all kv requests and
-	// use the `RangeInfo`s that come back. Unfortunately, we wanted to get
-	// _some_ version of this into 2.0 for partitioning users, but the RangeInfo
-	// plumbing would have sunk the project. It's also possible that the
-	// sovereignty work may require the RangeInfo plumbing and we should revisit
-	// this then.
-	return &showTraceReplicaNode{plan: plan}
 }
 
 func (n *showTraceReplicaNode) startExec(params runParams) error {

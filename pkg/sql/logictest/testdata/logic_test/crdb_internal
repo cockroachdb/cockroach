@@ -123,10 +123,10 @@ SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
 node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var
 
-query IITTTTTT colnames
+query IITTTTTTT colnames
 SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 ----
-span_idx  message_idx  timestamp  duration  operation  loc  tag  message
+span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
 query TTTT colnames
 SELECT * FROM crdb_internal.cluster_settings WHERE name = ''

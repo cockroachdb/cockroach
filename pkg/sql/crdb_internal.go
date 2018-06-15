@@ -591,11 +591,11 @@ CREATE TABLE crdb_internal.session_trace (
                                    -- (dummy) message on a span.
                                    -- NULL if the span was not finished at the time
                                    -- the trace has been collected.
-  operation   STRING NULL,         -- The span's operation. Set only on
-                                   -- the first (dummy) message in a span.
+  operation   STRING NULL,         -- The span's operation.
   loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
   tag         STRING NOT NULL,     -- The logging tag, if any.
-  message     STRING NOT NULL      -- The logged message.
+  message     STRING NOT NULL,     -- The logged message.
+  age         INTERVAL NOT NULL    -- The age of this message relative to the beginning of the trace.
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
