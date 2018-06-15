@@ -1344,7 +1344,7 @@ func getRangeMetadata(
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
-	sender := mtc.dbs[0].GetSender()
+	sender := mtc.dbs[0].NonTransactionalSender()
 	rs, _, err := client.RangeLookup(context.TODO(), sender, key.AsRawKey(),
 		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
