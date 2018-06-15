@@ -507,7 +507,7 @@ SELECT * FROM (SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b) WHERE y = 5
 ----
 select
  ├── columns: y:2(int!null) s:3(string)
- ├── stats: [rows=12, distinct(2)=1]
+ ├── stats: [rows=12.50, distinct(2)=1]
  ├── except-all
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── left columns: y:2(int) a.s:3(string)

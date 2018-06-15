@@ -339,7 +339,7 @@ func (c *Compactor) processCompaction(
 		if c.doneFn != nil {
 			c.doneFn(ctx)
 		}
-		log.Infof(ctx, "processed compaction %s in %s", aggr, duration)
+		log.Infof(ctx, "processed compaction %s in %.1fs", aggr, duration.Seconds())
 	} else {
 		log.VEventf(ctx, 2, "skipping compaction(s) %s", aggr)
 	}
@@ -386,6 +386,11 @@ func (c *Compactor) aggregateCompaction(
 	aggr *aggregatedCompaction,
 	sc storagebase.SuggestedCompaction,
 ) bool {
+	// Don't bother aggregating more once we reach threshold bytes.
+	if aggr.Bytes >= c.thresholdBytes() {
+		return true // suggested compation could not be aggregated
+	}
+
 	// If the key spans don't overlap, then check whether they're
 	// "nearly" contiguous.
 	if aggr.EndKey.Compare(sc.StartKey) < 0 {

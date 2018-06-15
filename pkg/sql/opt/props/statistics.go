@@ -37,7 +37,11 @@ import (
 // not for column y.
 type Statistics struct {
 	// RowCount is the estimated number of rows returned by the expression.
-	RowCount uint64
+	// Note that - especially when there are no stats available - the scaling of
+	// the row counts can be unpredictable; thus, a row count of 0.001 should be
+	// considered 1000 times better than a row count of 1, even though if this was
+	// a true row count they would be pretty much the same thing.
+	RowCount float64
 
 	// ColStats contains statistics that pertain to individual columns
 	// in an expression or table. It is keyed by column ID, and it is separated
@@ -68,5 +72,5 @@ type ColumnStatistic struct {
 
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
-	DistinctCount uint64
+	DistinctCount float64
 }

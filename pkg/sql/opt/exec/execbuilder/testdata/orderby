@@ -234,8 +234,21 @@ scan  ·      ·
 ·     table  abc@ba
 ·     spans  ALL
 
-# We use the WHERE condition to force the use of index ba.
-# TODO(radu): this should use index ba + index join
+# We use the WHERE condition to force the use of the index.
+query TTT
+EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
+----
+render                ·      ·
+ └── sort             ·      ·
+      │               order  +b,+a,+d
+      └── index-join  ·      ·
+           ├── scan   ·      ·
+           │          table  abc@bc
+           │          spans  /11-/30
+           └── scan   ·      ·
+·                     table  abc@primary
+
+# An inequality should not be enough to force the use of the index.
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
@@ -258,7 +271,7 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-# TODO(radu): Need to trim sort key, and probably use index join
+# TODO(radu): Need to trim sort key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
@@ -295,7 +308,7 @@ render     ·      ·
 ·          table  abc@bc
 ·          spans  ALL
 
-# TODO(radu): should be using bc index
+# TODO(radu): sort isn't necessary.
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
@@ -303,7 +316,7 @@ render          ·      ·
  └── sort       ·      ·
       │         order  +b,+c,-a
       └── scan  ·      ·
-·               table  abc@primary
+·               table  abc@bc
 ·               spans  ALL
 
 query T
@@ -329,10 +342,8 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc ORDER BY a DESC]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /abc/primary/1/2/3 -> NULL
-fetched: /abc/primary/1/2/3 -> NULL
-fetched: /abc/primary/4/5/6 -> NULL
-fetched: /abc/primary/4/5/6 -> NULL
+fetched: /abc/bc/2/3 -> /1
+fetched: /abc/bc/5/6 -> /4
 output row: [4]
 output row: [1]
 
@@ -342,7 +353,7 @@ EXPLAIN SELECT a FROM abc ORDER BY a DESC
 sort       ·      ·
  │         order  -a
  └── scan  ·      ·
-·          table  abc@primary
+·          table  abc@bc
 ·          spans  ALL
 
 # TODO(radu): sort is unnecessary here, because bc is unique
@@ -550,15 +561,15 @@ CREATE TABLE uvwxyz (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-render          ·         ·            (y, w, x)  ·
- │              render 0  y            ·          ·
- │              render 1  w            ·          ·
- │              render 2  x            ·          ·
- └── sort       ·         ·            (w, x, y)  +w,+x
-      │         order     +w,+x        ·          ·
-      └── scan  ·         ·            (w, x, y)  ·
-·               table     uvwxyz@ywxz  ·          ·
-·               spans     /1-/2        ·          ·
+render          ·         ·           (y, w, x)  ·
+ │              render 0  y           ·          ·
+ │              render 1  w           ·          ·
+ │              render 2  x           ·          ·
+ └── sort       ·         ·           (w, x, y)  +w,+x
+      │         order     +w,+x       ·          ·
+      └── scan  ·         ·           (w, x, y)  ·
+·               table     uvwxyz@ywz  ·          ·
+·               spans     /1-/2       ·          ·
 
 
 statement ok

@@ -19,8 +19,8 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
 Tree       Field  Description
 render     ·      ·
-└── scan  ·      ·
-·          table  jobs@primary
+ └── scan  ·      ·
+·          table  jobs@jobs_status_created_idx
 ·          spans  ALL
 
 query TTTTT colnames

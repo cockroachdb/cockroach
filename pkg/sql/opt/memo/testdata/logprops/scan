@@ -46,7 +46,7 @@ project
 opt
 SELECT s, x FROM a
 ----
-scan a
+scan a@secondary
  ├── columns: s:3(string) x:1(int!null)
  ├── stats: [rows=1000]
  └── keys: (1)
@@ -76,6 +76,6 @@ scan a
 opt
 SELECT d FROM a
 ----
-scan a
+scan a@secondary
  ├── columns: d:4(decimal!null)
  └── stats: [rows=1000]

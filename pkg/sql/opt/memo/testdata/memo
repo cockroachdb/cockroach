@@ -30,14 +30,14 @@ limit
  ├── ordering: +2
  ├── sort
  │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int)
- │    ├── stats: [rows=1428]
+ │    ├── stats: [rows=1429]
  │    ├── ordering: +2
  │    └── project
  │         ├── columns: c:5(int) y:2(int!null) b.x:3(string!null)
- │         ├── stats: [rows=1428]
+ │         ├── stats: [rows=1429]
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
- │         │    ├── stats: [rows=1428, distinct(2)=1]
+ │         │    ├── stats: [rows=1429, distinct(2)=1]
  │         │    ├── inner-join
  │         │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:3(string!null) z:4(decimal!null)
  │         │    │    ├── stats: [rows=1000000, distinct(2)=700]
@@ -84,14 +84,14 @@ project
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=143]
  │    │    ├── ordering: +2
  │    │    └── inner-join
  │    │         ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │         ├── stats: [rows=100]
+ │    │         ├── stats: [rows=143]
  │    │         ├── select
  │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
- │    │         │    ├── stats: [rows=1, distinct(2)=1]
+ │    │         │    ├── stats: [rows=1.43, distinct(2)=1]
  │    │         │    ├── keys: (1)
  │    │         │    ├── scan a
  │    │         │    │    ├── columns: a.x:1(int!null) y:2(int)
@@ -127,40 +127,40 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 2026.65
+ │    │    └── cost: 2100.24
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 2026.65
+ │         └── cost: 2100.24
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 2026.65
+ │    │    └── cost: 2100.24
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2026.65
+ │         └── cost: 2100.24
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 2020.01
+ │    │    └── cost: 2090.01
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 2026.65
+ │         └── cost: 2100.24
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (select G10 G11)
  │    └── ""
  │         ├── best: (select G10 G11)
- │         └── cost: 1010.00
+ │         └── cost: 1050.00
  ├── G8: (scan b,cols=(3))
  │    └── ""
  │         ├── best: (scan b,cols=(3))
- │         └── cost: 1000.00
+ │         └── cost: 1030.00
  ├── G9: (filters G12)
  ├── G10: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G11: (filters G13)
  ├── G12: (eq G14 G15)
  ├── G13: (eq G16 G17)
@@ -180,16 +180,16 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: a:3,b:4,c:5,d:6]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1010.00
+ │         └── cost: 1050.00
  ├── G2: (select G4 G5)
  │    └── ""
  │         ├── best: (select G4 G5)
- │         └── cost: 1010.00
+ │         └── cost: 1050.00
  ├── G3: (projections G6 G7 G8 G9)
  ├── G4: (scan b)
  │    └── ""
  │         ├── best: (scan b)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G5: (filters G10 G11)
  ├── G6: (const 1)
  ├── G7: (plus G13 G14)
@@ -213,21 +213,21 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.01
+ │         └── cost: 1.05
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 1.01
+ │         └── cost: 1.05
  ├── G3: (projections a.x)
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,constrained)
  │    └── ""
  │         ├── best: (scan a,constrained)
- │         └── cost: 1.00
+ │         └── cost: 1.04
  ├── G7: (filters G9)
  ├── G8: (eq G12 G11)
  ├── G9: (eq G10 G11)
@@ -244,7 +244,7 @@ memo (optimized)
  ├── G1: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G2: (variable a.x)
  ├── G3: (const 1)
  ├── G4: (eq G2 G3)
@@ -256,18 +256,18 @@ memo (optimized)
  ├── G10: (select G1 G9) (select G15 G14)
  │    └── ""
  │         ├── best: (select G15 G14)
- │         └── cost: 1.01
+ │         └── cost: 1.05
  ├── G11: (projections a.x)
  ├── G12: (project G10 G11)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G10 G11)
- │         └── cost: 1.01
+ │         └── cost: 1.05
  ├── G13: (true)
  ├── G14: (filters G7)
  └── G15: (scan a,constrained)
       └── ""
            ├── best: (scan a,constrained)
-           └── cost: 1.00
+           └── cost: 1.04
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
@@ -276,19 +276,19 @@ memo (optimized)
  ├── G1: (union G2 G3)
  │    └── "[presentation: x:7,y:8]"
  │         ├── best: (union G2 G3)
- │         └── cost: 2000.00
+ │         └── cost: 2080.00
  ├── G2: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G3: (project G4 G5)
  │    └── ""
  │         ├── best: (project G4 G5)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G5: (projections G6 G7)
  ├── G6: (plus G8 G10)
  ├── G7: (plus G9 G10)
@@ -303,11 +303,11 @@ memo (optimized)
  ├── G1: (group-by G2 G3 cols=())
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (group-by G2 G3 cols=())
- │         └── cost: 1000.00
+ │         └── cost: 1030.00
  ├── G2: (scan a,cols=(1))
  │    └── ""
  │         ├── best: (scan a,cols=(1))
- │         └── cost: 1000.00
+ │         └── cost: 1030.00
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
@@ -319,16 +319,16 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── ""
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G3: (projections array_agg)
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)
- │         └── cost: 1000.00
+ │         └── cost: 1040.00
  ├── G5: (aggregations G6)
  ├── G6: (array-agg G7)
  └── G7: (variable a.x)
@@ -340,14 +340,14 @@ memo (optimized)
  ├── G1: (group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1099.66
+ │         └── cost: 1129.66
  ├── G2: (scan a,cols=(1))
  │    ├── ""
  │    │    ├── best: (scan a,cols=(1))
- │    │    └── cost: 1000.00
+ │    │    └── cost: 1030.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1099.66
+ │         └── cost: 1129.66
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
