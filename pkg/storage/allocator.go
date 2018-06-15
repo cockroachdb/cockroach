@@ -386,6 +386,7 @@ func (a Allocator) simulateRemoveTarget(
 	defer func() {
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
 	}()
+	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
 	return a.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
 }
 
