@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type execFactory struct {
@@ -501,11 +502,23 @@ func (ef *execFactory) ConstructShowTrace(
 
 	// TODO(radu): we hardcode tree.Rows because the optimizer doesn't yet support
 	// statements with other types.
-	node := ef.planner.makeShowTraceNode(inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
+	var node planNode = ef.planner.makeShowTraceNode(
+		inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
+
+	// Ensure the messages are sorted in age order, so that the user
+	// does not get confused.
+	ageColIdx := sqlbase.GetTraceAgeColumnIdx(compact)
+	node = &sortNode{
+		plan:    node,
+		columns: planColumns(node),
+		ordering: sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
+		},
+		needSort: true,
+	}
 
 	if typ == tree.ShowTraceReplica {
-		// Wrap the showTraceNode in a showTraceReplicaNode.
-		return ef.planner.makeShowTraceReplicaNode(node), nil
+		node = &showTraceReplicaNode{plan: node}
 	}
 	return node, nil
 }
