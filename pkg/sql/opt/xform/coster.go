@@ -109,7 +109,7 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	rowCount := float64(logical.Relational.Stats.RowCount)
+	rowCount := logical.Relational.Stats.RowCount
 	var cost memo.Cost
 	if rowCount > 0 {
 		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
@@ -127,7 +127,25 @@ func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logica
 }
 
 func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	return memo.Cost(logical.Relational.Stats.RowCount) * seqIOCostFactor
+	// Scanning an index with a few columns is faster than scanning an index with
+	// many columns. Ideally, we would want to use statistics about the size of
+	// each column. In lieu of that, use the number of columns.
+	def := candidate.Private(c.mem).(*memo.ScanOpDef)
+	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
+	return rowCount * (seqIOCostFactor + c.rowScanCost(def.Table, def.Index, def.Cols.Len()))
+}
+
+// rowScanCost is the CPU cost to scan one row, which depends on the number of
+// columns in the index and (to a lesser extent) on the number of columns we are
+// scanning.
+func (c *coster) rowScanCost(table opt.TableID, index int, numScannedCols int) memo.Cost {
+	md := c.mem.Metadata()
+	numCols := md.Table(table).Index(index).ColumnCount()
+	// The number of the columns in the index matter because more columns means
+	// more data to scan. The number of columns we actually return also matters
+	// because that is the amount of data that we could potentially transfer over
+	// the network.
+	return memo.Cost(numCols+numScannedCols) * cpuCostFactor
 }
 
 func (c *coster) computeSelectCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
@@ -156,11 +174,14 @@ func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Lo
 func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	leftCost := c.mem.BestExprCost(candidate.Child(0))
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	def := candidate.Private(c.mem).(*memo.LookupJoinDef)
 
 	// The rows in the left table are used to probe into an index on the right
 	// table. Since the matching rows in the right table may not all be in the
 	// same range, this counts as random I/O.
-	return leftCost + memo.Cost(leftRowCount)*(randIOCostFactor+cpuCostFactor)
+	perRowCost := cpuCostFactor + randIOCostFactor +
+		c.rowScanCost(def.Table, def.Index, def.LookupCols.Len())
+	return leftCost + memo.Cost(leftRowCount)*perRowCost
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {

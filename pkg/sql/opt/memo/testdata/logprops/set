@@ -44,7 +44,7 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── right columns: v:4(int) u:3(int) rowid:5(int)
- ├── stats: [rows=1, distinct(1,2)=1]
+ ├── stats: [rows=1.43, distinct(1,2)=1.43]
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
@@ -55,11 +55,11 @@ intersect
  │         └── keys: (1)
  └── project
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=1, distinct(3-5)=1]
+      ├── stats: [rows=1.43, distinct(3-5)=1.43]
       ├── keys: (5)
       └── select
            ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1, distinct(3)=1, distinct(3-5)=1]
+           ├── stats: [rows=1.43, distinct(3)=1, distinct(3-5)=1.43]
            ├── keys: (5)
            ├── scan uv
            │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
@@ -88,13 +88,13 @@ except
  │         └── keys: (1)
  └── project
       ├── columns: u:3(int!null) v:4(int!null)
-      ├── stats: [rows=1, distinct(3,4)=1]
+      ├── stats: [rows=1.43, distinct(3,4)=1.43]
       └── project
            ├── columns: u:3(int!null) v:4(int!null)
-           ├── stats: [rows=1, distinct(3,4)=1]
+           ├── stats: [rows=1.43, distinct(3,4)=1.43]
            └── select
                 ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-                ├── stats: [rows=1, distinct(3)=1, distinct(3,4)=1]
+                ├── stats: [rows=1.43, distinct(3)=1, distinct(3,4)=1.43]
                 ├── keys: (5)
                 ├── scan uv
                 │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)

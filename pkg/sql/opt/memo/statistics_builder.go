@@ -173,7 +173,7 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *props.Colum
 // Then, ensureColStat sets the distinct count to the minimum of the existing
 // value and the new value.
 func (sb *statisticsBuilder) ensureColStat(
-	col opt.ColumnID, distinctCount uint64, inputStatsBuilder *statisticsBuilder,
+	col opt.ColumnID, distinctCount float64, inputStatsBuilder *statisticsBuilder,
 ) *props.ColumnStatistic {
 	colStat, ok := sb.s.ColStats[col]
 	if !ok {
@@ -219,9 +219,9 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 
 	if colSet.Len() == 1 {
 		// Cast to int64 and then to uint64 to make the linter happy.
-		colStat.DistinctCount = max(1, uint64(int64(unknownDistinctCountRatio*float64(sb.s.RowCount))))
+		colStat.DistinctCount = unknownDistinctCountRatio * sb.s.RowCount
 	} else {
-		distinctCount := uint64(1)
+		distinctCount := 1.0
 		colSet.ForEach(func(i int) {
 			distinctCount *= sb.singleColStat(opt.ColumnID(i)).DistinctCount
 		})
@@ -368,7 +368,7 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 	for col, colStat := range sb.s.ColStats {
 		inputStat := inputStatsBuilder.singleColStat(col)
 		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
-			selectivity *= float64(colStat.DistinctCount) / float64(inputStat.DistinctCount)
+			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
 		}
 	}
 
@@ -378,15 +378,15 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 // applySelectivityToColStat updates the given column statistics according to
 // the filter selectivity.
 func (sb *statisticsBuilder) applySelectivityToColStat(
-	colStat *props.ColumnStatistic, inputRows uint64,
+	colStat *props.ColumnStatistic, inputRows float64,
 ) {
 	if sb.s.Selectivity == 0 {
 		colStat.DistinctCount = 0
 		return
 	}
 
-	n := float64(inputRows)
-	d := float64(colStat.DistinctCount)
+	n := inputRows
+	d := colStat.DistinctCount
 
 	// If each distinct value appears n/d times, and the probability of a
 	// row being filtered out is (1 - selectivity), the probability that all
@@ -395,21 +395,18 @@ func (sb *statisticsBuilder) applySelectivityToColStat(
 	//
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
-	d = d - d*math.Pow(1-sb.s.Selectivity, n/d)
-
-	// Cast to int64 and then to uint64 to make the linter happy.
-	colStat.DistinctCount = max(1, uint64(int64(d)))
+	colStat.DistinctCount = d - d*math.Pow(1-sb.s.Selectivity, n/d)
 }
 
 // applySelectivity updates the row count according to the filter selectivity,
 // and ensures that no distinct counts are larger than the row count.
-func (sb *statisticsBuilder) applySelectivity(inputRows uint64) {
+func (sb *statisticsBuilder) applySelectivity(inputRows float64) {
 	if sb.s.Selectivity == 0 {
 		sb.updateStatsFromContradiction()
 		return
 	}
 
-	sb.s.RowCount = max(1, uint64(int64(float64(inputRows)*sb.s.Selectivity)))
+	sb.s.RowCount = inputRows * sb.s.Selectivity
 
 	// At this point we only have single-column stats on columns that were
 	// constrained by the filter. Make sure none of the distinct counts are
@@ -471,7 +468,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	//       -> Column c has DistinctCount = 5.
 	col := exactPrefix
 	// All columns should have at least one distinct value.
-	distinctCount := uint64(1)
+	distinctCount := 1.0
 
 	var val tree.Datum
 	for i := 0; i < c.Spans.Count(); i++ {
@@ -494,9 +491,9 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 				// should be the case for integer valued columns (due to normalization
 				// by constraint.PreferInclusive).
 				if c.Columns.Get(col).Ascending() {
-					distinctCount += uint64(end - start)
+					distinctCount += float64(end - start)
 				} else {
-					distinctCount += uint64(start - end)
+					distinctCount += float64(start - end)
 				}
 			} else {
 				// We can't determine the distinct count for this column. For example,
@@ -535,13 +532,13 @@ func (sb *statisticsBuilder) buildScan(def *ScanOpDef) {
 	sb.applySelectivity(inputStatsBuilder.s.RowCount)
 
 	// Cap number of rows at limit, if it exists.
-	if def.HardLimit > 0 && uint64(def.HardLimit) < sb.s.RowCount {
-		sb.s.RowCount = uint64(def.HardLimit)
+	if def.HardLimit > 0 && float64(def.HardLimit) < sb.s.RowCount {
+		sb.s.RowCount = float64(def.HardLimit)
 
 		// At this point we only have single-column stats on columns that were
 		// constrained by the filter.
 		for _, colStat := range sb.s.ColStats {
-			colStat.DistinctCount = min(colStat.DistinctCount, uint64(def.HardLimit))
+			colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
 		}
 	}
 }
@@ -558,8 +555,8 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	sb.applySelectivityToColStat(colStat, inputStatsBuilder.s.RowCount)
 
 	// Cap distinct count at limit, if it exists.
-	if def.HardLimit > 0 && uint64(def.HardLimit) < sb.s.RowCount {
-		colStat.DistinctCount = min(colStat.DistinctCount, uint64(def.HardLimit))
+	if def.HardLimit > 0 && float64(def.HardLimit) < sb.s.RowCount {
+		colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
 	}
 
 	return colStat
@@ -677,7 +674,7 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *props.ColumnStat
 		colStat.DistinctCount = inputColStat.DistinctCount
 	} else {
 		// There are no columns in this expression, so it must be a constant.
-		colStat.DistinctCount = uint64(1)
+		colStat.DistinctCount = 1
 	}
 	return colStat
 }
@@ -741,7 +738,7 @@ func (sb *statisticsBuilder) colStatLookupJoin(colSet opt.ColSet) *props.ColumnS
 	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
 
 	colStat := sb.makeColStat(colSet)
-	colStat.DistinctCount = uint64(1)
+	colStat.DistinctCount = 1
 
 	// Some of the requested columns may be from the input index.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -886,15 +883,8 @@ func (sb *statisticsBuilder) colStatSetOpImpl(
 	return colStat
 }
 
-func min(a uint64, b uint64) uint64 {
+func min(a float64, b float64) float64 {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a uint64, b uint64) uint64 {
-	if a > b {
 		return a
 	}
 	return b
@@ -942,7 +932,7 @@ func translateColSet(colSetIn opt.ColSet, from opt.ColList, to opt.ColList) opt.
 
 // buildValues builds the statistics for a VALUES expression.
 func (sb *statisticsBuilder) buildValues() {
-	sb.s.RowCount = uint64(sb.ev.ChildCount())
+	sb.s.RowCount = float64(sb.ev.ChildCount())
 }
 
 func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet) *props.ColumnStatistic {
@@ -970,7 +960,7 @@ func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet) *props.ColumnStati
 
 	// Update the column statistics.
 	colStat := sb.makeColStat(colSet)
-	colStat.DistinctCount = uint64(len(distinct))
+	colStat.DistinctCount = float64(len(distinct))
 	return colStat
 }
 
@@ -982,8 +972,8 @@ func (sb *statisticsBuilder) buildLimit(limit ExprView, inputStats *props.Statis
 	if limit.Operator() == opt.ConstOp {
 		hardLimit := *limit.Private().(*tree.DInt)
 		if hardLimit > 0 {
-			sb.s.RowCount = min(uint64(hardLimit), inputStats.RowCount)
-			sb.s.Selectivity = float64(sb.s.RowCount) / float64(inputStats.RowCount)
+			sb.s.RowCount = min(float64(hardLimit), inputStats.RowCount)
+			sb.s.Selectivity = sb.s.RowCount / inputStats.RowCount
 		}
 	}
 }
@@ -1006,12 +996,12 @@ func (sb *statisticsBuilder) buildOffset(offset ExprView, inputStats *props.Stat
 	// Update row count if offset is a constant.
 	if offset.Operator() == opt.ConstOp {
 		hardOffset := *offset.Private().(*tree.DInt)
-		if uint64(hardOffset) >= inputStats.RowCount {
+		if float64(hardOffset) >= inputStats.RowCount {
 			sb.s.RowCount = 0
 		} else if hardOffset > 0 {
-			sb.s.RowCount = inputStats.RowCount - uint64(hardOffset)
+			sb.s.RowCount = inputStats.RowCount - float64(hardOffset)
 		}
-		sb.s.Selectivity = float64(sb.s.RowCount) / float64(inputStats.RowCount)
+		sb.s.Selectivity = sb.s.RowCount / inputStats.RowCount
 	}
 }
 
@@ -1100,7 +1090,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	} else {
 		// Get the RowCount from the most recent statistic. Stats are ordered
 		// with most recent first.
-		stats.RowCount = tab.Statistic(0).RowCount()
+		stats.RowCount = float64(tab.Statistic(0).RowCount())
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.
@@ -1117,7 +1107,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				if _, ok := stats.ColStats[key]; !ok {
 					stats.ColStats[key] = &props.ColumnStatistic{
 						Cols:          cols,
-						DistinctCount: stat.DistinctCount(),
+						DistinctCount: float64(stat.DistinctCount()),
 					}
 				}
 			} else {
@@ -1129,7 +1119,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				if _, ok := stats.MultiColStats[key]; !ok {
 					stats.MultiColStats[key] = &props.ColumnStatistic{
 						Cols:          cols,
-						DistinctCount: stat.DistinctCount(),
+						DistinctCount: float64(stat.DistinctCount()),
 					}
 				}
 			}

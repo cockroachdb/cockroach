@@ -320,67 +320,67 @@ INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz
 ----
-group      ·            ·            (min int)  ·
- │         aggregate 0  min(x)       ·          ·
- └── scan  ·            ·            (x int)    ·
-·          table        xyz@primary  ·          ·
-·          spans        ALL          ·          ·
+group      ·            ·       (min int)  ·
+ │         aggregate 0  min(x)  ·          ·
+ └── scan  ·            ·       (x int)    ·
+·          table        xyz@xy  ·          ·
+·          spans        ALL     ·          ·
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group      ·            ·                        (min int)  ·
- │         aggregate 0  min(x)                   ·          ·
- └── scan  ·            ·                        (x int)    ·
-·          table        xyz@primary              ·          ·
-·          spans        /0-/0/# /4-/4/# /7-/7/#  ·          ·
+group      ·            ·                  (min int)  ·
+ │         aggregate 0  min(x)             ·          ·
+ └── scan  ·            ·                  (x int)    ·
+·          table        xyz@xy             ·          ·
+·          spans        /0-/1 /4-/5 /7-/8  ·          ·
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
-group      ·            ·            (max int)  ·
- │         aggregate 0  max(x)       ·          ·
- └── scan  ·            ·            (x int)    ·
-·          table        xyz@primary  ·          ·
-·          spans        ALL          ·          ·
+group      ·            ·       (max int)  ·
+ │         aggregate 0  max(x)  ·          ·
+ └── scan  ·            ·       (x int)    ·
+·          table        xyz@xy  ·          ·
+·          spans        ALL     ·          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·            (min int)       ·
- │         aggregate 0  min(y)       ·               ·
- └── scan  ·            ·            (x int, y int)  ·
-·          table        xyz@primary  ·               ·
-·          spans        /1-/1/#      ·               ·
+group      ·            ·       (min int)       ·
+ │         aggregate 0  min(y)  ·               ·
+ └── scan  ·            ·       (x int, y int)  ·
+·          table        xyz@xy  ·               ·
+·          spans        /1-/2   ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·            (max int)       ·
- │         aggregate 0  max(y)       ·               ·
- └── scan  ·            ·            (x int, y int)  ·
-·          table        xyz@primary  ·               ·
-·          spans        /1-/1/#      ·               ·
+group      ·            ·       (max int)       ·
+ │         aggregate 0  max(y)  ·               ·
+ └── scan  ·            ·       (x int, y int)  ·
+·          table        xyz@xy  ·               ·
+·          spans        /1-/2   ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 7
 ----
-group      ·            ·            (min int)       ·
- │         aggregate 0  min(y)       ·               ·
- └── scan  ·            ·            (x int, y int)  ·
-·          table        xyz@primary  ·               ·
-·          spans        /7-/7/#      ·               ·
+group      ·            ·       (min int)       ·
+ │         aggregate 0  min(y)  ·               ·
+ └── scan  ·            ·       (x int, y int)  ·
+·          table        xyz@xy  ·               ·
+·          spans        /7-/8   ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 7
 ----
-group      ·            ·            (max int)       ·
- │         aggregate 0  max(y)       ·               ·
- └── scan  ·            ·            (x int, y int)  ·
-·          table        xyz@primary  ·               ·
-·          spans        /7-/7/#      ·               ·
+group      ·            ·       (max int)       ·
+ │         aggregate 0  max(y)  ·               ·
+ └── scan  ·            ·       (x int, y int)  ·
+·          table        xyz@xy  ·               ·
+·          spans        /7-/8   ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -429,8 +429,8 @@ EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 group      ·            ·            (variance decimal)  ·
  │         aggregate 0  variance(x)  ·                   ·
  └── scan  ·            ·            (x int)             ·
-·          table        xyz@primary  ·                   ·
-·          spans        /1-/1/#      ·                   ·
+·          table        xyz@xy       ·                   ·
+·          spans        /1-/2        ·                   ·
 
 ## Tests for the single-row optimization.
 statement ok

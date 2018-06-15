@@ -44,14 +44,14 @@ TABLE sort
 opt
 SELECT DISTINCT k FROM a
 ----
-scan a
+scan a@fi_idx
  ├── columns: k:1(int!null)
  └── keys: (1)
 
 opt
 SELECT DISTINCT s, i FROM a
 ----
-scan a
+scan a@si_idx
  ├── columns: s:4(string!null) i:2(int!null)
  └── keys: (2,4)
 
@@ -71,7 +71,7 @@ group-by
  ├── columns: i:2(int!null)
  ├── grouping columns: i:2(int!null)
  ├── keys: (2)
- └── scan a
+ └── scan a@fi_idx
       └── columns: i:2(int!null)
 
 # Distinct not eliminated because one column is nullable.
@@ -82,7 +82,7 @@ group-by
  ├── columns: f:3(float) i:2(int!null)
  ├── grouping columns: i:2(int!null) f:3(float)
  ├── keys: weak(2,3)
- └── scan a
+ └── scan a@fi_idx
       ├── columns: i:2(int!null) f:3(float)
       └── keys: weak(2,3)
 
@@ -94,7 +94,7 @@ group-by
  ├── columns: s:4(string!null) i:2(int!null) sum:6(decimal)
  ├── grouping columns: i:2(int!null) s:4(string!null)
  ├── keys: (2,4)
- ├── scan a
+ ├── scan a@si_idx
  │    ├── columns: i:2(int!null) s:4(string!null)
  │    └── keys: (2,4)
  └── aggregations [outer=(2)]
@@ -139,7 +139,7 @@ project
       ├── keys: weak(6)
       ├── project
       │    ├── columns: i2:6(int) s:4(string!null)
-      │    ├── scan a
+      │    ├── scan a@si_idx
       │    │    ├── columns: i:2(int!null) s:4(string!null)
       │    │    └── keys: (2,4)
       │    └── projections [outer=(2,4)]

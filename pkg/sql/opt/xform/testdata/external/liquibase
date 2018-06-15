@@ -311,14 +311,14 @@ project
  │    │    │         │    │    │    │    │    │    │    │    │    └── keys: (1) (2,3)
  │    │    │         │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(17)]
  │    │    │         │    │    │    │    │    │    │    │         └── (pg_class.relkind = 'r'::CHAR) OR (pg_class.relkind = 'f'::CHAR) [type=bool, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    ├── scan pg_namespace
+ │    │    │         │    │    │    │    │    │    │    ├── scan pg_namespace@pg_namespace_nspname_index
  │    │    │         │    │    │    │    │    │    │    │    ├── columns: pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null)
  │    │    │         │    │    │    │    │    │    │    │    └── keys: (28) (29)
  │    │    │         │    │    │    │    │    │    │    └── filters [type=bool, outer=(3,28), constraints=(/3: (/NULL - ]; /28: (/NULL - ])]
  │    │    │         │    │    │    │    │    │    │         └── pg_namespace.oid = pg_class.relnamespace [type=bool, outer=(3,28), constraints=(/3: (/NULL - ]; /28: (/NULL - ])]
  │    │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(29), constraints=(/29: [/'public' - /'public']; tight)]
  │    │    │         │    │    │    │    │    │         └── pg_namespace.nspname = 'public' [type=bool, outer=(29), constraints=(/29: [/'public' - /'public']; tight)]
- │    │    │         │    │    │    │    │    ├── scan pg_tablespace
+ │    │    │         │    │    │    │    │    ├── scan pg_tablespace@pg_tablespace_spcname_index
  │    │    │         │    │    │    │    │    │    ├── columns: pg_tablespace.oid:32(oid!null) spcname:33(string!null)
  │    │    │         │    │    │    │    │    │    └── keys: (32) (33)
  │    │    │         │    │    │    │    │    └── filters [type=bool, outer=(8,32), constraints=(/8: (/NULL - ]; /32: (/NULL - ])]
@@ -329,12 +329,12 @@ project
  │    │    │         │    │    │    │    │    │    ├── columns: pg_inherits.inhrelid:38(oid!null) pg_inherits.inhparent:39(oid!null) pg_class.oid:41(oid!null) pg_class.relname:42(string!null) pg_class.relnamespace:43(oid!null)
  │    │    │         │    │    │    │    │    │    ├── scan pg_inherits
  │    │    │         │    │    │    │    │    │    │    └── columns: pg_inherits.inhrelid:38(oid!null) pg_inherits.inhparent:39(oid!null)
- │    │    │         │    │    │    │    │    │    ├── scan pg_class
+ │    │    │         │    │    │    │    │    │    ├── scan pg_class@pg_class_relname_nsp_index
  │    │    │         │    │    │    │    │    │    │    ├── columns: pg_class.oid:41(oid!null) pg_class.relname:42(string!null) pg_class.relnamespace:43(oid!null)
  │    │    │         │    │    │    │    │    │    │    └── keys: (41) (42,43)
  │    │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(39,41), constraints=(/39: (/NULL - ]; /41: (/NULL - ])]
  │    │    │         │    │    │    │    │    │         └── pg_inherits.inhparent = pg_class.oid [type=bool, outer=(39,41), constraints=(/39: (/NULL - ]; /41: (/NULL - ])]
- │    │    │         │    │    │    │    │    ├── scan pg_namespace
+ │    │    │         │    │    │    │    │    ├── scan pg_namespace@pg_namespace_nspname_index
  │    │    │         │    │    │    │    │    │    ├── columns: pg_namespace.oid:68(oid!null) pg_namespace.nspname:69(string!null)
  │    │    │         │    │    │    │    │    │    └── keys: (68) (69)
  │    │    │         │    │    │    │    │    └── filters [type=bool, outer=(43,68), constraints=(/43: (/NULL - ]; /68: (/NULL - ])]
@@ -351,7 +351,7 @@ project
  │    │    │         │    │    │    │         └── pg_index.indisclustered = true [type=bool, outer=(79), constraints=(/79: [/true - /true]; tight)]
  │    │    │         │    │    │    └── filters [type=bool, outer=(1,73), constraints=(/1: (/NULL - ]; /73: (/NULL - ])]
  │    │    │         │    │    │         └── pg_index.indrelid = pg_class.oid [type=bool, outer=(1,73), constraints=(/1: (/NULL - ]; /73: (/NULL - ])]
- │    │    │         │    │    ├── scan pg_class
+ │    │    │         │    │    ├── scan pg_class@pg_class_relname_nsp_index
  │    │    │         │    │    │    ├── columns: pg_class.oid:91(oid!null) pg_class.relname:92(string!null)
  │    │    │         │    │    │    └── keys: (91)
  │    │    │         │    │    └── filters [type=bool, outer=(72,91), constraints=(/72: (/NULL - ]; /91: (/NULL - ])]
@@ -361,7 +361,7 @@ project
  │    │    │         │    │    └── keys: (118)
  │    │    │         │    └── filters [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
  │    │    │         │         └── pg_foreign_table.ftrelid = pg_class.oid [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
- │    │    │         ├── scan pg_foreign_server
+ │    │    │         ├── scan pg_foreign_server@pg_foreign_server_name_index
  │    │    │         │    ├── columns: pg_foreign_server.oid:121(oid!null) srvname:122(string!null)
  │    │    │         │    └── keys: (121) (122)
  │    │    │         └── filters [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ])]
