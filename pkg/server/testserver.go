@@ -619,7 +619,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rs, _, err := client.RangeLookup(context.Background(), ts.DB().GetSender(),
+	rs, _, err := client.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
@@ -649,7 +649,7 @@ func (ts *TestServer) SplitRange(
 		},
 		SplitKey: splitKey,
 	}
-	_, pErr := client.SendWrapped(ctx, ts.DB().GetSender(), &splitReq)
+	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf(
@@ -735,7 +735,7 @@ func (ts *TestServer) GetRangeLease(
 	}
 	leaseResp, pErr := client.SendWrappedWith(
 		ctx,
-		ts.DB().GetSender(),
+		ts.DB().NonTransactionalSender(),
 		roachpb.Header{
 			// INCONSISTENT read, since we want to make sure that the node used to
 			// send this is the one that processes the command, for the hint to
