@@ -1,3 +1,4 @@
+import d3 from "d3";
 import _ from "lodash";
 import React, { Component } from "react";
 import classNames from "classnames";
@@ -94,11 +95,41 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     return `${arrow} ${label}`;
   }
 
+  renderCell(
+    row: FlattenedNode<SchemaObject>,
+    col: FlattenedNode<NodeDescriptor$Properties>,
+    scale: d3.scale.Linear<number, number>,
+  ) {
+    if (!(row.isLeaf || row.isCollapsed)) {
+      return null;
+    }
+
+    const value = sumValuesUnderPaths(
+      this.props.rows, this.props.cols, row.path, col.path, this.props.getValue,
+    );
+
+    if (value === 0) {
+      return null;
+    }
+
+    const lightnessValue = scale(value);
+    const backgroundColor = `hsl(210, 100%, ${lightnessValue}%)`;
+    const textColor = lightnessValue < 75 ? "white" : "black";
+
+    return (
+      <div
+        className="matrix__cell-value"
+        style={{ backgroundColor: backgroundColor, color: textColor }}
+      >
+        {value}
+      </div>
+    );
+  }
+
   render() {
     const {
       cols,
       rows,
-      getValue,
     } = this.props;
     const {
       collapsedRows,
@@ -108,6 +139,24 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const flattenedRows = flatten(rows, collapsedRows, true /* includeNodes */);
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
+
+    // TODO(vilterp): don't loop through cells twice each render (here and in actual render)
+    // maybe just put the scale in a selector or something
+    const allVals: number[] = [];
+    flattenedRows.forEach((row) => {
+      flattenedCols.forEach((col) => {
+        if (!(row.isLeaf || row.isCollapsed)) {
+          return;
+        }
+        const value = sumValuesUnderPaths(rows, cols, row.path, col.path, this.props.getValue);
+        allVals.push(value);
+      });
+    });
+
+    const extent = d3.extent(allVals);
+    const scale = d3.scale.linear()
+      .domain([0, extent[1]])
+      .range([100, 50]);
 
     return (
       <table className="matrix">
@@ -165,11 +214,9 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                   return (
                     <td
                       key={col.path.join("/")}
-                      className="matrix__cell-value"
+                      className="matrix__cell"
                     >
-                      {row.isLeaf || row.isCollapsed
-                        ? emptyIfZero(sumValuesUnderPaths(rows, cols, row.path, col.path, getValue))
-                        : null}
+                      {this.renderCell(row, col, scale)}
                     </td>
                   );
                 })}
@@ -181,13 +228,6 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     );
   }
 
-}
-
-function emptyIfZero(n: number): string {
-  if (n === 0) {
-    return "";
-  }
-  return `${n}`;
 }
 
 export default ReplicaMatrix;
