@@ -270,7 +270,7 @@ SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 project
  ├── columns: k:1(string!null)
  └── select
-      ├── columns: k:1(string!null) v:2(string)
+      ├── columns: k:1(string!null=const) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
       └── filters [type=bool]
@@ -284,7 +284,7 @@ SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 project
  ├── columns: v:2(string)
  └── select
-      ├── columns: k:1(string!null) v:2(string)
+      ├── columns: k:1(string!null=const) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
       └── filters [type=bool]

@@ -57,6 +57,9 @@ type Relational struct {
 	// derived from filters that are NULL-intolerant.
 	NotNullCols opt.ColSet
 
+	// ConstantCols is the subset of output columns which are constant.
+	ConstantCols opt.ColSet
+
 	// OuterCols is the set of columns that are referenced by variables within
 	// this relational sub-expression, but are not bound within the scope of
 	// the expression. For example:
@@ -287,6 +290,9 @@ func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, 
 	}
 	if p.Relational.NotNullCols.Contains(int(id)) {
 		buf.WriteString("!null")
+	}
+	if p.Relational.ConstantCols.Contains(int(id)) {
+		buf.WriteString("=const")
 	}
 	buf.WriteByte(')')
 }

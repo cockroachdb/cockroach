@@ -78,6 +78,20 @@ func (c *Constraint) IsUnconstrained() bool {
 	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
+// IsConstant returns true if there is exactly one point satisfying this
+// constraint.
+func (c *Constraint) IsConstant(keyCtx *KeyContext) bool {
+	if c.Spans.Count() == 1 {
+		span := c.Spans.Get(0)
+		if !span.IsUnconstrained() &&
+			span.StartKey().Compare(keyCtx, span.EndKey(), ExtendLow, ExtendLow) == 0 &&
+			span.StartBoundary() == IncludeBoundary && span.EndBoundary() == IncludeBoundary {
+			return true
+		}
+	}
+	return false
+}
+
 // UnionWith merges the spans of the given constraint into this constraint.  The
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input

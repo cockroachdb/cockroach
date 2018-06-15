@@ -262,6 +262,79 @@ func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
+// columnIsConst returns whether the constraint set restricts col to be
+// constant.
+func (s *Set) columnIsConst(evalCtx *tree.EvalContext, col int) bool {
+	var singleCol Columns
+	singleCol.InitSingle(opt.OrderingColumn(col))
+	keyCtx := MakeKeyContext(&singleCol, evalCtx)
+
+	var colConstraint Constraint
+	colConstraint.InitSingleSpan(&keyCtx, &UnconstrainedSpan)
+
+	var colSpans Spans
+	for constraintIdx := 0; constraintIdx < s.Length(); constraintIdx++ {
+		colSpans.Truncate(0)
+		c := s.Constraint(constraintIdx)
+
+		colIdxInConstraint := -1
+		for j := 0; j < c.Columns.Count(); j++ {
+			if int(c.Columns.Get(j).ID()) == col {
+				colIdxInConstraint = j
+				break
+			}
+		}
+
+		if colIdxInConstraint == -1 {
+			// The column wasn't part of this constraint.
+			continue
+		}
+
+		constraintUsable := true
+		for spanIdx := 0; spanIdx < c.Spans.Count(); spanIdx++ {
+			colSpan := c.Spans.Get(spanIdx).IsolateToSingleColumn(evalCtx, colIdxInConstraint)
+			if colSpan.IsUnconstrained() {
+				// This is an optimization, since we know this constraint can't give us
+				// any information.
+				constraintUsable = false
+				break
+			}
+			colSpans.Append(&colSpan)
+		}
+
+		if constraintUsable {
+			colSpans.SortAndMerge(&keyCtx)
+			var constraint Constraint
+			constraint.Init(&keyCtx, &colSpans)
+			colConstraint.IntersectWith(evalCtx, &constraint)
+		}
+	}
+
+	return colConstraint.IsConstant(&keyCtx)
+}
+
+// ExtractConstCols returns a set of columns which can only have one value
+// for the constraints in the set to hold.
+func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	var allCols opt.ColSet
+
+	for i := 0; i < s.Length(); i++ {
+		c := s.Constraint(i)
+		for j, n := 0, c.Columns.Count(); j < n; j++ {
+			allCols.Add(int(c.Columns.Get(j)))
+		}
+	}
+
+	var res opt.ColSet
+	for col, ok := allCols.Next(0); ok; col, ok = allCols.Next(col + 1) {
+		if s.columnIsConst(evalCtx, col) {
+			res.Add(col)
+		}
+	}
+
+	return res
+}
+
 // allocConstraint allocates space for a new constraint in the set and returns
 // a pointer to it. The first constraint is stored inline, and subsequent
 // constraints are stored in the otherConstraints slice.

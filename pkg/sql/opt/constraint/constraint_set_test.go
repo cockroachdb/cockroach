@@ -17,7 +17,9 @@ package constraint
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
@@ -223,6 +225,107 @@ func TestConstraintSetUnion(t *testing.T) {
 	test(res, "/1: [/10 - /10]")
 	res = Contradiction.Union(evalCtx, eq10)
 	test(res, "/1: [/10 - /10]")
+}
+
+func TestExtractConstCols(t *testing.T) {
+	type testCase struct {
+		constraints []string
+		expected    opt.ColSet
+	}
+
+	cols := util.MakeFastIntSet
+
+	cases := []testCase{
+		{[]string{`/1: [/10 - /10]`}, cols(1)},
+		{[]string{`/1: [/10 - /11]`}, cols()},
+		{[]string{`/1: [/10 - ]`}, cols()},
+		{[]string{`/1/2: [/10/2 - /10/4]`}, cols(1)},
+		{[]string{`/1/2: [/10/2 - /10/2]`}, cols(1, 2)},
+		{[]string{`/1/2: [/10/2 - /12/2]`}, cols()},
+		{
+			[]string{
+				`/1/2: [/9/2 - /9/2] [/10/2 - /12/2]`,
+			},
+			cols(),
+		},
+		{[]string{`/1: [/10 - /10] [/12 - /12]`}, cols()},
+		{
+			[]string{
+				`/1: [/10 - /10] [/12 - /12]`,
+				`/1/2: [/8/1 - /8/2] [/10/1 - /10/2]`,
+			},
+			cols(1),
+		},
+		{
+			[]string{
+				`/1: [/10 - /10]`,
+				`/2: [/8 - /8]`,
+			},
+			cols(1, 2),
+		},
+		{
+			[]string{
+				`/1: [ - /10]`,
+				`/1/2: [/10/1 - ]`,
+			},
+			cols(1),
+		},
+		{
+			[]string{
+				`/1/2: [/10/4 - /10/5] [/12/4 - /12/5]`,
+				`/2: [/4 - /4]`,
+			},
+			cols(2),
+		},
+		{
+			[]string{
+				`/1/2: [/10/4 - /10/5] [/12/4 - /12/5]`,
+				`/2: [/3 - /4]`,
+			},
+			cols(2),
+		},
+		{
+			[]string{
+				`/1/2/3: [/10/20/30 - /10/20/40] [/12/20/30 - /12/20/40]`,
+				`/2: [/10 - /30]`,
+				`/3/1: [/20/10 - /30/10]`,
+			},
+			cols(2, 3),
+		},
+		// TODO(justin): in both of these cases 1 is actually constant because 11
+		// is the successor of 10.
+		{[]string{`/1: [/10 - /11)`}, cols()},
+		{
+			[]string{
+				`/1: [/2 - /3]`,
+				`/2/1: [/10/3 - /11/1]`,
+			},
+			cols(),
+		},
+		// TODO(justin): given that 1 is constant (it must be 13) we can infer
+		// that 2 is also constant (it must be 8).
+		{
+			[]string{
+				`/1/2: [/10/3 - /13/8]`,
+				`/1: [/13 - /14]`,
+				`/2: [/8 - /10]`,
+			},
+			cols(1),
+		},
+	}
+
+	evalCtx := tree.NewTestingEvalContext(nil)
+	for _, tc := range cases {
+		cs := Unconstrained
+		for _, constraint := range tc.constraints {
+			constraint := ParseConstraint(evalCtx, constraint)
+			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+		}
+		cols := cs.ExtractConstCols(evalCtx)
+		if !tc.expected.Equals(cols) {
+			t.Errorf("expected constant columns from %s to be %s, was %s", cs, tc.expected, cols)
+		}
+	}
 }
 
 type spanTestData struct {

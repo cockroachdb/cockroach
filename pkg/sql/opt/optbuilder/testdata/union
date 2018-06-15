@@ -388,7 +388,7 @@ union
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -398,7 +398,7 @@ union
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -416,7 +416,7 @@ union-all
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -426,7 +426,7 @@ union-all
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -444,7 +444,7 @@ intersect
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -454,7 +454,7 @@ intersect
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -472,7 +472,7 @@ intersect-all
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -482,7 +482,7 @@ intersect-all
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -500,7 +500,7 @@ except
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -510,7 +510,7 @@ except
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -528,7 +528,7 @@ except-all
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         └── filters [type=bool]
@@ -538,7 +538,7 @@ except-all
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            └── filters [type=bool]
@@ -562,7 +562,7 @@ limit
  │         ├── project
  │         │    ├── columns: uniontest.v:2(int)
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         └── filters [type=bool]
@@ -572,7 +572,7 @@ limit
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   └── filters [type=bool]
@@ -598,7 +598,7 @@ limit
  │         ├── project
  │         │    ├── columns: uniontest.v:2(int)
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: uniontest.k:1(int!null=const) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         └── filters [type=bool]
@@ -608,7 +608,7 @@ limit
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: uniontest.k:4(int!null=const) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   └── filters [type=bool]

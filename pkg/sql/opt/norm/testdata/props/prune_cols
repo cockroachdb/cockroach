@@ -36,7 +36,7 @@ build
 SELECT * FROM a WHERE k=1 AND f=1.0
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string)
+ ├── columns: k:1(int!null=const) i:2(int) f:3(float!null=const) s:4(string)
  ├── keys: (1)
  ├── prune: (2,4)
  ├── scan a
@@ -121,7 +121,7 @@ project
  ├── keys: (1)
  ├── prune: (1-4)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null=const)
       ├── keys: (1)
       ├── prune: (2-4)
       ├── left-join-apply
@@ -287,12 +287,12 @@ union-all
  ├── left columns: a.k:1(int) a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) y:6(int) x:5(int)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    ├── columns: a.k:1(int!null=const) a.i:2(int)
  │    ├── constraint: /1: [/1 - /1]
  │    ├── keys: (1)
  │    └── prune: (2)
  └── select
-      ├── columns: x:5(int!null) y:6(int!null)
+      ├── columns: x:5(int!null) y:6(int!null=const)
       ├── keys: (5)
       ├── prune: (5)
       ├── scan xy

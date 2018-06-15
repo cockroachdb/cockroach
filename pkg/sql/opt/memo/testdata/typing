@@ -75,7 +75,7 @@ build
 SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null=const) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
@@ -86,7 +86,7 @@ build
 SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null=const) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
@@ -152,7 +152,7 @@ build
 SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null=const) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]

@@ -196,7 +196,7 @@ project
  ├── stats: [rows=1]
  ├── keys: weak(4)
  └── select
-      ├── columns: s:4(string) column5:5(decimal!null)
+      ├── columns: s:4(string) column5:5(decimal!null=const)
       ├── stats: [rows=1, distinct(5)=1]
       ├── keys: weak(4)
       ├── group-by

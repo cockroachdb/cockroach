@@ -249,7 +249,7 @@ intersect
       ├── stats: [rows=2, distinct(4,5,7)=2]
       ├── keys: (7)
       └── select
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
+           ├── columns: b.x:4(int!null=const) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1, distinct(4,5,7)=2]
            ├── keys: (7)
            ├── scan b
@@ -282,7 +282,7 @@ intersect-all
       ├── stats: [rows=2]
       ├── keys: (7)
       └── select
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
+           ├── columns: b.x:4(int!null=const) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1]
            ├── keys: (7)
            ├── scan b
@@ -386,7 +386,7 @@ except
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2, distinct(4,5)=2]
            └── select
-                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
+                ├── columns: b.x:4(int!null=const) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1, distinct(4,5)=2]
                 ├── keys: (7)
                 ├── scan b
@@ -421,7 +421,7 @@ except-all
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2]
            └── select
-                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
+                ├── columns: b.x:4(int!null=const) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1]
                 ├── keys: (7)
                 ├── scan b
@@ -506,7 +506,7 @@ build
 SELECT * FROM (SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b) WHERE y = 5
 ----
 select
- ├── columns: y:2(int!null) s:3(string)
+ ├── columns: y:2(int!null=const) s:3(string)
  ├── stats: [rows=12.50, distinct(2)=1]
  ├── except-all
  │    ├── columns: y:2(int) a.s:3(string)

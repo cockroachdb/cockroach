@@ -16,6 +16,8 @@ package constraint
 
 import (
 	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // SpanBoundary specifies whether a span endpoint is inclusive or exclusive of
@@ -177,6 +179,64 @@ func (sp *Span) StartsAfter(keyCtx *KeyContext, other *Span) bool {
 // strictly greater than the given span's end boundary.
 func (sp *Span) StartsStrictlyAfter(keyCtx *KeyContext, other *Span) bool {
 	return sp.start.Compare(keyCtx, other.end, sp.startExt(), other.endExt()) > 0
+}
+
+// IsolateToSingleColumn returns a span which only refers to the given column
+// in the key.
+func (sp *Span) IsolateToSingleColumn(evalCtx *tree.EvalContext, idx int) Span {
+	// TODO(justin): figure out exclusive boundaries.
+	if sp.StartBoundary() != IncludeBoundary || sp.EndBoundary() != IncludeBoundary {
+		return UnconstrainedSpan
+	}
+
+	if sp.start.IsEmpty() || sp.end.IsEmpty() {
+		// If one but not both of the bounds are empty, we can restrict if we're
+		// dealing with the first component of the key.
+		if idx == 0 && sp.start.IsEmpty() != sp.end.IsEmpty() {
+			start, end := sp.start, sp.end
+			if !sp.start.IsEmpty() {
+				start = MakeKey(sp.start.Value(0))
+			}
+			if !sp.end.IsEmpty() {
+				end = MakeKey(sp.end.Value(0))
+			}
+			return Span{
+				start:         start,
+				end:           end,
+				startBoundary: sp.startBoundary,
+				endBoundary:   sp.endBoundary,
+			}
+		}
+		return UnconstrainedSpan
+	}
+
+	// This constraint can only be used to constrain the given column if in every
+	// span the columns appearing before it in the key are constant. Ex:
+	//   /1/2: [/10/3 - /10/8]
+	// restricts 2 to be between 3 and 8, but
+	//   /1/2: [/10/3 - /13/8]
+	// doesn't.
+	for i := 0; i < idx; i++ {
+		if sp.start.Value(i).Compare(evalCtx, sp.end.Value(i)) != 0 {
+			return UnconstrainedSpan
+		}
+	}
+
+	var start Key
+	if !sp.start.IsEmpty() {
+		start = MakeKey(sp.start.Value(idx))
+	}
+	var end Key
+	if !sp.end.IsEmpty() {
+		end = MakeKey(sp.end.Value(idx))
+	}
+
+	return Span{
+		start:         start,
+		end:           end,
+		startBoundary: sp.startBoundary,
+		endBoundary:   sp.endBoundary,
+	}
 }
 
 // TryIntersectWith finds the overlap between this span and the given span.

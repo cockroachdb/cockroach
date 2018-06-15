@@ -21,7 +21,7 @@ build
 SELECT * FROM xy WHERE x=1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null=const) y:2(int)
  ├── stats: [rows=1, distinct(1)=1]
  ├── keys: (1)
  ├── scan xy
@@ -98,7 +98,7 @@ build
 SELECT count(*) FROM xy HAVING count(*) = 5
 ----
 select
- ├── columns: count:3(int!null)
+ ├── columns: count:3(int!null=const)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(3)=1]
  ├── group-by

@@ -300,7 +300,7 @@ project
  │    │    │         │    │    │    │    ├── left-join
  │    │    │         │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid) pg_namespace.nspname:29(string!null) pg_tablespace.oid:32(oid) spcname:33(string)
  │    │    │         │    │    │    │    │    ├── select
- │    │    │         │    │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid) pg_namespace.nspname:29(string!null)
+ │    │    │         │    │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid) pg_namespace.nspname:29(string!null=const)
  │    │    │         │    │    │    │    │    │    ├── left-join
  │    │    │         │    │    │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid) pg_namespace.nspname:29(string)
  │    │    │         │    │    │    │    │    │    │    ├── select
@@ -342,7 +342,7 @@ project
  │    │    │         │    │    │    │    └── filters [type=bool, outer=(1,38), constraints=(/1: (/NULL - ]; /38: (/NULL - ])]
  │    │    │         │    │    │    │         └── pg_inherits.inhrelid = pg_class.oid [type=bool, outer=(1,38), constraints=(/1: (/NULL - ]; /38: (/NULL - ])]
  │    │    │         │    │    │    ├── select
- │    │    │         │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
+ │    │    │         │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null=const)
  │    │    │         │    │    │    │    ├── keys: (72)
  │    │    │         │    │    │    │    ├── scan pg_index
  │    │    │         │    │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
