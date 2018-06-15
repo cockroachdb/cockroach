@@ -114,6 +114,9 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// ----------------
 	// Initialize not-NULL columns from the table schema.
 	relational.NotNullCols = tableNotNullCols(md, def.Table)
+	if def.Constraint != nil {
+		relational.NotNullCols.UnionWith(def.Constraint.ExtractNotNullCols(b.evalCtx))
+	}
 	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
 	// Outer Columns
@@ -162,7 +165,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// "y" cannot be null because the SQL equality operator rejects nulls.
 	relational.NotNullCols = inputProps.NotNullCols
 	if filterProps.Constraints != nil {
-		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols()
+		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols(b.evalCtx)
 		if !constraintNotNullCols.Empty() {
 			relational.NotNullCols = relational.NotNullCols.Union(constraintNotNullCols)
 			relational.NotNullCols.IntersectionWith(relational.OutputCols)

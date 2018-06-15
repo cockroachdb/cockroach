@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -348,6 +349,10 @@ func TestExactPrefix(t *testing.T) {
 			e: 1,
 		},
 		{
+			s: "[/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]",
+			e: 1,
+		},
+		{
 			s: "[/1/2/3 - /1/2/3] [/3 - /4]",
 			e: 0,
 		},
@@ -448,4 +453,85 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	data.mangoStrawberry.InitSingleSpan(kc12, &span)
 
 	return data
+}
+
+func TestExtractNotNullCols(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		c string
+		e []int
+	}{
+		{ // 0
+			c: "/1: [/2 - ]",
+			e: []int{1},
+		},
+		{ // 1
+			c: "/1: [ - /2]",
+			e: []int{},
+		},
+		{ // 2
+			c: "/1: [/NULL - /4]",
+			e: []int{},
+		},
+		{ // 3
+			c: "/1: (/NULL - /4]",
+			e: []int{1},
+		},
+		{ // 4
+			c: "/-1: [ - /2]",
+			e: []int{1},
+		},
+		{ // 5
+			c: "/-1: [/2 - ]",
+			e: []int{},
+		},
+		{ // 6
+			c: "/-1: [/4 - /NULL]",
+			e: []int{},
+		},
+		{ // 7
+			c: "/-1: [/4 - /NULL)",
+			e: []int{1},
+		},
+		{ // 8
+			c: "/1/2/3: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]",
+			e: []int{1, 2, 3},
+		},
+		{ // 9
+			c: "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/3/3/1 - /3/3/4/1]",
+			e: []int{1, 2, 3},
+		},
+		{ // 10
+			c: "/1/2/3: [/1/1 - /1/1/2] [/3/3/3 - /3/3/4]",
+			e: []int{1, 2},
+		},
+		{ // 11
+			c: "/1/-2/-3: [/1/1/2 - /1/1] [/3/3/4 - /3/3/3]",
+			e: []int{1, 2},
+		},
+		{ // 12
+			c: "/1/2/3: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4] [/4/4/1 - /5]",
+			e: []int{1},
+		},
+		{ // 13
+			c: "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
+			e: []int{1, 2},
+		},
+		{ // 13
+			c: "/1/2/3: [/1/1/1 - /1/1/1] [/2/NULL/2 - /2/NULL/3]",
+			e: []int{1, 3},
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.c)
+			cols := c.ExtractNotNullCols(&evalCtx)
+			if exp := util.MakeFastIntSet(tc.e...); !cols.Equals(exp) {
+				t.Errorf("expected %s; got %s", exp, cols)
+			}
+		})
+	}
 }
