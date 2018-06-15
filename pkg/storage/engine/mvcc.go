@@ -1322,12 +1322,6 @@ func mvccPutInternal(
 	}
 	newMeta := &buf.newMeta
 
-	versionKey := metaKey
-	versionKey.Timestamp = timestamp
-	if err := engine.Put(versionKey, value); err != nil {
-		return err
-	}
-
 	// Write the mvcc metadata now that we have sizes for the latest
 	// versioned value. For values, the size of keys is always accounted
 	// for as mvccVersionTimestampSize. The size of the metadata key is
@@ -1347,6 +1341,20 @@ func mvccPutInternal(
 		// each versioned value. We maintain that accounting even when the MVCC
 		// metadata is implicit.
 		metaKeySize = int64(metaKey.EncodedSize())
+	}
+
+	// Write the mvcc value.
+	//
+	// NB: this was previously performed before the mvcc metadata write, but
+	// benchmarking has show that performing this write after results in a 6%
+	// throughput improvement on write-heavy workloads. The reason for this is
+	// probably that the meta key is always ordered before the value key and
+	// that backward iteration in RocksDB's memtable skiplist is significantly
+	// slower than forward iteration.
+	versionKey := metaKey
+	versionKey.Timestamp = timestamp
+	if err := engine.Put(versionKey, value); err != nil {
+		return err
 	}
 
 	// Update MVCC stats.
@@ -2201,10 +2209,10 @@ func mvccResolveWriteIntent(
 			if err != nil {
 				return false, err
 			}
-			if err = engine.Clear(origKey); err != nil {
+			if err = engine.Put(newKey, valBytes); err != nil {
 				return false, err
 			}
-			if err = engine.Put(newKey, valBytes); err != nil {
+			if err = engine.Clear(origKey); err != nil {
 				return false, err
 			}
 		}
