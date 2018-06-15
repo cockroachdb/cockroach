@@ -160,7 +160,7 @@ project
       ├── columns: k:1(int!null) u:2(int!null)
       ├── keys: (1)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int)
+      │    ├── columns: k:1(int!null) u:2(int!null)
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1)
       └── filters [type=bool, outer=(1,2)]
@@ -206,9 +206,9 @@ project
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@v
-      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
       │    ├── constraint: /3: [/5 - /5]
-      │    └── keys: (1) weak(3)
+      │    └── keys: (1) (3)
       └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
            └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
 
@@ -258,7 +258,7 @@ project
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
       │    ├── constraint: /2/1: (/NULL - ]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -354,9 +354,9 @@ lookup-join b
       ├── columns: k:1(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan b@v
-      │    ├── columns: k:1(int!null) v:3(int)
+      │    ├── columns: k:1(int!null) v:3(int!null)
       │    ├── constraint: /3: [/1 - /10]
-      │    └── keys: (1) weak(3)
+      │    └── keys: (1) (3)
       └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
            └── b.k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
 
@@ -518,9 +518,9 @@ select
  │         ├── columns: k:1(int!null) v:3(int!null)
  │         ├── keys: (1) (3)
  │         ├── scan b@v
- │         │    ├── columns: k:1(int!null) v:3(int)
+ │         │    ├── columns: k:1(int!null) v:3(int!null)
  │         │    ├── constraint: /3: [/1 - /10]
- │         │    └── keys: (1) weak(3)
+ │         │    └── keys: (1) (3)
  │         └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
  │              └── b.k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
  └── filters [type=bool, outer=(1,2)]
@@ -620,7 +620,7 @@ select
  │    ├── key columns: [1]
  │    ├── keys: (1) weak(3)
  │    └── scan b@u
- │         ├── columns: k:1(int!null) u:2(int)
+ │         ├── columns: k:1(int!null) u:2(int!null)
  │         ├── constraint: /2/1: [/1/2 - /8/9]
  │         └── keys: (1)
  └── filters [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - /8/9/9]; tight)]
