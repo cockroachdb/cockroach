@@ -125,3 +125,59 @@ memo (optimized)
  ├── G6: (eq G7 G8)
  ├── G7: (variable a.s)
  └── G8: (const 'foo')
+
+# --------------------------------------------------
+# PushLimitIntoLookupJoin
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u INT, v INT, INDEX (u))
+----
+TABLE kuv
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX secondary
+      ├── u int
+      └── k int not null
+
+opt
+SELECT * FROM kuv ORDER BY u LIMIT 5
+----
+lookup-join kuv
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── key columns: [1]
+ ├── cardinality: [0 - 5]
+ ├── keys: (1)
+ ├── ordering: +2
+ └── scan kuv@secondary
+      ├── columns: k:1(int!null) u:2(int)
+      ├── limit: 5
+      ├── keys: (1)
+      └── ordering: +2
+
+# Verify we don't push the limit if the ordering depends on a column not in the
+# input index.
+opt
+SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ ├── cardinality: [0 - 5]
+ ├── keys: (1)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ │    ├── keys: (1)
+ │    ├── ordering: +2,+3
+ │    └── lookup-join kuv
+ │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ │         ├── key columns: [1]
+ │         ├── keys: (1)
+ │         └── scan kuv@secondary
+ │              ├── columns: k:1(int!null) u:2(int)
+ │              ├── constraint: /2/1: [/2 - /9]
+ │              └── keys: (1)
+ └── const: 5 [type=int]
