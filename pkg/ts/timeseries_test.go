@@ -155,7 +155,7 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := engine.MergeInternalTimeSeriesData(internal...)
+	out, err := engine.MergeInternalTimeSeriesData(true /* mergeIntoNil */, false /* usePartialMerge */, internal...)
 	if err != nil {
 		t.Fatal(err)
 	}
