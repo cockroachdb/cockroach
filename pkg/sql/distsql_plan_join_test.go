@@ -33,6 +33,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+func setTestEqColForSide(colName string, side *scanNode, equalityIndices *[]int) error {
+	colFound := false
+
+	for i, leftCol := range side.cols {
+		if colName == leftCol.Name {
+			*equalityIndices = append(*equalityIndices, i)
+			colFound = true
+			break
+		}
+	}
+	if !colFound {
+		return errors.Errorf("column %s not found in %s", colName, side.desc.Name)
+	}
+	return nil
+}
+
 func setTestEqCols(n *joinNode, colNames []string) error {
 	left := n.left.plan.(*scanNode)
 	right := n.right.plan.(*scanNode)
@@ -45,34 +61,11 @@ func setTestEqCols(n *joinNode, colNames []string) error {
 			continue
 		}
 
-		colFound := false
-		for i, leftCol := range left.cols {
-			if colName == leftCol.Name {
-				n.pred.leftEqualityIndices = append(
-					n.pred.leftEqualityIndices,
-					i,
-				)
-				colFound = true
-				break
-			}
+		if err := setTestEqColForSide(colName, left, &n.pred.leftEqualityIndices); err != nil {
+			return err
 		}
-		if !colFound {
-			return errors.Errorf("column %s not found in %s", colName, left.desc.Name)
-		}
-
-		colFound = false
-		for i, rightCol := range right.cols {
-			if colName == rightCol.Name {
-				n.pred.rightEqualityIndices = append(
-					n.pred.rightEqualityIndices,
-					i,
-				)
-				colFound = true
-				break
-			}
-		}
-		if !colFound {
-			return errors.Errorf("column %s not found in %s", colName, right.desc.Name)
+		if err := setTestEqColForSide(colName, right, &n.pred.rightEqualityIndices); err != nil {
+			return err
 		}
 	}
 
@@ -327,6 +320,45 @@ func TestUseInterleavedJoin(t *testing.T) {
 			tc.table1, tc.table2 = tc.table2, tc.table1
 		}
 	}
+
+	// Test that a join from an interleaved column to a non-interleaved column
+	// doesn't get planned as an interleaved table join, even if the
+	// non-interleaved column is constant and is given a merge join ordering.
+	t.Run("MismatchedJoin", func(t *testing.T) {
+		join, err := newTestJoinNode(kvDB, "parent1", "child1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		join.joinType = sqlbase.InnerJoin
+
+		join.pred = &joinPredicate{}
+		join.mergeJoinOrdering = nil
+		if err := setTestEqColForSide("pid1", join.left.plan.(*scanNode), &join.pred.leftEqualityIndices); err != nil {
+			t.Fatal(err)
+		}
+		if err := setTestEqColForSide("v", join.right.plan.(*scanNode), &join.pred.rightEqualityIndices); err != nil {
+			t.Fatal(err)
+		}
+		// Set the merge join ordering to idx 0 - this says that the column `pid1`
+		// and `v` have the same ordering. This can be true if `v` has been
+		// constrained to a constant value. We shouldn't plan an interleaved table
+		// join in this case, even though the left equality columns are a prefix
+		// of the interleaved columns, because the right equality columns are not
+		// part of the interleaved columns.
+		// See issue #25838 for a case where this could happen.
+		join.mergeJoinOrdering = sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    0,
+				Direction: encoding.Ascending,
+			},
+		}
+
+		actual := useInterleavedJoin(join)
+
+		if actual {
+			t.Errorf("expected useInterleaveJoin to return %t, actual %t", false, actual)
+		}
+	})
 }
 
 func TestMaximalJoinPrefix(t *testing.T) {
