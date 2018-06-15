@@ -96,6 +96,46 @@ class DBLogger : public rocksdb::Logger {
   int go_log_level_;
 };
 
+class DeleteRangeTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const char* Name() const override { return "DeleteRangeTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties*) override {
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice&, const rocksdb::Slice&,
+                             rocksdb::EntryType type, rocksdb::SequenceNumber,
+                             uint64_t) override {
+    if (type == rocksdb::kEntryRangeDeletion) {
+      ntombstones_++;
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+  virtual bool NeedCompact() const override {
+    // NB: Mark any file containing range deletions as requiring a
+    // compaction. This ensures that range deletions are quickly compacted out
+    // of existence.
+    return ntombstones_ > 0;
+  }
+
+ private:
+  int ntombstones_;
+};
+
+class DeleteRangeTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new DeleteRangeTblPropCollector();
+  }
+  const char* Name() const override { return "DeleteRangeTblPropCollectorFactory"; }
+};
+
 }  // namespace
 
 rocksdb::Logger* NewDBLogger(int go_log_level) { return new DBLogger(go_log_level); }
@@ -151,6 +191,11 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the TablePropertiesCollector hook to store the min and max MVCC
   // timestamps present in each sstable in the metadata for that sstable.
   options.table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
+
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options.table_properties_collector_factories.emplace_back(
+      new DeleteRangeTblPropCollectorFactory());
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files.
