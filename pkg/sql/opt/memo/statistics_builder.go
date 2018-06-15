@@ -160,6 +160,9 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *props.Colum
 
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet)
+
+	case opt.ExplainOp, opt.ShowTraceForSessionOp:
+		return sb.colStatMetadata(colSet)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", sb.ev.op))
