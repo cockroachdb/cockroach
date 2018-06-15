@@ -1312,6 +1312,12 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	db := setupMVCCInMemRocksDB(t, "delrange").(InMem)
 	defer db.Close()
 
+	// Disable automatic compactions which interfere with test expectations
+	// below.
+	if err := db.disableAutoCompaction(); err != nil {
+		t.Fatal(err)
+	}
+
 	makeKey := func(prefix string, i int) roachpb.Key {
 		return roachpb.Key(fmt.Sprintf("%s%09d", prefix, i))
 	}

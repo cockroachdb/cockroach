@@ -411,6 +411,16 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   return kSuccess;
 }
 
+DBStatus DBDisableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->SetOptions({{"disable_auto_compactions", "true"}});
+  return ToDBStatus(status);
+}
+
+DBStatus DBEnableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->EnableAutoCompaction({db->rep->DefaultColumnFamily()});
+  return ToDBStatus(status);
+}
+
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));
