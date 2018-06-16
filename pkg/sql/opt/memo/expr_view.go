@@ -519,23 +519,6 @@ func (ev ExprView) formatPresentation(
 	tp.Child(buf.String())
 }
 
-func (ev ExprView) formatWeakKeys(tp treeprinter.Node) {
-	var buf bytes.Buffer
-	rel := ev.Logical().Relational
-	for i, key := range rel.WeakKeys {
-		if i != 0 {
-			buf.WriteRune(' ')
-		}
-		if !key.SubsetOf(rel.NotNullCols) {
-			buf.WriteString("weak")
-		}
-		buf.WriteString(key.String())
-	}
-	if buf.Len() != 0 {
-		tp.Childf("keys: %s", buf.String())
-	}
-}
-
 // HasOnlyConstChildren returns true if all children of ev are constant values
 // (tuples of constant values are considered constant values).
 func HasOnlyConstChildren(ev ExprView) bool {

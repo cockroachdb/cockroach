@@ -801,12 +801,12 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-render     ·         ·              (f)     ·
- │         render 0  f              ·       ·
- └── scan  ·         ·              (d, f)  ·
-·          table     def@def_f_key  ·       ·
-·          spans     /1-/2          ·       ·
-·          filter    d = 3          ·       ·
+render     ·         ·            (f)     ·
+ │         render 0  f            ·       ·
+ └── scan  ·         ·            (d, f)  ·
+·          table     def@primary  ·       ·
+·          spans     /3-/4        ·       ·
+·          filter    f = 1        ·       ·
 
 # Regression test for #20504.
 query TTTTT
