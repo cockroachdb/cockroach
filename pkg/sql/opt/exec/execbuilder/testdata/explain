@@ -618,11 +618,14 @@ project
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.01
+ ├── key: ()
+ ├── fd: ()-->(1)
  ├── prune: (1)
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── cost: 0.01
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── const: 1 [type=int]

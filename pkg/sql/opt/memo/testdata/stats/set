@@ -125,15 +125,22 @@ union
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
  ├── right columns: b.x:4(int) z:5(int) b.s:6(string) rowid:7(int)
  ├── stats: [rows=15000, distinct(8-11)=15000]
+ ├── key: (8-11)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(1-3)=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(1-3)=5000]
+ │         ├── stats: [rows=5000, distinct(1-3)=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── scan b
       ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-      └── stats: [rows=10000, distinct(4-7)=10000]
+      ├── stats: [rows=10000, distinct(4-7)=10000]
+      ├── key: (7)
+      └── fd: (7)-->(4-6)
 
 build
 SELECT *, x FROM a UNION ALL SELECT *, rowid FROM b
@@ -146,12 +153,18 @@ union-all
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── scan b
       ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-      └── stats: [rows=10000]
+      ├── stats: [rows=10000]
+      ├── key: (7)
+      └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a UNION SELECT z, s FROM c
@@ -161,18 +174,23 @@ union
  ├── left columns: a.y:2(int) a.s:3(string)
  ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=2000, distinct(8,9)=2000]
+ ├── key: (8,9)
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
            ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=1000]
+           ├── stats: [rows=10000, distinct(5,6)=1000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a UNION SELECT z, s FROM b
@@ -182,18 +200,23 @@ union
  ├── left columns: a.y:2(int) a.s:3(string)
  ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=1200, distinct(8,9)=1200]
+ ├── key: (8,9)
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=200]
+           ├── stats: [rows=10000, distinct(5,6)=200]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a UNION ALL SELECT z, s FROM b
@@ -208,13 +231,17 @@ union-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000]
+           ├── stats: [rows=10000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -224,21 +251,32 @@ intersect
  ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
  ├── right columns: z:5(int) b.x:4(int) rowid:7(int)
  ├── stats: [rows=2, distinct(1,2)=2]
+ ├── key: (1,2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(1,2)=5000]
+ │         ├── stats: [rows=5000, distinct(1,2)=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2, distinct(4,5,7)=2]
+      ├── key: (7)
+      ├── fd: (7)-->(4,5)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1, distinct(4,5,7)=2]
+           ├── key: (7)
+           ├── fd: (7)-->(4-6)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           │    └── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
+           │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
+           │    ├── key: (7)
+           │    └── fd: (7)-->(4-6)
            └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      ├── variable: b.x [type=int, outer=(4)]
@@ -255,18 +293,28 @@ intersect-all
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2]
+      ├── key: (7)
+      ├── fd: (7)-->(4,5)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1]
+           ├── key: (7)
+           ├── fd: (7)-->(4-6)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           │    └── stats: [rows=10000, distinct(4)=5000]
+           │    ├── stats: [rows=10000, distinct(4)=5000]
+           │    ├── key: (7)
+           │    └── fd: (7)-->(4-6)
            └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      ├── variable: b.x [type=int, outer=(4)]
@@ -280,18 +328,23 @@ intersect
  ├── left columns: y:2(int) a.s:3(string)
  ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
+ ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
            ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=1000]
+           ├── stats: [rows=10000, distinct(5,6)=1000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM b
@@ -301,18 +354,23 @@ intersect
  ├── left columns: y:2(int) a.s:3(string)
  ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=200, distinct(2,3)=200]
+ ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=200]
+           ├── stats: [rows=10000, distinct(5,6)=200]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a INTERSECT ALL SELECT z, s FROM b
@@ -327,13 +385,17 @@ intersect-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000]
+           ├── stats: [rows=10000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -343,12 +405,17 @@ except
  ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
  ├── right columns: b.x:4(int) z:5(int) z:5(int)
  ├── stats: [rows=5000, distinct(1,2)=5000]
+ ├── key: (1,2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(1,2)=5000]
+ │         ├── stats: [rows=5000, distinct(1,2)=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2, distinct(4,5)=2]
@@ -358,9 +425,13 @@ except
            └── select
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1, distinct(4,5)=2]
+                ├── key: (7)
+                ├── fd: (7)-->(4-6)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                │    └── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
+                │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
+                │    ├── key: (7)
+                │    └── fd: (7)-->(4-6)
                 └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                           ├── variable: b.x [type=int, outer=(4)]
@@ -377,9 +448,13 @@ except-all
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2]
@@ -389,9 +464,13 @@ except-all
            └── select
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1]
+                ├── key: (7)
+                ├── fd: (7)-->(4-6)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                │    └── stats: [rows=10000, distinct(4)=5000]
+                │    ├── stats: [rows=10000, distinct(4)=5000]
+                │    ├── key: (7)
+                │    └── fd: (7)-->(4-6)
                 └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                           ├── variable: b.x [type=int, outer=(4)]
@@ -405,18 +484,23 @@ except
  ├── left columns: y:2(int) a.s:3(string)
  ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
+ ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
            ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=1000]
+           ├── stats: [rows=10000, distinct(5,6)=1000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM b
@@ -426,18 +510,23 @@ except
  ├── left columns: y:2(int) a.s:3(string)
  ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
+ ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── stats: [rows=5000, distinct(2,3)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000, distinct(5,6)=200]
+           ├── stats: [rows=10000, distinct(5,6)=200]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b
@@ -452,13 +541,17 @@ except-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │         └── stats: [rows=5000]
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
  └── project
       ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           └── stats: [rows=10000]
+           ├── stats: [rows=10000]
+           ├── key: (7)
+           └── fd: (7)-->(4-6)
 
 build
 SELECT * FROM (SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b) WHERE y = 5
@@ -476,13 +569,17 @@ select
  │    │    ├── stats: [rows=5000, distinct(2)=400]
  │    │    └── scan a
  │    │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
- │    │         └── stats: [rows=5000, distinct(2)=400]
+ │    │         ├── stats: [rows=5000, distinct(2)=400]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2,3)
  │    └── project
  │         ├── columns: z:5(int!null) b.s:6(string)
  │         ├── stats: [rows=10000, distinct(5)=100]
  │         └── scan b
  │              ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
- │              └── stats: [rows=10000, distinct(5)=100]
+ │              ├── stats: [rows=10000, distinct(5)=100]
+ │              ├── key: (7)
+ │              └── fd: (7)-->(4-6)
  └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
            ├── variable: a.y [type=int, outer=(2)]
