@@ -182,7 +182,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// Functional Dependencies
 	// -----------------------
 	// Start with copy of FuncDepSet from input and modify with any additional
-	// not-null columns, then simplify.
+	// not-null columns, then possibly simplify by calling ProjectCols.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)

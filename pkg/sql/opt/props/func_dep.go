@@ -119,7 +119,8 @@ import (
 // values, which are allowed because each NULL is treated as if it was a
 // different value. Contrast this with the different NULL handling rules used
 // by SQL's GROUP BY and DISTINCT operators. Those operators treat multiple NULL
-// values as duplicates, because each NULL is treated as it was the same value.
+// values as duplicates, because each NULL is treated as if it was the same
+// value.
 //
 // The functional dependencies described up until now always use the "NULLs are
 // equal" semantics (denoted as NULL= hereafter) in order to answer the question
@@ -993,8 +994,12 @@ func (f *FuncDepSet) colsAreKey(cols opt.ColSet, strict bool) bool {
 
 	// Determine whether the key is in the closure of the given columns. The
 	// closure is necessary in the general case since it's possible that the
-	// columns form a different key. For example, f.key might be (a), but cols
-	// are (b,c), but both form keys for the relation.
+	// columns form a different key. For example:
+	//
+	//   f.key = (a)
+	//   cols  = (b,c)
+	//
+	// and yet both column sets form keys for the relation.
 	return f.inClosureOf(f.key, cols, strict)
 }
 
