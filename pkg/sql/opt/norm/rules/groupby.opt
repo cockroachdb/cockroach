@@ -10,7 +10,7 @@
 (GroupBy
     $input:*
     $aggregations:* & (HasNoCols $aggregations)
-    $def:* & (ColsAreKey $def $input)
+    $def:* & (GroupingColsAreKey $def $input) & ^(IsScalarGroupBy $def)
 )
 =>
 $input

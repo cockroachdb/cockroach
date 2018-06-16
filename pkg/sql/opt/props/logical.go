@@ -72,27 +72,30 @@ type Relational struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
-	// WeakKeys are the column sets which form weak keys and are subsets of the
-	// expression's output columns. A weak key set cannot contain any other weak
-	// key set (it would be redundant).
+	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
+	// relationships between columns in a base or derived relation. Given two sets
+	// of columns A and B, a functional dependency A-->B holds if A uniquely
+	// determines B. In other words, if two different rows have equal values for
+	// columns in A, then those two rows will also have equal values for columns
+	// in B. For example:
 	//
-	// A column set is a key if no two rows are equal after projection onto that
-	// set. This definition treats NULL as if were equal to NULL, so two rows
-	// having duplicate NULL values would *not* qualify as key rows. Therefore,
-	// in the usual case, the key columns are also not nullable. The simplest
-	// example of a key is the primary key for a table (recall that all of the
-	// columns of the primary key are defined to be NOT NULL).
+	//   a1 a2 b1
+	//   --------
+	//   1  2  5
+	//   1  2  5
 	//
-	// A weak key is similar to a key, with the difference that NULL values are
-	// treated as *not equal* to other NULL values. Therefore, two rows having
-	// duplicate NULL values could still qualify as weak key rows. A UNIQUE index
-	// on a table is a weak key and possibly a key if all of the columns are NOT
-	// NULL. A weak key is a key if "(WeakKeys[i] & NotNullCols) == WeakKeys[i]".
+	// FDs assist the optimizer in proving useful properties about query results.
+	// This information powers many optimizations, including eliminating
+	// unnecessary DISTINCT operators, simplifying ORDER BY columns, removing
+	// Max1Row operators, and mapping semi-joins to inner-joins.
 	//
-	// An empty key is valid (an empty key implies there is at most one row). Note
-	// that an empty key is always the only key in the set, since it's a subset of
-	// every other key (i.e. every other key would be redundant).
-	WeakKeys WeakKeys
+	// The methods that are most useful for optimizations are:
+	//   Key: extract a candidate key for the relation
+	//   ColsAreStrictKey: determine if a set of columns uniquely identify rows
+	//   ReduceCols: discard redundant columns to create a candidate key
+	//
+	// For more details, see the header comment for FuncDepSet.
+	FuncDeps FuncDepSet
 
 	// Cardinality is the number of rows that can be returned from this relational
 	// expression. The number of rows will always be between the inclusive Min and
