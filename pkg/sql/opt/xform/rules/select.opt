@@ -14,13 +14,91 @@
 =>
 (ConstrainScan $filter $def)
 
+# PushFilterIntoLookupJoinNoRemainder matches a Select over a lookup join in
+# which the Select filter condition is fully bound by the input to the lookup
+# join. If this rule matches, it pushes the Select fully below the lookup join.
+#
+# Note that the below rule, PushFilterIntoLookupJoin, would cover this case if
+# its Filter match condition ^(IsBoundBy $filter $input) were removed. But the
+# problem is that PushFilterIntoLookupJoin would construct a Select with filter
+# condition True, which would not get normalized away (since exploration rules
+# don't re-construct the root node). We need two rules in order to avoid
+# constructing no-op Select operators.
+#
+# In addition, PushFilterIntoLookupJoinNoRemainder serves as an optimization:
+# if the filter is fully bound by the lookup join input, it is not necessary to
+# check each condition. In order to avoid checking each condition,
+# PushFilterIntoLookupJoin must be ordered after this rule.
+[PushFilterIntoLookupJoinNoRemainder, Explore]
+(Select
+  (LookupJoin
+    $input:*
+    $def:*
+  )
+  $filter:* & (IsBoundBy $filter $input)
+)
+=>
+(LookupJoin
+  (Select
+    $input
+    $filter
+  )
+  $def
+)
+
+
+# PushFilterIntoLookupJoin matches a Select over a lookup join in which some of
+# the Select filter conditions are bound by the input to the lookup join, and
+# some are not. If this rule matches, it pushes the bound conditions below the
+# lookup join.
+[PushFilterIntoLookupJoin, Explore]
+(Select
+  (LookupJoin
+    $input:*
+    $def:*
+  )
+  $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]) & ^(IsBoundBy $filter $input)
+)
+=>
+(Select
+  (LookupJoin
+    (Select
+      $input
+      (Filters (ExtractBoundConditions $list $input))
+    )
+    $def
+  )
+  (Filters (ExtractUnboundConditions $list $input))
+)
+
 # ConstrainLookupJoinIndexScan matches a Select over a lookup join with an
 # unconstrained Scan and tries to push down the filter (or part of it) as
 # index constraints. The result is either a lookup join with a constrained
 # index Scan or a Select (with a remaining filter) on top of a lookup join with
 # a constrained index Scan.
-# TODO(rytaft): in the future we'll want to push part or all of the remaining
-# filter below the lookup join if it uses only columns from the index scan.
+#
+# This rule is needed in addition to the above two rules for the cases where
+# an index constraint can be inferred, but there is no conjunct in the filter
+# that is fully bound by the index scan. For example, consider the query:
+#
+#   SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10)
+#
+# in which there is a secondary index on (a, b). The best plan is an index join
+# using a constrained scan of the secondary index, with the constraint
+# (a, b) >= (1, 2) AND (a, b) <= (8, 9) pushed down to the scan, and the
+# original filter preserved above the index join:
+#
+#   (Select
+#     (LookupJoin abc
+#       (Scan abc@secondary, constraint: /a/b/rowid: [/1/2 - /8/9])
+#     )
+#     (Filter (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10))
+#   )
+#
+# Neither of the above two rules would find this plan.
+#
+# TODO(rytaft): try to find a mechanism for pushdown that is more powerful than
+# finding conjuncts that are fully bound.
 [ConstrainLookupJoinIndexScan, Explore]
 (Select
   (LookupJoin
