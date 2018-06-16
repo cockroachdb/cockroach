@@ -741,16 +741,18 @@ func TestEvictCacheOnError(t *testing.T) {
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
 	testCases := []struct {
+		canceledCtx            bool
 		rpcError               bool
 		replicaError           error
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, nil, false, false},                              // non-retryable replica error
-		{false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
-		{true, &roachpb.RangeKeyMismatchError{}, false, false},  // RPC error aka all nodes dead
-		{false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
-		{true, &roachpb.RangeNotFoundError{}, false, false},     // RPC error aka all nodes dead
+		{false, false, nil, false, false},                              // non-retryable replica error
+		{false, false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
+		{false, true, &roachpb.RangeKeyMismatchError{}, false, false},  // RPC error aka all nodes dead
+		{false, false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
+		{false, true, &roachpb.RangeNotFoundError{}, false, false},     // RPC error aka all nodes dead
+		{true, false, nil, false, false},                               // canceled context
 	}
 
 	const errString = "boom"
@@ -766,8 +768,10 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
+		ctx, cancel := context.WithCancel(context.TODO())
+
 		var testFn rpcSendFn = func(
-			_ context.Context,
+			ctx context.Context,
 			_ SendOptions,
 			_ ReplicaSlice,
 			args roachpb.BatchRequest,
@@ -777,6 +781,10 @@ func TestEvictCacheOnError(t *testing.T) {
 				return args.CreateReply(), nil
 			}
 			first = false
+			if tc.canceledCtx {
+				cancel()
+				return nil, ctx.Err()
+			}
 			if tc.rpcError {
 				return nil, roachpb.NewSendError(errString)
 			}
@@ -804,7 +812,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-		if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil && !testutils.IsPError(pErr, errString) {
+		if _, pErr := client.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {
