@@ -28,7 +28,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/pkg/errors"
 
@@ -656,8 +655,7 @@ func (v Value) PrettyPrint() string {
 	case ValueType_BYTES:
 		var data []byte
 		data, err = v.GetBytes()
-		printable := len(bytes.TrimLeftFunc(data, unicode.IsPrint)) == 0
-		if printable {
+		if encoding.PrintableBytes(data) {
 			buf.WriteString(string(data))
 		} else {
 			buf.WriteString(hex.EncodeToString(data))

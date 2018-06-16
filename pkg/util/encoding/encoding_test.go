@@ -1857,7 +1857,8 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeDurationValue(nil, NoColumnID,
 			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "01020fff"},
-		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
+		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"}, // printable bytes
+		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "89"},   // non-printable bytes
 		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
 	}
