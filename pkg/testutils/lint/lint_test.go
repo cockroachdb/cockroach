@@ -86,49 +86,46 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		for i := range builtins.AllBuiltinNames {
-			name := builtins.AllBuiltinNames[i]
-
-			// Exclude special forms: EXTRACT(... FROM ...), etc.
+		var names []string
+		for _, name := range builtins.AllBuiltinNames {
 			switch name {
 			case "extract", "trim", "overlay", "position", "substring":
-				continue
+				// Exempt special forms: EXTRACT(... FROM ...), etc.
+			default:
+				names = append(names, strings.ToUpper(name))
 			}
+		}
 
-			t.Run(name, func(t *testing.T) {
-				t.Parallel()
+		cmd, stderr, filter, err := dirCmd(crdb.Dir,
+			"git", "grep", "-nE", fmt.Sprintf(`[^a-zA-Z](%s)\(`, strings.Join(names, "|")),
+			"--", "pkg")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-				cmd, stderr, filter, err := dirCmd(crdb.Dir,
-					"git", "grep", "-nE", fmt.Sprintf(`[^a-zA-Z]%s\(`, strings.ToUpper(name)),
-					"--", "pkg")
-				if err != nil {
-					t.Fatal(err)
-				}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
 
-				if err := cmd.Start(); err != nil {
-					t.Fatal(err)
-				}
+		if err := stream.ForEach(filter, func(s string) {
+			if reSkipCasedFunction.MatchString(s) {
+				// OK when mentioned in comment or lint disabled.
+				return
+			}
+			if strings.Contains(s, "FAMILY"+"(") {
+				t.Errorf("\n%s <- forbidden; use \"FAMILY (\" (with space) or "+
+					"lowercase \"family(\" for the built-in function", s)
+			} else {
+				t.Errorf("\n%s <- forbidden; use lowercase for SQL built-in functions", s)
+			}
+		}); err != nil {
+			t.Error(err)
+		}
 
-				if err := stream.ForEach(filter, func(s string) {
-					if reSkipCasedFunction.MatchString(s) {
-						// OK when mentioned in comment or lint disabled.
-						return
-					}
-					if name == "family" {
-						t.Errorf("\n%s <- forbidden; use \"FAMILY (\" (with space) or lowercase %s() for the built-in function", s, name)
-					} else {
-						t.Errorf("\n%s <- forbidden; use lowercase %s() instead for SQL built-in functions", s, name)
-					}
-				}); err != nil {
-					t.Error(err)
-				}
-
-				if err := cmd.Wait(); err != nil {
-					if out := stderr.String(); len(out) > 0 {
-						t.Fatalf("err=%s, stderr=%s", err, out)
-					}
-				}
-			})
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
 		}
 	})
 
