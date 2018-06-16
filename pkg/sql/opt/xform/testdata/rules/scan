@@ -162,7 +162,7 @@ memo (optimized)
  │    └── "[presentation: j:5]"
  │         ├── best: (project G2 G3)
  │         └── cost: 1.51
- ├── G2: (select G4 G5) (scan a@si_idx,cols=(4,5),constrained) (lookup-join G6 a,keyCols=[1],lookupCols=(5))
+ ├── G2: (select G4 G8) (scan a@si_idx,cols=(4,5),constrained) (lookup-join G5 a,keyCols=[1],lookupCols=(5)) (lookup-join G6 a,keyCols=[1],lookupCols=(5))
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
  │         └── cost: 1.51
@@ -171,7 +171,10 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5))
  │         └── cost: 1060.00
- ├── G5: (filters G8)
+ ├── G5: (select G7 G8) (scan a@s_idx,cols=(1,4),constrained)
+ │    └── ""
+ │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
+ │         └── cost: 1.51
  ├── G6: (scan a@s_idx,cols=(1,4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
@@ -180,9 +183,10 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,4))
  │         └── cost: 1060.00
- ├── G8: (eq G9 G10)
- ├── G9: (variable a.s)
- └── G10: (const 'foo')
+ ├── G8: (filters G9)
+ ├── G9: (eq G10 G11)
+ ├── G10: (variable a.s)
+ └── G11: (const 'foo')
 
 # Scan of primary index is lowest cost.
 opt

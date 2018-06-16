@@ -115,16 +115,13 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE c = 22]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/primary/1/'one' -> NULL
-fetched: /t/primary/1/'one'/c -> 11
-fetched: /t/primary/1/'one'/d -> 'foo'
+fetched: /t/bc/'one'/11/1 -> NULL
+fetched: /t/bc/'three'/33/3 -> NULL
+fetched: /t/bc/'two'/22/2 -> NULL
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
-fetched: /t/primary/3/'three' -> NULL
-fetched: /t/primary/3/'three'/c -> 33
-fetched: /t/primary/3/'three'/d -> 'blah'
 
 # Use the descending index
 query T
@@ -1106,22 +1103,31 @@ INSERT INTO t2 VALUES
   (8, 3, 2, '32'),
   (9, 3, 3, '33')
 
+# Pretend we have 10x more rows in the database than we really do.
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 90,
+    "distinct_count": 30
+  }
+]'
+
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
-filter           ·       ·
- │               filter  (c % 2) = 0
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2-/3
+ │          filter  (c % 2) = 0
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '21' and '23'.
-# TODO(justin): we need to push the c % 2 into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1129,36 +1135,26 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
 fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/primary/4 -> NULL
-fetched: /t2/primary/4/b -> 2
-fetched: /t2/primary/4/c -> 1
-fetched: /t2/primary/4/s -> '21'
 fetched: /t2/primary/5 -> NULL
 fetched: /t2/primary/5/b -> 2
 fetched: /t2/primary/5/c -> 2
 fetched: /t2/primary/5/s -> '22'
 output row: [5 2 2 '22']
-fetched: /t2/primary/6 -> NULL
-fetched: /t2/primary/6/b -> 2
-fetched: /t2/primary/6/c -> 3
-fetched: /t2/primary/6/s -> '23'
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----
-filter           ·       ·
- │               filter  c != b
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2/!NULL-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2/!NULL-/3
+ │          filter  c != b
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1171,10 +1167,6 @@ fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
 output row: [4 2 1 '21']
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
@@ -1182,7 +1174,6 @@ fetched: /t2/primary/6/s -> '23'
 output row: [6 2 3 '23']
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -1194,10 +1185,6 @@ fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3

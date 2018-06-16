@@ -240,10 +240,6 @@ func (g *ruleGen) genMatch(match lang.Expr, contextName string, noMatch bool) {
 }
 
 func (g *ruleGen) genMatchList(match lang.Expr, contextName string, noMatch bool) {
-	if !g.normalize {
-		panic("list matchers are not yet supported in exploration rules")
-	}
-
 	switch t := match.(type) {
 	case *lang.MatchListAnyExpr:
 		if noMatch {
