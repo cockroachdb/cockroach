@@ -365,11 +365,19 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		tp.Childf("cost: %.2f", ev.bestExpr().cost)
 	}
 
-	// Format weak keys.
-	if !f.HasFlags(opt.ExprFmtHideKeys) {
-		// TODO(andyk): this is temporarily removed in order to see that test diffs
-		//              are caused by FDs, without the noise of format changes
-		// ev.formatWeakKeys(tp)
+	// Format functional dependencies.
+	if !f.HasFlags(opt.ExprFmtHideFuncDeps) {
+		// Show the key separately from the rest of the FDs.
+		fd := logProps.Relational.FuncDeps
+		key, ok := fd.Key()
+		if ok {
+			tp.Childf("key: %s", key)
+		}
+
+		fd.ClearKey()
+		if !fd.Empty() {
+			tp.Childf("fd: %s", fd)
+		}
 	}
 
 	if physProps.Ordering.Defined() {

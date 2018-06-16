@@ -37,8 +37,8 @@ const (
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
 	ExprFmtHideConstraints
 
-	// ExprFmtHideKeys does not show keys in the output.
-	ExprFmtHideKeys
+	// ExprFmtHideFuncDeps does not show functional dependencies in the output.
+	ExprFmtHideFuncDeps
 
 	// ExprFmtHideRuleProps does not show rule-specific properties in the output.
 	ExprFmtHideRuleProps

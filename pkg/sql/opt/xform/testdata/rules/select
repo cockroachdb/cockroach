@@ -56,7 +56,8 @@ SELECT k FROM a WHERE k = 1
 ----
 scan a
  ├── columns: k:1(int!null)
- └── constraint: /1: [/1 - /1]
+ ├── constraint: /1: [/1 - /1]
+ └── key: (1)
 
 memo
 SELECT k FROM a WHERE k = 1
@@ -80,9 +81,13 @@ SELECT k FROM a WHERE v > 1
 ----
 project
  ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(1) [removed: (3)]
  └── scan a@v
       ├── columns: k:1(int!null) v:3(int!null)
-      └── constraint: /3: [/2 - ]
+      ├── constraint: /3: [/2 - ]
+      ├── key: (1)
+      └── fd: (1)-->(3), (3)-->(1)
 
 memo
 SELECT k FROM a WHERE v > 1
@@ -111,9 +116,12 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── key: (1)
  └── scan a@u
       ├── columns: k:1(int!null) u:2(int!null)
-      └── constraint: /2/1: [/1/5 - /1/5]
+      ├── constraint: /2/1: [/1/5 - /1/5]
+      ├── key: (1)
+      └── fd: (1)-->(2)
 
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
@@ -151,11 +159,16 @@ SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
 project
  ├── columns: k:1(int!null)
+ ├── key: (1)
  └── select
       ├── columns: k:1(int!null) u:2(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       ├── scan a@u
       │    ├── columns: k:1(int!null) u:2(int)
-      │    └── constraint: /2/1: [/1 - /1]
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
       └── filters [type=bool, outer=(1,2)]
            └── (a.k + a.u) = 1 [type=bool, outer=(1,2)]
 
@@ -194,11 +207,17 @@ SELECT k FROM a WHERE u = 1 AND v = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(1) [removed: (3)]
  └── select
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (3)-->(1,2)
       ├── scan a@u
       │    ├── columns: k:1(int!null) u:2(int) v:3(int)
-      │    └── constraint: /2/1: [/1 - /1]
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3), (3)~~>(1,2)
       └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
            └── a.v = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
 
@@ -243,11 +262,17 @@ SELECT k FROM a WHERE u=v
 ----
 project
  ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(1) [removed: (3)]
  └── select
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (3)-->(1,2)
       ├── scan a@u
       │    ├── columns: k:1(int!null) u:2(int) v:3(int)
-      │    └── constraint: /2/1: (/NULL - ]
+      │    ├── constraint: /2/1: (/NULL - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3), (3)~~>(1,2)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
            └── a.u = a.v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
 
@@ -258,9 +283,13 @@ SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
 select
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
  ├── scan a@u
  │    ├── columns: k:1(int!null) u:2(int)
- │    └── limit: 1
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       └── a.k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
 
@@ -274,9 +303,13 @@ SELECT * FROM b WHERE v = 1
 lookup-join b
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── key columns: [1]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (3)-->(1,2)
  └── scan b@v
       ├── columns: k:1(int!null) v:3(int)
-      └── constraint: /3: [/1 - /1]
+      ├── constraint: /3: [/1 - /1]
+      ├── key: (1)
+      └── fd: (1)-->(3), (3)~~>(1)
 
 memo
 SELECT * FROM b WHERE v = 1
@@ -313,8 +346,12 @@ SELECT * FROM b WHERE v > 1
 ----
 select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (3)-->(1,2)
  ├── scan b
- │    └── columns: k:1(int!null) u:2(int) v:3(int)
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3), (3)~~>(1,2)
  └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
       └── b.v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
 
@@ -324,12 +361,18 @@ SELECT * FROM b WHERE v = 1 AND k+u = 1
 ----
 select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (3)-->(1,2)
  ├── lookup-join b
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── key columns: [1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (3)~~>(1,2)
  │    └── scan b@v
  │         ├── columns: k:1(int!null) v:3(int)
- │         └── constraint: /3: [/1 - /1]
+ │         ├── constraint: /3: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3), (3)~~>(1)
  └── filters [type=bool, outer=(1,2)]
       └── (b.k + b.u) = 1 [type=bool, outer=(1,2)]
 

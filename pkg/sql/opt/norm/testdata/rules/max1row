@@ -28,15 +28,20 @@ SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 project
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── scan a
            │         ├── columns: i:2(int)
-           │         └── limit: 1
+           │         ├── limit: 1
+           │         ├── key: ()
+           │         └── fd: ()-->(2)
            └── const: 5 [type=int]
 
 opt
@@ -45,8 +50,11 @@ SELECT (SELECT count(*) FROM a) > 100 AS r
 project
  ├── columns: r:7(bool)
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── gt [type=bool]
@@ -54,6 +62,8 @@ project
            │    └── group-by
            │         ├── columns: count:6(int)
            │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(6)
            │         ├── scan a
            │         └── aggregations
            │              └── count-rows [type=int]
@@ -65,8 +75,11 @@ SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 project
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── gt [type=bool]
@@ -74,6 +87,8 @@ project
            │    └── limit
            │         ├── columns: i:2(int)
            │         ├── cardinality: [0 - 0]
+           │         ├── key: ()
+           │         ├── fd: ()-->(2)
            │         ├── scan a
            │         │    └── columns: i:2(int)
            │         └── const: 0 [type=int]
@@ -86,8 +101,11 @@ SELECT (SELECT i FROM a) > 5 AS r
 project
  ├── columns: r:6(bool)
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── gt [type=bool]
@@ -95,6 +113,8 @@ project
            │    └── max1-row
            │         ├── columns: i:2(int)
            │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(2)
            │         └── scan a
            │              └── columns: i:2(int)
            └── const: 5 [type=int]
