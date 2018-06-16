@@ -168,12 +168,15 @@ type LookupJoinDef struct {
 	// opt.Index metadata.
 	Index int
 
-	// KeyCols are the columns (produced by the input) used to create lookup keys;
-	// in the same order as the index columns (or a prefix of them).
+	// KeyCols are the columns (produced by the input) used to create lookup keys.
+	// The key columns must be non-empty, and are listed in the same order as the
+	// index columns (or a prefix of them). If this is an index join, then the key
+	// column ids on both sides of the join will always be the same.
 	KeyCols opt.ColList
 
-	// LookupCols is the set of columns retrieved from the index. The LookupJoin
-	// operator produces the columns in its input plus these columns.
+	// LookupCols is the set of columns retrieved from the index. This set does
+	// not include the key columns. The LookupJoin operator produces the columns
+	// in its input plus these columns.
 	LookupCols opt.ColSet
 }
 

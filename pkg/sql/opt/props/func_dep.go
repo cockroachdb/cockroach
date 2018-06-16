@@ -447,12 +447,6 @@ func (f *FuncDepSet) Key() (_ opt.ColSet, ok bool) {
 	return f.key, f.hasKey
 }
 
-// HasMax1Row is true if the relation must have zero or one rows, in which case
-// the key is empty and all columns are constants.
-func (f *FuncDepSet) HasMax1Row() bool {
-	return f.hasKey && f.key.Empty()
-}
-
 // Empty is true if the set contains no FDs and no key.
 func (f *FuncDepSet) Empty() bool {
 	return len(f.deps) == 0 && f.removed.Empty() && !f.hasKey && f.key.Empty()
