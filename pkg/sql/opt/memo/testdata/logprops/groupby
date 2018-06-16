@@ -29,20 +29,16 @@ SELECT y, sum(z), x, False FROM xyzs GROUP BY x, y
 project
  ├── columns: y:2(int) sum:5(float) x:1(int!null) bool:6(bool!null)
  ├── stats: [rows=1000]
- ├── keys: (1)
  ├── group-by
  │    ├── columns: x:1(int!null) y:2(int) sum:5(float)
  │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
- │    ├── keys: (1)
  │    ├── project
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
  │    │    ├── stats: [rows=1000, distinct(1,2)=1000]
- │    │    ├── keys: (1)
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=1000, distinct(1,2)=1000]
- │    │         └── keys: (1) weak(3,4)
+ │    │         └── stats: [rows=1000, distinct(1,2)=1000]
  │    └── aggregations [outer=(3)]
  │         └── sum [type=float, outer=(3)]
  │              └── variable: xyzs.z [type=float, outer=(3)]
@@ -60,11 +56,9 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── keys: (1)
  │    └── scan xyzs
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │         ├── stats: [rows=1000]
- │         └── keys: (1) weak(3,4)
+ │         └── stats: [rows=1000]
  └── aggregations [outer=(1,2)]
       ├── sum [type=decimal, outer=(1)]
       │    └── variable: xyzs.x [type=int, outer=(1)]
@@ -82,15 +76,12 @@ project
       ├── columns: z:3(float!null) s:4(string)
       ├── grouping columns: z:3(float!null) s:4(string)
       ├── stats: [rows=1000, distinct(3,4)=1000]
-      ├── keys: weak(3,4)
       └── project
            ├── columns: z:3(float!null) s:4(string)
            ├── stats: [rows=1000, distinct(3,4)=1000]
-           ├── keys: weak(3,4)
            └── scan xyzs
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-                ├── stats: [rows=1000, distinct(3,4)=1000]
-                └── keys: (1) weak(3,4)
+                └── stats: [rows=1000, distinct(3,4)=1000]
 
 # Group by columns that otherwise wouldn't be weak key.
 build
@@ -103,14 +94,12 @@ project
       ├── columns: y:2(int) z:3(float!null) sum:5(float)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=1000, distinct(2,3)=1000]
-      ├── keys: weak(2,3)
       ├── project
       │    ├── columns: y:2(int) z:3(float!null)
       │    ├── stats: [rows=1000, distinct(2,3)=1000]
       │    └── scan xyzs
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=1000, distinct(2,3)=1000]
-      │         └── keys: (1) weak(3,4)
+      │         └── stats: [rows=1000, distinct(2,3)=1000]
       └── aggregations [outer=(3)]
            └── sum [type=float, outer=(3)]
                 └── variable: xyzs.z [type=float, outer=(3)]
@@ -123,15 +112,12 @@ group-by
  ├── columns: z:3(float!null) max:5(string)
  ├── grouping columns: z:3(float!null)
  ├── stats: [rows=700, distinct(3)=700]
- ├── keys: (3)
  ├── project
  │    ├── columns: z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000, distinct(3)=700]
- │    ├── keys: weak(3,4)
  │    └── scan xyzs
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │         ├── stats: [rows=1000, distinct(3)=700]
- │         └── keys: (1) weak(3,4)
+ │         └── stats: [rows=1000, distinct(3)=700]
  └── aggregations [outer=(4)]
       └── max [type=string, outer=(4)]
            └── variable: xyzs.s [type=string, outer=(4)]
@@ -147,11 +133,9 @@ project
       ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── grouping columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=1000, distinct(1-4)=1000]
-      ├── keys: (1) weak(3,4)
       └── scan xyzs
            ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-           ├── stats: [rows=1000, distinct(1-4)=1000]
-           └── keys: (1) weak(3,4)
+           └── stats: [rows=1000, distinct(1-4)=1000]
 
 # Propagate outer columns.
 build
@@ -160,11 +144,9 @@ SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) 
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=333]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2)]
       └── gt [type=bool, outer=(1,2)]
            ├── subquery [type=decimal, outer=(1,2)]
@@ -182,7 +164,6 @@ select
            │                   ├── grouping columns: u:6(float)
            │                   ├── outer: (1,2)
            │                   ├── stats: [rows=700, distinct(6)=700]
-           │                   ├── keys: weak(6)
            │                   ├── project
            │                   │    ├── columns: x:9(int) u:6(float)
            │                   │    ├── outer: (1,2)
@@ -193,8 +174,7 @@ select
            │                   │    │    ├── stats: [rows=1000, distinct(6)=700]
            │                   │    │    ├── scan kuv
            │                   │    │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │                   │    │    │    ├── stats: [rows=1000, distinct(6)=700]
-           │                   │    │    │    └── keys: (5)
+           │                   │    │    │    └── stats: [rows=1000, distinct(6)=700]
            │                   │    │    └── projections [outer=(2,6)]
            │                   │    │         └── variable: xyzs.y [type=int, outer=(2)]
            │                   │    └── projections [outer=(1,6)]
@@ -213,7 +193,6 @@ group-by
  ├── grouping columns: column1:1(int)
  ├── cardinality: [1 - 4]
  ├── stats: [rows=3, distinct(1)=3]
- ├── keys: weak(1)
  └── values
       ├── columns: column1:1(int)
       ├── cardinality: [4 - 4]

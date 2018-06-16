@@ -71,12 +71,10 @@ inner-join
  ├── stats: [rows=4000000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=4000]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=10000]
- │    └── keys: (7)
+ │    └── stats: [rows=10000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: a.x [type=int, outer=(1)]
@@ -90,12 +88,10 @@ left-join
  ├── stats: [rows=4000000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=4000]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=10000]
- │    └── keys: (7)
+ │    └── stats: [rows=10000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: a.x [type=int, outer=(1)]
@@ -109,12 +105,10 @@ right-join
  ├── stats: [rows=4000000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=4000]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=10000]
- │    └── keys: (7)
+ │    └── stats: [rows=10000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: a.x [type=int, outer=(1)]
@@ -128,12 +122,10 @@ full-join
  ├── stats: [rows=4000000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=4000]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=10000]
- │    └── keys: (7)
+ │    └── stats: [rows=10000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: a.x [type=int, outer=(1)]
@@ -150,12 +142,10 @@ project
       ├── stats: [rows=40000000]
       ├── scan a
       │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=4000]
-      │    └── keys: (1) weak(3,4)
+      │    └── stats: [rows=4000]
       ├── scan b
       │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
-      │    ├── stats: [rows=10000]
-      │    └── keys: (7)
+      │    └── stats: [rows=10000]
       └── true [type=bool]
 
 build
@@ -166,12 +156,10 @@ inner-join
  ├── stats: [rows=16000000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=4000]
  ├── scan a
  │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
- │    ├── stats: [rows=4000]
- │    └── keys: (5) weak(7,8)
+ │    └── stats: [rows=4000]
  └── true [type=bool]
 
 build
@@ -188,12 +176,10 @@ project
       │    ├── stats: [rows=40000000, distinct(6)=100]
       │    ├── scan a
       │    │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    │    ├── stats: [rows=4000]
-      │    │    └── keys: (1) weak(3,4)
+      │    │    └── stats: [rows=4000]
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
-      │    │    ├── stats: [rows=10000, distinct(6)=100]
-      │    │    └── keys: (7)
+      │    │    └── stats: [rows=10000, distinct(6)=100]
       │    └── true [type=bool]
       └── filters [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
            └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
@@ -208,12 +194,10 @@ SELECT sum(b.z), a.x, b.z FROM a, b GROUP BY a.x, b.z
 project
  ├── columns: sum:8(decimal) x:1(int!null) z:6(int!null)
  ├── stats: [rows=500000]
- ├── keys: (1,6)
  └── group-by
       ├── columns: a.x:1(int!null) z:6(int!null) sum:8(decimal)
       ├── grouping columns: a.x:1(int!null) z:6(int!null)
       ├── stats: [rows=500000, distinct(1,6)=500000]
-      ├── keys: (1,6)
       ├── project
       │    ├── columns: a.x:1(int!null) z:6(int!null)
       │    ├── stats: [rows=40000000, distinct(1,6)=500000]
@@ -222,12 +206,10 @@ project
       │         ├── stats: [rows=40000000, distinct(1,6)=500000]
       │         ├── scan a
       │         │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │         │    ├── stats: [rows=4000, distinct(1)=5000]
-      │         │    └── keys: (1) weak(3,4)
+      │         │    └── stats: [rows=4000, distinct(1)=5000]
       │         ├── scan b
       │         │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
-      │         │    ├── stats: [rows=10000, distinct(6)=100]
-      │         │    └── keys: (7)
+      │         │    └── stats: [rows=10000, distinct(6)=100]
       │         └── true [type=bool]
       └── aggregations [outer=(6)]
            └── sum [type=decimal, outer=(6)]

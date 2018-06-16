@@ -30,11 +30,9 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── const: 1 [type=int]
 
 build
@@ -52,8 +50,7 @@ limit
  │    │    ├── stats: [rows=1000]
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=1000]
- │    │         └── keys: (1) weak(3,4)
+ │    │         └── stats: [rows=1000]
  │    └── aggregations
  │         └── count-rows [type=int]
  └── const: 10 [type=int]
@@ -64,11 +61,9 @@ SELECT * FROM xyzs LIMIT (SELECT 1)
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── subquery [type=int]
       └── max1-row
            ├── columns: "?column?":5(int!null)
@@ -92,11 +87,9 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── const: 0 [type=int]
 
 # Propagate outer columns.
@@ -108,8 +101,7 @@ project
  ├── stats: [rows=1000]
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
@@ -127,8 +119,7 @@ project
                      │    ├── stats: [rows=1000]
                      │    ├── scan kuv
                      │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │    │    ├── stats: [rows=1000]
-                     │    │    └── keys: (5)
+                     │    │    └── stats: [rows=1000]
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
                      └── variable: xyzs.y [type=int, outer=(2)]
@@ -140,10 +131,8 @@ SELECT s, x FROM xyzs WHERE x=1 LIMIT 4294967296
 limit
  ├── columns: s:4(string) x:1(int!null)
  ├── stats: [rows=1]
- ├── keys: (1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) s:4(string)
  │    ├── constraint: /1: [/1 - /1]
- │    ├── stats: [rows=1, distinct(1)=1]
- │    └── keys: (1)
+ │    └── stats: [rows=1, distinct(1)=1]
  └── const: 4294967296 [type=int]

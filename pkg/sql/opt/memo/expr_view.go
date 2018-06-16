@@ -367,7 +367,9 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	// Format weak keys.
 	if !f.HasFlags(opt.ExprFmtHideKeys) {
-		ev.formatWeakKeys(tp)
+		// TODO(andyk): this is temporarily removed in order to see that test diffs
+		//              are caused by FDs, without the noise of format changes
+		// ev.formatWeakKeys(tp)
 	}
 
 	if physProps.Ordering.Defined() {
