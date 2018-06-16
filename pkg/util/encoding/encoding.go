@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 	"unicode"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -2046,6 +2047,16 @@ func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
 	}
 }
 
+// PrintableBytes returns true iff the given byte array is a valid
+// UTF-8 sequence and it is printable.
+func PrintableBytes(b []byte) bool {
+	return len(bytes.TrimLeftFunc(b, isValidAndPrintableRune)) == 0
+}
+
+func isValidAndPrintableRune(r rune) bool {
+	return r != utf8.RuneError && unicode.IsPrint(r)
+}
+
 // PrettyPrintValueEncoded returns a string representation of the first
 // decodable value in the provided byte slice, along with the remaining byte
 // slice after decoding.
@@ -2091,11 +2102,14 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		printable := len(bytes.TrimLeftFunc(data, unicode.IsPrint)) == 0
-		if printable {
+		if PrintableBytes(data) {
 			return b, string(data), nil
 		}
-		return b, hex.EncodeToString(data), nil
+		// The following code extends hex.EncodeToString().
+		dst := make([]byte, 2+hex.EncodedLen(len(data)))
+		dst[0], dst[1] = '0', 'x'
+		hex.Encode(dst[2:], data)
+		return b, string(dst), nil
 	case Time:
 		var t time.Time
 		b, t, err = DecodeTimeValue(b)
