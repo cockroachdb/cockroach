@@ -89,11 +89,11 @@ test
 query TTTTT colnames
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
-Database  Schema  Table       User   Privileges
-system    public  descriptor  admin  GRANT
-system    public  descriptor  admin  SELECT
-system    public  descriptor  root   GRANT
-system    public  descriptor  root   SELECT
+database_name  schema_name  table_name  grantee  privilege_type
+system         public       descriptor  admin    GRANT
+system         public       descriptor  admin    SELECT
+system         public       descriptor  root     GRANT
+system         public       descriptor  root     SELECT
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]

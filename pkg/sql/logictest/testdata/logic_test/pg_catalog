@@ -150,8 +150,8 @@ table  name  type  details  validated
 query TTTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
-Database  Schema      Table         User    Privileges
-test      pg_catalog  pg_namespace  public  SELECT
+database_name  schema_name  table_name    grantee  privilege_type
+test           pg_catalog   pg_namespace  public   SELECT
 
 
 # Verify selecting from pg_catalog.
