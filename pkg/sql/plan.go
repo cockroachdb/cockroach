@@ -773,12 +773,8 @@ func (p *planner) newPlan(
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowConstraints:
 		return p.ShowConstraints(ctx, n)
-	case *tree.ShowCreateTable:
-		return p.ShowCreateTable(ctx, n)
-	case *tree.ShowCreateView:
-		return p.ShowCreateView(ctx, n)
-	case *tree.ShowCreateSequence:
-		return p.ShowCreateSequence(ctx, n)
+	case *tree.ShowCreate:
+		return p.ShowCreate(ctx, n)
 	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
@@ -896,12 +892,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowCreateTable:
-		return p.ShowCreateTable(ctx, n)
-	case *tree.ShowCreateView:
-		return p.ShowCreateView(ctx, n)
-	case *tree.ShowCreateSequence:
-		return p.ShowCreateSequence(ctx, n)
+	case *tree.ShowCreate:
+		return p.ShowCreate(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowDatabases:

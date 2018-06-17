@@ -458,10 +458,10 @@ func (s *adminServer) TableDetails(
 		}
 	}
 
-	// Marshal SHOW CREATE TABLE result.
+	// Marshal SHOW CREATE result.
 	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-show-create",
-		nil /* txn */, args, fmt.Sprintf("SHOW CREATE TABLE %s", escQualTable),
+		nil /* txn */, args, fmt.Sprintf("SHOW CREATE %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -470,14 +470,14 @@ func (s *adminServer) TableDetails(
 		return nil, s.serverError(err)
 	}
 	{
-		const createTableCol = "CreateTable"
+		const createCol = "create_statement"
 		if len(rows) != 1 {
-			return nil, s.serverErrorf("CreateTable response not available.")
+			return nil, s.serverErrorf("create response not available.")
 		}
 
 		scanner := makeResultScanner(cols)
 		var createStmt string
-		if err := scanner.Scan(rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(rows[0], createCol, &createStmt); err != nil {
 			return nil, err
 		}
 

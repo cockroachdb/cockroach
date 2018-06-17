@@ -151,9 +151,7 @@ show_stmt ::=
 	show_backup_stmt
 	| show_columns_stmt
 	| show_constraints_stmt
-	| show_create_table_stmt
-	| show_create_view_stmt
-	| show_create_sequence_stmt
+	| show_create_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_grants_stmt
@@ -450,14 +448,8 @@ show_constraints_stmt ::=
 	'SHOW' 'CONSTRAINT' 'FROM' table_name
 	| 'SHOW' 'CONSTRAINTS' 'FROM' table_name
 
-show_create_table_stmt ::=
-	'SHOW' 'CREATE' 'TABLE' table_name
-
-show_create_view_stmt ::=
-	'SHOW' 'CREATE' 'VIEW' view_name
-
-show_create_sequence_stmt ::=
-	'SHOW' 'CREATE' 'SEQUENCE' sequence_name
+show_create_stmt ::=
+	'SHOW' 'CREATE' table_name
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
@@ -1057,12 +1049,6 @@ var_value ::=
 	a_expr
 	| 'ON'
 
-view_name ::=
-	table_name
-
-sequence_name ::=
-	db_object_name
-
 opt_on_targets_roles ::=
 	'ON' targets_roles
 	| 
@@ -1232,6 +1218,12 @@ index_name ::=
 opt_table_elem_list ::=
 	table_elem_list
 	| 
+
+view_name ::=
+	table_name
+
+sequence_name ::=
+	db_object_name
 
 opt_sequence_option_list ::=
 	sequence_option_list

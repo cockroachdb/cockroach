@@ -19,75 +19,24 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
-// ShowCreateTable returns a SHOW CREATE TABLE statement for the specified table.
-// Privileges: Any privilege on table.
-func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
-	// We make the check whether the name points to a table or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
+// ShowCreate implements the SHOW CREATE statement.
+// Privileges: Any privilege on object.
+func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode, error) {
 	// The condition "database_name IS NULL" ensures that virtual tables are included.
-	const showCreateTableQuery = `
-     SELECT %[3]s AS "Table",
-            IFNULL(create_statement,
-                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[3]s || ' is not a table')::string
-            ) AS "CreateTable"
-       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE (database_name IS NULL OR database_name = %[1]s)
-                AND schema_name = %[5]s
-                AND descriptor_name = %[2]s
-                AND descriptor_type = 'table'
-              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-  `
-	return p.showTableDetails(ctx, "SHOW CREATE TABLE", n.Table, showCreateTableQuery)
-}
-
-// ShowCreateView returns a CREATE VIEW statement for the specified view.
-// Privileges: Any privilege on view.
-func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (planNode, error) {
-	// We make the check whether the name points to a view or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
-	const showCreateViewQuery = `
-     SELECT %[3]s AS "View",
-            IFNULL(create_statement,
-                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[3]s || ' is not a view')::string
-            ) AS "CreateView"
-       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s AND descriptor_type = 'view'
-              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-  `
-	return p.showTableDetails(ctx, "SHOW CREATE VIEW", n.View, showCreateViewQuery)
-}
-
-func (p *planner) ShowCreateSequence(
-	ctx context.Context, n *tree.ShowCreateSequence,
-) (planNode, error) {
-	// We make the check whether the name points to a sequence or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
-	const showCreateSequenceQuery = `
-			SELECT %[3]s AS "Sequence",
-							IFNULL(create_statement,
-										 crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                              %[3]s || ' is not a sequence')::string
-							) AS "CreateSequence"
-				 FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-								WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s
-								AND descriptor_type = 'sequence'
-								UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-	`
-	return p.showTableDetails(ctx, "SHOW CREATE SEQUENCE", n.Sequence, showCreateSequenceQuery)
+	const showCreateQuery = `
+     SELECT %[3]s AS table_name,
+            create_statement
+       FROM %[4]s.crdb_internal.create_statements
+      WHERE (database_name IS NULL OR database_name = %[1]s)
+        AND schema_name = %[5]s
+        AND descriptor_name = %[2]s
+`
+	return p.showTableDetails(ctx, "SHOW CREATE", n.Name, showCreateQuery)
 }
 
 // showCreateView returns a valid SQL representation of the CREATE
