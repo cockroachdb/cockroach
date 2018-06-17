@@ -87,6 +87,15 @@ x CREATE TABLE x (
     FAMILY "primary" (a, b, c, d, rowid)
   )
 
+query TTBTTT colnames
+SHOW COLUMNS FROM x
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        true         3:::INT         ·                      {}
+b            INT        true         7:::INT         ·                      {}
+c            INT        true         NULL            a                      {}
+d            INT        true         NULL            a + b                  {}
+
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
 

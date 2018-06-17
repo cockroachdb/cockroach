@@ -117,6 +117,9 @@ message TableDetailsResponse {
 
     // default_value is the default value of this column.
     string default_value = 4;
+
+    // generation_expression is the generator expression if the column is computed.
+    string generation_expression = 5;
   }
 
   message Index {
