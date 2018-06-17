@@ -230,7 +230,7 @@ query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 sort                   ·      ·
- │                     order  +"Database",+"Schema",+"Table",+"User"
+ │                     order  +database_name,+schema_name,+table_name,+grantee
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·

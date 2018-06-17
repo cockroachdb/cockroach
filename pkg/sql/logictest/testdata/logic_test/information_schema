@@ -178,8 +178,8 @@ table  name  type  details  validated
 query TTTTT colnames
 SHOW GRANTS ON information_schema.tables
 ----
-Database  Schema              Table   User    Privileges
-test      information_schema  tables  public  SELECT
+database_name  schema_name         table_name  grantee  privilege_type
+test           information_schema  tables      public   SELECT
 
 
 # Verify selecting from information_schema.

@@ -215,9 +215,9 @@ func (s *adminServer) DatabaseDetails(
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
-			schemaCol     = "Schema"
-			userCol       = "User"
-			privilegesCol = "Privileges"
+			schemaCol     = "schema_name"
+			userCol       = "grantee"
+			privilegesCol = "privilege_type"
 		)
 
 		scanner := makeResultScanner(cols)
@@ -440,8 +440,8 @@ func (s *adminServer) TableDetails(
 	}
 	{
 		const (
-			userCol       = "User"
-			privilegesCol = "Privileges"
+			userCol       = "grantee"
+			privilegesCol = "privilege_type"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
