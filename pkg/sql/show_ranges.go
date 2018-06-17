@@ -12,13 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// This file implements the SHOW EXPERIMENTAL_RANGES statement:
-//   SHOW EXPERIMENTAL_RANGES FROM TABLE t
-//   SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx
-//
-// These statements show the ranges corresponding to the given table or index,
-// along with the list of replicas and the lease holder.
-
 package sql
 
 import (
@@ -35,6 +28,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// showRangesNode implements the SHOW EXPERIMENTAL_RANGES statement:
+//   SHOW EXPERIMENTAL_RANGES FROM TABLE t
+//   SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx
+//
+// These statements show the ranges corresponding to the given table or index,
+// along with the list of replicas and the lease holder.
 type showRangesNode struct {
 	optColumnsSlot
 
@@ -61,24 +60,24 @@ func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode,
 
 var showRangesColumns = sqlbase.ResultColumns{
 	{
-		Name: "Start Key",
+		Name: "start_key",
 		Typ:  types.String,
 	},
 	{
-		Name: "End Key",
+		Name: "end_key",
 		Typ:  types.String,
 	},
 	{
-		Name: "Range ID",
+		Name: "range_id",
 		Typ:  types.Int,
 	},
 	{
-		Name: "Replicas",
+		Name: "replicas",
 		// The INTs in the array are Store IDs.
 		Typ: types.TArray{Typ: types.Int},
 	},
 	{
-		Name: "Lease Holder",
+		Name: "lease_holder",
 		// The store ID for the lease holder.
 		Typ: types.Int,
 	},

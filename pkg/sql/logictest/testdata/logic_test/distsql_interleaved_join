@@ -191,7 +191,7 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE parent1
 ----
-Start Key                   End Key                     Range ID  Replicas  Lease Holder
+start_key                   end_key                     range_id  replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 /2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                11        {2}       2
 /4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     6         {3}       3
@@ -216,7 +216,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE child1
 ----
-Start Key                   End Key                     Range ID  Replicas  Lease Holder
+start_key                   end_key                     range_id  replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 /2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                11        {2}       2
 /4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     6         {3}       3
@@ -241,7 +241,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1
 ----
-Start Key                   End Key                     Range ID  Replicas  Lease Holder
+start_key                   end_key                     range_id  replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 /2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                11        {2}       2
 /4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     6         {3}       3
@@ -512,7 +512,7 @@ ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /0       20        {5}       5
 /0         /5       31        {1}       1
 /5         /10      32        {2}       2
