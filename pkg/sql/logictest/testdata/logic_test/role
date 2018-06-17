@@ -82,16 +82,14 @@ SHOW DATABASES
 ----
 publicdb
 
-query T colnames
+query T
 SHOW TABLES FROM publicdb
 ----
-Table
 publictable
 
-query T colnames
+query T
 SHOW TABLES FROM privatedb
 ----
-Table
 publictable
 
 statement ok
@@ -126,7 +124,6 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query T colnames
+query T
 SHOW TABLES FROM publicdb
 ----
-Table
