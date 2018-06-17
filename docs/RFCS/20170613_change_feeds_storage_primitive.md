@@ -1,7 +1,7 @@
-- Feature Name: Storage-Level Primitive for Change Feeds
+- Feature Name: Storage-Level Primitive for Range Feeds
 - Status: draft
 - Start Date: 2017-06-13
-- Authors: Arjun Narayan and Tobias Schottdorf
+- Authors: Arjun Narayan, Tobias Schottdorf, Nathan VanBenschoten
 - RFC PR: #16838
 - Cockroach Issue: #9712, #6130
 
@@ -11,13 +11,12 @@ This RFC proposes a mechanism for subscribing to changes to a set of key ranges
 starting at an initial timestamp.
 
 It is for use by Cockroach-internal higher-level systems such as distributed
-SQL, change data capture, or a Kafka producer endpoint. A "sister RFC"
-detailing these higher-level systems will be prepared by @arjunravinarayan.
+SQL, change data capture, or a Kafka producer endpoint. ["Change Data Capture
+(CDC)"][cdc] is a "sister RFC" detailing these higher-level systems.
 
-We propose to add a basic building block for change feeds: a command
-`ChangeFeed` served by `*Replica` which, given a (sufficiently recent) HLC
-timestamp and a set of key spans contained in the Replica returns a stream-based
-connection that
+We propose to add a basic building block for range feeds: a command `RangeFeed`
+served by `*Replica` which, given an HLC timestamp and a set of key spans
+contained in the Replica returns a stream-based connection that
 
 1. eagerly delivers updates that affect any of the given key spans, and
 1. periodically delivers checkpoints, i.e. tuples `(timestamp, key_range)` where
@@ -26,7 +25,7 @@ connection that
    details).
 
 If the provided timestamp is too far in the past, or if the Replica can't serve
-the ChangeFeed, a descriptive error is returned which enables the caller to
+the RangeFeed, a descriptive error is returned which enables the caller to
 retry.
 
 The design overlaps with incremental Backup/Restore and in particular [follower
@@ -43,7 +42,7 @@ external sinks eagerly. Currently, however, the only way to get data out of
 CockroachDB is via SQL `SELECT` queries, `./cockroach dump`, or Backups
 (enterprise only). Furthermore, `SELECT` queries at the SQL layer do not support
 incremental reads, so polling through SQL is inefficient for data that is not
-strictly ordered. Anecdotally, change feeds are one of the more frequently
+strictly ordered. Anecdotally, range feeds are one of the more frequently
 requested features for CockroachDB.
 
 Our motivating use cases are:
@@ -65,16 +64,17 @@ Our motivating use cases are:
 The above use cases were key in informing the design of the basic building block
 presented here: We
 
-- initiate change feeds using a HLC timestamp since that is the right primitive
+- initiate range feeds using a HLC timestamp since that is the right primitive
   for connecting the "initial state" (think `SELECT * FROM ...` or `INSERT ...
   RETURNING CURRENT_TIMESTAMP()`) to the stream of updates.
 - chose to operate on a set of key ranges since that captures both collections
   of individual keys, sets of tables, or whole databases (CDC).
 - require checkpoint notifications because often, a higher-level system needs to
-  buffer updates until is knows that older data won't change any more; a simple
-  example is wanting to output updates in timestamp-sorted order. More
-  generally, checkpoint notifications enable check pointing for the case in which a
-  change feed disconnects (which would not be uncommon with large key spans).
+  buffer updates until it is knows that older data won't change any more; a
+  simple example is wanting to output updates in timestamp-sorted order. More
+  generally, checkpoint notifications enable check pointing for the case in
+  which a range feed disconnects (which would not be uncommon with large key
+  spans).
 - emit checkpoint notifications with attached key ranges since that is a natural
   consequence of the Range-based sharding in CockroachDB, and fine-grained
   information is always preferrable. When not necessary, the key range can be
@@ -85,7 +85,7 @@ presented here: We
   (though this is really a requirement we impose on [16593][followerreads]).
   Fast checkpoints (which allow consumers to operate more efficiently)
   correspond to disabling long transactions, which we must not impose globally.
-- aim to serve change feeds from follower replicas (hence the connection to
+- aim to serve range feeds from follower replicas (hence the connection to
   [16593][followerreads]).
 - make the protocol efficient enough to operate on whole databases in practice.
 
@@ -176,9 +176,9 @@ subsystem.
 
 ### Replica-level
 
-Replicas (whether they're lease holder or not) accept a top-level `ChangeFeed`
+Replicas (whether they're lease holder or not) accept a top-level `RangeFeed`
 RPC which contains a base HLC timestamp and (for the sake of presentation) one
-key range for which updates are to be delivered. The `ChangeFeed` command first
+key range for which updates are to be delivered. The `RangeFeed` command first
 grabs `raftMu`, opens a RocksDB snapshot, registers itself with the raft
 processing goroutine and releases `raftMu` again. By registering itself, it
 receives all future `WriteBatch`es which apply on the Replica, and sends them on
@@ -188,7 +188,7 @@ updates which are relevant to the span the caller has supplied).
 The remaining difficulty is that additionally, we must retrieve all updates made
 at or after the given base HLC timestamp, and this is what the engine snapshot
 is for. We invoke a new MVCC operation (specified below) that, given a base
-timestamp and a set of key ranges, synthesizes ChangeFeed notifications from the
+timestamp and a set of key ranges, synthesizes RangeFeed notifications from the
 snapshot (which is possible assuming that the base timestamp is a valid read
 timestamp, i.e. does not violate the GCThreshold or the like).
 
@@ -201,7 +201,7 @@ key ranges (which are contained in the range) will be affected equally.
 When the range splits or merges, of if the Replica gets removed, the stream
 terminates in an orderly fashion. The caller (who has knowledge of Replica
 distribution) will retry accordingly. For example, when the range splits, the
-caller will open two individual ChangeFeed streams to Replicas on both sides of
+caller will open two individual RangeFeed streams to Replicas on both sides of
 the post-split Ranges, using the highest checkpoint notification timestamp it
 received before the stream disconnected. If the Replica gets removed, it will
 simply reconnect to another Replica, again using its most recently received
@@ -240,7 +240,7 @@ checkpoint exists.
 Assuming such a mechanism in place, whether in DistSender or distributed SQL, it
 should be straightforward to add an entity which abstracts away the Range level.
 For example, given the key span of a whole table, that entity splits it along
-range boundaries, and opens individual `ChangeFeed` streams to suitable members
+range boundaries, and opens individual `RangeFeed` streams to suitable members
 of each range. When individual streams disconnect (for instance due to a split)
 new streams are initiated (using the last known closed timestamp for the lost
 stream).
@@ -250,16 +250,16 @@ stream).
 There is a straightforward path to implement small bits and pieces of this
 functionality without embarking on an overwhelming endeavour all at once:
 
-First, implement the basic `ChangeFeed` command, but without the base timestamp
+First, implement the basic `RangeFeed` command, but without the base timestamp
 or checkpoints. That is, once registered with `Raft`, updates are streamed, but
 there is no information on which updates were missed and what timestamps to
 expect. In turn, the MVCC work is not necessary yet, and neither are [follower
 reads][followerreads].
 
-Next, add an experimental `./cockroach debug changefeed <key>` command which
-launches a single `ChangeFeed` request through `DistSender`. It immediately
+Next, add an experimental `./cockroach debug rangefeed <key>` command which
+launches a single `RangeFeed` request through `DistSender`. It immediately
 prints results to the command line without buffering and simply retries the
-`ChangeFeed` command until the client disconnects. It may thus both produce
+`RangeFeed` command until the client disconnects. It may thus both produce
 duplicates and miss updates.
 
 This is a toy implementation that already makes for a good demo and allows a
@@ -271,7 +271,7 @@ snapshot. That with some simple buffering at the consumer gives at-least-once
 delivery.
 
 Once follower reads are available, it should be straightforward to send
-checkpoints from `ChangeFeed`.
+checkpoints from `RangeFeed`.
 
 At that point, core-level work should be nearly complete and the focus shifts to
 implementing distributed SQL processors which provide real changefeeds by
@@ -295,7 +295,7 @@ inactive, we don't want to force continuous Range activity  even if there aren't
 any writes on almost all of the Ranges. Naively, this is necessary to be able to
 checkpoint timestamps.
 
-The second concern is the case in which there is a high rate of `ChangeFeed`
+The second concern is the case in which there is a high rate of `RangeFeed`
 requests with a base timestamp and large key ranges, so that a lot of work is
 spent on scanning data from snapshots which is not relevant to the feed. This
 shouldn't be an issue for small (think single-key) watchers, but a large feed in
@@ -348,3 +348,4 @@ between all of them.
 [followerreads]: https://github.com/cockroachdb/cockroach/issues/16593
 [revertrfc]: https://github.com/cockroachdb/cockroach/pull/16294
 [streamsql]: https://github.com/cockroachdb/cockroach/pull/16626
+[cdc]: https://github.com/cockroachdb/cockroach/pull/25229
