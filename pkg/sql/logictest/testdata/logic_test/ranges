@@ -21,7 +21,7 @@ NULL       /1       1         {1}       1
 /10        NULL     3         {1}       1
 
 statement ok
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 1, 12)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 1, 12)
 
 query TTITI colnames
 SHOW TESTING_RANGES FROM TABLE t
@@ -46,10 +46,10 @@ NULL       /1       {1}       1
 /10        NULL     {1}       1
 
 statement ok
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,1,2], 5, 3)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,1,2], 5, 3)
 
 statement ok
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[3,4], 4)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3,4], 4)
 
 query TTTI colnames
 SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE t]
@@ -96,7 +96,7 @@ NULL       /8       {1}       1
 /100/50    NULL     {1}       1
 
 statement ok
-ALTER INDEX t@idx TESTING_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
+ALTER INDEX t@idx EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
 
 query TTTI colnames
 SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM INDEX t@idx]
@@ -215,14 +215,14 @@ ALTER TABLE t SPLIT AT VALUES (1, 2, 3)
 statement error could not parse "foo" as type int
 ALTER TABLE t SPLIT AT VALUES ('foo')
 
-statement error too many columns in TESTING_RELOCATE data
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
+statement error too many columns in EXPERIMENTAL_RELOCATE data
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
 
 statement error could not parse "foo" as type int
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 'foo')
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 'foo')
 
-statement error TESTING_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
-ALTER TABLE t TESTING_RELOCATE VALUES ('foo', 1)
+statement error EXPERIMENTAL_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES ('foo', 1)
 
 # Create and drop things to produce interesting data for crdb_internal.ranges.
 

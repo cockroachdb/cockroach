@@ -81,14 +81,14 @@ ALTER INDEX p2_id SPLIT AT VALUES(2)
 # (for seconary indexes) nodes.
 
 statement ok
-ALTER TABLE p1 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
+ALTER TABLE p1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
 
 statement ok
-ALTER INDEX b TESTING_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
+ALTER INDEX b EXPERIMENTAL_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
 
 # Interleaved index table
 statement ok
-ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
+ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
 
 #############################
 # Verify range distribution #

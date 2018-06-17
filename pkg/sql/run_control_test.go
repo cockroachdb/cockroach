@@ -239,7 +239,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	// Make the second node the leaseholder for the first range to distribute
 	// the query.
 	if _, err := conn1.Exec(fmt.Sprintf(
-		"ALTER TABLE nums TESTING_RELOCATE VALUES (ARRAY[%d], 1)",
+		"ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1)",
 		tc.Server(1).GetFirstStoreID(),
 	)); err != nil {
 		t.Fatal(err)

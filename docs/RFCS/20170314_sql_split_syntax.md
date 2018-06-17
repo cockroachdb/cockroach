@@ -146,20 +146,20 @@ The statement returns only after the relocations are complete.
 *Interleaved tables*: the command works as expected (the ranges may contain rows
 for parent or child tables/indexes).
 
-### 3. `ALTER TABLE/INDEX TESTING_RELOCATE` ###
+### 3. `ALTER TABLE/INDEX EXPERIMENTAL_RELOCATE` ###
 
-The `TESTING_RELOCATE` statements can be used to relocate specific ranges to
+The `EXPERIMENTAL_RELOCATE` statements can be used to relocate specific ranges to
 specific stores. This is very low-level functionality and is intended to be used
 sparingly, mainly for setting up tests which benefit from a predetermined data
 distribution. The rebalancing queues should be stopped in order to make the
 relocations "stick".
 
 ```sql
-ALTER TABLE <table> TESTING_RELOCATE <select_statement>
-ALTER INDEX <table>@<index> TESTING_RELOCATE <select_statement>
+ALTER TABLE <table> EXPERIMENTAL_RELOCATE <select_statement>
+ALTER INDEX <table>@<index> EXPERIMENTAL_RELOCATE <select_statement>
 ```
 
-`TESTING_RELOCATE` takes a select statement with the following result schema:
+`EXPERIMENTAL_RELOCATE` takes a select statement with the following result schema:
  - the first column is the relocation information: an array of integers, where
    each integer is a store ID. This indicates the set of replicas for the range;
    the first replica in the array will be the new lease owner.
@@ -175,13 +175,13 @@ Examples:
 CREATE TABLE t (k1, k2, k3, v INT, PRIMARY KEY (k1, k2, k3))
 
 -- Move the range containing /t/primary/1/2/3 to store 1:
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
 
 -- Move the range containing /t/primary/1/2 to stores 5,6,7 (with 5 as lease owner):
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[5,6,7], 1, 2)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[5,6,7], 1, 2)
 
 -- Move even k1s to store 1, odd k1s to store 2:
-ALTER TABLE t TESTING_RELOCATE SELECT ARRAY[1+i%2], i FROM GENERATE_SERIES(1, 10) AS g(i)
+ALTER TABLE t EXPERIMENTAL_RELOCATE SELECT ARRAY[1+i%2], i FROM GENERATE_SERIES(1, 10) AS g(i)
 ```
 
 The statement returns only after the relocations are complete.

@@ -99,7 +99,7 @@ generate_series(2, 38, 4) AS g(pid1)
 
 # Relocate the twenty parts to the five nodes.
 statement ok
-ALTER TABLE grandchild2 TESTING_RELOCATE
+ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
 
 # Verify data placement.
@@ -357,7 +357,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 #   SELECT i FROM generate_series(0, 40, 5) AS g(i)
 # 
 # statement ok
-# ALTER TABLE outer_p1 TESTING_RELOCATE
+# ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
 #   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 # 
 # query TTITI colnames
