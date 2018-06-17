@@ -148,10 +148,10 @@ node_id  username  application_name  active_queries
 1        root      ·                 SELECT node_id, username, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
 
 query ITT colnames
-SELECT node_id, username, query FROM [SHOW QUERIES]
+SELECT node_id, user_name, query FROM [SHOW QUERIES]
 ----
-node_id   username   query
-1         root       SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES]
+node_id  user_name  query
+1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
 query T colnames

@@ -141,12 +141,12 @@ variable                       value
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
