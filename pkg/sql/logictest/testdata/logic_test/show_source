@@ -80,7 +80,7 @@ test
 query T colnames
 SELECT * FROM [SHOW DATABASES]
 ----
-Database
+database_name
 defaultdb
 postgres
 system

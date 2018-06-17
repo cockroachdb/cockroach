@@ -77,10 +77,9 @@ GRANT GRANT,SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query T colnames
+query T
 SHOW DATABASES
 ----
-Database
 publicdb
 
 query T colnames
