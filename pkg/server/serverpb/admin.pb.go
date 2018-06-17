@@ -313,7 +313,7 @@ type TableDetailsResponse struct {
 	// consider removing or renaming this field to reflect that difference. See
 	// Github issue #5435 for more information.
 	RangeCount int64 `protobuf:"varint,4,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
-	// create_table_statement is the output of "SHOW CREATE TABLE" for this table;
+	// create_table_statement is the output of "SHOW CREATE" for this table;
 	// it is a SQL statement that would re-create the table's current schema if
 	// executed.
 	CreateTableStatement string `protobuf:"bytes,5,opt,name=create_table_statement,json=createTableStatement,proto3" json:"create_table_statement,omitempty"`
