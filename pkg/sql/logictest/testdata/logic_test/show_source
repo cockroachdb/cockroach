@@ -125,7 +125,7 @@ public
 query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-Table
+table_name
 descriptor
 eventlog
 jobs
@@ -166,7 +166,7 @@ public
 query T colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-Table
+table_name
 foo
 
 

@@ -148,7 +148,7 @@ query TTT
 EXPLAIN SHOW TABLES
 ----
 sort                   ·      ·
- │                     order  +table_schema,+"Table"
+ │                     order  +table_schema,+table_name
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·

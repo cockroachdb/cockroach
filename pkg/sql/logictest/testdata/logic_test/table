@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 query T colnames
 SHOW TABLES FROM test
 ----
-Table
+table_name
 a
 
 statement ok

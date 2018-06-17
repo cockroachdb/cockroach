@@ -25,10 +25,9 @@ statement ok
 CREATE TABLE bar (k INT PRIMARY KEY)
 
 # Verify that the table is indeed in "foo".
-query T colnames
+query T
 SHOW TABLES FROM foo
 ----
-Table
 bar
 
 # Verify set to empty string.
@@ -61,10 +60,9 @@ database
 foo
 
 # SET succeeds
-query T colnames
+query T
 SHOW TABLES from foo
 ----
-Table
 bar
 
 statement error invalid variable name: ""
