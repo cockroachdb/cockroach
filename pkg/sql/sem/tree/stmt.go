@@ -652,28 +652,12 @@ func (*ShowColumns) StatementTag() string { return "SHOW COLUMNS" }
 func (*ShowColumns) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
-func (*ShowCreateTable) StatementType() StatementType { return Rows }
+func (*ShowCreate) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowCreateTable) StatementTag() string { return "SHOW CREATE TABLE" }
+func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
 
-func (*ShowCreateTable) hiddenFromStats() {}
-
-// StatementType implements the Statement interface.
-func (*ShowCreateView) StatementType() StatementType { return Rows }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*ShowCreateView) StatementTag() string { return "SHOW CREATE VIEW" }
-
-func (*ShowCreateView) hiddenFromStats() {}
-
-// StatementType implements the Statement interface.
-func (*ShowCreateSequence) StatementType() StatementType { return Rows }
-
-// StatementTag implements the Statement interface.
-func (*ShowCreateSequence) StatementTag() string { return "SHOW CREATE SEQUENCE" }
-
-func (*ShowCreateSequence) hiddenFromStats() {}
+func (*ShowCreate) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*ShowBackup) StatementType() StatementType { return Rows }
@@ -949,9 +933,7 @@ func (n *ShowBackup) String() string                { return AsString(n) }
 func (n *ShowClusterSetting) String() string        { return AsString(n) }
 func (n *ShowColumns) String() string               { return AsString(n) }
 func (n *ShowConstraints) String() string           { return AsString(n) }
-func (n *ShowCreateTable) String() string           { return AsString(n) }
-func (n *ShowCreateView) String() string            { return AsString(n) }
-func (n *ShowCreateSequence) String() string        { return AsString(n) }
+func (n *ShowCreate) String() string                { return AsString(n) }
 func (n *ShowDatabases) String() string             { return AsString(n) }
 func (n *ShowGrants) String() string                { return AsString(n) }
 func (n *ShowHistogram) String() string             { return AsString(n) }

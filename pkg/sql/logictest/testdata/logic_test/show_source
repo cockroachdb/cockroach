@@ -207,7 +207,7 @@ NoTxn
 query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
-Table                     CreateTable
+table_name                create_statement
 system.public.descriptor  CREATE TABLE descriptor (
                           id INT NOT NULL,
                           descriptor BYTES NULL,
@@ -220,8 +220,8 @@ system.public.descriptor  CREATE TABLE descriptor (
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
-View  CreateView
-v     CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
+table_name  create_statement
+v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
 
 
 query T colnames

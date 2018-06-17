@@ -144,7 +144,7 @@ views
 query TT colnames
 SHOW CREATE TABLE information_schema.tables
 ----
-Table                      CreateTable
+table_name                 create_statement
 information_schema.tables  CREATE TABLE tables (
                            table_catalog STRING NOT NULL,
                            table_schema STRING NOT NULL,

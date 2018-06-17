@@ -127,11 +127,8 @@ database_id  database_name  schema_name  descriptor_id  descriptor_type  descrip
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
-Sequence         CreateSequence
-show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
-
-statement error pq: show_create_test is not a table
-SHOW CREATE TABLE show_create_test
+table_name        create_statement
+show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 # DML ERRORS
 

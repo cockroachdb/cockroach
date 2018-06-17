@@ -61,8 +61,6 @@ func (p *planner) showTableDetails(
 		lex.EscapeSQLString(tn.Schema()),
 	)
 
-	// log.VEventf(ctx, 2, "using table detail query: %s", fullQuery)
-
 	return p.delegateQuery(ctx, showType, fullQuery,
 		func(_ context.Context) error { return nil }, nil)
 }

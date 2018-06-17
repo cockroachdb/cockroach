@@ -127,7 +127,7 @@ func TestJobsTableProgressFamily(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	var table, schema string
-	sqlutils.MakeSQLRunner(db).QueryRow(t, `SHOW CREATE TABLE system.jobs`).Scan(&table, &schema)
+	sqlutils.MakeSQLRunner(db).QueryRow(t, `SHOW CREATE system.jobs`).Scan(&table, &schema)
 	if !strings.Contains(schema, `FAMILY progress (progress)`) {
 		t.Fatalf("expected progress family, got %q", schema)
 	}

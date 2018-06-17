@@ -63,13 +63,13 @@ ALTER TABLE t ALTER COLUMN i DROP STORED, DROP COLUMN b CASCADE
 query TT colnames
 show create table t
 ----
-Table  CreateTable
-t      CREATE TABLE t (
-       a INT NOT NULL,
-       i INT NULL,
-       CONSTRAINT "primary" PRIMARY KEY (a ASC),
-       INDEX idx2 (i ASC),
-       FAMILY "primary" (a, i)
+table_name  create_statement
+t           CREATE TABLE t (
+            a INT NOT NULL,
+            i INT NULL,
+            CONSTRAINT "primary" PRIMARY KEY (a ASC),
+            INDEX idx2 (i ASC),
+            FAMILY "primary" (a, i)
 )
 
 statement ok
