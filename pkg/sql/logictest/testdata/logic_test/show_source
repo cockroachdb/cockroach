@@ -98,8 +98,8 @@ system    public  descriptor  root   SELECT
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
-descriptor  primary  true    1    id      ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+descriptor  primary     false       1             id           ASC        false    false
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -110,8 +110,8 @@ descriptor  primary  PRIMARY KEY  PRIMARY KEY (id ASC)  true
 query TTBITTBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
-descriptor  primary  true    1    id      ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+descriptor  primary     false       1             id           ASC        false    false
 
 query T colnames
 SELECT * FROM [SHOW SCHEMAS FROM system]
