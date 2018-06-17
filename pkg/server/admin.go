@@ -387,13 +387,13 @@ func (s *adminServer) TableDetails(
 	}
 	{
 		const (
-			nameCol      = "Name"
-			uniqueCol    = "Unique"
-			seqCol       = "Seq"
-			columnCol    = "Column"
-			directionCol = "Direction"
-			storingCol   = "Storing"
-			implicitCol  = "Implicit"
+			nameCol      = "index_name"
+			nonUniqueCol = "non_unique"
+			seqCol       = "seq_in_index"
+			columnCol    = "column_name"
+			directionCol = "direction"
+			storingCol   = "storing"
+			implicitCol  = "implicit"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
@@ -402,9 +402,11 @@ func (s *adminServer) TableDetails(
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
 				return nil, err
 			}
-			if err := scanner.Scan(row, uniqueCol, &index.Unique); err != nil {
+			var nonUnique bool
+			if err := scanner.Scan(row, nonUniqueCol, &nonUnique); err != nil {
 				return nil, err
 			}
+			index.Unique = !nonUnique
 			if err := scanner.Scan(row, seqCol, &index.Seq); err != nil {
 				return nil, err
 			}

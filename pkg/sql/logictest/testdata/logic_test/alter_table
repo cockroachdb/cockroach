@@ -46,12 +46,12 @@ ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
-t      foo      true    1    b       ASC        false    false
-t      foo      true    2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
+t           foo         false       1             b            ASC        false    false
+t           foo         false       2             a            ASC        false    true
 
 query III
 SELECT * FROM t
@@ -189,10 +189,10 @@ SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
 
 statement ok
 ALTER TABLE t DROP b, DROP c

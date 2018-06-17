@@ -168,7 +168,7 @@ version             INT        true         NULL            ·                  
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
 ----
-Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 
 query TTTTB colnames
 SHOW CONSTRAINTS FROM information_schema.tables
