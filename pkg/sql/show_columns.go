@@ -26,26 +26,27 @@ import (
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNode, error) {
 	const getColumnsQuery = `
-				SELECT
-					column_name AS "Field",
-					data_type AS "Type",
-					(is_nullable != 'NO') AS "Null",
-					column_default AS "Default",
-					IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS "Indices"
-				FROM
-					(SELECT column_name, data_type, is_nullable, column_default, ordinal_position,
-									array_agg(index_name) AS inames
-						 FROM
-								 (SELECT column_name, data_type, is_nullable, column_default, ordinal_position
-										FROM %[4]s.information_schema.columns
-									 WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
-								 LEFT OUTER JOIN
-								 (SELECT column_name, index_name
-										FROM %[4]s.information_schema.statistics
-									 WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
-								 USING(column_name)
-						GROUP BY column_name, data_type, is_nullable, column_default, ordinal_position
-					 )
-				ORDER BY ordinal_position`
+SELECT
+  column_name AS column_name,
+  data_type AS data_type,
+  is_nullable::BOOL,
+  column_default,
+  generation_expression,
+  IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS indices
+FROM
+  (SELECT column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position,
+          array_agg(index_name) AS inames
+     FROM
+         (SELECT column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position
+            FROM %[4]s.information_schema.columns
+           WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
+         LEFT OUTER JOIN
+         (SELECT column_name, index_name
+            FROM %[4]s.information_schema.statistics
+           WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
+         USING(column_name)
+    GROUP BY column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position
+   )
+ORDER BY ordinal_position`
 	return p.showTableDetails(ctx, "SHOW COLUMNS", n.Table, getColumnsQuery)
 }
