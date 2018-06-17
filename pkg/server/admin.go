@@ -259,14 +259,14 @@ func (s *adminServer) DatabaseDetails(
 
 	// Marshal table names.
 	{
-		const tableCol = "Table"
+		const nameCol = "table_name"
 		scanner := makeResultScanner(cols)
 		if a, e := len(cols), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {
 			var tableName string
-			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
+			if err := scanner.Scan(row, nameCol, &tableName); err != nil {
 				return nil, err
 			}
 			resp.TableNames = append(resp.TableNames, tableName)

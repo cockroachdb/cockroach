@@ -6,10 +6,9 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
-query T colnames
+query T
 SHOW TABLES FROM test
 ----
-Table
 a
 b
 
@@ -26,10 +25,9 @@ SELECT * FROM a
 statement ok
 DROP TABLE a
 
-query T colnames
+query T
 SHOW TABLES FROM test
 ----
-Table
 b
 
 statement error pgcode 42P01 relation "a" does not exist
