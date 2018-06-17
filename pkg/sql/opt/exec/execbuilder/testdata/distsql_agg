@@ -14,9 +14,9 @@ ALTER TABLE data EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
-Start Key  End Key  Replicas  Lease Holder
+start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
 /1         /2       {2}       2
 /2         /3       {3}       3
