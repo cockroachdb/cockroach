@@ -28,10 +28,10 @@ CREATE INDEX bar ON t (b, b);
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      foo      false   1    b       ASC        false    false
-t      foo      false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           foo         true        1             b            ASC        false    false
+t           foo         true        2             a            ASC        false    true
 
 statement ok
 INSERT INTO t VALUES (2,1)
@@ -42,10 +42,10 @@ CREATE UNIQUE INDEX bar ON t (b)
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      foo      false   1    b       ASC        false    false
-t      foo      false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           foo         true        1             b            ASC        false    false
+t           foo         true        2             a            ASC        false    true
 
 # test for DESC index
 
@@ -71,13 +71,13 @@ CREATE INDEX b_asc ON t (b ASC, c DESC)
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      b_desc   false   1    b       DESC       false    false
-t      b_desc   false   2    a       ASC        false    true
-t      b_asc    false   1    b       ASC        false    false
-t      b_asc    false   2    c       DESC       false    false
-t      b_asc    false   3    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           b_desc      true        1             b            DESC       false    false
+t           b_desc      true        2             a            ASC        false    true
+t           b_asc       true        1             b            ASC        false    false
+t           b_asc       true        2             c            DESC       false    false
+t           b_asc       true        3             a            ASC        false    true
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -101,8 +101,8 @@ user root
 query TTBITTBB colnames
 SHOW INDEXES FROM privs
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-privs  primary  true    1    a       ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       primary     false       1             a            ASC        false    false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -115,7 +115,7 @@ CREATE INDEX foo ON privs (b)
 query TTBITTBB colnames
 SHOW INDEXES FROM privs
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-privs  primary  true    1    a       ASC        false    false
-privs  foo      false   1    b       ASC        false    false
-privs  foo      false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       primary     false       1             a            ASC        false    false
+privs       foo         true        1             b            ASC        false    false
+privs       foo         true        2             a            ASC        false    true

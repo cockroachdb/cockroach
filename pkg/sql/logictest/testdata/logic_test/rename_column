@@ -75,12 +75,12 @@ id username  species
 query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table  Name     Unique  Seq  Column    Direction  Storing  Implicit
-users  primary  true    1    id        ASC        false    false
-users  foo      false   1    username  ASC        false    false
-users  foo      false   2    id        ASC        false    true
-users  bar      true    1    id        ASC        false    false
-users  bar      true    2    username  ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       foo         true        1             username     ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             username     ASC        false    false
 
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'

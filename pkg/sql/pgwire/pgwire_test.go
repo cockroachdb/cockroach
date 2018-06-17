@@ -731,7 +731,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", security.RootUser, "UPDATE"),
 		},
 		"SHOW INDEXES FROM system.users": {
-			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),
+			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
 		},
 		"SHOW TABLES FROM system": {
 			baseTest.Results("descriptor").Others(13),

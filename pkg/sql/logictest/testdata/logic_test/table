@@ -62,17 +62,17 @@ CREATE TABLE c (
 query TTBITTBB colnames
 SHOW INDEXES FROM c
 ----
-Table  Name           Unique  Seq  Column  Direction  Storing  Implicit
-c      primary        true    1    id      ASC        false    false
-c      c_foo_idx      false   1    foo     ASC        false    false
-c      c_foo_idx      false   2    id      ASC        false    true
-c      c_foo_idx1     false   1    foo     ASC        false    false
-c      c_foo_idx1     false   2    id      ASC        false    true
-c      c_foo_bar_idx  false   1    foo     ASC        false    false
-c      c_foo_bar_idx  false   2    bar     DESC       false    false
-c      c_foo_bar_idx  false   3    id      ASC        false    true
-c      c_bar_key      true    1    bar     ASC        false    false
-c      c_bar_key      true    2    id      ASC        false    true
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
+c           primary        false       1             id           ASC        false    false
+c           c_foo_idx      true        1             foo          ASC        false    false
+c           c_foo_idx      true        2             id           ASC        false    true
+c           c_foo_idx1     true        1             foo          ASC        false    false
+c           c_foo_idx1     true        2             id           ASC        false    true
+c           c_foo_bar_idx  true        1             foo          ASC        false    false
+c           c_foo_bar_idx  true        2             bar          DESC       false    false
+c           c_foo_bar_idx  true        3             id           ASC        false    true
+c           c_bar_key      false       1             bar          ASC        false    false
+c           c_bar_key      false       2             id           ASC        false    true
 
 # primary keys can never be null
 
@@ -170,12 +170,12 @@ email        STRING(100)  true         NULL            ·                      {
 query TTBITTBB colnames
 SHOW INDEXES FROM test.users
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-users  primary  true    1    id      ASC        false    false
-users  foo      false   1    name    ASC        false    false
-users  foo      false   2    id      ASC        false    true
-users  bar      true    1    id      ASC        false    false
-users  bar      true    2    name    ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             name         ASC        false    false
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
