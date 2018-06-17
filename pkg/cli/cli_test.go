@@ -804,7 +804,7 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// Database
+	// database_name
 	// defaultdb
 	// postgres
 	// system

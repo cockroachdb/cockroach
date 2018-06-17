@@ -141,9 +141,9 @@ query TTT
 EXPLAIN SHOW DATABASES
 ----
 distinct               ·          ·
- │                     order key  Database
+ │                     order key  database_name
  └── sort              ·          ·
-      │                order      +"Database"
+      │                order      +database_name
       └── render       ·          ·
            └── values  ·          ·
 ·                      size       4 columns, 20 rows
