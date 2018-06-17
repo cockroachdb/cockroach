@@ -212,9 +212,10 @@ sort                                       ·            ·
            │                               aggregate 1  data_type
            │                               aggregate 2  is_nullable
            │                               aggregate 3  column_default
-           │                               aggregate 4  ordinal_position
-           │                               aggregate 5  array_agg(index_name)
-           │                               group by     @1-@5
+           │                               aggregate 4  generation_expression
+           │                               aggregate 5  ordinal_position
+           │                               aggregate 6  array_agg(index_name)
+           │                               group by     @1-@6
            └── render                      ·            ·
                 └── join                   ·            ·
                      │                     type         left outer

@@ -334,15 +334,16 @@ func (s *adminServer) TableDetails(
 	// for our API.
 	{
 		const (
-			fieldCol   = "Field" // column name
-			typeCol    = "Type"
-			nullCol    = "Null"
-			defaultCol = "Default"
+			colCol     = "column_name"
+			typeCol    = "data_type"
+			nullCol    = "is_nullable"
+			defaultCol = "column_default"
+			genCol     = "generation_expression"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
 			var col serverpb.TableDetailsResponse_Column
-			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
+			if err := scanner.Scan(row, colCol, &col.Name); err != nil {
 				return nil, err
 			}
 			if err := scanner.Scan(row, typeCol, &col.Type); err != nil {
@@ -357,6 +358,15 @@ func (s *adminServer) TableDetails(
 			}
 			if !isDefaultNull {
 				if err := scanner.Scan(row, defaultCol, &col.DefaultValue); err != nil {
+					return nil, err
+				}
+			}
+			isGenNull, err := scanner.IsNull(row, genCol)
+			if err != nil {
+				return nil, err
+			}
+			if !isGenNull {
+				if err := scanner.Scan(row, genCol, &col.GenerationExpression); err != nil {
 					return nil, err
 				}
 			}
