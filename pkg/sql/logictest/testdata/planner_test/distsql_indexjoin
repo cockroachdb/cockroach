@@ -15,7 +15,7 @@ ALTER INDEX t@v EXPERIMENTAL_RELOCATE
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM INDEX t@v
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /10      1         {1}       1
 /10        /20      2         {2}       2
 /20        /30      3         {3}       3

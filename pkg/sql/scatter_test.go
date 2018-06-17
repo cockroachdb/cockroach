@@ -49,7 +49,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	getLeaseholders := func() (map[int]int, error) {
-		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.t]`)
+		rows := r.Query(t, `SELECT range_id, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.t]`)
 		leaseholders := make(map[int]int)
 		numRows := 0
 		for ; rows.Next(); numRows++ {
@@ -61,7 +61,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 				t.Fatalf("invalid rangeID: %d", rangeID)
 			}
 			if leaseholder < 1 || leaseholder > numHosts {
-				return nil, fmt.Errorf("invalid leaseholder value: %d", leaseholder)
+				return nil, fmt.Errorf("invalid lease_holder value: %d", leaseholder)
 			}
 			leaseholders[rangeID] = leaseholder
 		}
