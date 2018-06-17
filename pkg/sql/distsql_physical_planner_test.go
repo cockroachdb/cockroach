@@ -317,7 +317,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// We're going to split one of the tables, but node 4 is unaware of this.
 	_, err = db0.Exec(fmt.Sprintf(`
 	ALTER TABLE "right" SPLIT AT VALUES (1), (2), (3);
-	ALTER TABLE "right" TESTING_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
+	ALTER TABLE "right" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
 	`,
 		tc.Server(1).GetFirstStoreID(),
 		tc.Server(0).GetFirstStoreID(),
@@ -403,7 +403,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	for i := 0; i < numNodes; i++ {
 		r.Exec(t, fmt.Sprintf(
-			"ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[%d,%d,%d], %d)",
+			"ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d,%d,%d], %d)",
 			i+1, (i+1)%5+1, (i+2)%5+1, n*i/5,
 		))
 	}
@@ -490,7 +490,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 		t,
 		fmt.Sprintf(`
 			ALTER TABLE nums SPLIT AT VALUES (1);
-			ALTER TABLE nums TESTING_RELOCATE VALUES (ARRAY[%d], 1);
+			ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1);
 		`,
 			tc.Server(1).GetFirstStoreID(),
 		),

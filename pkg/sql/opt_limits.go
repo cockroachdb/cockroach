@@ -191,7 +191,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *splitNode:
 		p.setUnlimited(n.rows)
 
-	case *testingRelocateNode:
+	case *relocateNode:
 		p.setUnlimited(n.rows)
 
 	case *cancelQueriesNode:

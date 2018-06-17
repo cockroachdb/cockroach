@@ -9,7 +9,7 @@ ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
 statement ok
-ALTER INDEX t@v TESTING_RELOCATE
+ALTER INDEX t@v EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
 
 query TTITI colnames
