@@ -41,6 +41,7 @@ func (s *sorterBase) init(
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
+	memMonitor *mon.BytesMonitor,
 	ordering sqlbase.ColumnOrdering,
 	matchLen uint32,
 	opts procStateOpts,
@@ -56,8 +57,9 @@ func (s *sorterBase) init(
 	s.ordering = ordering
 	s.matchLen = matchLen
 	s.count = count
-	return s.processorBase.init(self, post, input.OutputTypes(), flowCtx,
-		processorID, output, opts)
+	return s.processorBase.init(
+		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
+	)
 }
 
 func newSorter(
@@ -109,8 +111,7 @@ func newSorter(
 type sortAllProcessor struct {
 	sorterBase
 
-	rows            sortableRowContainer
-	rowContainerMon *mon.BytesMonitor
+	rows sortableRowContainer
 
 	// The following variables are used by the state machine, and are used by Next()
 	// to determine where to resume emitting rows.
@@ -135,7 +136,7 @@ func newSortAllProcessor(
 	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
 		flowCtx.testingKnobs.MemoryLimitBytes > 0
 
-	rowContainerMon := flowCtx.EvalCtx.Mon
+	var memMonitor *mon.BytesMonitor
 	if useTempStorage {
 		// We will use the sortAllProcessor in this case and potentially fall
 		// back to disk.
@@ -148,15 +149,15 @@ func newSortAllProcessor(
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
-		rowContainerMon = &limitedMon
+		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		memMonitor = &limitedMon
+	} else {
+		memMonitor = newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall")
 	}
 
-	proc := &sortAllProcessor{
-		rowContainerMon: rowContainerMon,
-	}
+	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, input, post, out, memMonitor,
 		convertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		procStateOpts{
@@ -177,7 +178,7 @@ func newSortAllProcessor(
 			proc.evalCtx,
 			flowCtx.TempStorage,
 			flowCtx.diskMonitor,
-			rowContainerMon,
+			memMonitor,
 		)
 		proc.rows = &rc
 	} else {
@@ -270,7 +271,7 @@ func (s *sortAllProcessor) close() {
 		}
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
-		s.rowContainerMon.Stop(ctx)
+		s.memMonitor.Stop(ctx)
 	}
 }
 
@@ -307,9 +308,8 @@ func (s *sortAllProcessor) ConsumerClosed() {
 type sortTopKProcessor struct {
 	sorterBase
 
-	rows            memRowContainer
-	rowContainerMon *mon.BytesMonitor
-	k               int64
+	rows memRowContainer
+	k    int64
 }
 
 var _ Processor = &sortTopKProcessor{}
@@ -326,14 +326,10 @@ func newSortTopKProcessor(
 	out RowReceiver,
 	k int64,
 ) (Processor, error) {
-	rowContainerMon := flowCtx.EvalCtx.Mon
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
-	proc := &sortTopKProcessor{
-		rowContainerMon: rowContainerMon,
-		k:               k,
-	}
+	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, input, post, out, nil, /* memMonitor */
 		ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
@@ -345,7 +341,7 @@ func newSortTopKProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	proc.rows.init(ordering, input.OutputTypes(), proc.evalCtx)
 	return proc, nil
 }
 
@@ -434,10 +430,9 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 type sortChunksProcessor struct {
 	sorterBase
 
-	rows            memRowContainer
-	rowContainerMon *mon.BytesMonitor
-	alloc           sqlbase.DatumAlloc
-	rowAlloc        sqlbase.EncDatumRowAlloc
+	rows     memRowContainer
+	alloc    sqlbase.DatumAlloc
+	rowAlloc sqlbase.EncDatumRowAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
@@ -457,15 +452,11 @@ func newSortChunksProcessor(
 	post *PostProcessSpec,
 	out RowReceiver,
 ) (Processor, error) {
-	rowContainerMon := flowCtx.EvalCtx.Mon
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 
-	proc := &sortChunksProcessor{
-		rowContainerMon: rowContainerMon,
-	}
+	proc := &sortChunksProcessor{}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, ordering,
-		spec.OrderingMatchLen,
+		proc, flowCtx, processorID, input, post, out, nil /* memMonitor */, ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -476,7 +467,7 @@ func newSortChunksProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	proc.rows.init(ordering, input.OutputTypes(), proc.evalCtx)
 	return proc, nil
 }
 

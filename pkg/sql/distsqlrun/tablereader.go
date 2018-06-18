@@ -83,6 +83,7 @@ func newTableReader(
 		flowCtx,
 		processorID,
 		output,
+		nil, /* memMonitor */
 		procStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
