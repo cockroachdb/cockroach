@@ -116,7 +116,7 @@ descriptor  primary     false       1             id           ASC        false 
 query T colnames
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
@@ -159,7 +159,7 @@ node_id  user_name  query
 query T colnames
 SELECT * FROM [SHOW SCHEMAS]
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
