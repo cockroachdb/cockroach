@@ -562,6 +562,93 @@ func (c *CustomFuncs) CommuteInequality(op opt.Operator, left, right memo.GroupI
 	panic(fmt.Sprintf("called commuteInequality with operator %s", op))
 }
 
+// IsRedundantSubclause checks if the given subclause appears as a conjunct in
+// all of the given OR conditions. For example, if A is the given subclause:
+//   A OR A                      =>  true
+//   B OR A                      =>  false
+//   A OR (A AND B)              =>  true
+//   (A AND B) OR (A AND C)      =>  true
+//   A OR (A AND B) OR (B AND C) =>  false
+func (c *CustomFuncs) IsRedundantSubclause(conditions memo.ListID, subclause memo.GroupID) bool {
+	for _, item := range c.f.mem.LookupList(conditions) {
+		itemExpr := c.f.mem.NormExpr(item)
+
+		switch itemExpr.Operator() {
+		case opt.AndOp:
+			found := false
+			for _, item := range c.f.mem.LookupList(itemExpr.AsAnd().Conditions()) {
+				if item == subclause {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+
+		default:
+			if item != subclause {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// ExtractRedundantSubclause extracts a redundant subclause from a list of OR
+// conditions, and returns an AND of the subclause with the remaining OR
+// expression (a logically equivalent expression). For example:
+//   (A AND B) OR (A AND C)  =>  A AND (B OR C)
+//
+// If extracting the subclause from one of the OR conditions would result in an
+// empty condition, the subclause itself is returned (a logically equivalent
+// expression). For example:
+//   A OR (A AND B)  =>  A
+//
+// These transformations are useful for finding a conjunct that can be pushed
+// down in the query tree. For example, if the redundant subclause A is
+// fully bound by one side of a join, it can be pushed through the join, even
+// if B AND C cannot.
+func (c *CustomFuncs) ExtractRedundantSubclause(
+	conditions memo.ListID, subclause memo.GroupID,
+) memo.GroupID {
+	orList := xfunc.MakeListBuilder(&c.CustomFuncs)
+
+	for _, item := range c.f.mem.LookupList(conditions) {
+		itemExpr := c.f.mem.NormExpr(item)
+
+		switch itemExpr.Operator() {
+		case opt.AndOp:
+			// Remove the subclause from the AND expression, and add the new AND
+			// expression to the list of OR conditions.
+			remaining := c.RemoveListItem(itemExpr.AsAnd().Conditions(), subclause)
+			orList.AddItem(c.f.ConstructAnd(remaining))
+
+		default:
+			// In the default case, we have a boolean expression such as
+			// `(A AND B) OR A`, which is logically equivalent to `A`.
+			// (`A` is the redundant subclause).
+			if item == subclause {
+				return item
+			}
+
+			panic(fmt.Errorf(
+				"ExtractRedundantSubclause called with non-redundant subclause:\n%s",
+				memo.MakeNormExprView(c.f.mem, subclause).FormatString(opt.ExprFmtHideScalars),
+			))
+		}
+	}
+
+	or := c.f.ConstructOr(orList.BuildList())
+
+	andList := xfunc.MakeListBuilder(&c.CustomFuncs)
+	andList.AddItem(subclause)
+	andList.AddItem(or)
+
+	return c.f.ConstructAnd(andList.BuildList())
+}
+
 // ----------------------------------------------------------------------
 //
 // Comparison Rules
