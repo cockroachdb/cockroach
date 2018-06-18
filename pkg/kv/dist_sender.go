@@ -1281,6 +1281,20 @@ func (ds *DistSender) sendToReplicas(
 			log.VErrEventf(ctx, 1, "application error: %s", br.Error)
 		}
 
+		// Has the caller given up?
+		if ctx.Err() != nil {
+			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
+			log.Eventf(ctx, errMsg)
+			if ambiguousError != nil {
+				return nil, roachpb.NewAmbiguousResultError(errMsg)
+			}
+			// Don't consider this a SendError, because SendErrors indicate that we
+			// were unable to reach a replica that could serve the request, and they
+			// cause range cache evictions. Context cancellations just mean the
+			// sender changed its mind or the request timed out.
+			return nil, ctx.Err()
+		}
+
 		if transport.IsExhausted() {
 			if ambiguousError != nil {
 				return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [exhausted]", ambiguousError))
@@ -1293,16 +1307,6 @@ func (ds *DistSender) sendToReplicas(
 			return nil, roachpb.NewSendError(
 				fmt.Sprintf("sending to all %d replicas failed; last error: %v %v", len(replicas), br, err),
 			)
-		}
-
-		// Has the caller given up?
-		if ctx.Err() != nil {
-			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
-			log.Eventf(ctx, errMsg)
-			if ambiguousError != nil {
-				return nil, roachpb.NewAmbiguousResultError(errMsg)
-			}
-			return nil, roachpb.NewSendError(errMsg)
 		}
 
 		ds.metrics.NextReplicaErrCount.Inc(1)
