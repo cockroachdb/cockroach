@@ -267,6 +267,16 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+// Encoded returns the encoded datum in the given ordering, if the cached
+// ordering matches the given ordering.
+func (ed *EncDatum) Encoded(enc DatumEncoding) ([]byte, bool) {
+	if ed.encoded != nil && enc == ed.encoding {
+		// We already have an encoding that matches that we can use.
+		return ed.encoded, true
+	}
+	return nil, false
+}
+
 // Compare returns:
 //    -1 if the receiver is less than rhs,
 //    0  if the receiver is equal to rhs,

@@ -112,6 +112,24 @@ func (e *columnEncoder) init(types []sqlbase.ColumnType, keyCols columns, encode
 func (e *columnEncoder) encodeEqualityCols(
 	ctx context.Context, row sqlbase.EncDatumRow, eqCols columns,
 ) ([]byte, error) {
+	nCols := len(eqCols)
+	if nCols == 0 {
+		return nil, nil
+	}
+
+	if nCols == 1 {
+		col := row[eqCols[0]]
+		if col.IsNull() {
+			log.Fatal(ctx, "cannot process rows with NULL in an equality column")
+		}
+		if enc, ok := col.Encoded(sqlbase.DatumEncoding_ASCENDING_KEY); ok {
+			// Fast path! We just have a single column, and it's already encoded in our
+			// desired encoding. Return that buffer directly rather than having to
+			// first copy it into our scratch buffer.
+			return enc, nil
+		}
+	}
+
 	encoded, hasNull, err := encodeColumnsOfRow(
 		&e.datumAlloc, e.scratch, row, eqCols, e.keyTypes, e.encodeNull,
 	)
@@ -122,6 +140,7 @@ func (e *columnEncoder) encodeEqualityCols(
 	if hasNull {
 		log.Fatal(ctx, "cannot process rows with NULL in an equality column")
 	}
+
 	return encoded, nil
 }
 
