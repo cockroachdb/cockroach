@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1765,11 +1766,28 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 	return nil
 }
 
-// startSampleEnvironment begins a worker that periodically instructs the
-// runtime stat sampler to sample the environment.
+// startSampleEnvironment begins the heap profiler worker and a worker that
+// periodically instructs the runtime stat sampler to sample the environment.
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
+	rssChan := make(chan int64)
+	systemMemory, err := GetTotalMemory(ctx)
+	if err != nil {
+		log.Warningf(ctx, "Could not compute system memory due to: %s", err)
+		return
+	}
+	heapProfilerWorker, err := heapprofiler.NewWorker(
+		rssChan, s.cfg.HeapProfileDirName, s.stopper, systemMemory, s.st,
+	)
+	var heapProfilerStarted bool
+	if err != nil {
+		log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
+		close(rssChan)
+	} else {
+		s.stopper.RunWorker(ctx, heapProfilerWorker)
+		heapProfilerStarted = true
+	}
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
@@ -1777,6 +1795,9 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 			select {
 			case <-ticker.C:
 				s.runtime.SampleEnvironment(ctx)
+				if heapProfilerStarted {
+					rssChan <- s.runtime.Rss.Value()
+				}
 			case <-s.stopper.ShouldStop():
 				return
 			}
