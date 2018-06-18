@@ -204,15 +204,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	// Check if the statement is parallelized or is independent from parallel
-	// execution. If neither of these cases are true, we need to synchronize
-	// parallel execution by letting it drain before we can begin executing stmt.
-	parallelize := IsStmtParallelized(stmt)
-	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
-	if !(parallelize || independentFromParallelStmts) {
-		if err := ex.synchronizeParallelStmts(ctx); err != nil {
-			return makeErrEvent(err)
-		}
+	// Check if the statement should be parallelized. If not, we may need to
+	// synchronize.
+	parallelize, err := ex.maybeSynchronizeParallelStmts(ctx, stmt)
+	if err != nil {
+		return makeErrEvent(err)
 	}
 
 	switch s := stmt.AST.(type) {
@@ -313,6 +309,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.Statement)
+
+		// Check again if the statement should be parallelized.
+		parallelize, err = ex.maybeSynchronizeParallelStmts(ctx, stmt)
+		if err != nil {
+			return makeErrEvent(err)
+		}
 	}
 
 	// For regular statements (the ones that get to this point), we don't return
@@ -432,6 +434,22 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// No event was generated.
 	return nil, nil, nil
+}
+
+// maybeSynchronizeParallelStmts check if the statement is parallelized or is
+// independent from parallel execution. If neither of these cases are true, the
+// method synchronizes parallel execution by letting it drain before returning.
+func (ex *connExecutor) maybeSynchronizeParallelStmts(
+	ctx context.Context, stmt Statement,
+) (parallelize bool, _ error) {
+	parallelize = IsStmtParallelized(stmt)
+	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
+	if !(parallelize || independentFromParallelStmts) {
+		if err := ex.synchronizeParallelStmts(ctx); err != nil {
+			return false, err
+		}
+	}
+	return parallelize, nil
 }
 
 // commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The

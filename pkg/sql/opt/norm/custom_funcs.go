@@ -370,7 +370,7 @@ func (c *CustomFuncs) ColsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 // IsUnorderedGroupBy returns true if the given input ordering for the group by
 // is unspecified.
 func (c *CustomFuncs) IsUnorderedGroupBy(def memo.PrivateID) bool {
-	return !c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Defined()
+	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Empty()
 }
 
 // IsScalarGroupBy returns true if the given grouping columns come from a

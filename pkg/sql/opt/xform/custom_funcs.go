@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -279,7 +278,7 @@ func (c *CustomFuncs) CanLimitScan(def, limit, ordering memo.PrivateID) bool {
 		return false
 	}
 
-	required := c.e.mem.LookupPrivate(ordering).(props.Ordering)
+	required := c.e.mem.LookupPrivate(ordering).(opt.Ordering)
 	return scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
 }
 

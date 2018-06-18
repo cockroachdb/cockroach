@@ -97,7 +97,7 @@ type ScanOpDef struct {
 
 // CanProvideOrdering returns true if the scan operator returns rows that
 // satisfy the given required ordering.
-func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering) bool {
+func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required opt.Ordering) bool {
 	// Scan naturally orders according to the order of the scanned index.
 	index := md.Table(s.Table).Index(s.Index)
 
@@ -131,7 +131,7 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering
 // operator.
 type GroupByDef struct {
 	GroupingCols opt.ColSet
-	Ordering     props.Ordering
+	Ordering     opt.Ordering
 }
 
 // LookupJoinDef defines the value of the Def private field of the LookupJoin
@@ -217,7 +217,7 @@ type ShowTraceOpDef struct {
 // operator.
 type RowNumberDef struct {
 	// Ordering denotes the required ordering of the input.
-	Ordering props.Ordering
+	Ordering opt.Ordering
 
 	// ColID holds the id of the column introduced by this operator.
 	ColID opt.ColumnID
@@ -225,7 +225,7 @@ type RowNumberDef struct {
 
 // CanProvideOrdering returns true if the row number operator returns rows that
 // can satisfy the given required ordering.
-func (w *RowNumberDef) CanProvideOrdering(required props.Ordering) bool {
+func (w *RowNumberDef) CanProvideOrdering(required opt.Ordering) bool {
 	// RowNumber can provide the same ordering it requires from its input.
 
 	// By construction, the ordinality is a key, and the output is always ordered

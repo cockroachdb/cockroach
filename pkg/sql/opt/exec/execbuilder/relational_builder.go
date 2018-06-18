@@ -552,7 +552,7 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	// TODO(radu): Remove this code once we have support for a more general
 	// lookup join operator.
 	var limit tree.TypedExpr
-	var ordering props.Ordering
+	var ordering opt.Ordering
 	child := ev.Child(0)
 	if child.Operator() == opt.LimitOp {
 		limit, err = b.buildScalar(nil, child.Child(1))
@@ -734,7 +734,7 @@ func (b *Builder) buildShowTrace(ev memo.ExprView) (execPlan, error) {
 
 // buildSortedInput is a helper method that can be reused to sort any input plan
 // by the given ordering.
-func (b *Builder) buildSortedInput(input execPlan, ordering props.Ordering) (execPlan, error) {
+func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execPlan, error) {
 	colOrd := make(sqlbase.ColumnOrdering, len(ordering))
 	for i, col := range ordering {
 		ord := input.getColumnOrdinal(col.ID())

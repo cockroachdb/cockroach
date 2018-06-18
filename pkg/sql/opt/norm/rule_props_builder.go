@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // rulePropsBuilder is a helper class that fills out the rule property structure
@@ -183,7 +182,7 @@ func (b *rulePropsBuilder) buildLimitProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
 	inputProps := ev.Child(0).Logical().Relational
-	ordering := ev.Private().(props.Ordering).ColSet()
+	ordering := ev.Private().(opt.Ordering).ColSet()
 
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used as an ordering column.
@@ -194,7 +193,7 @@ func (b *rulePropsBuilder) buildOffsetProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
 	inputProps := ev.Child(0).Logical().Relational
-	ordering := ev.Private().(props.Ordering).ColSet()
+	ordering := ev.Private().(opt.Ordering).ColSet()
 
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used as an ordering column.

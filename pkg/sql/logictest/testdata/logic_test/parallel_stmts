@@ -403,3 +403,45 @@ SELECT count(*) FROM kv WHERE k = 2
 
 statement ok
 ROLLBACK
+
+
+# Parallel statements can be prepared and executed.
+
+statement ok
+PREPARE x AS INSERT INTO kv VALUES ($1, $2) RETURNING NOTHING
+
+statement ok
+BEGIN
+
+statement ok
+EXECUTE x(1, 2)
+
+statement ok
+EXECUTE x(1, 2)
+
+# We know the ParallelizeQueue was used because the error was not returned
+# when the statement was EXECUTED.
+statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+EXECUTE x(1, 2)
+
+statement ok
+EXECUTE x(2, 3)
+
+statement ok
+EXECUTE x(3, 4)
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  4

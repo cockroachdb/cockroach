@@ -51,41 +51,9 @@ func TestPhysicalProps(t *testing.T) {
 	}
 
 	// Add Ordering props.
-	ordering := props.Ordering{1, 5}
+	ordering := opt.Ordering{1, 5}
 	phys.Ordering = ordering
 	testPhysicalProps(t, phys, "p:a:1,b:2 o:+1,+5")
-
-	if !ordering.Defined() {
-		t.Error("ordering should be defined")
-	}
-
-	if !ordering.Provides(ordering) {
-		t.Error("ordering should provide itself")
-	}
-
-	if !ordering.Provides(props.Ordering{1}) {
-		t.Error("ordering should provide the prefix ordering")
-	}
-
-	if (props.Ordering{}).Provides(ordering) {
-		t.Error("empty ordering should not provide ordering")
-	}
-
-	if !ordering.Provides(props.Ordering{}) {
-		t.Error("ordering should provide the empty ordering")
-	}
-
-	if !ordering.Equals(ordering) {
-		t.Error("ordering should be equal with itself")
-	}
-
-	if ordering.Equals(props.Ordering{}) {
-		t.Error("ordering should not equal the empty ordering")
-	}
-
-	if (props.Ordering{}).Equals(ordering) {
-		t.Error("empty ordering should not equal ordering")
-	}
 }
 
 func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {

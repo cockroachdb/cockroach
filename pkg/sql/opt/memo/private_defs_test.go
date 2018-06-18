@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 )
 
@@ -51,7 +50,7 @@ func TestCanProvideOrdering(t *testing.T) {
 	s := opt.OrderingColumn(md.TableColumn(a, 2))
 	f := opt.OrderingColumn(md.TableColumn(a, 3))
 
-	test := func(def *memo.ScanOpDef, ordering props.Ordering, expected bool) {
+	test := func(def *memo.ScanOpDef, ordering opt.Ordering, expected bool) {
 		t.Helper()
 		if def.CanProvideOrdering(md, ordering) != expected {
 			t.Errorf("expected %v, got %v", expected, !expected)
@@ -60,19 +59,19 @@ func TestCanProvideOrdering(t *testing.T) {
 
 	// Ordering is longer than index.
 	def := &memo.ScanOpDef{Table: a, Index: altIndex1}
-	test(def, props.Ordering{i, k, s}, true)
-	test(def, props.Ordering{k, i, s}, false)
+	test(def, opt.Ordering{i, k, s}, true)
+	test(def, opt.Ordering{k, i, s}, false)
 
 	// Index is longer than ordering.
-	test(def, props.Ordering{i}, true)
-	test(def, props.Ordering{k}, false)
+	test(def, opt.Ordering{i}, true)
+	test(def, opt.Ordering{k}, false)
 
 	// Index contains descending column.
 	def = &memo.ScanOpDef{Table: a, Index: altIndex2}
-	test(def, props.Ordering{-s}, true)
-	test(def, props.Ordering{s}, false)
+	test(def, opt.Ordering{-s}, true)
+	test(def, opt.Ordering{s}, false)
 
 	// Index contains storing column.
-	test(def, props.Ordering{-s, k, f}, true)
-	test(def, props.Ordering{-s, k, i}, false)
+	test(def, opt.Ordering{-s, k, f}, true)
+	test(def, opt.Ordering{-s, k, i}, false)
 }
