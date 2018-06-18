@@ -3,7 +3,7 @@
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement error a role named admin already exists
@@ -33,7 +33,7 @@ CREATE ROLE myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 myrole
 
@@ -61,7 +61,7 @@ DROP ROLE admin, myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 myrole
 
@@ -71,7 +71,7 @@ DROP ROLE myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement error pq: role myrole does not exist
@@ -104,7 +104,7 @@ DROP ROLE rolea, roleb
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement ok
