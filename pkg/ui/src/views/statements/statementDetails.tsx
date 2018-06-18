@@ -6,6 +6,8 @@ import { connect } from "react-redux";
 import { RouterState } from "react-router";
 import { createSelector } from "reselect";
 
+import Loading from "src/views/shared/components/loading";
+import spinner from "assets/spinner.gif";
 import { refreshQueries } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { statementAttr } from "src/util/constants";
@@ -93,8 +95,28 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
   }
 
   render() {
+    return (
+      <div>
+        <Helmet>
+          <title>{`Details | Statements`}</title>
+        </Helmet>
+        <section className="section">
+          <h2>Statement Details</h2>
+          <Loading
+            loading={_.isNil(this.props.statement)}
+            className="loading-image loading-image__spinner"
+            image={spinner}
+          >
+            { this.renderContent() }
+          </Loading>
+        </section>
+      </div>
+    );
+  }
+
+  renderContent() {
     if (!this.props.statement) {
-      return "loading...";
+      return null;
     }
 
     const { stats } = this.props.statement;
@@ -106,89 +128,83 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     const latencyBar = latencyBarChart();
 
     return (
-      <div>
-        <Helmet>
-          <title>{`Details | Statements`}</title>
-        </Helmet>
-        <section className="section">
-          <h2>Statement Details</h2>
-          <div className="content l-columns">
-            <div className="l-columns__left">
-              <SqlBox value={ this.props.statement.key.query } />
-              <section className="section">
-                <h3>Execution Count</h3>
-                <div className="details-bar">{ countBar(this.props.statement) }</div>
-                <table className="numeric-stats-table">
-                  <tbody>
-                    <tr className="numeric-stats-table__row--body">
-                      <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempt Count</th>
-                      <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ firstAttemptCount }</td>
-                    </tr>
-                    <tr className="numeric-stats-table__row--body">
-                      <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total Count</th>
-                      <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
-                    </tr>
-                    <tr className="numeric-stats-table__row--body">
-                      <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Cumulative Retries</th>
-                      <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count - firstAttemptCount }</td>
-                    </tr>
-                    <tr className="numeric-stats-table__row--body">
-                      <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Max Retries</th>
-                      <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ FixLong(stats.max_retries).toInt() }</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </section>
-              <section className="section">
-                <h3>Latency by Phase</h3>
-                <div className="details-bar">{ latencyBar(this.props.statement) }</div>
-                <NumericStatTable
-                  count={ count }
-                  format={ (v: number) => Duration(v * 1e9) }
-                  rows={[
-                    { name: "Overall", value: stats.service_lat },
-                    { name: "Parse", value: stats.parse_lat },
-                    { name: "Plan", value: stats.plan_lat },
-                    { name: "Run", value: stats.run_lat },
-                    { name: "Overhead", value: stats.overhead_lat },
-                  ]}
-                />
-              </section>
-              <section className="section">
-                <h3>Row Count</h3>
-                <NumericStatTable
-                  count={ count }
-                  format={ (v: number) => "" + Math.round(v) }
-                  rows={[
-                    { name: "Rows", value: stats.num_rows },
-                  ]}
-                />
-              </section>
-            </div>
-            <div className="l-columns__right">
-              <SummaryBar>
-                <SummaryHeadlineStat
-                  title="Execution Count"
-                  tooltip="Number of times this statement has executed."
-                  value={ count } />
-                <SummaryHeadlineStat
-                  title="Executed without Retry"
-                  tooltip="Portion of executions free of retries."
-                  value={ firstAttemptCount / count }
-                  format={ d3.format("%") } />
-                <SummaryHeadlineStat
-                  title="Mean Service Latency"
-                  tooltip="Latency to parse, plan, and execute the statement."
-                  value={ stats.service_lat.mean }
-                  format={ v => Duration(v * 1e9) } />
-                <SummaryHeadlineStat
-                  title="Mean Number of Rows"
-                  tooltip="The average number of rows returned or affected."
-                  value={ Math.round(stats.num_rows.mean) } />
-              </SummaryBar>
-            </div>
-          </div>
-        </section>
+      <div className="content l-columns">
+        <div className="l-columns__left">
+          <section className="section">
+            <SqlBox value={ this.props.statement.key.query } />
+          </section>
+          <section className="section">
+            <h3>Execution Count</h3>
+            <div className="details-bar">{ countBar(this.props.statement) }</div>
+            <table className="numeric-stats-table">
+              <tbody>
+                <tr className="numeric-stats-table__row--body">
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempt Count</th>
+                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ firstAttemptCount }</td>
+                </tr>
+                <tr className="numeric-stats-table__row--body">
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total Count</th>
+                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
+                </tr>
+                <tr className="numeric-stats-table__row--body">
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Cumulative Retries</th>
+                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count - firstAttemptCount }</td>
+                </tr>
+                <tr className="numeric-stats-table__row--body">
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Max Retries</th>
+                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ FixLong(stats.max_retries).toInt() }</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+          <section className="section">
+            <h3>Latency by Phase</h3>
+            <div className="details-bar">{ latencyBar(this.props.statement) }</div>
+            <NumericStatTable
+              count={ count }
+              format={ (v: number) => Duration(v * 1e9) }
+              rows={[
+                { name: "Overall", value: stats.service_lat },
+                { name: "Parse", value: stats.parse_lat },
+                { name: "Plan", value: stats.plan_lat },
+                { name: "Run", value: stats.run_lat },
+                { name: "Overhead", value: stats.overhead_lat },
+              ]}
+            />
+          </section>
+          <section className="section">
+            <h3>Row Count</h3>
+            <NumericStatTable
+              count={ count }
+              format={ (v: number) => "" + Math.round(v) }
+              rows={[
+                { name: "Rows", value: stats.num_rows },
+              ]}
+            />
+          </section>
+        </div>
+        <div className="l-columns__right">
+          <SummaryBar>
+            <SummaryHeadlineStat
+              title="Execution Count"
+              tooltip="Number of times this statement has executed."
+              value={ count } />
+            <SummaryHeadlineStat
+              title="Executed without Retry"
+              tooltip="Portion of executions free of retries."
+              value={ firstAttemptCount / count }
+              format={ d3.format("%") } />
+            <SummaryHeadlineStat
+              title="Mean Service Latency"
+              tooltip="Latency to parse, plan, and execute the statement."
+              value={ stats.service_lat.mean }
+              format={ v => Duration(v * 1e9) } />
+            <SummaryHeadlineStat
+              title="Mean Number of Rows"
+              tooltip="The average number of rows returned or affected."
+              value={ Math.round(stats.num_rows.mean) } />
+          </SummaryBar>
+        </div>
       </div>
     );
   }
