@@ -1,3 +1,4 @@
+export const appAttr = "app";
 export const dashQueryString = "dash";
 export const dashboardNameAttr = "dashboard_name";
 export const databaseNameAttr = "database_name";
