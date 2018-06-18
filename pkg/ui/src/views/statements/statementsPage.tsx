@@ -73,6 +73,11 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
 
   return [
     {
+      title: "App",
+      cell: (query) => query.key.app,
+      sort: (query) => query.key.app,
+    },
+    {
       title: "Statement",
       className: "statements-table__col-query-text",
       cell: (query) => <StatementLink statement={ query.key.query } />,
@@ -107,7 +112,7 @@ class StatementsPage extends React.Component<StatementsPageProps, StatementsPage
     super(props);
     this.state = {
       sortSetting: {
-        sortKey: 1,
+        sortKey: 2,
         ascending: false,
       },
     };
