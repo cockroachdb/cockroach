@@ -25,7 +25,7 @@ test
 query T colnames
 SHOW SCHEMAS FROM a
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
