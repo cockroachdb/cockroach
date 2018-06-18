@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -109,13 +108,7 @@ func (b *Backup) NextKeyValues(
 
 	newDesc := *tableDesc
 	newDesc.ID = newTableID
-	newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))
-	if err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	kr, err := storageccl.MakeKeyRewriter([]roachpb.ImportRequest_TableRekey{{
-		OldID: uint32(tableDesc.ID), NewDesc: newDescBytes,
-	}})
+	kr, err := storageccl.MakeKeyRewriter(sqlbase.TablesByID{tableDesc.ID: &newDesc})
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}

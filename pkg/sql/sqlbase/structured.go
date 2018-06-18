@@ -57,6 +57,9 @@ func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 // TableDescriptors is a sortable list of *TableDescriptors.
 type TableDescriptors []*TableDescriptor
 
+// TablesByID is a shorthand for the common map of tables keyed by ID.
+type TablesByID map[ID]*TableDescriptor
+
 func (t TableDescriptors) Len() int           { return len(t) }
 func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
 func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }

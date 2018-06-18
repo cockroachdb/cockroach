@@ -174,19 +174,23 @@ func finalizeCSVBackup(
 	ctx context.Context,
 	backupDesc *backupccl.BackupDescriptor,
 	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
+	tables map[string]*sqlbase.TableDescriptor,
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
-	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
-	backupDesc.Descriptors = []sqlbase.Descriptor{
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
-			Name: csvDatabaseName,
-			ID:   parentID,
-		}),
-		*sqlbase.WrapDescriptor(tableDesc),
+
+	backupDesc.Spans = make([]roachpb.Span, 0, len(tables))
+	backupDesc.Descriptors = make([]sqlbase.Descriptor, 1, len(tables)+1)
+	backupDesc.Descriptors[0] = *sqlbase.WrapDescriptor(
+		&sqlbase.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
+	)
+
+	for _, table := range tables {
+		backupDesc.Spans = append(backupDesc.Spans, table.TableSpan())
+		backupDesc.Descriptors = append(backupDesc.Descriptors, *sqlbase.WrapDescriptor(table))
 	}
+
 	backupDesc.FormatVersion = backupccl.BackupFormatInitialVersion
 	backupDesc.BuildInfo = build.GetInfo()
 	if execCfg != nil {
@@ -450,6 +454,7 @@ func importPlanHook(
 
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
+		var names []string
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
 			if err != nil {
@@ -462,14 +467,11 @@ func importPlanHook(
 			}
 			defer reader.Close()
 
-			var match string
 			if table != nil {
-				match = table.TableName.String()
+				names = []string{table.TableName.String()}
 			}
 			switch format.Format {
 			case roachpb.IOFileFormat_Mysqldump:
-				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readMysqlCreateTable(reader, evalCtx, parentID, match)
 			default:
 				// should be unreachable based on current parser rules.
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
@@ -550,9 +552,12 @@ func importPlanHook(
 			}
 		}
 
-		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
-		for i := range tableDescs {
-			tableDetails[i].Desc = tableDescs[i]
+		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
+		for _, tbl := range tableDescs {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl})
+		}
+		for _, name := range names {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
 		}
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
@@ -584,7 +589,6 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
 	tables map[string]*sqlbase.TableDescriptor,
-	tableDesc *sqlbase.TableDescriptor,
 	transformOnly string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -612,12 +616,14 @@ func doDistributedCSVTransform(
 		job,
 		sql.NewRowResultWriter(rows),
 		tables,
-		tableDesc,
 		files,
 		transformOnly,
 		format,
 		walltime,
 		sstSize,
+		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
+			return storageccl.MakeKeyRewriter(descs)
+		},
 	); err != nil {
 		// If the job was canceled, any of the distsql processors could have been
 		// the first to encounter the .Progress error. This error's string is sent
@@ -670,12 +676,22 @@ func doDistributedCSVTransform(
 	sort.Slice(backupDesc.Files, func(i, j int) bool {
 		return backupDesc.Files[i].Span.Key.Compare(backupDesc.Files[j].Span.Key) < 0
 	})
-	tableSpan := tableDesc.TableSpan()
-	backupDesc.Files[0].Span.Key = tableSpan.Key
+
+	var minTableSpan, maxTableSpan roachpb.Key
+	for _, tableDesc := range tables {
+		span := tableDesc.TableSpan()
+		if minTableSpan == nil || span.Key.Compare(minTableSpan) < 0 {
+			minTableSpan = span.Key
+		}
+		if maxTableSpan == nil || span.EndKey.Compare(maxTableSpan) > 0 {
+			maxTableSpan = span.EndKey
+		}
+	}
+	backupDesc.Files[0].Span.Key = minTableSpan
 	for i := 1; i < len(backupDesc.Files); i++ {
 		backupDesc.Files[i].Span.Key = backupDesc.Files[i-1].Span.EndKey
 	}
-	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = tableSpan.EndKey
+	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = maxTableSpan
 
 	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
@@ -687,7 +703,7 @@ func doDistributedCSVTransform(
 	}
 	defer es.Close()
 
-	return finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, p.ExecCfg())
+	return finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
 }
 
 type importResumer struct {
@@ -722,20 +738,21 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	var tableDesc *sqlbase.TableDescriptor
-	var tables map[string]*sqlbase.TableDescriptor
-
-	if len(details.Tables) == 1 {
-		tableDesc = details.Tables[0].Desc
-	} else if len(details.Tables) > 1 {
-		tables = make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	if details.Tables != nil {
 		for _, i := range details.Tables {
-			tables[i.Desc.Name] = i.Desc
+			if i.Name != "" {
+				tables[i.Name] = i.Desc
+			} else if i.Desc != nil {
+				tables[i.Desc.Name] = i.Desc
+			} else {
+				return errors.Errorf("invalid table specification")
+			}
 		}
 	}
 
 	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tables, tableDesc, transform, format, walltime, sstSize,
+		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize,
 	)
 }
 
@@ -764,7 +781,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Payload().Details.(*jobspb.Payload_Import).Import
 
 	if details.BackupPath != "" {
 		return nil
@@ -773,6 +790,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
 	for i := range details.Tables {
 		toWrite[i] = details.Tables[i].Desc
+		toWrite[i].ParentID = details.ParentID
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
