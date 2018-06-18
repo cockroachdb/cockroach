@@ -846,6 +846,20 @@ func newMemMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *
 	return &monitor
 }
 
+// getInputStats is a utility function to check whether the given input is
+// collecting stats, returning true and the stats if so. If false is returned,
+// the input is not collecting stats.
+func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
+	isc, ok := input.(*InputStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	if flowCtx.testingKnobs.OverrideStallTime {
+		isc.InputStats.StallTime = 0
+	}
+	return isc.InputStats, true
+}
+
 // rowSourceBase provides common functionality for RowSource implementations
 // that need to track consumer status. It is intended to be used by RowSource
 // implementations into which data is pushed by a producer async, as opposed to
