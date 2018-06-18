@@ -32,7 +32,16 @@ message IOFileFormat {
   optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
   optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
+
+  enum Compression {
+    Auto = 0;
+    None = 1;
+    Gzip = 2;
+    Bzip = 3;
+  }
+  optional Compression compression = 5 [(gogoproto.nullable) = false];
 }
+
 
 // CSVOptions describe the format of csv data (delimiter, comment, etc).
 message CSVOptions {
