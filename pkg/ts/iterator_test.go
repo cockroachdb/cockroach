@@ -28,18 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// dataSample is a basic data type that represents a single time series sample:
-// a timestamp value pair.
-type dataSample struct {
-	timestamp int64
-	value     float64
-}
-
 // makeInternalRowData makes an InternalTimeSeriesData object from a collection of data
 // samples. Input is the start timestamp, the sample duration, and the set of
 // samples. Sample data must be ordered by timestamp.
 func makeInternalRowData(
-	startTimestamp, sampleDuration int64, samples []dataSample,
+	startTimestamp, sampleDuration int64, samples []tspb.TimeSeriesDatapoint,
 ) roachpb.InternalTimeSeriesData {
 	// Adjust startTimestamp to an exact multiple of sampleDuration.
 	startTimestamp -= startTimestamp % sampleDuration
@@ -52,8 +45,8 @@ func makeInternalRowData(
 	// Run through all samples, merging any consecutive samples which correspond
 	// to the same sample interval.
 	for _, sample := range samples {
-		offset := int32((sample.timestamp - startTimestamp) / sampleDuration)
-		value := sample.value
+		offset := int32((sample.TimestampNanos - startTimestamp) / sampleDuration)
+		value := sample.Value
 
 		// Merge into the previous sample if we have the same offset.
 		if count := len(result.Samples); count > 0 && result.Samples[count-1].Offset == offset {
@@ -87,7 +80,7 @@ func makeInternalRowData(
 // samples. Input is the start timestamp, the sample duration, and the set of
 // samples. Sample data must be ordered by timestamp.
 func makeInternalColumnData(
-	startTimestamp, sampleDuration int64, samples []dataSample,
+	startTimestamp, sampleDuration int64, samples []tspb.TimeSeriesDatapoint,
 ) roachpb.InternalTimeSeriesData {
 	// Adjust startTimestamp to an exact multiple of sampleDuration.
 	startTimestamp -= startTimestamp % sampleDuration
@@ -128,8 +121,8 @@ func makeInternalColumnData(
 	}
 
 	for _, sample := range samples {
-		offset := result.OffsetForTimestamp(sample.timestamp)
-		value := sample.value
+		offset := result.OffsetForTimestamp(sample.TimestampNanos)
+		value := sample.Value
 
 		// Merge into the previous sample if we have the same offset.
 		if count := len(result.Offset); count > 0 && result.Offset[count-1] == offset {
@@ -311,51 +304,51 @@ func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 	// Row data only.
 	t.Run("row only", func(t *testing.T) {
 		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
-			makeInternalRowData(0, 10, []dataSample{
-				{10, 1},
-				{20, 2},
+			makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(10, 1),
+				tsdp(20, 2),
 			}),
-			makeInternalRowData(30, 10, []dataSample{
-				{30, 3},
+			makeInternalRowData(30, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(30, 3),
 			}),
-			makeInternalRowData(50, 10, []dataSample{
-				{50, 5},
-				{70, 7},
-				{90, 9},
+			makeInternalRowData(50, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(50, 5),
+				tsdp(70, 7),
+				tsdp(90, 9),
 			}),
 		}))
 	})
 
 	t.Run("columns only", func(t *testing.T) {
 		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
-			makeInternalColumnData(0, 10, []dataSample{
-				{10, 1},
-				{20, 2},
+			makeInternalColumnData(0, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(10, 1),
+				tsdp(20, 2),
 			}),
-			makeInternalColumnData(30, 10, []dataSample{
-				{30, 3},
+			makeInternalColumnData(30, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(30, 3),
 			}),
-			makeInternalColumnData(50, 10, []dataSample{
-				{50, 5},
-				{70, 7},
-				{90, 9},
+			makeInternalColumnData(50, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(50, 5),
+				tsdp(70, 7),
+				tsdp(90, 9),
 			}),
 		}))
 	})
 
 	t.Run("mixed rows and columns", func(t *testing.T) {
 		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
-			makeInternalRowData(0, 10, []dataSample{
-				{10, 1},
-				{20, 2},
+			makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(10, 1),
+				tsdp(20, 2),
 			}),
-			makeInternalColumnData(30, 10, []dataSample{
-				{30, 3},
+			makeInternalColumnData(30, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(30, 3),
 			}),
-			makeInternalRowData(50, 10, []dataSample{
-				{50, 5},
-				{70, 7},
-				{90, 9},
+			makeInternalRowData(50, 10, []tspb.TimeSeriesDatapoint{
+				tsdp(50, 5),
+				tsdp(70, 7),
+				tsdp(90, 9),
 			}),
 		}))
 	})
@@ -364,20 +357,20 @@ func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
-		makeInternalRowData(0, 10, []dataSample{
-			{10, 1},
-			{20, 2},
-			{20, 4},
+		makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
+			tsdp(10, 1),
+			tsdp(20, 2),
+			tsdp(20, 4),
 		}),
-		makeInternalRowData(30, 10, []dataSample{
-			{30, 3},
-			{30, 6},
-			{30, 9},
+		makeInternalRowData(30, 10, []tspb.TimeSeriesDatapoint{
+			tsdp(30, 3),
+			tsdp(30, 6),
+			tsdp(30, 9),
 		}),
-		makeInternalRowData(50, 10, []dataSample{
-			{50, 12},
-			{70, 700},
-			{90, 9},
+		makeInternalRowData(50, 10, []tspb.TimeSeriesDatapoint{
+			tsdp(50, 12),
+			tsdp(70, 700),
+			tsdp(90, 9),
 		}),
 	})
 
@@ -467,7 +460,7 @@ func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 type dataDesc struct {
 	startTimestamp int64
 	sampleDuration int64
-	samples        []dataSample
+	samples        []tspb.TimeSeriesDatapoint
 }
 
 func TestDownsampleSpans(t *testing.T) {
@@ -502,113 +495,113 @@ func TestDownsampleSpans(t *testing.T) {
 		// Original sample period, average downsampler.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 			samplePeriod: 10,
 			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 3},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 3),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 		},
 		// Original sample period, max downsampler. Should fill in max value.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 			samplePeriod: 10,
 			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 		},
 		// Original sample period, min downsampler.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 			samplePeriod: 10,
 			downsampler:  tspb.TimeSeriesQueryAggregator_MIN,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
 			},
 		},
 		// AVG downsamper. Should re-use original span data.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
-				{70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
+				{70, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(70, 7),
+					tsdp(90, 9),
+					tsdp(110, 8),
 				}},
 			},
 			samplePeriod: 50,
 			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{0, 3},
-					{50, 6.75},
-					{100, 8},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(0, 3),
+					tsdp(50, 6.75),
+					tsdp(100, 8),
 				}},
 			},
 		},
@@ -616,29 +609,29 @@ func TestDownsampleSpans(t *testing.T) {
 		// count values are NOT overwritten.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
-				{70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
+				{70, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(70, 7),
+					tsdp(90, 9),
+					tsdp(110, 8),
 				}},
 			},
 			samplePeriod: 50,
 			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{0, 5},
-					{50, 9},
-					{100, 8},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(0, 5),
+					tsdp(50, 9),
+					tsdp(100, 8),
 				}},
 			},
 		},
@@ -646,29 +639,29 @@ func TestDownsampleSpans(t *testing.T) {
 		// count values are NOT overwritten.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
-					{20, 2},
-					{20, 4},
-					{30, 5},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
+					tsdp(20, 2),
+					tsdp(20, 4),
+					tsdp(30, 5),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
-				{70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
+				{70, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(70, 7),
+					tsdp(90, 9),
+					tsdp(110, 8),
 				}},
 			},
 			samplePeriod: 50,
 			downsampler:  tspb.TimeSeriesQueryAggregator_MIN,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{0, 1},
-					{50, 5},
-					{100, 8},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(0, 1),
+					tsdp(50, 5),
+					tsdp(100, 8),
 				}},
 			},
 		},
@@ -676,28 +669,28 @@ func TestDownsampleSpans(t *testing.T) {
 		// InternalTimeSeriesData structures.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
-				{70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
+				{70, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(70, 7),
+					tsdp(90, 9),
+					tsdp(110, 8),
 				}},
 			},
 			samplePeriod: 50,
 			downsampler:  tspb.TimeSeriesQueryAggregator_AVG,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{0, 1},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(0, 1),
 				}},
-				{50, 10, []dataSample{
-					{50, 6.75},
-					{100, 8},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 6.75),
+					tsdp(100, 8),
 				}},
 			},
 		},
@@ -705,28 +698,28 @@ func TestDownsampleSpans(t *testing.T) {
 		// InternalTimeSeriesData structures.
 		{
 			inputDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{10, 1},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(10, 1),
 				}},
-				{50, 10, []dataSample{
-					{50, 5},
-					{60, 6},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 5),
+					tsdp(60, 6),
 				}},
-				{70, 10, []dataSample{
-					{70, 7},
-					{90, 9},
-					{110, 8},
+				{70, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(70, 7),
+					tsdp(90, 9),
+					tsdp(110, 8),
 				}},
 			},
 			samplePeriod: 50,
 			downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
 			expectedDesc: []dataDesc{
-				{0, 10, []dataSample{
-					{0, 1},
+				{0, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(0, 1),
 				}},
-				{50, 10, []dataSample{
-					{50, 9},
-					{100, 8},
+				{50, 10, []tspb.TimeSeriesDatapoint{
+					tsdp(50, 9),
+					tsdp(100, 8),
 				}},
 			},
 		},
