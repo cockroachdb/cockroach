@@ -365,12 +365,15 @@ func useInterleavedJoin(n *joinNode) bool {
 	}
 
 	var ancestorEqIndices []int
+	var descendantEqIndices []int
 	// We are guaranteed that both of the sources are scan nodes from
 	// n.interleavedNodes().
 	if ancestor == n.left.plan.(*scanNode) {
 		ancestorEqIndices = n.pred.leftEqualityIndices
+		descendantEqIndices = n.pred.rightEqualityIndices
 	} else {
 		ancestorEqIndices = n.pred.rightEqualityIndices
+		descendantEqIndices = n.pred.leftEqualityIndices
 	}
 
 	// We want full 1-1 correspondence between our join columns and the
@@ -385,9 +388,9 @@ func useInterleavedJoin(n *joinNode) bool {
 
 	// We iterate through the ordering given by n.mergeJoinOrdering and check
 	// if the columns have a 1-1 correspondence to the interleaved
-	// ancestor's primary index columns (i.e. interleave prefix).  We
-	// naively return false if any part of the ordering does not
-	// correspond.
+	// ancestor's primary index columns (i.e. interleave prefix) as well as the
+	// descendant's primary index columns. We naively return false if any part
+	// of the ordering does not correspond.
 	for i, info := range n.mergeJoinOrdering {
 		colID := ancestor.index.ColumnIDs[i]
 		// info.ColIdx refers to i in ancestorEqIndices[i], which refers
@@ -395,7 +398,8 @@ func useInterleavedJoin(n *joinNode) bool {
 		// the index in scanNode.resultColumns. To convert the colID
 		// from the index descriptor, we can use the map provided by
 		// colIdxMap.
-		if ancestorEqIndices[info.ColIdx] != ancestor.colIdxMap[colID] {
+		if ancestorEqIndices[info.ColIdx] != ancestor.colIdxMap[colID] ||
+			descendantEqIndices[info.ColIdx] != descendant.colIdxMap[colID] {
 			// The column in the ordering does not correspond to
 			// the column in the interleave prefix.
 			// We should not try to do an interleaved join.
