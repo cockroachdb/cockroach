@@ -663,3 +663,86 @@ func TestQueryNearCurrentTime(t *testing.T) {
 		}
 	})
 }
+
+func TestQueryRollup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Rollups are always columnar, no need to run this test using row format.
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	tm.storeTimeSeriesData(resolution50ns, []tspb.TimeSeriesData{
+		{
+			Name:   "metric.test",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(45, 500),
+				datapoint(150, 500),
+				datapoint(165, 600),
+				datapoint(172, 700),
+				datapoint(220, 200),
+				datapoint(230, 200),
+				datapoint(240, 242),
+				datapoint(350, 500),
+				datapoint(520, 199),
+				datapoint(610, 200),
+				datapoint(620, 999),
+				datapoint(750, 200),
+				datapoint(751, 2123),
+				datapoint(921, 500),
+				datapoint(991, 500),
+				datapoint(1001, 1234),
+				datapoint(1002, 234),
+			},
+		},
+		{
+			Name:   "metric.test",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(7, 234),
+				datapoint(63, 342),
+				datapoint(74, 342),
+				datapoint(124, 500),
+				datapoint(186, 2345),
+				datapoint(193, 1234),
+				datapoint(220, 200),
+				datapoint(221, 200),
+				datapoint(240, 22342),
+				datapoint(420, 975),
+				datapoint(422, 396),
+				datapoint(498, 6884.74),
+				datapoint(610, 200),
+				datapoint(620, 999),
+				datapoint(750, 200),
+				datapoint(751, 2123),
+				datapoint(854, 9403),
+				datapoint(921, 500),
+				datapoint(991, 500),
+				datapoint(1001, 1234),
+				datapoint(1002, 234),
+			},
+		},
+	})
+	tm.assertKeyCount(4)
+	tm.assertModelCorrect()
+
+	{
+		query := tm.makeQuery("metric.test", resolution50ns, 100, 1500)
+		query.assertSuccess(13, 2)
+	}
+
+	{
+		query := tm.makeQuery("metric.test", resolution50ns, 450, 850)
+		query.setDownsampler(tspb.TimeSeriesQueryAggregator_MAX)
+		query.setDownsampler(tspb.TimeSeriesQueryAggregator_MIN)
+		query.assertSuccess(5, 2)
+	}
+
+	{
+		query := tm.makeQuery("metric.test", resolution50ns, 100, 1500)
+		query.setDerivative(tspb.TimeSeriesQueryDerivative_DERIVATIVE)
+		query.assertSuccess(13, 2)
+	}
+}

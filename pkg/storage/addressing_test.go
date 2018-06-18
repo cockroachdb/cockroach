@@ -143,9 +143,14 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// intents, otherwise the MVCCScan that the test does below fails.
 		actx := testutils.MakeAmbientCtx()
 		tcsf := kv.NewTxnCoordSenderFactory(
-			actx, st,
-			store.TestSender(), store.cfg.Clock,
-			false, stopper, kv.MakeTxnMetrics(time.Second),
+			kv.TxnCoordSenderFactoryConfig{
+				AmbientCtx: actx,
+				Settings:   st,
+				Clock:      store.cfg.Clock,
+				Stopper:    stopper,
+				Metrics:    kv.MakeTxnMetrics(time.Second),
+			},
+			store.TestSender(),
 		)
 		db := client.NewDB(actx, tcsf, store.cfg.Clock)
 		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)

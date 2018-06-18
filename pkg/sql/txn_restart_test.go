@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1318,7 +1319,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	var clockUpdate int32
 	testKey := []byte("test_key")
-	testingKnobs := &storage.StoreTestingKnobs{
+	storeTestingKnobs := &storage.StoreTestingKnobs{
 		EvalKnobs: batcheval.TestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
@@ -1343,17 +1344,23 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		},
 	}
 
+	const refreshAttempts = 3
+	clientTestingKnobs := &kv.ClientTestingKnobs{
+		MaxTxnRefreshAttempts: refreshAttempts,
+	}
+
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.Store = testingKnobs
+	params.Knobs.Store = storeTestingKnobs
+	params.Knobs.KVClient = clientTestingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
-			// Allow two restarts so that the auto retry on the first uncertainty
-			// interval error also fails.
-			if atomic.LoadInt32(&restartDone) > 1 {
+			// Allow a set number of restarts so that the auto retry on the
+			// first few uncertainty interval errors also fails.
+			if atomic.LoadInt32(&restartDone) > refreshAttempts {
 				return nil
 			}
 
@@ -1380,9 +1387,11 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 `); err != nil {
 		t.Fatal(err)
 	}
-	// Acquire the lease and enable the auto-retry. The first read attempt will trigger ReadWithinUncertaintyIntervalError
-	// and advance the transaction timestamp. The transaction timestamp will exceed the lease expiration
-	// time, and the second read attempt will re-acquire the lease.
+	// Acquire the lease and enable the auto-retry. The first few read attempts
+	// will trigger ReadWithinUncertaintyIntervalError and advance the
+	// transaction timestamp due to txnSpanRefresher-initiated span refreshes.
+	// The transaction timestamp will exceed the lease expiration time, and the
+	// last read attempt will re-acquire the lease.
 	if _, err := sqlDB.Exec(`
 SELECT * from t.test WHERE k = 'test_key';
 `); err != nil {
@@ -1392,8 +1401,8 @@ SELECT * from t.test WHERE k = 'test_key';
 	if u := atomic.LoadInt32(&clockUpdate); u != 1 {
 		t.Errorf("expected exacltly one clock update, but got %d", u)
 	}
-	if u := atomic.LoadInt32(&restartDone); u != 2 {
-		t.Errorf("expected exactly two restarts, but got %d", u)
+	if u, e := atomic.LoadInt32(&restartDone), int32(refreshAttempts+1); u != e {
+		t.Errorf("expected exactly %d restarts, but got %d", e, u)
 	}
 }
 

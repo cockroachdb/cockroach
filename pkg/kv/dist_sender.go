@@ -151,21 +151,8 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 
-	TestingKnobs DistSenderTestingKnobs
+	TestingKnobs ClientTestingKnobs
 }
-
-// DistSenderTestingKnobs is a part of the context used to control parts of
-// the system.
-type DistSenderTestingKnobs struct {
-	// The RPC dispatcher. Defaults to grpc but can be changed here for
-	// testing purposes.
-	TransportFactory TransportFactory
-}
-
-var _ base.ModuleTestingKnobs = &DistSenderTestingKnobs{}
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 
 // NewDistSender returns a batch.Sender instance which connects to the
 // Cockroach cluster via the supplied gossip instance. Supplying a
