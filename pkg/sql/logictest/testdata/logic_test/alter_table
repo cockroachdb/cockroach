@@ -535,6 +535,23 @@ ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 statement error cannot access virtual schema in anonymous database
 ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
+subtest 26422
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
+
+statement error null value in column "fee" violates not-null constraint
+COMMIT
+
+statement error pgcode 42703 column "fee" does not exist
+ALTER TABLE add_default DROP fee
+
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok
 CREATE TABLE d (a INT PRIMARY KEY)
