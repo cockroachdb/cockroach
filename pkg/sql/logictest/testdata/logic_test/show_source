@@ -142,10 +142,12 @@ web_sessions
 zones
 
 query ITTT colnames
-SELECT node_id,username,application_name,active_queries FROM [SHOW SESSIONS] WHERE active_queries != ''
+SELECT node_id, user_name, application_name, active_queries
+  FROM [SHOW SESSIONS]
+ WHERE active_queries != ''
 ----
-node_id  username  application_name  active_queries
-1        root      ·                 SELECT node_id, username, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
+node_id  user_name  application_name  active_queries
+1        root       ·                 SELECT node_id, user_name, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
 
 query ITT colnames
 SELECT node_id, user_name, query FROM [SHOW QUERIES]

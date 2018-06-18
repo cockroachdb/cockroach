@@ -792,7 +792,7 @@ const sessionsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   node_id            INT NOT NULL,   -- the node on which the query is running
   session_id         STRING,         -- the ID of the session
-  username           STRING,         -- the user running the query
+  user_name          STRING,         -- the user running the query
   client_address     STRING,         -- the address of the client that issued the query
   application_name   STRING,         -- the name of the application as per SET application_name
   active_queries     STRING,         -- the currently running queries as SQL
