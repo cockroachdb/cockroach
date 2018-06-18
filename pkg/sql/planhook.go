@@ -135,7 +135,11 @@ func (f *hookFnNode) startExec(params runParams) error {
 		}
 	}
 	go func() {
-		f.run.errCh <- f.f(params.ctx, f.subplans, f.run.resultsCh)
+		err := f.f(params.ctx, f.subplans, f.run.resultsCh)
+		select {
+		case <-params.ctx.Done():
+		case f.run.errCh <- err:
+		}
 		close(f.run.errCh)
 		close(f.run.resultsCh)
 	}()

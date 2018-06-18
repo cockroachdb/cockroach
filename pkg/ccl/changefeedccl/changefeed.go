@@ -14,8 +14,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Shopify/sarama"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,7 +73,7 @@ func runChangefeedFlow(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.ChangefeedProgress,
-	startedCh chan<- tree.Datums,
+	resultsCh chan<- tree.Datums,
 	progressedFn func(context.Context, jobs.ProgressedFn) error,
 ) error {
 	details, err := validateChangefeed(details)
@@ -103,7 +101,7 @@ func runChangefeedFlow(
 	// TODO(dan): Make this into a DistSQL flow.
 	changedKVsFn := exportRequestPoll(execCfg, details, progress)
 	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
-	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn)
+	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {
 		return err
 	}
@@ -112,14 +110,6 @@ func runChangefeedFlow(
 			log.Warningf(ctx, "failed to close changefeed sink: %+v", err)
 		}
 	}()
-
-	// We abuse the job's results channel to make CREATE CHANGEFEED wait for
-	// this before returning to the user to ensure the setup went okay. Job
-	// resumption doesn't have the same hack, but at the moment ignores results
-	// and so is currently okay. Return nil instead of anything meaningful so
-	// that if we start doing anything with the results returned by resumed
-	// jobs, then it breaks instead of returning nonsense.
-	startedCh <- tree.Datums(nil)
 
 	for {
 		if err := emitRowsFn(ctx); err != nil {
@@ -291,22 +281,33 @@ func emitRows(
 	details jobspb.ChangefeedDetails,
 	jobProgressedFn func(context.Context, hlc.Timestamp) error,
 	inputFn func(context.Context) ([]emitRow, error),
+	resultsCh chan<- tree.Datums,
 ) (emitFn func(context.Context) error, closeFn func() error, err error) {
-	var kafkaTopicPrefix string
-	var producer sarama.SyncProducer
+	var sink Sink
 
 	sinkURI, err := url.Parse(details.SinkURI)
 	if err != nil {
 		return nil, nil, err
 	}
 	switch sinkURI.Scheme {
+	case sinkSchemeChannel:
+		sink = &channelSink{resultsCh: resultsCh}
+		closeFn = sink.Close
 	case sinkSchemeKafka:
-		kafkaTopicPrefix = sinkURI.Query().Get(sinkParamTopicPrefix)
-		producer, err = getKafkaProducer(sinkURI.Host)
+		kafkaTopicPrefix := sinkURI.Query().Get(sinkParamTopicPrefix)
+		sink, err = getKafkaSink(kafkaTopicPrefix, sinkURI.Host)
 		if err != nil {
 			return nil, nil, err
 		}
-		closeFn = producer.Close
+		closeFn = sink.Close
+
+		// We abuse the job's results channel to make CREATE CHANGEFEED wait for
+		// this before returning to the user to ensure the setup went okay. Job
+		// resumption doesn't have the same hack, but at the moment ignores results
+		// and so is currently okay. Return nil instead of anything meaningful so
+		// that if we start doing anything with the results returned by resumed
+		// jobs, then it breaks instead of returning nonsense.
+		resultsCh <- tree.Datums(nil)
 	default:
 		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
@@ -351,26 +352,16 @@ func emitRows(
 					log.Infof(ctx, `row %s -> %s`, key.String(), value.String())
 				}
 
-				message := &sarama.ProducerMessage{
-					Topic: kafkaTopicPrefix + input.tableDesc.Name,
-					Key:   sarama.ByteEncoder(key.Bytes()),
-					Value: sarama.ByteEncoder(value.Bytes()),
-				}
-				if _, _, err := producer.SendMessage(message); err != nil {
-					return errors.Wrapf(err, `sending message to kafka topic %s`, message.Topic)
+				topic := input.tableDesc.Name
+				if err := sink.EmitRow(ctx, topic, key.Bytes(), value.Bytes()); err != nil {
+					return err
 				}
 			}
 			if input.resolved != (hlc.Timestamp{}) {
 				if err := jobProgressedFn(ctx, input.resolved); err != nil {
 					return err
 				}
-
-				// TODO(dan): HACK for testing. We call SendMessages with nil to
-				// indicate to the test that a full poll finished. Figure out
-				// something better.
-				if err := producer.SendMessages(nil); err != nil {
-					return err
-				}
+				// TODO(dan): Emit resolved timestamps to the sink.
 			}
 		}
 		return nil
