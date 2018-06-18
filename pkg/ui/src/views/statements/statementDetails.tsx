@@ -35,6 +35,10 @@ function variance(stat: NumericStat, count: number) {
   return stat.squared_diffs / (count - 1);
 }
 
+function stdDev(stat: NumericStat, count: number) {
+  return Math.sqrt(variance(stat, count));
+}
+
 interface NumericStatRow {
   name: string;
   value: NumericStat;
@@ -58,7 +62,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
           <tr className="numeric-stats-table__row--header">
             <th className="numeric-stats-table__cell" />
             <th className="numeric-stats-table__cell">Mean</th>
-            <th className="numeric-stats-table__cell">Variance</th>
+            <th className="numeric-stats-table__cell">Std. Dev.</th>
           </tr>
         </thead>
         <tbody style={{ textAlign: "right" }}>
@@ -68,7 +72,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
                   <td className="numeric-stats-table__cell">{ this.props.format(row.value.mean) }</td>
-                  <td className="numeric-stats-table__cell">{ this.props.format(variance(row.value, this.props.count)) }</td>
+                  <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
                 </tr>
               );
             })
