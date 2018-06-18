@@ -492,6 +492,13 @@ func (tc *TxnCoordSender) Send(
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
 
+	// Update our copy of the transaction. It will be further updated with the
+	// result in updateStateLocked().
+	// Besides seeming like the sane thing to do, updating the txn here assures
+	// that, if the heartbeat loop is started, it's assured to have a transaction
+	// anchor key to operate on.
+	tc.mu.txn.Update(ba.Txn)
+
 	ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
 	if log.V(2) {
 		ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
@@ -809,6 +816,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	txn := tc.mu.txn.Clone()
 	tc.mu.Unlock()
 
+	if txn.Key == nil {
+		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
+	}
+
 	if txn.Status != roachpb.PENDING {
 		// A previous iteration has already determined that the transaction is
 		// already finalized.
@@ -928,10 +939,9 @@ func (tc *TxnCoordSender) updateStateLocked(
 ) *roachpb.Error {
 
 	txnID := ba.Txn.ID
-	var newTxn roachpb.Transaction
+	var responseTxn *roachpb.Transaction
 	if pErr == nil {
-		newTxn.Update(ba.Txn)
-		newTxn.Update(br.Txn)
+		responseTxn = br.Txn
 	} else {
 		// Only handle transaction retry errors if this is a root transaction.
 		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE &&
@@ -959,20 +969,21 @@ func (tc *TxnCoordSender) updateStateLocked(
 					tc.metrics.RestartsPossibleReplay.Inc(1)
 				}
 			}
-			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
+			nextTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
+			responseTxn = &nextTxn
 
 			// We'll pass a HandledRetryableTxnError up to the next layer.
 			pErr = roachpb.NewError(
 				roachpb.NewHandledRetryableTxnError(
 					pErr.Message,
 					errTxnID, // the id of the transaction that encountered the error
-					newTxn))
+					nextTxn))
 
 			// If the ID changed, it means we had to start a new transaction and the
 			// old one is toast. This TxnCoordSender cannot be used any more - future
 			// Send() calls will be rejected; the client is supposed to create a new
 			// one.
-			if errTxnID != newTxn.ID {
+			if errTxnID != nextTxn.ID {
 				tc.abortTxnAsyncLocked()
 				return pErr
 			}
@@ -989,23 +1000,16 @@ func (tc *TxnCoordSender) updateStateLocked(
 			// transaction, and need to pass responsibility for handling it
 			// up to the root transaction.
 
-			newTxn.Update(ba.Txn)
 			if errTxn := pErr.GetTxn(); errTxn != nil {
-				newTxn.Update(errTxn)
+				responseTxn = errTxn
 			}
-
-			// Update the txn in the error to reflect the TxnCoordSender's state.
-			//
-			// Avoid changing existing errors because sometimes they escape into
-			// goroutines and data races can occur.
-			pErrShallow := *pErr
-			pErrShallow.SetTxn(&newTxn) // SetTxn clones newTxn
-			pErr = &pErrShallow
 		}
 	}
 
 	// Update our record of this transaction, even on error.
-	tc.mu.txn.Update(&newTxn)
+	if responseTxn != nil {
+		tc.mu.txn.Update(responseTxn)
+	}
 	tc.mu.lastUpdateNanos = tc.clock.PhysicalNow()
 
 	if pErr != nil {
