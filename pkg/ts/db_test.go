@@ -513,14 +513,6 @@ func (mds *modelDataSource) GetTimeSeriesData() []tspb.TimeSeriesData {
 	return data
 }
 
-// datapoint quickly generates a time series datapoint.
-func datapoint(timestamp int64, val float64) tspb.TimeSeriesDatapoint {
-	return tspb.TimeSeriesDatapoint{
-		TimestampNanos: timestamp,
-		Value:          val,
-	}
-}
-
 // TestStoreTimeSeries is a simple test of the Time Series module, ensuring that
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
@@ -532,7 +524,7 @@ func TestStoreTimeSeries(t *testing.T) {
 			{
 				Name: "test.metric",
 				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 100),
+					tsdp(440000000000000000, 100),
 				},
 			},
 		})
@@ -546,9 +538,9 @@ func TestStoreTimeSeries(t *testing.T) {
 				Name:   "test.metric.float",
 				Source: "cpu01",
 				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1428713843000000000, 100.0),
-					datapoint(1428713843000000001, 50.2),
-					datapoint(1428713843000000002, 90.9),
+					tsdp(1428713843000000000, 100.0),
+					tsdp(1428713843000000001, 50.2),
+					tsdp(1428713843000000002, 90.9),
 				},
 			},
 		})
@@ -557,9 +549,9 @@ func TestStoreTimeSeries(t *testing.T) {
 				Name:   "test.metric.float",
 				Source: "cpu02",
 				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1428713843000000000, 900.8),
-					datapoint(1428713843000000001, 30.12),
-					datapoint(1428713843000000002, 72.324),
+					tsdp(1428713843000000000, 900.8),
+					tsdp(1428713843000000001, 30.12),
+					tsdp(1428713843000000002, 72.324),
 				},
 			},
 		})
@@ -572,9 +564,9 @@ func TestStoreTimeSeries(t *testing.T) {
 			{
 				Name: "test.metric",
 				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 200),
-					datapoint(450000000000000001, 1),
-					datapoint(460000000000000000, 777),
+					tsdp(440000000000000000, 200),
+					tsdp(450000000000000001, 1),
+					tsdp(460000000000000000, 777),
 				},
 			},
 		})
@@ -597,18 +589,18 @@ func TestPollSource(t *testing.T) {
 						Name:   "test.metric.float",
 						Source: "cpu01",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100.0),
-							datapoint(1428713843000000001, 50.2),
-							datapoint(1428713843000000002, 90.9),
+							tsdp(1428713843000000000, 100.0),
+							tsdp(1428713843000000001, 50.2),
+							tsdp(1428713843000000002, 90.9),
 						},
 					},
 					{
 						Name:   "test.metric.float",
 						Source: "cpu02",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 900.8),
-							datapoint(1428713843000000001, 30.12),
-							datapoint(1428713843000000002, 72.324),
+							tsdp(1428713843000000000, 900.8),
+							tsdp(1428713843000000001, 30.12),
+							tsdp(1428713843000000002, 72.324),
 						},
 					},
 				},
@@ -616,7 +608,7 @@ func TestPollSource(t *testing.T) {
 					{
 						Name: "test.metric",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100),
+							tsdp(1428713843000000000, 100),
 						},
 					},
 				},
@@ -646,7 +638,7 @@ func TestDisableStorage(t *testing.T) {
 			{
 				Name: "test.metric",
 				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 100),
+					tsdp(440000000000000000, 100),
 				},
 			},
 		})
@@ -663,18 +655,18 @@ func TestDisableStorage(t *testing.T) {
 						Name:   "test.metric.float",
 						Source: "cpu01",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100.0),
-							datapoint(1428713843000000001, 50.2),
-							datapoint(1428713843000000002, 90.9),
+							tsdp(1428713843000000000, 100.0),
+							tsdp(1428713843000000001, 50.2),
+							tsdp(1428713843000000002, 90.9),
 						},
 					},
 					{
 						Name:   "test.metric.float",
 						Source: "cpu02",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 900.8),
-							datapoint(1428713843000000001, 30.12),
-							datapoint(1428713843000000002, 72.324),
+							tsdp(1428713843000000000, 900.8),
+							tsdp(1428713843000000001, 30.12),
+							tsdp(1428713843000000002, 72.324),
 						},
 					},
 				},
@@ -682,7 +674,7 @@ func TestDisableStorage(t *testing.T) {
 					{
 						Name: "test.metric",
 						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100),
+							tsdp(1428713843000000000, 100),
 						},
 					},
 				},
