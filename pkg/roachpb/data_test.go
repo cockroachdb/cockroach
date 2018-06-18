@@ -1323,6 +1323,10 @@ func TestValuePrettyPrint(t *testing.T) {
 	tupleBytes := encoding.EncodeBytesValue(encoding.EncodeIntValue(nil, 1, 8), 2, []byte("foo"))
 	tupleValue.SetTuple(tupleBytes)
 
+	var bytesValuePrintable, bytesValueNonPrintable Value
+	bytesValuePrintable.SetBytes([]byte("abc"))
+	bytesValueNonPrintable.SetBytes([]byte{0x89})
+
 	var errValue Value
 	errValue.SetInt(7)
 	errValue.setTag(ValueType_FLOAT)
@@ -1341,9 +1345,11 @@ func TestValuePrettyPrint(t *testing.T) {
 		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
 		{decimalValue, "/DECIMAL/6.28"},
 		{durationValue, "/DURATION/1mon2d3ns"},
-		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/01020fff"},
+		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/0x01020fff"},
 		{MakeValueFromString("foo"), "/BYTES/foo"},
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
+		{bytesValuePrintable, "/BYTES/abc"},
+		{bytesValueNonPrintable, "/BYTES/0x89"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
 	}
