@@ -94,21 +94,19 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	}
 
 	cb.updateCols = append(cb.added, dropped...)
-	if len(dropped) > 0 || len(defaultExprs) > 0 || len(computedExprs) > 0 {
-		// Populate default or computed values.
-		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
-		for j, col := range cb.added {
-			if col.IsComputed() {
-				cb.updateExprs[j] = computedExprs[j]
-			} else if defaultExprs == nil || defaultExprs[j] == nil {
-				cb.updateExprs[j] = tree.DNull
-			} else {
-				cb.updateExprs[j] = defaultExprs[j]
-			}
+	// Populate default or computed values.
+	cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
+	for j, col := range cb.added {
+		if col.IsComputed() {
+			cb.updateExprs[j] = computedExprs[j]
+		} else if defaultExprs == nil || defaultExprs[j] == nil {
+			cb.updateExprs[j] = tree.DNull
+		} else {
+			cb.updateExprs[j] = defaultExprs[j]
 		}
-		for j := range dropped {
-			cb.updateExprs[j+len(cb.added)] = tree.DNull
-		}
+	}
+	for j := range dropped {
+		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
 	// We need all the columns.
