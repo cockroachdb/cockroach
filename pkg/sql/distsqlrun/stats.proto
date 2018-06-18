@@ -59,3 +59,10 @@ message MergeJoinerStats {
   InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
   InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
 }
+
+// JoinReaderStats are the stats collected during a joinReader run.
+message JoinReaderStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
+  InputStats extra_index_lookup_stats = 3;
+}
