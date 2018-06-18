@@ -369,7 +369,7 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses:  1000,
 			EstimatedMax:    325,
-			StoreDirVersion: "2.0-6",
+			StoreDirVersion: "2.0-5",
 		},
 		{
 			Nodes: 3,
@@ -394,7 +394,7 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses:  5000,
 			EstimatedMax:    500,
-			StoreDirVersion: "2.0-6",
+			StoreDirVersion: "2.0-5",
 		},
 		// objective 3, key result 2.
 		{
