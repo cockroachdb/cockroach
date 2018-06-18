@@ -127,7 +127,7 @@ func newSamplerProcessor(
 	s.outTypes = outTypes
 
 	if err := s.init(
-		post, outTypes, flowCtx, processorID, output,
+		post, outTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		// this proc doesn't implement RowSource and doesn't use processorBase to drain
 		procStateOpts{},
 	); err != nil {

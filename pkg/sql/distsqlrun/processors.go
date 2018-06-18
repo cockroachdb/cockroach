@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -500,6 +501,9 @@ type processorBase struct {
 	// evalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	evalCtx *tree.EvalContext
 
+	// memMonitor is the processor's memory monitor.
+	memMonitor *mon.BytesMonitor
+
 	// closed is set by internalClose(). Once set, the processor's tracing span
 	// has been closed.
 	closed bool
@@ -771,10 +775,12 @@ func (pb *processorBase) init(
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
+	memMonitor *mon.BytesMonitor,
 	opts procStateOpts,
 ) error {
 	pb.flowCtx = flowCtx
 	pb.processorID = processorID
+	pb.memMonitor = memMonitor
 	pb.evalCtx = flowCtx.NewEvalCtx()
 	pb.trailingMetaCallback = opts.trailingMetaCallback
 	pb.inputsToDrain = opts.inputsToDrain
@@ -827,6 +833,15 @@ func (pb *processorBase) internalClose() bool {
 		pb.out.consumerClosed()
 	}
 	return closing
+}
+
+// newMemMonitor is a utility function used by processors to create a new
+// memory monitor with the given name and start it. The returned monitor must
+// be closed.
+func newMemMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
+	monitor := mon.MakeMonitorInheritWithLimit(name, 0 /* limit */, parent)
+	monitor.Start(ctx, parent, mon.BoundAccount{})
+	return &monitor
 }
 
 // rowSourceBase provides common functionality for RowSource implementations

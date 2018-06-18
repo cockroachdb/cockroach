@@ -93,7 +93,7 @@ func NewDistinct(
 	}
 
 	if err := d.init(
-		post, d.types, flowCtx, processorID, output,
+		post, d.types, flowCtx, processorID, output, nil, /* memMonitor */
 		procStateOpts{
 			inputsToDrain: []RowSource{d.input},
 			trailingMetaCallback: func() []ProducerMetadata {
