@@ -169,9 +169,9 @@ func (c *CustomFuncs) ExtractColList(private memo.PrivateID) opt.ColList {
 	return c.mem.LookupPrivate(private).(opt.ColList)
 }
 
-// ExtractOrdering extracts a props.Ordering from the given private.
-func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) props.Ordering {
-	return c.mem.LookupPrivate(private).(props.Ordering)
+// ExtractOrdering extracts an opt.Ordering from the given private.
+func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) opt.Ordering {
+	return c.mem.LookupPrivate(private).(opt.Ordering)
 }
 
 // ExtractProjectionsOpDef extracts a *memo.ProjectionsOpDef from the given

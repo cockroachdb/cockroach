@@ -318,7 +318,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		groupingColSet := def.GroupingCols
 		ordering := def.Ordering
 		logProps.FormatColSet(f, tp, "grouping columns:", groupingColSet)
-		if ordering.Defined() {
+		if !ordering.Empty() {
 			tp.Childf("ordering: %s", ordering.String())
 		}
 
@@ -370,7 +370,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		ev.formatWeakKeys(tp)
 	}
 
-	if physProps.Ordering.Defined() {
+	if !physProps.Ordering.Empty() {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
 

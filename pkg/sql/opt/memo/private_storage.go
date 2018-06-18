@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -135,12 +134,12 @@ func (ps *privateStorage) internOperator(op opt.Operator) PrivateID {
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internOrdering always
 // returns the same private id that was returned from the previous call.
-func (ps *privateStorage) internOrdering(ordering props.Ordering) PrivateID {
+func (ps *privateStorage) internOrdering(ordering opt.Ordering) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeOrdering(ordering)
-	typ := (*props.Ordering)(nil)
+	typ := (*opt.Ordering)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -443,7 +442,7 @@ func (kb *keyBuffer) writeColSet(colSet opt.ColSet) {
 
 // writeOrdering writes a series of varints, one for each column in the set, in
 // the order of the ordering.
-func (kb *keyBuffer) writeOrdering(ordering props.Ordering) {
+func (kb *keyBuffer) writeOrdering(ordering opt.Ordering) {
 	for _, col := range ordering {
 		kb.writeVarint(int64(col))
 	}
