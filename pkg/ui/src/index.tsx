@@ -53,8 +53,8 @@ import ReduxDebug from "src/views/reports/containers/redux";
 import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import QueriesPage from "src/views/queries";
-import StatementDetails from "src/views/queries/statementDetails";
+import StatementsPage from "src/views/statements/statementsPage";
+import StatementDetails from "src/views/statements/statementDetails";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -128,9 +128,9 @@ ReactDOM.render(
         <Route path="data-distribution" component={ DataDistributionPage } />
 
         { /* statement statistics */ }
-        <Route path="queries" component={ QueriesPage } />
+        <Route path="statements" component={ StatementsPage } />
         <Route path="statement">
-          <IndexRedirect to="queries" />
+          <IndexRedirect to="statements" />
           <Route path={ `:${statementAttr}` } component={ StatementDetails } />
         </Route>
 
