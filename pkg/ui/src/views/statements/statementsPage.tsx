@@ -2,7 +2,7 @@ import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link, RouterState } from "react-router";
 
 import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
@@ -14,6 +14,7 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
+import { appAttr } from "src/util/constants";
 import { Duration } from "src/util/format";
 import { summarize, StatementSummary } from "src/util/sql/summarize";
 
@@ -45,6 +46,14 @@ function StatementLink(props: { statement: string }) {
   );
 }
 
+function AppLink(props: { app: string }) {
+  return (
+    <Link to={ `/statements/${encodeURIComponent(props.app)}` }>
+      { props.app }
+    </Link>
+  );
+}
+
 function shortStatement(summary: StatementSummary, original: string) {
   switch (summary.statement) {
     case "update": return "UPDATE " + summary.table;
@@ -72,7 +81,7 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
   return [
     {
       title: "App",
-      cell: (query) => query.key.app,
+      cell: (query) => <AppLink app={ query.key.app } />,
       sort: (query) => query.key.app,
     },
     {
@@ -104,9 +113,9 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
   ];
 }
 
-class StatementsPage extends React.Component<StatementsPageProps, StatementsPageState> {
+class StatementsPage extends React.Component<StatementsPageProps & RouterState, StatementsPageState> {
 
-  constructor(props: StatementsPageProps) {
+  constructor(props: StatementsPageProps & RouterState) {
     super(props);
     this.state = {
       sortSetting: {
@@ -130,12 +139,25 @@ class StatementsPage extends React.Component<StatementsPageProps, StatementsPage
     this.props.refreshQueries();
   }
 
+  getStatements() {
+    if (!this.props.params[appAttr]) {
+      return this.props.statements.data.queries;
+    }
+
+    return this.props.statements.data.queries.filter(
+      (statement: CollectedStatementStatistics$Properties) =>
+        statement.key.app === this.props.params[appAttr],
+    );
+  }
+
   renderStatements() {
     if (!this.props.statements.data) {
       // This should really be handled by a loader component.
       return null;
     }
-    const { queries, last_reset } = this.props.statements.data;
+
+    const { last_reset } = this.props.statements.data;
+    const queries = this.getStatements();
 
     return (
       <div className="statements">
