@@ -284,7 +284,7 @@ dist sender  r1: sending batch 1 Scan to (n1,s1):1
 sql txn      fetched: /kv/primary/2/v -> /3
 sql txn      Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 sql txn      Del /Table/54/2/3/0
-sql txn      CPut /Table/54/2/2/0 -> /BYTES/Š
+sql txn      CPut /Table/54/2/2/0 -> /BYTES/0x8a
 dist sender  querying next range at /Table/54/1/2/0
 dist sender  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 dist sender  querying next range at /Table/54/1/2/0
