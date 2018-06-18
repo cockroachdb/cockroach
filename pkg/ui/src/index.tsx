@@ -130,7 +130,7 @@ ReactDOM.render(
         { /* statement statistics */ }
         <Route path="statements" component={ StatementsPage } />
         <Route path="statement">
-          <IndexRedirect to="statements" />
+          <IndexRedirect to="/statements" />
           <Route path={ `:${statementAttr}` } component={ StatementDetails } />
         </Route>
 

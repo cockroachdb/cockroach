@@ -98,7 +98,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     return (
       <div>
         <Helmet>
-          <title>{`Details | Statements`}</title>
+          <title>Details | Statements</title>
         </Helmet>
         <section className="section">
           <h2>Statement Details</h2>
