@@ -18,7 +18,7 @@ import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr,
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr,
 } from "src/util/constants";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -128,7 +128,10 @@ ReactDOM.render(
         <Route path="data-distribution" component={ DataDistributionPage } />
 
         { /* statement statistics */ }
-        <Route path="statements" component={ StatementsPage } />
+        <Route path="statements">
+          <IndexRoute component={ StatementsPage } />
+          <Route path={ `:${appAttr}` } component={ StatementsPage } />
+        </Route>
         <Route path="statement">
           <IndexRedirect to="/statements" />
           <Route path={ `:${statementAttr}` } component={ StatementDetails } />
