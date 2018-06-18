@@ -15,6 +15,7 @@
 package sqlbase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -23,6 +24,9 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
 type testTables struct {
@@ -208,5 +212,571 @@ func TestTablesNeededForFKs(t *testing.T) {
 	})
 	t.Run("Deletes", func(t *testing.T) {
 		test(t, CheckDeletes, expectedDeleteIDs)
+	})
+}
+
+// BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
+func BenchmarkMultiRowFKChecks(b *testing.B) {
+
+	// Throughout the course of testing there are four tables that are set up at the beginning of each sub-benchmark and
+	// torn down at the end of each sub-benchmark.
+	// `childFK` has a foreign key that references `parentFK`.
+	fkTables := map[string]string{
+		`parentFK`: `
+CREATE TABLE IF NOT EXISTS parentFK(
+  foo INT PRIMARY KEY,
+  bar INT
+)`,
+		`childFK`: `
+CREATE TABLE IF NOT EXISTS childFK(
+  baz INT,
+  foo INT,
+  FOREIGN KEY(foo) REFERENCES parentFK(foo) ON UPDATE CASCADE ON DELETE CASCADE
+)
+`,
+		// `parentNoFK` and `childNoFK` are the same as `parentFK` and `childFK` but `childNoFK` has no foreign key reference
+		// to `parentNoFK`
+		`parentNoFK`: `
+CREATE TABLE IF NOT EXISTS parentNoFK(
+  foo INT PRIMARY KEY,
+  bar INT
+)
+`,
+		`childNoFK`: `
+CREATE TABLE IF NOT EXISTS childNoFK(
+  baz INT,
+  foo INT
+)`,
+		`parentInterleaved`: `
+CREATE TABLE IF NOT EXISTS parentInterleaved(
+	foo INT PRIMARY KEY,
+	bar int
+)`,
+		`childInterleaved`: `
+CREATE TABLE IF NOT EXISTS childInterleaved(
+	baz INT,
+	foo INT,
+	PRIMARY KEY(foo, baz),
+	FOREIGN KEY(foo) REFERENCES parentInterleaved(foo) ON UPDATE CASCADE ON DELETE CASCADE
+) INTERLEAVE IN PARENT parentInterleaved (foo)`,
+		// `self_referential` has a foreign key reference to itself (parent-child relationship) with
+		// 		cascading updates and deletes
+		// `self_referential_noFK` has the same schema
+		// `self_referential_setnull` has an identical schema to `self_referential` except that instead of cascading
+		// 		on delete, it sets the reference field to null.
+		`self_referential`: `
+CREATE TABLE IF NOT EXISTS self_referential(
+	id INT PRIMARY KEY,
+	pid INT,
+	FOREIGN KEY(pid) REFERENCES self_referential(id) ON UPDATE CASCADE ON DELETE CASCADE
+)`,
+		`self_referential_noFK`: `
+CREATE TABLE IF NOT EXISTS self_referential_noFK(
+	id INT PRIMARY KEY,
+	pid INT
+)`,
+		`self_referential_setnull`: `
+CREATE TABLE IF NOT EXISTS self_referential_setnull(
+	id INT PRIMARY KEY,
+	pid INT,
+	FOREIGN KEY(pid) REFERENCES self_referential_setnull(id) ON UPDATE CASCADE ON DELETE SET NULL
+)`,
+	}
+	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+
+	// This function tears down all the tables and is meant to be called at the beginning and  end of each sub-benchmark.
+	drop := func() {
+		// dropping has to be done in reverse so no drop causes a foreign key violation
+		for tableName := range fkTables {
+			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, tableName)); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	// This function is to be called at the beginning of each sub-benchmark to set up the necessary tables.
+	setup := func(tablesNeeded []string) {
+		drop()
+		for _, t := range tablesNeeded {
+			if _, ok := fkTables[t]; !ok {
+				b.Fatal(errors.New("invalid table name for setup"))
+			}
+			if _, err := db.Exec(fkTables[t]); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	// The following sub-benchmarks are for the parentFK/childFK and parentNoFK/childNoFK tables.
+	// The insertRows and deleteRows sub-benchmarks of each kind measures insert performance and delete performance (respectively)
+	// of the following cases:
+	//     * {insert,delete}Rows_IdenticalFK: All rows in child reference the same row in parent
+	//     * {insert,delete}Rows_NoFK: Uses parentNoFK/childNoFK tables, no foreign key refs
+	//     * {insert,delete}Rows_UniqueFKs: All rows in child reference a distinct row in parent
+	const numFKRows = 10000
+	b.Run("insertRows_IdenticalFK", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
+			b.Fatal(err)
+		}
+		defer drop()
+		b.ResetTimer()
+		var run bytes.Buffer
+
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, 1)", i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("deleteRows_IdenticalFK", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
+			b.Fatal(err)
+		}
+		defer drop()
+		var run bytes.Buffer
+
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, 1)", i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE from childFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("insertRows_UniqueFKs", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		for i := 1; i <= numFKRows; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		b.ResetTimer()
+		var run bytes.Buffer
+
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, %d)", i, i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+
+		b.ResetTimer()
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("deleteRows_UniqueFKs", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		for i := 1; i <= numFKRows; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		b.ResetTimer()
+		var run bytes.Buffer
+
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, %d)", i, i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM childFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("insertRows_NoFK", func(b *testing.B) {
+		setup([]string{`parentNoFK`, `childNoFK`})
+		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
+			b.Fatal(err)
+		}
+		defer drop()
+		b.ResetTimer()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childNoFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, 1)", i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+
+		b.StopTimer()
+	})
+	b.Run("deleteRows_NoFK", func(b *testing.B) {
+		setup([]string{`parentNoFK`, `childNoFK`})
+		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
+			b.Fatal(err)
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childNoFK(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d, 1)", i))
+			if i != numFKRows {
+				run.WriteString(", ")
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM childNoFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	const numFKRowsMultipleRef = 1000
+	const refsPerRow = 10
+	b.Run("insertRows_multiple_refs", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		b.ResetTimer()
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("deleteRows_multiple_refs", func(b *testing.B) {
+		setup([]string{`parentFK`, `childFK`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childFK(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM childFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("insertRows_multiple_refs_noFK", func(b *testing.B) {
+		setup([]string{`parentNoFK`, `childNoFK`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentNoFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		b.ResetTimer()
+		run.WriteString(`INSERT INTO childNoFK(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("deleteRows_multiple_refs_No_FK", func(b *testing.B) {
+		setup([]string{`parentNoFK`, `childNoFK`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentNoFK(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childNoFK(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM childNoFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	// Inserts and deletes are tested for interleaved tables
+	b.Run("insertRows_interleaved", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		b.ResetTimer()
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("deleteRows_interleaved", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM childInterleaved`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	// For the self-referential table benchmarks, `numSRRows` rows are inserted and there is again a contrast between
+	// rows with foreign key references and those without.
+	// There are several different cases:
+	// Cascade: casacading deletes
+	// No_FK: no foreign key references
+	// SetNull: ... ON DELETE SET NULL foreign key reference
+	// Within each of these three categories, there are two cases:
+	// Chain: row i references row i-1, chaining until row 1
+	// ManyChildren: row 2..numSRRows all reference row 1
+	const numSRRows = 10000
+	b.Run("SelfReferential_Cascade_FK_Chain_Delete", func(b *testing.B) {
+		setup([]string{`self_referential`})
+		defer drop()
+		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, %d)`, i, i-1)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("SelfReferential_Cascade_FK_ManyChildren_Delete", func(b *testing.B) {
+		setup([]string{`self_referential`})
+		defer drop()
+		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, 1)`, i)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("SelfReferential_No_FK_Chain_Delete", func(b *testing.B) {
+		setup([]string{`self_referential_noFK`})
+		defer drop()
+		var insert bytes.Buffer
+		insert.WriteString(`INSERT INTO self_referential_noFK(id) VALUES `)
+		for i := 1; i <= numSRRows; i++ {
+			insert.WriteString(fmt.Sprintf(`(%d)`, i))
+			if i != numSRRows {
+				insert.WriteString(`, `)
+			}
+		}
+
+		if _, err := db.Exec(insert.String()); err != nil {
+			b.Fatal(err)
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential_noFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("SelfReferential_No_FK_ManyChildren_Delete", func(b *testing.B) {
+		setup([]string{`self_referential_noFK`})
+		defer drop()
+		if _, err := db.Exec(`INSERT INTO self_referential_noFK(id) VALUES (1)`); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential_noFK(id, pid) VALUES (%d, 1)`, i)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM self_referential_noFK`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("SelfReferential_SetNull_FK_Chain_Delete", func(b *testing.B) {
+		setup([]string{`self_referential_setnull`})
+		defer drop()
+		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
+		if _, err := db.Exec(run3); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential_setnull(id, pid) VALUES (%d, %d)`, i, i-1)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM self_referential_setnull`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("SelfReferential_SetNull_FK_ManyChildren", func(b *testing.B) {
+		setup([]string{`self_referential_setnull`})
+		defer drop()
+		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
+		if _, err := db.Exec(run3); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential_setnull(id, pid) VALUES (%d, 1)`, i)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential_setnull`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
 	})
 }
