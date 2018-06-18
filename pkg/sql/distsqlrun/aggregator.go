@@ -212,42 +212,37 @@ func (ag *aggregatorBase) init(
 
 var _ DistSQLSpanStats = &AggregatorStats{}
 
+const aggregatorTagPrefix = "aggregator."
+
 // Stats implements the SpanStats interface.
 func (as *AggregatorStats) Stats() map[string]string {
-	return map[string]string{
-		"aggregator.input.rows": fmt.Sprintf("%d", as.InputStats.NumRows),
-		"aggregator.stalltime":  fmt.Sprintf("%v", as.InputStats.RoundStallTime()),
-		"aggregator.mem.max":    humanizeutil.IBytes(as.MaxAllocatedMem),
-	}
+	inputStatsMap := as.InputStats.Stats(aggregatorTagPrefix)
+	inputStatsMap[aggregatorTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
+	return inputStatsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (as *AggregatorStats) StatsForQueryPlan() []string {
 	return append(
-		as.InputStats.StatsForQueryPlan(),
-		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(as.MaxAllocatedMem)),
+		as.InputStats.StatsForQueryPlan("" /* prefix */),
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)),
 	)
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {
-	isc, ok := ag.input.(*InputStatCollector)
+	is, ok := getInputStats(ag.flowCtx, ag.input)
 	if !ok {
 		return
 	}
-	sp := opentracing.SpanFromContext(ag.ctx)
-	if sp == nil {
-		return
+	if sp := opentracing.SpanFromContext(ag.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&AggregatorStats{
+				InputStats:      is,
+				MaxAllocatedMem: ag.memMonitor.MaximumBytes(),
+			},
+		)
 	}
-	if ag.flowCtx.testingKnobs.OverrideStallTime {
-		isc.InputStats.StallTime = 0
-	}
-	tracing.SetSpanStats(
-		sp,
-		&AggregatorStats{
-			InputStats:      isc.InputStats,
-			MaxAllocatedMem: ag.memMonitor.MaximumBytes(),
-		},
-	)
 }
 
 // hashAggregator is a specialization of aggregatorBase that must keep track of
