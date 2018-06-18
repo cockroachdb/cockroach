@@ -9,9 +9,12 @@
 package importccl
 
 import (
+	"compress/bzip2"
+	"compress/gzip"
 	"context"
 	"io"
 	"math/rand"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -53,6 +56,7 @@ func (c ctxProvider) Ctx() context.Context {
 func readInputFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	progressFn func(float32) error,
 	settings *cluster.Settings,
@@ -106,7 +110,23 @@ func readInputFiles(
 				return err
 			}
 			defer f.Close()
-			bc := byteCounter{r: f}
+			bc := &byteCounter{r: f}
+
+			var src io.Reader
+			compression := guessCompressionFromName(dataFile, format.Compression)
+			switch compression {
+			case roachpb.IOFileFormat_Gzip:
+				r, err := gzip.NewReader(bc)
+				if err != nil {
+					return err
+				}
+				defer r.Close()
+				src = r
+			case roachpb.IOFileFormat_Bzip:
+				src = bzip2.NewReader(bc)
+			default:
+				src = bc
+			}
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
@@ -126,7 +146,7 @@ func readInputFiles(
 				}
 			}
 
-			if err := fileFunc(ctx, &bc, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
+			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
 				return errors.Wrap(err, dataFile)
 			}
 			if updateFromFiles {
@@ -140,6 +160,22 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func guessCompressionFromName(
+	name string, hint roachpb.IOFileFormat_Compression,
+) roachpb.IOFileFormat_Compression {
+	if hint != roachpb.IOFileFormat_Auto {
+		return hint
+	}
+	switch {
+	case strings.HasSuffix(name, ".gz"):
+		return roachpb.IOFileFormat_Gzip
+	case strings.HasSuffix(name, ".bz2") || strings.HasSuffix(name, ".bz"):
+		return roachpb.IOFileFormat_Bzip
+	default:
+		return roachpb.IOFileFormat_None
+	}
 }
 
 type byteCounter struct {
@@ -424,7 +460,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			})
 		}
 
-		return readInputFiles(ctx, cp.spec.Uri, conv.readFile, progFn, cp.flowCtx.Settings)
+		return readInputFiles(ctx, cp.spec.Uri, cp.spec.Format, conv.readFile, progFn, cp.flowCtx.Settings)
 	})
 
 	// Sample KVs
