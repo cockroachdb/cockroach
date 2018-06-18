@@ -15,14 +15,19 @@
 package sqlbase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
 type testTables struct {
@@ -208,5 +213,57 @@ func TestTablesNeededForFKs(t *testing.T) {
 	})
 	t.Run("Deletes", func(t *testing.T) {
 		test(t, CheckDeletes, expectedDeleteIDs)
+	})
+}
+
+// BenchmarkMultiRowFKChecks does a benchmark on a multi-row insert statement that has to check foreign keys.
+func BenchmarkMultiRowFKChecks(b *testing.B) {
+	schema1 := `
+CREATE TABLE IF NOT EXISTS example1(
+  foo INT PRIMARY KEY,
+  bar INT
+)
+`
+	schema2 := `
+CREATE TABLE IF NOT EXISTS example2(
+  baz INT PRIMARY KEY,
+  foo INT,
+  FOREIGN KEY(foo) REFERENCES example1(foo) ON UPDATE CASCADE ON DELETE CASCADE
+)
+`
+	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	setupStatements := []string{schema1, schema2, schema3}
+	for _, s := range setupStatements {
+		if _, err := db.Exec(s); err != nil {
+			b.Fatal(err)
+		}
+	}
+	run1 := `
+INSERT INTO example1(foo) VALUES(1)
+`
+	if _, err := db.Exec(run1); err != nil {
+		b.Fatal(err)
+	}
+
+	b.Run("10KRows_IdenticalFK", func(b *testing.B) {
+		var run2 bytes.Buffer
+
+		run2.WriteString(`INSERT INTO example2(baz, foo) VALUES `)
+
+		for i := 1; i <= 10000; i++ {
+			run2.WriteString("(")
+			run2.WriteString(strconv.Itoa(i))
+			run2.WriteString(", 1")
+			if i != 10000 {
+				run2.WriteString("), ")
+			} else {
+				run2.WriteString(")")
+			}
+		}
+
+		statement := run2.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
 	})
 }
