@@ -1601,7 +1601,7 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 			// these writes might have been performed at the wrong epoch). Note
 			// that we don't need to lock the client.Txn because we're synchronized.
 			// See #17197.
-			ex.state.mu.txn.Proto().BumpEpoch()
+			ex.state.mu.txn.BumpEpochAfterConcurrentRetryErrorLocked()
 		case *roachpb.TxnPrevAttemptError:
 			log.Fatalf(ctx, "found symptoms of a concurrent retry, but did "+
 				"not find the final retry error: %v", errs)
