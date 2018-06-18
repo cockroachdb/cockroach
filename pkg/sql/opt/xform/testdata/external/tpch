@@ -1866,9 +1866,6 @@ limit
 # for three different types of parts that were shipped by air and delivered in
 # person. Parts are selected based on the combination of specific brands, a list
 # of containers, and a range of sizes.
-#
-# TODO:
-#   1. Extract out the "p_partkey = l_partkey" predicate as a conjunct
 # --------------------------------------------------
 opt
 SELECT
@@ -1913,14 +1910,25 @@ group-by
  ├── project
  │    ├── columns: column26:26(float)
  │    ├── inner-join
- │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_shipinstruct:14(string) l_shipmode:15(string) p_partkey:17(int!null) p_brand:20(string) p_size:22(int) p_container:23(string)
- │    │    ├── scan lineitem
- │    │    │    └── columns: l_partkey:2(int!null) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_shipinstruct:14(string) l_shipmode:15(string)
- │    │    ├── scan part
- │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string) p_size:22(int) p_container:23(string)
- │    │    │    └── keys: (17)
- │    │    └── filters [type=bool, outer=(2,5,14,15,17,20,22,23)]
- │    │         └── ((((((((((part.p_partkey = lineitem.l_partkey) AND (part.p_brand = 'Brand#12')) AND (part.p_container IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (lineitem.l_quantity >= 1.0)) AND (lineitem.l_quantity <= 11.0)) AND (part.p_size >= 1)) AND (part.p_size <= 5)) AND (lineitem.l_shipmode IN ('AIR', 'AIR REG'))) AND (lineitem.l_shipinstruct = 'DELIVER IN PERSON')) OR (((((((((part.p_partkey = lineitem.l_partkey) AND (part.p_brand = 'Brand#23')) AND (part.p_container IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (lineitem.l_quantity >= 10.0)) AND (lineitem.l_quantity <= 20.0)) AND (part.p_size >= 1)) AND (part.p_size <= 10)) AND (lineitem.l_shipmode IN ('AIR', 'AIR REG'))) AND (lineitem.l_shipinstruct = 'DELIVER IN PERSON'))) OR (((((((((part.p_partkey = lineitem.l_partkey) AND (part.p_brand = 'Brand#34')) AND (part.p_container IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (lineitem.l_quantity >= 20.0)) AND (lineitem.l_quantity <= 30.0)) AND (part.p_size >= 1)) AND (part.p_size <= 15)) AND (lineitem.l_shipmode IN ('AIR', 'AIR REG'))) AND (lineitem.l_shipinstruct = 'DELIVER IN PERSON')) [type=bool, outer=(2,5,14,15,17,20,22,23)]
+ │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_shipinstruct:14(string!null) l_shipmode:15(string!null) p_partkey:17(int!null) p_brand:20(string) p_size:22(int!null) p_container:23(string)
+ │    │    ├── select
+ │    │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_shipinstruct:14(string!null) l_shipmode:15(string!null)
+ │    │    │    ├── scan lineitem
+ │    │    │    │    └── columns: l_partkey:2(int!null) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_shipinstruct:14(string) l_shipmode:15(string)
+ │    │    │    └── filters [type=bool, outer=(14,15), constraints=(/14: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; /15: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
+ │    │    │         ├── lineitem.l_shipmode IN ('AIR', 'AIR REG') [type=bool, outer=(15), constraints=(/15: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
+ │    │    │         └── lineitem.l_shipinstruct = 'DELIVER IN PERSON' [type=bool, outer=(14), constraints=(/14: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight)]
+ │    │    ├── select
+ │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string) p_size:22(int!null) p_container:23(string)
+ │    │    │    ├── keys: (17)
+ │    │    │    ├── scan part
+ │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(string) p_size:22(int) p_container:23(string)
+ │    │    │    │    └── keys: (17)
+ │    │    │    └── filters [type=bool, outer=(22), constraints=(/22: [/1 - ]; tight)]
+ │    │    │         └── part.p_size >= 1 [type=bool, outer=(22), constraints=(/22: [/1 - ]; tight)]
+ │    │    └── filters [type=bool, outer=(2,5,17,20,22,23), constraints=(/2: (/NULL - ]; /17: (/NULL - ])]
+ │    │         ├── part.p_partkey = lineitem.l_partkey [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ])]
+ │    │         └── ((((((part.p_brand = 'Brand#12') AND (part.p_container IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (lineitem.l_quantity >= 1.0)) AND (lineitem.l_quantity <= 11.0)) AND (part.p_size <= 5)) OR (((((part.p_brand = 'Brand#23') AND (part.p_container IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (lineitem.l_quantity >= 10.0)) AND (lineitem.l_quantity <= 20.0)) AND (part.p_size <= 10))) OR (((((part.p_brand = 'Brand#34') AND (part.p_container IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (lineitem.l_quantity >= 20.0)) AND (lineitem.l_quantity <= 30.0)) AND (part.p_size <= 15)) [type=bool, outer=(5,20,22,23)]
  │    └── projections [outer=(6,7)]
  │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(6,7)]
  └── aggregations [outer=(26)]
