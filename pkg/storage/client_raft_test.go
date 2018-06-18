@@ -2033,9 +2033,17 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	mtc.replicateRange(rangeID, 1, 2)
 
 	leaderIdx := -1
-	for i, store := range mtc.stores {
-		if store.RaftStatus(rangeID).SoftState.RaftState == raft.StateLeader {
-			leaderIdx = i
+	// Loop until a leader is elected.
+	for {
+		for i, store := range mtc.stores {
+			if store.RaftStatus(rangeID).SoftState.RaftState == raft.StateLeader {
+				leaderIdx = i
+				break
+			}
+		}
+		if leaderIdx == -1 {
+			runtime.Gosched()
+		} else {
 			break
 		}
 	}
