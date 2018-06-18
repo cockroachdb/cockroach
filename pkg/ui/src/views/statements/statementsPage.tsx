@@ -14,6 +14,7 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
+import { Duration } from "src/util/format";
 import { summarize, StatementSummary } from "src/util/sql/summarize";
 
 import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
@@ -55,6 +56,13 @@ function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
+function calculateCumulativeTime(query: CollectedStatementStatistics$Properties) {
+  const count = FixLong(query.stats.count).toInt();
+  const latency = query.stats.service_lat.mean;
+
+  return count * latency;
+}
+
 function makeStatementsColumns(statements: CollectedStatementStatistics$Properties[])
     : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
   const countBar = countBarChart(statements);
@@ -67,6 +75,11 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
       className: "statements-table__col-query-text",
       cell: (query) => <StatementLink statement={ query.key.query } />,
       sort: (query) => query.key.query,
+    },
+    {
+      title: "Time",
+      cell: (query) => Duration(calculateCumulativeTime(query) * 1e9),
+      sort: calculateCumulativeTime,
     },
     {
       title: "Count",
