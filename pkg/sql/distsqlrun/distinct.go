@@ -18,10 +18,15 @@ import (
 	"context"
 	"sync"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -84,16 +89,23 @@ func NewDistinct(
 		distinctCols.Add(int(col))
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &Distinct{
 		input:        input,
 		orderedCols:  spec.OrderedColumns,
 		distinctCols: distinctCols,
-		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
+		memAcc:       memMonitor.MakeBoundAccount(),
 		types:        input.OutputTypes(),
 	}
 
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		d.input = NewInputStatCollector(d.input)
+		d.finishTrace = d.outputStatsToTrace
+	}
+
 	if err := d.init(
-		post, d.types, flowCtx, processorID, output, nil, /* memMonitor */
+		post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		procStateOpts{
 			inputsToDrain: []RowSource{d.input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -198,6 +210,7 @@ func (d *Distinct) close() {
 	// Need to close the mem accounting while the context is still valid.
 	d.memAcc.Close(d.ctx)
 	d.internalClose()
+	d.memMonitor.Stop(d.ctx)
 }
 
 // Next is part of the RowSource interface.
@@ -306,4 +319,42 @@ func (d *Distinct) ConsumerDone() {
 func (d *Distinct) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	d.close()
+}
+
+var _ DistSQLSpanStats = &DistinctStats{}
+
+// Stats implements the SpanStats interface.
+func (ds *DistinctStats) Stats() map[string]string {
+	return map[string]string{
+		"distinct.input.rows": fmt.Sprintf("%d", ds.InputStats.NumRows),
+		"distinct.stalltime":  fmt.Sprintf("%v", ds.InputStats.RoundStallTime()),
+		"distinct.mem.max":    humanizeutil.IBytes(ds.MaxAllocatedMem),
+	}
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (ds *DistinctStats) StatsForQueryPlan() []string {
+	return append(
+		ds.InputStats.StatsForQueryPlan(),
+		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(ds.MaxAllocatedMem)),
+	)
+}
+
+// outputStatsToTrace outputs the collected distinct stats to the trace. Will
+// fail silently if the Distinct processor is not collecting stats.
+func (d *Distinct) outputStatsToTrace() {
+	isc, ok := d.input.(*InputStatCollector)
+	if !ok {
+		return
+	}
+	sp := opentracing.SpanFromContext(d.ctx)
+	if sp == nil {
+		return
+	}
+	if d.flowCtx.testingKnobs.OverrideStallTime {
+		isc.InputStats.StallTime = 0
+	}
+	tracing.SetSpanStats(
+		sp, &DistinctStats{InputStats: isc.InputStats, MaxAllocatedMem: d.memMonitor.MaximumBytes()},
+	)
 }
