@@ -84,7 +84,7 @@ func TestAmbiguousCommit(t *testing.T) {
 			return nil
 		}
 
-		params.Knobs.DistSender = &kv.DistSenderTestingKnobs{
+		params.Knobs.KVClient = &kv.ClientTestingKnobs{
 			TransportFactory: func(opts kv.SendOptions, rpcContext *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest) (kv.Transport, error) {
 				transport, err := kv.GRPCTransportFactory(opts, rpcContext, replicas, args)
 				return &interceptingTransport{

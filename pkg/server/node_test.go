@@ -80,18 +80,19 @@ func createTestNode(
 	cfg.AmbientCtx.Tracer = st.Tracer
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx:      cfg.AmbientCtx,
+		Settings:        st,
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, cfg.Gossip)
 	tsf := kv.NewTxnCoordSenderFactory(
-		cfg.AmbientCtx,
-		st,
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: cfg.AmbientCtx,
+			Settings:   st,
+			Clock:      cfg.Clock,
+			Stopper:    stopper,
+		},
 		distSender,
-		cfg.Clock,
-		false, /* linearizable */
-		stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	cfg.DB = client.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)

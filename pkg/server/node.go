@@ -191,8 +191,17 @@ func bootstrapCluster(
 		ba.Replica.StoreID = 1
 		return ba
 	})
-	tcsFactory := kv.NewTxnCoordSenderFactory(cfg.AmbientCtx, cfg.Settings, localSender, cfg.Clock,
-		false /* linearizable */, stopper, txnMetrics)
+	tcsFactory := kv.NewTxnCoordSenderFactory(
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: cfg.AmbientCtx,
+			Settings:   cfg.Settings,
+			Clock:      cfg.Clock,
+			Stopper:    stopper,
+			Metrics:    txnMetrics,
+		},
+		localSender,
+	)
+
 	cfg.DB = client.NewDB(cfg.AmbientCtx, tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
