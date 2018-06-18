@@ -443,7 +443,7 @@ func (o *Optimizer) enforceProps(
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
 	var enforcerOp opt.Operator
-	if props.Ordering.Defined() {
+	if !props.Ordering.Empty() {
 		enforcerOp = opt.SortOp
 		innerProps.Ordering = nil
 	} else {

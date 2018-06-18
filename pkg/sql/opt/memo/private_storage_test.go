@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -153,10 +152,10 @@ func TestInternGroupByDef(t *testing.T) {
 		}
 	}
 
-	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), props.Ordering{1, -1}}
-	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), props.Ordering{1, -1}}
-	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), props.Ordering{1, 1}}
-	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), props.Ordering{1, 1, 1}}
+	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), opt.Ordering{1, -1}}
+	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), opt.Ordering{1, -1}}
+	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), opt.Ordering{1, 1}}
+	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), opt.Ordering{1, 1, 1}}
 
 	test(groupByDef1, groupByDef2, true)
 	test(groupByDef1, groupByDef3, false)
@@ -232,7 +231,7 @@ func TestInternOrdering(t *testing.T) {
 	var ps privateStorage
 	ps.init()
 
-	test := func(left, right props.Ordering, expected bool) {
+	test := func(left, right opt.Ordering, expected bool) {
 		t.Helper()
 		leftID := ps.internOrdering(left)
 		rightID := ps.internOrdering(right)
@@ -241,11 +240,11 @@ func TestInternOrdering(t *testing.T) {
 		}
 	}
 
-	test(props.Ordering{}, props.Ordering{}, true)
-	test(props.Ordering{1, -1, 0}, props.Ordering{1, -1, 0}, true)
-	test(props.Ordering{1, -1, 0}, props.Ordering{-1, 1, 0}, false)
-	test(props.Ordering{1, -1, 0}, props.Ordering{-1, 0, 1}, false)
-	test(props.Ordering{1, 2}, props.Ordering{1, 2, 3}, false)
+	test(opt.Ordering{}, opt.Ordering{}, true)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{1, -1, 0}, true)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 1, 0}, false)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 0, 1}, false)
+	test(opt.Ordering{1, 2}, opt.Ordering{1, 2, 3}, false)
 }
 
 func TestInternDatum(t *testing.T) {
@@ -426,7 +425,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	colID := opt.ColumnID(1)
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
-	ordering := props.Ordering{1, -2, 3}
+	ordering := opt.Ordering{1, -2, 3}
 	op := opt.PlusOp
 	concatProps, concatOvls := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
@@ -470,7 +469,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	colID := opt.ColumnID(1)
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
-	ordering := props.Ordering{1, -2, 3}
+	ordering := opt.Ordering{1, -2, 3}
 	op := opt.PlusOp
 	props, overloads := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{

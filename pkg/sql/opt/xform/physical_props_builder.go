@@ -45,7 +45,7 @@ func (b physicalPropsBuilder) canProvide(eid memo.ExprID, required memo.Physical
 		}
 	}
 
-	if requiredProps.Ordering.Defined() {
+	if !requiredProps.Ordering.Empty() {
 		if !b.canProvideOrdering(eid, requiredProps.Ordering) {
 			return false
 		}
@@ -71,7 +71,7 @@ func (b physicalPropsBuilder) canProvidePresentation(
 
 // canProvideOrdering returns true if the given expression can provide the
 // required ordering property.
-func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required props.Ordering) bool {
+func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required opt.Ordering) bool {
 	// TODO(justin): we should trim any ordering in `required` which contains a
 	// key to its shortest prefix which still contains a key.
 	mexpr := b.mem.Expr(eid)
@@ -105,11 +105,11 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required props
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(props.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(opt.Ordering).Provides(required)
 
 	case opt.OffsetOp:
 		// Offset can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(props.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(opt.Ordering).Provides(required)
 	}
 
 	return false
@@ -117,7 +117,7 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required props
 
 // orderingBoundBy returns whether or not input provides all columns present in
 // ordering.
-func (b physicalPropsBuilder) orderingBoundBy(ordering props.Ordering, input memo.GroupID) bool {
+func (b physicalPropsBuilder) orderingBoundBy(ordering opt.Ordering, input memo.GroupID) bool {
 	inputCols := b.mem.GroupProperties(input).Relational.OutputCols
 	for _, colOrder := range ordering {
 		if colOrder < 0 {
@@ -168,12 +168,12 @@ func (b physicalPropsBuilder) buildChildProps(
 	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp:
 		// Limit/Offset/RowNumber require the ordering in their private.
 		if nth == 0 {
-			var ordering props.Ordering
+			var ordering opt.Ordering
 			switch mexpr.Operator() {
 			case opt.LimitOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(props.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(opt.Ordering)
 			case opt.OffsetOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(props.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(opt.Ordering)
 			case opt.RowNumberOp:
 				def := b.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
 				ordering = def.Ordering
