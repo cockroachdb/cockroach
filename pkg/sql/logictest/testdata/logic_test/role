@@ -3,7 +3,7 @@
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 query TTB colnames
