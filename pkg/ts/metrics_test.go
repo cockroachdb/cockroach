@@ -31,26 +31,18 @@ func TestTimeSeriesWriteMetrics(t *testing.T) {
 	metrics := tm.DB.Metrics()
 
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-		{
-			Name:   "test.multimetric",
-			Source: "source1",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				tsdp(1, 100),
-				tsdp(15, 300),
-				tsdp(17, 500),
-				tsdp(52, 900),
-			},
-		},
-		{
-			Name:   "test.multimetric",
-			Source: "source2",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				tsdp(5, 100),
-				tsdp(16, 300),
-				tsdp(22, 500),
-				tsdp(82, 900),
-			},
-		},
+		tsd("test.multimetric", "source1",
+			tsdp(1, 100),
+			tsdp(15, 300),
+			tsdp(17, 500),
+			tsdp(52, 900),
+		),
+		tsd("test.multimetric", "source2",
+			tsdp(5, 100),
+			tsdp(16, 300),
+			tsdp(22, 500),
+			tsdp(82, 900),
+		),
 	})
 	tm.assertKeyCount(7)
 	tm.assertModelCorrect()

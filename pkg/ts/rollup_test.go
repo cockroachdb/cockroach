@@ -32,7 +32,7 @@ func TestComputeRollup(t *testing.T) {
 		expected []roachpb.InternalTimeSeriesData
 	}{
 		{
-			input: ts("test.metric",
+			input: tsd("test.metric", "",
 				tsdp(10, 200),
 				tsdp(20, 300),
 				tsdp(40, 400),
@@ -76,7 +76,7 @@ func TestComputeRollup(t *testing.T) {
 			},
 		},
 		{
-			input: ts("test.metric",
+			input: tsd("test.metric", "",
 				tsdp(1023, 999),
 				tsdp(1048, 888),
 				tsdp(1123, 999),
