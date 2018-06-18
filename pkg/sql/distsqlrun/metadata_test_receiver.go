@@ -67,6 +67,7 @@ func newMetadataTestReceiver(
 		flowCtx,
 		processorID,
 		output,
+		nil, /* memMonitor */
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {

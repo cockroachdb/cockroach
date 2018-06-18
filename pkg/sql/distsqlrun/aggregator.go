@@ -118,10 +118,6 @@ type aggregatorBase struct {
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
-	// memMonitor is only set when collecting stats. It is a child monitor of the
-	// shared flow monitor to separate memory allocations that the aggregator
-	// makes from the rest of the flow.
-	memMonitor *mon.BytesMonitor
 	bucketsAcc mon.BoundAccount
 
 	groupCols        columns
@@ -150,18 +146,10 @@ func (ag *aggregatorBase) init(
 	output RowReceiver,
 	trailingMetaCallback func() []ProducerMetadata,
 ) error {
-	memMonitor := flowCtx.EvalCtx.Mon
 	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = NewInputStatCollector(input)
-
-		// Start private memory monitor to track the memory usage of the aggregator.
-		privateMemMonitor := mon.MakeMonitorInheritWithLimit(
-			"aggregator-stat-mem", 0 /* limit */, memMonitor,
-		)
-		privateMemMonitor.Start(ctx, memMonitor, mon.BoundAccount{})
-		ag.memMonitor = &privateMemMonitor
-		memMonitor = &privateMemMonitor
 		ag.finishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
@@ -213,10 +201,13 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = retType
 	}
 
-	return ag.processorBase.init(self, post, ag.outputTypes, flowCtx, processorID, output, procStateOpts{
-		inputsToDrain:        []RowSource{ag.input},
-		trailingMetaCallback: trailingMetaCallback,
-	})
+	return ag.processorBase.init(
+		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
+		procStateOpts{
+			inputsToDrain:        []RowSource{ag.input},
+			trailingMetaCallback: trailingMetaCallback,
+		},
+	)
 }
 
 var _ DistSQLSpanStats = &AggregatorStats{}
@@ -399,9 +390,7 @@ func (ag *hashAggregator) close() {
 				ag.buckets[bucket].close(ag.ctx)
 			}
 		}
-		if ag.memMonitor != nil {
-			ag.memMonitor.Stop(ag.ctx)
-		}
+		ag.memMonitor.Stop(ag.ctx)
 	}
 }
 
@@ -412,9 +401,7 @@ func (ag *orderedAggregator) close() {
 		if ag.bucket != nil {
 			ag.bucket.close(ag.ctx)
 		}
-		if ag.memMonitor != nil {
-			ag.memMonitor.Stop(ag.ctx)
-		}
+		ag.memMonitor.Stop(ag.ctx)
 	}
 }
 
