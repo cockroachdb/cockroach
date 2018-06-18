@@ -186,6 +186,11 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
         <div className="l-columns__right">
           <SummaryBar>
             <SummaryHeadlineStat
+              title="Total Time"
+              tooltip="Cumulative time spent servicing this statement."
+              value={ count * stats.service_lat.mean }
+              format={ v => Duration(v * 1e9) } />
+            <SummaryHeadlineStat
               title="Execution Count"
               tooltip="Number of times this statement has executed."
               value={ count } />
