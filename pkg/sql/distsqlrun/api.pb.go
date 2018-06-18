@@ -63,6 +63,7 @@
 		HashJoinerStats
 		AggregatorStats
 		DistinctStats
+		MergeJoinerStats
 */
 package distsqlrun
 
