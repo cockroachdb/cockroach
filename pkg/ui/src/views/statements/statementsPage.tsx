@@ -63,7 +63,7 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
 
   return [
     {
-      title: "Query",
+      title: "Statement",
       className: "statements-table__col-query-text",
       cell: (query) => <StatementLink statement={ query.key.query } />,
       sort: (query) => query.key.query,
@@ -74,12 +74,12 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
       sort: (query) => FixLong(query.stats.count).toInt(),
     },
     {
-      title: "Avg Rows",
+      title: "Mean Rows",
       cell: rowsBar,
       sort: (query) => query.stats.num_rows.mean,
     },
     {
-      title: "Avg Latency",
+      title: "Mean Latency",
       cell: latencyBar,
       sort: (query) => query.stats.service_lat.mean,
     },
@@ -123,8 +123,8 @@ class StatementsPage extends React.Component<StatementsPageProps, StatementsPage
       <div className="statements">
         <span className="statements__last-hour-note">
           {queries.length} statement fingerprints.
-          Query history is only maintained for about an hour.
-          History last cleared {Print.Timestamp(last_reset)}.
+          Query history is cleared once an hour;
+          last cleared {Print.Timestamp(last_reset)}.
         </span>
 
         <StatementsSortedTable
