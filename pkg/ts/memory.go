@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -32,6 +33,7 @@ var (
 	sizeOfDataPoint      = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
 	sizeOfInt32          = int64(unsafe.Sizeof(int32(0)))
 	sizeOfFloat64        = int64(unsafe.Sizeof(float64(0)))
+	sizeOfTimestamp      = int64(unsafe.Sizeof(hlc.Timestamp{}))
 )
 
 // QueryMemoryOptions represents the adjustable options of a QueryMemoryContext.

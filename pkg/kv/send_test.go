@@ -267,7 +267,7 @@ func sendBatch(
 ) (*roachpb.BatchResponse, error) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
 	}, nil)

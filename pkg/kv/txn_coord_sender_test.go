@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -274,9 +273,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction metadata contains only two entries
 	// in its intents slice. "a" and range "aa"-"c".
-	tc.mu.Lock()
-	intents, _ := roachpb.MergeSpans(tc.mu.meta.Intents)
-	tc.mu.Unlock()
+	intents, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
 	if len(intents) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", intents)
 	}
@@ -348,23 +345,26 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		}
 		return args.CreateReply(), nil
 	}
-	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Clock:      s.Clock,
-		TestingKnobs: DistSenderTestingKnobs{
-			TransportFactory: adaptLegacyTransport(sendFn),
-		},
-		RangeDescriptorDB: descDB,
-	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ds := NewDistSender(
+		DistSenderConfig{
+			AmbientCtx: ambient,
+			Clock:      s.Clock,
+			TestingKnobs: ClientTestingKnobs{
+				TransportFactory: adaptLegacyTransport(sendFn),
+			},
+			RangeDescriptorDB: descDB,
+		},
+		s.Gossip,
+	)
 	tsf := NewTxnCoordSenderFactory(
-		ambient,
-		st,
-		NewDistSender(cfg, s.Gossip),
-		s.Clock,
-		false, /* linearizable */
-		s.Stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Settings:   st,
+			Clock:      s.Clock,
+			Stopper:    s.Stopper,
+		},
+		ds,
 	)
 	db := client.NewDB(ambient, tsf, s.Clock)
 
@@ -614,11 +614,9 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if !ok {
 		t.Fatal(err)
 	}
-	tc.mu.Lock()
-	intentSpans, _ := roachpb.MergeSpans(tc.mu.meta.Intents)
+	intentSpans, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
-	tc.mu.Unlock()
 	if err := txn.Rollback(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
@@ -849,13 +847,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			tsf := NewTxnCoordSenderFactory(
-				ambient,
-				cluster.MakeTestingClusterSettings(),
+				TxnCoordSenderFactoryConfig{
+					AmbientCtx: ambient,
+					Clock:      clock,
+					Stopper:    stopper,
+				},
 				senderFn,
-				clock,
-				false, /* linearizable */
-				stopper,
-				MakeTxnMetrics(metric.TestSampleInterval),
 			)
 			db := client.NewDB(ambient, tsf, clock)
 			key := roachpb.Key("test-key")
@@ -972,12 +969,9 @@ func TestTxnMultipleCoord(t *testing.T) {
 	// Augment txn with txn2's meta & commit.
 	txn.AugmentTxnCoordMeta(ctx, txn2.GetTxnCoordMeta())
 	// Verify presence of both intents.
-	tc.mu.Lock()
-	if a, e := tc.mu.meta.RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
-		tc.mu.Unlock()
+	if a, e := tc.GetMeta().RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected read spans %+v; got %+v", e, a)
 	}
-	tc.mu.Unlock()
 	ba := txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
 	if err := txn.Run(ctx, ba); err != nil {
@@ -1021,15 +1015,13 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				pErr.SetTxn(&txn)
 				return nil, pErr
 			}
-			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			factory := NewTxnCoordSenderFactory(
-				ambient,
-				cluster.MakeTestingClusterSettings(),
+				TxnCoordSenderFactoryConfig{
+					AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+					Clock:      clock,
+					Stopper:    stopper,
+				},
 				senderFn,
-				clock,
-				false,
-				stopper,
-				MakeTxnMetrics(metric.TestSampleInterval),
 			)
 
 			var ba roachpb.BatchRequest
@@ -1075,13 +1067,12 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	factory := NewTxnCoordSenderFactory(
-		ambient,
-		cluster.MakeTestingClusterSettings(),
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Clock:      clock,
+			Stopper:    stopper,
+		},
 		senderFn,
-		clock,
-		false,
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	defer stopper.Stop(context.TODO())
 
@@ -1461,13 +1452,12 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			factory := NewTxnCoordSenderFactory(
-				ambient,
-				cluster.MakeTestingClusterSettings(),
+				TxnCoordSenderFactoryConfig{
+					AmbientCtx: ambient,
+					Clock:      clock,
+					Stopper:    stopper,
+				},
 				senderFn,
-				clock,
-				false,
-				stopper,
-				MakeTxnMetrics(metric.TestSampleInterval),
 			)
 
 			db := client.NewDB(ambient, factory, clock)
@@ -1538,13 +1528,12 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	factory := NewTxnCoordSenderFactory(
-		ambient,
-		cluster.MakeTestingClusterSettings(),
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:      clock,
+			Stopper:    stopper,
+		},
 		sender,
-		clock,
-		false, /* linearizable */
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	db := client.NewDB(ambient, factory, clock)
 
@@ -1606,13 +1595,12 @@ func TestOnePCErrorTracking(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	factory := NewTxnCoordSenderFactory(
-		ambient,
-		cluster.MakeTestingClusterSettings(),
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:      clock,
+			Stopper:    stopper,
+		},
 		sender,
-		clock,
-		false, /* linearizable */
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	db := client.NewDB(ambient, factory, clock)
 	var key = roachpb.Key("a")
@@ -1697,13 +1685,12 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	factory := NewTxnCoordSenderFactory(
-		ambient,
-		cluster.MakeTestingClusterSettings(),
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Clock:      clock,
+			Stopper:    stopper,
+		},
 		sender,
-		clock,
-		false, /* linearizable */
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	key := roachpb.Key("a")
 	txn := roachpb.MakeTransaction(
