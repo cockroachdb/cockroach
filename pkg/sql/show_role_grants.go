@@ -28,7 +28,11 @@ import (
 // Privileges: SELECT on system.role_members.
 //   Notes: postgres does not have a SHOW GRANTS ON ROLES statement.
 func (p *planner) ShowRoleGrants(ctx context.Context, n *tree.ShowRoleGrants) (planNode, error) {
-	const selectQuery = `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	const selectQuery = `
+SELECT role AS role_name,
+       member,
+       "isAdmin" AS is_admin
+ FROM system.role_members`
 
 	var query bytes.Buffer
 	query.WriteString(selectQuery)
@@ -54,7 +58,7 @@ func (p *planner) ShowRoleGrants(ctx context.Context, n *tree.ShowRoleGrants) (p
 		for _, g := range n.Grantees.ToStrings() {
 			grantees = append(grantees, lex.EscapeSQLString(g))
 		}
-		fmt.Fprintf(&query, ` "member" IN (%s)`, strings.Join(grantees, ","))
+		fmt.Fprintf(&query, ` member IN (%s)`, strings.Join(grantees, ","))
 
 	}
 

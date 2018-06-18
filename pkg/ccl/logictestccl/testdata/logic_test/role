@@ -116,8 +116,8 @@ CREATE ROLE testrole
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
@@ -169,9 +169,9 @@ testrole  testuser  false
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role      member    isAdmin
-admin     root      true
-testrole  testuser  false
+role_name  member    is_admin
+admin      root      true
+testrole   testuser  false
 
 user testuser
 
@@ -232,53 +232,53 @@ testrole  testuser2  true
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role      member     isAdmin
-admin     root       true
-admin     testuser   false
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      root       true
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin
 ----
-role      member     isAdmin
-admin     root       true
-admin     testuser   false
+role_name  member    is_admin
+admin      root      true
+admin      testuser  false
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser
 ----
-role      member     isAdmin
-admin     testuser   false
-testrole  testuser   true
+role_name  member    is_admin
+admin      testuser  false
+testrole   testuser  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE testrole FOR testuser2
 ----
-role      member     isAdmin
-testrole  testuser2  true
+role_name  member     is_admin
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE foo,testrole
 ----
-role      member     isAdmin
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser, testuser2
 ----
-role      member     isAdmin
-admin     testuser   false
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin, testrole FOR root, testuser2
 ----
-role      member     isAdmin
-admin     root       true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      root       true
+testrole   testuser2  true
 
 statement ok
 DROP USER testuser
