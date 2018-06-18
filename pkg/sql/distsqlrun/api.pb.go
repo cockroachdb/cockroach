@@ -62,6 +62,7 @@
 		TableReaderStats
 		HashJoinerStats
 		AggregatorStats
+		DistinctStats
 */
 package distsqlrun
 

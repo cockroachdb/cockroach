@@ -47,3 +47,9 @@ message AggregatorStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
 }
+
+// DistinctStats are the stats collected during a distinct run.
+message DistinctStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+}
