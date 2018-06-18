@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS example2(
 )
 `
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	setupStatements := []string{schema1, schema2, schema3}
+	setupStatements := []string{schema1, schema2}
 	for _, s := range setupStatements {
 		if _, err := db.Exec(s); err != nil {
 			b.Fatal(err)
