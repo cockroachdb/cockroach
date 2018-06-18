@@ -1,4 +1,4 @@
-- Feature Name: Storage-Level Primitive for Range Feeds
+- Feature Name: RangeFeed: A Storage-Level Primitive for Change Feeds
 - Status: draft
 - Start Date: 2017-06-13
 - Authors: Arjun Narayan, Tobias Schottdorf, Nathan VanBenschoten
@@ -120,7 +120,7 @@ The events emitted are simple:
 In the presence of reconnections (which are expected), the system provides
 at-least-once semantics: The caller must handle duplicates which can occur as it
 reconnects to streams using the latest known checkpoint notification timestamp
-as its new base timestamp, as in the following example:
+("resolved timestamp") as its new base timestamp, as in the following example:
 
 1. `ts=120` checkpoints
 1. receive `key=x` changes to `a` at `ts=123`
@@ -152,8 +152,8 @@ order:
 #### Checkpoint() notification
 
 An event `Checkpoint(k1, k2, ts)` represents the promise that no more `Value()`
-notifications with timestamps less than or equal to `ts` are going to be
-emitted, i.e. the following is illegal:
+notifications with timestamps less than `ts` are going to be emitted, i.e. the
+following is illegal:
 
 1. `[a, z)` checkpoints at `ts=100`
 1. `key=x` gets deleted at `ts=90`
@@ -169,10 +169,12 @@ followed by a `Checkpoint()` event.
 
 #### Wire format
 
-The exact format in which events are reported are TBD. Throughout this document,
-we assume that we are passing along `WriteBatch`es for change events, though
-that is unlikely to be the final format: Typical consumers will live in the SQL
-subsystem.
+The exact format in which events are reported are TBD. RangeFeed processing will
+require that Raft log-provided `WriteBatch`es be decoded and sanitized in order
+to properly track intents, filter based on key ranges, and remove range-local
+updates. Because we will have already incurred this decoding and filtering cost,
+it is likely that the wire format will be a protobuf union type that closely
+resembles the events presented in [Types of events](#types-of-events).
 
 ### Replica-level
 
@@ -180,10 +182,15 @@ Replicas (whether they're lease holder or not) accept a top-level `RangeFeed`
 RPC which contains a base HLC timestamp and (for the sake of presentation) one
 key range for which updates are to be delivered. The `RangeFeed` command first
 grabs `raftMu`, opens a RocksDB snapshot, registers itself with the raft
-processing goroutine and releases `raftMu` again. By registering itself, it
-receives all future `WriteBatch`es which apply on the Replica, and sends them on
-the stream to the caller (after suitably sanitizing to account only for the
-updates which are relevant to the span the caller has supplied).
+processing goroutine and releases `raftMu` again. 
+
+By registering itself, it receives notifications for all future `WriteBatch`es
+which apply on the Replica, and sends them on the stream to the caller
+(after suitably sanitizing to account only for the updates which are relevant
+to the span the caller has supplied). This means that the `RangeFeed` is driven
+off the Raft log itself. This poses a few challenges, described in
+[The Resolved Timestamp](#resolved-timestamps) and
+[Decoding WriteBatches](#decoding-writebatches).
 
 The remaining difficulty is that additionally, we must retrieve all updates made
 at or after the given base HLC timestamp, and this is what the engine snapshot
@@ -193,24 +200,254 @@ snapshot (which is possible assuming that the base timestamp is a valid read
 timestamp, i.e. does not violate the GCThreshold or the like).
 
 Once these synthesized events have been fed to the client, we begin emitting
-checkpoint notifications. We assume that these notifications are driven by
-[follower reads][followerreads] and can be observed periodically, so that we are
-really only relaying them to the stream. Checkpoints are per-Range, so all the
-key ranges (which are contained in the range) will be affected equally.
+checkpoint notifications. Checkpoints are per-Range, so all the key ranges
+(which are contained in the range) will be affected equally.
 
 When the range splits or merges, of if the Replica gets removed, the stream
 terminates in an orderly fashion. The caller (who has knowledge of Replica
 distribution) will retry accordingly. For example, when the range splits, the
 caller will open two individual RangeFeed streams to Replicas on both sides of
-the post-split Ranges, using the highest checkpoint notification timestamp it
-received before the stream disconnected. If the Replica gets removed, it will
-simply reconnect to another Replica, again using its most recently received
-checkpoint. Duplication of values streamed to clients after its reconnect can be
-reduced by strategically checkpointing just before the stream gets closed.
+the post-split Ranges, using the highest resolved timestamp it received before
+the stream disconnected. If the Replica gets removed, it will simply reconnect
+to another Replica, again using its most recently received resolved timestamp.
+Duplication of values streamed to clients after its reconnect can be reduced by
+strategically checkpointing just before the stream gets closed.
 
 Initially, streams may also disconnect if they find themselves unable to keep up
 with write traffic on the Range. Later, we can consider triggering an early
 split and/or adding backpressure, but this is out of scope for now.
+
+#### Resolved Timestamps
+
+The timestamp provided by a `Checkpoint()` notification is called a "resolved
+timestamp". As discussed above, the receipt of one of these checkpoints with an
+associated resolved timestamp indicates to a downstream receiver that no
+`Value()` notifications with timestamps less than the resolved timestamp will
+later be emitted.
+
+Because the `RangeFeed` is driven off the Raft log, we have an opportunity to
+reuse the "closed timestamp" proposed in the [follower reads RFC][followerreads],
+which is incremented during Raft log application, as a basis for this "resolved
+timestamp". In fact, the semantics of the resolved timestamp line up very
+closely with those of the closed timestamp. However, they are not the same.
+Fundamentally, the closed timestamp restricts the state of a Range such that no
+"visible" data mutations are permitted at earlier timestamps. On the other hand,
+resolved timestamps restrict the state of a RangeFeed such that no `Value()`
+notifications are permitted at earlier timestamps. The key difference here is
+that data mutations are allowed beneath a closed timestamp as long as they are
+not externally "visible". This is not true of the resolved timestamp because the
+`RangeFeed` is driven directly off the state of a Range through its Raft log
+updates. As such, all external changes to a Range beneath a given timestamp,
+"visible" or not, must be made to the Range before its resolved timestamp can be
+advanced to that timestamp.
+
+This distinction becomes interesting when considering unresolved transaction
+intents because these intents can undergo changes at timestamps earlier than a
+Range's closed timestamp. This is possible because intent resolution of an
+intent which is part of a committed or aborted transaction does not change the
+visible state of a range. In effect, this means that a range can "close"
+timestamp t2 before resolving an intent for a transaction at timestamp t1, where
+t1 < t2. This phenomena is explored in the [follower reads RFC's][followerreads]
+`Timestamp forwarding and intents` section. 
+
+Because we intend to drive `Value()` notifications for transactional changes off
+of intent resolution of individual keys, this effect prevents us from using a
+Range's closed timestamp as its resolved timestamp directly. Instead, a Range's
+resolved timestamp will always be the minimum of its closed timestamp and the
+`Timestamp` of the earliest unresolved intent that exists within its key bounds.
+This poses two additional concerns on top of the need for a functioning closed
+timestamp: tracking unresolved intents and proactively pushing or resolving
+unresolved intents to ensure that the resolved timestamp continues to make
+forward progress.
+
+##### Tracking Unresolved Intents (UnresolvedIntentQueue)
+
+Each replica (follower or leaseholder) with at least one active RangeFeed will
+track all unresolved intents that exist within its key bounds. It will do so by
+maintaining a priority queue that tracks all transactions with unresolved
+intents on the Range called the `UnresolvedIntentQueue`. Each item in the queue
+will contain the following information:
+- txnID
+- txn key
+- max Timestamp seen for this txn (min Timestamp that it can commit at)
+- refcount of unresolved intents for txn on this range
+
+Each item in the queue will maintain a priority based on its Timestamp, such
+that the item with the earliest timestamp will rise to the head of the queue.
+
+Because the queue contains a reference count of each unresolved intent for the
+txn on the range, its size will be O(active txns on range) instead of O(active
+intents on range). This also means that the queue does not need to track the
+specific keys of each intent. This is critical as it should prevent the queue's
+memory footprint from growing large enough to need to spill to disk.
+
+The queue will be initially built using the RocksDB snapshot captured under lock
+when the first RangeFeed connected. It will then be incrementally maintained
+(txns added and deleted, refcount adjusted, Timestamp forwarded) as
+`WriteBatch`es decoded off the Raft log write and resolve intents.
+
+Whenever an intent is resolved, its transaction's corresponding unresolved
+intent reference count is decremented. When a transaction's ref count reaches 0,
+it is removed from the queue. When the queue's highest priority txn (the txn
+with the earliest Timestamp) is removed or has its timestamp forwarded, the
+replica's `resolvedTS` is advanced to `min(closedTS, newTopTxn.Timestamp)`. If
+this causes the `resolvedTS` to move, it will trigger a `Checkpoint()`
+notification.
+
+When a range splits or merges, the `UnresolvedIntentQueue` will be cleared at
+the same time that all `RangeFeeds` are terminated. It will be re-built when a
+RangeFeed connects to the new range. Importantly, it should be relatively cheap
+to re-build using a `TimeBoundIterator` because this iterator can start
+iterating from the previously established resolved timestamp.
+
+This is probably a good enough reason to periodically persist the resolved
+timestamp in a range-id local key on the range itself.
+
+##### Ensuring Progress
+
+On its own, this queue would not be enough to ensure that the resolved timestamp
+continues to make forward progress. This is because transactions may be
+abandoned before or after committing but before cleaning up all of their
+intents. It's also possible that a transaction is not abandoned but is simply
+waiting for a significant amount of time while continuing to heartbeat its
+transaction record. Either way, if no other transaction stumbles upon the
+intents, they will never be pushed or resolved. This is a problem because the
+oldest unresolved intent on a range will prevent the range's resolved timestamp
+from moving forward. To ensure that these old intents don't hold up the resolved
+timestamp, we need some forcing function to push the intents to a higher
+timestamp. 
+
+Luckily, we already know how to do this using `PushTxnRequest`s. A new policy
+will be introduced to push any transactions that have a sufficiently old
+timestamp in the `UnresolvedIntentQueue` using a high-priority `PushTxnRequest`.
+It is likely that this age threshold will be similar to the follower reads
+closed timestamp interval because no transactions will be able to commit before
+this interval anyway. Whatever we decide, we will want to jitter this slightly
+to prevent all replicas in a Range from attempting to push abandoned or
+long-running transactions at the same time.
+
+The push will tell us one of three things:
+- the txn is still PENDING but has been pushed to a larger timestamp. We can
+  forward the timestamp in the `UnresolvedIntentQueue` and update the resolved
+  timestamp accordingly.
+- the txn is ABORTED. We can remove the transaction's record from the
+  `UnresolvedIntentQueue` and update the resolved timestamp accordingly. Even
+  though the intents won't be cleaned up, we know that they will never be
+  committed.
+- the txn is COMMITTED and the txn record holds the authoritative list of
+  all of its intents. We can resolve whichever are present on our range,
+  which will in turn allow us to remove the transaction's record from the
+  `UnresolvedIntentQueue` after we see the intent resolution pop out of the
+  raft log.
+
+Note that none of this requires that we maintain a record of the intents for a
+given transaction in the `UnresolvedIntentQueue`. These intents will already be
+present in a COMMITTED transaction record and we can ignore them for an ABORTED
+transaction (where the transaction record may be missing intents). However, it
+might be best to attempt to resolve sufficiently old intents when we run into
+them while constructing the `UnresolvedIntentQueue`, so that we don't continue
+to run into them later. This will be less of a problem if we persist the
+resolved timestamp and use a `TimeBoundIterator` to skip over the abandoned
+intents when re-building the `UnresolvedIntentQueue`.
+
+#### Decoding WriteBatches
+
+The heart of this proposal relies on the ability to decode `WriteBatch`es
+present in Raft entries and accurately determine their intended effect on
+values, intents, and other MVCC-related state. To do this, it is important to
+understand what entries a WriteBatch will contain for a given MVCC operations.
+Below is a flow diagram of all mutating MVCC operations as of commit 396ea7e.
+
+```
+- MVCCPut
+    - inline (never transactional)
+        + write meta key w/ inline value
+    - not inline
+        - transactional
+            - no
+                + write new version
+            - yes
+                - intent exists with older timestamp
+                    + clear old version
+                    + write meta
+                    + write new version
+                - else
+                    + write meta
+                    + write new version
+- MVCCDelete
+    - inline (never transactional)
+        + clear meta key
+    - not inline
+        + same as MVCCPut but with empty value and Deleted=true in meta
+- MVCCDeleteRange
+    + calls MVCCDelete for each key in range
+- MVCCMerge
+    + write merge record (never transactional)
+- MVCCResolveWriteIntent
+    - commit
+        + clear meta
+        - if timestamp of intent is incorrect
+            + clear old version key
+            + write new version key
+    - abort
+        + clear version key
+        + clear meta key
+    - push
+        + write meta with larger timestamp
+        + clear old version key
+        + write new version key
+- MVCCGarbageCollect
+    + clear each meta key
+    + clear each version
+```
+
+The process of decoding `WriteBatch`es will consist of taking a list of RocksDB
+batch entries and reverse engineering the collective higher level operations it
+is performing. For instance, a `WriteBatch` that includes a write to a meta and
+version key for the same logical key will be interpreted as an intent write.
+Likewise, the deletion of a meta key will be interpreted as a successful intent
+resolution.
+
+I have some concerns about this. To start, the diagram shows how complicated
+this decoding process will be. Not only are there a large number of state
+transitions here that we'll have to pattern match against, but I haven't
+convinced myself that this decoding will even be un-ambiguous without additional
+engine reads. That said, I don't think this is insurmountable by any means. My
+bigger concern is that this is creating a very substantial below-Raft dependency
+on the implementation details of our above-Raft MVCC-layer. We're going to have
+to be very careful about making any changes to MVCC once we introduce this
+dependency, and I'm worried about the consequences of this. I think this
+deserves a serious discussion.
+
+For the sake of this proposal though, let's ignore these concerns and pretend
+we have the ability to accurately decode `WriteBatch`es. Once a `WriteBatch`
+is decoded and split up into its component operations, these will then each
+be run through the following logic:
+```
+match op {
+    InlineWrite | NonTransactionalWrite => SendValueToMatchingFeeds(key, val, ts),
+    IntentWrite    => {
+        UnresolvedIntentQueue[txnID].refcount++
+        UnresolvedIntentQueue[txnID].Timestamp.Forward(ts)
+    }, 
+    IntentUpdate   => UnresolvedIntentQueue[txnID].Timestamp.Forward(ts),
+    IntentCommit   => {
+        UnresolvedIntentQueue[txnID].refcount--
+        SendValueToMatchingFeeds(key, val, ts)
+    },
+    IntentAbort    => UnresolvedIntentQueue[txnID].refcount--,
+    IntentPush     => UnresolvedIntentQueue[txnID].Timestamp.Forward(ts),
+    Merge          => { error },
+    DeleteRange    => { error },
+    GarbageCollect => { },
+}
+```
+
+Note that not all WriteBatches will contain all information necessary to make
+these decisions. For instance, intent resolution will be identified by the
+deletion of a meta record key, but this will not include the current transaction
+ID in that meta record. This extra information will probably need to be hung
+off of the `RaftCommand` message itself.
 
 ### MVCC-level
 
@@ -345,7 +582,7 @@ However, there's a lot in between, and the primitive presented here is shared
 between all of them.
 
 
-[followerreads]: https://github.com/cockroachdb/cockroach/issues/16593
+[followerreads]: https://github.com/cockroachdb/cockroach/pull/26362
 [revertrfc]: https://github.com/cockroachdb/cockroach/pull/16294
 [streamsql]: https://github.com/cockroachdb/cockroach/pull/16626
 [cdc]: https://github.com/cockroachdb/cockroach/pull/25229
