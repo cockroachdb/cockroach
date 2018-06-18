@@ -55,6 +55,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	k := newTestKafkaProducer()
 	testKafkaProducersHook[t.Name()] = k
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
