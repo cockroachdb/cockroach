@@ -53,9 +53,13 @@ type joinReader struct {
 	index     *sqlbase.IndexDescriptor
 	colIdxMap map[sqlbase.ColumnID]int
 
-	fetcher  sqlbase.RowFetcher
-	alloc    sqlbase.DatumAlloc
-	rowAlloc sqlbase.EncDatumRowAlloc
+	// fetcherInput wraps fetcher in a RowSource implementation and should be used
+	// to get rows from the fetcher. This enables the joinReader to wrap the
+	// fetcherInput with a stat collector when necessary.
+	fetcherInput RowSource
+	fetcher      sqlbase.RowFetcher
+	alloc        sqlbase.DatumAlloc
+	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	input      RowSource
 	inputTypes []sqlbase.ColumnType
@@ -69,9 +73,12 @@ type joinReader struct {
 
 	// These fields are set only for lookup joins on secondary indexes which
 	// require an additional primary index lookup.
-	primaryFetcher     *sqlbase.RowFetcher
-	primaryColumnTypes []sqlbase.ColumnType
-	primaryKeyPrefix   []byte
+	// primaryFetcherInput wraps primaryFetcher in a RowSource implementation for
+	// the same reason that fetcher is wrapped.
+	primaryFetcherInput RowSource
+	primaryFetcher      *sqlbase.RowFetcher
+	primaryColumnTypes  []sqlbase.ColumnType
+	primaryKeyPrefix    []byte
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
@@ -165,6 +172,8 @@ func newJoinReader(
 			return nil, err
 		}
 		jr.primaryKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.desc.PrimaryIndex.ID)
+
+		jr.primaryFetcherInput = &rowFetcherWrapper{RowFetcher: jr.primaryFetcher}
 	}
 	_, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
@@ -173,6 +182,7 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
+	jr.fetcherInput = &rowFetcherWrapper{RowFetcher: &jr.fetcher}
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -399,10 +409,9 @@ func (jr *joinReader) indexJoinLookup(
 		return true, err
 	}
 	for {
-		row, _, _, err := jr.fetcher.NextRow(ctx)
-		if err != nil {
-			err = scrub.UnwrapScrubError(err)
-			return true, err
+		row, meta := jr.fetcherInput.Next()
+		if meta != nil {
+			return true, scrub.UnwrapScrubError(meta.Err)
 		}
 		if row == nil {
 			// Done with this batch.
@@ -469,10 +478,9 @@ func (jr *joinReader) lookupJoinLookup(
 		lookupRows = lookupRows[:0]
 		for len(lookupRows) < joinReaderBatchSize {
 			key := jr.fetcher.IndexKeyString(len(jr.lookupCols))
-			row, _, _, err := jr.fetcher.NextRow(ctx)
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
-				return true, err
+			row, meta := jr.fetcherInput.Next()
+			if meta != nil {
+				return true, scrub.UnwrapScrubError(meta.Err)
 			}
 			if row == nil {
 				// Done with this batch.
@@ -604,9 +612,9 @@ func (jr *joinReader) primaryLookup(
 		if !ok {
 			return nil, errors.Errorf("failed to find key %v in keyToInputRowIdx %v", key, keyToInputRowIdx)
 		}
-		row, _, _, err := jr.primaryFetcher.NextRow(ctx)
-		if err != nil {
-			return nil, err
+		row, meta := jr.primaryFetcherInput.Next()
+		if meta != nil {
+			return nil, meta.Err
 		}
 		if row == nil {
 			return nil, errors.Errorf("expected %d rows but found %d", batchSize, i)
@@ -615,9 +623,9 @@ func (jr *joinReader) primaryLookup(
 	}
 
 	// Verify that we consumed all the fetched rows.
-	nextRow, _, _, err := jr.primaryFetcher.NextRow(ctx)
-	if err != nil {
-		return nil, err
+	nextRow, meta := jr.primaryFetcherInput.Next()
+	if meta != nil {
+		return nil, meta.Err
 	}
 	if nextRow != nil {
 		return nil, errors.Errorf("expected %d rows but found more", batchSize)
@@ -633,6 +641,10 @@ func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	jr.input.Start(ctx)
+	jr.fetcherInput.Start(ctx)
+	if jr.primaryFetcherInput != nil {
+		jr.primaryFetcherInput.Start(ctx)
+	}
 	ctx = jr.startInternal(ctx, joinReaderProcName)
 	defer tracing.FinishSpan(jr.span)
 
