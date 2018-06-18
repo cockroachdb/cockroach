@@ -123,20 +123,20 @@ func createTestStoreWithEngine(
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ac,
 		Clock:      storeCfg.Clock,
-		TestingKnobs: kv.DistSenderTestingKnobs{
+		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		},
 		RPCRetryOptions: &retryOpts,
 	}, storeCfg.Gossip)
 
 	tcsFactory := kv.NewTxnCoordSenderFactory(
-		ac,
-		storeCfg.Settings,
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ac,
+			Settings:   storeCfg.Settings,
+			Clock:      storeCfg.Clock,
+			Stopper:    stopper,
+		},
 		distSender,
-		storeCfg.Clock,
-		false,
-		stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	storeCfg.DB = client.NewDB(ac, tcsFactory, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
@@ -652,19 +652,19 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
 		},
-		TestingKnobs: kv.DistSenderTestingKnobs{
+		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: m.kvTransportFactory,
 		},
 		RPCRetryOptions: &retryOpts,
 	}, m.gossips[idx])
 	tcsFactory := kv.NewTxnCoordSenderFactory(
-		ambient,
-		m.storeConfig.Settings,
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Settings:   m.storeConfig.Settings,
+			Clock:      m.clocks[idx],
+			Stopper:    stopper,
+		},
 		m.distSenders[idx],
-		m.clocks[idx],
-		false,
-		stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -63,10 +62,11 @@ func InitFactoryForLocalTestCluster(
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	distSender := NewDistSender(DistSenderConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
+		Settings:        st,
 		Clock:           clock,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,
 				rpcContext *rpc.Context,
@@ -82,14 +82,13 @@ func InitFactoryForLocalTestCluster(
 		},
 	}, gossip)
 
-	ambient := log.AmbientContext{Tracer: tracer}
 	return NewTxnCoordSenderFactory(
-		ambient,
-		st,
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+			Settings:   st,
+			Clock:      clock,
+			Stopper:    stopper,
+		},
 		distSender,
-		clock,
-		false, /* linearizable */
-		stopper,
-		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 }

@@ -52,6 +52,7 @@ var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 // transaction timestamp.
 type txnSpanRefresher struct {
 	st      *cluster.Settings
+	knobs   *ClientTestingKnobs
 	wrapped lockedSender
 
 	// See TxnCoordMeta.RefreshReads and TxnCoordMeta.RefreshWrites.
@@ -91,8 +92,13 @@ func (sr *txnSpanRefresher) SendLocked(
 		}
 	}
 
+	maxAttempts := maxTxnRefreshAttempts
+	if knob := sr.knobs.MaxTxnRefreshAttempts; knob > 0 {
+		maxAttempts = knob
+	}
+
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
-	br, pErr, largestRefreshTS := sr.sendLockedWithRefreshAttempts(ctx, ba, maxTxnRefreshAttempts)
+	br, pErr, largestRefreshTS := sr.sendLockedWithRefreshAttempts(ctx, ba, maxAttempts)
 	if pErr != nil {
 		return nil, pErr
 	}

@@ -306,34 +306,54 @@ type TxnCoordSenderFactory struct {
 	linearizable      bool // enables linearizable behavior
 	stopper           *stop.Stopper
 	metrics           TxnMetrics
+
+	testingKnobs ClientTestingKnobs
 }
 
 var _ client.TxnSenderFactory = &TxnCoordSenderFactory{}
 
+// TxnCoordSenderFactoryConfig holds configuration and auxiliary objects that can be passed
+// to NewTxnCoordSenderFactory.
+type TxnCoordSenderFactoryConfig struct {
+	AmbientCtx log.AmbientContext
+
+	Settings *cluster.Settings
+	Clock    *hlc.Clock
+	Stopper  *stop.Stopper
+
+	HeartbeatInterval time.Duration
+	Linearizable      bool
+	Metrics           TxnMetrics
+
+	TestingKnobs ClientTestingKnobs
+}
+
 // NewTxnCoordSenderFactory creates a new TxnCoordSenderFactory. The
 // factory creates new instances of TxnCoordSenders.
-//
-// TODO(spencer): move these settings into a configuration object and
-// supply that to each sender.
 func NewTxnCoordSenderFactory(
-	ambient log.AmbientContext,
-	st *cluster.Settings,
-	wrapped client.Sender,
-	clock *hlc.Clock,
-	linearizable bool,
-	stopper *stop.Stopper,
-	txnMetrics TxnMetrics,
+	cfg TxnCoordSenderFactoryConfig, wrapped client.Sender,
 ) *TxnCoordSenderFactory {
-	return &TxnCoordSenderFactory{
-		AmbientContext:    ambient,
-		st:                st,
+	tcf := &TxnCoordSenderFactory{
+		AmbientContext:    cfg.AmbientCtx,
+		st:                cfg.Settings,
 		wrapped:           wrapped,
-		clock:             clock,
-		heartbeatInterval: base.DefaultHeartbeatInterval,
-		linearizable:      linearizable,
-		stopper:           stopper,
-		metrics:           txnMetrics,
+		clock:             cfg.Clock,
+		stopper:           cfg.Stopper,
+		linearizable:      cfg.Linearizable,
+		heartbeatInterval: cfg.HeartbeatInterval,
+		metrics:           cfg.Metrics,
+		testingKnobs:      cfg.TestingKnobs,
 	}
+	if tcf.st == nil {
+		tcf.st = cluster.MakeTestingClusterSettings()
+	}
+	if tcf.heartbeatInterval == 0 {
+		tcf.heartbeatInterval = base.DefaultHeartbeatInterval
+	}
+	if tcf.metrics == (TxnMetrics{}) {
+		tcf.metrics = MakeTxnMetrics(metric.TestSampleInterval)
+	}
+	return tcf
 }
 
 // New is part of the TxnSenderFactory interface.
@@ -360,6 +380,7 @@ func (tcf *TxnCoordSenderFactory) New(
 	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:           tcf.st,
+		knobs:        &tcf.testingKnobs,
 		refreshValid: true,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the

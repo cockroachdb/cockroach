@@ -250,6 +250,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// However, on a single-node setup (such as a test), retries will never
 	// succeed because the only server has been shut down; thus, the
 	// DistSender needs to know that it should not retry in this situation.
+	var clientTestingKnobs kv.ClientTestingKnobs
+	if kvKnobs := s.cfg.TestingKnobs.KVClient; kvKnobs != nil {
+		clientTestingKnobs = *kvKnobs.(*kv.ClientTestingKnobs)
+	}
 	retryOpts := s.cfg.RetryOptions
 	if retryOpts == (retry.Options{}) {
 		retryOpts = base.DefaultRetryOptions()
@@ -261,24 +265,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
-	}
-	if distSenderTestingKnobs := s.cfg.TestingKnobs.DistSender; distSenderTestingKnobs != nil {
-		distSenderCfg.TestingKnobs = *distSenderTestingKnobs.(*kv.DistSenderTestingKnobs)
+		TestingKnobs:    clientTestingKnobs,
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(txnMetrics)
-	s.tcsFactory = kv.NewTxnCoordSenderFactory(
-		s.cfg.AmbientCtx,
-		st,
-		s.distSender,
-		s.clock,
-		s.cfg.Linearizable,
-		s.stopper,
-		txnMetrics,
-	)
+	txnCoordSenderFactoryCfg := kv.TxnCoordSenderFactoryConfig{
+		AmbientCtx:   s.cfg.AmbientCtx,
+		Settings:     st,
+		Clock:        s.clock,
+		Stopper:      s.stopper,
+		Linearizable: s.cfg.Linearizable,
+		Metrics:      txnMetrics,
+		TestingKnobs: clientTestingKnobs,
+	}
+	s.tcsFactory = kv.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
+
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer
 	dbCtx.Stopper = s.stopper
