@@ -267,13 +267,13 @@ func (s LeaseStore) WaitForOneVersion(
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.execCfg.Clock.Now()
-		tables := []idVersion{
+		tables := []IDVersion{
 			{
 				id:      tableDesc.ID,
 				version: tableDesc.Version - 1,
 			},
 		}
-		count, err := countLeases(ctx, s.execCfg.InternalExecutor, tables, now)
+		count, err := CountLeases(ctx, s.execCfg.InternalExecutor, tables, now)
 		if err != nil {
 			return 0, err
 		}
@@ -408,17 +408,22 @@ func (s LeaseStore) Publish(
 	panic("not reached")
 }
 
-// idVersion represents a descriptor ID, version pair that are
+// IDVersion represents a descriptor ID, version pair that are
 // meant to map to a single immutable descriptor.
-type idVersion struct {
+type IDVersion struct {
 	id      sqlbase.ID
 	version sqlbase.DescriptorVersion
 }
 
-// countLeases returns the number of unexpired leases for a number of tables
+// NewIDVersion returns an initialized IDVersion.
+func NewIDVersion(id sqlbase.ID, version sqlbase.DescriptorVersion) IDVersion {
+	return IDVersion{id: id, version: version}
+}
+
+// CountLeases returns the number of unexpired leases for a number of tables
 // each at a particular version at a particular time.
-func countLeases(
-	ctx context.Context, executor *InternalExecutor, tables []idVersion, at hlc.Timestamp,
+func CountLeases(
+	ctx context.Context, executor *InternalExecutor, tables []IDVersion, at hlc.Timestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range tables {

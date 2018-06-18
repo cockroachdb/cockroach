@@ -466,12 +466,12 @@ func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
 // schema change is Version - 2, because that's the one that will be
 // used when checking for table descriptor two version invariance.
 // Also returns strings representing the new <name, version> pairs
-func (tc *TableCollection) getTablesWithNewVersion() ([]idVersion, []string) {
-	var tables []idVersion
+func (tc *TableCollection) getTablesWithNewVersion() ([]IDVersion, []string) {
+	var tables []IDVersion
 	var nameVersions []string
 	for _, table := range tc.uncommittedTables {
 		if !tc.isCreatedTable(table.ID) {
-			tables = append(tables, idVersion{
+			tables = append(tables, IDVersion{
 				id: table.ID,
 				// Used to check that there are no leases at Version - 2.
 				// Note the version has already been incremented.

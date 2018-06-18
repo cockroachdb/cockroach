@@ -476,7 +476,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 		return nil
 	}
 	txn := ex.state.mu.txn
-	count, err := countLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
 	if err != nil {
 		return err
 	}
@@ -516,7 +516,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	for r := retry.Start(retryOptions); r.Next(); {
 		// Use the current clock time.
 		now := ex.server.cfg.Clock.Now()
-		count, err := countLeases(ctx, ex.server.cfg.InternalExecutor, tables, now)
+		count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, now)
 		if err != nil {
 			return err
 		}

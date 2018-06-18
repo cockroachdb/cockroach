@@ -667,6 +667,8 @@ func upgradeDescsWithFn(
 			}
 			startKey = kvs[len(kvs)-1].Key.Next()
 
+			var idVersions []sql.IDVersion
+			var now hlc.Timestamp
 			b := txn.NewBatch()
 			for _, kv := range kvs {
 				var sqlDesc sqlbase.Descriptor
@@ -692,7 +694,9 @@ func upgradeDescsWithFn(
 							// concern: consider that dropping a large table can take several
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
-							table.UpVersion = true
+							table.Version++
+							now = txn.CommitTimestamp()
+							idVersions = append(idVersions, sql.NewIDVersion(table.ID, table.Version-2))
 							if err := table.Validate(ctx, txn, nil); err != nil {
 								return err
 							}
@@ -719,6 +723,15 @@ func upgradeDescsWithFn(
 			}
 			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
+			}
+			if idVersions != nil {
+				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
+				if err != nil {
+					return err
+				}
+				if count > 0 {
+					return errors.Errorf("penultimate schema version still being leased, try again")
+				}
 			}
 			return txn.Run(ctx, b)
 		}); err != nil {
