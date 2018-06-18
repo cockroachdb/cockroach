@@ -324,7 +324,7 @@ func TestSendRPCOrder(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
@@ -488,7 +488,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
@@ -552,7 +552,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
@@ -591,7 +591,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -685,7 +685,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: SenderTransportFactory(
 				tracing.NewTracer(),
 				client.SenderFunc(sender),
@@ -794,7 +794,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		cfg := DistSenderConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
-			TestingKnobs: DistSenderTestingKnobs{
+			TestingKnobs: ClientTestingKnobs{
 				TransportFactory: adaptLegacyTransport(testFn),
 			},
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
@@ -863,7 +863,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
@@ -961,7 +961,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 	}
@@ -1053,7 +1053,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 	}
@@ -1164,7 +1164,7 @@ func TestSendRPCRetry(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: descDB,
@@ -1262,7 +1262,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
 		RangeDescriptorDB: rdb,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: SenderTransportFactory(
 				tracing.NewTracer(),
 				sender,
@@ -1361,7 +1361,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -1403,7 +1403,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -1565,7 +1565,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(sendStub),
 		},
 		RangeDescriptorDB: descDB,
@@ -1690,7 +1690,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(sendStub),
 		},
 		RangeDescriptorDB: descDB,
@@ -1832,7 +1832,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		cfg := DistSenderConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
-			TestingKnobs: DistSenderTestingKnobs{
+			TestingKnobs: ClientTestingKnobs{
 				TransportFactory: adaptLegacyTransport(testFn),
 			},
 			RangeDescriptorDB: descDB,
@@ -1899,7 +1899,7 @@ func TestCountRanges(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: descDB,
@@ -1993,7 +1993,7 @@ func TestGatewayNodeID(t *testing.T) {
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
+		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
@@ -2117,7 +2117,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 			cfg := DistSenderConfig{
 				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 				Clock:      clock,
-				TestingKnobs: DistSenderTestingKnobs{
+				TestingKnobs: ClientTestingKnobs{
 					TransportFactory: adaptLegacyTransport(testFn),
 				},
 				RangeDescriptorDB: descDB,

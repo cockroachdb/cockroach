@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -41,8 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -86,23 +83,22 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
+	ambient := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ds := kv.NewDistSender(
 		kv.DistSenderConfig{
-			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+			AmbientCtx: ambient,
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
 		},
 		s.(*server.TestServer).Gossip(),
 	)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	tsf := kv.NewTxnCoordSenderFactory(
-		ambient,
-		cluster.MakeTestingClusterSettings(),
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Clock:      s.Clock(),
+			Stopper:    s.Stopper(),
+		},
 		ds,
-		s.Clock(),
-		false, /* linearizable */
-		s.Stopper(),
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
 
