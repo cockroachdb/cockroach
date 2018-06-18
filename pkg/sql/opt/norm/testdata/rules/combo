@@ -373,12 +373,14 @@ ConstrainScan
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── keys: (1) (3,4)
          ├── scan a@secondary
-         │    ├── columns: k:1(int!null) f:3(float) s:4(string)
-  +      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
-         │    └── keys: (1) weak(3,4)
+  -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
+  -      │    └── keys: (1) weak(3,4)
   -      └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
   -           ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
   -           └── a.f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+  +      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
+  +      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  +      │    └── keys: (1) (3,4)
   +      └── filters [type=bool]
   +           ├── true [type=bool]
   +           └── true [type=bool]
@@ -394,9 +396,9 @@ SimplifyFilters
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   -      ├── keys: (1) (3,4)
   -      ├── scan a@secondary
-  -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
+  -      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   -      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
-  -      │    └── keys: (1) weak(3,4)
+  -      │    └── keys: (1) (3,4)
   -      └── filters [type=bool]
   -           ├── true [type=bool]
   -           └── true [type=bool]

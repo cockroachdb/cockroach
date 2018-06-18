@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -419,6 +420,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 //   /a/b/c: [/1/2/3 - /1/2/3]                    ->  ExactPrefix = 3
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]  ->  ExactPrefix = 2
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
 //   /a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
 func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 	if c.IsContradiction() {
@@ -444,4 +446,73 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 			}
 		}
 	}
+}
+
+// ExtractNotNullCols returns a set of columns that cannot be NULL when the
+// constraint holds.
+func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
+	if c.IsUnconstrained() || c.IsContradiction() {
+		return opt.ColSet{}
+	}
+
+	var res opt.ColSet
+
+	// If we have a span where the start and end key value diverge for a column,
+	// none of the columns that follow can be not-null. For example:
+	//   /1/2/3: [/1/2/3 - /1/4/1]
+	// Because the span is not restricted to a single value on column 2, column 3
+	// can take any value, like /1/3/NULL.
+	//
+	// Find the longest prefix of columns for which all the spans have the same
+	// start and end values. For example:
+	//   [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+	// has prefix 2. Only these columns and the first following column can be
+	// known to be not-null.
+	prefix := 0
+	for ; prefix < c.Columns.Count(); prefix++ {
+		ok := true
+		// hasNull identifies cases like [/1/NULL/1 - /1/NULL/2].
+		hasNull := false
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			start := sp.StartKey()
+			end := sp.EndKey()
+			if start.Length() <= prefix || end.Length() <= prefix ||
+				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+				ok = false
+				break
+			}
+			hasNull = hasNull || start.Value(prefix) == tree.DNull
+		}
+		if !ok {
+			break
+		}
+		if !hasNull {
+			res.Add(int(c.Columns.Get(prefix).ID()))
+		}
+	}
+	if prefix == c.Columns.Count() {
+		return res
+	}
+
+	// Now look at the first column that follows the prefix.
+	col := c.Columns.Get(prefix)
+	for i := 0; i < c.Spans.Count(); i++ {
+		span := c.Spans.Get(i)
+		var key Key
+		var boundary SpanBoundary
+		if !col.Descending() {
+			key, boundary = span.StartKey(), span.StartBoundary()
+		} else {
+			key, boundary = span.EndKey(), span.EndBoundary()
+		}
+		// If the span is unbounded on the NULL side, or if it is of the form
+		// [/NULL - /x], the column is nullable.
+		if key.Length() <= prefix || (key.Value(prefix) == tree.DNull && boundary == IncludeBoundary) {
+			return res
+		}
+	}
+	// All spans constrain col to be not-null.
+	res.Add(int(col.ID()))
+	return res
 }

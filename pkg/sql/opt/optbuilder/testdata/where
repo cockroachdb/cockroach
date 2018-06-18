@@ -225,9 +225,9 @@ build
 SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
 ----
 project
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  └── select
-      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── filters [type=bool]
@@ -250,9 +250,9 @@ build
 SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
 ----
 project
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  └── select
-      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── filters [type=bool]
