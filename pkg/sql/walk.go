@@ -128,6 +128,9 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *scanNode:
 		if v.observer.attr != nil {
+			if n.desc == nil || n.index == nil {
+				return
+			}
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
 			if n.noIndexJoin {
 				v.observer.attr(name, "hint", "no index join")
@@ -237,6 +240,9 @@ func (v *planVisitor) visit(plan planNode) {
 			columns := planColumns(n.plan)
 			n.distinctOnColIdxs.ForEach(func(col int) {
 				buf.WriteString(prefix)
+				if col >= len(columns) {
+					return
+				}
 				buf.WriteString(columns[col].Name)
 				prefix = ", "
 			})
@@ -247,6 +253,9 @@ func (v *planVisitor) visit(plan planNode) {
 			var buf bytes.Buffer
 			prefix := ""
 			columns := planColumns(n.plan)
+			if len(n.columnsInOrder) > len(columns) {
+				return
+			}
 			for i, key := range n.columnsInOrder {
 				if key {
 					buf.WriteString(prefix)
@@ -342,8 +351,12 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.plan)
 
 	case *unionNode:
-		v.visit(n.left)
-		v.visit(n.right)
+		if n.left != nil {
+			v.visit(n.left)
+		}
+		if n.right != nil {
+			v.visit(n.right)
+		}
 
 	case *splitNode:
 		v.visit(n.rows)
