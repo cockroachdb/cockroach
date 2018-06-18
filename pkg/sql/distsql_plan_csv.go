@@ -153,6 +153,11 @@ func (c *callbackResultWriter) Err() error {
 
 var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 
+// KeyRewriter describes helpers that can rewrite keys (possibly in-place).
+type KeyRewriter interface {
+	RewriteKey(key []byte) (res []byte, ok bool, err error)
+}
+
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
 func LoadCSV(
@@ -161,12 +166,12 @@ func LoadCSV(
 	job *jobs.Job,
 	resultRows *RowResultWriter,
 	tables map[string]*sqlbase.TableDescriptor,
-	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
+	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
 	ctx = log.WithLogTag(ctx, "import-distsql", nil)
 
@@ -198,9 +203,6 @@ func LoadCSV(
 	})
 
 	// Setup common to both stages.
-	if len(tables) == 0 && tableDesc == nil {
-		return errors.Errorf("must specify table(s) to import")
-	}
 
 	// For each input file, assign it to a node.
 	inputSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
@@ -216,9 +218,6 @@ func LoadCSV(
 					Slot:  int32(i),
 				},
 				Uri: make(map[int32]string),
-			}
-			if tableDesc != nil {
-				spec.TableDesc = *tableDesc
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -247,20 +246,68 @@ func LoadCSV(
 
 	details := job.Record.Details.(jobspb.ImportDetails)
 	samples := details.Samples
+	var parsedTables map[sqlbase.ID]*sqlbase.TableDescriptor
 	if samples == nil {
 		var err error
-		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, inputSpecs, sstSpecs)
+		samples, parsedTables, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
 	}
 
-	splits := make([][]byte, 0, 2+2*len(tables)+len(samples))
-	// Add the table keys to the spans.
-	if tableDesc != nil {
-		tableSpan := tableDesc.TableSpan()
-		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
+	// If sampling returns parsed table definitions, we need to potentially assign
+	// them real IDs and re-key the samples with those IDs, then update the job
+	// details to record the tables and their matching samples.
+	if len(parsedTables) > 0 {
+		importing := to == "" // are we actually ingesting, or just transforming?
+
+		rekeys := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(parsedTables))
+
+		// Update the tables map with the parsed tables and allocate them real IDs.
+		for _, parsed := range parsedTables {
+			name := parsed.Name
+			if existing, ok := tables[name]; ok && existing != nil {
+				return errors.Errorf("unexpected parsed table definition for %q", name)
+			}
+			tables[name] = parsed
+
+			// If we're actually importing, we'll need a real ID for this table.
+			if importing {
+				rekeys[parsed.ID] = parsed
+				parsed.ID, err = GenerateUniqueDescID(ctx, phs.ExecCfg().DB)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		// The samples were created using the dummy IDs, but the IMPORT run will use
+		// the actual IDs, so we need to re-key the samples so that they actually
+		// act as splits in the IMPORTed key-space.
+		if importing {
+			kr, err := makeRewriter(rekeys)
+			if err != nil {
+				return err
+			}
+			for i := range samples {
+				var ok bool
+				samples[i], ok, err = kr.RewriteKey(samples[i])
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return errors.Errorf("expected rewriter to rewrite key %v", samples[i])
+				}
+			}
+		}
 	}
+
+	if len(tables) == 0 {
+		return errors.Errorf("must specify table(s) to import")
+	}
+
+	splits := make([][]byte, 0, 2*len(tables)+len(samples))
+	// Add the table keys to the spans.
 	for _, desc := range tables {
 		tableSpan := desc.TableSpan()
 		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
@@ -377,7 +424,8 @@ func LoadCSV(
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
-	// Clear SamplingProgress and prep second stage job details for progress
+	// Update job details with the sampled keys, as well as any parsed tables,
+	// clear SamplingProgress and prep second stage job details for progress
 	// tracking.
 	if err := job.DetailProgressed(ctx,
 		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
@@ -388,6 +436,12 @@ func LoadCSV(
 
 			d := details.(*jobspb.Payload_Import).Import
 			d.Samples = samples
+			if len(parsedTables) > 0 {
+				d.Tables = make([]jobspb.ImportDetails_Table, 0, len(tables))
+				for _, tbl := range tables {
+					d.Tables = append(d.Tables, jobspb.ImportDetails_Table{Desc: tbl})
+				}
+			}
 			return prog.Completed()
 		},
 	); err != nil {
@@ -427,7 +481,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	planCtx *planningCtx,
 	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
-) ([][]byte, error) {
+) ([][]byte, map[sqlbase.ID]*sqlbase.TableDescriptor, error) {
 	// splitSize is the target number of bytes at which to create SST files. We
 	// attempt to do this by sampling, which is what the first DistSQL plan of this
 	// function does. CSV rows are converted into KVs. The total size of the KV is
@@ -443,7 +497,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	const oversample = 3
 	sampleSize := splitSize / oversample
 	if sampleSize > math.MaxInt32 {
-		return nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
+		return nil, nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
 	}
 
 	var p physicalPlan
@@ -472,16 +526,19 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		d.SamplingProgress = make([]float32, len(csvSpecs))
 		return d.Completed()
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// We only need the key during sorting.
-	p.planToStreamColMap = []int{0}
+	p.planToStreamColMap = []int{0, 1}
 	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	kvOrdering := distsqlrun.Ordering{
 		Columns: []distsqlrun.Ordering_Column{{
 			ColIdx:    0,
+			Direction: distsqlrun.Ordering_Column_ASC,
+		}, {
+			ColIdx:    1,
 			Direction: distsqlrun.Ordering_Column_ASC,
 		}},
 	}
@@ -493,17 +550,31 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.AddSingleGroupStage(thisNode,
 		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlrun.PostProcessSpec{},
-		[]sqlbase.ColumnType{colTypeBytes},
+		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},
 	)
 
 	var samples [][]byte
+	parsedTables := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+
 	sampleCount := 0
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		key := roachpb.Key(*row[0].(*tree.DBytes))
+
+		if keys.IsDescriptorKey(key) {
+			kv := roachpb.KeyValue{Key: key}
+			kv.Value.RawBytes = []byte(*row[1].(*tree.DBytes))
+			var desc sqlbase.TableDescriptor
+			if err := kv.Value.GetProto(&desc); err != nil {
+				return err
+			}
+			parsedTables[desc.ID] = &desc
+			return nil
+		}
+
 		sampleCount++
 		sampleCount = sampleCount % oversample
 		if sampleCount == 0 {
-			b := row[0].(*tree.DBytes)
-			k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
+			k, err := keys.EnsureSafeSplitKey(key)
 			if err != nil {
 				return err
 			}
@@ -534,10 +605,10 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		dsp.Run(planCtx, txn, &p, recv, evalCtx)
 		return rowResultWriter.Err()
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Record.Description)
 
-	return samples, nil
+	return samples, parsedTables, nil
 }
