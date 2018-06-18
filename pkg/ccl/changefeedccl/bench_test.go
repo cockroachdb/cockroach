@@ -10,16 +10,15 @@ package changefeedccl
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -61,13 +60,12 @@ func BenchmarkChangefeed(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		k := newTestKafkaProducer()
-		hookName := fmt.Sprintf(`%s-%d`, b.Name(), i)
-		testProducersHook[hookName] = k
+		resultsCh := make(chan tree.Datums, 1)
 
 		b.StartTimer()
-		cancelFeed := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`, `kafka://`+hookName)
-		for rows := 0; rows < numRows; rows += len(k.WaitUntilNewMessages()) {
+		cancelFeed := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`, resultsCh)
+		for rows := 0; rows < numRows; rows++ {
+			<-resultsCh
 		}
 		b.StopTimer()
 

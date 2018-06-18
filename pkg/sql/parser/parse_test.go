@@ -983,6 +983,7 @@ func TestParse(t *testing.T) {
 		{`EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10`},
 		{`SET ROW (1, true, NULL)`},
 
+		{`CREATE CHANGEFEED FOR TABLE foo`},
 		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 		// TODO(dan): Implement.
 		// {`CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'`},
