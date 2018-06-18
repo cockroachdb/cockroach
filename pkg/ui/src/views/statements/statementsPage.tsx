@@ -19,18 +19,18 @@ import { summarize, StatementSummary } from "src/util/sql/summarize";
 import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 
 import * as protos from "src/js/protos";
-import "./queries.styl";
+import "./statements.styl";
 
 type CollectedStatementStatistics$Properties = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
-class QueriesSortedTable extends SortedTable<CollectedStatementStatistics$Properties> {}
+class StatementsSortedTable extends SortedTable<CollectedStatementStatistics$Properties> {}
 
-interface QueriesPageProps {
-  queries: CachedDataReducerState<QueriesResponseMessage>;
+interface StatementsPageProps {
+  statements: CachedDataReducerState<QueriesResponseMessage>;
   refreshQueries: typeof refreshQueries;
 }
 
-interface QueriesPageState {
+interface StatementsPageState {
   sortSetting: SortSetting;
 }
 
@@ -55,16 +55,16 @@ function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
-function makeQueriesColumns(queries: CollectedStatementStatistics$Properties[])
+function makeStatementsColumns(statements: CollectedStatementStatistics$Properties[])
     : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
-  const countBar = countBarChart(queries);
-  const rowsBar = rowsBarChart(queries);
-  const latencyBar = latencyBarChart(queries);
+  const countBar = countBarChart(statements);
+  const rowsBar = rowsBarChart(statements);
+  const latencyBar = latencyBarChart(statements);
 
   return [
     {
       title: "Query",
-      className: "queries-table__col-query-text",
+      className: "statements-table__col-query-text",
       cell: (query) => <StatementLink statement={ query.key.query } />,
       sort: (query) => query.key.query,
     },
@@ -86,9 +86,9 @@ function makeQueriesColumns(queries: CollectedStatementStatistics$Properties[])
   ];
 }
 
-class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
+class StatementsPage extends React.Component<StatementsPageProps, StatementsPageState> {
 
-  constructor(props: QueriesPageProps) {
+  constructor(props: StatementsPageProps) {
     super(props);
     this.state = {
       sortSetting: {
@@ -112,25 +112,25 @@ class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
     this.props.refreshQueries();
   }
 
-  renderQueries() {
-    if (!this.props.queries.data) {
+  renderStatements() {
+    if (!this.props.statements.data) {
       // This should really be handled by a loader component.
       return null;
     }
-    const { queries, last_reset } = this.props.queries.data;
+    const { queries, last_reset } = this.props.statements.data;
 
     return (
-      <div className="queries-screen">
-        <span className="queries-screen__last-hour-note">
-          {queries.length} query fingerprints.
+      <div className="statements">
+        <span className="statements__last-hour-note">
+          {queries.length} statement fingerprints.
           Query history is only maintained for about an hour.
           History last cleared {Print.Timestamp(last_reset)}.
         </span>
 
-        <QueriesSortedTable
-          className="queries-table"
+        <StatementsSortedTable
+          className="statements-table"
           data={queries}
-          columns={makeQueriesColumns(queries)}
+          columns={makeStatementsColumns(queries)}
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
@@ -142,17 +142,17 @@ class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
     return (
       <section className="section" style={{ maxWidth: "none" }}>
         <Helmet>
-          <title>Queries</title>
+          <title>Statements</title>
         </Helmet>
 
-        <h1 style={{ marginBottom: 20 }}>Queries</h1>
+        <h1 style={{ marginBottom: 20 }}>Statements</h1>
 
         <Loading
-          loading={_.isNil(this.props.queries.data)}
+          loading={_.isNil(this.props.statements.data)}
           className="loading-image loading-image__spinner"
           image={spinner}
         >
-          {this.renderQueries()}
+          {this.renderStatements()}
         </Loading>
       </section>
     );
@@ -161,13 +161,13 @@ class QueriesPage extends React.Component<QueriesPageProps, QueriesPageState> {
 }
 
 // tslint:disable-next-line:variable-name
-const QueriesPageConnected = connect(
+const StatementsPageConnected = connect(
   (state: AdminUIState) => ({
-    queries: state.cachedData.queries,
+    statements: state.cachedData.queries,
   }),
   {
     refreshQueries,
   },
-)(QueriesPage);
+)(StatementsPage);
 
-export default QueriesPageConnected;
+export default StatementsPageConnected;
