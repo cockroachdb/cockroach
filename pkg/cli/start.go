@@ -425,6 +425,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	serverCfg.HeapProfileDirName = profileOutputDirectory()
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.SetSeverity(log.Severity_WARNING)
@@ -828,6 +829,15 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
+func profileOutputDirectory() string {
+	f := cockroachCmd.PersistentFlags().Lookup(logflags.LogDirName)
+	outputDirectory := "."
+	if logDir := f.Value.String(); logDir != "" {
+		outputDirectory = logDir
+	}
+	return outputDirectory
+}
+
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
@@ -859,11 +869,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 		}
 	}
 
-	// We need an output directory below. We use the current directory unless
-	// the log directory is configured, in which case we use that.
-	outputDirectory := "."
 	if logDir := f.Value.String(); logDir != "" {
-		outputDirectory = logDir
 
 		ls := pf.Lookup(logflags.LogToStderrName)
 		if !ls.Changed {
@@ -884,6 +890,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 		// directory too large.
 		log.StartGCDaemon()
 	}
+	outputDirectory := profileOutputDirectory()
 
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory

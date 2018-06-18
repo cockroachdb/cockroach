@@ -173,6 +173,9 @@ type Config struct {
 	// statistics cache.
 	SQLTableStatCacheSize int
 
+	// HeapProfileDirName is the directory name for heap profiles using
+	// heapprofiler.
+	HeapProfileDirName string
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
