@@ -173,6 +173,9 @@ type Config struct {
 	// statistics cache.
 	SQLTableStatCacheSize int
 
+	// OOMHeuristicProfileDirName is the directory name for heap profiles using
+	// OOM Heuristics.
+	OOMHeuristicProfileDirName string
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.

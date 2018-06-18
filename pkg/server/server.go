@@ -1770,6 +1770,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
+	rssChan := make(chan int64)
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
@@ -1777,11 +1778,19 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 			select {
 			case <-ticker.C:
 				s.runtime.SampleEnvironment(ctx)
+				rssChan <- s.runtime.Rss.Value()
 			case <-s.stopper.ShouldStop():
+				close(rssChan)
 				return
 			}
 		}
 	})
+	ohmd, err := newOOMHeuristicMemDumper(ctx, rssChan, s.cfg.OOMHeuristicProfileDirName)
+	if err != nil {
+		log.Infof(ctx, "Could not create OOMHeuristicDumper due to: %s", err)
+		return
+	}
+	s.stopper.RunWorker(ctx, ohmd.getWorker(s.stopper))
 }
 
 // Stop stops the server.
