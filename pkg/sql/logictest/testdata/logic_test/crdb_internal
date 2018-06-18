@@ -151,12 +151,12 @@ query_id  node_id  user_name  start  query  client_address  application_name  di
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query TTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
