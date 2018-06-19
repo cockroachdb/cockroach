@@ -17,8 +17,6 @@ package jobspb
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // Details is a marker interface for job details proto structs.
@@ -86,47 +84,39 @@ func WrapProgressDetails(details ProgressDetails) interface {
 
 // UnwrapDetails returns the details object stored within the payload's Details
 // field, discarding the protobuf wrapper struct.
-//
-// Unlike in WrapPayloadDetails, an unknown details type may simply indicate
-// that the Payload originated on a node aware of more details types, and so the
-// error is returned to the caller.
-func (p *Payload) UnwrapDetails() (Details, error) {
+func (p *Payload) UnwrapDetails() Details {
 	switch d := p.Details.(type) {
 	case *Payload_Backup:
-		return *d.Backup, nil
+		return *d.Backup
 	case *Payload_Restore:
-		return *d.Restore, nil
+		return *d.Restore
 	case *Payload_SchemaChange:
-		return *d.SchemaChange, nil
+		return *d.SchemaChange
 	case *Payload_Import:
-		return *d.Import, nil
+		return *d.Import
 	case *Payload_Changefeed:
-		return *d.Changefeed, nil
+		return *d.Changefeed
 	default:
-		return nil, errors.Errorf("jobspb.Payload: unsupported details type %T", d)
+		return nil
 	}
 }
 
 // UnwrapDetails returns the details object stored within the progress' Details
 // field, discarding the protobuf wrapper struct.
-//
-// Unlike in WrapProgressDetails, an unknown details type may simply indicate
-// that the Payload originated on a node aware of more details types, and so the
-// error is returned to the caller.
-func (p *Progress) UnwrapDetails() (ProgressDetails, error) {
+func (p *Progress) UnwrapDetails() ProgressDetails {
 	switch d := p.Details.(type) {
 	case *Progress_Backup:
-		return *d.Backup, nil
+		return *d.Backup
 	case *Progress_Restore:
-		return *d.Restore, nil
+		return *d.Restore
 	case *Progress_SchemaChange:
-		return *d.SchemaChange, nil
+		return *d.SchemaChange
 	case *Progress_Import:
-		return *d.Import, nil
+		return *d.Import
 	case *Progress_Changefeed:
-		return *d.Changefeed, nil
+		return *d.Changefeed
 	default:
-		return nil, errors.Errorf("jobs.Progress: unsupported details type %T", d)
+		return nil
 	}
 }
 

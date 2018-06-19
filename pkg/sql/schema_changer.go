@@ -908,10 +908,10 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				return err
 			}
 
-			details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
+			details, ok := job.Details().(jobspb.SchemaChangeDetails)
 			if !ok {
 				// TODO(mjibson): should this be `job`, not `sc.job`?
-				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Record.Details)
+				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Details())
 			}
 			details.ResumeSpanList[i].ResumeSpans = nil
 			err = job.SetDetails(ctx, details)
@@ -937,9 +937,14 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		for i := range desc.MutationJobs {
 			if desc.MutationJobs[i].MutationID == sc.mutationID {
 				// Create a roll back job.
-				record := sc.job.Record
-				record.Description = "ROLL BACK " + record.Description
-				job := sc.jobRegistry.NewJob(record)
+				oldJobPayload := sc.job.Payload()
+				job := sc.jobRegistry.NewJob(jobs.Record{
+					Description:   "ROLL BACK " + oldJobPayload.Description,
+					Username:      oldJobPayload.Username,
+					DescriptorIDs: oldJobPayload.DescriptorIDs,
+					Details:       oldJobPayload.UnwrapDetails(),
+					Progress:      jobspb.SchemaChangeProgress{},
+				})
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
