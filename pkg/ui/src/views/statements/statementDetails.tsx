@@ -13,11 +13,12 @@ import { AdminUIState } from "src/redux/state";
 import { statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
+import { NumericStat, stdDev } from "src/util/app_stats";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import * as protos from "src/js/protos";
 
-import { countBarChart, latencyBarChart } from "./barCharts";
+import { countBreakdown, rowsBreakdown, latencyBreakdown } from "./barCharts";
 
 type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
@@ -28,22 +29,10 @@ interface StatementDetailsOwnProps {
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
 
-interface NumericStat {
-  mean?: number;
-  squared_diffs?: number;
-}
-
-function variance(stat: NumericStat, count: number) {
-  return stat.squared_diffs / (count - 1);
-}
-
-function stdDev(stat: NumericStat, count: number) {
-  return Math.sqrt(variance(stat, count));
-}
-
 interface NumericStatRow {
   name: string;
   value: NumericStat;
+  bar?: () => {};
 }
 
 interface NumericStatTableProps {
@@ -65,6 +54,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
             <th className="numeric-stats-table__cell" />
             <th className="numeric-stats-table__cell">Mean</th>
             <th className="numeric-stats-table__cell">Std. Dev.</th>
+            <th className="numeric-stats-table__cell" />
           </tr>
         </thead>
         <tbody style={{ textAlign: "right" }}>
@@ -75,6 +65,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
                   <td className="numeric-stats-table__cell">{ this.props.format(row.value.mean) }</td>
                   <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
+                  <td className="numeric-stats-table__cell">{ row.bar ? row.bar() : null }</td>
                 </tr>
               );
             })
@@ -124,8 +115,9 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
 
-    const countBar = countBarChart();
-    const latencyBar = latencyBarChart();
+    const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart } = countBreakdown(this.props.statement);
+    const { rowsBarChart } = rowsBreakdown(this.props.statement);
+    const { parseBarChart, planBarChart, runBarChart, overheadBarChart } = latencyBreakdown(this.props.statement);
 
     return (
       <div className="content l-columns">
@@ -153,40 +145,42 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
           </section>
           <section className="section">
             <h3>Execution Count</h3>
-            <div className="details-bar">{ countBar(this.props.statement) }</div>
             <table className="numeric-stats-table">
               <tbody>
                 <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempt Count</th>
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempts</th>
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ firstAttemptCount }</td>
+                  <td className="numeric-stats-table__cell">{ firstAttemptsBarChart() }</td>
                 </tr>
                 <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total Count</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
-                </tr>
-                <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Cumulative Retries</th>
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Retries</th>
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count - firstAttemptCount }</td>
+                  <td className="numeric-stats-table__cell">{ retriesBarChart() }</td>
                 </tr>
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Max Retries</th>
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ FixLong(stats.max_retries).toInt() }</td>
+                  <td className="numeric-stats-table__cell">{ maxRetriesBarChart() }</td>
+                </tr>
+                <tr className="numeric-stats-table__row--body">
+                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total</th>
+                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
+                  <td className="numeric-stats-table__cell" />
                 </tr>
               </tbody>
             </table>
           </section>
           <section className="section">
             <h3>Latency by Phase</h3>
-            <div className="details-bar">{ latencyBar(this.props.statement) }</div>
             <NumericStatTable
               count={ count }
               format={ (v: number) => Duration(v * 1e9) }
               rows={[
+                { name: "Parse", value: stats.parse_lat, bar: parseBarChart },
+                { name: "Plan", value: stats.plan_lat, bar: planBarChart },
+                { name: "Run", value: stats.run_lat, bar: runBarChart },
+                { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
                 { name: "Overall", value: stats.service_lat },
-                { name: "Parse", value: stats.parse_lat },
-                { name: "Plan", value: stats.plan_lat },
-                { name: "Run", value: stats.run_lat },
-                { name: "Overhead", value: stats.overhead_lat },
               ]}
             />
           </section>
@@ -196,7 +190,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
               count={ count }
               format={ (v: number) => "" + Math.round(v) }
               rows={[
-                { name: "Rows", value: stats.num_rows },
+                { name: "Rows", value: stats.num_rows, bar: rowsBarChart },
               ]}
             />
           </section>

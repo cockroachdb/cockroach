@@ -2,6 +2,7 @@ import d3 from "d3";
 import _ from "lodash";
 import React from "react";
 
+import { stdDevLong } from "src/util/app_stats";
 import { Duration } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 
@@ -10,6 +11,7 @@ import * as protos from "src/js/protos";
 type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
+const clamp = (i: number) => i < 0 ? 0 : i;
 
 const countBars = [
   bar("count-first-try", "First Try Count", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
@@ -76,3 +78,221 @@ function makeBarChart(
 export const countBarChart = makeBarChart(countBars);
 export const rowsBarChart = makeBarChart(rowsBars, v => "" + Math.round(v));
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9));
+
+export function countBreakdown(s: StatementStatistics) {
+  const count = longToInt(s.stats.count);
+  const firstAttempts = longToInt(s.stats.first_attempt_count);
+  const retries = count - firstAttempts;
+  const maxRetries = longToInt(s.stats.max_retries);
+
+  const scale = d3.scale.linear()
+    .domain([0, count])
+    .range([0, 100]);
+
+  return {
+    firstAttemptsBarChart() {
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="count-first-try bar-chart__bar"
+            style={{ width: scale(firstAttempts) + "%" }}
+            title={ "First Try Count: " + firstAttempts }
+          />
+        </div>
+      );
+    },
+
+    retriesBarChart() {
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="count-retry bar-chart__bar"
+            style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
+            title={ "Retry Count: " + retries }
+          />
+        </div>
+      );
+    },
+
+    maxRetriesBarChart() {
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="count-retry bar-chart__bar"
+            style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
+            title={ "Max Retries: " + retries }
+          />
+        </div>
+      );
+    },
+  };
+}
+
+export function rowsBreakdown(s: StatementStatistics) {
+  const mean = s.stats.num_rows.mean;
+  const sd = stdDevLong(s.stats.num_rows, s.stats.count);
+
+  const scale = d3.scale.linear()
+      .domain([0, mean + sd])
+      .range([0, 100]);
+
+  return {
+    rowsBarChart() {
+      const title = "Row Count.  Mean: " + mean + " Std.Dev.: " + sd;
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="rows bar-chart__bar"
+            style={{ width: scale(clamp(mean - sd)) + "%" }}
+            title={ title }
+          />
+          <div
+            className="rows-dev bar-chart__bar"
+            style={{ width: scale(2 * sd) + "%" }}
+            title={ title }
+          />
+        </div>
+      );
+    },
+  };
+}
+
+export function latencyBreakdown(s: StatementStatistics) {
+  const parseMean = s.stats.parse_lat.mean;
+  const parseSd = stdDevLong(s.stats.parse_lat, s.stats.count);
+
+  const planMean = s.stats.plan_lat.mean;
+  const planSd = stdDevLong(s.stats.plan_lat, s.stats.count);
+
+  const runMean = s.stats.run_lat.mean;
+  const runSd = stdDevLong(s.stats.run_lat, s.stats.count);
+
+  const overheadMean = s.stats.overhead_lat.mean;
+  const overheadSd = stdDevLong(s.stats.overhead_lat, s.stats.count);
+
+  const overallMean = s.stats.service_lat.mean;
+  const overallSd = stdDevLong(s.stats.service_lat, s.stats.count);
+
+  const max = Math.max(
+    parseMean + parseSd,
+    parseMean + planMean + planSd,
+    parseMean + planMean + runMean + runSd,
+    parseMean + planMean + runMean + overheadMean + overheadSd,
+    overallMean + overallSd,
+  );
+
+  const scale = d3.scale.linear()
+    .domain([0, max])
+    .range([0, 100]);
+
+  return {
+    parseBarChart() {
+      const width = scale(clamp(parseMean - parseSd));
+      const right = scale(parseMean);
+      const title = "Parse Latency.  Mean: " + parseMean + " Std. Dev.: " + parseSd;
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="latency-parse bar-chart__bar"
+            style={{ width: width + "%", position: "absolute", left: 0 }}
+            title={ title }
+          />
+          <div
+            className="latency-parse-dev bar-chart__bar"
+            style={{ width: scale(2 * parseSd) + "%", position: "absolute", left: width + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-parse bar-chart__bar"
+            style={{ width: 1, position: "absolute", left: right + "%" }}
+            title={ title }
+          />
+        </div>
+      );
+    },
+
+    planBarChart() {
+      const left = scale(parseMean);
+      const width = scale(clamp(planMean - planSd));
+      const right = scale(parseMean + planMean);
+      const title = "Plan Latency.  Mean: " + planMean + " Std. Dev.: " + planSd;
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="latency-plan bar-chart__bar"
+            style={{ width: scale(planMean - planSd) + "%", position: "absolute", left: left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-plan-dev bar-chart__bar"
+            style={{ width: scale(2 * planSd) + "%", position: "absolute", left: width + left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-plan bar-chart__bar"
+            style={{ width: 1, position: "absolute", left: right + "%" }}
+            title={ title }
+          />
+        </div>
+      );
+    },
+
+    runBarChart() {
+      const left = scale(parseMean + planMean);
+      const width = scale(clamp(runMean - runSd));
+      const right = scale(parseMean + planMean + runMean);
+      const title = "Run Latency.  Mean: " + runMean + " Std. Dev.: " + runSd;
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="latency-run bar-chart__bar"
+            style={{ width: scale(runMean - runSd) + "%", position: "absolute", left: left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-run-dev bar-chart__bar"
+            style={{ width: scale(2 * runSd) + "%", position: "absolute", left: width + left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-run bar-chart__bar"
+            style={{ width: 1, position: "absolute", left: right + "%" }}
+            title={ title }
+          />
+        </div>
+      );
+    },
+
+    overheadBarChart() {
+      const left = scale(parseMean + planMean + runMean);
+      const width = scale(clamp(overheadMean - overheadSd));
+      const right = scale(parseMean + planMean + runMean + overheadMean);
+      const title = "Overhead Latency.  Mean: " + overheadMean + " Std. Dev.: " + overheadSd;
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="latency-overhead bar-chart__bar"
+            style={{ width: scale(overheadMean - overheadSd) + "%", position: "absolute", left: left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-overhead-dev bar-chart__bar"
+            style={{ width: scale(2 * overheadSd) + "%", position: "absolute", left: width + left + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-overhead bar-chart__bar"
+            style={{ width: 1, position: "absolute", left: right + "%" }}
+            title={ title }
+          />
+        </div>
+      );
+    },
+
+    overallBarChart() {
+      return (
+        <div>Unimplemented.</div>
+      );
+    },
+  };
+}
