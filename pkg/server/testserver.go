@@ -587,6 +587,11 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
+// GetNodeLiveness exposes the Server's nodeLiveness.
+func (ts *TestServer) GetNodeLiveness() *storage.NodeLiveness {
+	return ts.nodeLiveness
+}
+
 // DistSender exposes the Server's DistSender.
 func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
