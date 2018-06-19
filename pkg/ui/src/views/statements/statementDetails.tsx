@@ -126,24 +126,6 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <SqlBox value={ this.props.statement.key.query } />
           </section>
           <section className="section">
-            <table className="numeric-stats-table">
-              <tbody>
-                <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>App</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.app }</td>
-                </tr>
-                <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>DistSQL</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.distSQL ? "Yes" : "No" }</td>
-                </tr>
-                <tr className="numeric-stats-table__row--body">
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.failed ? "Yes" : "No" }</td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
-          <section className="section">
             <h3>Execution Count</h3>
             <table className="numeric-stats-table">
               <tbody>
@@ -221,6 +203,22 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
               tooltip="The average number of rows returned or affected."
               value={ Math.round(stats.num_rows.mean) } />
           </SummaryBar>
+          <table className="numeric-stats-table">
+            <tbody>
+              <tr className="numeric-stats-table__row--body">
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>App</th>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.app }</td>
+              </tr>
+              <tr className="numeric-stats-table__row--body">
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used DistSQL?</th>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.distSQL ? "Yes" : "No" }</td>
+              </tr>
+              <tr className="numeric-stats-table__row--body">
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed?</th>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.failed ? "Yes" : "No" }</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     );
