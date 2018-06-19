@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -36,6 +35,7 @@ type sorterBase struct {
 }
 
 func (s *sorterBase) init(
+	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
 	input RowSource,
@@ -56,7 +56,8 @@ func (s *sorterBase) init(
 	s.ordering = ordering
 	s.matchLen = matchLen
 	s.count = count
-	return s.processorBase.init(post, input.OutputTypes(), flowCtx, processorID, output, opts)
+	return s.processorBase.init(self, post, input.OutputTypes(), flowCtx,
+		processorID, output, opts)
 }
 
 func newSorter(
@@ -155,7 +156,7 @@ func newSortAllProcessor(
 		rowContainerMon: rowContainerMon,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, input, post, out,
 		convertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		procStateOpts{
@@ -260,17 +261,6 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	return true, nil
 }
 
-func (s *sortAllProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if s.out.output == nil {
-		panic("sorter output not initialized for emitting rows")
-	}
-	ctx = s.Start(ctx)
-	Run(ctx, s, s.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
 func (s *sortAllProcessor) close() {
 	// We are done sorting rows, close the iterators we have open. The row
 	// containers require a context, so must be called before internalClose().
@@ -343,7 +333,7 @@ func newSortTopKProcessor(
 		k:               k,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, input, post, out,
 		ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
@@ -420,17 +410,6 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, s.drainHelper()
 }
 
-func (s *sortTopKProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if s.out.output == nil {
-		panic("sorter output not initialized for emitting rows")
-	}
-	ctx = s.Start(ctx)
-	Run(ctx, s, s.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
 func (s *sortTopKProcessor) close() {
 	if s.internalClose() {
 		ctx := s.evalCtx.Ctx()
@@ -485,7 +464,8 @@ func newSortChunksProcessor(
 		rowContainerMon: rowContainerMon,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
+		proc, flowCtx, processorID, input, post, out, ordering,
+		spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -609,17 +589,6 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, s.drainHelper()
-}
-
-func (s *sortChunksProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if s.out.output == nil {
-		panic("sorter output not initialized for emitting rows")
-	}
-	ctx = s.Start(ctx)
-	Run(ctx, s, s.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 func (s *sortChunksProcessor) close() {

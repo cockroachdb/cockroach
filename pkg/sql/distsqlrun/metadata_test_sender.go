@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -48,6 +47,7 @@ func newMetadataTestSender(
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
 	if err := mts.init(
+		mts,
 		post,
 		input.OutputTypes(),
 		flowCtx,
@@ -72,19 +72,6 @@ func newMetadataTestSender(
 		return nil, err
 	}
 	return mts, nil
-}
-
-// Run is part of the Processor interface.
-func (mts *metadataTestSender) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if mts.out.output == nil {
-		panic("metadataTestSender output not initialized for emitting rows")
-	}
-
-	ctx = mts.Start(ctx)
-	Run(ctx, mts, mts.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.
