@@ -170,11 +170,13 @@ var _ hashRowContainer = &hashMemRowContainer{}
 
 // makeHashMemRowContainer creates a hashMemRowContainer from the given
 // rowContainer. This rowContainer must still be Close()d by the caller.
-func makeHashMemRowContainer(rowContainer *memRowContainer) hashMemRowContainer {
+func makeHashMemRowContainer(
+	mon *mon.BytesMonitor, rowContainer *memRowContainer,
+) hashMemRowContainer {
 	return hashMemRowContainer{
 		memRowContainer: rowContainer,
 		buckets:         make(map[string][]int),
-		bucketsAcc:      rowContainer.evalCtx.Mon.MakeBoundAccount(),
+		bucketsAcc:      mon.MakeBoundAccount(),
 	}
 }
 

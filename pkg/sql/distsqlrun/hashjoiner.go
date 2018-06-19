@@ -686,7 +686,7 @@ func (h *hashJoiner) shouldEmitUnmatched(
 
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
 func (h *hashJoiner) initStoredRows() error {
-	storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
+	storedMemRows := makeHashMemRowContainer(h.MemMonitor, &h.rows[h.storedSide])
 	err := storedMemRows.Init(
 		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
