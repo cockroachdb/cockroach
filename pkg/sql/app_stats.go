@@ -306,20 +306,21 @@ func (s *sqlStats) getStmtStats(
 			// guesstimate that we'll need apps*(queries-per-app).
 			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
 		}
-		hashedAppName := HashForReporting(salt, appName)
 		a.Lock()
 		for q, stats := range a.stmts {
 			maybeScrubbed := q.stmt
+			maybeHashedAppName := appName
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
+				maybeHashedAppName = HashForReporting(salt, appName)
 			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
 					Query:   maybeScrubbed,
 					DistSQL: q.distSQLUsed,
 					Failed:  q.failed,
-					App:     hashedAppName,
+					App:     maybeHashedAppName,
 				}
 				stats.Lock()
 				data := stats.data
