@@ -360,6 +360,7 @@ on_conflict ::=
 
 import_bundle_format ::=
 	'MYSQLDUMP'
+	| 'PGDUMP'
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -643,6 +644,7 @@ unreserved_keyword ::=
 	| 'BIGSERIAL'
 	| 'BLOB'
 	| 'BOOL'
+	| 'BTREE'
 	| 'BY'
 	| 'BYTEA'
 	| 'BYTES'
@@ -758,6 +760,7 @@ unreserved_keyword ::=
 	| 'PAUSE'
 	| 'PHYSICAL'
 	| 'PGCOPY'
+	| 'PGDUMP'
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'
@@ -887,8 +890,8 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
 	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
 
@@ -1225,8 +1228,9 @@ opt_unique ::=
 opt_index_name ::=
 	opt_name
 
-opt_using_gin ::=
+opt_using_gin_btree ::=
 	'USING' 'GIN'
+	| 'USING' 'BTREE'
 	| 
 
 index_params ::=

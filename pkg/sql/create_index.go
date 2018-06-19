@@ -56,6 +56,39 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
+// MakeIndexDescriptor creates an index descriptor from a CreateIndex node.
+func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) {
+	indexDesc := sqlbase.IndexDescriptor{
+		Name:             string(n.Name),
+		Unique:           n.Unique,
+		StoreColumnNames: n.Storing.ToStrings(),
+	}
+
+	if n.Inverted {
+		if n.Interleave != nil {
+			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
+		}
+
+		if n.PartitionBy != nil {
+			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+		}
+
+		if len(indexDesc.StoreColumnNames) > 0 {
+			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
+		}
+
+		if n.Unique {
+			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+		}
+		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+	}
+
+	if err := indexDesc.FillColumns(n.Columns); err != nil {
+		return nil, err
+	}
+	return &indexDesc, nil
+}
+
 func (n *createIndexNode) startExec(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
@@ -67,37 +100,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	indexDesc := sqlbase.IndexDescriptor{
-		Name:             string(n.n.Name),
-		Unique:           n.n.Unique,
-		StoreColumnNames: n.n.Storing.ToStrings(),
-	}
-
-	if n.n.Inverted {
-		if n.n.Interleave != nil {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
-		}
-
-		if n.n.PartitionBy != nil {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
-		}
-
-		if len(indexDesc.StoreColumnNames) > 0 {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
-		}
-
-		if n.n.Unique {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
-		}
-		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
-	}
-
-	if err := indexDesc.FillColumns(n.n.Columns); err != nil {
+	indexDesc, err := MakeIndexDescriptor(n.n)
+	if err != nil {
 		return err
 	}
+
 	if n.n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-			params.EvalContext(), n.tableDesc, &indexDesc, n.n.PartitionBy)
+			params.EvalContext(), n.tableDesc, indexDesc, n.n.PartitionBy)
 		if err != nil {
 			return err
 		}
@@ -105,7 +115,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(*indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
