@@ -13,7 +13,7 @@ import { AdminUIState } from "src/redux/state";
 import { statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
-import { NumericStat, stdDev } from "src/util/app_stats";
+import { NumericStat, stdDev } from "src/util/appStats";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import * as protos from "src/js/protos";
