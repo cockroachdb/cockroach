@@ -424,20 +424,6 @@ func (h *ProcOutputHelper) consumerClosed() {
 //     return p.startInternal(ctx, concatProcName)
 //   }
 //
-//   // Run is part of the Processor interface.
-//   func (p *concatProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-//     if p.out.output == nil {
-//       panic("concatProcessor output not initialized for emitting rows")
-//     }
-//     ctx = p.Start(ctx)
-//     // Run is a utility for implementing Processor.Run() in terms of
-//     // RowSource.Next().
-//     Run(ctx, p, p.out.output)
-//     if wg != nil {
-//       wg.Done()
-//     }
-//   }
-//
 //   // Next is part of the RowSource interface.
 //   func (p *concatProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 //     // Loop while we haven't produced a row or a metadata record. We loop around
@@ -492,6 +478,8 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   }
 //
 type processorBase struct {
+	self RowSource
+
 	processorID int32
 
 	out     ProcOutputHelper
@@ -729,6 +717,18 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 	return pb.out.outputTypes
 }
 
+// Run is part of the processor interface.
+func (pb *processorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if pb.out.output == nil {
+		panic("processor output not initialized for emitting rows")
+	}
+	ctx = pb.self.Start(ctx)
+	Run(ctx, pb.self, pb.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
 var procNameToLogTag = map[string]string{
 	distinctProcName:                "distinct",
 	hashAggregatorProcName:          "hashAgg",
@@ -766,6 +766,7 @@ type procStateOpts struct {
 
 // init initializes the processorBase.
 func (pb *processorBase) init(
+	self RowSource,
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
 	flowCtx *FlowCtx,
@@ -773,6 +774,7 @@ func (pb *processorBase) init(
 	output RowReceiver,
 	opts procStateOpts,
 ) error {
+	pb.self = self
 	pb.flowCtx = flowCtx
 	pb.processorID = processorID
 	pb.evalCtx = flowCtx.NewEvalCtx()

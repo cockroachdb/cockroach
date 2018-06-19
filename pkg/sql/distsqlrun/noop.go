@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -40,6 +39,7 @@ func newNoopProcessor(
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.init(
+		n,
 		post,
 		input.OutputTypes(),
 		flowCtx,
@@ -56,18 +56,6 @@ func newNoopProcessor(
 func (n *noopProcessor) Start(ctx context.Context) context.Context {
 	n.input.Start(ctx)
 	return n.startInternal(ctx, noopProcName)
-}
-
-// Run is part of the Processor interface.
-func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if n.out.output == nil {
-		panic("noopProcessor output not initialized for emitting rows")
-	}
-	ctx = n.Start(ctx)
-	Run(ctx, n, n.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Next is part of the RowSource interface.

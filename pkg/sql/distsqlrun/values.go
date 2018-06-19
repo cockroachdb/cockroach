@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -58,22 +57,10 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(post, types, flowCtx, processorID, output, procStateOpts{}); err != nil {
+	if err := v.init(v, post, types, flowCtx, processorID, output, procStateOpts{}); err != nil {
 		return nil, err
 	}
 	return v, nil
-}
-
-// Run is part of the processor interface.
-func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if v.out.output == nil {
-		panic("valuesProcessor output not initialized for emitting rows")
-	}
-	ctx = v.Start(ctx)
-	Run(ctx, v, v.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.

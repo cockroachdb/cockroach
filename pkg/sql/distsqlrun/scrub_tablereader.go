@@ -18,8 +18,6 @@ import (
 	"bytes"
 	"context"
 
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,6 +82,7 @@ func newScrubTableReader(
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
 	if err := tr.init(
+		tr,
 		post,
 		ScrubTypes,
 		flowCtx,
@@ -205,18 +204,6 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	primaryKeyValues.WriteByte(')')
 	return primaryKeyValues.String()
-}
-
-// Run is part of the processor interface.
-func (tr *scrubTableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if tr.out.output == nil {
-		panic("scrubTableReader output not initialized for emitting rows")
-	}
-	ctx = tr.Start(ctx)
-	Run(ctx, tr, tr.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.
