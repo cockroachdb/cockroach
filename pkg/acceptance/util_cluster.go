@@ -135,6 +135,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			LogDir:     logDir,
 			NumNodes:   len(cfg.Nodes),
 			PerNodeCfg: perNodeCfg,
+			NoWait:     cfg.NoWait,
 		}
 
 		l := localcluster.New(clusterCfg)
