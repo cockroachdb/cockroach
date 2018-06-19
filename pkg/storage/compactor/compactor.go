@@ -375,17 +375,18 @@ func (c *Compactor) processCompaction(
 }
 
 // aggregateCompaction merges sc into aggr, to create a new suggested
-// compaction, if the key spans are overlapping or near-contiguous.
-// Note that because suggested compactions are stored sorted by their
-// start key, sc.StartKey >= aggr.StartKey. Returns whether the
-// compaction was aggregated. If false, the supplied aggregation is
-// complete and should be processed.
+// compaction, if the key spans are overlapping or near-contiguous.  Note that
+// because suggested compactions are stored sorted by their start key,
+// sc.StartKey >= aggr.StartKey. Returns true if we couldn't add the new
+// suggested compaction to the aggregation and are therefore done building the
+// current aggregation and should process it. Returns false if we should
+// continue aggregating suggested compactions.
 func (c *Compactor) aggregateCompaction(
 	ctx context.Context,
 	ssti engine.SSTableInfosByLevel,
 	aggr *aggregatedCompaction,
 	sc storagebase.SuggestedCompaction,
-) bool {
+) (done bool) {
 	// Don't bother aggregating more once we reach threshold bytes.
 	if aggr.Bytes >= c.thresholdBytes() {
 		return true // suggested compation could not be aggregated
