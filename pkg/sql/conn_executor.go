@@ -622,11 +622,14 @@ func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.S
 	})
 }
 
-type closeType bool
+type closeType int
 
 const (
-	normalClose closeType = true
-	panicClose  closeType = false
+	normalClose closeType = iota
+	panicClose
+	// externalTxnClose means that the connExecutor has been used within a
+	// higher-level txn (through the InternalExecutor).
+	externalTxnClose
 )
 
 func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{}) {
@@ -679,19 +682,23 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// cancellation. Now what?
 	_ = ex.synchronizeParallelStmts(ctx)
 
-	// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
-	// This event is guaranteed to be accepted in every state.
-	ev := eventNonRetriableErr{IsCommit: fsm.FromBool(true)}
-	payload := eventNonRetriableErrPayload{err: fmt.Errorf("connExecutor closing")}
-	if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
-		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+	if closeType == normalClose {
+		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
+		// This event is guaranteed to be accepted in every state.
+		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(true)}
+		payload := eventNonRetriableErrPayload{err: fmt.Errorf("connExecutor closing")}
+		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
+			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+		}
+	} else if closeType == externalTxnClose {
+		ex.state.finishExternalTxn()
 	}
 
 	if err := ex.resetExtraTxnState(ctx, txnAborted, ex.server.dbCache); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
-	if closeType == normalClose {
+	if closeType != panicClose {
 		// Close all statements and prepared portals by first unifying the namespaces
 		// and the closing what remains.
 		ex.commitPrepStmtNamespace(ctx)
@@ -709,7 +716,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.eventLog = nil
 	}
 
-	if closeType == normalClose {
+	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
 		ex.mon.Stop(ctx)
