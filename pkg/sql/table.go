@@ -219,16 +219,11 @@ func (tc *TableCollection) getTableVersion(
 	}
 
 	// We don't go through the normal lease mechanism for system tables
-	// that are not the role members table.
+	// system.descriptor and system.lease, because they are
+	// used for acquiring leases, creating a chicken&egg problem.
 	if testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
-		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
-		// TODO(vivek): Ideally we'd avoid caching for only the
-		// system.descriptor and system.lease tables, because they are
-		// used for acquiring leases, creating a chicken&egg problem.
-		// But doing so turned problematic and the tests pass only by also
-		// disabling caching of system.eventlog, system.rangelog, and
-		// system.users. For now we're sticking to disabling caching of
-		// all system descriptors except the role-members-table.
+		(tn.TableName.String() == sqlbase.DescriptorTable.Name ||
+			tn.TableName.String() == sqlbase.LeaseTable.Name)) {
 		flags.avoidCached = true
 		phyAccessor := UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(tn, flags)
