@@ -1456,6 +1456,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
 
+	var graphiteOnce sync.Once
+	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
+		if graphiteEndpoint.Get(&s.st.SV) != "" {
+			graphiteOnce.Do(func() {
+				s.node.startGraphiteStatsExporter(s.st)
+			})
+		}
+	})
+
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
 	var testingKnobs *sql.SchemaChangerTestingKnobs

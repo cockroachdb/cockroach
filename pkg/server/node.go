@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,7 +58,9 @@ const (
 	gossipStatusInterval = 1 * time.Minute
 
 	// FirstNodeID is the node ID of the first node in a new cluster.
-	FirstNodeID = 1
+	FirstNodeID         = 1
+	graphiteIntervalKey = "external.graphite.interval"
+	maxGraphiteInterval = 15 * time.Minute
 )
 
 // Metric names.
@@ -71,6 +74,30 @@ var (
 	metaExecError = metric.Metadata{
 		Name: "exec.error",
 		Help: "Number of batch KV requests that failed to execute on this node"}
+)
+
+// Cluster settings.
+var (
+	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
+	graphiteEndpoint = settings.RegisterStringSetting(
+		"external.graphite.endpoint",
+		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
+		"",
+	)
+	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
+	graphiteInterval = settings.RegisterValidatedDurationSetting(
+		graphiteIntervalKey,
+		"the interval at which metrics are pushed to Graphite (if enabled)",
+		10*time.Second,
+		func(v time.Duration) error {
+			if v < 0 {
+				return errors.Errorf("cannot set %s to a negative duration: %s", graphiteIntervalKey, v)
+			} else if v > maxGraphiteInterval {
+				return errors.Errorf("cannot set %s to more than %v: %s", graphiteIntervalKey, maxGraphiteInterval, v)
+			}
+			return nil
+		},
+	)
 )
 
 type nodeMetrics struct {
@@ -764,6 +791,31 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		}
 		return nil
+	})
+}
+
+func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
+	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+	pm := metric.MakePrometheusExporter()
+
+	n.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		defer timer.Stop()
+		for {
+			timer.Reset(graphiteInterval.Get(&st.SV))
+			select {
+			case <-n.stopper.ShouldStop():
+				return
+			case <-timer.C:
+				timer.Read = true
+				endpoint := graphiteEndpoint.Get(&st.SV)
+				if endpoint != "" {
+					if err := n.recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
+						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+					}
+				}
+			}
+		}
 	})
 }
 
