@@ -132,7 +132,7 @@ func newJoinReader(
 		}
 	} else {
 		if err := jr.processorBase.init(
-			post, jr.desc.ColumnTypes(), flowCtx, processorID, output,
+			nil, post, jr.desc.ColumnTypes(), flowCtx, processorID, output,
 			procStateOpts{}, // joinReader doesn't implement RowSource and so doesn't use it.
 		); err != nil {
 			return nil, err

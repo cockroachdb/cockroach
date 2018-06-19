@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -62,6 +61,7 @@ func newMetadataTestReceiver(
 		rowCounts: make(map[string]rowNumCounter),
 	}
 	if err := mtr.init(
+		mtr,
 		post,
 		input.OutputTypes(),
 		flowCtx,
@@ -84,19 +84,6 @@ func newMetadataTestReceiver(
 		return nil, err
 	}
 	return mtr, nil
-}
-
-// Run is part of the Processor interface.
-func (mtr *metadataTestReceiver) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if mtr.out.output == nil {
-		panic("metadataTestReceiver output not initialized for emitting rows")
-	}
-
-	ctx = mtr.Start(ctx)
-	Run(ctx, mtr, mtr.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // checkRowNumMetadata examines all of the received RowNum metadata to ensure

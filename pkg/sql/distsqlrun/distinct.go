@@ -93,7 +93,7 @@ func NewDistinct(
 	}
 
 	if err := d.init(
-		post, d.types, flowCtx, processorID, output,
+		d, post, d.types, flowCtx, processorID, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{d.input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -120,18 +120,6 @@ func NewDistinct(
 func (d *Distinct) Start(ctx context.Context) context.Context {
 	d.input.Start(ctx)
 	return d.startInternal(ctx, distinctProcName)
-}
-
-// Run is part of the processor interface.
-func (d *Distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if d.out.output == nil {
-		panic("distinct output not initialized for emitting rows")
-	}
-	ctx = d.Start(ctx)
-	Run(ctx, d, d.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.

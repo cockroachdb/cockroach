@@ -17,9 +17,8 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -78,6 +77,7 @@ func newTableReader(
 		types[i] = spec.Table.Columns[i].Type
 	}
 	if err := tr.init(
+		tr,
 		post,
 		types,
 		flowCtx,
@@ -176,18 +176,6 @@ func initRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
-}
-
-// Run is part of the processor interface.
-func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if tr.out.output == nil {
-		panic("tableReader output not initialized for emitting rows")
-	}
-	ctx = tr.Start(ctx)
-	Run(ctx, tr, tr.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {

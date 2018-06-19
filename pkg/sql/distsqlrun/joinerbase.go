@@ -106,7 +106,7 @@ func (jb *joinerBase) init(
 	outputTypes := condTypes[:outputSize]
 
 	if err := jb.processorBase.init(
-		post, outputTypes, flowCtx, processorID, output, opts,
+		nil, post, outputTypes, flowCtx, processorID, output, opts,
 	); err != nil {
 		return err
 	}

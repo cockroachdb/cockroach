@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"strings"
-	"sync"
 	"unsafe"
 
 	"fmt"
@@ -142,6 +141,7 @@ type aggregatorBase struct {
 // trailingMetaCallback is passed as part of procStateOpts; the inputs to drain
 // are in aggregatorBase.
 func (ag *aggregatorBase) init(
+	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
 	spec *AggregatorSpec,
@@ -213,7 +213,7 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = retType
 	}
 
-	return ag.processorBase.init(post, ag.outputTypes, flowCtx, processorID, output, procStateOpts{
+	return ag.processorBase.init(self, post, ag.outputTypes, flowCtx, processorID, output, procStateOpts{
 		inputsToDrain:        []RowSource{ag.input},
 		trailingMetaCallback: trailingMetaCallback,
 	})
@@ -318,6 +318,7 @@ func newAggregator(
 	ag := &hashAggregator{buckets: make(map[string]aggregateFuncs)}
 
 	if err := ag.init(
+		ag,
 		flowCtx,
 		processorID,
 		spec,
@@ -346,6 +347,7 @@ func newOrderedAggregator(
 	ag := &orderedAggregator{}
 
 	if err := ag.init(
+		ag,
 		flowCtx,
 		processorID,
 		spec,
@@ -379,32 +381,6 @@ func (ag *aggregatorBase) start(ctx context.Context, procName string) context.Co
 	ag.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	ag.runningState = aggAccumulating
 	return ctx
-}
-
-// Run is part of the Processor interface.
-func (ag *hashAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if ag.out.output == nil {
-		panic("aggregator output not initialized for emitting rows")
-	}
-
-	ctx = ag.Start(ctx)
-	Run(ctx, ag, ag.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
-// Run is part of the Processor interface.
-func (ag *orderedAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if ag.out.output == nil {
-		panic("aggregator output not initialized for emitting rows")
-	}
-
-	ctx = ag.Start(ctx)
-	Run(ctx, ag, ag.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 func (ag *hashAggregator) close() {
