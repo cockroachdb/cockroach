@@ -18,7 +18,7 @@ import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import * as protos from "src/js/protos";
 
-import { countBreakdown, rowsBreakdown, latencyBreakdown } from "./barCharts";
+import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 
 type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
@@ -187,7 +187,8 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <SummaryHeadlineStat
               title="Execution Count"
               tooltip="Number of times this statement has executed."
-              value={ count } />
+              value={ count }
+              format={ approximify } />
             <SummaryHeadlineStat
               title="Executed without Retry"
               tooltip="Portion of executions free of retries."
@@ -201,7 +202,8 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <SummaryHeadlineStat
               title="Mean Number of Rows"
               tooltip="The average number of rows returned or affected."
-              value={ Math.round(stats.num_rows.mean) } />
+              value={ stats.num_rows.mean }
+              format={ approximify } />
           </SummaryBar>
           <table className="numeric-stats-table">
             <tbody>
