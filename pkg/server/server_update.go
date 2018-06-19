@@ -21,7 +21,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,26 +104,24 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	datums, _, err := s.internalExecutor.Query(
-		ctx, "read-gossip", nil, /* txn */
-		"SELECT node_id, server_version FROM crdb_internal.gossip_nodes;",
-	)
+	nodesWithLiveness, err := s.status.NodesWithLiveness(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	statusMap := s.nodeLiveness.GetLivenessStatusMap()
 	var newVersion string
-	for _, row := range datums {
-		id := roachpb.NodeID(int32(tree.MustBeDInt(row[0])))
-		version := string(tree.MustBeDString(row[1]))
+	for nodeID, st := range nodesWithLiveness {
+		if st.LivenessStatus != storage.NodeLivenessStatus_LIVE &&
+			st.LivenessStatus != storage.NodeLivenessStatus_DECOMMISSIONING {
+			return false, errors.Errorf("node %d not running (%s), cannot determine version",
+				nodeID, st.LivenessStatus)
+		}
 
-		if statusMap[id] == storage.NodeLivenessStatus_LIVE {
-			if newVersion == "" {
-				newVersion = version
-			} else if version != newVersion {
-				return false, errors.New("not all nodes are running the latest version yet")
-			}
+		version := st.Desc.ServerVersion.String()
+		if newVersion == "" {
+			newVersion = version
+		} else if version != newVersion {
+			return false, errors.New("not all nodes are running the latest version yet")
 		}
 	}
 
@@ -134,7 +131,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	// Check if auto upgrade is enabled at current version.
-	datums, _, err = s.internalExecutor.Query(
+	datums, _, err := s.internalExecutor.Query(
 		ctx, "read-downgrade", nil, /* txn */
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
@@ -151,13 +148,6 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		}
 	}
 
-	// Check if all non-decommissioned nodes are alive.
-	for id, status := range statusMap {
-		if status != storage.NodeLivenessStatus_DECOMMISSIONED && status != storage.NodeLivenessStatus_LIVE {
-			return false, errors.Errorf("node %d is not decommissioned but not alive, node status: %s.",
-				id, storage.NodeLivenessStatus_name[int32(status)])
-		}
-	}
 	return false, nil
 }
 

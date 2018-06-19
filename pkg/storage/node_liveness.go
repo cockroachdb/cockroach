@@ -619,7 +619,8 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 }
 
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
-// each node.
+// each node. This excludes nodes that were removed completely (dead +
+// decommissioning).
 func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
@@ -627,7 +628,12 @@ func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
-		lMap[nID] = l.IsLive(now, maxOffset)
+		isLive := l.IsLive(now, maxOffset)
+		if !isLive && l.Decommissioning {
+			// This is a node that was completely removed. Skip over it.
+			continue
+		}
+		lMap[nID] = isLive
 	}
 	return lMap
 }
@@ -654,7 +660,9 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (*Liveness, error) {
 }
 
 // GetLivenessStatusMap generates map from NodeID to LivenessStatus.
-func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]NodeLivenessStatus {
+func (nl *NodeLiveness) GetLivenessStatusMap(
+	includeRemovedNodes bool,
+) map[roachpb.NodeID]NodeLivenessStatus {
 	now := nl.clock.PhysicalTime()
 	livenesses := nl.GetLivenesses()
 	threshold := TimeUntilStoreDead.Get(&nl.st.SV)
@@ -662,9 +670,13 @@ func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]NodeLivenessSt
 
 	statusMap := make(map[roachpb.NodeID]NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		statusMap[liveness.NodeID] = liveness.LivenessStatus(
+		status := liveness.LivenessStatus(
 			now, threshold, maxOffset,
 		)
+		if status == NodeLivenessStatus_DECOMMISSIONED && !includeRemovedNodes {
+			continue
+		}
+		statusMap[liveness.NodeID] = status
 	}
 	return statusMap
 }

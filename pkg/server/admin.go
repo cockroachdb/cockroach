@@ -1082,7 +1082,7 @@ func (s *adminServer) Liveness(
 	context.Context, *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
 	livenesses := s.server.nodeLiveness.GetLivenesses()
-	statusMap := s.server.nodeLiveness.GetLivenessStatusMap()
+	statusMap := s.server.nodeLiveness.GetLivenessStatusMap(true /*includeRemovedNodes*/)
 
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
