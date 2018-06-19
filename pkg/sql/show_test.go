@@ -568,6 +568,38 @@ func TestShowQueries(t *testing.T) {
 	if !found {
 		t.Fatalf("knob did not activate in test")
 	}
+
+	// Now check the behavior on error.
+	tc.StopServer(1)
+
+	rows, err := conn1.Query(`SELECT node_id, query FROM [SHOW CLUSTER QUERIES]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	errcount := 0
+	for rows.Next() {
+		count++
+
+		var nodeID int
+		var sql string
+		if err := rows.Scan(&nodeID, &sql); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(sql)
+		if strings.HasPrefix(sql, "-- failed") || strings.HasPrefix(sql, "-- error") {
+			errcount++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if errcount != 1 {
+		t.Fatalf("expected 1 error row, got %d", errcount)
+	}
 }
 
 func TestShowSessions(t *testing.T) {
@@ -646,6 +678,38 @@ func TestShowSessions(t *testing.T) {
 
 		t.Fatalf("unexpected number of running sessions: %d, expected %d.\n%s",
 			count, expectedCount, report)
+	}
+
+	// Now check the behavior on error.
+	tc.StopServer(1)
+
+	rows, err = conn.Query(`SELECT node_id, active_queries FROM [SHOW CLUSTER SESSIONS]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count = 0
+	errcount := 0
+	for rows.Next() {
+		count++
+
+		var nodeID int
+		var sql string
+		if err := rows.Scan(&nodeID, &sql); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(sql)
+		if strings.HasPrefix(sql, "-- failed") || strings.HasPrefix(sql, "-- error") {
+			errcount++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if errcount != 1 {
+		t.Fatalf("expected 1 error row, got %d", errcount)
 	}
 }
 

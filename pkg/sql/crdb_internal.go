@@ -739,17 +739,18 @@ func populateQueriesTable(
 	for _, rpcErr := range response.Errors {
 		log.Warning(ctx, rpcErr.Message)
 		if rpcErr.NodeID != 0 {
-			// Add a row with this node ID, and nulls for all other columns
+			// Add a row with this node ID, the error for query, and
+			// nulls for all other columns.
 			if err := addRow(
-				tree.DNull,
-				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
+				tree.DNull,                             // query ID
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // username
+				tree.DNull,                             // start
+				tree.NewDString("-- "+rpcErr.Message),  // query
+				tree.DNull,                             // client_address
+				tree.DNull,                             // application_name
+				tree.DNull,                             // distributed
+				tree.DNull,                             // phase
 			); err != nil {
 				return err
 			}
@@ -857,18 +858,21 @@ func populateSessionsTable(
 	for _, rpcErr := range response.Errors {
 		log.Warning(ctx, rpcErr.Message)
 		if rpcErr.NodeID != 0 {
-			// Add a row with this node ID, and nulls for all other columns
+			// Add a row with this node ID, error in active queries, and nulls
+			// for all other columns.
 			if err := addRow(
-				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // session ID
+				tree.DNull,                             // username
+				tree.DNull,                             // client address
+				tree.DNull,                             // application name
+				tree.NewDString("-- "+rpcErr.Message),  // active queries
+				tree.DNull,                             // last active query
+				tree.DNull,                             // session start
+				tree.DNull,                             // oldest_query_start
+				tree.DNull,                             // kv_txn
+				tree.DNull,                             // alloc_bytes
+				tree.DNull,                             // max_alloc_bytes
 			); err != nil {
 				return err
 			}

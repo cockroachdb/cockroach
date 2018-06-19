@@ -102,7 +102,7 @@ func TestGossipOverwriteNode(t *testing.T) {
 	// Quiesce the stopper now to ensure that the update has propagated before
 	// checking whether node 1 has been removed from the infoStore.
 	stopper.Quiesce(context.TODO())
-	expectedErr := "unable to look up descriptor for node"
+	expectedErr := "node.*has been removed from the cluster"
 	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
 			expectedErr, node1.NodeID, err, val)
@@ -154,7 +154,7 @@ func TestGossipMoveNode(t *testing.T) {
 	} else if !proto.Equal(movedNode, val) {
 		t.Errorf("expected node %+v, got %+v", movedNode, val)
 	}
-	expectedErr := "unable to look up descriptor for node"
+	expectedErr := "node.*has been removed from the cluster"
 	if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
 			expectedErr, replacedNode.NodeID, err, val)

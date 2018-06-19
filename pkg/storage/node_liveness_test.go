@@ -16,13 +16,18 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -757,6 +762,133 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 		}
 		return nil
 	})
+}
+
+func TestNodeLivenessStatusMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Disable replica rebalancing to ensure that the liveness range
+				// does not get out of the first node (we'll be shutting down nodes).
+				DisableReplicaRebalancing: true,
+			},
+		},
+		RaftConfig: base.RaftConfig{
+			// Make everything tick faster to ensure dead nodes are
+			// recognized dead faster.
+			RaftTickInterval: 100 * time.Millisecond,
+		},
+		// Scan like a bat out of hell to ensure replication and replica GC
+		// happen in a timely manner.
+		ScanInterval: 50 * time.Millisecond,
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: serverArgs,
+		// Disable full replication otherwise StartTestCluster with just 1
+		// node will wait forever.
+		ReplicationMode: base.ReplicationManual,
+	})
+	ctx := context.TODO()
+	defer tc.Stopper().Stop(ctx)
+
+	ctx = log.WithLogTag(ctx, "in test", nil)
+
+	log.Infof(ctx, "setting zone config to disable replication")
+	// Allow for inserting zone configs without having to go through (or
+	// duplicate the logic from) the CLI.
+	config.TestingSetupZoneConfigHook(tc.Stopper())
+	zoneConfig := config.DefaultZoneConfig()
+	// Force just one replica per range to ensure that we can shut down
+	// nodes without endangering the liveness range.
+	zoneConfig.NumReplicas = 1
+	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
+
+	log.Infof(ctx, "starting 3 more nodes")
+	tc.AddServer(t, serverArgs)
+	tc.AddServer(t, serverArgs)
+	tc.AddServer(t, serverArgs)
+
+	log.Infof(ctx, "waiting for node statuses")
+	tc.WaitForNodeStatuses(t)
+	log.Infof(ctx, "waiting done")
+
+	firstServer := tc.Server(0).(*server.TestServer)
+
+	// Ensure that dead nodes are quickly recognized as dead by gossip.
+	// We set the cluster setting after we've done propagating statuses
+	// above so that the new setting value does not race with gossip
+	// initialization.
+	// Note: morally we'd probably need to use SQL here to set
+	// the cluster setting. However that restricts the allowable values
+	// to 1m15s, which is much too long for a test.
+	storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
+		storage.TestTimeUntilStoreDead)
+
+	liveNodeID := firstServer.NodeID()
+
+	deadNodeID := tc.Server(1).NodeID()
+	log.Infof(ctx, "shutting down node %d", deadNodeID)
+	tc.StopServer(1)
+	log.Infof(ctx, "done shutting down node %d", deadNodeID)
+
+	decommissioningNodeID := tc.Server(2).NodeID()
+	log.Infof(ctx, "decommissioning node %d", decommissioningNodeID)
+	if err := firstServer.Decommission(ctx, true, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+		t.Fatal(err)
+	}
+	log.Infof(ctx, "done decommissioning node %d", decommissioningNodeID)
+
+	removedNodeID := tc.Server(3).NodeID()
+	log.Infof(ctx, "decommissioning and shutting down node %d", removedNodeID)
+	if err := firstServer.Decommission(ctx, true, []roachpb.NodeID{removedNodeID}); err != nil {
+		t.Fatal(err)
+	}
+	tc.StopServer(3)
+	log.Infof(ctx, "done removing node %d", removedNodeID)
+
+	log.Infof(ctx, "checking status map")
+
+	// See what comes up in the status.
+	callerNodeLiveness := firstServer.GetNodeLiveness()
+
+	type expectedStatus struct {
+		nodeID         roachpb.NodeID
+		expectedStatus storage.NodeLivenessStatus
+	}
+	testData := []expectedStatus{
+		{liveNodeID, storage.NodeLivenessStatus_LIVE},
+		{deadNodeID, storage.NodeLivenessStatus_DEAD},
+		{decommissioningNodeID, storage.NodeLivenessStatus_DECOMMISSIONING},
+		{removedNodeID, storage.NodeLivenessStatus_DECOMMISSIONED},
+	}
+
+	for _, test := range testData {
+		t.Run(test.expectedStatus.String(), func(t *testing.T) {
+			nodeID, expectedStatus := test.nodeID, test.expectedStatus
+			t.Parallel()
+
+			testutils.SucceedsSoon(t, func() error {
+				log.Infof(ctx, "checking expected status for node %d", nodeID)
+				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
+				if st, ok := nodeStatuses[nodeID]; !ok {
+					return fmt.Errorf("%s node not in statuses", expectedStatus)
+				} else {
+					if st != expectedStatus {
+						if expectedStatus == storage.NodeLivenessStatus_DECOMMISSIONING && st == storage.NodeLivenessStatus_DECOMMISSIONED {
+							// Server somehow shut down super-fast. Tolerating the mismatch.
+							return nil
+						}
+						return fmt.Errorf("unexpected status: got %s, expected %s",
+							st, expectedStatus)
+					}
+				}
+				log.Infof(ctx, "node %d status ok", nodeID)
+				return nil
+			})
+		})
+	}
 }
 
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
