@@ -145,25 +145,25 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 2100.24
+ │    │    └── cost: 2106.68
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 2100.24
+ │         └── cost: 2106.68
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 2100.24
+ │    │    └── cost: 2106.68
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2100.24
+ │         └── cost: 2106.68
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 2090.01
+ │    │    └── cost: 2096.45
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 2100.24
+ │         └── cost: 2106.68
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (select G10 G11)

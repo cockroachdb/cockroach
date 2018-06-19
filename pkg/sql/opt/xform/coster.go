@@ -163,6 +163,14 @@ func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Lo
 	// amount of memory is used, distsql switches to a disk-based hash join with
 	// a temp RocksDB store.
 	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+
+	// Add an extra cost for creating the hash table and doing lookups.
+	cost *= 1.5
+
+	// Add the CPU cost of emitting the rows.
+	// TODO(radu): ideally we would have an estimate of how many rows we actually
+	// have to run the ON condition on.
+	cost += memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
