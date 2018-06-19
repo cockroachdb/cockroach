@@ -380,7 +380,7 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 func (sb *statisticsBuilder) applySelectivityToColStat(
 	colStat *props.ColumnStatistic, inputRows float64,
 ) {
-	if sb.s.Selectivity == 0 {
+	if sb.s.Selectivity == 0 || colStat.DistinctCount == 0 {
 		colStat.DistinctCount = 0
 		return
 	}
