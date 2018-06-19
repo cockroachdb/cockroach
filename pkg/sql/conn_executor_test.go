@@ -205,6 +205,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 			// any errors.
 			// TODO(andrei): Figure out a better way to test for non-blocking.
 			// Use a trace when the client-side tracing story gets good enough.
+			// There's a bit of difficulty because the cleanup is async.
 			txCheck, err := mainDB.Begin()
 			if err != nil {
 				t.Fatal(err)

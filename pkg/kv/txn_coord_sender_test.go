@@ -935,7 +935,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	// succeeds, which it may not if the previous cleanup has already
 	// terminated the heartbeat goroutine)
 	ba = txn.NewBatch()
-	ba.AddRawRequest(&roachpb.EndTransactionRequest{})
+	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
 	err := txn.Run(context.TODO(), ba)
 	assertTransactionAbortedError(t, err)
 }
