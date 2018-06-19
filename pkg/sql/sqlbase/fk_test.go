@@ -218,6 +218,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 
 // BenchmarkMultiRowFKChecks does a benchmark on a multi-row insert statement that has to check foreign keys.
 func BenchmarkMultiRowFKChecks(b *testing.B) {
+
 	schema1 := `
 CREATE TABLE IF NOT EXISTS example1(
   foo INT PRIMARY KEY,
@@ -231,13 +232,30 @@ CREATE TABLE IF NOT EXISTS example2(
   FOREIGN KEY(foo) REFERENCES example1(foo) ON UPDATE CASCADE ON DELETE CASCADE
 )
 `
+
+	schema3 := `
+CREATE TABLE IF NOT EXISTS self_referential(
+	id INT PRIMARY KEY,
+	pid INT,
+	FOREIGN KEY(pid) REFERENCES self_referential(id) ON UPDATE CASCADE ON DELETE CASCADE
+)
+`
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	setupStatements := []string{schema1, schema2}
+
+	tables := []string{"example2", "example1", "self_referential"}
+	for _, table := range tables {
+		if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", table)); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	setupStatements := []string{schema1, schema2, schema3}
 	for _, s := range setupStatements {
 		if _, err := db.Exec(s); err != nil {
 			b.Fatal(err)
 		}
 	}
+
 	run1 := `
 INSERT INTO example1(foo) VALUES(1)
 `
@@ -263,6 +281,31 @@ INSERT INTO example1(foo) VALUES(1)
 
 		statement := run2.String()
 		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+		if _, err := db.Exec(`DELETE FROM example2`); err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	b.Run("SelfReferential_Delete", func(b *testing.B) {
+		const numRows = 10000
+		run3 := `INSERT INTO self_referential(id) VALUES (1)`
+		if _, err := db.Exec(run3); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, %d)`, i, i-1)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
 			b.Fatal(err)
 		}
 	})
