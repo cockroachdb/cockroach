@@ -72,7 +72,6 @@ func exportPlanHook(
 	}
 
 	if exportStmt.FileFormat != "CSV" {
-		// not possible with current parser rules.
 		return nil, nil, nil, errors.Errorf("unsupported import format: %q", exportStmt.FileFormat)
 	}
 
