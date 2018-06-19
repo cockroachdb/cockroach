@@ -684,11 +684,13 @@ $(LIBSNAPPY): $(SNAPPY_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBROCKSDB): $(ROCKSDB_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(ROCKSDB_SRC_DIR) || $(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
+libroach-inputs := $(LIBROACH_SRC_DIR) $(ROCKSDB_SRC_DIR)/include $(PROTOBUF_SRC_DIR)/src
+
 $(LIBROACH): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(LIBROACH_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
+	@uptodate $@ $(libroach-inputs) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 $(LIBROACHCCL): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(LIBROACH_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
+	@uptodate $@ $(libroach-inputs) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
 .PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy librocksdb libroach libroachccl

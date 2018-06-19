@@ -35,17 +35,17 @@ func die(err error) {
 
 func main() {
 	pflag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s [-d] OUTPUT INPUT\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "usage: %s [-d] OUTPUT INPUT...\n", os.Args[0])
 	}
 	pflag.Parse()
-	if pflag.NArg() != 2 {
+	if pflag.NArg() < 2 {
 		pflag.Usage()
 		os.Exit(1)
 	}
 	if !*debug {
 		log.SetOutput(ioutil.Discard)
 	}
-	output, input := pflag.Arg(0), pflag.Arg(1)
+	output, inputs := pflag.Arg(0), pflag.Args()[1:]
 
 	fi, err := os.Stat(output)
 	if os.IsNotExist(err) {
@@ -56,22 +56,24 @@ func main() {
 	}
 	outputModTime := fi.ModTime()
 
-	err = walk.Walk(input, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
+	for _, input := range inputs {
+		err = walk.Walk(input, func(path string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if fi.IsDir() {
+				return nil
+			}
+			if !fi.ModTime().Before(outputModTime) {
+				log.Printf("input %q (mtime %s) not older than output %q (mtime %s)",
+					path, fi.ModTime(), output, outputModTime)
+				os.Exit(1)
+			}
 			return nil
+		})
+		if err != nil {
+			die(err)
 		}
-		if !fi.ModTime().Before(outputModTime) {
-			log.Printf("input %q (mtime %s) not older than output %q (mtime %s)",
-				path, fi.ModTime(), output, outputModTime)
-			os.Exit(1)
-		}
-		return nil
-	})
-	if err != nil {
-		die(err)
 	}
 	log.Printf("all inputs older than output %q (mtime %s)\n", output, outputModTime)
 	os.Exit(0)
