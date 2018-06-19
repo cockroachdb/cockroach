@@ -11,13 +11,27 @@ TABLE a
       └── k int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
+CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
 TABLE b
  ├── x int not null
  ├── z int
  └── INDEX primary
       └── x int not null
+
+exec-ddl
+CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+----
+TABLE c
+ ├── a bool
+ ├── b bool
+ ├── c bool
+ ├── d bool
+ ├── e bool
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
 
 # --------------------------------------------------
 # EliminateEmptyAnd
@@ -282,15 +296,16 @@ project
 
 # Don't fold.
 opt
-SELECT null or (null and k=1) AS r FROM a
+SELECT (null or k=1) AS r, (null and k=1) AS s FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool) s:7(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
-      └── NULL OR (NULL AND (a.k = 1)) [type=bool, outer=(1)]
+      ├── NULL OR (a.k = 1) [type=bool, outer=(1)]
+      └── NULL AND (a.k = 1) [type=bool, outer=(1)]
 
 # --------------------------------------------------
 # NegateComparison
@@ -504,3 +519,152 @@ select
  └── filters [type=bool, outer=(1-3)]
       ├── (a.k < a.i) OR (a.i >= a.f) [type=bool, outer=(1-3)]
       └── (a.i <= 5) OR (a.f <= 1.0) [type=bool, outer=(2,3)]
+
+# --------------------------------------------------
+# ExtractRedundantClause + ExtractRedundantSubclause
+# --------------------------------------------------
+opt
+SELECT b OR b FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: b:2(bool)
+ └── projections [outer=(2)]
+      └── variable: c.b [type=bool, outer=(2)]
+
+opt
+SELECT a OR (a AND b) OR (a AND c) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool)
+ └── projections [outer=(1)]
+      └── variable: c.a [type=bool, outer=(1)]
+
+opt
+SELECT (a AND b) OR a OR (a AND c) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool)
+ └── projections [outer=(1)]
+      └── variable: c.a [type=bool, outer=(1)]
+
+opt
+SELECT (a AND b) OR (b AND a) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool)
+ └── projections [outer=(1,2)]
+      └── c.a AND c.b [type=bool, outer=(1,2)]
+
+opt
+SELECT (a AND b) OR (c AND a) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ └── projections [outer=(1-3)]
+      └── c.a AND (c.b OR c.c) [type=bool, outer=(1-3)]
+
+opt
+SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
+----
+select
+ ├── columns: a:1(bool!null) b:2(bool!null) c:3(bool) d:4(bool) e:5(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/true - /true]; /2: [/true - /true]; tight)]
+      ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
+      └── variable: c.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+
+opt
+SELECT * FROM c WHERE (b AND a AND c) OR (d AND e AND a)
+----
+select
+ ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ └── filters [type=bool, outer=(1-5), constraints=(/1: [/true - /true])]
+      ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
+      └── (c.b AND c.c) OR (c.d AND c.e) [type=bool, outer=(2-5)]
+
+opt
+SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── constraint: /1: [/6 - ]
+ │    └── keys: (1)
+ └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /1])]
+      ├── a.i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
+      └── (a.i > 0) OR (a.s = 'foo') [type=bool, outer=(2,4)]
+
+opt
+SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── constraint: /1: [/6 - ]
+ └── keys: (1)
+
+# Works with nulls too.
+opt
+SELECT null or (null and k=1) AS r FROM a
+----
+project
+ ├── columns: r:6(bool)
+ ├── scan a
+ └── projections
+      └── null [type=unknown]
+
+opt
+SELECT (null and k=2) or (null and k=1) AS r FROM a
+----
+project
+ ├── columns: r:6(bool)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── keys: (1)
+ └── projections [outer=(1)]
+      └── NULL AND ((a.k = 2) OR (a.k = 1)) [type=bool, outer=(1)]
+
+# Check that we don't match non-redundant cases.
+opt
+SELECT a OR b OR b FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool)
+ └── projections [outer=(1,2)]
+      └── (c.a OR c.b) OR c.b [type=bool, outer=(1,2)]
+
+opt
+SELECT (a AND b) OR (a OR c) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ └── projections [outer=(1-3)]
+      └── ((c.a AND c.b) OR c.a) OR c.c [type=bool, outer=(1-3)]
+
+opt
+SELECT (a AND b) OR (NOT a AND c) FROM c
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ └── projections [outer=(1-3)]
+      └── (c.a AND c.b) OR ((NOT c.a) AND c.c) [type=bool, outer=(1-3)]
