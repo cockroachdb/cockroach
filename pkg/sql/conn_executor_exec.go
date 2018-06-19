@@ -843,19 +843,21 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 func (ex *connExecutor) sampleLogicalPlan(
 	stmt Statement, useDistSQL bool, planner *planner,
 ) *roachpb.PlanNode {
-	// TODO(vilterp): introduce and check a cluster setting to turn this off
+	if !sampleLogicalPlans.Get(&ex.appStats.st.SV) {
+		return nil
+	}
 
 	stats := ex.appStats.getStatsForStmt(stmt, useDistSQL, nil, false /* createIfNonexistent */)
 
-	doTheThing := true
+	savePlan := true
 	if stats != nil {
 		stats.Lock()
 		defer stats.Unlock()
 
-		doTheThing = stats.data.Count%saveFingerprintPlanOnceEvery == 0
+		savePlan = stats.data.Count%saveFingerprintPlanOnceEvery == 0
 	}
 
-	if doTheThing {
+	if savePlan {
 		return getPlanTree(context.Background(), planner.curPlan)
 	}
 	return nil

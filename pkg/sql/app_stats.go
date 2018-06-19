@@ -77,6 +77,12 @@ var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	false,
 )
 
+var sampleLogicalPlans = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.sample_logical_plans",
+	"periodically save a logical plan for each fingerprint",
+	true,
+)
+
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
 }
