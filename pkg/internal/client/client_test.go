@@ -1088,11 +1088,11 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 
 // Test that a transaction can be rolled back even with a canceled context.
 // This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
-func TestCleanupWithCanceledContext(t *testing.T) {
+func TestRollbackWithCanceledContextBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	key := roachpb.Key("a")
@@ -1107,17 +1107,84 @@ func TestCleanupWithCanceledContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := timeutil.Now()
+
 	// Do a Get using a different ctx (not the canceled one), and check that it
 	// didn't take too long - take that as proof that it was not blocked on
 	// intents. If the Get would have been blocked, it would have had to wait for
 	// the transaction abandon timeout before the Get would proceed.
-	// TODO(andrei): It'd be better to use tracing to verify what we were and
-	// weren't blocked on. Similar in TestSessionFinishRollsBackTxn.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
 	if _, err := db.Get(context.TODO(), key); err != nil {
 		t.Fatal(err)
 	}
 	dur := timeutil.Since(start)
 	if dur > 500*time.Millisecond {
 		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+}
+
+// This test is like TestRollbackWithCanceledContextBasic, except that, instead
+// of the ctx being canceled before the rollback is sent, this time it is
+// canceled after the rollback is sent. So, the first rollback is expected to
+// fail, and we're testing that a 2nd one is sent.
+func TestRollbackWithCanceledContextInsidious(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Add a request filter which cancels the ctx when it sees a rollback.
+	var storeKnobs storage.StoreTestingKnobs
+	key := roachpb.Key("a")
+	ctx, cancel := context.WithCancel(context.Background())
+	var rollbacks int
+	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if !ba.IsSingleEndTransactionRequest() {
+			return nil
+		}
+		et := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		if !et.Commit && et.Key.Equal(key) {
+			rollbacks++
+			cancel()
+		}
+		return nil
+	}
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	defer s.Stopper().Stop(context.Background())
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+	if rollbacks != 2 {
+		t.Fatalf("expected 2 rollbacks, got: %d", rollbacks)
 	}
 }

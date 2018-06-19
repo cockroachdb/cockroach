@@ -544,7 +544,7 @@ func (tc *TxnCoordSender) Send(
 		tc.mu.txn.Isolation = ba.Txn.Isolation
 		tc.mu.txn.Priority = ba.Txn.Priority
 
-		if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
+		if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID, &ba); pErr != nil {
 			return nil, pErr
 		}
 
@@ -606,7 +606,7 @@ func (tc *TxnCoordSender) Send(
 // state that prevents it from continuing, such as the coordinator having
 // considered the client abandoned, or a heartbeat having reported an error.
 func (tc *TxnCoordSender) maybeRejectClientLocked(
-	ctx context.Context, txnID uuid.UUID,
+	ctx context.Context, txnID uuid.UUID, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	// Check whether the transaction is still tracked and has a chance of
 	// completing. It's possible that the coordinator learns about the
@@ -617,6 +617,17 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case tc.mu.state == aborted:
 		fallthrough
 	case tc.mu.txn.Status == roachpb.ABORTED:
+		// As a special case, we allow rollbacks to be sent at any time. Any
+		// rollback attempt moves the TxnCoordSender state to aborted, but higher
+		// layers are free to retry rollbacks if they want (and they do, for
+		// example, when the context was canceled while txn.Rollback() was running).
+		singleAbort := ba != nil &&
+			ba.IsSingleEndTransactionRequest() &&
+			!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+		if singleAbort {
+			return nil
+		}
+
 		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &tc.mu.txn)
 		// TODO(andrei): figure out a UserPriority to use here.
 		newTxn := roachpb.PrepareTransactionForRetry(
@@ -671,7 +682,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordSt
 	if tc.mu.onFinishFn != nil {
 		// rejectErr is guaranteed to be non-nil because state is done or
 		// aborted on cleanup.
-		rejectErr := tc.maybeRejectClientLocked(ctx, tc.mu.txn.ID).GetDetail()
+		rejectErr := tc.maybeRejectClientLocked(ctx, tc.mu.txn.ID, nil /* ba */).GetDetail()
 		if rejectErr == nil {
 			log.Fatalf(ctx, "expected non-nil rejectErr on txn coord state %v", state)
 		}
