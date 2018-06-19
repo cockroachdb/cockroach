@@ -290,6 +290,14 @@ d
 				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
 			},
 		},
+
+		// Error
+		{
+			name:   "unsupported import format",
+			create: `b bytes`,
+			typ:    "NOPE",
+			err:    `unsupported import format`,
+		},
 	}
 
 	var dataString string
