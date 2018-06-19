@@ -59,6 +59,23 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	})
 }
 
+func verifyNodeLiveness(
+	t *testing.T, mtc *multiTestContext, fromIdx int, nodeID roachpb.NodeID, expectedLive bool,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		nl := mtc.nodeLivenesses[fromIdx]
+		live, err := nl.IsLive(nodeID)
+		if err != nil {
+			return err
+		} else if live != expectedLive {
+			return errors.Errorf(
+				"from store %d: unexpected node %d liveness: got %v, expected %v",
+				fromIdx, nodeID, live, expectedLive)
+		}
+		return nil
+	})
+}
+
 func pauseNodeLivenessHeartbeats(mtc *multiTestContext, pause bool) {
 	for _, nl := range mtc.nodeLivenesses {
 		nl.PauseHeartbeat(pause)
@@ -757,6 +774,73 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 		}
 		return nil
 	})
+}
+
+func TestNodeLivenessStatusMap(t *testing.T) {
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 4)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+
+	ctx := context.Background()
+	callerNodeLiveness := mtc.nodeLivenesses[0]
+
+	// We'll need:
+	// - a live node: 0
+	// - a dead node but not commissioned: 1
+	// - a decommissioning but live node: 2
+	// - a dead and decommissioned node: 3
+
+	// FIXME: We also need to expire the nodes pretty fast so the test
+	// doesn't time out.
+
+	liveNodeID := mtc.gossips[0].NodeID.Get()
+
+	deadNodeID := mtc.gossips[2].NodeID.Get()
+	mtc.stopStore(1)
+
+	decommissioningNodeID := mtc.gossips[2].NodeID.Get()
+	if _, err := callerNodeLiveness.SetDecommissioning(ctx, decommissioningNodeID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	removedNodeID := mtc.gossips[3].NodeID.Get()
+	if _, err := callerNodeLiveness.SetDecommissioning(ctx, removedNodeID, true); err != nil {
+		t.Fatal(err)
+	}
+	mtc.stopStore(3)
+
+	verifyNodeLiveness(t, mtc, 0 /*fromIdx*/, deadNodeID, false)
+	verifyNodeLiveness(t, mtc, 0 /*fromIdx*/, removedNodeID, false)
+
+	// See what comes up in the status.
+	nodeStatuses := callerNodeLiveness.GetLivenessStatusMap(true /*includeRemovedNodes*/)
+
+	type expectedStatus struct {
+		nodeID         roachpb.NodeID
+		expectedStatus storage.NodeLivenessStatus
+	}
+	testData := []expectedStatus{
+		{liveNodeID, storage.NodeLivenessStatus_LIVE},
+		{deadNodeID, storage.NodeLivenessStatus_UNKNOWN},
+		{decommissioningNodeID, storage.NodeLivenessStatus_DECOMMISSIONING},
+		{removedNodeID, storage.NodeLivenessStatus_DECOMMISSIONED},
+	}
+
+	for _, test := range testData {
+		t.Run(test.expectedStatus.String(), func(t *testing.T) {
+			if st, ok := nodeStatuses[test.nodeID]; !ok {
+				t.Errorf("%s node not in statuses", test.expectedStatus)
+			} else {
+				if st != test.expectedStatus {
+					t.Errorf("unexpected status: got %s, expected %s",
+						st, test.expectedStatus)
+				}
+			}
+		})
+	}
 }
 
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
