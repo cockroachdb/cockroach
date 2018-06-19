@@ -120,3 +120,32 @@ $item
 (Not (Or $conditions:*))
 =>
 (And (NegateConditions $conditions))
+
+# ExtractRedundantClause matches an OR expression in which one of the OR
+# conditions appears as a conjunct in all of the other OR conditions. For
+# example, it matches expressions such as: A OR (A AND B)
+#
+# In this case, A is the redundant clause, so the boolean expression can be
+# simplified to:
+#   A OR (A AND B)  =>  A
+[ExtractRedundantClause, Normalize]
+(Or $conditions:[ $item:* ... ] & (IsRedundantSubclause $conditions $item))
+=>
+$item
+
+# ExtractRedundantSubclause matches an OR expression in which a subclause
+# appears as a conjunct in all of the OR conditions. For example, it matches
+# expressions such as: (A AND B) OR (A AND C)
+#
+# In this case, A is the redundant subclause, so the boolean expression can be
+# rewritten as:
+#   (A AND B) OR (A AND C)  =>  A AND (B OR C)
+#
+# This transformation is useful for finding a conjunct that can be pushed
+# down in the query tree. For example, if the redundant subclause A is
+# fully bound by one side of a join, it can be pushed through the join, even
+# if B AND C cannot.
+[ExtractRedundantSubclause, Normalize]
+(Or $conditions:[ (And [ ... $item:* ... ]) ... ] & (IsRedundantSubclause $conditions $item))
+=>
+(ExtractRedundantSubclause $conditions $item)
