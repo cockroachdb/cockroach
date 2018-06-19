@@ -10,12 +10,15 @@ package importccl
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -380,11 +383,52 @@ func makeCSVData(
 		if err := fWithOpts.Close(); err != nil {
 			t.Fatal(err)
 		}
-		files = append(files, fmt.Sprintf(`'nodelocal:///%s'`, path))
-		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal:///%s'`, pathWithOpts))
-		filesWithDups = append(filesWithDups, fmt.Sprintf(`'nodelocal:///%s'`, pathDup))
+		files = append(files, path)
+		filesWithOpts = append(filesWithOpts, pathWithOpts)
+		filesWithDups = append(filesWithDups, pathDup)
 	}
 	return files, filesWithOpts, filesWithDups
+}
+
+func nodelocalPrefix(in []string) []string {
+	res := make([]string, len(in))
+	for i := range in {
+		res[i] = fmt.Sprintf(`'nodelocal:///%s'`, in[i])
+	}
+	return res
+}
+
+func gzipFile(t *testing.T, dir, in string) string {
+	r, err := os.Open(filepath.Join(dir, in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	name := in + ".gz"
+	f, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w := gzip.NewWriter(f)
+	if _, err := io.Copy(w, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return name
+}
+
+func bzipFile(t *testing.T, dir, in string) string {
+	_, err := exec.Command("bzip2", "-k", filepath.Join(dir, in)).CombinedOutput()
+	if err != nil {
+		if strings.Contains(err.Error(), "executable file not found") {
+			return ""
+		}
+		t.Fatal(err)
+	}
+	return in + ".bz2"
 }
 
 func TestImportCSVStmt(t *testing.T) {
@@ -428,6 +472,28 @@ func TestImportCSVStmt(t *testing.T) {
 	schema := []interface{}{"nodelocal:///table"}
 
 	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
+	filesWithOpts = nodelocalPrefix(filesWithOpts)
+	dups = nodelocalPrefix(dups)
+
+	gzip := make([]string, len(files))
+	for i := range files {
+		gzip[i] = gzipFile(t, dir, files[i])
+	}
+	gzip = nodelocalPrefix(gzip)
+
+	var skipBzip = false
+	bzip := make([]string, len(files))
+	for i := range files {
+		bzip[i] = bzipFile(t, dir, files[i])
+		// if we don't have `bzip` on PATH, just skip those subtests.
+		if bzip[i] == "" {
+			skipBzip = true
+		}
+	}
+	bzip = nodelocalPrefix(bzip)
+
+	files = nodelocalPrefix(files)
+
 	expectedRows := numFiles * rowsPerFile
 
 	// Support subtests by keeping track of the number of jobs that are executed.
@@ -505,6 +571,70 @@ func TestImportCSVStmt(t *testing.T) {
 			``,
 			"",
 		},
+		{
+			"schema-in-file-auto-decompress",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
+			schema,
+			files,
+			` WITH decompress = 'auto'`,
+			"",
+		},
+		{
+			"schema-in-file-no-decompress",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
+			schema,
+			files,
+			` WITH decompress = 'none'`,
+			"",
+		},
+		{
+			"schema-in-file-explicit-gzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
+			schema,
+			gzip,
+			` WITH decompress = 'gzip'`,
+			"",
+		},
+		{
+			"schema-in-file-auto-gzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
+			schema,
+			gzip,
+			` WITH decompress = 'auto'`,
+			"",
+		},
+		{
+			"schema-in-file-implicit-gzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
+			schema,
+			gzip,
+			``,
+			"",
+		},
+		{
+			"schema-in-file-explicit-bzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'bzip'`,
+			schema,
+			bzip,
+			` WITH decompress = 'bzip'`,
+			"",
+		},
+		{
+			"schema-in-file-auto-bzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
+			schema,
+			bzip,
+			` WITH decompress = 'auto'`,
+			"",
+		},
+		{
+			"schema-in-file-implicit-bzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
+			schema,
+			bzip,
+			``,
+			"",
+		},
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"bad-opt-name",
@@ -554,8 +684,27 @@ func TestImportCSVStmt(t *testing.T) {
 			``,
 			`invalid option "into_db"`,
 		},
+		{
+			"schema-in-file-no-decompress-gzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
+			schema,
+			gzip,
+			` WITH decompress = 'none'`,
+			"expected 2 fields, got",
+		},
+		{
+			"schema-in-file-no-decompress-gzip",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
+			schema,
+			files,
+			` WITH decompress = 'gzip'`,
+			"gzip: invalid header",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if strings.Contains(tc.name, "bzip") && skipBzip {
+				t.Skip("bzip2 not available on PATH?")
+			}
 			intodb := fmt.Sprintf(`csv%d`, i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, intodb))
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
@@ -778,6 +927,7 @@ func BenchmarkImport(b *testing.B) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
+	files = nodelocalPrefix(files)
 	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
 
 	b.ResetTimer()

@@ -27,7 +27,7 @@ import (
 // #cgo LDFLAGS: -lsnappy
 // #cgo LDFLAGS: -lcryptopp
 // #cgo linux LDFLAGS: -lrt -lpthread
-// #cgo windows LDFLAGS: -lrpcrt4
+// #cgo windows LDFLAGS: -lshlwapi -lrpcrt4
 //
 // #include <stdlib.h>
 // #include <libroachccl.h>

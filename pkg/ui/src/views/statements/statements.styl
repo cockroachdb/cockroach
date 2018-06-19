@@ -1,0 +1,93 @@
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+
+.statements-table
+  &__col-query-text
+    font-family monospace
+    white-space pre-wrap
+
+.statements
+  &__last-hour-note
+    margin-left 3px
+    font-style italic
+    color $body-color
+
+.app-name
+  &__unset
+    color $tooltip-color
+    font-style italic
+
+.bar-chart
+  width 10em
+  height 1em
+  margin-left 5em
+  position relative
+
+  &--breakdown
+    margin-left 0
+
+  .label
+    position absolute
+    left -5em
+    width 4.5em
+    text-align right
+    top -2px
+
+  &__bar
+    display inline-block
+    height 100%
+    margin-left -1px
+
+  .count-first-try
+    background-color $link-color
+    border-left 1px solid $link-color
+
+  .count-retry
+    background-color $alert-color
+    border-left 1px solid $alert-color
+
+  .rows
+    background-color $link-color
+    border-left 1px solid $link-color
+
+  .rows-dev
+    background-color lighten($link-color, 50%)
+    border-left 1px solid lighten($link-color, 50%)
+
+  .latency-parse
+    background-color $alert-color
+    border-left 1px solid $alert-color
+
+  .latency-parse-dev
+    background-color lighten($alert-color, 50%)
+    border-left 1px solid lighten($alert-color, 50%)
+
+  .latency-plan
+    background-color $warning-color
+    border-left 1px solid $warning-color
+
+  .latency-plan-dev
+    background-color lighten($warning-color, 50%)
+    border-left 1px solid lighten($warning-color, 50%)
+
+  .latency-run
+    background-color $link-color
+    border-left 1px solid $link-color
+
+  .latency-run-dev
+    background-color lighten($link-color, 50%)
+    border-left 1px solid lighten($link-color, 50%)
+
+  .latency-overhead
+    background-color $alert-color
+    border-left 1px solid $alert-color
+
+  .latency-overhead-dev
+    background-color lighten($alert-color, 50%)
+    border-left 1px solid lighten($alert-color, 50%)
+
+.numeric-stats-table
+  @extend $table-base
+
+.details-bar
+  margin 12px 0
