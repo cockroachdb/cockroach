@@ -242,13 +242,6 @@ CREATE TABLE IF NOT EXISTS self_referential(
 `
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
-	tables := []string{"example2", "example1", "self_referential"}
-	for _, table := range tables {
-		if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", table)); err != nil {
-			b.Fatal(err)
-		}
-	}
-
 	setupStatements := []string{schema1, schema2, schema3}
 	for _, s := range setupStatements {
 		if _, err := db.Exec(s); err != nil {
