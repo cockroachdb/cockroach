@@ -53,9 +53,8 @@ const (
 	// done indicates the transaction has been completed via end
 	// transaction and can no longer be used.
 	done
-	// aborted indicates the transaction was aborted or abandoned (e.g.
-	// from timeout, heartbeat failure, context cancelation, txn abort
-	// or restart, etc.)
+	// aborted indicates the transaction was aborted. All requests other than
+	// rollbacks are rejected.
 	aborted
 )
 
@@ -791,7 +790,7 @@ func (tc *TxnCoordSender) abortTxnAsyncLocked() {
 			_, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
 			if pErr != nil {
 				log.VErrEventf(ctx, 1,
-					"abort due to inactivity failed for %s: %s ", txn, pErr)
+					"async abort failed for %s: %s ", txn, pErr)
 			}
 		},
 	); err != nil {
@@ -841,16 +840,21 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
+		tc.mu.Lock()
 		// If the error contains updated txn info, ingest it. For example, we might
 		// find out this way that the transaction has been Aborted in the meantime
-		// (e.g. someone else pushed it).
+		// (e.g. someone else pushed it), in which case it's up to us to clean up.
 		if errTxn := pErr.GetTxn(); errTxn != nil {
-			tc.mu.Lock()
 			tc.mu.txn.Update(errTxn)
-			tc.mu.Unlock()
 		}
+		status := tc.mu.txn.Status
+		if status == roachpb.ABORTED {
+			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+			tc.abortTxnAsyncLocked()
+		}
+		tc.mu.Unlock()
 
-		return tc.mu.txn.Status == roachpb.PENDING
+		return status == roachpb.PENDING
 	}
 	txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 
