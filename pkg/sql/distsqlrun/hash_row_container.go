@@ -218,7 +218,7 @@ func (h *hashMemRowContainer) addRowToBucket(
 		return err
 	}
 
-	_, ok := h.buckets[string(encoded)]
+	bucket, ok := h.buckets[string(encoded)]
 
 	usage := sizeOfRowIdx
 	if !ok {
@@ -230,7 +230,7 @@ func (h *hashMemRowContainer) addRowToBucket(
 		return err
 	}
 
-	h.buckets[string(encoded)] = append(h.buckets[string(encoded)], rowIdx)
+	h.buckets[string(encoded)] = append(bucket, rowIdx)
 	return nil
 }
 
