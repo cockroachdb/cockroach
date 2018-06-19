@@ -89,6 +89,7 @@ type ClusterConfig struct {
 	PerNodeCfg  map[int]NodeConfig // optional map of nodeIndex -> configuration
 	DB          string             // database to configure DB connection for
 	NumWorkers  int                // SetMaxOpenConns to use for DB connection
+	NoWait      bool               // if set, return from Start before cluster ready
 }
 
 // NodeConfig is a configuration for a node in a Cluster. Options with the zero
@@ -199,7 +200,7 @@ func (c *Cluster) Start(ctx context.Context) {
 		}
 	}
 
-	if c.Cfg.NumNodes > 1 {
+	if !c.Cfg.NoWait {
 		for i := range chs {
 			if err := <-chs[i]; err != nil {
 				log.Fatalf(ctx, "node %d: %s", i+1, err)
@@ -209,7 +210,7 @@ func (c *Cluster) Start(ctx context.Context) {
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
 
-	if c.Cfg.NumNodes > 1 {
+	if c.Cfg.NumNodes > 1 || !c.Cfg.NoWait {
 		c.waitForFullReplication()
 	} else {
 		// NB: This is useful for TestRapidRestarts.
