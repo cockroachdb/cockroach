@@ -60,7 +60,7 @@ function makeBarChart(
             key={ name + v }
             className={ name + " bar-chart__bar" }
             style={{ width: scale(v) + "%" }}
-            title={ title + ": " + formatter(v) }
+            title={ title + ": " + v }
           />
         );
       });
@@ -75,8 +75,25 @@ function makeBarChart(
   };
 }
 
-export const countBarChart = makeBarChart(countBars);
-export const rowsBarChart = makeBarChart(rowsBars, v => "" + Math.round(v));
+const SCALE_FACTORS: { factor: number, key: string }[] = [
+  { factor: 1000000000, key: "b" },
+  { factor: 1000000, key: "m" },
+  { factor: 1000, key: "k" },
+];
+
+function approximify(value: number) {
+  for (let i = 0; i < SCALE_FACTORS.length; i++) {
+    const scale = SCALE_FACTORS[i];
+    if (value > scale.factor) {
+      return "" + Math.round(value / scale.factor) + scale.key;
+    }
+  }
+
+  return "" + Math.round(value);
+}
+
+export const countBarChart = makeBarChart(countBars, approximify);
+export const rowsBarChart = makeBarChart(rowsBars, approximify);
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9));
 
 export function countBreakdown(s: StatementStatistics) {
