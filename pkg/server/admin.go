@@ -1089,7 +1089,9 @@ func (s *adminServer) Health(
 	return &serverpb.HealthResponse{}, nil
 }
 
-// Liveness returns the liveness state of all nodes on the cluster.
+// Liveness returns the liveness state of all nodes on the cluster
+// known to gossip. To reach all nodes in the cluster, consider
+// using (statusServer).NodesWithLiveness instead.
 func (s *adminServer) Liveness(
 	context.Context, *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {

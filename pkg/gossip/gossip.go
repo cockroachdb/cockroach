@@ -831,9 +831,11 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		}
 		// Don't return node descriptors that are empty, because that's meant to
 		// indicate that the node has been removed from the cluster.
-		if !(nodeDescriptor.NodeID == 0 && nodeDescriptor.Address.IsEmpty()) {
-			return nodeDescriptor, nil
+		if nodeDescriptor.NodeID == 0 || nodeDescriptor.Address.IsEmpty() {
+			return nil, errors.Errorf("node %d has been removed from the cluster", nodeID)
 		}
+
+		return nodeDescriptor, nil
 	}
 
 	return nil, errors.Errorf("unable to look up descriptor for node %d", nodeID)
