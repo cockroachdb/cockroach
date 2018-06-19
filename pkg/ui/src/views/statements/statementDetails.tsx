@@ -3,7 +3,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
+import { Link, RouterState } from "react-router";
 import { createSelector } from "reselect";
 
 import Loading from "src/views/shared/components/loading";
@@ -19,6 +19,18 @@ import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/sum
 import * as protos from "src/js/protos";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
+
+function AppLink(props: { app: string }) {
+  if (!props.app) {
+    return <span className="app-name app-name__unset">(unset)</span>;
+  }
+
+  return (
+    <Link className="app-name" to={ `/statements/${encodeURIComponent(props.app)}` }>
+      { props.app }
+    </Link>
+  );
+}
 
 type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
@@ -110,7 +122,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
       return null;
     }
 
-    const { stats } = this.props.statement;
+    const { stats, key } = this.props.statement;
 
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
@@ -209,15 +221,15 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <tbody>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>App</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.app }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}><AppLink app={ key.app } /></td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used DistSQL?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.distSQL ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.distSQL ? "Yes" : "No" }</td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ this.props.statement.key.failed ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.failed ? "Yes" : "No" }</td>
               </tr>
             </tbody>
           </table>

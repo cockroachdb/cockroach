@@ -46,14 +46,6 @@ function StatementLink(props: { statement: string }) {
   );
 }
 
-function AppLink(props: { app: string }) {
-  return (
-    <Link to={ `/statements/${encodeURIComponent(props.app)}` }>
-      { props.app }
-    </Link>
-  );
-}
-
 function shortStatement(summary: StatementSummary, original: string) {
   switch (summary.statement) {
     case "update": return "UPDATE " + summary.table;
@@ -79,11 +71,6 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
   const latencyBar = latencyBarChart(statements);
 
   return [
-    {
-      title: "App",
-      cell: (query) => <AppLink app={ query.key.app } />,
-      sort: (query) => query.key.app,
-    },
     {
       title: "Statement",
       className: "statements-table__col-query-text",
@@ -119,7 +106,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouterState, 
     super(props);
     this.state = {
       sortSetting: {
-        sortKey: 2,
+        sortKey: 1,
         ascending: false,
       },
     };
