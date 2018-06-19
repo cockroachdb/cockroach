@@ -376,6 +376,12 @@ func (s *Server) GetUnscrubbedStmtStats() []roachpb.CollectedStatementStatistics
 	return s.sqlStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
+// GetStmtStatsLastReset returns the time at which the statement statistics were
+// last cleared.
+func (s *Server) GetStmtStatsLastReset() time.Time {
+	return s.sqlStats.lastReset
+}
+
 // ServeConn creates a connExecutor and serves a client connection by reading
 // commands from stmtBuf.
 //

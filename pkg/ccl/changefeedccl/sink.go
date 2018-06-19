@@ -21,6 +21,7 @@ import (
 // Sink is an abstration for anything that a changefeed may emit into.
 type Sink interface {
 	EmitRow(ctx context.Context, topic string, key, value []byte) error
+	EmitResolvedTimestamp(ctx context.Context, payload []byte) error
 	Close() error
 }
 
@@ -37,12 +38,17 @@ type kafkaSink struct {
 	// to add a new c dep for the prototype. Revisit before 2.1 and check
 	// stability, performance, etc.
 	sarama.SyncProducer
+	client sarama.Client
 
 	kafkaTopicPrefix string
+	topicsSeen       map[string]struct{}
 }
 
 func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error) {
-	sink := &kafkaSink{kafkaTopicPrefix: kafkaTopicPrefix}
+	sink := &kafkaSink{
+		kafkaTopicPrefix: kafkaTopicPrefix,
+		topicsSeen:       make(map[string]struct{}),
+	}
 
 	if testKafkaProducersHook != nil {
 		if sink.SyncProducer = testKafkaProducersHook[bootstrapServers]; sink.SyncProducer == nil {
@@ -51,8 +57,16 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 		return sink, nil
 	}
 
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Partitioner = newChangefeedPartitioner
+
 	var err error
-	sink.SyncProducer, err = sarama.NewSyncProducer(strings.Split(bootstrapServers, `,`), nil)
+	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
+	if err != nil {
+		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+	}
+	sink.SyncProducer, err = sarama.NewSyncProducerFromClient(sink.client)
 	if err != nil {
 		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
 	}
@@ -61,6 +75,9 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 
 func (s *kafkaSink) EmitRow(_ context.Context, topic string, key, value []byte) error {
 	topic = s.kafkaTopicPrefix + topic
+	if _, ok := s.topicsSeen[topic]; !ok {
+		s.topicsSeen[topic] = struct{}{}
+	}
 	_, _, err := s.SendMessage(&sarama.ProducerMessage{
 		Topic: topic,
 		Key:   sarama.ByteEncoder(key),
@@ -69,17 +86,75 @@ func (s *kafkaSink) EmitRow(_ context.Context, topic string, key, value []byte) 
 	return errors.Wrapf(err, `sending message to kafka topic %s`, topic)
 }
 
+func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+	// Staleness here does not impact correctness. Some new partitions will miss
+	// this resolved timestamp, but they'll eventually be picked up and get
+	// later ones.
+	messages := make([]*sarama.ProducerMessage, 0, len(s.topicsSeen))
+	for topic := range s.topicsSeen {
+		// TODO(dan): Figure out how expensive this is to call. Maybe we need to
+		// cache it and rate limit?
+		partitions, err := s.client.Partitions(topic)
+		if err != nil {
+			return err
+		}
+		for _, partition := range partitions {
+			messages = append(messages, &sarama.ProducerMessage{
+				Topic:     topic,
+				Partition: partition,
+				Key:       nil,
+				Value:     sarama.ByteEncoder(payload),
+			})
+		}
+	}
+	return s.SendMessages(messages)
+}
+
+type changefeedPartitioner struct {
+	hash sarama.Partitioner
+}
+
+var _ sarama.Partitioner = &changefeedPartitioner{}
+var _ sarama.PartitionerConstructor = newChangefeedPartitioner
+
+func newChangefeedPartitioner(topic string) sarama.Partitioner {
+	return &changefeedPartitioner{
+		hash: sarama.NewHashPartitioner(topic),
+	}
+}
+
+func (p *changefeedPartitioner) RequiresConsistency() bool { return true }
+func (p *changefeedPartitioner) Partition(
+	message *sarama.ProducerMessage, numPartitions int32,
+) (int32, error) {
+	if message.Key == nil {
+		return message.Partition, nil
+	}
+	return p.hash.Partition(message, numPartitions)
+}
+
 type channelSink struct {
 	resultsCh chan<- tree.Datums
 	alloc     sqlbase.DatumAlloc
 }
 
 func (s *channelSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
-	row := tree.Datums{
+	return s.emitDatums(ctx, tree.Datums{
 		s.alloc.NewDString(tree.DString(topic)),
 		s.alloc.NewDBytes(tree.DBytes(key)),
 		s.alloc.NewDBytes(tree.DBytes(value)),
-	}
+	})
+}
+
+func (s *channelSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+	return s.emitDatums(ctx, tree.Datums{
+		tree.DNull,
+		tree.DNull,
+		s.alloc.NewDBytes(tree.DBytes(payload)),
+	})
+}
+
+func (s *channelSink) emitDatums(ctx context.Context, row tree.Datums) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

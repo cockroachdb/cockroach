@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -48,8 +49,9 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionTransform = "transform"
-	importOptionSSTSize   = "sstsize"
+	importOptionTransform  = "transform"
+	importOptionSSTSize    = "sstsize"
+	importOptionDecompress = "decompress"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -66,8 +68,9 @@ var importOptionExpectValues = map[string]bool{
 	mysqlOutfileEnclose:  true,
 	mysqlOutfileEscape:   true,
 
-	importOptionTransform: true,
-	importOptionSSTSize:   true,
+	importOptionTransform:  true,
+	importOptionSSTSize:    true,
+	importOptionDecompress: true,
 }
 
 const (
@@ -450,6 +453,20 @@ func importPlanHook(
 				return err
 			}
 			sstSize = sz
+		}
+
+		if override, ok := opts[importOptionDecompress]; ok {
+			found := false
+			for name, value := range roachpb.IOFileFormat_Compression_value {
+				if strings.EqualFold(name, override) {
+					format.Compression = roachpb.IOFileFormat_Compression(value)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.Errorf("unsupported compression value: %q", override)
+			}
 		}
 
 		var tableDescs []*sqlbase.TableDescriptor
