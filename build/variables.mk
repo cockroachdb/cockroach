@@ -164,6 +164,7 @@ define VALID_VARS
   go-targets-ccl
   have-defs
   langgen-package
+  libroach-inputs
   logictest-package
   logictestccl-package
   macos-version
