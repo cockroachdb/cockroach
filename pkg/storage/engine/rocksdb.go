@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unsafeutil"
 )
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
@@ -2165,7 +2166,7 @@ func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
 	for i := range slices {
 		neededBytes += int(slices[i].len)
 	}
-	data := nonZeroingMakeByteSlice(neededBytes)[:0]
+	data := unsafeutil.NonZeroingMakeByteSlice(neededBytes)[:0]
 	for i := range slices {
 		data = append(data, cSliceToUnsafeGoBytes(slices[i])...)
 	}

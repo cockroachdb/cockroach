@@ -12,25 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package engine
+package unsafeutil
 
-import (
-	"unsafe"
+import "C"
 
-	"github.com/cockroachdb/cockroach/pkg/util/unsafeutil"
-)
-
-// Replacement for C.GoBytes which does not zero initialize the returned slice
-// before overwriting it.
-//
-// TODO(peter): Remove when go1.11 is released which has a similar change to
-// C.GoBytes.
-func gobytes(ptr unsafe.Pointer, len int) []byte {
-	if len == 0 {
-		return make([]byte, 0)
-	}
-	x := unsafeutil.NonZeroingMakeByteSlice(len)
-	src := (*[maxArrayLen]byte)(ptr)[:len:len]
-	copy(x, src)
-	return x
+// NonZeroingMakeByteSlice allocates and returns a byte slice of a specified
+// size without zeroing out the constituent bytes. WARNING: use this with care.
+func NonZeroingMakeByteSlice(len int) []byte {
+	ptr := mallocgc(uintptr(len), nil, false)
+	return (*[maxArrayLen]byte)(ptr)[:len:len]
 }

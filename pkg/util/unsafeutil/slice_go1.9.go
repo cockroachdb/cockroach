@@ -14,7 +14,7 @@
 
 // +build gc,go1.9
 
-package engine
+package unsafeutil
 
 import "unsafe"
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2014 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,10 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package engine
+// +build 386 amd64p32 arm armbe  mips mipsle mips64p32 mips64p32le ppc sparc
 
-import (
-	"unsafe"
+package unsafeutil
 
-	"github.com/cockroachdb/cockroach/pkg/util/unsafeutil"
+const (
+	maxArrayLen = 1<<31 - 1
 )
-
-// Replacement for C.GoBytes which does not zero initialize the returned slice
-// before overwriting it.
-//
-// TODO(peter): Remove when go1.11 is released which has a similar change to
-// C.GoBytes.
-func gobytes(ptr unsafe.Pointer, len int) []byte {
-	if len == 0 {
-		return make([]byte, 0)
-	}
-	x := unsafeutil.NonZeroingMakeByteSlice(len)
-	src := (*[maxArrayLen]byte)(ptr)[:len:len]
-	copy(x, src)
-	return x
-}
