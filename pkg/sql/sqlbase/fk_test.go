@@ -256,23 +256,41 @@ INSERT INTO example1(foo) VALUES(1)
 		b.Fatal(err)
 	}
 
-	b.Run("10KRows_IdenticalFK", func(b *testing.B) {
-		var run2 bytes.Buffer
+	const numFKRows = 10000
+	b.Run("10KRows_NoFK", func(b *testing.B) {
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO example2(baz) VALUES `)
 
-		run2.WriteString(`INSERT INTO example2(baz, foo) VALUES `)
-
-		for i := 1; i <= 10000; i++ {
-			run2.WriteString("(")
-			run2.WriteString(strconv.Itoa(i))
-			run2.WriteString(", 1")
-			if i != 10000 {
-				run2.WriteString("), ")
-			} else {
-				run2.WriteString(")")
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString(fmt.Sprintf("(%d)", i))
+			if i != numFKRows {
+				run.WriteString(", ")
 			}
 		}
 
-		statement := run2.String()
+		b.StopTimer()
+		if _, err := db.Exec(`DELETE FROM example2`); err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	b.Run("10KRows_IdenticalFK", func(b *testing.B) {
+		var run bytes.Buffer
+
+		run.WriteString(`INSERT INTO example2(baz, foo) VALUES `)
+
+		for i := 1; i <= numFKRows; i++ {
+			run.WriteString("(")
+			run.WriteString(strconv.Itoa(i))
+			run.WriteString(", 1")
+			if i != numFKRows {
+				run.WriteString("), ")
+			} else {
+				run.WriteString(")")
+			}
+		}
+
+		statement := run.String()
 		if _, err := db.Exec(statement); err != nil {
 			b.Fatal(err)
 		}
@@ -282,18 +300,39 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 	})
 
+	const numSRRows = 10000
 	b.Run("SelfReferential_Delete", func(b *testing.B) {
-		const numRows = 10000
 		run3 := `INSERT INTO self_referential(id) VALUES (1)`
 		if _, err := db.Exec(run3); err != nil {
 			b.Fatal(err)
 		}
 
-		for i := 2; i <= numRows; i++ {
+		for i := 2; i <= numSRRows; i++ {
 			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, %d)`, i, i-1)
 			if _, err := db.Exec(insert); err != nil {
 				b.Fatal(err)
 			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	b.Run("SR_No_FK_Delete", func(b *testing.B) {
+		var insert bytes.Buffer
+		insert.WriteString(`INSERT INTO self_referential(id) VALUES `)
+		for i := 1; i <= numSRRows; i++ {
+			insert.WriteString(fmt.Sprintf(`(%d)`, i))
+			if i != numSRRows {
+				insert.WriteString(`, `)
+			}
+		}
+
+		if _, err := db.Exec(insert.String()); err != nil {
+			b.Fatal(err)
 		}
 
 		b.ResetTimer()
