@@ -10,8 +10,8 @@
 # the output of `kubectl get pods`, then run:
 #   kubectl exec -it <pod-name> -- ./cockroach init --insecure
 #
-# If you're interested in using a DaemonSet in secure mode, please reach
-# out to us via a Github issue or our public Gitter channel.
+# If you're interested in using a DaemonSet in secure mode instead, please see
+# cockroachdb-daemonset-secure.yaml.
 apiVersion: v1
 kind: Service
 metadata:
