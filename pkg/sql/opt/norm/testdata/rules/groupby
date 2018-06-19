@@ -45,23 +45,20 @@ opt
 SELECT DISTINCT k FROM a
 ----
 scan a@fi_idx
- ├── columns: k:1(int!null)
- └── keys: (1)
+ └── columns: k:1(int!null)
 
 opt
 SELECT DISTINCT s, i FROM a
 ----
 scan a@si_idx
- ├── columns: s:4(string!null) i:2(int!null)
- └── keys: (2,4)
+ └── columns: s:4(string!null) i:2(int!null)
 
 # Strict superset of key.
 opt
 SELECT DISTINCT s, i, f FROM a
 ----
 scan a
- ├── columns: s:4(string!null) i:2(int!null) f:3(float)
- └── keys: (2,4) weak(2,3)
+ └── columns: s:4(string!null) i:2(int!null) f:3(float)
 
 # Distinct not eliminated because columns aren't superset of any weak key.
 opt
@@ -70,7 +67,6 @@ SELECT DISTINCT i FROM a
 group-by
  ├── columns: i:2(int!null)
  ├── grouping columns: i:2(int!null)
- ├── keys: (2)
  └── scan a@fi_idx
       └── columns: i:2(int!null)
 
@@ -81,10 +77,8 @@ SELECT DISTINCT f, i FROM a
 group-by
  ├── columns: f:3(float) i:2(int!null)
  ├── grouping columns: i:2(int!null) f:3(float)
- ├── keys: weak(2,3)
  └── scan a@fi_idx
-      ├── columns: i:2(int!null) f:3(float)
-      └── keys: weak(2,3)
+      └── columns: i:2(int!null) f:3(float)
 
 # Group by not eliminated because it has aggregation.
 opt
@@ -93,10 +87,8 @@ SELECT s, i, sum(i) FROM a GROUP BY s, i
 group-by
  ├── columns: s:4(string!null) i:2(int!null) sum:6(decimal)
  ├── grouping columns: i:2(int!null) s:4(string!null)
- ├── keys: (2,4)
  ├── scan a@si_idx
- │    ├── columns: i:2(int!null) s:4(string!null)
- │    └── keys: (2,4)
+ │    └── columns: i:2(int!null) s:4(string!null)
  └── aggregations [outer=(2)]
       └── sum [type=decimal, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
@@ -112,17 +104,14 @@ project
  └── group-by
       ├── columns: i:12(int!null) min:16(string)
       ├── grouping columns: i:12(int!null)
-      ├── keys: (12)
       ├── union
       │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
       │    ├── left columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
       │    ├── right columns: a.k:6(int) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
       │    ├── scan a
-      │    │    ├── columns: a.k:1(int!null) a.i:2(int!null) a.f:3(float) a.s:4(string!null) a.j:5(jsonb)
-      │    │    └── keys: (1) (2,4) weak(2,3)
+      │    │    └── columns: a.k:1(int!null) a.i:2(int!null) a.f:3(float) a.s:4(string!null) a.j:5(jsonb)
       │    └── scan a
-      │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
-      │         └── keys: (6) (7,9) weak(7,8)
+      │         └── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
       └── aggregations [outer=(14)]
            └── min [type=string, outer=(14)]
                 └── variable: s [type=string, outer=(14)]
@@ -136,12 +125,10 @@ project
  └── group-by
       ├── columns: i2:6(int) min:7(string)
       ├── grouping columns: i2:6(int)
-      ├── keys: weak(6)
       ├── project
       │    ├── columns: i2:6(int) s:4(string!null)
       │    ├── scan a@si_idx
-      │    │    ├── columns: i:2(int!null) s:4(string!null)
-      │    │    └── keys: (2,4)
+      │    │    └── columns: i:2(int!null) s:4(string!null)
       │    └── projections [outer=(2,4)]
       │         └── a.i + 1 [type=int, outer=(2)]
       └── aggregations [outer=(4)]

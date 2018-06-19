@@ -31,10 +31,8 @@ project
  ├── columns: expr:6(bool)
  ├── select
  │    ├── columns: k:1(int!null)
- │    ├── keys: (1)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
- │    │    └── keys: (1)
+ │    │    └── columns: k:1(int!null)
  │    └── filters [type=bool, outer=(1)]
  │         └── (a.k = 1) IS NULL [type=bool, outer=(1)]
  └── projections [outer=(1)]
@@ -48,10 +46,8 @@ project
  ├── columns: expr:6(int)
  ├── select
  │    ├── columns: k:1(int!null)
- │    ├── keys: (1)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
- │    │    └── keys: (1)
+ │    │    └── columns: k:1(int!null)
  │    └── filters [type=bool, outer=(1)]
  │         └── ((a.k * 2) + 1) > 10 [type=bool, outer=(1)]
  └── projections [outer=(1)]
@@ -65,8 +61,7 @@ project
  ├── columns: expr:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [ - /1] [/6 - ]
- │    └── keys: (1)
+ │    └── constraint: /1: [ - /1] [/6 - ]
  └── projections [outer=(1)]
       └── (a.k <= 1) OR (a.k > 5) [type=bool, outer=(1)]
 
@@ -106,13 +101,10 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE 
 ----
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan xy
- │    ├── columns: x:6(int!null)
- │    └── keys: (6)
+ │    └── columns: x:6(int!null)
  └── filters [type=bool, outer=(2,6)]
       └── (xy.x - a.i) > (a.i * a.i) [type=bool, outer=(2,6)]
 
@@ -125,8 +117,7 @@ SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 project
  ├── columns: expr:6(bool) r:7(int)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    └── columns: k:1(int!null) i:2(int)
  └── projections [outer=(1,2)]
       ├── a.i + 1 [type=int, outer=(2)]
       └── a.k = 1 [type=bool, outer=(1)]
@@ -138,8 +129,7 @@ SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' 
 project
  ├── columns: r:8(int) i:2(int) s:9(string)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
- │    └── keys: (1)
+ │    └── columns: k:1(int!null) i:2(int) a.s:4(string)
  └── projections [outer=(1,2,4)]
       ├── (a.k + 1) + 1 [type=int, outer=(1)]
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
@@ -153,8 +143,7 @@ project
  ├── project
  │    ├── columns: expr:6(int)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
- │    │    └── keys: (1)
+ │    │    └── columns: k:1(int!null)
  │    └── projections [outer=(1)]
  │         └── a.k + 1 [type=int, outer=(1)]
  └── projections [outer=(6)]
@@ -167,14 +156,12 @@ SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 A
 project
  ├── columns: exists:9(bool) r:10(int)
  ├── scan a
- │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── columns: k:1(int!null)
  └── projections [outer=(1)]
       ├── exists [type=bool]
       │    └── scan xy
       │         ├── columns: x:7(int!null) y:8(int)
-      │         ├── constraint: /7: [/1 - /2]
-      │         └── keys: (7)
+      │         └── constraint: /7: [/1 - /2]
       └── (a.k + 1) * 2 [type=int, outer=(1)]
 
 # Correlated subquery should be hoisted as usual.
@@ -186,17 +173,14 @@ project
  ├── group-by
  │    ├── columns: any_not_null:11(bool) rownum:13(int!null)
  │    ├── grouping columns: rownum:13(int!null)
- │    ├── keys: (13)
  │    ├── left-join
  │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
  │    │    ├── row-number
  │    │    │    ├── columns: expr:6(int) rownum:13(int!null)
- │    │    │    ├── keys: (13)
  │    │    │    └── project
  │    │    │         ├── columns: expr:6(int)
  │    │    │         ├── scan a
- │    │    │         │    ├── columns: k:1(int!null)
- │    │    │         │    └── keys: (1)
+ │    │    │         │    └── columns: k:1(int!null)
  │    │    │         └── projections [outer=(1)]
  │    │    │              └── a.k + 1 [type=int, outer=(1)]
  │    │    ├── project
