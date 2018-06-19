@@ -100,7 +100,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err != nil {
 			return err
 		}
-		samples := job.Payload().Details.(*jobspb.Payload_Import).Import.Samples
+		samples := job.Details().(jobspb.ImportDetails).Samples
 
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.

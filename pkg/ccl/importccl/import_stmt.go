@@ -740,7 +740,7 @@ type importResumer struct {
 func (r *importResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 
 	// TODO(dt): consider looking at the legacy fields used in 2.0.
@@ -787,7 +787,7 @@ func (r *importResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Details().(jobspb.ImportDetails)
 	if details.BackupPath != "" {
 		return nil
 	}
@@ -807,7 +807,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Payload().Details.(*jobspb.Payload_Import).Import
+	details := job.Details().(jobspb.ImportDetails)
 
 	if details.BackupPath != "" {
 		return nil
@@ -822,7 +822,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Record.Username, r.settings); err != nil {
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings); err != nil {
 		return errors.Wrapf(err, "creating tables")
 	}
 	return nil
@@ -831,7 +831,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 func (r *importResumer) OnTerminal(
 	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Details().(jobspb.ImportDetails)
 
 	if transform := details.BackupPath; transform != "" {
 		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)

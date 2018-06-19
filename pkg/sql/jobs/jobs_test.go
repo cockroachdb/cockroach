@@ -76,15 +76,8 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	}
 
 	// Verify the upstream-provided fields.
-	details, err := payload.UnwrapDetails()
-	if err != nil {
-		return err
-	}
-
-	progressDetail, err := progress.UnwrapDetails()
-	if err != nil {
-		return err
-	}
+	details := payload.UnwrapDetails()
+	progressDetail := progress.UnwrapDetails()
 
 	if e, a := expected.Record, (jobs.Record{
 		Description:   payload.Description,
@@ -656,6 +649,8 @@ func TestJobLifecycle(t *testing.T) {
 			Description:   "To infinity and beyond!",
 			Username:      "Buzz Lightyear",
 			DescriptorIDs: []sqlbase.ID{3, 2, 1},
+			Details:       jobspb.BackupDetails{},
+			Progress:      jobspb.BackupProgress{},
 		}
 		buzzExp := expectation{
 			DB:     sqlDB,
@@ -666,11 +661,6 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		buzzJob := registry.NewJob(buzzRecord)
 
-		// Test modifying the job details before calling `Created`.
-		buzzJob.Record.Details = jobspb.BackupDetails{}
-		buzzExp.Record.Details = jobspb.BackupDetails{}
-		buzzJob.Record.Progress = jobspb.BackupProgress{}
-		buzzExp.Record.Progress = jobspb.BackupProgress{}
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -913,7 +903,10 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
-		job := registry.NewJob(jobs.Record{})
+		job := registry.NewJob(jobs.Record{
+			Details:  jobspb.RestoreDetails{},
+			Progress: jobspb.RestoreProgress{},
+		})
 		if err := job.Started(ctx); !testutils.IsError(err, "job not created") {
 			t.Fatalf("expected 'job not created' error, but got %v", err)
 		}
