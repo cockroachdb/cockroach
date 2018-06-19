@@ -377,3 +377,26 @@ END
 
 statement error duplicate key value \(p_id,c_id\)=\(1,1\) violates unique constraint "primary"
 INSERT INTO c20067 VALUES (1, 1, 'John Doe')
+
+# Regression test for #26756: ensure that interleaved table joins don't get
+# planned incorrectly given a merge join ordering caused by a constant value
+# constraint on a non-interleaved column.
+
+subtest interleaved_join_on_other_columns
+
+statement ok
+CREATE TABLE users (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE documents (id INT PRIMARY KEY, user_id INT NOT NULL) INTERLEAVE IN PARENT users (id)
+
+statement ok
+INSERT INTO users(id) VALUES(1)
+
+statement ok
+INSERT INTO documents(id, user_id) VALUES (0, 1)
+
+query I
+SELECT count(*) FROM users JOIN documents ON users.id=documents.user_id WHERE documents.id=0
+----
+1
