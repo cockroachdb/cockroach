@@ -464,7 +464,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS COPY COVERING CREATE
-%token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
+%token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
 
@@ -501,7 +501,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH MYSQLDUMP MYSQLOUTFILE
+%token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF
@@ -510,7 +510,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
-%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PGCOPY PGDUMP PLACING
+%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str> QUERIES QUERY
@@ -724,7 +724,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options
-%type <str> import_data_format import_bundle_format
+%type <str> import_format
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
@@ -1593,29 +1593,10 @@ restore_stmt:
   }
 | RESTORE error // SHOW HELP: RESTORE
 
-import_bundle_format:
-  MYSQLDUMP
+import_format:
+  name
   {
-    $$ = "MYSQLDUMP"
-  }
-| PGDUMP
-  {
-    $$ = "PGDUMP"
-  }
-
-import_data_format:
-  import_bundle_format
-|  CSV
-  {
-    $$ = "CSV"
-  }
-| MYSQLOUTFILE
-  {
-    $$ = "MYSQLOUTFILE"
-  }
-| PGCOPY
-  {
-    $$ = "PGCOPY"
+    $$ = strings.ToUpper($1)
   }
 
 // %Help: IMPORT - load data from file in a distributed manner
@@ -1644,19 +1625,19 @@ import_data_format:
 //
 // %SeeAlso: CREATE TABLE
 import_stmt:
- IMPORT import_bundle_format '(' string_or_placeholder ')'
+ IMPORT import_format '(' string_or_placeholder ')'
   {
     $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}}
   }
-| IMPORT TABLE table_name FROM import_bundle_format '(' string_or_placeholder ')'
+| IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')'
   {
     $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}}
   }
-| IMPORT TABLE table_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
-| IMPORT TABLE table_name '(' table_elem_list ')' import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
@@ -1676,7 +1657,7 @@ import_stmt:
 //
 // %SeeAlso: SELECT
 export_stmt:
-  EXPORT INTO import_data_format string_or_placeholder opt_with_options FROM select_stmt
+  EXPORT INTO import_format string_or_placeholder opt_with_options FROM select_stmt
   {
     $$.val = &tree.Export{Query: $7.slct(), FileFormat: $3, File: $4.expr(), Options: $5.kvOptions()}
   }
@@ -7970,7 +7951,6 @@ unreserved_keyword:
 | CONSTRAINTS
 | COPY
 | COVERING
-| CSV
 | CUBE
 | CURRENT
 | CYCLE
@@ -8039,8 +8019,6 @@ unreserved_keyword:
 | MATCH
 | MINUTE
 | MONTH
-| MYSQLDUMP
-| MYSQLOUTFILE
 | NAMES
 | NAN
 | NAME
@@ -8064,8 +8042,6 @@ unreserved_keyword:
 | PASSWORD
 | PAUSE
 | PHYSICAL
-| PGCOPY
-| PGDUMP
 | PLANS
 | PRECEDING
 | PREPARE
