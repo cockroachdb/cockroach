@@ -2,7 +2,7 @@ import d3 from "d3";
 import _ from "lodash";
 import React from "react";
 
-import { stdDevLong } from "src/util/app_stats";
+import { stdDevLong } from "src/util/appStats";
 import { Duration } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 
