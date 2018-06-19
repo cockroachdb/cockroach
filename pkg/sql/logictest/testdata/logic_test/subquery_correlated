@@ -229,7 +229,7 @@ WHERE
 1  CA
 
 # For now, we can't decorrelate semi-join-apply cases.
-statement error pq: unsupported relational op semi-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
 WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
@@ -272,7 +272,7 @@ WHERE
 4  TX
 
 # Max1Row prevents decorrelation.
-statement error pq: unsupported relational op left-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
 WHERE (SELECT o_id FROM o WHERE o.c_id=c.c_id AND ship='WY')=4;
@@ -576,7 +576,7 @@ ORDER BY c_id;
 6  false
 
 # For now, we can't decorrelate semi-join-apply cases.
-statement error pq: unsupported relational op semi-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
 WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
@@ -634,7 +634,7 @@ WA    1
 WY    1
 
 # ConcatAgg prevents decorrelation.
-statement error pq: unsupported relational op inner-join-apply
+statement error could not decorrelate subquery
 SELECT (SELECT concat_agg(ship || ' ') FROM o WHERE o.c_id=c.c_id)
 FROM c;
 
@@ -678,7 +678,7 @@ ON c.c_id=o.c_id AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship IS NULL
 4  80
 
 # Can't decorrelate this case.
-statement error pq: unsupported relational op inner-join-apply
+statement error could not decorrelate subquery
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o

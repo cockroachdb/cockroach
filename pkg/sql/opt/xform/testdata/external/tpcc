@@ -939,21 +939,21 @@ group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 124.4
+ ├── cost: 124.6
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
  ├── select
  │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int) sum_d_ytd:21(decimal!null)
  │    ├── stats: [rows=1.11111111]
- │    ├── cost: 124.4
+ │    ├── cost: 124.6
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(9), (11)-->(21)
  │    ├── interesting orderings: (+1) (+11)
  │    ├── full-join
  │    │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal) district.d_w_id:11(int) sum_d_ytd:21(decimal)
  │    │    ├── stats: [rows=10]
- │    │    ├── cost: 124.3
+ │    │    ├── cost: 124.5
  │    │    ├── key: (1,11)
  │    │    ├── fd: (1)-->(9), (11)-->(21)
  │    │    ├── prune: (9,21)
@@ -1402,19 +1402,19 @@ group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1477000.03
+ ├── cost: 1477000.05
  ├── key: ()
  ├── fd: ()-->(19)
  ├── prune: (19)
  ├── select
  │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
  │    ├── stats: [rows=0.0680272109]
- │    ├── cost: 1477000.03
+ │    ├── cost: 1477000.05
  │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    ├── full-join
  │    │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
  │    │    ├── stats: [rows=0.204081633]
- │    │    ├── cost: 1477000.03
+ │    │    ├── cost: 1477000.04
  │    │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    │    ├── project
  │    │    │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
