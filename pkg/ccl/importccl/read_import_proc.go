@@ -386,7 +386,8 @@ func (cp *readImportDataProcessor) OutputTypes() []sqlbase.ColumnType {
 
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
-	case roachpb.IOFileFormat_Mysqldump:
+	case roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
 		return true
 	}
 	return false
@@ -437,6 +438,8 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 		conv, err = newMysqldumpReader(kvCh, cp.spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
 		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx)
+	case roachpb.IOFileFormat_PgDump:
+		conv, err = newPgDumpReader(kvCh, cp.spec.Tables, evalCtx)
 	default:
 		err = errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
 	}
