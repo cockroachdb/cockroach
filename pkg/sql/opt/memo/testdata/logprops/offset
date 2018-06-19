@@ -29,11 +29,9 @@ SELECT * FROM xyzs OFFSET 1
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=999]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── const: 1 [type=int]
 
 build
@@ -42,11 +40,9 @@ SELECT * FROM xyzs OFFSET (SELECT 1)
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── subquery [type=int]
       └── max1-row
            ├── columns: "?column?":5(int!null)
@@ -69,11 +65,9 @@ SELECT * FROM xyzs OFFSET 0
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── const: 0 [type=int]
 
 # Propagate outer columns.
@@ -85,8 +79,7 @@ project
  ├── stats: [rows=1000]
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    └── stats: [rows=1000]
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
@@ -104,8 +97,7 @@ project
                      │    ├── stats: [rows=1000]
                      │    ├── scan kuv
                      │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │    │    ├── stats: [rows=1000]
-                     │    │    └── keys: (5)
+                     │    │    └── stats: [rows=1000]
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
                      └── variable: xyzs.y [type=int, outer=(2)]
@@ -130,15 +122,12 @@ offset
  │    │    ├── columns: xyzs.x:1(int!null)
  │    │    ├── cardinality: [0 - 10]
  │    │    ├── stats: [rows=10]
- │    │    ├── keys: (1)
  │    │    ├── project
  │    │    │    ├── columns: xyzs.x:1(int!null)
  │    │    │    ├── stats: [rows=1000]
- │    │    │    ├── keys: (1)
  │    │    │    └── scan xyzs
  │    │    │         ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │    │         ├── stats: [rows=1000]
- │    │    │         └── keys: (1) weak(3,4)
+ │    │    │         └── stats: [rows=1000]
  │    │    └── const: 10 [type=int]
  │    └── values
  │         ├── columns: column1:5(int)
@@ -160,17 +149,14 @@ offset
  ├── columns: s:4(string) x:1(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── keys: (1)
  ├── select
  │    ├── columns: x:1(int!null) s:4(string)
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
- │    ├── keys: (1)
  │    ├── scan xyzs@secondary
  │    │    ├── columns: x:1(int!null) s:4(string)
  │    │    ├── limit: 100
- │    │    ├── stats: [rows=100, distinct(1)=100]
- │    │    └── keys: (1)
+ │    │    └── stats: [rows=100, distinct(1)=100]
  │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
  │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
  │              ├── variable: xyzs.x [type=int, outer=(1)]

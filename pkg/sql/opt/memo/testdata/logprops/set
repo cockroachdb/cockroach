@@ -27,15 +27,13 @@ union
  ├── stats: [rows=2000, distinct(6,7)=2000]
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
- │    └── keys: (1)
+ │    └── stats: [rows=1000, distinct(1,2)=1000]
  └── project
       ├── columns: u:3(int) v:4(int!null)
       ├── stats: [rows=1000, distinct(3,4)=1000]
       └── scan uv
            ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1000, distinct(3,4)=1000]
-           └── keys: (5)
+           └── stats: [rows=1000, distinct(3,4)=1000]
 
 build
 SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM uv WHERE u=1) uv
@@ -48,23 +46,18 @@ intersect
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
- │    ├── keys: (1)
  │    └── scan xy
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=1000, distinct(1,2)=1000]
- │         └── keys: (1)
+ │         └── stats: [rows=1000, distinct(1,2)=1000]
  └── project
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
       ├── stats: [rows=1.43, distinct(3-5)=1.43]
-      ├── keys: (5)
       └── select
            ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            ├── stats: [rows=1.43, distinct(3)=1, distinct(3-5)=1.43]
-           ├── keys: (5)
            ├── scan uv
            │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
-           │    └── keys: (5)
+           │    └── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
            └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                 └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                      ├── variable: uv.u [type=int, outer=(3)]
@@ -81,11 +74,9 @@ except
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
- │    ├── keys: (1)
  │    └── scan xy
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=1000, distinct(1,2)=1000]
- │         └── keys: (1)
+ │         └── stats: [rows=1000, distinct(1,2)=1000]
  └── project
       ├── columns: u:3(int!null) v:4(int!null)
       ├── stats: [rows=1.43, distinct(3,4)=1.43]
@@ -95,11 +86,9 @@ except
            └── select
                 ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                 ├── stats: [rows=1.43, distinct(3)=1, distinct(3,4)=1.43]
-                ├── keys: (5)
                 ├── scan uv
                 │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-                │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
-                │    └── keys: (5)
+                │    └── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
                 └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                      └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                           ├── variable: uv.u [type=int, outer=(3)]
@@ -112,11 +101,9 @@ SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
- ├── keys: (1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
+ │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2)]
       └── eq [type=bool, outer=(1,2)]
            ├── subquery [type=tuple{int AS x, int AS u}, outer=(1,2)]
@@ -141,8 +128,7 @@ select
            │              │    │    ├── stats: [rows=1000, distinct(3,6)=700]
            │              │    │    ├── scan uv
            │              │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
-           │              │    │    │    ├── stats: [rows=1000, distinct(3)=700]
-           │              │    │    │    └── keys: (5)
+           │              │    │    │    └── stats: [rows=1000, distinct(3)=700]
            │              │    │    └── projections [outer=(1,3)]
            │              │    │         └── variable: xy.x [type=int, outer=(1)]
            │              │    └── project
@@ -151,8 +137,7 @@ select
            │              │         ├── stats: [rows=1000, distinct(8,10)=700]
            │              │         ├── scan uv
            │              │         │    ├── columns: uv.u:7(int) uv.v:8(int!null) uv.rowid:9(int!null)
-           │              │         │    ├── stats: [rows=1000, distinct(8)=700]
-           │              │         │    └── keys: (9)
+           │              │         │    └── stats: [rows=1000, distinct(8)=700]
            │              │         └── projections [outer=(2,8)]
            │              │              └── variable: xy.y [type=int, outer=(2)]
            │              └── projections [outer=(11,12)]

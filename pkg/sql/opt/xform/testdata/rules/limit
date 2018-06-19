@@ -38,8 +38,7 @@ SELECT * FROM a LIMIT 1
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── limit: 1
- └── keys: (1)
+ └── limit: 1
 
 # Combine limit with needed columns.
 opt
@@ -101,8 +100,7 @@ limit
  └── subquery [type=int]
       └── scan a@s_idx
            ├── columns: a.k:6(int!null)
-           ├── limit: 1
-           └── keys: (6)
+           └── limit: 1
 
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
@@ -150,12 +148,10 @@ lookup-join kuv
  ├── columns: k:1(int!null) u:2(int) v:3(int)
  ├── key columns: [1]
  ├── cardinality: [0 - 5]
- ├── keys: (1)
  ├── ordering: +2
  └── scan kuv@secondary
       ├── columns: k:1(int!null) u:2(int)
       ├── limit: 5
-      ├── keys: (1)
       └── ordering: +2
 
 # Verify we don't push the limit if the ordering depends on a column not in the
@@ -166,18 +162,14 @@ SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 limit
  ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  ├── cardinality: [0 - 5]
- ├── keys: (1)
  ├── ordering: +2,+3
  ├── sort
  │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
- │    ├── keys: (1)
  │    ├── ordering: +2,+3
  │    └── lookup-join kuv
  │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  │         ├── key columns: [1]
- │         ├── keys: (1)
  │         └── scan kuv@secondary
  │              ├── columns: k:1(int!null) u:2(int!null)
- │              ├── constraint: /2/1: [/2 - /9]
- │              └── keys: (1)
+ │              └── constraint: /2/1: [/2 - /9]
  └── const: 5 [type=int]

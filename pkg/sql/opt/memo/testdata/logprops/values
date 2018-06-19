@@ -33,8 +33,7 @@ project
  ├── stats: [rows=1000]
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
+ │    └── stats: [rows=1000]
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
