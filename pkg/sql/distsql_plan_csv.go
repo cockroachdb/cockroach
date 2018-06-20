@@ -461,8 +461,6 @@ func LoadCSV(
 	)
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
-	// TODO(dan): We really don't need the txn for this flow, so remove it once
-	// Run works without one.
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		dsp.Run(&planCtx, txn, &p, recv, evalCtx)
 		return resultRows.Err()
@@ -597,14 +595,10 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		func(ts hlc.Timestamp) {},
 	)
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
-	// TODO(dan): We really don't need the txn for this flow, so remove it once
-	// Run works without one.
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
-		samples = nil
-		dsp.Run(planCtx, txn, &p, recv, evalCtx)
-		return rowResultWriter.Err()
-	}); err != nil {
+	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
+	samples = nil
+	dsp.Run(planCtx, nil, &p, recv, evalCtx)
+	if err := rowResultWriter.Err(); err != nil {
 		return nil, nil, err
 	}
 
