@@ -116,13 +116,13 @@ SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=1.27, distinct(3)=1]
+ ├── stats: [rows=1.26952228, distinct(3)=1]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  ├── limit
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5, distinct(3)=3.94]
+ │    ├── stats: [rows=5, distinct(3)=3.93848936]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── sort

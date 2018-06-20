@@ -124,7 +124,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc123(
 		cs2,
-		"[rows=3333333333]",
+		"[rows=3.33333333e+09]",
 		1.0/3,
 	)
 
@@ -187,7 +187,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc45(
 		cs45,
-		"[rows=1000000000, distinct(4)=1]",
+		"[rows=1e+09, distinct(4)=1]",
 		1.0/10,
 	)
 }

@@ -63,10 +63,10 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=0]
+ ├── stats: [rows=8e-06]
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
-      ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(3)=0]
+      ├── stats: [rows=8e-06, distinct(1)=8e-06, distinct(2)=8e-06, distinct(3)=8e-06]
       ├── key: (3)
       ├── fd: (3)-->(1,2)
       ├── scan b
@@ -97,7 +97,7 @@ SELECT * FROM a WHERE x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1333]
+ ├── stats: [rows=1333.33333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -218,14 +218,14 @@ SELECT y FROM idx WHERE y < 5 AND z < 10
 ----
 project
  ├── columns: y:2(int!null)
- ├── stats: [rows=111]
+ ├── stats: [rows=111.111111]
  └── select
       ├── columns: y:2(int!null) z:3(int!null)
-      ├── stats: [rows=111]
+      ├── stats: [rows=111.111111]
       ├── scan idx@yz
       │    ├── columns: y:2(int!null) z:3(int)
       │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
-      │    └── stats: [rows=333]
+      │    └── stats: [rows=333.333333]
       └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
            └── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
                 ├── variable: idx.z [type=int, outer=(3)]
