@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -144,6 +145,10 @@ func makeIntCols(numCols int) []sqlbase.ColumnType {
 
 func intEncDatum(i int) sqlbase.EncDatum {
 	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+}
+
+func strEncDatum(s string) sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: tree.NewDString(s)}
 }
 
 func nullEncDatum() sqlbase.EncDatum {
@@ -314,6 +319,7 @@ func runProcessorTest(
 	inputRows sqlbase.EncDatumRows,
 	outputTypes []sqlbase.ColumnType,
 	expected sqlbase.EncDatumRows,
+	txn *client.Txn,
 ) {
 	in := NewRowBuffer(inputTypes, inputRows, RowBufferArgs{})
 	out := &RowBuffer{}
@@ -324,16 +330,26 @@ func runProcessorTest(
 	flowCtx := FlowCtx{
 		Settings: st,
 		EvalCtx:  evalCtx,
+		txn:      txn,
 	}
 
-	d, err := newProcessor(
+	p, err := newProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
 		[]RowSource{in}, []RowReceiver{out})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	d.Run(context.Background(), nil /* wg */)
+	switch pt := p.(type) {
+	case *joinReader:
+		// Reduce batch size to exercise batching logic.
+		pt.batchSize = 2
+	case *indexJoiner:
+		// Reduce batch size to exercise batching logic.
+		pt.batchSize = 2
+	}
+
+	p.Run(context.Background(), nil /* wg */)
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
 	}
