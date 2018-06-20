@@ -1608,7 +1608,7 @@ func Example_misc_pretty() {
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s from t.t union all select s from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s, 'foo' from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -1620,21 +1620,16 @@ func Example_misc_pretty() {
 	// |   hai |
 	// +-------+
 	// (1 row)
-	// sql --format=pretty -e explain select s from t.t union all select s from t.t
-	// +----------------+-------+-------------+
-	// |      Tree      | Field | Description |
-	// +----------------+-------+-------------+
-	// | append         |       |             |
-	// |  ├── render    |       |             |
-	// |  │    └── scan |       |             |
-	// |  │             | table | t@primary   |
-	// |  │             | spans | ALL         |
-	// |  └── render    |       |             |
-	// |       └── scan |       |             |
-	// |                | table | t@primary   |
-	// |                | spans | ALL         |
-	// +----------------+-------+-------------+
-	// (9 rows)
+	// sql --format=pretty -e explain select s, 'foo' from t.t
+	// +-----------+-------+-------------+
+	// |   Tree    | Field | Description |
+	// +-----------+-------+-------------+
+	// | render    |       |             |
+	// |  └── scan |       |             |
+	// |           | table | t@primary   |
+	// |           | spans | ALL         |
+	// +-----------+-------+-------------+
+	// (4 rows)
 }
 
 func Example_user() {
