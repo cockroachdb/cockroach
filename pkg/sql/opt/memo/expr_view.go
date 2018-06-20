@@ -17,8 +17,6 @@ package memo
 import (
 	"bytes"
 	"fmt"
-	"math"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -358,7 +356,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideStats) {
-		ev.formatStats(tp, &logProps.Relational.Stats)
+		tp.Childf("stats: %s", &logProps.Relational.Stats)
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideCost) && ev.best != normBestOrdinal {
@@ -397,38 +395,6 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	for i := 0; i < ev.ChildCount(); i++ {
 		ev.Child(i).format(f, tp)
-	}
-}
-
-func (ev ExprView) formatStats(tp treeprinter.Node, s *props.Statistics) {
-	var buf bytes.Buffer
-
-	buf.WriteString("stats: [rows=")
-	printFloat(&buf, s.RowCount)
-	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
-	for _, colStat := range s.ColStats {
-		colStats = append(colStats, *colStat)
-	}
-	for _, colStat := range s.MultiColStats {
-		colStats = append(colStats, *colStat)
-	}
-	sort.Sort(colStats)
-	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=", col.Cols.String())
-		printFloat(&buf, col.DistinctCount)
-	}
-	buf.WriteString("]")
-	tp.Child(buf.String())
-}
-
-func printFloat(buf *bytes.Buffer, v float64) {
-	if v >= 100 && v <= 1e+15 || math.Abs(math.Round(v)-v) < .0001 {
-		// Omit fractional digits for integers and for large values.
-		fmt.Fprintf(buf, "%.0f", v)
-	} else if v >= 1 {
-		fmt.Fprintf(buf, "%.2f", v)
-	} else {
-		fmt.Fprintf(buf, "%.4f", v)
 	}
 }
 
