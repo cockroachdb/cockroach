@@ -105,7 +105,7 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 var OptimizerClusterMode = settings.RegisterEnumSetting(
 	"sql.defaults.optimizer",
 	"Default cost-based optimizer mode",
-	"Off",
+	"On",
 	map[int64]string{
 		int64(sessiondata.OptimizerAlways): "Always",
 		int64(sessiondata.OptimizerLocal):  "Local",
