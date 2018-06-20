@@ -164,6 +164,10 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				if _, err := sqlDB.Exec("SET EXPERIMENTAL_OPT = OFF"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
 					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
@@ -181,6 +185,10 @@ func TestTrace(t *testing.T) {
 			name: "ShowTraceForDistSQL",
 			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
 				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
+					t.Fatal(err)
+				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				if _, err := sqlDB.Exec("SET EXPERIMENTAL_OPT = OFF"); err != nil {
 					t.Fatal(err)
 				}
 				return sqlDB.Query(

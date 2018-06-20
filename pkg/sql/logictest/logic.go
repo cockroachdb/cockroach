@@ -385,8 +385,9 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "local", numNodes: 1, overrideDistSQLMode: "Off"},
-	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1, overrideDistSQLMode: "Off",
+	{name: "local", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "Off"},
+	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
+		overrideDistSQLMode: "Off", overrideOptimizerMode: "Off",
 		bootstrapVersion: &cluster.ClusterVersion{
 			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
@@ -395,16 +396,20 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade: 1,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "On"},
-	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
-	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off", overrideOptimizerMode: "Off"},
+	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "Off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
-	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "Off"},
-	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "On"},
+	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "Off",
+		distSQLMetadataTestEnabled: true, skipShort: true},
+	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "Off",
+		distSQLUseDisk: true, skipShort: true},
+	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "Off", overrideOptimizerMode: "Off"},
+	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "Off"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
+	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true,
+		skipShort: true, overrideOptimizerMode: "Off"},
+	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true,
+		overrideOptimizerMode: "Off"},
 }
 
 // An index in the above slice.

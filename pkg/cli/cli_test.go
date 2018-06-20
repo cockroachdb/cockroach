@@ -1606,13 +1606,10 @@ func Example_misc_pretty() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s from t.t union all select s from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "values (1, 2, 3), (4, 5, 6), (7, 8, 9)"})
 
 	// Output:
-	// sql -e create database t; create table t.t (s string, d string);
-	// CREATE TABLE
 	// sql --format=pretty -e select '  hai' as x
 	// +-------+
 	// |   x   |
@@ -1620,21 +1617,15 @@ func Example_misc_pretty() {
 	// |   hai |
 	// +-------+
 	// (1 row)
-	// sql --format=pretty -e explain select s from t.t union all select s from t.t
-	// +----------------+-------+-------------+
-	// |      Tree      | Field | Description |
-	// +----------------+-------+-------------+
-	// | append         |       |             |
-	// |  ├── render    |       |             |
-	// |  │    └── scan |       |             |
-	// |  │             | table | t@primary   |
-	// |  │             | spans | ALL         |
-	// |  └── render    |       |             |
-	// |       └── scan |       |             |
-	// |                | table | t@primary   |
-	// |                | spans | ALL         |
-	// +----------------+-------+-------------+
-	// (9 rows)
+	// sql --format=pretty -e values (1, 2, 3), (4, 5, 6), (7, 8, 9)
+	// +---------+---------+---------+
+	// | column1 | column2 | column3 |
+	// +---------+---------+---------+
+	// |       1 |       2 |       3 |
+	// |       4 |       5 |       6 |
+	// |       7 |       8 |       9 |
+	// +---------+---------+---------+
+	// (3 rows)
 }
 
 func Example_user() {
