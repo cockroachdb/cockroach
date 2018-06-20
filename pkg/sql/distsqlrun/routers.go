@@ -89,8 +89,7 @@ type routerOutput struct {
 		// The "level 2" rowContainer is used when we need to buffer more rows than
 		// rowBuf allows. The row container always contains rows "older" than those
 		// in rowBuf. The oldest rows are at the beginning of the row container.
-		// TODO(radu,arjun): fall back to a disk container when it gets too big.
-		rowContainer memRowContainer
+		rowContainer diskBackedRowContainer
 		producerDone bool
 	}
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
@@ -125,23 +124,43 @@ func (ro *routerOutput) addRowLocked(ctx context.Context, row sqlbase.EncDatumRo
 	return nil
 }
 
-func (ro *routerOutput) popRowsLocked(rowBuf []sqlbase.EncDatumRow) []sqlbase.EncDatumRow {
+func (ro *routerOutput) popRowsLocked(
+	ctx context.Context, rowBuf []sqlbase.EncDatumRow,
+) ([]sqlbase.EncDatumRow, error) {
 	n := 0
 	// First try to get rows from the row container.
-	for ; n < len(rowBuf) && ro.mu.rowContainer.Len() > 0; n++ {
-		// TODO(radu): use an EncDatumRowAlloc?
-		row := ro.mu.rowContainer.EncRow(0)
-		rowBuf[n] = make(sqlbase.EncDatumRow, len(row))
-		copy(rowBuf[n], row)
-		ro.mu.rowContainer.PopFirst()
+	if ro.mu.rowContainer.Len() > 0 {
+		if err := func() error {
+			i := ro.mu.rowContainer.NewFinalIterator(ctx)
+			defer i.Close()
+			for i.Rewind(); n < len(rowBuf); i.Next() {
+				if ok, err := i.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+				row, err := i.Row()
+				if err != nil {
+					return err
+				}
+				// TODO(radu): use an EncDatumRowAlloc?
+				rowBuf[n] = make(sqlbase.EncDatumRow, len(row))
+				copy(rowBuf[n], row)
+				n++
+			}
+			return nil
+		}(); err != nil {
+			return nil, err
+		}
 	}
+
 	// If the row container is empty, get more rows from the row buffer.
 	for ; n < len(rowBuf) && ro.mu.rowBufLen > 0; n++ {
 		rowBuf[n] = ro.mu.rowBuf[ro.mu.rowBufLeft]
 		ro.mu.rowBufLeft = (ro.mu.rowBufLeft + 1) % routerRowBufSize
 		ro.mu.rowBufLen--
 	}
-	return rowBuf[:n]
+	return rowBuf[:n], nil
 }
 
 // See the comment for routerBase.semaphoreCount.
@@ -203,7 +222,15 @@ func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
 	for i := range rb.outputs {
 		// This method must be called before we start() so we don't need
 		// to take the mutex.
-		rb.outputs[i].mu.rowContainer.init(nil /* ordering */, types, flowCtx.NewEvalCtx())
+		evalCtx := flowCtx.NewEvalCtx()
+		rb.outputs[i].mu.rowContainer.init(
+			nil, /* ordering */
+			types,
+			evalCtx,
+			flowCtx.TempStorage,
+			evalCtx.Mon,
+			flowCtx.diskMonitor,
+		)
 		// Initialize any outboxes.
 		if o, ok := rb.outputs[i].stream.(*outbox); ok {
 			o.init(types)
@@ -216,6 +243,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
+			drain := false
 			rowBuf := make([]sqlbase.EncDatumRow, routerRowBufSize)
 			streamStatus := NeedMoreRows
 			ro.mu.Lock()
@@ -242,19 +270,26 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					continue
 				}
 
-				// Send any rows that have been buffered. We grab multiple rows at a
-				// time to reduce contention.
-				if rows := ro.popRowsLocked(rowBuf); len(rows) > 0 {
-					ro.mu.Unlock()
-					rb.semaphore <- struct{}{}
-					for _, row := range rows {
-						status := ro.stream.Push(row, nil)
-						rb.updateStreamState(&streamStatus, status)
+				if !drain {
+					// Send any rows that have been buffered. We grab multiple rows at a
+					// time to reduce contention.
+					if rows, err := ro.popRowsLocked(ctx, rowBuf); err != nil {
+						rb.fwdMetadata(&ProducerMetadata{Err: err})
+						atomic.StoreUint32(&rb.aggregatedStatus, uint32(DrainRequested))
+						drain = true
+						continue
+					} else if len(rows) > 0 {
+						ro.mu.Unlock()
+						rb.semaphore <- struct{}{}
+						for _, row := range rows {
+							status := ro.stream.Push(row, nil)
+							rb.updateStreamState(&streamStatus, status)
+						}
+						<-rb.semaphore
+						ro.mu.Lock()
+						ro.mu.streamStatus = streamStatus
+						continue
 					}
-					<-rb.semaphore
-					ro.mu.Lock()
-					ro.mu.streamStatus = streamStatus
-					continue
 				}
 
 				// No rows or metadata buffered; see if the producer is done.
