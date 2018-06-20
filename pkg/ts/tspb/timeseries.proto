@@ -59,6 +59,16 @@ enum TimeSeriesQueryAggregator {
   MAX = 3;
   // MIN returns the minimum value of datapoints.
   MIN = 4;
+  // FIRST returns the value of the first datapoint in the set being aggregated.
+  // This aggregator is not valid for a source aggregator, and should only be
+  // used for downsampling.
+  FIRST = 5;
+  // LAST returns the value of the last datapoint in the set being aggregated.
+  // This aggregator is not valid for a source aggregator, and should only be
+  // used for downsampling.
+  LAST = 6;
+  // VARIANCE returns the variance (σ^2) of the datapoints.
+  VARIANCE = 7;
 }
 
 // TimeSeriesQueryDerivative describes a derivative function used to convert

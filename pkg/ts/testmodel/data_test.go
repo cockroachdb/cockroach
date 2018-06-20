@@ -55,10 +55,21 @@ func TestDataSeriesTimeSlice(t *testing.T) {
 			end:      1001,
 			expected: nil,
 		},
+
 		{
 			start:    1,
 			end:      2,
 			expected: testData[:1],
+		},
+		{
+			start:    -100,
+			end:      36,
+			expected: testData[:7],
+		},
+		{
+			start:    15,
+			end:      2000,
+			expected: testData[4:],
 		},
 		{
 			start: 15,
@@ -112,6 +123,12 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		aggFunc    aggFunc
 		expected   DataSeries
 	}{
+		// Group by same resolution, aggregate add.
+		{
+			resolution: 1,
+			aggFunc:    AggregateSum,
+			expected:   testData,
+		},
 		// Group by 10 second resolution, aggregate add.
 		{
 			resolution: 10,
