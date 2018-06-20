@@ -1092,6 +1092,11 @@ type SchemaChangerTestingKnobs struct {
 
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
+
+	// TwoVersionLeaseViolation is called whenever a schema change
+	// transaction is unable to commit because it is violating the two
+	// version lease invariant.
+	TwoVersionLeaseViolation func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

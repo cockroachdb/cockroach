@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -266,17 +269,49 @@ func (s LeaseStore) WaitForOneVersion(
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.execCfg.Clock.Now()
-		count, err := s.countLeases(ctx, tableDesc.ID, tableDesc.Version-1, now.GoTime())
+		tables := []IDVersion{
+			{
+				name:    tableDesc.Name,
+				id:      tableDesc.ID,
+				version: tableDesc.Version - 1,
+			},
+		}
+		count, err := CountLeases(ctx, s.execCfg.InternalExecutor, tables, now)
 		if err != nil {
 			return 0, err
 		}
 		if count == 0 {
 			break
 		}
-		log.Infof(context.TODO(), "publish (count leases): descID=%d name=%s version=%d count=%d",
-			tableDesc.ID, tableDesc.Name, tableDesc.Version-1, count)
+		log.Infof(context.TODO(), "publish (%d leases): desc=%v", count, tables)
 	}
 	return tableDesc.Version, nil
+}
+
+func incrementVersion(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn,
+) error {
+	// Use SERIALIZABLE transactions so that the ModificationTime on the
+	// descriptor is the commit timestamp.
+	if txn.Isolation() != enginepb.SERIALIZABLE {
+		return pgerror.NewErrorf(pgerror.CodeInvalidTransactionStateError,
+			"transaction involving a schemas change needs to be SERIALIZABLE")
+	}
+	tableDesc.Version++
+	// We need to set ModificationTime to the transaction's commit
+	// timestamp. Using CommitTimestamp() guarantees that the
+	// transaction will commit at the CommitTimestamp().
+	//
+	// TODO(vivek): Stop needing to do this by deprecating the
+	// ModificationTime. A Descriptor modification time can be
+	// the mvcc timestamp of the descriptor. This requires moving the
+	// schema change lease out of the descriptor making the
+	// descriptor truly immutable at a version.
+	modTime := txn.CommitTimestamp()
+	tableDesc.ModificationTime = modTime
+	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
+		tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+	return nil
 }
 
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
@@ -341,17 +376,9 @@ func (s LeaseStore) Publish(
 					tableDesc.Version, version)
 			}
 
-			tableDesc.Version++
-			// We need to set ModificationTime to the transaction's commit
-			// timestamp. Since this is a SERIALIZABLE transaction, that
-			// will be OrigTimestamp. However, once we've used the
-			// timestamp, it's rather essential that we have a guarantee
-			// that the txn will commit at that exact timestamp. Using
-			// CommitTimestamp() provides this guarantee.
-			modTime := txn.CommitTimestamp()
-			tableDesc.ModificationTime = modTime
-			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
+			if err := incrementVersion(ctx, tableDesc, txn); err != nil {
+				return err
+			}
 			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
 				return err
 			}
@@ -394,15 +421,38 @@ func (s LeaseStore) Publish(
 	panic("not reached")
 }
 
-// countLeases returns the number of unexpired leases for a particular version
-// of a descriptor.
-func (s LeaseStore) countLeases(
-	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
+// IDVersion represents a descriptor ID, version pair that are
+// meant to map to a single immutable descriptor.
+type IDVersion struct {
+	// name only provided for pretty printing.
+	name    string
+	id      sqlbase.ID
+	version sqlbase.DescriptorVersion
+}
+
+// NewIDVersion returns an initialized IDVersion.
+func NewIDVersion(name string, id sqlbase.ID, version sqlbase.DescriptorVersion) IDVersion {
+	return IDVersion{name: name, id: id, version: version}
+}
+
+// CountLeases returns the number of unexpired leases for a number of tables
+// each at a particular version at a particular time.
+func CountLeases(
+	ctx context.Context, executor *InternalExecutor, tables []IDVersion, at hlc.Timestamp,
 ) (int, error) {
-	const countLeases = `SELECT count(version) FROM system.lease ` +
-		`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
-	values, err := s.execCfg.InternalExecutor.QueryRow(
-		ctx, "count-leases", nil /* txn */, countLeases, descID, int(version), expiration,
+	var whereClauses []string
+	for _, t := range tables {
+		whereClauses = append(whereClauses,
+			fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+				t.id, t.version),
+		)
+	}
+
+	stmt := fmt.Sprintf(`SELECT count(1) FROM system.lease AS OF SYSTEM TIME %d.%d WHERE `,
+		at.WallTime, at.Logical) +
+		strings.Join(whereClauses, " OR ")
+	values, err := executor.QueryRow(
+		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
 	)
 	if err != nil {
 		return 0, err

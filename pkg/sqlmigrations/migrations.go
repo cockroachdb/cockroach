@@ -635,12 +635,13 @@ func ensureMaxPrivileges(ctx context.Context, r runner) error {
 	return upgradeDescsWithFn(ctx, r, tableDescFn, databaseDescFn)
 }
 
-var upgradeDescBatchSize int64 = 50
+var upgradeDescBatchSize int64 = 10
 
 // upgradeTableDescsWithFn runs the provided upgrade functions on each table
 // and database descriptor, persisting any upgrades if the function indicates that the
 // descriptor was changed.
 // Upgrade functions may be nil to perform nothing for the corresponding descriptor type.
+// If it returns an error some descriptors could have been upgraded.
 func upgradeDescsWithFn(
 	ctx context.Context,
 	r runner,
@@ -667,6 +668,8 @@ func upgradeDescsWithFn(
 			}
 			startKey = kvs[len(kvs)-1].Key.Next()
 
+			var idVersions []sql.IDVersion
+			var now hlc.Timestamp
 			b := txn.NewBatch()
 			for _, kv := range kvs {
 				var sqlDesc sqlbase.Descriptor
@@ -692,7 +695,12 @@ func upgradeDescsWithFn(
 							// concern: consider that dropping a large table can take several
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
-							table.UpVersion = true
+							table.Version++
+							now = txn.CommitTimestamp()
+							idVersions = append(idVersions,
+								sql.NewIDVersion(
+									table.Name, table.ID, table.Version-2,
+								))
 							// Use ValidateTable() instead of Validate()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
@@ -722,6 +730,17 @@ func upgradeDescsWithFn(
 			}
 			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
+			}
+			if idVersions != nil {
+				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
+				if err != nil {
+					return err
+				}
+				if count > 0 {
+					return errors.Errorf(
+						`penultimate schema version is leased, upgrade again with no outstanding schema changes`,
+					)
+				}
 			}
 			return txn.Run(ctx, b)
 		}); err != nil {

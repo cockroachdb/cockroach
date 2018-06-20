@@ -1060,9 +1060,10 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
-
-					atomic.AddInt32(&testAcquiredCount, 1)
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.ID > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquiredCount, 1)
+					}
 				},
 				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
@@ -1174,6 +1175,215 @@ CREATE TABLE t.test2 ();
 
 		return nil
 	})
+}
+
+// Check that the table version is incremented with every schema change.
+// The test also verifies that when a lease is in use, the first schema
+// change can proceed, but the next one will wait until the lease is
+// released. Furthermore, this also tests that the schema change transaction
+// will rollback a transaction that violates the two version invariant
+// thereby not blocking any table lease transaction trying to acquire a
+// table lease.
+func TestIncrementTableVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var violations int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Disable execution of schema changers after the schema change
+		// transaction commits. This is to prevent executing the default
+		// WaitForOneVersion() code that holds up a schema change
+		// transaction until the new version has been published to the
+		// entire cluster.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			TwoVersionLeaseViolation: func() {
+				atomic.AddInt64(&violations, 1)
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 1 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Grab a lease on the table.
+	if _, err := tx.Exec("INSERT INTO t.kv VALUES ('a', 'b');"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify the table descriptor.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.kv RENAME to t.kv1`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first schema change will succeed and increment the version.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 2 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	if l := atomic.LoadInt64(&violations); l > 0 {
+		t.Fatalf("violations = %d", l)
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.kv1 RENAME TO t.kv2`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Let the second schema change hit a retry because of a two version
+	// lease violation.
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt64(&violations) == 0 {
+			return errors.Errorf("didnt retry schema change")
+		}
+		return nil
+	})
+	// The second schema change doesn't increment the table descriptor
+	// version. Furthermore, it also doesn't block any reads on
+	// the table descriptor. If the schema change transaction
+	// doesn't rollback the transaction this descriptor read will
+	// hang.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 2 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	// Transaction successfully used the old version.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Wait()
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 3 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+}
+
+// Tests that when a transaction has already returned results
+// to the user and the transaction continues on to make a schema change,
+// whenever the table lease two version invariant is violated and the
+// transaction needs to be restarted, a retryable error is returned to the
+// user.
+func TestTwoVersionInvariantRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var violations int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Disable execution of schema changers after the schema change
+		// transaction commits. This is to prevent executing the default
+		// WaitForOneVersion() code that holds up a schema change
+		// transaction until the new version has been published to the
+		// entire cluster.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			TwoVersionLeaseViolation: func() {
+				atomic.AddInt64(&violations, 1)
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if tableDesc.Version != 1 {
+		t.Fatalf("invalid version %d", tableDesc.Version)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Grab a lease on the table.
+	rows, err := tx.Query("SELECT * FROM t.kv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify the table descriptor increments the version.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.kv RENAME to t.kv1`); err != nil {
+		t.Fatal(err)
+	}
+
+	txRetry, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read some data using the transaction so that it cannot be
+	// retried internally
+	rows, err = txRetry.Query(`SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := txRetry.Exec(`ALTER TABLE t.kv1 RENAME TO t.kv2`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		// This can hang waiting for one version before tx.Commit() is
+		// called below, so it is executed in another goroutine
+		if err := txRetry.Commit(); !testutils.IsError(err,
+			`HandledRetryableTxnError: cannot publish new versions for tables: \[\{kv2 53 1\}\], old versions still in use`,
+		) {
+			t.Errorf("err = %v", err)
+		}
+		wg.Done()
+	}()
+
+	// Make sure that txRetry does violate the two version lease invariant.
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt64(&violations) == 0 {
+			return errors.Errorf("didnt retry schema change")
+		}
+		return nil
+	})
+	// Commit the first transaction, unblocking txRetry.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
 }
 
 func TestModificationTimeTxnOrdering(testingT *testing.T) {

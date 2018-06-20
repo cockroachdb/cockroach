@@ -23,6 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -188,13 +191,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 		if os.ImplicitTxn.Get() {
-			autoCommitErr := ex.handleAutoCommit(ctx, stmt.AST)
-			if autoCommitErr != nil {
-				retEv, retPayload = ex.makeErrEvent(autoCommitErr, stmt.AST)
-				return
-			}
-			retEv = eventTxnFinish{}
-			retPayload = eventTxnFinishPayload{commit: true}
+			retEv, retPayload = ex.handleAutoCommit(ctx, stmt.AST)
 			return
 		}
 	}()
@@ -452,15 +449,113 @@ func (ex *connExecutor) maybeSynchronizeParallelStmts(
 	return parallelize, nil
 }
 
-// commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
-// transaction is committed and the statement result is written to res. res is
-// closed.
+// checkTableTwoVersionInvariant checks whether any new table schema being
+// modified written at a version V has only valid leases at version = V - 1.
+// A transaction retry error is returned whenever the invariant is violated.
+// Before returning the retry error the current transaction is
+// rolled-back and the function waits until there are only outstanding
+// leases on the current version. This affords the retry to succeed in the
+// event that there are no other schema changes simultaneously contending with
+// this txn.
+//
+// checkTableTwoVersionInvariant blocks until it's legal for the modified
+// table descriptors (if any) to be committed.
+// Reminder: a descriptor version v can only be written at a timestamp
+// that's not covered by a lease on version v-2. So, if the current
+// txn wants to write some updated descriptors, it needs
+// to wait until all incompatible leases are revoked or expire. If
+// incompatible leases exist, we'll block waiting for these leases to
+// go away. Then, the transaction is restarted by generating a retriable error.
+// Note that we're relying on the fact that the number of conflicting
+// leases will only go down over time: no new conflicting leases can be
+// created as of the time of this call because v-2 can't be leased once
+// v-1 exists.
+func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
+	tables := ex.extraTxnState.tables.getTablesWithNewVersion()
+	if tables == nil {
+		return nil
+	}
+	txn := ex.state.mu.txn
+	if txn.IsCommitted() {
+		panic("transaction has already committed")
+	}
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+	// Restart the transaction so that it is able to replay itself at a newer timestamp
+	// with the hope that the next time around there will be leases only at the current
+	// version.
+	retryErr := roachpb.NewHandledRetryableTxnError(
+		fmt.Sprintf(
+			`cannot publish new versions for tables: %v, old versions still in use`,
+			tables),
+		txn.ID(),
+		*txn.Proto(),
+	)
+	// We cleanup the transaction and create a new transaction after
+	// waiting for the invariant to be satisfied because the wait time
+	// might be extensive and intents can block out leases being created
+	// on a descriptor.
+	//
+	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
+	// table descriptor intents can be laid down here after the invariant
+	// has been checked.
+	isolation := txn.Proto().Isolation
+	userPriority := txn.UserPriority()
+	// We cleanup the transaction and create a new transaction wait time
+	// might be extensive and so we'd better get rid of all the intents.
+	txn.CleanupOnError(ctx, retryErr)
+
+	// Release leases held by the current transaction before waiting
+	// on cluster wide releases of old version leases.
+	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
+
+	// Wait until all older version leases have been released or expired.
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		// Use the current clock time.
+		now := ex.server.cfg.Clock.Now()
+		count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, now)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			break
+		}
+		if ex.server.cfg.SchemaChangerTestingKnobs.TwoVersionLeaseViolation != nil {
+			ex.server.cfg.SchemaChangerTestingKnobs.TwoVersionLeaseViolation()
+		}
+	}
+
+	// Create a new transaction to retry with a higher timestamp than the
+	// timestamps used in the retry loop above.
+	ex.state.mu.txn = client.NewTxn(ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
+	if err := ex.state.mu.txn.SetIsolation(isolation); err != nil {
+		return err
+	}
+	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
+		return err
+	}
+	return retryErr
+}
+
+// commitSQLTransaction executes a commit after the execution of a stmt,
+// which can be any statement when executing a statement with an implicit
+// transaction, or a COMMIT or RELEASE SAVEPOINT statement when using
+// an explicit transaction.
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
 	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
 		isRelease = true
+	}
+
+	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
+		return ex.makeErrEvent(err, stmt)
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -1133,19 +1228,27 @@ func (ex *connExecutor) addActiveQuery(
 //
 // Args:
 // stmt: The statement that we just ran.
-func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statement) error {
+func (ex *connExecutor) handleAutoCommit(
+	ctx context.Context, stmt tree.Statement,
+) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
-		return nil
+		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
+
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
 		if err := knob(ctx, stmt.String()); err != nil {
-			return err
+			return ex.makeErrEvent(err, stmt)
 		}
 	}
-	err := txn.Commit(ctx)
+
+	ev, payload := ex.commitSQLTransaction(ctx, stmt)
+	var err error
+	if perr, ok := payload.(payloadWithError); ok {
+		err = perr.errorCause()
+	}
 	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
-	return err
+	return ev, payload
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {

@@ -113,7 +113,8 @@ func (p *planner) changePrivileges(
 
 		case *sqlbase.TableDescriptor:
 			if !d.Dropped() {
-				if err := p.writeSchemaChangeToBatch(ctx, d, sqlbase.InvalidMutationID, b); err != nil {
+				if err := p.writeSchemaChangeToBatch(
+					ctx, d, sqlbase.InvalidMutationID, b); err != nil {
 					return nil, err
 				}
 			}
