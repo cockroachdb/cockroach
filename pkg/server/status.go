@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1574,6 +1575,74 @@ func (s *statusServer) Stores(
 	if err != nil {
 		return nil, err
 	}
+	return resp, nil
+}
+
+// LeaseholdersAndQPS combs through the information in the RaftDebug endpoint,
+// only returning leaseholder and QPS info. It also decodes range keys so they
+// can be assigned to tables.
+func (s *statusServer) LeaseholdersAndQPS(
+	ctx context.Context, req *serverpb.LeaseholdersAndQPSRequest,
+) (*serverpb.LeaseholdersAndQPSResponse, error) {
+	raftResp, err := s.RaftDebug(ctx, &serverpb.RaftDebugRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.LeaseholdersAndQPSResponse{}
+
+	tableInfos := map[sqlbase.ID]*serverpb.LeaseholdersAndQPSResponse_TableInfo{}
+
+	for rangeID, rangeStatus := range raftResp.Ranges {
+		rangeInfo := serverpb.LeaseholdersAndQPSResponse_RangeInfo{
+			ID:          rangeID,
+			ReplicaInfo: map[roachpb.NodeID]serverpb.LeaseholdersAndQPSResponse_ReplicaInfo{},
+		}
+		var tableInfo *serverpb.LeaseholdersAndQPSResponse_TableInfo
+		// get replicas
+		for _, replInfo := range rangeStatus.Nodes {
+			replicaInfo := serverpb.LeaseholdersAndQPSResponse_ReplicaInfo{}
+			// map to table
+			startKey := replInfo.Range.State.Desc.StartKey.AsRawKey()
+			_, tableID, err := keys.DecodeTablePrefix(startKey)
+			if err != nil {
+				// don't care about non-table ranges (for now)
+				break
+			}
+			maybeTableInfo, ok := tableInfos[sqlbase.ID(tableID)]
+			if ok {
+				tableInfo = maybeTableInfo
+			} else {
+				tableInfo = &serverpb.LeaseholdersAndQPSResponse_TableInfo{
+					ID:         int32(tableID),
+					RangeInfos: map[roachpb.RangeID]serverpb.LeaseholdersAndQPSResponse_RangeInfo{},
+				}
+				tableInfos[sqlbase.ID(tableID)] = tableInfo
+			}
+
+			// get stats & leaseholder
+			replicaInfo.Stats = replInfo.Range.Stats
+			// this seems complicated... each node has its own idea of the lease
+			// they might disagree.
+			if replInfo.Range.LeaseStatus.Lease.Replica.NodeID == replInfo.NodeID {
+				rangeInfo.LeaseholderNodeID = replInfo.NodeID
+			}
+
+			rangeInfo.ReplicaInfo[replInfo.NodeID] = replicaInfo
+		}
+
+		if tableInfo != nil {
+			tableInfo.RangeInfos[rangeInfo.ID] = rangeInfo
+		}
+	}
+
+	// TODO(vilterp): figure out a way to get rid of this loop
+	// just because we have to use pointers above
+	resp.TableInfos = map[sqlbase.ID]serverpb.LeaseholdersAndQPSResponse_TableInfo{}
+	for tableID, tableInfo := range tableInfos {
+		resp.TableInfos[tableID] = *tableInfo
+	}
+
 	return resp, nil
 }
 

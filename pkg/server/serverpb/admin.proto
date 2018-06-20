@@ -535,6 +535,7 @@ message DataDistributionResponse {
     map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
+    int64 id = 3 [(gogoproto.customname) = "ID"];
   }
 
   message DatabaseInfo {

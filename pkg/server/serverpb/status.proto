@@ -625,8 +625,7 @@ message StatementsResponse {
     string app = 2;
     bool distSQL = 3;
     bool failed = 4;
-    int32 node_id = 5 [ (gogoproto.customname) = "NodeID",
-                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    int32 node_id = 5 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
 
   message CollectedStatementStatistics {
@@ -637,6 +636,45 @@ message StatementsResponse {
   repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
   // Timestamp of the last stats reset.
   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+message LeaseholdersAndQPSRequest {}
+
+message LeaseholdersAndQPSResponse {
+  message ReplicaInfo {
+    // TODO(vilterp): I am pretty confused about why this is called RangeStatistics
+    // when it seems to be ReplicaStatistics
+    RangeStatistics stats = 1 [(gogoproto.nullable) = false];
+  }
+
+  message RangeInfo {
+    int64 id = 1 [
+      (gogoproto.customname) = "ID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    map<int32, ReplicaInfo> replica_info = 2 [
+      (gogoproto.nullable) = false,
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    int32 leaseholder_node_id = 4 [
+      (gogoproto.customname) = "LeaseholderNodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+  }
+
+  message TableInfo {
+    int32 id = 1 [(gogoproto.customname) = "ID"];
+
+    map<int32, RangeInfo> range_infos = 2 [
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+      (gogoproto.nullable) = false
+    ];
+  }
+
+  map<int32, TableInfo> table_infos = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID",
+    (gogoproto.nullable) = false
+  ];
 }
 
 service Status {
@@ -778,6 +816,12 @@ service Status {
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"
+    };
+  }
+
+  rpc LeaseholdersAndQPS(LeaseholdersAndQPSRequest) returns (LeaseholdersAndQPSResponse) {
+    option (google.api.http) = {
+      get : "/_status/leaseholders_and_qps"
     };
   }
 }
