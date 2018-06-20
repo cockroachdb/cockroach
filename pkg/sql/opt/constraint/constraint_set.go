@@ -52,7 +52,7 @@ var Contradiction = &Set{contradiction: true}
 //
 //  - (@1 = 10 AND @2 > 5) OR (@1 = 20 AND @2 > 0)
 //      /@1: [/10 - /10] [/20 - /20]
-//      /@2: [/0 - ]
+//      /@2: (/0 - ]
 //
 type Set struct {
 	// firstConstraint holds the first constraint in the set and otherConstraints

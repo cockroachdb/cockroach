@@ -412,73 +412,79 @@ func (sb *statisticsBuilder) applySelectivity(inputRows float64) {
 func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	c *constraint.Constraint, inputStatsBuilder *statisticsBuilder,
 ) (applied bool) {
-	// All of the columns that are part of the exact prefix have exactly one
-	// distinct value.
-	exactPrefix := c.ExactPrefix(sb.evalCtx)
-	for i := 0; i < exactPrefix; i++ {
-		sb.ensureColStat(c.Columns.Get(i).ID(), 1 /* distinctCount */, inputStatsBuilder)
-		applied = true
-	}
+	// All of the columns that are part of the prefix have a finite number of
+	// distinct values.
+	prefix := c.Prefix(sb.evalCtx)
+	applied = prefix > 0
 
-	// If there are no other columns beyond the exact prefix, we are done.
-	if exactPrefix >= c.Columns.Count() {
-		return applied
-	}
-
-	// If there are any other columns beyond the exact prefix, we may be able to
+	// If there are any other columns beyond the prefix, we may be able to
 	// determine the number of distinct values for the first one. For example:
-	//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
-	//       -> Columns a and b have DistinctCount = 1.
+	//   /a/b/c: [/1/2/3 - /1/2/3] [/1/4/5 - /1/4/8]
+	//       -> Column a has DistinctCount = 1.
+	//       -> Column b has DistinctCount = 2.
 	//       -> Column c has DistinctCount = 5.
-	col := exactPrefix
-	// All columns should have at least one distinct value.
-	distinctCount := 1.0
+	for col := 0; col <= prefix; col++ {
+		// All columns should have at least one distinct value.
+		distinctCount := 1.0
 
-	var val tree.Datum
-	for i := 0; i < c.Spans.Count(); i++ {
-		sp := c.Spans.Get(i)
-		if sp.StartKey().Length() <= col || sp.EndKey().Length() <= col {
-			// We can't determine the distinct count for this column. For example,
-			// the number of distinct values for column b in the constraint
-			// /a/b: [/1/1 - /1] cannot be determined.
-			return applied
-		}
-		startVal := sp.StartKey().Value(col)
-		endVal := sp.EndKey().Value(col)
-		if startVal.Compare(sb.evalCtx, endVal) != 0 {
-			// TODO(rytaft): are there other types we should handle here
-			// besides int?
-			if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
-				start := int(*startVal.(*tree.DInt))
-				end := int(*endVal.(*tree.DInt))
-				// We assume that both start and end boundaries are inclusive. This
-				// should be the case for integer valued columns (due to normalization
-				// by constraint.PreferInclusive).
-				if c.Columns.Get(col).Ascending() {
-					distinctCount += float64(end - start)
-				} else {
-					distinctCount += float64(start - end)
-				}
-			} else {
+		var val tree.Datum
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			if sp.StartKey().Length() <= col || sp.EndKey().Length() <= col {
 				// We can't determine the distinct count for this column. For example,
-				// the number of distinct values in the constraint
-				// /a: [/'cherry' - /'mango'] cannot be determined.
+				// the number of distinct values for column b in the constraint
+				// /a/b: [/1/1 - /1] cannot be determined.
 				return applied
 			}
+			startVal := sp.StartKey().Value(col)
+			endVal := sp.EndKey().Value(col)
+			if startVal.Compare(sb.evalCtx, endVal) != 0 {
+				// TODO(rytaft): are there other types we should handle here
+				// besides int?
+				if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
+					start := int(*startVal.(*tree.DInt))
+					end := int(*endVal.(*tree.DInt))
+					// We assume that both start and end boundaries are inclusive. This
+					// should be the case for integer valued columns (due to normalization
+					// by constraint.PreferInclusive).
+					if c.Columns.Get(col).Ascending() {
+						distinctCount += float64(end - start)
+					} else {
+						distinctCount += float64(start - end)
+					}
+				} else {
+					// We can't determine the distinct count for this column. For example,
+					// the number of distinct values in the constraint
+					// /a: [/'cherry' - /'mango'] cannot be determined.
+					return applied
+				}
+			}
+			if i != 0 {
+				compare := startVal.Compare(sb.evalCtx, val)
+				ascending := c.Columns.Get(col).Ascending()
+				if compare > 0 && ascending || compare < 0 && !ascending {
+					// This check is needed to ensure that we calculate the correct distinct
+					// value count for constraints such as:
+					//   /a/b: [/1/2 - /1/2] [/1/4 - /1/4] [/2 - /2]
+					// We should only increment the distinct count for column "a" once we
+					// reach the third span.
+					distinctCount++
+				} else if compare != 0 {
+					// This can happen if we have a prefix, but not an exact prefix. For
+					// example:
+					//   /a/b: [/1/2 - /1/4] [/3/2 - /3/5] [/6/0 - /6/0]
+					// In this case, /a is a prefix, but not an exact prefix. Trying to
+					// figure out the distinct count for column b may be more trouble
+					// than it's worth. For now, don't bother trying.
+					return applied
+				}
+			}
+			val = endVal
 		}
-		if i == 0 {
-			val = startVal
-		} else if startVal.Compare(sb.evalCtx, val) != 0 {
-			// This check is needed to ensure that we calculate the correct distinct
-			// value count for constraints such as:
-			//   /a/b: [/1/2 - /1/2] [/1/4 - /1/4] [/2 - /2]
-			// We should only increment the distinct count for column "a" once we
-			// reach the third span.
-			distinctCount++
-		}
+
+		sb.ensureColStat(c.Columns.Get(col).ID(), distinctCount, inputStatsBuilder)
 	}
 
-	sb.ensureColStat(c.Columns.Get(col).ID(), distinctCount, inputStatsBuilder)
 	return true /* applied */
 }
 

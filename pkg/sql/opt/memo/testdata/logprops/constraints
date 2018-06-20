@@ -656,7 +656,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50] [/5/100 - /5/100]
- ├── stats: [rows=4.29, distinct(3)=3]
+ ├── stats: [rows=0.0061, distinct(2)=0.0061, distinct(3)=0.0061]
  └── keys: (1)
 
 # A tuple with NULL in it can't match anything, so it should be excluded from the constraints.
@@ -666,7 +666,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, NULL))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50]
- ├── stats: [rows=2.86, distinct(3)=2]
+ ├── stats: [rows=0.0041, distinct(2)=0.0041, distinct(3)=0.0041]
  └── keys: (1)
 
 # TODO(justin): ideally we would be normalizing away the 2 on the LHS here to
