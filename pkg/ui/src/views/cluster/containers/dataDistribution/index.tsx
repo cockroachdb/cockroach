@@ -11,13 +11,24 @@ import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { refreshDataDistribution, refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import {
+  refreshDataDistribution,
+  refreshNodes,
+  refreshLiveness,
+  refreshLeaseholdersAndQPS,
+} from "src/redux/apiReducers";
 import { LocalityTree, selectLocalityTree } from "src/redux/localities";
-import ReplicaMatrix, { SchemaObject } from "./replicaMatrix";
+import ReplicaMatrix, {
+  METRIC_LEASEHOLDERS,
+  METRIC_QPS,
+  METRIC_REPLICAS,
+  SchemaObject,
+} from "./replicaMatrix";
 import { TreeNode, TreePath } from "./tree";
 import "./index.styl";
 
 type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
+type LeaseholdersAndQPSResponse = cockroach.server.serverpb.LeaseholdersAndQPSResponse;
 type NodeDescriptor = cockroach.roachpb.INodeDescriptor;
 type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
 
@@ -31,6 +42,7 @@ const ZONE_CONFIG_TEXT = (
 
 interface DataDistributionProps {
   dataDistribution: DataDistributionResponse;
+  leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: ZoneConfig$Properties[];
 }
@@ -54,7 +66,64 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     );
   }
 
-  getCellValue = (dbPath: TreePath, nodePath: TreePath): number => {
+  getCellValue = (metric: string) => {
+    return (dbPath: TreePath, nodePath: TreePath): number => {
+      switch (metric) {
+        case METRIC_QPS:
+          return this.getQPS(dbPath, nodePath);
+        case METRIC_LEASEHOLDERS:
+          return this.getLeaseholderCount(dbPath, nodePath);
+        case METRIC_REPLICAS:
+          return this.getReplicaCount(dbPath, nodePath);
+        default:
+          return 0;
+      }
+    };
+  }
+
+  getLeaseholderCount(dbPath: TreePath, nodePath: TreePath): number {
+    const tableName = dbPath[1];
+    const nodeID = nodePath[nodePath.length - 1];
+
+    const tableID = this.tableIDForName(tableName);
+
+    // gah this is stupid. use int32s
+    // TODO(vilterp): remove this keyBy...
+    const tableInfo = this.props.leaseholdersAndQPS.table_infos[tableID];
+
+    if (tableInfo) {
+      return _.sumBy(tableInfo.range_infos, (rangeInfo) => {
+        return rangeInfo.leaseholder_node_id.toString() === nodeID ? 1 : 0;
+      });
+    } else {
+      return 0;
+    }
+  }
+
+  getQPS(dbPath: TreePath, nodePath: TreePath): number {
+    const tableName = dbPath[1];
+    const nodeID = nodePath[nodePath.length - 1];
+
+    const tableID = this.tableIDForName(tableName);
+
+    // gah this is stupid. use int32s
+    // TODO(vilterp): remove this keyBy...
+    const tableInfo = this.props.leaseholdersAndQPS.table_infos[tableID];
+
+    if (tableInfo) {
+      return _.sumBy(tableInfo.range_infos, (rangeInfo) => {
+        const replicaOnThisNode = rangeInfo.replica_info[nodeID];
+        if (replicaOnThisNode) {
+          return Math.round(replicaOnThisNode.stats.queries_per_second);
+        }
+        return 0;
+      });
+    } else {
+      return 0;
+    }
+  }
+
+  getReplicaCount(dbPath: TreePath, nodePath: TreePath): number {
     const [dbName, tableName] = dbPath;
     const nodeID = nodePath[nodePath.length - 1];
     const databaseInfo = this.props.dataDistribution.database_info;
@@ -64,6 +133,19 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       return 0;
     }
     return FixLong(res).toInt();
+  }
+
+  tableIDForName(name: string) {
+    let id = 0;
+    _.forEach(this.props.dataDistribution.database_info, (dbInfo) => {
+      _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
+        if (tableName === name) {
+          id = tableInfo.id.toInt();
+          // TODO(vilterp): how do you bail out of this early?
+        }
+      });
+    });
+    return id;
   }
 
   render() {
@@ -76,9 +158,13 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       children: _.map(databaseInfo, (dbInfo, dbName) => ({
         name: dbName,
         data: { dbName },
-        children: _.map(dbInfo.table_info, (_tableInfo, tableName) => ({
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
           name: tableName,
-          data: { dbName, tableName },
+          data: {
+            dbName,
+            tableName,
+            tableID: tableInfo.id.toInt(),
+          },
         })),
       })),
     };
@@ -112,9 +198,11 @@ class DataDistribution extends React.Component<DataDistributionProps> {
 
 interface DataDistributionPageProps {
   dataDistribution: DataDistributionResponse;
+  leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: ZoneConfig$Properties[];
   refreshDataDistribution: typeof refreshDataDistribution;
+  refreshLeaseholdersAndQPS: typeof refreshLeaseholdersAndQPS;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
 }
@@ -123,12 +211,14 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
 
   componentDidMount() {
     this.props.refreshDataDistribution();
+    this.props.refreshLeaseholdersAndQPS();
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
 
   componentWillReceiveProps() {
     this.props.refreshDataDistribution();
+    this.props.refreshLeaseholdersAndQPS();
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
@@ -151,6 +241,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
             <DataDistribution
               localityTree={this.props.localityTree}
               dataDistribution={this.props.dataDistribution}
+              leaseholdersAndQPS={this.props.leaseholdersAndQPS}
               sortedZoneConfigs={this.props.sortedZoneConfigs}
             />
           </Loading>
@@ -174,11 +265,13 @@ const sortedZoneConfigs = createSelector(
 const DataDistributionPageConnected = connect(
   (state: AdminUIState) => ({
     dataDistribution: state.cachedData.dataDistribution.data,
+    leaseholdersAndQPS: state.cachedData.leaseholdersAndQPS.data,
     sortedZoneConfigs: sortedZoneConfigs(state),
     localityTree: selectLocalityTree(state),
   }),
   {
     refreshDataDistribution,
+    refreshLeaseholdersAndQPS,
     refreshNodes,
     refreshLiveness,
   },
