@@ -45,6 +45,7 @@ func newNoopProcessor(
 		flowCtx,
 		processorID,
 		output,
+		nil, /* memMonitor */
 		procStateOpts{inputsToDrain: []RowSource{n.input}},
 	); err != nil {
 		return nil, err

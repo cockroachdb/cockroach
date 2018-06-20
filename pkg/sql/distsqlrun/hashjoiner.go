@@ -762,61 +762,58 @@ func (h *hashJoiner) pushTrailingMeta(ctx context.Context) {
 
 var _ DistSQLSpanStats = &HashJoinerStats{}
 
+const hashJoinerTagPrefix = "hashjoiner."
+
 // Stats implements the SpanStats interface.
 func (hjs *HashJoinerStats) Stats() map[string]string {
-	return map[string]string{
-		"hashjoiner.left.input.rows":  fmt.Sprintf("%d", hjs.LeftInputStats.NumRows),
-		"hashjoiner.left.stalltime":   fmt.Sprintf("%v", hjs.LeftInputStats.RoundStallTime()),
-		"hashjoiner.right.input.rows": fmt.Sprintf("%d", hjs.RightInputStats.NumRows),
-		"hashjoiner.right.stalltime":  fmt.Sprintf("%v", hjs.RightInputStats.RoundStallTime()),
-		"hashjoiner.stored_side":      hjs.StoredSide,
-		"hashjoiner.mem.max":          humanizeutil.IBytes(hjs.MaxAllocatedMem),
-		"hashjoiner.disk.max":         humanizeutil.IBytes(hjs.MaxAllocatedDisk),
+	// statsMap starts off as the left input stats map.
+	statsMap := hjs.LeftInputStats.Stats(hashJoinerTagPrefix + "left.")
+	rightInputStatsMap := hjs.RightInputStats.Stats(hashJoinerTagPrefix + "right.")
+	// Merge the two input maps.
+	for k, v := range rightInputStatsMap {
+		statsMap[k] = v
 	}
+	statsMap[hashJoinerTagPrefix+"stored_side"] = hjs.StoredSide
+	statsMap[hashJoinerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
+	statsMap[hashJoinerTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
+	return statsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
-	return []string{
-		fmt.Sprintf("left rows read: %d", hjs.LeftInputStats.NumRows),
-		fmt.Sprintf("left stall time: %v", hjs.LeftInputStats.RoundStallTime()),
-		fmt.Sprintf("right rows read: %d", hjs.RightInputStats.NumRows),
-		fmt.Sprintf("right stall time: %v", hjs.RightInputStats.RoundStallTime()),
+	leftInputStats := hjs.LeftInputStats.StatsForQueryPlan("left ")
+	leftInputStats = append(leftInputStats, hjs.RightInputStats.StatsForQueryPlan("right ")...)
+	return append(
+		leftInputStats,
 		fmt.Sprintf("stored side: %s", hjs.StoredSide),
-		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(hjs.MaxAllocatedMem)),
-		fmt.Sprintf("max disk used: %s", humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
-	}
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
+	)
 }
 
 // outputStatsToTrace outputs the collected hashJoiner stats to the trace. Will
 // fail silently if the hashJoiner is not collecting stats.
 func (h *hashJoiner) outputStatsToTrace() {
-	lisc, ok := h.leftSource.(*InputStatCollector)
+	lis, ok := getInputStats(h.flowCtx, h.leftSource)
 	if !ok {
 		return
 	}
-	risc, ok := h.rightSource.(*InputStatCollector)
+	ris, ok := getInputStats(h.flowCtx, h.rightSource)
 	if !ok {
 		return
 	}
-	sp := opentracing.SpanFromContext(h.ctx)
-	if sp == nil {
-		return
+	if sp := opentracing.SpanFromContext(h.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&HashJoinerStats{
+				LeftInputStats:   lis,
+				RightInputStats:  ris,
+				StoredSide:       h.storedSide.String(),
+				MaxAllocatedMem:  h.memMonitor.MaximumBytes(),
+				MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
+			},
+		)
 	}
-	if h.flowCtx.testingKnobs.OverrideStallTime {
-		lisc.StallTime = 0
-		risc.StallTime = 0
-	}
-	tracing.SetSpanStats(
-		sp,
-		&HashJoinerStats{
-			LeftInputStats:   lisc.InputStats,
-			RightInputStats:  risc.InputStats,
-			StoredSide:       h.storedSide.String(),
-			MaxAllocatedMem:  h.memMonitor.MaximumBytes(),
-			MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
-		},
-	)
 }
 
 // Some types of joins need to mark rows that matched.

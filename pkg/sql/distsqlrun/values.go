@@ -57,7 +57,9 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(v, post, types, flowCtx, processorID, output, procStateOpts{}); err != nil {
+	if err := v.init(
+		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, procStateOpts{},
+	); err != nil {
 		return nil, err
 	}
 	return v, nil
