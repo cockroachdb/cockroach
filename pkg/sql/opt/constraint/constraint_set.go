@@ -43,16 +43,20 @@ var Contradiction = &Set{contradiction: true}
 // expression tree each time.
 //
 // A few examples:
-//  - @1 > 10
-//      /@1: (/10 - ]
+//  - @1 >= 10
+//      /@1: [/10 - ]
 //
 //  - @1 > 10 AND @2 = 5
-//      /@1: (/10 - ]
+//      /@1: [/11 - ]
 //      /@2: [/5 - /5]
 //
 //  - (@1 = 10 AND @2 > 5) OR (@1 = 20 AND @2 > 0)
 //      /@1: [/10 - /10] [/20 - /20]
-//      /@2: [/0 - ]
+//      /@2: [/1 - ]
+//
+//  - @1 > 10.5 AND @2 != 'foo'
+//      /@1: (10.5 - ]
+//      /@2: [ - 'foo') ('foo' - ]
 //
 type Set struct {
 	// firstConstraint holds the first constraint in the set and otherConstraints

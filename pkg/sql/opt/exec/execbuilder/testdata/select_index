@@ -464,17 +464,14 @@ render     ·         ·          (b)     ·
 ·          table     abcd@abcd  ·       ·
 ·          spans     /1/4-/1/5  ·       ·
 
-# TODO(radu): this should use the abcd index. Both scans are estimate to return
-# the same number of rows; investigate this.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-render     ·         ·                           (b)     ·
- │         render 0  b                           ·       ·
- └── scan  ·         ·                           (a, b)  ·
-·          table     abcd@adb                    ·       ·
-·          spans     /1-/3                       ·       ·
-·          filter    (a, b) IN ((1, 4), (2, 9))  ·       ·
+render     ·         ·                     (b)     ·
+ │         render 0  b                     ·       ·
+ └── scan  ·         ·                     (a, b)  ·
+·          table     abcd@abcd             ·       ·
+·          spans     /1/4-/1/5 /2/9-/2/10  ·       ·
 
 statement ok
 CREATE TABLE ab (

@@ -448,6 +448,32 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 	}
 }
 
+// Prefix returns the length of the longest prefix of columns for which all the
+// spans have the same start and end values. For example:
+//   /a/b/c: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+// has prefix 2.
+//
+// Note that Prefix returns a value that is greater than or equal to the value
+// returned by ExactPrefix. For example:
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8] -> ExactPrefix = 1, Prefix = 1
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3] -> ExactPrefix = 1, Prefix = 3
+func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
+	prefix := 0
+	for ; prefix < c.Columns.Count(); prefix++ {
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			start := sp.StartKey()
+			end := sp.EndKey()
+			if start.Length() <= prefix || end.Length() <= prefix ||
+				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+				return prefix
+			}
+		}
+	}
+
+	return prefix
+}
+
 // ExtractNotNullCols returns a set of columns that cannot be NULL when the
 // constraint holds.
 func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
@@ -468,27 +494,16 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	//   [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
 	// has prefix 2. Only these columns and the first following column can be
 	// known to be not-null.
-	prefix := 0
-	for ; prefix < c.Columns.Count(); prefix++ {
-		ok := true
+	prefix := c.Prefix(evalCtx)
+	for i := 0; i < prefix; i++ {
 		// hasNull identifies cases like [/1/NULL/1 - /1/NULL/2].
 		hasNull := false
-		for i := 0; i < c.Spans.Count(); i++ {
-			sp := c.Spans.Get(i)
-			start := sp.StartKey()
-			end := sp.EndKey()
-			if start.Length() <= prefix || end.Length() <= prefix ||
-				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
-				ok = false
-				break
-			}
-			hasNull = hasNull || start.Value(prefix) == tree.DNull
-		}
-		if !ok {
-			break
+		for j := 0; j < c.Spans.Count(); j++ {
+			start := c.Spans.Get(j).StartKey()
+			hasNull = hasNull || start.Value(i) == tree.DNull
 		}
 		if !hasNull {
-			res.Add(int(c.Columns.Get(prefix).ID()))
+			res.Add(int(c.Columns.Get(i).ID()))
 		}
 	}
 	if prefix == c.Columns.Count() {
