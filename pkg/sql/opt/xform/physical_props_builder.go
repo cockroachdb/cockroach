@@ -140,12 +140,16 @@ func (b physicalPropsBuilder) buildChildProps(
 ) memo.PhysicalPropsID {
 	mexpr := b.mem.Expr(parent)
 
+	// Fast path taken in common case when no properties are required of
+	// parent and the operator itself does not require any properties.
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
-		case opt.LimitOp, opt.OffsetOp, opt.ExplainOp, opt.ShowTraceOp, opt.RowNumberOp:
+		case opt.LimitOp, opt.OffsetOp,
+			opt.ExplainOp, opt.ShowTraceOp,
+			opt.RowNumberOp, opt.GroupByOp:
+			// These operations can require an ordering of some child even if there is
+			// no ordering requirement on themselves.
 		default:
-			// Fast path taken in common case when no properties are required of
-			// parent and the operator itself does not require any properties.
 			return memo.MinPhysPropsID
 		}
 	}
@@ -196,6 +200,11 @@ func (b physicalPropsBuilder) buildChildProps(
 		if nth == 0 {
 			childProps = b.mem.LookupPrivate(mexpr.AsShowTrace().Def()).(*memo.ShowTraceOpDef).Props
 		}
+
+		// ************************* WARNING *************************
+		//  If you add a new case here, check if it needs to be added
+		//     to the exception list in the fast path above.
+		// ************************* WARNING *************************
 	}
 
 	// If properties haven't changed, no need to re-intern them.

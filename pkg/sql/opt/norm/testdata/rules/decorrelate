@@ -740,22 +740,26 @@ project
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(9)
-      │    │    ├── project
+      │    │    ├── sort
       │    │    │    ├── columns: column8:8(string)
       │    │    │    ├── outer: (1)
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    │    ├── outer: (1)
-      │    │    │    │    ├── key: (6)
-      │    │    │    │    ├── fd: (6)-->(7)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    │    │    ├── key: (6)
-      │    │    │    │    │    └── fd: (6)-->(7)
-      │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    │    │    └── projections [outer=(7)]
-      │    │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    │    ├── ordering: +7
+      │    │    │    └── project
+      │    │    │         ├── columns: column8:8(string)
+      │    │    │         ├── outer: (1)
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │         │    ├── outer: (1)
+      │    │    │         │    ├── key: (6)
+      │    │    │         │    ├── fd: (6)-->(7)
+      │    │    │         │    ├── scan xy
+      │    │    │         │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │         │    │    ├── key: (6)
+      │    │    │         │    │    └── fd: (6)-->(7)
+      │    │    │         │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         └── projections [outer=(7)]
+      │    │    │              └── xy.y::STRING [type=string, outer=(7)]
       │    │    └── aggregations [outer=(8)]
       │    │         └── max [type=string, outer=(8)]
       │    │              └── variable: column8 [type=string, outer=(8)]
