@@ -266,30 +266,31 @@ project
       ├── a.i::DECIMAL || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(2)]
       └── CAST(NULL AS FLOAT[]) || a.i::FLOAT [type=float[], outer=(2)]
 
-opt
-SELECT
-    null::json || '[1, 2]' AS ra, '[1, 2]' || null::json AS rb,
-    null::json->'foo' AS sa, '{}'::jsonb->null::string AS sb,
-    null::json->>'foo' AS ta, '{}'::jsonb->>null::string AS tb,
-    null::json->>'foo' AS ua, '{}'::jsonb->>null::string AS ub,
-    null::json#>ARRAY['foo'] AS va, '{}'::jsonb#>NULL AS vb,
-    null::json#>>ARRAY['foo'] AS wa, '{}'::jsonb#>>NULL AS wb
-FROM a
-----
-project
- ├── columns: ra:7(jsonb) rb:8(jsonb) sa:9(jsonb) sb:10(jsonb) ta:11(string) tb:12(string) ua:11(string) ub:12(string) va:13(jsonb) vb:14(unknown) wa:15(string) wb:14(unknown)
- ├── fd: ()-->(7-15)
- ├── scan a
- └── projections
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=string]
-      ├── null [type=string]
-      ├── null [type=jsonb]
-      ├── null [type=unknown]
-      └── null [type=string]
+# TODO(justin): re-enable when we support JSON ops.
+# opt
+# SELECT
+#     null::json || '[1, 2]' AS ra, '[1, 2]' || null::json AS rb,
+#     null::json->'foo' AS sa, '{}'::jsonb->null::string AS sb,
+#     null::json->>'foo' AS ta, '{}'::jsonb->>null::string AS tb,
+#     null::json->>'foo' AS ua, '{}'::jsonb->>null::string AS ub,
+#     null::json#>ARRAY['foo'] AS va, '{}'::jsonb#>NULL AS vb,
+#     null::json#>>ARRAY['foo'] AS wa, '{}'::jsonb#>>NULL AS wb
+# FROM a
+# ----
+# project
+#  ├── columns: ra:7(jsonb) rb:8(jsonb) sa:9(jsonb) sb:10(jsonb) ta:11(string) tb:12(string) ua:11(string) ub:12(string) va:13(jsonb) vb:14(unknown) wa:15(string) wb:14(unknown)
+#  ├── fd: ()-->(7-15)
+#  ├── scan a
+#  └── projections
+#       ├── null [type=jsonb]
+#       ├── null [type=jsonb]
+#       ├── null [type=jsonb]
+#       ├── null [type=jsonb]
+#       ├── null [type=string]
+#       ├── null [type=string]
+#       ├── null [type=jsonb]
+#       ├── null [type=unknown]
+#       └── null [type=string]
 
 # --------------------------------------------------
 # FoldNullInNonEmpty
