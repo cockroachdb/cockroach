@@ -79,39 +79,6 @@ SHOW application_name
 application_name
 helloworld
 
-query TT
-SHOW ALL
-----
-application_name                helloworld
-bytea_output                    hex
-client_encoding                 UTF8
-client_min_messages             ·
-database                        foo
-datestyle                       ISO
-default_transaction_isolation   serializable
-default_transaction_read_only   off
-distsql                         off
-experimental_force_lookup_join  off
-experimental_force_zigzag_join  off
-experimental_opt                off
-extra_float_digits              ·
-intervalstyle                   postgres
-max_index_keys                  32
-node_id                         1
-search_path                     public
-server_version                  9.5.0
-server_version_num              90500
-session_user                    root
-sql_safe_updates                false
-standard_conforming_strings     on
-statement_timeout               0s
-timezone                        UTC
-tracing                         off
-transaction_isolation           serializable
-transaction_priority            normal
-transaction_read_only           off
-transaction_status              NoTxn
-
 # SESSION_USER is a special keyword, check that SHOW knows about it.
 query T
 SHOW session_user

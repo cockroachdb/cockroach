@@ -441,6 +441,7 @@ func (sp sessionParams) sessionData(
 		ApplicationName: sp.args.ApplicationName,
 		Database:        curDb,
 		DistSQLMode:     sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
+		OptimizerMode:   sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
 		SearchPath:      sqlbase.DefaultSearchPath,
 		Location:        time.UTC,
 		User:            sp.args.User,
