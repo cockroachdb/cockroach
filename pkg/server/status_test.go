@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -736,6 +737,32 @@ func TestRangeResponse(t *testing.T) {
 	if len(info.LeaseHistory) == 0 {
 		t.Error("expected at least one lease history entry")
 	}
+}
+
+func TestLeaseholdersAndQPSResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServer := testCluster.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	// Create some tables.
+	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
+	sqlDB.Exec(t, `CREATE TABLE roachblog.posts (id INT PRIMARY KEY, title text, body text)`)
+	sqlDB.Exec(t, `CREATE TABLE roachblog.comments (
+		id INT PRIMARY KEY,
+		post_id INT REFERENCES roachblog.posts,
+		body text
+	)`)
+
+	resp := serverpb.LeaseholdersAndQPSResponse{}
+	if err := getStatusJSONProto(firstServer, "leaseholders_and_qps", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO(vilterp): make some assertions
 }
 
 func TestRemoteDebugModeSetting(t *testing.T) {
