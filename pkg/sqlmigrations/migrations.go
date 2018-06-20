@@ -657,7 +657,9 @@ func upgradeDescsWithFn(
 		// (the current release and the previous release) create new table
 		// descriptors using InterleavedFormatVersion. We need only upgrade the
 		// ancient table descriptors written by versions before beta-20161013.
+		var nextKey roachpb.Key
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// Scan a limited batch of keys.
 			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeDescBatchSize)
 			if err != nil {
 				return err
@@ -666,7 +668,8 @@ func upgradeDescsWithFn(
 				done = true
 				return nil
 			}
-			startKey = kvs[len(kvs)-1].Key.Next()
+			// Store away the start key for the next batch.
+			nextKey = kvs[len(kvs)-1].Key.Next()
 
 			var idVersions []sql.IDVersion
 			var now hlc.Timestamp
@@ -746,6 +749,7 @@ func upgradeDescsWithFn(
 		}); err != nil {
 			return err
 		}
+		startKey = nextKey
 	}
 	return nil
 }
