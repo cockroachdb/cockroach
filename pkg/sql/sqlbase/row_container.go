@@ -208,10 +208,21 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity in
 // Clear resets the container and releases the associated memory. This allows
 // the RowContainer to be reused.
 func (c *RowContainer) Clear(ctx context.Context) {
+	c.chunks = nil
 	c.numRows = 0
 	c.deletedRows = 0
-	c.chunks = nil
 	c.memAcc.Clear(ctx)
+}
+
+// Reset resets the container without releasing the associated memory. This
+// allows the RowContainer to be reused, but keeps the previously-allocated
+// buffers around for reuse. This is desirable if this RowContainer will be used
+// and reset many times in the course of a computation before eventually being
+// discarded.
+func (c *RowContainer) Reset(ctx context.Context) error {
+	c.numRows = 0
+	c.deletedRows = 0
+	return c.memAcc.ResizeTo(ctx, int64(len(c.chunks))*c.chunkMemSize)
 }
 
 // Close releases the memory associated with the RowContainer.
