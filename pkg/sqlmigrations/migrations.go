@@ -648,29 +648,29 @@ func upgradeDescsWithFn(
 	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
 	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
+	// use multiple transactions to prevent blocking reads on the
+	// table descriptors while running this upgrade process.
 	startKey := sqlbase.MakeAllDescsMetadataKey()
-	endKey := startKey.PrefixEnd()
-	for done := false; !done; {
-		// It's safe to use multiple transactions here. Any table descriptor that's
-		// created while this migration is in progress will use the desired
-		// InterleavedFormatVersion, as all possible binary versions in the cluster
-		// (the current release and the previous release) create new table
-		// descriptors using InterleavedFormatVersion. We need only upgrade the
-		// ancient table descriptors written by versions before beta-20161013.
+	span := roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
+	for resumeSpan := (roachpb.Span{}); span.Key != nil; span = resumeSpan {
+		// It's safe to use multiple transactions here because it is assumed
+		// that a new table created will be created upgraded.
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeDescBatchSize)
-			if err != nil {
+			// Scan a limited batch of keys.
+			b := txn.NewBatch()
+			b.Header.MaxSpanRequestKeys = upgradeDescBatchSize
+			b.Scan(span.Key, span.EndKey)
+			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
-			if len(kvs) == 0 {
-				done = true
-				return nil
-			}
-			startKey = kvs[len(kvs)-1].Key.Next()
+			result := b.Results[0]
+			kvs := result.Rows
+			// Store away the span for the next batch.
+			resumeSpan = result.ResumeSpan
 
 			var idVersions []sql.IDVersion
 			var now hlc.Timestamp
-			b := txn.NewBatch()
+			b = txn.NewBatch()
 			for _, kv := range kvs {
 				var sqlDesc sqlbase.Descriptor
 				if err := kv.ValueProto(&sqlDesc); err != nil {
