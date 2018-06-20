@@ -26,9 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func ts(name string, dps ...tspb.TimeSeriesDatapoint) tspb.TimeSeriesData {
+func tsd(name, source string, dps ...tspb.TimeSeriesDatapoint) tspb.TimeSeriesData {
 	return tspb.TimeSeriesData{
 		Name:       name,
+		Source:     source,
 		Datapoints: dps,
 	}
 }
@@ -55,21 +56,21 @@ func TestToInternal(t *testing.T) {
 			time.Minute.Nanoseconds(),
 			101,
 			"does not evenly divide key duration",
-			ts("error.series"),
+			tsd("error.series", ""),
 			nil,
 		},
 		{
 			time.Minute.Nanoseconds(),
 			time.Hour.Nanoseconds(),
 			"does not evenly divide key duration",
-			ts("error.series"),
+			tsd("error.series", ""),
 			nil,
 		},
 		{
 			(24 * time.Hour).Nanoseconds(),
 			(20 * time.Minute).Nanoseconds(),
 			"",
-			ts("test.series",
+			tsd("test.series", "",
 				tsdp(5*time.Hour+5*time.Minute, 1.0),
 				tsdp(24*time.Hour+39*time.Minute, 2.0),
 				tsdp(10*time.Hour+10*time.Minute, 3.0),
@@ -146,7 +147,7 @@ func TestToInternal(t *testing.T) {
 // sample period; earlier samples are discarded.
 func TestDiscardEarlierSamples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := ts("test.series",
+	ts := tsd("test.series", "",
 		tsdp(5*time.Hour+5*time.Minute, -1.0),
 		tsdp(5*time.Hour+5*time.Minute, -2.0),
 	)

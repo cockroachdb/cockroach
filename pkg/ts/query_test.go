@@ -19,6 +19,7 @@ import (
 	"math"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -52,18 +53,15 @@ func TestQueryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name: "test.metric",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(5, 200),
-					datapoint(15, 300),
-					datapoint(16, 400),
-					datapoint(17, 500),
-					datapoint(22, 600),
-					datapoint(52, 900),
-				},
-			},
+			tsd("test.metric", "",
+				tsdp(1, 100),
+				tsdp(5, 200),
+				tsdp(15, 300),
+				tsdp(16, 400),
+				tsdp(17, 500),
+				tsdp(22, 600),
+				tsdp(52, 900),
+			),
 		})
 		tm.assertKeyCount(4)
 		tm.assertModelCorrect()
@@ -73,26 +71,18 @@ func TestQueryBasic(t *testing.T) {
 
 		// Verify across multiple sources
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "test.multimetric",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(15, 300),
-					datapoint(17, 500),
-					datapoint(52, 900),
-				},
-			},
-			{
-				Name:   "test.multimetric",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(5, 100),
-					datapoint(16, 300),
-					datapoint(22, 500),
-					datapoint(82, 900),
-				},
-			},
+			tsd("test.multimetric", "source1",
+				tsdp(1, 100),
+				tsdp(15, 300),
+				tsdp(17, 500),
+				tsdp(52, 900),
+			),
+			tsd("test.multimetric", "source2",
+				tsdp(5, 100),
+				tsdp(16, 300),
+				tsdp(22, 500),
+				tsdp(82, 900),
+			),
 		})
 
 		tm.assertKeyCount(11)
@@ -145,56 +135,36 @@ func TestQueryBasic(t *testing.T) {
 		// Verify querying specific sources, thus excluding other available sources
 		// in the same time period.
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "test.specificmetric",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 9999),
-					datapoint(11, 9999),
-					datapoint(21, 9999),
-					datapoint(31, 9999),
-				},
-			},
-			{
-				Name:   "test.specificmetric",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(2, 10),
-					datapoint(12, 15),
-					datapoint(22, 25),
-					datapoint(32, 60),
-				},
-			},
-			{
-				Name:   "test.specificmetric",
-				Source: "source3",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(3, 9999),
-					datapoint(13, 9999),
-					datapoint(23, 9999),
-					datapoint(33, 9999),
-				},
-			},
-			{
-				Name:   "test.specificmetric",
-				Source: "source4",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(4, 15),
-					datapoint(14, 45),
-					datapoint(24, 60),
-					datapoint(32, 100),
-				},
-			},
-			{
-				Name:   "test.specificmetric",
-				Source: "source5",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(5, 9999),
-					datapoint(15, 9999),
-					datapoint(25, 9999),
-					datapoint(35, 9999),
-				},
-			},
+			tsd("test.specificmetric", "source1",
+				tsdp(1, 9999),
+				tsdp(11, 9999),
+				tsdp(21, 9999),
+				tsdp(31, 9999),
+			),
+			tsd("test.specificmetric", "source2",
+				tsdp(2, 10),
+				tsdp(12, 15),
+				tsdp(22, 25),
+				tsdp(32, 60),
+			),
+			tsd("test.specificmetric", "source3",
+				tsdp(3, 9999),
+				tsdp(13, 9999),
+				tsdp(23, 9999),
+				tsdp(33, 9999),
+			),
+			tsd("test.specificmetric", "source4",
+				tsdp(4, 15),
+				tsdp(14, 45),
+				tsdp(24, 60),
+				tsdp(32, 100),
+			),
+			tsd("test.specificmetric", "source5",
+				tsdp(5, 9999),
+				tsdp(15, 9999),
+				tsdp(25, 9999),
+				tsdp(35, 9999),
+			),
 		})
 
 		tm.assertKeyCount(31)
@@ -234,36 +204,28 @@ func TestQueryDownsampling(t *testing.T) {
 		query.assertError("not a multiple")
 
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "test.metric",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(5, 500),
-					datapoint(15, 500),
-					datapoint(16, 600),
-					datapoint(17, 700),
-					datapoint(22, 200),
-					datapoint(45, 500),
-					datapoint(46, 600),
-					datapoint(52, 200),
-				},
-			},
-			{
-				Name:   "test.metric",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(7, 0),
-					datapoint(7, 700),
-					datapoint(9, 900),
-					datapoint(14, 400),
-					datapoint(18, 800),
-					datapoint(33, 300),
-					datapoint(34, 400),
-					datapoint(56, 600),
-					datapoint(59, 900),
-				},
-			},
+			tsd("test.metric", "source1",
+				tsdp(1, 100),
+				tsdp(5, 500),
+				tsdp(15, 500),
+				tsdp(16, 600),
+				tsdp(17, 700),
+				tsdp(22, 200),
+				tsdp(45, 500),
+				tsdp(46, 600),
+				tsdp(52, 200),
+			),
+			tsd("test.metric", "source2",
+				tsdp(7, 0),
+				tsdp(7, 700),
+				tsdp(9, 900),
+				tsdp(14, 400),
+				tsdp(18, 800),
+				tsdp(33, 300),
+				tsdp(34, 400),
+				tsdp(56, 600),
+				tsdp(59, 900),
+			),
 		})
 		tm.assertKeyCount(9)
 		tm.assertModelCorrect()
@@ -290,30 +252,22 @@ func TestInterpolationLimit(t *testing.T) {
 		// be interpolated from data points located in nearby slabs.
 		// 5 - [15, 16, 17, 18] - 25
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "metric.edgegaps",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(5, 500),
-					datapoint(15, 1500),
-					datapoint(16, 1600),
-					datapoint(17, 1700),
-					datapoint(18, 1800),
-					datapoint(25, 2500),
-				},
-			},
-			{
-				Name:   "metric.edgegaps",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(14, 1000),
-					datapoint(15, 1000),
-					datapoint(16, 1000),
-					datapoint(17, 1000),
-					datapoint(18, 1000),
-					datapoint(19, 1000),
-				},
-			},
+			tsd("metric.edgegaps", "source1",
+				tsdp(5, 500),
+				tsdp(15, 1500),
+				tsdp(16, 1600),
+				tsdp(17, 1700),
+				tsdp(18, 1800),
+				tsdp(25, 2500),
+			),
+			tsd("metric.edgegaps", "source2",
+				tsdp(14, 1000),
+				tsdp(15, 1000),
+				tsdp(16, 1000),
+				tsdp(17, 1000),
+				tsdp(18, 1000),
+				tsdp(19, 1000),
+			),
 		})
 		tm.assertKeyCount(4)
 		tm.assertModelCorrect()
@@ -329,32 +283,24 @@ func TestInterpolationLimit(t *testing.T) {
 
 		// Metric with inner gaps which may be effected by the interpolation limit.
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "metric.innergaps",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(2, 200),
-					datapoint(4, 400),
-					datapoint(7, 700),
-					datapoint(10, 1000),
-				},
-			},
-			{
-				Name:   "metric.innergaps",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(2, 100),
-					datapoint(3, 100),
-					datapoint(4, 100),
-					datapoint(5, 100),
-					datapoint(6, 100),
-					datapoint(7, 100),
-					datapoint(8, 100),
-					datapoint(9, 100),
-				},
-			},
+			tsd("metric.innergaps", "source1",
+				tsdp(1, 100),
+				tsdp(2, 200),
+				tsdp(4, 400),
+				tsdp(7, 700),
+				tsdp(10, 1000),
+			),
+			tsd("metric.innergaps", "source2",
+				tsdp(1, 100),
+				tsdp(2, 100),
+				tsdp(3, 100),
+				tsdp(4, 100),
+				tsdp(5, 100),
+				tsdp(6, 100),
+				tsdp(7, 100),
+				tsdp(8, 100),
+				tsdp(9, 100),
+			),
 		})
 		tm.assertKeyCount(7)
 		tm.assertModelCorrect()
@@ -393,7 +339,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 			result := make([]tspb.TimeSeriesDatapoint, 0, dps)
 			var i int64
 			for i = 0; i < dps; i++ {
-				result = append(result, datapoint(i, float64(100*i)))
+				result = append(result, tsdp(time.Duration(i), float64(100*i)))
 			}
 			return result
 		}
@@ -401,21 +347,21 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		// Store data for a large metric across many keys, so we can test across
 		// many different memory maximums.
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:       "test.metric",
-				Source:     "source1",
-				Datapoints: generateData(120),
-			},
-			{
-				Name:       "test.metric",
-				Source:     "source2",
-				Datapoints: generateData(120),
-			},
-			{
-				Name:       "test.metric",
-				Source:     "source3",
-				Datapoints: generateData(120),
-			},
+			tsd(
+				"test.metric",
+				"source1",
+				generateData(120)...,
+			),
+			tsd(
+				"test.metric",
+				"source2",
+				generateData(120)...,
+			),
+			tsd(
+				"test.metric",
+				"source3",
+				generateData(120)...,
+			),
 		})
 		tm.assertKeyCount(36)
 		tm.assertModelCorrect()
@@ -485,18 +431,15 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name: "test.metric",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(5, 200),
-					datapoint(15, 300),
-					datapoint(16, 400),
-					datapoint(17, 500),
-					datapoint(22, 600),
-					datapoint(52, 900),
-				},
-			},
+			tsd("test.metric", "",
+				tsdp(1, 100),
+				tsdp(5, 200),
+				tsdp(15, 300),
+				tsdp(16, 400),
+				tsdp(17, 500),
+				tsdp(22, 600),
+				tsdp(52, 900),
+			),
 		})
 		tm.assertKeyCount(4)
 		tm.assertModelCorrect()
@@ -587,36 +530,28 @@ func TestQueryNearCurrentTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
-			{
-				Name:   "metric.test",
-				Source: "source1",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1, 100),
-					datapoint(5, 500),
-					datapoint(15, 500),
-					datapoint(16, 600),
-					datapoint(17, 700),
-					datapoint(22, 200),
-					datapoint(45, 500),
-					datapoint(46, 600),
-					datapoint(52, 200),
-				},
-			},
-			{
-				Name:   "metric.test",
-				Source: "source2",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(7, 0),
-					datapoint(7, 700),
-					datapoint(9, 900),
-					datapoint(14, 400),
-					datapoint(18, 800),
-					datapoint(33, 300),
-					datapoint(34, 400),
-					datapoint(56, 600),
-					datapoint(59, 900),
-				},
-			},
+			tsd("metric.test", "source1",
+				tsdp(1, 100),
+				tsdp(5, 500),
+				tsdp(15, 500),
+				tsdp(16, 600),
+				tsdp(17, 700),
+				tsdp(22, 200),
+				tsdp(45, 500),
+				tsdp(46, 600),
+				tsdp(52, 200),
+			),
+			tsd("metric.test", "source2",
+				tsdp(7, 0),
+				tsdp(7, 700),
+				tsdp(9, 900),
+				tsdp(14, 400),
+				tsdp(18, 800),
+				tsdp(33, 300),
+				tsdp(34, 400),
+				tsdp(56, 600),
+				tsdp(59, 900),
+			),
 		})
 		tm.assertKeyCount(9)
 		tm.assertModelCorrect()
@@ -673,57 +608,49 @@ func TestQueryRollup(t *testing.T) {
 	defer tm.Stop()
 
 	tm.storeTimeSeriesData(resolution50ns, []tspb.TimeSeriesData{
-		{
-			Name:   "metric.test",
-			Source: "source1",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(1, 100),
-				datapoint(45, 500),
-				datapoint(150, 500),
-				datapoint(165, 600),
-				datapoint(172, 700),
-				datapoint(220, 200),
-				datapoint(230, 200),
-				datapoint(240, 242),
-				datapoint(350, 500),
-				datapoint(520, 199),
-				datapoint(610, 200),
-				datapoint(620, 999),
-				datapoint(750, 200),
-				datapoint(751, 2123),
-				datapoint(921, 500),
-				datapoint(991, 500),
-				datapoint(1001, 1234),
-				datapoint(1002, 234),
-			},
-		},
-		{
-			Name:   "metric.test",
-			Source: "source2",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(7, 234),
-				datapoint(63, 342),
-				datapoint(74, 342),
-				datapoint(124, 500),
-				datapoint(186, 2345),
-				datapoint(193, 1234),
-				datapoint(220, 200),
-				datapoint(221, 200),
-				datapoint(240, 22342),
-				datapoint(420, 975),
-				datapoint(422, 396),
-				datapoint(498, 6884.74),
-				datapoint(610, 200),
-				datapoint(620, 999),
-				datapoint(750, 200),
-				datapoint(751, 2123),
-				datapoint(854, 9403),
-				datapoint(921, 500),
-				datapoint(991, 500),
-				datapoint(1001, 1234),
-				datapoint(1002, 234),
-			},
-		},
+		tsd("metric.test", "source1",
+			tsdp(1, 100),
+			tsdp(45, 500),
+			tsdp(150, 500),
+			tsdp(165, 600),
+			tsdp(172, 700),
+			tsdp(220, 200),
+			tsdp(230, 200),
+			tsdp(240, 242),
+			tsdp(350, 500),
+			tsdp(520, 199),
+			tsdp(610, 200),
+			tsdp(620, 999),
+			tsdp(750, 200),
+			tsdp(751, 2123),
+			tsdp(921, 500),
+			tsdp(991, 500),
+			tsdp(1001, 1234),
+			tsdp(1002, 234),
+		),
+		tsd("metric.test", "source2",
+			tsdp(7, 234),
+			tsdp(63, 342),
+			tsdp(74, 342),
+			tsdp(124, 500),
+			tsdp(186, 2345),
+			tsdp(193, 1234),
+			tsdp(220, 200),
+			tsdp(221, 200),
+			tsdp(240, 22342),
+			tsdp(420, 975),
+			tsdp(422, 396),
+			tsdp(498, 6884.74),
+			tsdp(610, 200),
+			tsdp(620, 999),
+			tsdp(750, 200),
+			tsdp(751, 2123),
+			tsdp(854, 9403),
+			tsdp(921, 500),
+			tsdp(991, 500),
+			tsdp(1001, 1234),
+			tsdp(1002, 234),
+		),
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
