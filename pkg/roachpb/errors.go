@@ -679,3 +679,24 @@ func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
+
+// NewIntentMissingError creates a new IntentMissingError.
+func NewIntentMissingError(wrongIntent *Intent) *IntentMissingError {
+	return &IntentMissingError{
+		WrongIntent: wrongIntent,
+	}
+}
+
+func (e *IntentMissingError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IntentMissingError) message(_ *Error) string {
+	var detail string
+	if e.WrongIntent != nil {
+		detail = fmt.Sprintf("; found intent %v at key instead", e.WrongIntent)
+	}
+	return fmt.Sprintf("intent missing%s", detail)
+}
+
+var _ ErrorDetailInterface = &IntentMissingError{}

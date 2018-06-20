@@ -539,6 +539,9 @@ func (*PushTxnRequest) Method() Method { return PushTxn }
 func (*QueryTxnRequest) Method() Method { return QueryTxn }
 
 // Method implements the Request interface.
+func (*QueryIntentRequest) Method() Method { return QueryIntent }
+
+// Method implements the Request interface.
 func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 
 // Method implements the Request interface.
@@ -715,6 +718,12 @@ func (ptr *PushTxnRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (qtr *QueryTxnRequest) ShallowCopy() Request {
 	shallowCopy := *qtr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (pir *QueryIntentRequest) ShallowCopy() Request {
+	shallowCopy := *pir
 	return &shallowCopy
 }
 
@@ -1039,11 +1048,16 @@ func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
 func (*PushTxnRequest) flags() int             { return isWrite | isAlone }
 func (*QueryTxnRequest) flags() int            { return isRead | isAlone }
-func (*ResolveIntentRequest) flags() int       { return isWrite }
-func (*ResolveIntentRangeRequest) flags() int  { return isWrite | isRange }
-func (*NoopRequest) flags() int                { return isRead } // slightly special
-func (*TruncateLogRequest) flags() int         { return isWrite }
-func (*MergeRequest) flags() int               { return isWrite }
+
+// QueryIntent only updates the read timestamp cache when attempting
+// to prevent an intent that is found missing from ever being written
+// in the future. See QueryIntentRequest_PREVENT.
+func (*QueryIntentRequest) flags() int        { return isRead | updatesReadTSCache }
+func (*ResolveIntentRequest) flags() int      { return isWrite }
+func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
+func (*NoopRequest) flags() int               { return isRead } // slightly special
+func (*TruncateLogRequest) flags() int        { return isWrite }
+func (*MergeRequest) flags() int              { return isWrite }
 
 func (*RequestLeaseRequest) flags() int {
 	return isWrite | isAlone | skipLeaseCheck
