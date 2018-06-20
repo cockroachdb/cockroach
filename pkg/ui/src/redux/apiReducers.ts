@@ -255,6 +255,13 @@ const dataDistributionReducerObj = new CachedDataReducer(
 );
 export const refreshDataDistribution = dataDistributionReducerObj.refresh;
 
+const leaseholdersAndQPSReducerObj = new CachedDataReducer(
+  api.getLeaseholdersAndQPS,
+  "leaseholdersAndQPS",
+  moment.duration(1, "m"),
+);
+export const refreshLeaseholdersAndQPS = leaseholdersAndQPSReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -282,6 +289,7 @@ export interface APIReducersState {
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
+  leaseholdersAndQPS: CachedDataReducerState<api.LeaseholdersAndQPSResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -311,6 +319,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
+  [leaseholdersAndQPSReducerObj.actionNamespace]: leaseholdersAndQPSReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
