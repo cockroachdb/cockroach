@@ -134,7 +134,7 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		gauge *metric.Gauge
 		min   int64
 	}{
-		{m.RdbBlockCacheHits, 4},
+		{m.RdbBlockCacheHits, 10},
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
 		{m.RdbBlockCachePinnedUsage, 0},
