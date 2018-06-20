@@ -3,6 +3,7 @@ import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps } from "react-router";
+import { createSelector } from "reselect";
 
 import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -16,6 +17,7 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
+import { aggregateStatementStats } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { Duration } from "src/util/format";
 import { summarize, StatementSummary } from "src/util/sql/summarize";
@@ -32,6 +34,8 @@ class StatementsSortedTable extends SortedTable<CollectedStatementStatistics$Pro
 
 interface StatementsPageProps {
   statements: CachedDataReducerState<QueriesResponseMessage>;
+  apps: string[];
+  totalStatements: number;
   refreshQueries: typeof refreshQueries;
 }
 
@@ -133,46 +137,17 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     this.props.refreshQueries();
   }
 
-  getStatements() {
-    if (!this.props.params[appAttr]) {
-      return this.props.statements.data.queries;
-    }
-
-    let criteria = this.props.params[appAttr];
-    if (criteria === "(unset)") {
-      criteria = "";
-    }
-
-    return this.props.statements.data.queries.filter(
-      (statement: CollectedStatementStatistics$Properties) =>
-        statement.key.app === criteria,
-    );
-  }
-
-  getApps() {
-    const apps = {};
-    this.props.statements.data.queries.forEach(
-      (statement: CollectedStatementStatistics$Properties) => {
-        if (statement.key.app) {
-          apps[statement.key.app] = true;
-        }
-      }
-    );
-    return Object.keys(apps);
-  }
-
   renderStatements() {
     if (!this.props.statements.data) {
       // This should really be handled by a loader component.
       return null;
     }
 
-    const { last_reset } = this.props.statements.data;
-    const queries = this.getStatements();
+    const { last_reset, queries } = this.props.statements.data;
 
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }, { value: "(unset)", label: "(unset)"  }];
-    this.getApps().forEach(app => appOptions.push({ value: app, label: app }));
+    this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
     return (
       <div className="statements">
@@ -189,7 +164,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
         <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
           {queries.length}
-          {selectedApp ? ` of ${this.props.statements.data.queries.length} ` : " "}
+          {selectedApp ? ` of ${this.props.totalStatements} ` : " "}
           statement fingerprints.
           Query history is cleared once an hour;
           last cleared {Print.Timestamp(last_reset)}.
@@ -228,10 +203,72 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
 }
 
+const selectStatements = createSelector(
+  (state: AdminUIState) => state.cachedData.queries,
+  (_state: AdminUIState, props: RouteProps) => props,
+  (state: CachedDataReducerState<QueriesResponseMessage>, props: RouteProps) => {
+    if (!state.data) {
+      return state;
+    }
+
+    let statements = state.data.queries;
+    if (props.params[appAttr]) {
+      let criteria = props.params[appAttr];
+      if (criteria === "(unset)") {
+        criteria = "";
+      }
+
+      statements = statements.filter(
+        (statement: CollectedStatementStatistics$Properties) =>
+          statement.key.app === criteria,
+      );
+    }
+
+    return {
+      data: {
+        last_reset: state.data.last_reset,
+        queries: aggregateStatementStats(statements),
+      },
+    };
+  },
+);
+
+const selectApps = createSelector(
+  (state: AdminUIState) => state.cachedData.queries,
+  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+    if (!state.data) {
+      return [];
+    }
+
+    const apps: { [app: string]: boolean } = {};
+    state.data.queries.forEach(
+      (statement: CollectedStatementStatistics$Properties) => {
+        if (statement.key.app) {
+          apps[statement.key.app] = true;
+        }
+      },
+    );
+    return Object.keys(apps);
+  },
+);
+
+const selectTotalStatements = createSelector(
+  (state: AdminUIState) => state.cachedData.queries,
+  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+    if (!state.data) {
+      return 0;
+    }
+    const aggregated = aggregateStatementStats(state.data.queries);
+    return aggregated.length;
+  },
+);
+
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
-  (state: AdminUIState) => ({
-    statements: state.cachedData.queries,
+  (state: AdminUIState, props: RouteProps) => ({
+    statements: selectStatements(state, props),
+    apps: selectApps(state),
+    totalStatements: selectTotalStatements(state),
   }),
   {
     refreshQueries,
