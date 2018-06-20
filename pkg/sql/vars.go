@@ -363,11 +363,11 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.DistSQLMode.String()
+			return evalCtx.SessionData.OptimizerMode.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
-			m.SetDistSQLMode(sessiondata.DistSQLExecMode(
-				DistSQLClusterExecMode.Get(&m.settings.SV)))
+			m.SetOptimizerMode(sessiondata.OptimizerMode(
+				OptimizerClusterMode.Get(&m.settings.SV)))
 			return nil
 		},
 	},

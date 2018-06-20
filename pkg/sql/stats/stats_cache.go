@@ -149,6 +149,12 @@ func (sc *TableStatisticsCache) lookupTableStats(
 func (sc *TableStatisticsCache) refreshTableStats(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
+	if sqlbase.IsReservedID(tableID) {
+		// Don't try to get statistics for system tables (most importantly,
+		// for table_statistics itself).
+		return nil, nil
+	}
+
 	tableStatistics, err := sc.getTableStatsFromDB(ctx, tableID)
 	if err != nil {
 		return nil, err

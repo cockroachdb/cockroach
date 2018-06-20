@@ -18,8 +18,10 @@ SELECT * FROM [SHOW client_encoding] WITH ORDINALITY
 client_encoding     ordinality
 UTF8                1
 
+# We filter here because experimental_opt will be different depending on which
+# configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL]
+SELECT * FROM [SHOW ALL] WHERE variable != 'experimental_opt'
 ----
 variable                        value
 application_name                ·
@@ -33,7 +35,6 @@ default_transaction_read_only   off
 distsql                         off
 experimental_force_lookup_join  off
 experimental_force_zigzag_join  off
-experimental_opt                off
 extra_float_digits              ·
 intervalstyle                   postgres
 max_index_keys                  32

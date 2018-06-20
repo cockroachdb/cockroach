@@ -101,6 +101,19 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"set to true to enable session tracing", false,
 )
 
+// OptimizerClusterMode controls the cluster default for when the cost-based optimizer is used.
+var OptimizerClusterMode = settings.RegisterEnumSetting(
+	"sql.defaults.optimizer",
+	"Default cost-based optimizer mode",
+	"Off",
+	map[int64]string{
+		int64(sessiondata.OptimizerAlways): "Always",
+		int64(sessiondata.OptimizerLocal):  "Local",
+		int64(sessiondata.OptimizerOff):    "Off",
+		int64(sessiondata.OptimizerOn):     "On",
+	},
+)
+
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
