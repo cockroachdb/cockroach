@@ -22,7 +22,7 @@ SELECT * FROM xy WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan xy
@@ -75,7 +75,7 @@ SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan xy
@@ -88,11 +88,11 @@ select
            └── project
                 ├── columns: u:3(int!null) v:4(int!null)
                 ├── outer: (1)
-                ├── stats: [rows=111]
+                ├── stats: [rows=111.111111]
                 └── select
                      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                      ├── outer: (1)
-                     ├── stats: [rows=111]
+                     ├── stats: [rows=111.111111]
                      ├── key: (5)
                      ├── fd: (5)-->(3,4)
                      ├── scan uv
@@ -110,7 +110,7 @@ SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan xy
@@ -123,11 +123,11 @@ select
            ├── project
            │    ├── columns: v:4(int!null)
            │    ├── outer: (1)
-           │    ├── stats: [rows=111]
+           │    ├── stats: [rows=111.111111]
            │    └── select
            │         ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            │         ├── outer: (1)
-           │         ├── stats: [rows=111]
+           │         ├── stats: [rows=111.111111]
            │         ├── key: (5)
            │         ├── fd: (5)-->(3,4)
            │         ├── scan uv
