@@ -142,11 +142,10 @@ type TxnCoordSender struct {
 	// is embedded in the interceptorAlloc struct, so the entire stack is
 	// allocated together with TxnCoordSender without any additional heap
 	// allocations necessary.
-	interceptorStack [3]txnInterceptor
+	interceptorStack [2]txnInterceptor
 	interceptorAlloc struct {
 		txnIntentCollector
 		txnSpanRefresher
-		txnBatchWrapper
 		txnLockGatekeeper // not in interceptorStack array.
 	}
 
@@ -355,14 +354,15 @@ func NewTxnCoordSenderFactory(
 	return tcf
 }
 
-// New is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) New(
+// TransactionalSender is part of the TxnSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	typ client.TxnType, txn *roachpb.Transaction,
 ) client.TxnSender {
 	tcs := &TxnCoordSender{
 		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
+	tcs.mu.txn = txn.Clone()
 
 	// Create a stack of request/response interceptors. All of the objects in
 	// this stack are pre-allocated on the TxnCoordSender struct, so this just
@@ -388,9 +388,6 @@ func (tcf *TxnCoordSenderFactory) New(
 		canAutoRetry:     typ == client.RootTxn,
 		autoRetryCounter: tcs.metrics.AutoRetries,
 	}
-	tcs.interceptorAlloc.txnBatchWrapper = txnBatchWrapper{
-		tcf: tcf,
-	}
 	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		mu:      &tcs.mu,
 		wrapped: tcs.wrapped,
@@ -398,7 +395,6 @@ func (tcf *TxnCoordSenderFactory) New(
 	tcs.interceptorStack = [...]txnInterceptor{
 		&tcs.interceptorAlloc.txnIntentCollector,
 		&tcs.interceptorAlloc.txnSpanRefresher,
-		&tcs.interceptorAlloc.txnBatchWrapper,
 	}
 	for i, reqInt := range tcs.interceptorStack {
 		if i < len(tcs.interceptorStack)-1 {
@@ -408,21 +404,11 @@ func (tcf *TxnCoordSenderFactory) New(
 		}
 	}
 
-	// If a transaction was passed in bind the TxnCoordSender to it.
-	// TODO(andrei): Ideally, if a transaction is not passed it, we should take
-	// that to mean that a TxnCoordSender is not needed and we should return the
-	// wrapped sender directly. However, there are tests that pass nil and still
-	// send transactional requests. That's why the TxnCoordSender is still
-	// littered with code handling the case where it is not yet bound to a
-	// transaction.
-	if txn != nil {
-		tcs.mu.txn = txn.Clone()
-	}
 	return tcs
 }
 
-// WrappedSender is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) WrappedSender() client.Sender {
+// NonTransactionalSender is part of the TxnSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) NonTransactionalSender() client.Sender {
 	return tcf.wrapped
 }
 
@@ -481,6 +467,11 @@ func (tc *TxnCoordSender) OnFinish(onFinishFn func(error)) {
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+
+	if ba.Txn == nil {
+		log.Fatalf(ctx, "can't send non-transactional request through a TxnCoordSender: %s", ba)
+	}
+
 	ctx = tc.AnnotateCtx(ctx)
 
 	// Start new or pick up active trace. From here on, there's always an active
@@ -496,61 +487,60 @@ func (tc *TxnCoordSender) Send(
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if ba.Txn != nil {
-		if tc.mu.txn.ID == (uuid.UUID{}) {
-			log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
-		}
 
-		ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
-		if log.V(2) {
-			ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
-		}
+	if tc.mu.txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
+	}
 
-		// If this request is part of a transaction...
-		if err := tc.validateTxnForBatchLocked(ctx, &ba); err != nil {
+	ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
+	if log.V(2) {
+		ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
+	}
+
+	// If this request is part of a transaction...
+	if err := tc.validateTxnForBatchLocked(ctx, &ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Associate the txnID with the trace.
+	txnIDStr := ba.Txn.ID.String()
+	sp.SetBaggageItem("txnID", txnIDStr)
+
+	_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
+	if hasBegin {
+		// If there's a BeginTransaction, we need to start the heartbeat loop.
+		// Perhaps surprisingly, this needs to be done even if the batch has both
+		// a BeginTransaction and an EndTransaction. Although on batch success the
+		// heartbeat loop will be stopped right away, on retriable errors we need the
+		// heartbeat loop: the intents and txn record should be kept in place just
+		// like for non-1PC txns.
+		if err := tc.startHeartbeatLoopLocked(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
-
-		// Associate the txnID with the trace.
-		txnIDStr := ba.Txn.ID.String()
-		sp.SetBaggageItem("txnID", txnIDStr)
-
-		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
-		if hasBegin {
-			// If there's a BeginTransaction, we need to start the heartbeat loop.
-			// Perhaps surprisingly, this needs to be done even if the batch has both
-			// a BeginTransaction and an EndTransaction. Although on batch success the
-			// heartbeat loop will be stopped right away, on retriable errors we need the
-			// heartbeat loop: the intents and txn record should be kept in place just
-			// like for non-1PC txns.
-			if err := tc.startHeartbeatLoopLocked(ctx); err != nil {
-				return nil, roachpb.NewError(err)
-			}
-		}
-
-		// Copy a few fields from the request's txn. This is technically only
-		// required during the first send, as these fields are set before
-		// the first send and can't change afterwards. Keeping these fields in
-		// sync between the TxnCoordSender and the client.Txn is needed because,
-		// when the TxnCoordSender synthesizes TransactionAbortedErrors, it
-		// creates a new proto that it passes to the client.Txn and then these
-		// fields are used when creating that proto that will then be used for the
-		// client.Txn. On subsequent retries of the transaction, it's important
-		// for the values of these fields to have been preserved because that
-		// makes future calls to txn.SetIsolation() and such no-ops.
-		// If this makes no sense it's because the TxnCoordSender having a copy of
-		// the Transaction proto generally makes no sense.
-		tc.mu.txn.Name = ba.Txn.Name
-		tc.mu.txn.Isolation = ba.Txn.Isolation
-		tc.mu.txn.Priority = ba.Txn.Priority
-
-		if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID, &ba); pErr != nil {
-			return nil, pErr
-		}
-
-		// Update the command count.
-		tc.mu.commandCount += int32(len(ba.Requests))
 	}
+
+	// Copy a few fields from the request's txn. This is technically only
+	// required during the first send, as these fields are set before
+	// the first send and can't change afterwards. Keeping these fields in
+	// sync between the TxnCoordSender and the client.Txn is needed because,
+	// when the TxnCoordSender synthesizes TransactionAbortedErrors, it
+	// creates a new proto that it passes to the client.Txn and then these
+	// fields are used when creating that proto that will then be used for the
+	// client.Txn. On subsequent retries of the transaction, it's important
+	// for the values of these fields to have been preserved because that
+	// makes future calls to txn.SetIsolation() and such no-ops.
+	// If this makes no sense it's because the TxnCoordSender having a copy of
+	// the Transaction proto generally makes no sense.
+	tc.mu.txn.Name = ba.Txn.Name
+	tc.mu.txn.Isolation = ba.Txn.Isolation
+	tc.mu.txn.Priority = ba.Txn.Priority
+
+	if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID, &ba); pErr != nil {
+		return nil, pErr
+	}
+
+	// Update the command count.
+	tc.mu.commandCount += int32(len(ba.Requests))
 
 	// Send the command through the txnInterceptor stack.
 	br, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
@@ -936,11 +926,6 @@ func (tc *TxnCoordSender) updateStateLocked(
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
 ) *roachpb.Error {
-
-	if ba.Txn == nil {
-		// Not a transactional request.
-		return pErr
-	}
 
 	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction

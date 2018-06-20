@@ -800,7 +800,7 @@ func splitAndScatter(
 			scatterReq := &roachpb.AdminScatterRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(chunkSpan),
 			}
-			if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+			if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
 				// fail the RESTORE when Scatter fails. I'm uncomfortable that
 				// this could break entirely and not start failing the tests,
@@ -844,7 +844,7 @@ func splitAndScatter(
 					scatterReq := &roachpb.AdminScatterRequest{
 						RequestHeader: roachpb.RequestHeaderFromSpan(newSpan),
 					}
-					if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+					if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 						// TODO(dan): Unfortunately, Scatter is still too unreliable to
 						// fail the RESTORE when Scatter fails. I'm uncomfortable that
 						// this could break entirely and not start failing the tests,
@@ -1126,7 +1126,7 @@ func restore(
 			defer tracing.FinishSpan(importSpan)
 			defer func() { <-importsSem }()
 
-			importRes, pErr := client.SendWrapped(ctx, db.GetSender(), importRequest)
+			importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 			if pErr != nil {
 				return pErr.GoError()
 			}

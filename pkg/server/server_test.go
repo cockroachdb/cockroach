@@ -139,7 +139,7 @@ func TestServerStartClock(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
 	}
 	if _, err := client.SendWrapped(
-		context.Background(), s.DB().GetSender(), get,
+		context.Background(), s.DB().NonTransactionalSender(), get,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
-	tds := db.GetSender()
+	tds := db.NonTransactionalSender()
 
 	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m", "m"); err != nil {
 		t.Fatal(err)
@@ -376,43 +376,47 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(context.TODO())
-		ts := s.(*TestServer)
-		tds := db.GetSender()
+		t.Run("", func(t *testing.T) {
+			ctx := context.Background()
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			ts := s.(*TestServer)
+			tds := db.NonTransactionalSender()
 
-		for _, sk := range tc.splitKeys {
-			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk, sk); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		for _, k := range tc.keys {
-			put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-			if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		// Try every possible ScanRequest startKey.
-		for start := 0; start < len(tc.keys); start++ {
-			// Try every possible maxResults, from 1 to beyond the size of key array.
-			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
-				reply, err := client.SendWrappedWith(
-					context.Background(), tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
-				)
-				if err != nil {
+			for _, sk := range tc.splitKeys {
+				if err := ts.node.storeCfg.DB.AdminSplit(ctx, sk, sk); err != nil {
 					t.Fatal(err)
 				}
-				rows := reply.(*roachpb.ScanResponse).Rows
-				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
-					t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
-				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
-					t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
+			}
+
+			for _, k := range tc.keys {
+				put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
+				if _, err := client.SendWrapped(ctx, tds, put); err != nil {
+					t.Fatal(err)
 				}
 			}
-		}
+
+			// Try every possible ScanRequest startKey.
+			for start := 0; start < len(tc.keys); start++ {
+				// Try every possible maxResults, from 1 to beyond the size of key array.
+				for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
+					scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
+					reply, err := client.SendWrappedWith(
+						ctx, tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+					rows := reply.(*roachpb.ScanResponse).Rows
+					if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
+						t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
+					} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
+						t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
+					}
+				}
+			}
+
+		})
 	}
 }
 

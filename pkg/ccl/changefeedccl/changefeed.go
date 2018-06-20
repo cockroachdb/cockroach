@@ -139,7 +139,7 @@ func runChangefeedFlow(
 func exportRequestPoll(
 	execCfg *sql.ExecutorConfig, details jobspb.ChangefeedDetails, progress jobspb.ChangefeedProgress,
 ) func(context.Context) (changedKVs, error) {
-	sender := execCfg.DB.GetSender()
+	sender := execCfg.DB.NonTransactionalSender()
 	var spans []roachpb.Span
 	for _, tableDesc := range details.TableDescs {
 		spans = append(spans, tableDesc.PrimaryIndexSpan())

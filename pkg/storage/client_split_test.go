@@ -2709,13 +2709,13 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	// will require a scan that continues into the next meta2 range.
 	const tableID = keys.MinUserDescID + 1 // 51
 	splitReq := adminSplitArgs(keys.MakeTablePrefix(tableID - 3 /* 48 */))
-	if _, pErr := client.SendWrapped(ctx, s.DB().GetSender(), splitReq); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, s.DB().NonTransactionalSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	metaKey := keys.RangeMetaKey(keys.MakeTablePrefix(tableID)).AsRawKey()
 	splitReq = adminSplitArgs(metaKey)
-	if _, pErr := client.SendWrapped(ctx, s.DB().GetSender(), splitReq); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, s.DB().NonTransactionalSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2741,7 +2741,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		} else {
 			lookupReq = &roachpb.ScanRequest{RequestHeader: header}
 		}
-		if _, err := client.SendWrapped(ctx, s.DB().GetSender(), lookupReq); err != nil {
+		if _, err := client.SendWrapped(ctx, s.DB().NonTransactionalSender(), lookupReq); err != nil {
 			t.Fatalf("%T %v", err.GoError(), err)
 		}
 	})
@@ -2947,7 +2947,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 
 	// Clear the range descriptor cache so that any future requests will first
 	// need to perform a RangeLookup.
-	store.DB().GetFactory().WrappedSender().(*kv.DistSender).RangeDescriptorCache().Clear()
+	store.DB().NonTransactionalSender().(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender).RangeDescriptorCache().Clear()
 
 	// Now send a request, forcing the RangeLookup. Since the lookup is
 	// inconsistent, there's no WriteIntentError, but we'll try to resolve any

@@ -187,6 +187,58 @@ func DefaultDBContext() DBContext {
 	}
 }
 
+// CrossRangeTxnWrapperSender is a Sender whose purpose is to wrap
+// non-transactional requests that span ranges into a transaction so they can
+// execute atomically.
+//
+// TODO(andrei, bdarnell): This is a wart. Our semantics are that batches are
+// atomic, but there's only historical reason for that. We should disallow
+// non-transactional batches and scans, forcing people to use transactions
+// instead. And then this Sender can go away.
+type CrossRangeTxnWrapperSender struct {
+	db      *DB
+	wrapped Sender
+}
+
+var _ Sender = &CrossRangeTxnWrapperSender{}
+
+// Send implements the Sender interface.
+func (s *CrossRangeTxnWrapperSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	if ba.Txn != nil {
+		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
+	}
+
+	br, pErr := s.wrapped.Send(ctx, ba)
+	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+		return br, pErr
+	}
+
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
+		txn.SetDebugName("auto-wrap")
+		b := txn.NewBatch()
+		b.Header = ba.Header
+		for _, arg := range ba.Requests {
+			req := arg.GetInner().ShallowCopy()
+			b.AddRawRequest(req)
+		}
+		err := txn.CommitInBatch(ctx, b)
+		br = b.RawResponse()
+		return err
+	})
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	br.Txn = nil // hide the evidence
+	return br, nil
+}
+
+// Wrapped returns the wrapped sender.
+func (s *CrossRangeTxnWrapperSender) Wrapped() Sender {
+	return s.wrapped
+}
+
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
@@ -195,24 +247,18 @@ type DB struct {
 	factory TxnSenderFactory
 	clock   *hlc.Clock
 	ctx     DBContext
+	// crs is the sender used for non-transactional requests.
+	crs CrossRangeTxnWrapperSender
 }
 
-// GetSender returns a Sender that can be used to send requests through.
-// Note that a new Sender created; it is not shared.
+// NonTransactionalSender returns a Sender that can be used for sending
+// non-transactional requests. The Sender is capable of transparently wrapping
+// non-transactional requests that span ranges in transactions.
 //
-// The Sender returned should not be used for sending transactional requests.
-// Use db.Txn() or db.NewTxn() for that.
-func (db *DB) GetSender() Sender {
-	// We pass nil for the txn here because we don't have a txn on hand.
-	// That's why this method says to not use the Sender for transactional
-	// requests, plus the fact that if a Sender is used directly, the caller needs
-	// to be mindful of the need to start a heartbeat loop when writing.
-	//
-	// Note that even non-transactional requests need to go through a
-	// TxnCoordSender because batches that get split need to be wrapped in
-	// transactions (and the TxnCoordSender handles that). So we can't simply
-	// return the wrapped handler here.
-	return db.factory.New(RootTxn, nil /* txn */)
+// The Sender returned should not be used for sending transactional requests -
+// it bypasses the TxnCoordSender. Use db.Txn() or db.NewTxn() for transactions.
+func (db *DB) NonTransactionalSender() Sender {
+	return &db.crs
 }
 
 // GetFactory returns the DB's TxnSenderFactory.
@@ -232,12 +278,17 @@ func NewDBWithContext(
 	if actx.Tracer == nil {
 		panic("no tracer set in AmbientCtx")
 	}
-	return &DB{
+	db := &DB{
 		AmbientContext: actx,
 		factory:        factory,
 		clock:          clock,
 		ctx:            ctx,
+		crs: CrossRangeTxnWrapperSender{
+			wrapped: factory.NonTransactionalSender(),
+		},
 	}
+	db.crs.db = db
+	return db
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -545,7 +596,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 func (db *DB) send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	return db.sendUsingSender(ctx, ba, db.GetSender())
+	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
 // sendUsingSender uses the specified sender to send the batch request.
