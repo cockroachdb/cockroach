@@ -17,15 +17,12 @@ package memo
 import (
 	"testing"
 
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // Most of the functionality in statistics.go is tested by the data-driven
@@ -104,6 +101,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	c12 := constraint.ParseConstraint(&evalCtx, "/1/2/3: [/1/2 - /1/3] [/1/4 - /1]")
 	c123 := constraint.ParseConstraint(&evalCtx, "/1/2/3: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]")
 	c32 := constraint.ParseConstraint(&evalCtx, "/3/-2: [/5/3 - /5/2]")
+	c321 := constraint.ParseConstraint(&evalCtx, "/-3/2/1: [/5/3/1 - /5/3/4] [/3/5/1 - /3/5/4]")
+	c312 := constraint.ParseConstraint(&evalCtx, "/3/1/-2: [/5/3/8 - /5/3/6] [/9/5/4 - /9/5/1]")
 
 	// /4/5: [/'apple'/'cherry' - /'apple'/'mango']
 	appleCherry := constraint.MakeCompositeKey(tree.NewDString("apple"), tree.NewDString("cherry"))
@@ -118,63 +117,77 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs1 := constraint.SingleConstraint(&c1)
 	statsFunc123(
 		cs1,
-		"stats: [rows=140000000, distinct(1)=7]",
+		"[rows=140000000, distinct(1)=7]",
 		7.0/500,
 	)
 
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc123(
 		cs2,
-		"stats: [rows=3333333333]",
+		"[rows=3333333333]",
 		1.0/3,
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
 	statsFunc123(
 		cs3,
-		"stats: [rows=20000000, distinct(3)=1]",
+		"[rows=20000000, distinct(3)=1]",
 		1.0/500,
 	)
 
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc123(
 		cs12,
-		"stats: [rows=20000000, distinct(1)=1]",
+		"[rows=20000000, distinct(1)=1]",
 		1.0/500,
 	)
 
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc123(
 		cs123,
-		"stats: [rows=400, distinct(1)=1, distinct(2)=1, distinct(3)=5]",
+		"[rows=400, distinct(1)=1, distinct(2)=1, distinct(3)=5]",
 		5.0/125000000,
 	)
 
 	cs32 := constraint.SingleConstraint(&c32)
 	statsFunc123(
 		cs32,
-		"stats: [rows=80000, distinct(2)=2, distinct(3)=1]",
+		"[rows=80000, distinct(2)=2, distinct(3)=1]",
 		2.0/250000,
+	)
+
+	cs321 := constraint.SingleConstraint(&c321)
+	statsFunc123(
+		cs321,
+		"[rows=160000, distinct(2)=2, distinct(3)=2]",
+		4.0/250000,
+	)
+
+	cs312 := constraint.SingleConstraint(&c312)
+	statsFunc123(
+		cs312,
+		"[rows=2240, distinct(1)=2, distinct(2)=7, distinct(3)=2]",
+		28.0/125000000,
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
 	statsFunc123(
 		cs,
-		"stats: [rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
+		"[rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
 		1.0/125000000,
 	)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
 	statsFunc123(
 		cs,
-		"stats: [rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
+		"[rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
 		1.0/125000000,
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc45(
 		cs45,
-		"stats: [rows=1000000000, distinct(4)=1]",
+		"[rows=1000000000, distinct(4)=1]",
 		1.0/10,
 	)
 }
@@ -215,12 +228,7 @@ func testStats(
 ) {
 	t.Helper()
 
-	ev := ExprView{}
-
-	tp := treeprinter.New()
-	ev.formatStats(tp, sb.s)
-	actual := strings.TrimSpace(tp.String())
-
+	actual := sb.s.String()
 	if actual != expectedStats {
 		t.Fatalf("\nexpected: %s\nactual  : %s", expectedStats, actual)
 	}

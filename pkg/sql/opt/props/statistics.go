@@ -15,6 +15,11 @@
 package props
 
 import (
+	"bytes"
+	"fmt"
+	"math"
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
@@ -60,6 +65,28 @@ type Statistics struct {
 	Selectivity float64
 }
 
+func (s *Statistics) String() string {
+	var buf bytes.Buffer
+
+	buf.WriteString("[rows=")
+	printFloat(&buf, s.RowCount)
+	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
+	for _, colStat := range s.ColStats {
+		colStats = append(colStats, *colStat)
+	}
+	for _, colStat := range s.MultiColStats {
+		colStats = append(colStats, *colStat)
+	}
+	sort.Sort(colStats)
+	for _, col := range colStats {
+		fmt.Fprintf(&buf, ", distinct%s=", col.Cols.String())
+		printFloat(&buf, col.DistinctCount)
+	}
+	buf.WriteString("]")
+
+	return buf.String()
+}
+
 // ColumnStatistic is a collection of statistics that applies to a particular
 // set of columns. In theory, a table could have a ColumnStatistic object
 // for every possible subset of columns. In practice, it is only worth
@@ -73,4 +100,51 @@ type ColumnStatistic struct {
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
 	DistinctCount float64
+}
+
+// ColumnStatistics is a slice of ColumnStatistic values.
+type ColumnStatistics []ColumnStatistic
+
+// Len returns the number of ColumnStatistic values.
+func (c ColumnStatistics) Len() int { return len(c) }
+
+// Less is part of the Sorter interface.
+func (c ColumnStatistics) Less(i, j int) bool {
+	if c[i].Cols.Len() != c[j].Cols.Len() {
+		return c[i].Cols.Len() < c[j].Cols.Len()
+	}
+
+	prev := 0
+	for {
+		nextI, ok := c[i].Cols.Next(prev)
+		if !ok {
+			return false
+		}
+
+		// No need to check if ok since both ColSets are the same length and
+		// so far have had the same elements.
+		nextJ, _ := c[j].Cols.Next(prev)
+
+		if nextI != nextJ {
+			return nextI < nextJ
+		}
+
+		prev = nextI
+	}
+}
+
+// Swap is part of the Sorter interface.
+func (c ColumnStatistics) Swap(i, j int) {
+	c[i], c[j] = c[j], c[i]
+}
+
+func printFloat(buf *bytes.Buffer, v float64) {
+	if v >= 100 && v <= 1e+15 || math.Abs(math.Round(v)-v) < .0001 {
+		// Omit fractional digits for integers and for large values.
+		fmt.Fprintf(buf, "%.0f", v)
+	} else if v >= 1 {
+		fmt.Fprintf(buf, "%.2f", v)
+	} else {
+		fmt.Fprintf(buf, "%.4f", v)
+	}
 }
