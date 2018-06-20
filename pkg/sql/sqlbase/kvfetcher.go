@@ -142,8 +142,11 @@ func SetKVBatchSize(val int64) func() {
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
-	txn             *client.Txn
-	spans           roachpb.Spans
+	txn   *client.Txn
+	spans roachpb.Spans
+	// If useBatchLimit is true, batches are limited to kvBatchSize. If
+	// firstBatchLimit is also set, the first batch is limited to that value.
+	// Subsequent batches are larger, up to kvBatchSize.
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
@@ -154,6 +157,10 @@ type txnKVFetcher struct {
 	fetchEnd  bool
 	batchIdx  int
 	responses []roachpb.ResponseUnion
+
+	// Keep track if the previous batch was limited. Used to calculate if
+	// the currentSpan is a new span.
+	lastBatchLimited bool
 
 	// As the kvFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
@@ -172,6 +179,10 @@ func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 
 // getBatchSize returns the max size of the next batch.
 func (f *txnKVFetcher) getBatchSize() int64 {
+	return f.getBatchSizeForIdx(f.batchIdx)
+}
+
+func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	if !f.useBatchLimit {
 		return 0
 	}
@@ -182,7 +193,7 @@ func (f *txnKVFetcher) getBatchSize() int64 {
 	// We grab the first batch according to the limit. If it turns out that we
 	// need another batch, we grab a bigger batch. If that's still not enough,
 	// we revert to the default batch size.
-	switch f.batchIdx {
+	switch batchIdx {
 	case 0:
 		return f.firstBatchLimit
 
@@ -344,24 +355,41 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
+func (f *txnKVFetcher) batchIsLimited(batchSize int) bool {
+	if f.useBatchLimit {
+		// f.batchIdx - 1 refers to the most recent fetch.
+		return int64(batchSize) == f.getBatchSizeForIdx(f.batchIdx-1)
+	}
+	return false
+}
+
 // nextBatch returns the next batch of key/value pairs. If there are none
-// available, a fetch is initiated. When there are no more keys, returns false.
-func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error) {
+// available, a fetch is initiated.
+// ok returns whether or not there are more kv pairs to be fetched.
+// maybeNewSpan returns true if it was possible that the kv pairs returned were
+// from a new span.
+func (f *txnKVFetcher) nextBatch(
+	ctx context.Context,
+) (ok bool, kvs []roachpb.KeyValue, maybeNewSpan bool, err error) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
+		// Assume a new span is started as long as the last one wasn't limited.
+		maybeNewSpan = !f.lastBatchLimited
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			return true, t.Rows, nil
+			f.lastBatchLimited = f.batchIsLimited(len(t.Rows))
+			return true, t.Rows, maybeNewSpan, nil
 		case *roachpb.ReverseScanResponse:
-			return true, t.Rows, nil
+			f.lastBatchLimited = f.batchIsLimited(len(t.Rows))
+			return true, t.Rows, maybeNewSpan, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil
+		return false, nil, false, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, err
+		return false, nil, false, err
 	}
 	return f.nextBatch(ctx)
 }
