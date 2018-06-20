@@ -2,14 +2,16 @@ import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouterState } from "react-router";
+import { Link, RouteComponentProps } from "react-router";
 
-import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import Loading from "src/views/shared/components/loading";
+import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
@@ -24,6 +26,7 @@ import * as protos from "src/js/protos";
 import "./statements.styl";
 
 type CollectedStatementStatistics$Properties = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+type RouteProps = RouteComponentProps<any, any>;
 
 class StatementsSortedTable extends SortedTable<CollectedStatementStatistics$Properties> {}
 
@@ -100,9 +103,9 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
   ];
 }
 
-class StatementsPage extends React.Component<StatementsPageProps & RouterState, StatementsPageState> {
+class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
 
-  constructor(props: StatementsPageProps & RouterState) {
+  constructor(props: StatementsPageProps & RouteProps) {
     super(props);
     this.state = {
       sortSetting: {
@@ -118,6 +121,10 @@ class StatementsPage extends React.Component<StatementsPageProps & RouterState, 
     });
   }
 
+  selectApp = (app: DropdownOption) => {
+    this.props.router.push(`/statements/${app.value}`);
+  }
+
   componentWillMount() {
     this.props.refreshQueries();
   }
@@ -131,10 +138,27 @@ class StatementsPage extends React.Component<StatementsPageProps & RouterState, 
       return this.props.statements.data.queries;
     }
 
+    let criteria = this.props.params[appAttr];
+    if (criteria === "(unset)") {
+      criteria = "";
+    }
+
     return this.props.statements.data.queries.filter(
       (statement: CollectedStatementStatistics$Properties) =>
-        statement.key.app === this.props.params[appAttr],
+        statement.key.app === criteria,
     );
+  }
+
+  getApps() {
+    const apps = {};
+    this.props.statements.data.queries.forEach(
+      (statement: CollectedStatementStatistics$Properties) => {
+        if (statement.key.app) {
+          apps[statement.key.app] = true;
+        }
+      }
+    );
+    return Object.keys(apps);
   }
 
   renderStatements() {
@@ -146,13 +170,30 @@ class StatementsPage extends React.Component<StatementsPageProps & RouterState, 
     const { last_reset } = this.props.statements.data;
     const queries = this.getStatements();
 
+    const selectedApp = this.props.params[appAttr] || "";
+    const appOptions = [{ value: "", label: "All" }, { value: "(unset)", label: "(unset)"  }];
+    this.getApps().forEach(app => appOptions.push({ value: app, label: app }));
+
     return (
       <div className="statements">
-        <span className="statements__last-hour-note">
-          {queries.length} statement fingerprints.
+        <PageConfig>
+          <PageConfigItem>
+            <Dropdown
+              title="App"
+              options={appOptions}
+              selected={selectedApp}
+              onChange={this.selectApp}
+            />
+          </PageConfigItem>
+        </PageConfig>
+
+        <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
+          {queries.length}
+          {selectedApp ? ` of ${this.props.statements.data.queries.length} ` : " "}
+          statement fingerprints.
           Query history is cleared once an hour;
           last cleared {Print.Timestamp(last_reset)}.
-        </span>
+        </div>
 
         <StatementsSortedTable
           className="statements-table"
