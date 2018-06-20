@@ -208,6 +208,125 @@ func TestNextRowSingle(t *testing.T) {
 	}
 }
 
+func TestNextRowBatchLimiting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	tables := map[string]fetcherEntryArgs{
+		"t1": {
+			modFactor: 42,
+			nRows:     1337,
+			nCols:     2,
+		},
+		"t2": {
+			modFactor: 13,
+			nRows:     2014,
+			nCols:     2,
+		},
+		"norows": {
+			modFactor: 10,
+			nRows:     0,
+			nCols:     2,
+		},
+		"onerow": {
+			modFactor: 10,
+			nRows:     1,
+			nCols:     2,
+		},
+	}
+
+	// Initialize tables first.
+	for tableName, table := range tables {
+		sqlutils.CreateTable(
+			t, sqlDB, tableName,
+			"k INT PRIMARY KEY, v INT, FAMILY f1 (k), FAMILY f2(v)",
+			table.nRows,
+			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(table.modFactor)),
+		)
+	}
+
+	alloc := &DatumAlloc{}
+
+	// We try to read rows from each table.
+	for tableName, table := range tables {
+		t.Run(tableName, func(t *testing.T) {
+			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+
+			var valNeededForCol util.FastIntSet
+			valNeededForCol.AddRange(0, table.nCols-1)
+
+			args := []initFetcherArgs{
+				{
+					tableDesc:       tableDesc,
+					indexIdx:        0,
+					valNeededForCol: valNeededForCol,
+				},
+			}
+
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := rf.StartScan(
+				context.TODO(),
+				client.NewTxn(kvDB, 0, client.RootTxn),
+				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
+				true,  /*limitBatches*/
+				10,    /*limitHint*/
+				false, /*traceKV*/
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			count := 0
+
+			expectedVals := [2]int64{1, 1}
+			for {
+				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if datums == nil {
+					break
+				}
+
+				count++
+
+				if desc.ID != tableDesc.ID || index.ID != tableDesc.PrimaryIndex.ID {
+					t.Fatalf(
+						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
+						tableDesc.Name, tableDesc.PrimaryIndex.Name,
+						desc.Name, index.Name,
+					)
+				}
+
+				if table.nCols != len(datums) {
+					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
+				}
+
+				for i, expected := range expectedVals {
+					actual := int64(*datums[i].(*tree.DInt))
+					if expected != actual {
+						t.Fatalf("unexpected value for row %d, col %d.\nexpected: %d\nactual: %d", count, i, expected, actual)
+					}
+				}
+
+				expectedVals[0]++
+				expectedVals[1]++
+				// Value column is in terms of a modulo.
+				expectedVals[1] %= int64(table.modFactor)
+			}
+
+			if table.nRows != count {
+				t.Fatalf("expected %d rows, got %d rows", table.nRows, count)
+			}
+		})
+	}
+}
+
 // Secondary indexes contain extra values (the primary key of the primary index
 // as well as STORING columns).
 func TestNextRowSecondaryIndex(t *testing.T) {

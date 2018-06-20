@@ -38,7 +38,7 @@ import (
 const debugRowFetch = false
 
 type kvFetcher interface {
-	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error)
+	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, bool, error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -182,6 +182,9 @@ type RowFetcher struct {
 	mustDecodeIndexKey bool
 
 	knownPrefixLength int
+
+	// Used to save whether or not the next batch is from a new span in `nextKV`.
+	maybeNewSpan bool
 
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
@@ -433,18 +436,27 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 	return err
 }
 
-func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
+// Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
+// the next batch until there are no more kvs to fetch.
+// Returns whether or not there are more kvs to fetch, the kv that was fetched,
+// whether or not the kv was from a maybeNewSpan, and any errors that may have
+// occurred.
+func (rf *RowFetcher) nextKV(
+	ctx context.Context,
+) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
 	if len(rf.kvs) != 0 {
 		kv = rf.kvs[0]
 		rf.kvs = rf.kvs[1:]
-		return true, kv, nil
+		newSpan = rf.maybeNewSpan
+		rf.maybeNewSpan = false
+		return true, kv, newSpan, nil
 	}
-	ok, rf.kvs, err = rf.kvFetcher.nextBatch(ctx)
+	ok, rf.kvs, rf.maybeNewSpan, err = rf.kvFetcher.nextBatch(ctx)
 	if err != nil {
-		return ok, kv, err
+		return ok, kv, false, err
 	}
 	if !ok {
-		return false, kv, nil
+		return false, kv, false, nil
 	}
 	return rf.nextKV(ctx)
 }
@@ -473,7 +485,8 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.nextKV(ctx)
+		var maybeNewSpan bool
+		ok, rf.kv, maybeNewSpan, err = rf.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -525,7 +538,27 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// secondary index as secondary indexes have only one key per row.
 		// If rf.rowReadyTable differs from rf.currentTable, this denotes
 		// a row is ready for output.
-		if rf.indexKey != nil && (rf.currentTable.isSecondaryIndex || !bytes.HasPrefix(rf.kv.Key, rf.indexKey) || rf.rowReadyTable != rf.currentTable) {
+		switch {
+		case rf.currentTable.isSecondaryIndex:
+			// Secondary indexes have only one key per row.
+			rowDone = true
+		case !bytes.HasPrefix(rf.kv.Key, rf.indexKey):
+			// If the prefix of the key has changed, current key is from a different
+			// row than the previous one.
+			rowDone = true
+		case rf.rowReadyTable != rf.currentTable:
+			// For rowFetchers with more than one table, if the table changes the row
+			// is done.
+			rowDone = true
+		case maybeNewSpan:
+			// If the kvFetcher reports that a maybeNewSpan was fetched, then the last
+			// span should be finished so that row is complete.
+			rowDone = true
+		default:
+			rowDone = false
+		}
+
+		if rf.indexKey != nil && rowDone {
 			// The current key belongs to a new row. Output the
 			// current row.
 			rf.indexKey = nil
