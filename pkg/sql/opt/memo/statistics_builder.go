@@ -231,42 +231,6 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 	return colStat
 }
 
-// ColumnStatistics is a slice of ColumnStatistic values.
-type ColumnStatistics []props.ColumnStatistic
-
-// Len returns the number of ColumnStatistic values.
-func (c ColumnStatistics) Len() int { return len(c) }
-
-// Less is part of the Sorter interface.
-func (c ColumnStatistics) Less(i, j int) bool {
-	if c[i].Cols.Len() != c[j].Cols.Len() {
-		return c[i].Cols.Len() < c[j].Cols.Len()
-	}
-
-	prev := 0
-	for {
-		nextI, ok := c[i].Cols.Next(prev)
-		if !ok {
-			return false
-		}
-
-		// No need to check if ok since both ColSets are the same length and
-		// so far have had the same elements.
-		nextJ, _ := c[j].Cols.Next(prev)
-
-		if nextI != nextJ {
-			return nextI < nextJ
-		}
-
-		prev = nextI
-	}
-}
-
-// Swap is part of the Sorter interface.
-func (c ColumnStatistics) Swap(i, j int) {
-	c[i], c[j] = c[j], c[i]
-}
-
 const (
 	// This is the value used for inequality filters such as x < 1 in
 	// "Access Path Selection in a Relational Database Management System"
