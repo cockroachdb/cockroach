@@ -27,33 +27,41 @@ import (
 
 //go:generate go run -tags gen-batch gen_batch.go
 
-// SetActiveTimestamp sets the correct timestamp at which the request
-// is to be carried out. For transactional requests, ba.Timestamp must
-// be zero initially and it will be set to txn.OrigTimestamp (and
-// forwarded to txn.SafeTimestamp if non-zero). For non-transactional
-// requests, if no timestamp is specified, nowFn is used to create and
-// set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+// GetActiveTimestamp returns the timestamp at which the batch will operate.
+// For non-transactional requests, this is `ba.Timestamp` if set and nowFn() otherwise.
+//
+// For transactional requests, it is the OrigTimestamp forwarded by the RefreshTimestamp.
+func (ba *BatchRequest) GetActiveTimestamp(nowFn func() hlc.Timestamp) hlc.Timestamp {
 	if txn := ba.Txn; txn != nil {
-		if ba.Timestamp != (hlc.Timestamp{}) {
-			return errors.New("transactional request must not set batch timestamp")
-		}
-
 		// Always use the original timestamp for reads and writes, even
 		// though some intents may be written at higher timestamps in the
 		// event of a WriteTooOldError.
-		ba.Timestamp = txn.OrigTimestamp
+		ts := txn.OrigTimestamp
 		// If a refreshed timestamp is set for the transaction, forward
 		// the batch timestamp to it. The refreshed timestamp indicates a
 		// future timestamp at which the transaction would like to commit
 		// to safely avoid a serializable transaction restart.
-		ba.Timestamp.Forward(txn.RefreshedTimestamp)
-	} else {
-		// When not transactional, allow empty timestamp and use nowFn instead
-		if ba.Timestamp == (hlc.Timestamp{}) {
-			ba.Timestamp = nowFn()
-		}
+		ts.Forward(txn.RefreshedTimestamp)
+		return ts
 	}
+	// When not transactional, use value from nowFn().
+	if ba.Timestamp == (hlc.Timestamp{}) {
+		return nowFn()
+	}
+	return ba.Timestamp
+}
+
+// SetActiveTimestamp sets ba.Timestamp to the active timestamp (as returned
+// by GetActiveTimestamp).
+//
+// Note that for transactional batches, the method will verify that ba.Timestamp
+// is initially unset. In particular, SetActiveTimestamp can be called only once
+// in that case.
+func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+	if ba.Txn != nil && ba.Timestamp != (hlc.Timestamp{}) {
+		return errors.New("transactional request must not set batch timestamp")
+	}
+	ba.Timestamp = ba.GetActiveTimestamp(nowFn)
 	return nil
 }
 

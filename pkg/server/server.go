@@ -239,6 +239,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.registry,
 	)
 
+	// The store config is intialized to the default values here in order
+	// to pass the follower read interval to the distributed sender. It's
+	// augmented later in this method before sending to the node to create
+	// stores.
+	storeCfg := storage.StoreConfig{}
+	storeCfg.SetDefaults()
+
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
@@ -260,12 +267,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		AmbientCtx:      s.cfg.AmbientCtx,
-		Settings:        st,
-		Clock:           s.clock,
-		RPCContext:      s.rpcContext,
-		RPCRetryOptions: &retryOpts,
-		TestingKnobs:    clientTestingKnobs,
+		AmbientCtx:           s.cfg.AmbientCtx,
+		Settings:             st,
+		Clock:                s.clock,
+		RPCContext:           s.rpcContext,
+		RPCRetryOptions:      &retryOpts,
+		TestingKnobs:         clientTestingKnobs,
+		FollowerReadInterval: storeCfg.FollowerReadInterval(),
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
@@ -397,27 +405,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	var execCfg sql.ExecutorConfig
 
 	// TODO(bdarnell): make StoreConfig configurable.
-	storeCfg := storage.StoreConfig{
-		Settings:                st,
-		AmbientCtx:              s.cfg.AmbientCtx,
-		RaftConfig:              s.cfg.RaftConfig,
-		Clock:                   s.clock,
-		DB:                      s.db,
-		Gossip:                  s.gossip,
-		NodeLiveness:            s.nodeLiveness,
-		Transport:               s.raftTransport,
-		RPCContext:              s.rpcContext,
-		ScanInterval:            s.cfg.ScanInterval,
-		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
-		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
-		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
-		StorePool:               s.storePool,
-		SQLExecutor:             internalExecutor,
-		LogRangeEvents:          s.cfg.EventLogEnabled,
-		TimeSeriesDataStore:     s.tsDB,
+	storeCfg.Settings = st
+	storeCfg.AmbientCtx = s.cfg.AmbientCtx
+	storeCfg.RaftConfig = s.cfg.RaftConfig
+	storeCfg.Clock = s.clock
+	storeCfg.DB = s.db
+	storeCfg.Gossip = s.gossip
+	storeCfg.NodeLiveness = s.nodeLiveness
+	storeCfg.Transport = s.raftTransport
+	storeCfg.RPCContext = s.rpcContext
+	storeCfg.ScanInterval = s.cfg.ScanInterval
+	storeCfg.ScanMaxIdleTime = s.cfg.ScanMaxIdleTime
+	storeCfg.TimestampCachePageSize = s.cfg.TimestampCachePageSize
+	storeCfg.HistogramWindowInterval = s.cfg.HistogramWindowInterval()
+	storeCfg.StorePool = s.storePool
+	storeCfg.SQLExecutor = internalExecutor
+	storeCfg.LogRangeEvents = s.cfg.EventLogEnabled
+	storeCfg.TimeSeriesDataStore = s.tsDB
+	storeCfg.EnableEpochRangeLeases = true
 
-		EnableEpochRangeLeases: true,
-	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
 	}

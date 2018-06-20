@@ -1247,7 +1247,7 @@ func runSetupSplitSnapshotRace(
 
 	// Stop node 3 so it doesn't hear about the split.
 	mtc.stopStore(3)
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(roachpb.Key("m"))

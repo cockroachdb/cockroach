@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -563,7 +564,8 @@ func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageReques
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
-	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 {
+	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 &&
+		len(req.Ranges) == 0 && req.Closed == (hlc.Timestamp{}) {
 		// Coalesced heartbeats are addressed to range 0; everything else
 		// needs an explicit range ID.
 		panic("only messages with coalesced heartbeats or heartbeat responses may be sent to range ID 0")

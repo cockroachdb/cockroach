@@ -74,7 +74,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 		// Allow leases to expire and send commands to ensure we
 		// re-acquire, then check types again.
-		mtc.advanceClock(context.TODO())
+		mtc.expireLeases(context.TODO())
 		for _, key := range splitKeys {
 			if _, err := mtc.dbs[0].Inc(context.TODO(), key, 1); err != nil {
 				t.Fatalf("%s failed to increment: %s", key, err)
@@ -117,7 +117,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	// Allow leases to expire and send commands to ensure we
 	// re-acquire, then check types again.
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
@@ -134,7 +134,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = false
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
@@ -151,7 +151,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = true
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
