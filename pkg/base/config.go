@@ -472,7 +472,7 @@ func TempStorageConfigFromEnv(
 			mon.DiskResource,
 			nil,             /* curCount */
 			nil,             /* maxHist */
-			64*1024*1024,    /* increment */
+			1024*1024,       /* increment */
 			maxSizeBytes/10, /* noteworthy */
 			st,
 		)
