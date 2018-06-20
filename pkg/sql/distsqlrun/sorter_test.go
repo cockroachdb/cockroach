@@ -268,92 +268,114 @@ func TestSorter(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tempEngine.Close()
-
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer diskMonitor.Stop(ctx)
-	flowCtx := FlowCtx{
-		EvalCtx:     evalCtx,
-		Settings:    cluster.MakeTestingClusterSettings(),
-		TempStorage: tempEngine,
-		diskMonitor: &diskMonitor,
+	// Test with several memory limits:
+	memLimits := []struct {
+		bytes    int64
+		expSpill bool
+	}{
+		// Use the default limit.
+		{bytes: 0, expSpill: false},
+		// Immediately switch to disk.
+		{bytes: 1, expSpill: true},
+		// This is the memory used after we store a couple of rows in
+		// memory. Tests the transfer of rows from memory to disk on
+		// initialization.
+		{bytes: 1150, expSpill: true},
+		// A memory limit that should not be hit; the processor will
+		// not use disk.
+		{bytes: 1 << 20, expSpill: false},
 	}
 
 	for _, c := range testCases {
-		// Test with several memory limits:
-		// 0: Use the default limit.
-		// 1: Immediately switch to disk.
-		// 1150: This is the memory used after we store a couple of rows in
-		// memory. Tests the transfer of rows from memory to disk on
-		// initialization.
-		// 2048: A memory limit that should not be hit; the processor will not
-		// use disk.
-		for _, memLimit := range []int64{0, 1, 1150, 2048} {
-			// In theory, SortAllProcessor should be able to handle all sorting
-			// strategies, as the other processors are optimizations.
-			for _, testingForceSortAll := range []bool{false, true} {
-				t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
-					in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
-					out := &RowBuffer{}
-
-					var s Processor
-					if !testingForceSortAll {
-						var err error
-						s, err = newSorter(context.Background(), &flowCtx, 0 /* processorID */, &c.spec, in, &c.post, out)
+		t.Run(c.name, func(t *testing.T) {
+			for _, memLimit := range memLimits {
+				// In theory, SortAllProcessor should be able to handle all sorting
+				// strategies, as the other processors are optimizations.
+				for _, forceSortAll := range []bool{false, true} {
+					name := fmt.Sprintf("MemLimit=%d/ForceSort=%t", memLimit.bytes, forceSortAll)
+					t.Run(name, func(t *testing.T) {
+						ctx := context.Background()
+						st := cluster.MakeTestingClusterSettings()
+						tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 						if err != nil {
 							t.Fatal(err)
 						}
-					} else {
-						var err error
-						s, err = newSortAllProcessor(context.Background(), &flowCtx, 0 /* procedssorID */, &c.spec, in, &c.post, out)
-						if err != nil {
-							t.Fatal(err)
-						}
-					}
-					// Override the default memory limit. This will result in using
-					// a memory row container which will hit this limit and fall
-					// back to using a disk row container.
-					flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-					s.Run(context.Background(), nil /* wg */)
-					if !out.ProducerClosed {
-						t.Fatalf("output RowReceiver not closed")
-					}
+						defer tempEngine.Close()
 
-					var retRows sqlbase.EncDatumRows
-					for {
-						row := out.NextNoMeta(t)
-						if row == nil {
-							break
+						evalCtx := tree.MakeTestingEvalContext(st)
+						defer evalCtx.Stop(ctx)
+						diskMonitor := mon.MakeMonitor(
+							"test-disk",
+							mon.DiskResource,
+							nil, /* curCount */
+							nil, /* maxHist */
+							-1,  /* increment: use default block size */
+							math.MaxInt64,
+							st,
+						)
+						diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+						defer diskMonitor.Stop(ctx)
+						flowCtx := FlowCtx{
+							EvalCtx:     evalCtx,
+							Settings:    cluster.MakeTestingClusterSettings(),
+							TempStorage: tempEngine,
+							diskMonitor: &diskMonitor,
 						}
-						retRows = append(retRows, row)
-					}
+						// Override the default memory limit. This will result in using
+						// a memory row container which will hit this limit and fall
+						// back to using a disk row container.
+						flowCtx.testingKnobs.MemoryLimitBytes = memLimit.bytes
 
-					expStr := c.expected.String(c.types)
-					retStr := retRows.String(c.types)
-					if expStr != retStr {
-						t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-							expStr, retStr)
-					}
-				})
+						in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
+						out := &RowBuffer{}
+
+						var s Processor
+						if !forceSortAll {
+							var err error
+							s, err = newSorter(context.Background(), &flowCtx, 0 /* processorID */, &c.spec, in, &c.post, out)
+							if err != nil {
+								t.Fatal(err)
+							}
+						} else {
+							var err error
+							s, err = newSortAllProcessor(context.Background(), &flowCtx, 0 /* procedssorID */, &c.spec, in, &c.post, out)
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						s.Run(context.Background(), nil /* wg */)
+						if !out.ProducerClosed {
+							t.Fatalf("output RowReceiver not closed")
+						}
+
+						var retRows sqlbase.EncDatumRows
+						for {
+							row := out.NextNoMeta(t)
+							if row == nil {
+								break
+							}
+							retRows = append(retRows, row)
+						}
+
+						expStr := c.expected.String(c.types)
+						retStr := retRows.String(c.types)
+						if expStr != retStr {
+							t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+								expStr, retStr)
+						}
+
+						// If the sorter is a sortAllProcessor, check whether the
+						// diskBackedRowContainer spilled to disk.
+						if sAll, ok := s.(*sortAllProcessor); ok {
+							spilled := sAll.rows.(*diskBackedRowContainer).Spilled()
+							if memLimit.expSpill != spilled {
+								t.Errorf("expected spill to disk=%t, found %t", memLimit.expSpill, spilled)
+							}
+						}
+					})
+				}
 			}
-		}
+		})
 	}
 }
 
