@@ -824,8 +824,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitQueueFailures:                        metric.NewCounter(metaSplitQueueFailures),
 		SplitQueuePending:                         metric.NewGauge(metaSplitQueuePending),
 		SplitQueueProcessingNanos:                 metric.NewCounter(metaSplitQueueProcessingNanos),
-		TimeSeriesMaintenanceQueueSuccesses:       metric.NewCounter(metaTimeSeriesMaintenanceQueueFailures),
-		TimeSeriesMaintenanceQueueFailures:        metric.NewCounter(metaTimeSeriesMaintenanceQueueSuccesses),
+		TimeSeriesMaintenanceQueueSuccesses:       metric.NewCounter(metaTimeSeriesMaintenanceQueueSuccesses),
+		TimeSeriesMaintenanceQueueFailures:        metric.NewCounter(metaTimeSeriesMaintenanceQueueFailures),
 		TimeSeriesMaintenanceQueuePending:         metric.NewGauge(metaTimeSeriesMaintenanceQueuePending),
 		TimeSeriesMaintenanceQueueProcessingNanos: metric.NewCounter(metaTimeSeriesMaintenanceQueueProcessingNanos),
 
