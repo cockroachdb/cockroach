@@ -513,14 +513,6 @@ func (mds *modelDataSource) GetTimeSeriesData() []tspb.TimeSeriesData {
 	return data
 }
 
-// datapoint quickly generates a time series datapoint.
-func datapoint(timestamp int64, val float64) tspb.TimeSeriesDatapoint {
-	return tspb.TimeSeriesDatapoint{
-		TimestampNanos: timestamp,
-		Value:          val,
-	}
-}
-
 // TestStoreTimeSeries is a simple test of the Time Series module, ensuring that
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
@@ -529,12 +521,9 @@ func TestStoreTimeSeries(t *testing.T) {
 
 		// Basic storage operation: one data point.
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			{
-				Name: "test.metric",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 100),
-				},
-			},
+			tsd("test.metric", "",
+				tsdp(440000000000000000, 100),
+			),
 		})
 		tm.assertKeyCount(1)
 		tm.assertModelCorrect()
@@ -542,26 +531,18 @@ func TestStoreTimeSeries(t *testing.T) {
 		// Store data with different sources, and with multiple data points that
 		// aggregate into the same key.
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			{
-				Name:   "test.metric.float",
-				Source: "cpu01",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1428713843000000000, 100.0),
-					datapoint(1428713843000000001, 50.2),
-					datapoint(1428713843000000002, 90.9),
-				},
-			},
+			tsd("test.metric.float", "cpu01",
+				tsdp(1428713843000000000, 100.0),
+				tsdp(1428713843000000001, 50.2),
+				tsdp(1428713843000000002, 90.9),
+			),
 		})
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			{
-				Name:   "test.metric.float",
-				Source: "cpu02",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(1428713843000000000, 900.8),
-					datapoint(1428713843000000001, 30.12),
-					datapoint(1428713843000000002, 72.324),
-				},
-			},
+			tsd("test.metric.float", "cpu02",
+				tsdp(1428713843000000000, 900.8),
+				tsdp(1428713843000000001, 30.12),
+				tsdp(1428713843000000002, 72.324),
+			),
 		})
 		tm.assertKeyCount(3)
 		tm.assertModelCorrect()
@@ -569,14 +550,11 @@ func TestStoreTimeSeries(t *testing.T) {
 		// A single storage operation that stores to multiple keys, including an
 		// existing key.
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			{
-				Name: "test.metric",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 200),
-					datapoint(450000000000000001, 1),
-					datapoint(460000000000000000, 777),
-				},
-			},
+			tsd("test.metric", "",
+				tsdp(440000000000000000, 200),
+				tsdp(450000000000000001, 1),
+				tsdp(460000000000000000, 777),
+			),
 		})
 		tm.assertKeyCount(5)
 		tm.assertModelCorrect()
@@ -593,32 +571,21 @@ func TestPollSource(t *testing.T) {
 			stopper: stop.NewStopper(),
 			datasets: [][]tspb.TimeSeriesData{
 				{
-					{
-						Name:   "test.metric.float",
-						Source: "cpu01",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100.0),
-							datapoint(1428713843000000001, 50.2),
-							datapoint(1428713843000000002, 90.9),
-						},
-					},
-					{
-						Name:   "test.metric.float",
-						Source: "cpu02",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 900.8),
-							datapoint(1428713843000000001, 30.12),
-							datapoint(1428713843000000002, 72.324),
-						},
-					},
+					tsd("test.metric.float", "cpu01",
+						tsdp(1428713843000000000, 100.0),
+						tsdp(1428713843000000001, 50.2),
+						tsdp(1428713843000000002, 90.9),
+					),
+					tsd("test.metric.float", "cpu02",
+						tsdp(1428713843000000000, 900.8),
+						tsdp(1428713843000000001, 30.12),
+						tsdp(1428713843000000002, 72.324),
+					),
 				},
 				{
-					{
-						Name: "test.metric",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100),
-						},
-					},
+					tsd("test.metric", "",
+						tsdp(1428713843000000000, 100),
+					),
 				},
 			},
 		}
@@ -643,12 +610,9 @@ func TestDisableStorage(t *testing.T) {
 
 		// Basic storage operation: one data point.
 		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			{
-				Name: "test.metric",
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					datapoint(440000000000000000, 100),
-				},
-			},
+			tsd("test.metric", "",
+				tsdp(440000000000000000, 100),
+			),
 		})
 		tm.assertKeyCount(0)
 		tm.assertModelCorrect()
@@ -659,32 +623,21 @@ func TestDisableStorage(t *testing.T) {
 			stopper: stop.NewStopper(),
 			datasets: [][]tspb.TimeSeriesData{
 				{
-					{
-						Name:   "test.metric.float",
-						Source: "cpu01",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100.0),
-							datapoint(1428713843000000001, 50.2),
-							datapoint(1428713843000000002, 90.9),
-						},
-					},
-					{
-						Name:   "test.metric.float",
-						Source: "cpu02",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 900.8),
-							datapoint(1428713843000000001, 30.12),
-							datapoint(1428713843000000002, 72.324),
-						},
-					},
+					tsd("test.metric.float", "cpu01",
+						tsdp(1428713843000000000, 100.0),
+						tsdp(1428713843000000001, 50.2),
+						tsdp(1428713843000000002, 90.9),
+					),
+					tsd("test.metric.float", "cpu02",
+						tsdp(1428713843000000000, 900.8),
+						tsdp(1428713843000000001, 30.12),
+						tsdp(1428713843000000002, 72.324),
+					),
 				},
 				{
-					{
-						Name: "test.metric",
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							datapoint(1428713843000000000, 100),
-						},
-					},
+					tsd("test.metric", "",
+						tsdp(1428713843000000000, 100),
+					),
 				},
 			},
 		}
