@@ -211,46 +211,47 @@ eq [type=bool]
  └── const: 2 [type=int]
 
 
-build-scalar vars=(jsonb)
-@1 @> '{"a":1}'
-----
-contains [type=bool]
- ├── variable: @1 [type=jsonb]
- └── const: '{"a": 1}' [type=jsonb]
+# TODO(justin): re-enable when we support JSON ops.
+# build-scalar vars=(jsonb)
+# @1 @> '{"a":1}'
+# ----
+# contains [type=bool]
+#  ├── variable: @1 [type=jsonb]
+#  └── const: '{"a": 1}' [type=jsonb]
 
-build-scalar vars=(jsonb)
-'{"a":1}' <@ @1
-----
-contains [type=bool]
- ├── variable: @1 [type=jsonb]
- └── const: '{"a": 1}' [type=jsonb]
+# build-scalar vars=(jsonb)
+# '{"a":1}' <@ @1
+# ----
+# contains [type=bool]
+#  ├── variable: @1 [type=jsonb]
+#  └── const: '{"a": 1}' [type=jsonb]
 
-build-scalar vars=(jsonb)
-@1 ? 'a'
-----
-json-exists [type=bool]
- ├── variable: @1 [type=jsonb]
- └── const: 'a' [type=string]
+# build-scalar vars=(jsonb)
+# @1 ? 'a'
+# ----
+# json-exists [type=bool]
+#  ├── variable: @1 [type=jsonb]
+#  └── const: 'a' [type=string]
 
-build-scalar vars=(jsonb)
-@1 ?| ARRAY['a', 'b', 'c']
-----
-json-some-exists [type=bool]
- ├── variable: @1 [type=jsonb]
- └── array: string[] [type=string[]]
-      ├── const: 'a' [type=string]
-      ├── const: 'b' [type=string]
-      └── const: 'c' [type=string]
+# build-scalar vars=(jsonb)
+# @1 ?| ARRAY['a', 'b', 'c']
+# ----
+# json-some-exists [type=bool]
+#  ├── variable: @1 [type=jsonb]
+#  └── array: string[] [type=string[]]
+#       ├── const: 'a' [type=string]
+#       ├── const: 'b' [type=string]
+#       └── const: 'c' [type=string]
 
-build-scalar vars=(jsonb)
-@1 ?& ARRAY['a', 'b', 'c']
-----
-json-all-exists [type=bool]
- ├── variable: @1 [type=jsonb]
- └── array: string[] [type=string[]]
-      ├── const: 'a' [type=string]
-      ├── const: 'b' [type=string]
-      └── const: 'c' [type=string]
+# build-scalar vars=(jsonb)
+# @1 ?& ARRAY['a', 'b', 'c']
+# ----
+# json-all-exists [type=bool]
+#  ├── variable: @1 [type=jsonb]
+#  └── array: string[] [type=string[]]
+#       ├── const: 'a' [type=string]
+#       ├── const: 'b' [type=string]
+#       └── const: 'c' [type=string]
 
 build-scalar
 TRUE
@@ -632,43 +633,44 @@ eq [type=bool]
       ├── const: 'bar' [type=string]
       └── const: 'baz' [type=string]
 
-build-scalar vars=(json)
-@1->>'a' = 'b'
-----
-eq [type=bool]
- ├── fetch-text [type=string]
- │    ├── variable: @1 [type=jsonb]
- │    └── const: 'a' [type=string]
- └── const: 'b' [type=string]
+# TODO(justin): re-enable when we support JSON ops.
+# build-scalar vars=(json)
+# @1->>'a' = 'b'
+# ----
+# eq [type=bool]
+#  ├── fetch-text [type=string]
+#  │    ├── variable: @1 [type=jsonb]
+#  │    └── const: 'a' [type=string]
+#  └── const: 'b' [type=string]
 
-build-scalar vars=(json)
-@1->'a' = '"b"'
-----
-eq [type=bool]
- ├── fetch-val [type=jsonb]
- │    ├── variable: @1 [type=jsonb]
- │    └── const: 'a' [type=string]
- └── const: '"b"' [type=jsonb]
+# build-scalar vars=(json)
+# @1->'a' = '"b"'
+# ----
+# eq [type=bool]
+#  ├── fetch-val [type=jsonb]
+#  │    ├── variable: @1 [type=jsonb]
+#  │    └── const: 'a' [type=string]
+#  └── const: '"b"' [type=jsonb]
 
-build-scalar vars=(json)
-@1#>ARRAY['a'] = '"b"'
-----
-eq [type=bool]
- ├── fetch-val-path [type=jsonb]
- │    ├── variable: @1 [type=jsonb]
- │    └── array: string[] [type=string[]]
- │         └── const: 'a' [type=string]
- └── const: '"b"' [type=jsonb]
+# build-scalar vars=(json)
+# @1#>ARRAY['a'] = '"b"'
+# ----
+# eq [type=bool]
+#  ├── fetch-val-path [type=jsonb]
+#  │    ├── variable: @1 [type=jsonb]
+#  │    └── array: string[] [type=string[]]
+#  │         └── const: 'a' [type=string]
+#  └── const: '"b"' [type=jsonb]
 
-build-scalar vars=(json)
-@1#>>ARRAY['a'] = 'b'
-----
-eq [type=bool]
- ├── fetch-text-path [type=string]
- │    ├── variable: @1 [type=jsonb]
- │    └── array: string[] [type=string[]]
- │         └── const: 'a' [type=string]
- └── const: 'b' [type=string]
+# build-scalar vars=(json)
+# @1#>>ARRAY['a'] = 'b'
+# ----
+# eq [type=bool]
+#  ├── fetch-text-path [type=string]
+#  │    ├── variable: @1 [type=jsonb]
+#  │    └── array: string[] [type=string[]]
+#  │         └── const: 'a' [type=string]
+#  └── const: 'b' [type=string]
 
 build-scalar vars=(json, json)
 @1 || @2
