@@ -20,13 +20,11 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // tableReader is the start of a computation flow; it performs KV operations to
@@ -184,12 +182,8 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-
-	if tr.flowCtx.txn.Type() == client.LeafTxn {
-		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
-		if txnMeta.Txn.ID != (uuid.UUID{}) {
-			trailingMeta = append(trailingMeta, ProducerMetadata{TxnMeta: &txnMeta})
-		}
+	if txnMeta := getTxnCoordMeta(tr.flowCtx.txn); txnMeta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnMeta: txnMeta})
 	}
 	tr.internalClose()
 	return trailingMeta
