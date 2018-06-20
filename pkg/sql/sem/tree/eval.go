@@ -2524,11 +2524,6 @@ type EvalContext struct {
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
-	ctx := EvalContext{
-		Txn:         &client.Txn{},
-		SessionData: &sessiondata.SessionData{},
-		Settings:    st,
-	}
 	monitor := mon.MakeMonitor(
 		"test-monitor",
 		mon.MemoryResource,
@@ -2538,8 +2533,20 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
+	return MakeTestingEvalContextWithMon(st, &monitor)
+}
+
+// MakeTestingEvalContextWithMon returns an EvalContext with the given
+// MemoryMonitor. Ownership of the memory monitor is transferred to the
+// EvalContext so do not start or close the memory monitor.
+func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
+	ctx := EvalContext{
+		Txn:         &client.Txn{},
+		SessionData: &sessiondata.SessionData{},
+		Settings:    st,
+	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	ctx.Mon = &monitor
+	ctx.Mon = monitor
 	ctx.CtxProvider = FixedCtxProvider{context.TODO()}
 	acc := monitor.MakeBoundAccount()
 	ctx.ActiveMemAcc = &acc

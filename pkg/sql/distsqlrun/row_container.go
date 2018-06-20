@@ -30,6 +30,7 @@ import (
 // sortableRowContainer is a container used to store rows and optionally sort
 // these.
 type sortableRowContainer interface {
+	Len() int
 	AddRow(context.Context, sqlbase.EncDatumRow) error
 	// Sort sorts the rows according to an ordering specified at initialization.
 	Sort(context.Context)
@@ -326,6 +327,10 @@ func (f *diskBackedRowContainer) init(
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
+}
+
+func (f *diskBackedRowContainer) Len() int {
+	return f.src.Len()
 }
 
 func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {

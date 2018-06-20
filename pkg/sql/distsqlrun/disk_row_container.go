@@ -40,6 +40,10 @@ type diskRowContainer struct {
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
 
+	// lastReadKey is used to implement NewFinalIterator. Refer to the method's
+	// comment for more information.
+	lastReadKey []byte
+
 	// rowID is used as a key suffix to prevent duplicate rows from overwriting
 	// each other.
 	rowID uint64
@@ -114,6 +118,10 @@ func makeDiskRowContainer(
 	}
 
 	return d
+}
+
+func (d *diskRowContainer) Len() int {
+	return int(d.rowID)
 }
 
 func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
@@ -211,11 +219,6 @@ func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
 }
 
-// NewFinalIterator is equivalent to NewIterator.
-func (d *diskRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
-	return d.NewIterator(ctx)
-}
-
 // Row returns the current row. The returned sqlbase.EncDatumRow is only valid
 // until the next call to Row().
 func (r diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
@@ -232,4 +235,37 @@ func (r diskRowIterator) Close() {
 	if r.SortedDiskMapIterator != nil {
 		r.SortedDiskMapIterator.Close()
 	}
+}
+
+type diskRowFinalIterator struct {
+	diskRowIterator
+}
+
+var _ rowIterator = diskRowFinalIterator{}
+
+// NewFinalIterator returns an iterator that reads rows exactly once throughout
+// the lifetime of a diskRowContainer. Rows are not actually discarded from the
+// diskRowContainer, but the lastReadKey is kept track of in order to serve as
+// the start key for future diskRowFinalIterators.
+// NOTE: Don't use NewFinalIterator if you passed in an ordering for the rows
+// and will be adding rows between iterations. New rows could sort before the
+// current row.
+func (d *diskRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
+	return diskRowFinalIterator{diskRowIterator: d.NewIterator(ctx).(diskRowIterator)}
+}
+
+func (r diskRowFinalIterator) Rewind() {
+	r.Seek(r.diskRowIterator.rowContainer.lastReadKey)
+	if r.diskRowIterator.rowContainer.lastReadKey != nil {
+		r.Next()
+	}
+}
+
+func (r diskRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
+	row, err := r.diskRowIterator.Row()
+	if err != nil {
+		return nil, err
+	}
+	r.diskRowIterator.rowContainer.lastReadKey = r.Key()
+	return row, nil
 }
