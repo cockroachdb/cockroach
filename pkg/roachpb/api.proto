@@ -735,6 +735,58 @@ message QueryTxnResponse {
   repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
+// A QueryIntentRequest is arguments to the QueryIntent() method. It visits
+// the specified key and checks whether an intent is present for the given
+// transaction.
+message QueryIntentRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The TxnMeta that the intent is expected to have. Specifically, whether an
+  // intent is a match or not is defined as whether an intent exists that could
+  // be committed by the provided transaction. If an intent is found at the
+  // specified key, the intent is only considered a match if it has the same ID,
+  // the same epoch, and a provisional commit timestamp that is equal to or less
+  // than that in the provided transaction. If the intent's timestamp is greater
+  // than that in the provided transaction, it would prevent the transaction
+  // from committing and is therefore not a match.
+  //
+  // Additionally, the intent is only considered a match if its sequence number
+  // is equal to or greater than the expected txn's sequence number. The
+  // requests doesn't require an exact sequence number match because the
+  // transaction could have performed overlapping writes, in which case only the
+  // latest sequence number will remain. We assume that if a transaction has
+  // successfully written an intent at a larger sequence number then it must
+  // have succeeeded in writing an intent at the smaller sequence number as
+  // well.
+  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+
+  enum IfMissingBehavior {
+    // Don't do anything special, just note that the intent was not found in the
+    // response.
+    DO_NOTHING = 0;
+    // Return an IntentMissingError.
+    RETURN_ERROR = 1;
+    // Prevent the intent from ever being written in the future. If set as the
+    // behavior, a response with found_intent=false implies that an intent will
+    // never be writtable at the key at the transaction's timestamp or below.
+    //
+    // Cannot be used with SNAPSHOT transactions.
+    PREVENT = 2;
+  }
+  // The behavior of the request if the expected intent is found to be not
+  // present.
+  IfMissingBehavior if_missing = 3;
+}
+
+// A QueryIntentResponse is the return value from the QueryIntent() method.
+message QueryIntentResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Whether an intent matching the expected transaction was found at the key.
+  bool found_intent = 2;
+}
+
 // A ResolveIntentRequest is arguments to the ResolveIntent()
 // method. It is sent by transaction coordinators after success
 // calling PushTxn to clean up write intents: either to remove, commit
@@ -779,17 +831,17 @@ message ResolveIntentRangeRequest {
   util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
-// A NoopResponse is the return value from a no-op operation.
-message NoopResponse {}
-
-// A NoopRequest is a no-op.
-message NoopRequest {}
-
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
+
+// A NoopResponse is the return value from a no-op operation.
+message NoopResponse {}
+
+// A NoopRequest is a no-op.
+message NoopRequest {}
 
 // A MergeRequest contains arguments to the Merge() method. It
 // specifies a key and a value which should be merged into the
@@ -1225,6 +1277,7 @@ message RequestUnion {
   ExportRequest export = 32;
   ImportRequest import = 34;
   QueryTxnRequest query_txn = 33;
+  QueryIntentRequest query_intent = 42;
   AdminScatterRequest admin_scatter = 36;
   AddSSTableRequest add_sstable = 37;
   RecomputeStatsRequest recompute_stats = 39;
@@ -1278,6 +1331,7 @@ message ResponseUnion {
   ExportResponse export = 32;
   ImportResponse import = 34;
   QueryTxnResponse query_txn = 33;
+  QueryIntentResponse query_intent = 42;
   AdminScatterResponse admin_scatter = 36;
   AddSSTableResponse add_sstable = 37;
   RecomputeStatsResponse recompute_stats = 39;
