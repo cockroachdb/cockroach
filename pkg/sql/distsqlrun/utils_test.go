@@ -303,3 +303,51 @@ func makeRandIntRows(rng *rand.Rand, numRows int, numCols int) sqlbase.EncDatumR
 	}
 	return rows
 }
+
+// runProcessorTest instantiates a processor with the provided spec, runs it
+// with the given inputs, and asserts that the outputted rows are as expected.
+func runProcessorTest(
+	t *testing.T,
+	core ProcessorCoreUnion,
+	post PostProcessSpec,
+	inputTypes []sqlbase.ColumnType,
+	inputRows sqlbase.EncDatumRows,
+	outputTypes []sqlbase.ColumnType,
+	expected sqlbase.EncDatumRows,
+) {
+	in := NewRowBuffer(inputTypes, inputRows, RowBufferArgs{})
+	out := &RowBuffer{}
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		Settings: st,
+		EvalCtx:  evalCtx,
+	}
+
+	d, err := newProcessor(
+		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
+		[]RowSource{in}, []RowReceiver{out})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d.Run(context.Background(), nil /* wg */)
+	if !out.ProducerClosed {
+		t.Fatalf("output RowReceiver not closed")
+	}
+	var res sqlbase.EncDatumRows
+	for {
+		row := out.NextNoMeta(t).Copy()
+		if row == nil {
+			break
+		}
+		res = append(res, row)
+	}
+
+	if result := res.String(outputTypes); result != expected.String(outputTypes) {
+		t.Errorf(
+			"invalid results: %s, expected %s'", result, expected.String(outputTypes))
+	}
+}

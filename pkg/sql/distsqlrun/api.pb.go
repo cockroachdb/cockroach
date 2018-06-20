@@ -58,11 +58,13 @@
 		SamplerSpec
 		SampleAggregatorSpec
 		InterleavedReaderJoinerSpec
+		ProjectSetSpec
 		InputStats
 		TableReaderStats
 		HashJoinerStats
 		AggregatorStats
 		DistinctStats
+		MergeJoinerStats
 */
 package distsqlrun
 

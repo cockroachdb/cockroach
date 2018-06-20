@@ -758,7 +758,7 @@ NULL  NULL             2
 
 # Check that the expression is still valid if the dependent name
 # is not otherwise rendered (needed column elision).
-query I colnames rowsort
+query I colnames,rowsort
 SELECT generate_series(1,x) FROM vals
 ----
 generate_series
@@ -819,7 +819,7 @@ CREATE TABLE j(x INT PRIMARY KEY, y JSON);
      (1, '{"a":123,"b":456}'),
      (2, '{"c":111,"d":222}')
 
-query IT
+query IT rowsort
 SELECT x, y->>json_object_keys(y) FROM j
 ----
 1  123
