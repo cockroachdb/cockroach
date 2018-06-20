@@ -35,7 +35,8 @@ project
  ├── columns: r:7(bool) s:8(bool) t:9(bool) u:10(bool) v:11(int) w:12(int) x:13(int) y:14(int) z:15(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
       ├── a.k = (a.i + 1) [type=bool, outer=(1,2)]
       ├── a.i != (2 - a.k) [type=bool, outer=(1,2)]
@@ -68,7 +69,8 @@ project
  ├── columns: r:7(bool) s:8(bool) t:9(bool) u:10(bool) v:11(float) w:12(int) x:13(int) y:14(int) z:15(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
  └── projections [outer=(1-3)]
       ├── (a.i + a.k) = (length('foo') + 1) [type=bool, outer=(1,2)]
       ├── (a.i * 2) != length('bar') [type=bool, outer=(2)]
@@ -101,6 +103,7 @@ SELECT COALESCE(NULL) FROM a
 ----
 project
  ├── columns: coalesce:7(unknown)
+ ├── fd: ()-->(7)
  ├── scan a
  └── projections
       └── null [type=unknown]
@@ -110,6 +113,7 @@ SELECT COALESCE(NULL, 'foo', s) FROM a
 ----
 project
  ├── columns: coalesce:7(string!null)
+ ├── fd: ()-->(7)
  ├── scan a
  └── projections
       └── const: 'foo' [type=string]
@@ -145,6 +149,7 @@ FROM a
 ----
 project
  ├── columns: i:7(int) arr:8(int[]) json:9(jsonb) bit:10(int) s:11(string)
+ ├── fd: ()-->(9,10)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
  └── projections [outer=(2,4,6)]
@@ -169,6 +174,7 @@ FROM a
 ----
 project
  ├── columns: i:7(float) arr:8(decimal[]) s:9(jsonb) s:10(string) i:11(int) s:12(string) array:13(oid[]) array:14(int[])
+ ├── fd: ()-->(13,14)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
  └── projections [outer=(2,4,6)]
@@ -195,8 +201,11 @@ SELECT
 project
  ├── columns: int:1(int) timestamptz:2(timestamptz) char:3(string) oidvector:4(oid[]) int2vector:5(int[])
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       ├── null [type=int]
@@ -213,6 +222,7 @@ SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
  ├── columns: r:7(int) s:8(int) t:9(int)
+ ├── fd: ()-->(7-9)
  ├── scan a
  └── projections
       ├── null [type=int]
@@ -239,6 +249,7 @@ FROM a
 ----
 project
  ├── columns: ra:7(int) rb:8(int) sa:9(decimal) sb:10(decimal) ta:11(float) tb:12(float) ua:13(int) ub:14(int) va:15(decimal[]) vb:16(string[]) wa:17(decimal[]) wb:18(float[])
+ ├── fd: ()-->(7-14)
  ├── scan a
  │    └── columns: i:2(int) arr:6(int[])
  └── projections [outer=(2,6)]
@@ -267,6 +278,7 @@ FROM a
 ----
 project
  ├── columns: ra:7(jsonb) rb:8(jsonb) sa:9(jsonb) sb:10(jsonb) ta:11(string) tb:12(string) ua:11(string) ub:12(string) va:13(jsonb) vb:14(unknown) wa:15(string) wb:14(unknown)
+ ├── fd: ()-->(7-15)
  ├── scan a
  └── projections
       ├── null [type=jsonb]
@@ -287,6 +299,7 @@ SELECT null IN (i) AS r, null NOT IN (s) AS s FROM a
 ----
 project
  ├── columns: r:7(bool) s:8(bool)
+ ├── fd: ()-->(7,8)
  ├── scan a
  └── projections
       ├── null [type=bool]
@@ -300,6 +313,7 @@ SELECT i IN (null, null) AS r, k NOT IN (1 * null, null::int, 1 < null) AS s FRO
 ----
 project
  ├── columns: r:7(bool) s:8(bool)
+ ├── fd: ()-->(7,8)
  ├── scan a
  └── projections
       ├── null [type=bool]
@@ -336,15 +350,18 @@ SELECT * FROM a WHERE EXISTS(SELECT i+1, i*k FROM a)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
  └── filters [type=bool]
       └── exists [type=bool]
            └── scan a
                 ├── columns: a.k:7(int!null) a.i:8(int)
-                └── keys: (7)
+                ├── key: (7)
+                └── fd: (7)-->(8)
 
 # --------------------------------------------------
 # EliminateExistsGroupBy
@@ -356,15 +373,19 @@ SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a WHERE False)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
  └── filters [type=bool]
       └── exists [type=bool]
            └── group-by
                 ├── columns: max:13(string)
                 ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(13)
                 ├── scan a
                 │    ├── columns: a.s:10(string)
                 │    └── constraint: /7: contradiction
@@ -380,10 +401,12 @@ SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a GROUP BY i)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
  └── filters [type=bool]
       └── exists [type=bool]
            └── scan a

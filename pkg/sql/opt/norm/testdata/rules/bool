@@ -41,7 +41,8 @@ SELECT * FROM a WHERE True AND True
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # --------------------------------------------------
 # EliminateEmptyOr
@@ -52,8 +53,11 @@ SELECT False OR False AS r
 project
  ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
  ├── values
  │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
  │    └── tuple [type=tuple{}]
  └── projections
       └── false [type=bool]
@@ -81,6 +85,7 @@ SELECT k=1 AND False AND f=3.5 AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── false [type=bool]
@@ -90,6 +95,7 @@ SELECT False AND s='foo' AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── false [type=bool]
@@ -102,7 +108,7 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── key: (1)
  └── projections [outer=(1)]
       └── a.k = 1 [type=bool, outer=(1)]
 
@@ -113,7 +119,8 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
       └── (a.k = 1) AND (a.i = 2) [type=bool, outer=(1,2)]
 
@@ -123,7 +130,8 @@ SELECT * FROM a WHERE true AND true
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # Flatten nested And operands.
 opt
@@ -133,7 +141,8 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) f:3(float) s:4(string)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3,4)
  └── projections [outer=(1,3,4)]
       └── (((a.k > 1) AND (a.k < 5)) AND (a.f = 3.5)) AND (a.s = 'foo') [type=bool, outer=(1,3,4)]
 
@@ -147,6 +156,7 @@ SELECT k=1 OR (i=2 OR True) AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── true [type=bool]
@@ -156,6 +166,7 @@ SELECT k=1 OR True OR f=3.5 AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── true [type=bool]
@@ -168,7 +179,7 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── key: (1)
  └── projections [outer=(1)]
       └── a.k = 1 [type=bool, outer=(1)]
 
@@ -177,10 +188,12 @@ SELECT * FROM a WHERE k=1 OR i=2 OR false
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2)]
       └── (a.k = 1) OR (a.i = 2) [type=bool, outer=(1,2)]
 
@@ -191,7 +204,8 @@ SELECT * FROM a WHERE false OR false
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # Flatten nested Or operands.
 opt
@@ -199,10 +213,12 @@ SELECT * FROM a WHERE (k=1 OR i=2) OR (f=3.5 OR s='foo')
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-4)]
       └── (((a.k = 1) OR (a.i = 2)) OR (a.f = 3.5)) OR (a.s = 'foo') [type=bool, outer=(1-4)]
 
@@ -216,7 +232,7 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── key: (1)
  └── projections [outer=(1)]
       └── (a.k = 1) AND (a.k = 2) [type=bool, outer=(1)]
 
@@ -228,7 +244,8 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
  └── projections [outer=(1-4)]
       └── ((((a.k = 1) OR (a.i = 2)) OR (a.f = 3.5)) AND (a.s = 'foo')) AND (a.s != 'bar') [type=bool, outer=(1-4)]
 
@@ -241,19 +258,24 @@ SELECT * FROM a WHERE Null
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 opt
 SELECT * FROM a INNER JOIN b ON NULL
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) z:7(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  ├── scan b
  │    ├── columns: x:6(int!null) z:7(int)
- │    └── keys: (6)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  └── false [type=bool]
 
 opt
@@ -262,7 +284,8 @@ SELECT * FROM a WHERE i=1 AND Null
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # --------------------------------------------------
 # FoldNullAndOr
@@ -272,6 +295,7 @@ SELECT null and null AS r FROM a
 ----
 project
  ├── columns: r:6(bool)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── null [type=bool]
@@ -281,6 +305,7 @@ SELECT null or null AS r FROM a
 ----
 project
  ├── columns: r:6(bool)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── null [type=bool]
@@ -290,6 +315,7 @@ SELECT null or (null and null and null) or null AS r FROM a
 ----
 project
  ├── columns: r:6(bool)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── null [type=bool]
@@ -302,7 +328,7 @@ project
  ├── columns: r:6(bool) s:7(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── key: (1)
  └── projections [outer=(1)]
       ├── NULL OR (a.k = 1) [type=bool, outer=(1)]
       └── NULL AND (a.k = 1) [type=bool, outer=(1)]
@@ -317,10 +343,12 @@ SELECT * FROM a WHERE NOT(i=1) AND NOT(i<>1) AND NOT(i>1) AND NOT(i>=1) AND NOT(
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── a.i != 1 [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
       ├── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
@@ -337,10 +365,12 @@ WHERE NOT(i IN (1,2)) AND NOT(i NOT IN (3,4)) AND NOT(i IS NULL) AND NOT(i IS NO
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── a.i NOT IN (1, 2) [type=bool, outer=(2)]
       ├── a.i IN (3, 4) [type=bool, outer=(2), constraints=(/2: [/3 - /3] [/4 - /4]; tight)]
@@ -355,10 +385,12 @@ WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
       ├── a.s NOT LIKE 'foo' [type=bool, outer=(4)]
       ├── a.s LIKE 'foo' [type=bool, outer=(4)]
@@ -371,10 +403,12 @@ SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
       ├── a.s NOT SIMILAR TO 'foo' [type=bool, outer=(4)]
       └── a.s SIMILAR TO 'foo' [type=bool, outer=(4)]
@@ -385,10 +419,12 @@ SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
       ├── a.s !~ 'foo' [type=bool, outer=(4)]
       ├── a.s ~ 'foo' [type=bool, outer=(4)]
@@ -405,10 +441,12 @@ SELECT * FROM a WHERE
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(5)]
       ├── NOT ('[1, 2]' @> a.j) [type=bool, outer=(5)]
       ├── NOT ('[3, 4]' @> a.j) [type=bool, outer=(5)]
@@ -424,10 +462,12 @@ SELECT * FROM a WHERE NOT(NOT('[1, 2]' @> j))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(5)]
       └── '[1, 2]' @> a.j [type=bool, outer=(5)]
 
@@ -439,10 +479,12 @@ SELECT * FROM a WHERE NOT (k >= i AND i < f)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
       └── (a.k < a.i) OR (a.i >= a.f) [type=bool, outer=(1-3)]
 
@@ -451,10 +493,12 @@ SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
       └── ((((a.k < a.i) OR (a.i >= a.f)) OR (a.i <= 5)) OR (a.i >= 10)) OR (a.f <= 1.0) [type=bool, outer=(1-3)]
 
@@ -467,10 +511,12 @@ SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
       ├── a.k < a.i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── a.i >= a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -481,10 +527,12 @@ SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 5 OR i < 10 OR f > 1))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3), constraints=(contradiction; tight)]
       ├── a.k < a.i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── a.i >= a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -500,10 +548,12 @@ SELECT * FROM a WHERE NOT ((k >= i OR i < f) AND (i > 5 OR f > 1))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
       └── ((a.k < a.i) AND (a.i >= a.f)) OR ((a.i <= 5) AND (a.f <= 1.0)) [type=bool, outer=(1-3)]
 
@@ -512,10 +562,12 @@ SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
       ├── (a.k < a.i) OR (a.i >= a.f) [type=bool, outer=(1-3)]
       └── (a.i <= 5) OR (a.f <= 1.0) [type=bool, outer=(2,3)]
@@ -600,11 +652,13 @@ SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) 
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── constraint: /1: [/6 - ]
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /1])]
       ├── a.i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
       └── (a.i > 0) OR (a.s = 'foo') [type=bool, outer=(2,4)]
@@ -615,7 +669,8 @@ SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: [/6 - ]
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # Works with nulls too.
 opt
@@ -623,6 +678,7 @@ SELECT null or (null and k=1) AS r FROM a
 ----
 project
  ├── columns: r:6(bool)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── null [type=unknown]
@@ -634,7 +690,7 @@ project
  ├── columns: r:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── keys: (1)
+ │    └── key: (1)
  └── projections [outer=(1)]
       └── NULL AND ((a.k = 2) OR (a.k = 1)) [type=bool, outer=(1)]
 

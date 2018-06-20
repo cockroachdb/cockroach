@@ -257,19 +257,5 @@ func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
 // columns, any one of them may be returned. If there are no strong keys in the
 // group, then ShortestKey returns ok=false.
 func (c *CustomFuncs) ShortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
-	var shortest opt.ColSet
-	var shortestLen int
-	props := c.LookupLogical(group).Relational
-	for _, wk := range props.WeakKeys {
-		// A strong key requires all columns to be non-nullable.
-		if wk.SubsetOf(props.NotNullCols) {
-			l := wk.Len()
-			if !ok || l < shortestLen {
-				shortestLen = l
-				shortest = wk
-				ok = true
-			}
-		}
-	}
-	return shortest, ok
+	return c.LookupLogical(group).Relational.FuncDeps.Key()
 }

@@ -30,16 +30,19 @@ project
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int)
       ├── stats: [rows=143]
       ├── cost: 2120.01
+      ├── fd: (1)-->(4)
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    ├── stats: [rows=1.43, distinct(4)=1]
       │    ├── cost: 1070.00
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    │    ├── stats: [rows=1000, distinct(4)=700]
       │    │    ├── cost: 1060.00
-      │    │    └── keys: (1)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4)
       │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
       │         └── a.d = 1.0 [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
       ├── scan b
@@ -82,10 +85,12 @@ lookup-join abc
  ├── key columns: [1]
  ├── stats: [rows=1.43, distinct(3)=1]
  ├── cost: 7.27
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
  └── scan abc@c_idx
       ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=1.43, distinct(3)=1]
       ├── cost: 1.49
-      └── keys: (1)
+      ├── key: (1)
+      └── fd: (1)-->(3)

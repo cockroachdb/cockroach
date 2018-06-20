@@ -29,11 +29,13 @@ SELECT * FROM xyzs WHERE (SELECT v FROM kuv) = 'foo'
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=333]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters [type=bool]
       └── eq [type=bool]
            ├── subquery [type=string]
@@ -41,11 +43,14 @@ select
            │         ├── columns: v:7(string)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(7)
            │         └── project
            │              ├── columns: v:7(string)
            │              ├── stats: [rows=1000]
            │              └── scan kuv
            │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
            │                   ├── stats: [rows=1000]
-           │                   └── keys: (5)
+           │                   ├── key: (5)
+           │                   └── fd: (5)-->(6,7)
            └── const: 'foo' [type=string]

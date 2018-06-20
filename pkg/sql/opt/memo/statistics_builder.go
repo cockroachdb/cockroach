@@ -211,8 +211,10 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 	}
 	colStat := sb.makeColStat(colSet)
 
-	// If some of the columns are a key, the distinct count equals the row count.
-	if sb.props.WeakKeys.ContainsSubsetOf(colSet) {
+	// If some of the columns are a lax key, the distinct count equals the row
+	// count. Note that this doesn't take into account the possibility of
+	// duplicates where all columns are NULL.
+	if sb.props.FuncDeps.ColsAreLaxKey(colSet) {
 		colStat.DistinctCount = sb.s.RowCount
 		return colStat
 	}

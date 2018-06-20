@@ -39,7 +39,8 @@ SELECT * FROM a LIMIT 1
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── limit: 1
- └── keys: (1)
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 # Combine limit with needed columns.
 opt
@@ -47,7 +48,9 @@ SELECT s FROM a LIMIT 1
 ----
 scan a@s_idx
  ├── columns: s:4(string)
- └── limit: 1
+ ├── limit: 1
+ ├── key: ()
+ └── fd: ()-->(4)
 
 # Combine limit with constraint.
 opt
@@ -56,7 +59,9 @@ SELECT s FROM a WHERE s='foo' LIMIT 1
 scan a@s_idx
  ├── columns: s:4(string!null)
  ├── constraint: /4/1: [/'foo' - /'foo']
- └── limit: 1
+ ├── limit: 1
+ ├── key: ()
+ └── fd: ()-->(4)
 
 # Limit of a limit.
 opt
@@ -65,6 +70,8 @@ SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 limit
  ├── columns: s:4(string)
  ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,4)
  ├── ordering: +4,+2
  ├── sort
  │    ├── columns: i:2(int) s:4(string)
@@ -82,6 +89,8 @@ SELECT s FROM a ORDER BY f LIMIT 1
 limit
  ├── columns: s:4(string)
  ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3,4)
  ├── ordering: +3
  ├── sort
  │    ├── columns: f:3(float) s:4(string)
@@ -102,7 +111,8 @@ limit
       └── scan a@s_idx
            ├── columns: a.k:6(int!null)
            ├── limit: 1
-           └── keys: (6)
+           ├── key: ()
+           └── fd: ()-->(6)
 
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
@@ -150,12 +160,14 @@ lookup-join kuv
  ├── columns: k:1(int!null) u:2(int) v:3(int)
  ├── key columns: [1]
  ├── cardinality: [0 - 5]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
  ├── ordering: +2
  └── scan kuv@secondary
       ├── columns: k:1(int!null) u:2(int)
       ├── limit: 5
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       └── ordering: +2
 
 # Verify we don't push the limit if the ordering depends on a column not in the
@@ -166,18 +178,22 @@ SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 limit
  ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  ├── cardinality: [0 - 5]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
  ├── ordering: +2,+3
  ├── sort
  │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
  │    ├── ordering: +2,+3
  │    └── lookup-join kuv
  │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  │         ├── key columns: [1]
- │         ├── keys: (1)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,3)
  │         └── scan kuv@secondary
  │              ├── columns: k:1(int!null) u:2(int!null)
  │              ├── constraint: /2/1: [/2 - /9]
- │              └── keys: (1)
+ │              ├── key: (1)
+ │              └── fd: (1)-->(2)
  └── const: 5 [type=int]

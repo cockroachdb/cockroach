@@ -38,7 +38,7 @@ group-by
  ├── grouping columns: column1:1(int) column2:2(int)
  ├── cardinality: [1 - 4]
  ├── stats: [rows=3, distinct(1,2)=3]
- ├── keys: weak(1,2)
+ ├── key: (1,2)
  └── values
       ├── columns: column1:1(int) column2:2(int)
       ├── cardinality: [4 - 4]

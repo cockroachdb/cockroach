@@ -30,14 +30,18 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=100000]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (7)
+ │    ├── key: (7)
+ │    └── fd: (7)-->(5,6)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -50,19 +54,24 @@ SELECT (SELECT (VALUES (x), (y))) FROM xysd
 project
  ├── columns: column1:7(int)
  ├── stats: [rows=1000]
+ ├── fd: ()-->(5), (5)-->(7) [removed: (5)]
  ├── inner-join-apply
  │    ├── columns: x:1(int!null) y:2(int) column1:5(int)
  │    ├── stats: [rows=1000]
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), ()-->(5)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
  │    ├── max1-row
  │    │    ├── columns: column1:5(int)
  │    │    ├── outer: (1,2)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5)
  │    │    └── values
  │    │         ├── columns: column1:5(int)
  │    │         ├── outer: (1,2)
@@ -83,14 +92,18 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=100000]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (7)
+ │    ├── key: (7)
+ │    └── fd: (7)-->(5,6)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -103,24 +116,30 @@ SELECT * FROM xysd WHERE (SELECT u FROM uv WHERE u=x)=10
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
       ├── stats: [rows=1000, distinct(5)=1]
-      ├── keys: (1) weak(3,4)
+      ├── key: (1)
+      ├── fd: (1)-->(2-5), (3,4)~~>(1,2), ()-->(5)
       ├── left-join-apply
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int)
       │    ├── stats: [rows=1000, distinct(5)=1]
-      │    ├── keys: (1) weak(3,4)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2), ()~~>(5)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    ├── stats: [rows=1000]
-      │    │    └── keys: (1) weak(3,4)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    ├── max1-row
       │    │    ├── columns: u:5(int!null)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── stats: [rows=1, distinct(5)=1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
       │    │    └── select
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
@@ -145,14 +164,18 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=100000]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (7)
+ │    ├── key: (7)
+ │    └── fd: (7)-->(5,6)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -165,27 +188,34 @@ SELECT * FROM xysd RIGHT JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NUL
 right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
  ├── stats: [rows=1000000]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    ├── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── select
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         ├── stats: [rows=1000, distinct(8)=1]
- │         ├── keys: (1) weak(3,4)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2), ()~~>(8)
  │         ├── left-join-apply
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         │    ├── stats: [rows=1000, distinct(8)=1]
- │         │    ├── keys: (1) weak(3,4)
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2), ()~~>(8)
  │         │    ├── scan xysd
  │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │         │    │    ├── stats: [rows=1000]
- │         │    │    └── keys: (1) weak(3,4)
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │         │    ├── max1-row
  │         │    │    ├── columns: uv.u:8(int!null)
  │         │    │    ├── outer: (1)
  │         │    │    ├── cardinality: [0 - 1]
  │         │    │    ├── stats: [rows=1, distinct(8)=1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(8)
  │         │    │    └── offset
  │         │    │         ├── columns: uv.u:8(int!null)
  │         │    │         ├── outer: (1)
@@ -219,14 +249,18 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=100000]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (7)
+ │    ├── key: (7)
+ │    └── fd: (7)-->(5,6)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -239,17 +273,21 @@ SELECT * FROM xysd FULL JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
  ├── stats: [rows=100000]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── full-join-apply
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
       ├── stats: [rows=100000]
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), ()~~>(8)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
-      │    └── keys: (1) weak(3,4)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── left-join
       │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
       │    ├── outer: (1)
       │    ├── stats: [rows=1000]
+      │    ├── fd: ()~~>(8)
       │    ├── scan uv
       │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
       │    │    └── stats: [rows=1000]
@@ -258,6 +296,8 @@ project
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(8)
       │    │    └── offset
       │    │         ├── columns: uv.u:8(int!null)
       │    │         ├── outer: (1)
@@ -287,11 +327,13 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 semi-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=100000]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=1000]
@@ -307,11 +349,13 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=110111]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
@@ -337,11 +381,13 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE x=u)
 anti-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=100000]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=1000]
@@ -357,11 +403,13 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=110111]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
@@ -387,17 +435,22 @@ SELECT * FROM xysd, uv
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=1000000]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=1000000]
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
-      │    └── keys: (1) weak(3,4)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── scan uv
       │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=1000]
-      │    └── keys: (7)
+      │    ├── key: (7)
+      │    └── fd: (7)-->(5,6)
       └── true [type=bool]
 
 # Self-join.
@@ -407,14 +460,18 @@ SELECT * FROM xysd, xysd AS xysd
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── stats: [rows=1000000]
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (5) weak(7,8)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
  └── true [type=bool]
 
 # Propagate outer columns.
@@ -424,11 +481,13 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM (SELECT x) INNER JOIN (SELECT y) O
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=333]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters [type=bool, outer=(1-3)]
       └── exists [type=bool, outer=(1-3)]
            └── inner-join
@@ -436,14 +495,19 @@ select
                 ├── outer: (1-3)
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=0.1000]
+                ├── key: ()
+                ├── fd: ()-->(5,6)
                 ├── project
                 │    ├── columns: x:5(int)
                 │    ├── outer: (1)
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(5)
                 │    ├── values
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
+                │    │    ├── key: ()
                 │    │    └── tuple [type=tuple{}]
                 │    └── projections [outer=(1)]
                 │         └── variable: xysd.x [type=int, outer=(1)]
@@ -452,9 +516,12 @@ select
                 │    ├── outer: (2)
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(6)
                 │    ├── values
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
+                │    │    ├── key: ()
                 │    │    └── tuple [type=tuple{}]
                 │    └── projections [outer=(2)]
                 │         └── variable: xysd.y [type=int, outer=(2)]
@@ -472,14 +539,20 @@ semi-join
  ├── columns: cnt:5(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1000]
+ ├── key: ()
+ ├── fd: ()-->(5)
  ├── select
  │    ├── columns: cnt:5(int!null)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1, distinct(5)=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5)
  │    ├── group-by
  │    │    ├── columns: cnt:5(int)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1, distinct(5)=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5)
  │    │    ├── scan xysd@secondary
  │    │    │    └── stats: [rows=1000]
  │    │    └── aggregations
@@ -501,12 +574,14 @@ semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=50]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── limit
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
@@ -534,10 +609,14 @@ anti-join
  ├── columns: column1:1(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=100]
+ ├── key: ()
+ ├── fd: ()-->(1)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── scan uv
@@ -556,12 +635,14 @@ anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=50]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── limit
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
@@ -607,7 +688,8 @@ inner-join
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
- │    │         └── keys: (4)
+ │    │         ├── key: (4)
+ │    │         └── fd: (4)-->(2,3)
  │    └── const: 2 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
@@ -640,7 +722,8 @@ left-join
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
- │    │         └── keys: (4)
+ │    │         ├── key: (4)
+ │    │         └── fd: (4)-->(2,3)
  │    └── const: 2 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
@@ -663,7 +746,8 @@ right-join
  │    │    └── scan uv
  │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=1000]
- │    │         └── keys: (3)
+ │    │         ├── key: (3)
+ │    │         └── fd: (3)-->(1,2)
  │    └── const: 2 [type=int]
  ├── values
  │    ├── columns: column1:4(int)
@@ -739,10 +823,12 @@ SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
  ├── stats: [rows=200]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── values
  │    ├── columns: column1:5(int)
  │    ├── cardinality: [2 - 2]
@@ -762,26 +848,261 @@ full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.1000]
- ├── keys: weak(1) weak(3,4) weak(5) weak(7,8)
+ ├── key: ()
+ ├── fd: ()-->(1-8)
  ├── limit
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1]
- │    ├── keys: (1) weak(3,4)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
  │    ├── scan xysd
  │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    │    ├── stats: [rows=1000]
- │    │    └── keys: (1) weak(3,4)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── const: 1 [type=int]
  ├── limit
  │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1]
- │    ├── keys: (5) weak(7,8)
+ │    ├── key: ()
+ │    ├── fd: ()-->(5-8)
  │    ├── scan xysd
  │    │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    │    ├── stats: [rows=1000]
- │    │    └── keys: (5) weak(7,8)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    └── const: 1 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
+
+# Nullable FD determinant on right side of left-join becomes lax.
+build
+SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
+----
+left-join
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
+ ├── stats: [rows=70000]
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── group-by
+ │    ├── columns: u:5(int) sum:8(decimal)
+ │    ├── grouping columns: u:5(int)
+ │    ├── stats: [rows=700, distinct(5)=700]
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(8)
+ │    ├── project
+ │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── stats: [rows=1000, distinct(5)=700]
+ │    │    └── scan uv
+ │    │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
+ │    │         ├── stats: [rows=1000, distinct(5)=700]
+ │    │         ├── key: (7)
+ │    │         └── fd: (7)-->(5,6)
+ │    └── aggregations [outer=(6)]
+ │         └── sum [type=decimal, outer=(6)]
+ │              └── variable: uv.v [type=int, outer=(6)]
+ └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+           ├── variable: uv.u [type=int, outer=(5)]
+           └── null [type=unknown]
+
+# Not-null FD determinant on right side of left-join stays strict.
+build
+SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) ON True
+----
+left-join
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
+ ├── stats: [rows=30777]
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── group-by
+ │    ├── columns: u:5(int!null) sum:8(decimal)
+ │    ├── grouping columns: u:5(int!null)
+ │    ├── stats: [rows=308, distinct(5)=308]
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(8)
+ │    ├── project
+ │    │    ├── columns: u:5(int!null) v:6(int!null)
+ │    │    ├── stats: [rows=333, distinct(5)=308]
+ │    │    └── select
+ │    │         ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null)
+ │    │         ├── stats: [rows=333, distinct(5)=308]
+ │    │         ├── key: (7)
+ │    │         ├── fd: (7)-->(5,6)
+ │    │         ├── scan uv
+ │    │         │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
+ │    │         │    ├── stats: [rows=1000, distinct(5)=700]
+ │    │         │    ├── key: (7)
+ │    │         │    └── fd: (7)-->(5,6)
+ │    │         └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ │    │              └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ │    │                   ├── variable: uv.u [type=int, outer=(5)]
+ │    │                   └── null [type=unknown]
+ │    └── aggregations [outer=(6)]
+ │         └── sum [type=decimal, outer=(6)]
+ │              └── variable: uv.v [type=int, outer=(6)]
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# Nullable FD determinant on left side of right-join becomes lax.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) RIGHT JOIN xysd ON u IS NOT NULL
+----
+right-join
+ ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── stats: [rows=70000]
+ ├── key: (1,5)
+ ├── fd: (1)~~>(4), (5)-->(6-8), (7,8)~~>(5,6), (1,5)-->(4)
+ ├── group-by
+ │    ├── columns: u:1(int) sum:4(decimal)
+ │    ├── grouping columns: u:1(int)
+ │    ├── stats: [rows=700, distinct(1)=700]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── project
+ │    │    ├── columns: u:1(int) v:2(int!null)
+ │    │    ├── stats: [rows=1000, distinct(1)=700]
+ │    │    └── scan uv
+ │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
+ │    │         ├── stats: [rows=1000, distinct(1)=700]
+ │    │         ├── key: (3)
+ │    │         └── fd: (3)-->(1,2)
+ │    └── aggregations [outer=(2)]
+ │         └── sum [type=decimal, outer=(2)]
+ │              └── variable: uv.v [type=int, outer=(2)]
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+      └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+           ├── variable: uv.u [type=int, outer=(1)]
+           └── null [type=unknown]
+
+# Not-null FD determinant on left side of right-join stays strict.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) RIGHT JOIN xysd ON True
+----
+right-join
+ ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── stats: [rows=30777]
+ ├── key: (1,5)
+ ├── fd: (1)-->(4), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── group-by
+ │    ├── columns: u:1(int!null) sum:4(decimal)
+ │    ├── grouping columns: u:1(int!null)
+ │    ├── stats: [rows=308, distinct(1)=308]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── project
+ │    │    ├── columns: u:1(int!null) v:2(int!null)
+ │    │    ├── stats: [rows=333, distinct(1)=308]
+ │    │    └── select
+ │    │         ├── columns: u:1(int!null) v:2(int!null) rowid:3(int!null)
+ │    │         ├── stats: [rows=333, distinct(1)=308]
+ │    │         ├── key: (3)
+ │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── scan uv
+ │    │         │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
+ │    │         │    ├── stats: [rows=1000, distinct(1)=700]
+ │    │         │    ├── key: (3)
+ │    │         │    └── fd: (3)-->(1,2)
+ │    │         └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ │    │              └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ │    │                   ├── variable: uv.u [type=int, outer=(1)]
+ │    │                   └── null [type=unknown]
+ │    └── aggregations [outer=(2)]
+ │         └── sum [type=decimal, outer=(2)]
+ │              └── variable: uv.v [type=int, outer=(2)]
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# Nullable FD determinant on right side of full-join becomes lax.
+build
+SELECT * FROM xysd FULL JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
+----
+full-join
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) sum:8(decimal)
+ ├── stats: [rows=70000]
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── group-by
+ │    ├── columns: u:5(int) sum:8(decimal)
+ │    ├── grouping columns: u:5(int)
+ │    ├── stats: [rows=700, distinct(5)=700]
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(8)
+ │    ├── project
+ │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── stats: [rows=1000, distinct(5)=700]
+ │    │    └── scan uv
+ │    │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
+ │    │         ├── stats: [rows=1000, distinct(5)=700]
+ │    │         ├── key: (7)
+ │    │         └── fd: (7)-->(5,6)
+ │    └── aggregations [outer=(6)]
+ │         └── sum [type=decimal, outer=(6)]
+ │              └── variable: uv.v [type=int, outer=(6)]
+ └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+           ├── variable: uv.u [type=int, outer=(5)]
+           └── null [type=unknown]
+
+# Nullable FD determinant on left side of full-join becomes lax.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) FULL JOIN xysd ON u IS NOT NULL
+----
+full-join
+ ├── columns: u:1(int) sum:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
+ ├── stats: [rows=70000]
+ ├── key: (1,5)
+ ├── fd: (1)~~>(4), (5)-->(6-8), (7,8)~~>(5,6), (1,5)-->(4)
+ ├── group-by
+ │    ├── columns: u:1(int) sum:4(decimal)
+ │    ├── grouping columns: u:1(int)
+ │    ├── stats: [rows=700, distinct(1)=700]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── project
+ │    │    ├── columns: u:1(int) v:2(int!null)
+ │    │    ├── stats: [rows=1000, distinct(1)=700]
+ │    │    └── scan uv
+ │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
+ │    │         ├── stats: [rows=1000, distinct(1)=700]
+ │    │         ├── key: (3)
+ │    │         └── fd: (3)-->(1,2)
+ │    └── aggregations [outer=(2)]
+ │         └── sum [type=decimal, outer=(2)]
+ │              └── variable: uv.v [type=int, outer=(2)]
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+      └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+           ├── variable: uv.u [type=int, outer=(1)]
+           └── null [type=unknown]

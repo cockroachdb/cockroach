@@ -28,7 +28,8 @@ SELECT * FROM (SELECT * FROM a LIMIT 99) LIMIT 100
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── limit: 99
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 opt
 SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
@@ -36,7 +37,8 @@ SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── limit: 100
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
 
 # Don't eliminate the outer limit if it's less than the inner.
 opt
@@ -45,11 +47,13 @@ SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 99
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 99]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── limit: 100
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── const: 99 [type=int]
 
 # High limits (> max uint32), can't eliminate in this case.
@@ -58,13 +62,16 @@ SELECT * FROM (SELECT * FROM a LIMIT 5000000000) LIMIT 5100000000
 ----
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
  ├── limit
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
  │    └── const: 5000000000 [type=int]
  └── const: 5100000000 [type=int]
 
@@ -75,14 +82,17 @@ SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── keys: (1)
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── limit
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── cardinality: [0 - 0]
- │    ├── keys: (1)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
  │    └── const: 0 [type=int]
  └── const: -1 [type=int]
 
@@ -95,11 +105,13 @@ SELECT k, f*2.0 AS r FROM a LIMIT 5
 project
  ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 5]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── scan a
  │    ├── columns: k:1(int!null) f:3(float)
  │    ├── limit: 5
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
  └── projections [outer=(1,3)]
       └── a.f * 2.0 [type=float, outer=(3)]
 
@@ -109,12 +121,14 @@ SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
 project
  ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 5]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── ordering: +1
  ├── scan a
  │    ├── columns: k:1(int!null) f:3(float)
  │    ├── limit: 5
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
  │    └── ordering: +1
  └── projections [outer=(1,3)]
       └── a.f * 2.0 [type=float, outer=(3)]
@@ -127,18 +141,22 @@ SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5
 limit
  ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 5]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── ordering: +6
  ├── sort
  │    ├── columns: k:1(int!null) r:6(float)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  │    ├── ordering: +6
  │    └── project
  │         ├── columns: r:6(float) k:1(int!null)
- │         ├── keys: (1)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  │         ├── scan a
  │         │    ├── columns: k:1(int!null) f:3(float)
- │         │    └── keys: (1)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(3)
  │         └── projections [outer=(1,3)]
  │              └── a.f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
@@ -151,20 +169,21 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 5]
+ ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
  │    ├── cardinality: [0 - 5]
- │    ├── keys: weak(2,3)
+ │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── sort
  │    │    ├── columns: i:2(int) f:3(float)
- │    │    ├── keys: weak(2,3)
+ │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
  │    │    └── group-by
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── keys: weak(2,3)
+ │    │         ├── key: (2,3)
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -178,10 +197,12 @@ SELECT * FROM a LIMIT 0
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── keys: (1)
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── const: 0 [type=int]
 
 # Don't push negative limit into Scan.
@@ -191,10 +212,12 @@ SELECT * FROM a LIMIT -1
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── keys: (1)
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -205,13 +228,16 @@ SELECT k, f*2.0 AS r FROM a OFFSET 5
 ----
 project
  ├── columns: k:1(int!null) r:6(float)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) f:3(float)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
  │    └── const: 5 [type=int]
  └── projections [outer=(1,3)]
       └── a.f * 2.0 [type=float, outer=(3)]
@@ -221,15 +247,18 @@ SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
 ----
 project
  ├── columns: k:1(int!null) r:6(float)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── ordering: +1
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) f:3(float)
- │    │    ├── keys: (1)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(3)
  │    │    └── ordering: +1
  │    └── const: 5 [type=int]
  └── projections [outer=(1,3)]
@@ -242,18 +271,22 @@ SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 ----
 offset
  ├── columns: k:1(int!null) r:6(float)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── ordering: +6
  ├── sort
  │    ├── columns: k:1(int!null) r:6(float)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  │    ├── ordering: +6
  │    └── project
  │         ├── columns: r:6(float) k:1(int!null)
- │         ├── keys: (1)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  │         ├── scan a
  │         │    ├── columns: k:1(int!null) f:3(float)
- │         │    └── keys: (1)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(3)
  │         └── projections [outer=(1,3)]
  │              └── a.f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
@@ -264,19 +297,20 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 ----
 project
  ├── columns: f:3(float) r:6(float)
+ ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
- │    ├── keys: weak(2,3)
+ │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── sort
  │    │    ├── columns: i:2(int) f:3(float)
- │    │    ├── keys: weak(2,3)
+ │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
  │    │    └── group-by
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── keys: weak(2,3)
+ │    │         ├── key: (2,3)
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -292,17 +326,21 @@ SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 project
  ├── columns: k:1(int!null) r:6(float)
  ├── cardinality: [0 - 10]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(6) [removed: (3)]
  ├── limit
  │    ├── columns: k:1(int!null) f:3(float)
  │    ├── cardinality: [0 - 10]
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
  │    ├── offset
  │    │    ├── columns: k:1(int!null) f:3(float)
- │    │    ├── keys: (1)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(3)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) f:3(float)
- │    │    │    └── keys: (1)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(3)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(1,3)]
@@ -314,24 +352,25 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 10]
+ ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
  │    ├── cardinality: [0 - 10]
- │    ├── keys: weak(2,3)
+ │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── offset
  │    │    ├── columns: i:2(int) f:3(float)
- │    │    ├── keys: weak(2,3)
+ │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
  │    │    ├── sort
  │    │    │    ├── columns: i:2(int) f:3(float)
- │    │    │    ├── keys: weak(2,3)
+ │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
  │    │    │    └── group-by
  │    │    │         ├── columns: i:2(int) f:3(float)
  │    │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │    │         ├── keys: weak(2,3)
+ │    │    │         ├── key: (2,3)
  │    │    │         └── scan a
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 5 [type=int]
