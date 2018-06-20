@@ -900,7 +900,10 @@ func upgradeDescsWithFn(
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
 							table.UpVersion = true
-							if err := table.Validate(ctx, txn, nil); err != nil {
+							// Use ValidateTable() instead of Validate()
+							// because of #26422. We still do not know why
+							// a table can reference a dropped database.
+							if err := table.ValidateTable(nil); err != nil {
 								return err
 							}
 
