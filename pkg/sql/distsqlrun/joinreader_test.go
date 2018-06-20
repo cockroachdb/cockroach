@@ -81,37 +81,6 @@ func TestJoinReader(t *testing.T) {
 		expected        string
 	}{
 		{
-			description: "Test selecting rows using the primary index",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 2},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(10), bFn(10)},
-				{aFn(15), bFn(15)},
-			},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
-		},
-		{
-			description: "Test duplicate rows in input stream on index join",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 2},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(5), bFn(5)},
-				{aFn(2), bFn(2)},
-			},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 2 2] [0 5 5] [0 5 5] [0 2 2]]",
-		},
-		{
 			description: "Test selecting columns from second table",
 			post: PostProcessSpec{
 				Projection:    true,
@@ -143,26 +112,6 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:  []uint32{0, 1},
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
-		},
-		{
-			description: "Test a filter in the post process spec and using a secondary index",
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
-				Projection:    true,
-				OutputColumns: []uint32{3},
-			},
-			input: [][]tree.Datum{
-				{aFn(1), bFn(1)},
-				{aFn(25), bFn(25)},
-				{aFn(5), bFn(5)},
-				{aFn(21), bFn(21)},
-				{aFn(34), bFn(34)},
-				{aFn(13), bFn(13)},
-				{aFn(51), bFn(51)},
-				{aFn(50), bFn(50)},
-			},
-			outputTypes: []sqlbase.ColumnType{strType},
-			expected:    "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
 		},
 		{
 			description: "Test lookup join with onExpr",
