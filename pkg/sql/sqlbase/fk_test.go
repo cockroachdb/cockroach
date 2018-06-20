@@ -273,7 +273,6 @@ INSERT INTO example1(foo) VALUES(1)
 			b.Fatal(err)
 		}
 	})
-
 	b.Run("10KRows_IdenticalFK", func(b *testing.B) {
 		var run bytes.Buffer
 
@@ -301,26 +300,6 @@ INSERT INTO example1(foo) VALUES(1)
 	})
 
 	const numSRRows = 10000
-	b.Run("SelfReferential_Delete", func(b *testing.B) {
-		run3 := `INSERT INTO self_referential(id) VALUES (1)`
-		if _, err := db.Exec(run3); err != nil {
-			b.Fatal(err)
-		}
-
-		for i := 2; i <= numSRRows; i++ {
-			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, %d)`, i, i-1)
-			if _, err := db.Exec(insert); err != nil {
-				b.Fatal(err)
-			}
-		}
-
-		b.ResetTimer()
-
-		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
-			b.Fatal(err)
-		}
-	})
-
 	b.Run("SR_No_FK_Delete", func(b *testing.B) {
 		var insert bytes.Buffer
 		insert.WriteString(`INSERT INTO self_referential(id) VALUES `)
@@ -341,4 +320,24 @@ INSERT INTO example1(foo) VALUES(1)
 			b.Fatal(err)
 		}
 	})
+	b.Run("SelfReferential_Delete", func(b *testing.B) {
+		run3 := `INSERT INTO self_referential(id) VALUES (1)`
+		if _, err := db.Exec(run3); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential(id, pid) VALUES (%d, %d)`, i, i-1)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
+			b.Fatal(err)
+		}
+	})
+
 }
