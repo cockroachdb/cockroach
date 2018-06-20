@@ -660,7 +660,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50] [/5/100 - /5/100]
- ├── stats: [rows=4.29, distinct(3)=3]
+ ├── stats: [rows=0.0061, distinct(2)=0.0061, distinct(3)=0.0061]
  ├── key: (1)
  └── fd: (1)-->(2,3)
 
@@ -671,7 +671,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, NULL))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50]
- ├── stats: [rows=2.86, distinct(3)=2]
+ ├── stats: [rows=0.0041, distinct(2)=0.0041, distinct(3)=0.0041]
  ├── key: (1)
  └── fd: (1)-->(2,3)
 

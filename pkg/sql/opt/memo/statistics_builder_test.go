@@ -101,6 +101,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	c12 := constraint.ParseConstraint(&evalCtx, "/1/2/3: [/1/2 - /1/3] [/1/4 - /1]")
 	c123 := constraint.ParseConstraint(&evalCtx, "/1/2/3: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]")
 	c32 := constraint.ParseConstraint(&evalCtx, "/3/-2: [/5/3 - /5/2]")
+	c321 := constraint.ParseConstraint(&evalCtx, "/-3/2/1: [/5/3/1 - /5/3/4] [/3/5/1 - /3/5/4]")
+	c312 := constraint.ParseConstraint(&evalCtx, "/3/1/-2: [/5/3/8 - /5/3/6] [/9/5/4 - /9/5/1]")
 
 	// /4/5: [/'apple'/'cherry' - /'apple'/'mango']
 	appleCherry := constraint.MakeCompositeKey(tree.NewDString("apple"), tree.NewDString("cherry"))
@@ -152,6 +154,20 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		cs32,
 		"[rows=80000, distinct(2)=2, distinct(3)=1]",
 		2.0/250000,
+	)
+
+	cs321 := constraint.SingleConstraint(&c321)
+	statsFunc123(
+		cs321,
+		"[rows=160000, distinct(2)=2, distinct(3)=2]",
+		4.0/250000,
+	)
+
+	cs312 := constraint.SingleConstraint(&c312)
+	statsFunc123(
+		cs312,
+		"[rows=2240, distinct(1)=2, distinct(2)=7, distinct(3)=2]",
+		28.0/125000000,
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
