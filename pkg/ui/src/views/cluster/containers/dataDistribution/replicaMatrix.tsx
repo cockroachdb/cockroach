@@ -21,12 +21,13 @@ const SIDE_ARROW = "▶";
 interface ReplicaMatrixState {
   collapsedRows: TreePath[];
   collapsedCols: TreePath[];
+  selectedMetric: string;
 }
 
 interface ReplicaMatrixProps {
   cols: TreeNode<NodeDescriptor$Properties>;
   rows: TreeNode<SchemaObject>;
-  getValue: (rowPath: TreePath, colPath: TreePath) => number;
+  getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number;
 }
 
 // Amount to indent for a row each level of depth in the tree.
@@ -35,13 +36,19 @@ const ROW_TREE_INDENT_PX = 18;
 // applied in CSS.
 const ROW_LEFT_MARGIN_PX = 5;
 
+export const METRIC_REPLICAS = "REPLICAS";
+export const METRIC_LEASEHOLDERS = "LEASEHOLDERS";
+export const METRIC_QPS = "QPS";
+
 class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   constructor(props: ReplicaMatrixProps) {
     super(props);
+    // TODO(vilterp): put all this state in the URL
     this.state = {
       collapsedRows: [["system"], ["defaultdb"], ["postgres"]],
       collapsedCols: [],
+      selectedMetric: METRIC_REPLICAS,
     };
   }
 
@@ -94,11 +101,26 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     return `${arrow} ${label}`;
   }
 
+  handleChangeMetric = (evt: React.FormEvent<HTMLSelectElement>) => {
+    this.setState({
+      selectedMetric: evt.target.value,
+    });
+  }
+
+  renderMetricSelector() {
+    return (
+      <select value={this.state.selectedMetric} onChange={this.handleChangeMetric}>
+        <option value={METRIC_REPLICAS}># Replicas</option>
+        <option value={METRIC_LEASEHOLDERS}># Leaseholders</option>
+        <option value={METRIC_QPS}>QPS</option>
+      </select>
+    );
+  }
+
   render() {
     const {
       cols,
       rows,
-      getValue,
     } = this.props;
     const {
       collapsedRows,
@@ -109,13 +131,15 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
 
+    const getValue = this.props.getValue(this.state.selectedMetric);
+
     return (
       <table className="matrix">
         <thead>
           {headerRows.map((row, idx) => (
             <tr key={idx}>
               {idx === 0
-                ? <th className="matrix__metric-label"># Replicas</th>
+                ? <th className="matrix__metric-label">{this.renderMetricSelector()}</th>
                 : <th />}
               {row.map((col) => (
                 <th
@@ -195,4 +219,5 @@ export default ReplicaMatrix;
 export interface SchemaObject {
   dbName?: string;
   tableName?: string;
+  tableID?: number;
 }

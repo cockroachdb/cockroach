@@ -98,6 +98,8 @@ export type QueriesResponseMessage = protos.cockroach.server.serverpb.QueriesRes
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
+export type LeaseholdersAndQPSResponseMessage = protos.cockroach.server.serverpb.LeaseholdersAndQPSResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -343,4 +345,8 @@ export function getQueries(timeout?: moment.Duration): Promise<QueriesResponseMe
 // getDataDistribution returns information about how replicas are distributed across nodes.
 export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
   return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
+}
+
+export function getLeaseholdersAndQPS(timeout?: moment.Duration): Promise<LeaseholdersAndQPSResponseMessage> {
+  return timeoutFetch(serverpb.LeaseholdersAndQPSResponse, `${STATUS_PREFIX}/leaseholders_and_qps`, null, timeout);
 }
