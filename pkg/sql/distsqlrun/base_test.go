@@ -132,3 +132,121 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkPreDecodeRowChannel(b *testing.B) {
+	var channel RowChannel
+
+	ctx := context.Background()
+	var se StreamEncoder
+	var sd StreamDecoder
+	colTypes := makeIntCols(1)
+	se.init(colTypes)
+	inRow := makeIntRows(1, 1)[0]
+	for i := 0; i < outboxBufRows; i++ {
+		if err := se.AddRow(inRow); err != nil {
+			b.Fatal(err)
+		}
+	}
+	firstMsg := se.FormMessage(ctx).Copy()
+
+	for i := 0; i < outboxBufRows; i++ {
+		if err := se.AddRow(inRow); err != nil {
+			b.Fatal(err)
+		}
+	}
+	restMsg := se.FormMessage(ctx)
+
+	numMsgs := 1 << 16
+
+	b.ResetTimer()
+	b.SetBytes(8 * int64(numMsgs) * outboxBufRows)
+	for i := 0; i < b.N; i++ {
+		msg := firstMsg
+		sentHeader := false
+		channel.InitWithNumSenders(oneIntCol, 1)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			for {
+				if r, _ := channel.Next(); r == nil {
+					break
+				}
+			}
+			wg.Done()
+		}()
+		for k := 0; k < numMsgs; k++ {
+			if err := sd.AddMessage(msg); err != nil {
+				b.Fatal(err)
+			}
+			for {
+				row, meta, err := sd.GetRow(nil)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if row == nil && meta == nil {
+					break
+				}
+				channel.Push(row, meta)
+			}
+			if !sentHeader {
+				sentHeader = true
+				msg = restMsg
+			}
+		}
+		channel.ProducerDone()
+		wg.Wait()
+	}
+}
+
+func BenchmarkBatchRowChannel(b *testing.B) {
+	var channel BatchRowChannel
+
+	ctx := context.Background()
+	var se StreamEncoder
+	colTypes := makeIntCols(1)
+	se.init(colTypes)
+	inRow := makeIntRows(1, 1)[0]
+	for i := 0; i < outboxBufRows; i++ {
+		if err := se.AddRow(inRow); err != nil {
+			b.Fatal(err)
+		}
+	}
+	firstMsg := se.FormMessage(ctx).Copy()
+
+	for i := 0; i < outboxBufRows; i++ {
+		if err := se.AddRow(inRow); err != nil {
+			b.Fatal(err)
+		}
+	}
+	restMsg := se.FormMessage(ctx)
+
+	numMsgs := 1 << 16
+
+	b.ResetTimer()
+	b.SetBytes(8 * outboxBufRows * int64(numMsgs))
+	for i := 0; i < b.N; i++ {
+		msg := firstMsg
+		sentHeader := false
+		channel.InitWithNumSenders(oneIntCol, 1)
+		channel.decoders[1] = &StreamDecoder{}
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			for {
+				if r, _ := channel.Next(); r == nil {
+					break
+				}
+			}
+			wg.Done()
+		}()
+		for k := 0; k < numMsgs; k++ {
+			channel.PushProducerMessage(StreamID(1), msg)
+			if !sentHeader {
+				sentHeader = true
+				msg = restMsg
+			}
+		}
+		channel.ProducerDone()
+		wg.Wait()
+	}
+}

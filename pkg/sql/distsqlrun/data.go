@@ -67,3 +67,16 @@ func ConvertToMappedSpecOrdering(
 	}
 	return specOrdering
 }
+func (msg *ProducerMessage) Copy() *ProducerMessage {
+	new := &ProducerMessage{}
+	if msg.Header != nil {
+		new.Header = &ProducerHeader{}
+		*new.Header = *msg.Header
+	}
+	new.Typing = msg.Typing
+	new.Data.Metadata = msg.Data.Metadata
+	new.Data.NumEmptyRows = msg.Data.NumEmptyRows
+	new.Data.RawBytes = make([]byte, len(msg.Data.RawBytes))
+	copy(new.Data.RawBytes, msg.Data.RawBytes)
+	return new
+}

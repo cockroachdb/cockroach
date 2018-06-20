@@ -183,7 +183,7 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceive
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
-	ctx context.Context, spec StreamEndpointSpec, receiver RowReceiver,
+	ctx context.Context, spec StreamEndpointSpec, receiver BatchRowReceiver,
 ) error {
 	if spec.TargetAddr != "" {
 		return errors.Errorf("inbound stream has target address set: %s", spec.TargetAddr)
@@ -204,6 +204,7 @@ func (f *Flow) setupInboundStream(
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
+		receiver.(*BatchRowChannel).decoders[sid] = &StreamDecoder{}
 
 	case StreamEndpointSpec_LOCAL:
 		if _, found := f.localStreams[sid]; found {
@@ -350,7 +351,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 			var sync RowSource
 			switch is.Type {
 			case InputSyncSpec_UNORDERED:
-				mrc := &RowChannel{}
+				mrc := &BatchRowChannel{}
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
 					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
@@ -362,7 +363,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 				// Ordered synchronizer: create a RowChannel for each input.
 				streams := make([]RowSource, len(is.Streams))
 				for i, s := range is.Streams {
-					rowChan := &RowChannel{}
+					rowChan := &BatchRowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return err
