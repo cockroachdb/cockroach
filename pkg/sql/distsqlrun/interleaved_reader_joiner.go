@@ -401,7 +401,9 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 
 	irj.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, irj.out.output)
-	sendTxnCoordMetaMaybe(irj.flowCtx.txn, irj.out.output)
+	if txnMeta := getTxnCoordMeta(irj.flowCtx.txn); txnMeta != nil {
+		irj.out.output.Push(nil /* row */, &ProducerMetadata{TxnMeta: txnMeta})
+	}
 	irj.out.Close()
 }
 
