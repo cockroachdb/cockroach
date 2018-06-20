@@ -101,7 +101,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	// Now check that the intent on key2 has been cleared. We'll do a
 	// READ_UNCOMMITTED Get for that.
 	testutils.SucceedsSoon(t, func() error {
-		reply, err := client.SendWrappedWith(ctx, origDB.GetSender(), roachpb.Header{
+		reply, err := client.SendWrappedWith(ctx, origDB.NonTransactionalSender(), roachpb.Header{
 			ReadConsistency: roachpb.READ_UNCOMMITTED,
 		}, roachpb.NewGet(key2))
 		if err != nil {

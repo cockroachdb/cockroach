@@ -798,16 +798,14 @@ func TestReadConsistencyTypes(t *testing.T) {
 		t.Run(rc.String(), func(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
-			factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-				return client.TxnSenderFunc(
-					func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-						if ba.ReadConsistency != rc {
-							return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
-						}
-						return ba.CreateReply(), nil
-					},
-				)
-			})
+			factory := client.NonTransactionalFactoryFunc(
+				func(_ context.Context, ba roachpb.BatchRequest,
+				) (*roachpb.BatchResponse, *roachpb.Error) {
+					if ba.ReadConsistency != rc {
+						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+					}
+					return ba.CreateReply(), nil
+				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)

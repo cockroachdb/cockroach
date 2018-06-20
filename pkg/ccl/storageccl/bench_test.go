@@ -204,7 +204,7 @@ func BenchmarkImport(b *testing.B) {
 					Files:         files,
 					Rekeys:        rekeys,
 				}
-				res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+				res, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 				if pErr != nil {
 					b.Fatalf("%+v", pErr.GoError())
 				}
