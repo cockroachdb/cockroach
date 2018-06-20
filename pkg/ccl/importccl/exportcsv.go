@@ -72,7 +72,7 @@ func exportPlanHook(
 	}
 
 	if exportStmt.FileFormat != "CSV" {
-		return nil, nil, nil, errors.Errorf("unsupported import format: %q", exportStmt.FileFormat)
+		return nil, nil, nil, errors.Errorf("unsupported export format: %q", exportStmt.FileFormat)
 	}
 
 	optsFn, err := p.TypeAsStringOpts(exportStmt.Options, exportOptionExpectValues)
