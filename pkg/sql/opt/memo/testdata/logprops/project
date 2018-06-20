@@ -29,11 +29,13 @@ SELECT y, x+1 AS a, 1 AS b, x FROM xysd
 project
  ├── columns: y:2(int) a:5(int) b:6(int!null) x:1(int!null)
  ├── stats: [rows=1000]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: ()-->(6), (1)-->(2,5)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── projections [outer=(1,2)]
       ├── plus [type=int, outer=(1)]
       │    ├── variable: xysd.x [type=int, outer=(1)]
@@ -49,7 +51,8 @@ project
  └── scan xysd
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       ├── stats: [rows=1000]
-      └── keys: (1) weak(3,4)
+      ├── key: (1)
+      └── fd: (1)-->(2-4), (3,4)~~>(1,2)
 
 # Propagate outer columns.
 build
@@ -58,11 +61,13 @@ SELECT * FROM xysd WHERE (SELECT (SELECT y) FROM kuv WHERE k=x) > 5
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=333]
- ├── keys: (1) weak(3,4)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters [type=bool, outer=(1,2)]
       └── gt [type=bool, outer=(1,2)]
            ├── subquery [type=int, outer=(1,2)]
@@ -71,19 +76,24 @@ select
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(9)
            │         └── project
            │              ├── columns: y:9(int)
            │              ├── outer: (1,2)
            │              ├── stats: [rows=111]
+           │              ├── fd: ()-->(9)
            │              ├── select
            │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    ├── outer: (1)
            │              │    ├── stats: [rows=111]
-           │              │    ├── keys: (5)
+           │              │    ├── key: (5)
+           │              │    ├── fd: (5)-->(6,7)
            │              │    ├── scan kuv
            │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    │    ├── stats: [rows=1000]
-           │              │    │    └── keys: (5)
+           │              │    │    ├── key: (5)
+           │              │    │    └── fd: (5)-->(6,7)
            │              │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            │              │              ├── variable: kuv.k [type=int, outer=(5)]
@@ -95,14 +105,19 @@ select
            │                             ├── outer: (2)
            │                             ├── cardinality: [1 - 1]
            │                             ├── stats: [rows=1]
+           │                             ├── key: ()
+           │                             ├── fd: ()-->(8)
            │                             └── project
            │                                  ├── columns: y:8(int)
            │                                  ├── outer: (2)
            │                                  ├── cardinality: [1 - 1]
            │                                  ├── stats: [rows=1]
+           │                                  ├── key: ()
+           │                                  ├── fd: ()-->(8)
            │                                  ├── values
            │                                  │    ├── cardinality: [1 - 1]
            │                                  │    ├── stats: [rows=1]
+           │                                  │    ├── key: ()
            │                                  │    └── tuple [type=tuple{}]
            │                                  └── projections [outer=(2)]
            │                                       └── variable: xysd.y [type=int, outer=(2)]
@@ -116,16 +131,19 @@ project
  ├── columns: x:1(int!null) y:2(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  └── limit
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
-      ├── keys: (1) weak(3,4)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
-      │    └── keys: (1) weak(3,4)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── const: 10 [type=int]
 
 # Constant null and not-null columns.
@@ -135,13 +153,120 @@ SELECT 1 AS a, 'foo' AS b, NULL AS c, 1::decimal + NULL AS d, NULL::STRING AS e 
 project
  ├── columns: a:5(int!null) b:6(string!null) c:7(unknown) d:7(unknown) e:8(string)
  ├── stats: [rows=1000]
+ ├── fd: ()-->(5-8)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── projections
       ├── const: 1 [type=int]
       ├── const: 'foo' [type=string]
       ├── null [type=unknown]
       └── cast: STRING [type=string]
            └── null [type=unknown]
+
+# Project constant over input with no needed columns and ensure that there is
+# no key on the output (because it will have duplicates).
+opt
+SELECT 1 FROM (SELECT x FROM xysd)
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── stats: [rows=1000]
+ ├── fd: ()-->(5)
+ ├── scan xysd@secondary
+ │    └── stats: [rows=1000]
+ └── projections
+      └── const: 1 [type=int]
+
+# Project correlated subquery.
+build
+SELECT k, (SELECT y FROM xysd WHERE x=k) FROM kuv
+----
+project
+ ├── columns: k:1(int!null) y:8(int)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections [outer=(1)]
+      └── subquery [type=int, outer=(1)]
+           └── max1-row
+                ├── columns: xysd.y:5(int)
+                ├── outer: (1)
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── project
+                     ├── columns: xysd.y:5(int)
+                     ├── outer: (1)
+                     ├── stats: [rows=111]
+                     └── select
+                          ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
+                          ├── outer: (1)
+                          ├── stats: [rows=111]
+                          ├── key: (4)
+                          ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
+                          ├── scan xysd
+                          │    ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
+                          │    ├── stats: [rows=1000]
+                          │    ├── key: (4)
+                          │    └── fd: (4)-->(5-7), (6,7)~~>(4,5)
+                          └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+                               └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+                                    ├── variable: xysd.x [type=int, outer=(4)]
+                                    └── variable: kuv.k [type=int, outer=(1)]
+
+# Project nested correlated subquery.
+build
+SELECT k, EXISTS(SELECT EXISTS(SELECT y FROM xysd WHERE x=k) FROM xysd) FROM kuv
+----
+project
+ ├── columns: k:1(int!null) exists:13(bool)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections [outer=(1)]
+      └── exists [type=bool, outer=(1)]
+           └── project
+                ├── columns: exists:12(bool)
+                ├── outer: (1)
+                ├── stats: [rows=1000]
+                ├── fd: ()-->(12)
+                ├── scan xysd
+                │    ├── columns: xysd.x:4(int!null) xysd.y:5(int) xysd.s:6(string) xysd.d:7(decimal!null)
+                │    ├── stats: [rows=1000]
+                │    ├── key: (4)
+                │    └── fd: (4)-->(5-7), (6,7)~~>(4,5)
+                └── projections [outer=(1)]
+                     └── exists [type=bool, outer=(1)]
+                          └── project
+                               ├── columns: xysd.y:9(int)
+                               ├── outer: (1)
+                               ├── stats: [rows=111]
+                               └── select
+                                    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    ├── outer: (1)
+                                    ├── stats: [rows=111]
+                                    ├── key: (8)
+                                    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
+                                    ├── scan xysd
+                                    │    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
+                                    │    ├── stats: [rows=1000]
+                                    │    ├── key: (8)
+                                    │    └── fd: (8)-->(9-11), (10,11)~~>(8,9)
+                                    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+                                         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+                                              ├── variable: xysd.x [type=int, outer=(8)]
+                                              └── variable: kuv.k [type=int, outer=(1)]

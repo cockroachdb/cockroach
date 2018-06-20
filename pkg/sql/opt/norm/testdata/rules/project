@@ -28,7 +28,8 @@ SELECT x, y FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Different order, aliased names.
 opt
@@ -36,7 +37,8 @@ SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
  ├── columns: aliasy:2(int) x:1(int!null)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Reordered, duplicate, aliased columns.
 opt
@@ -44,7 +46,8 @@ SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
  ├── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Added column (projection should not be eliminated).
 opt
@@ -52,10 +55,12 @@ SELECT *, 1 r FROM a
 ----
 project
  ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) r:5(int!null)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: ()-->(5), (1)-->(2-4)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
  └── projections [outer=(1-4)]
       └── const: 1 [type=int]
 
@@ -70,12 +75,15 @@ project
  ├── columns: r:7(int)
  ├── inner-join
  │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) y:2(int)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
  │    ├── scan b
  │    │    ├── columns: b.x:5(int!null)
- │    │    └── keys: (5)
+ │    │    └── key: (5)
  │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  └── projections [outer=(2)]

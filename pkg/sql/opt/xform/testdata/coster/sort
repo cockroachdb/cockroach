@@ -48,4 +48,4 @@ sort
            ├── constraint: /1/-2: contradiction
            ├── stats: [rows=0]
            ├── cost: 0.00
-           └── keys: (1,2)
+           └── key: (1,2)

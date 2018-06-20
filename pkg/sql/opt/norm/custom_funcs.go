@@ -353,18 +353,15 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 //
 // ----------------------------------------------------------------------
 
-// ColsAreKey returns true if the given group by's grouping columns form a
-// strong key for the output rows of the given group. A strong key means that
-// the set of given column values are unique and not null.
-func (c *CustomFuncs) ColsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
+// GroupingColsAreKey returns true if the given group by's grouping columns form
+// a strict key for the output rows of the given group. A strict key means that
+// any two rows will have unique key column values. Nulls are treated as equal
+// to one another (i.e. no duplicate nulls allowed). Having a strict key means
+// that the set of key column values uniquely determine the values of all other
+// columns in the relation.
+func (c *CustomFuncs) GroupingColsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 	colSet := c.f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols
-	props := c.LookupLogical(group).Relational
-	for _, weakKey := range props.WeakKeys {
-		if weakKey.SubsetOf(colSet) && weakKey.SubsetOf(props.NotNullCols) {
-			return true
-		}
-	}
-	return false
+	return c.LookupLogical(group).Relational.FuncDeps.ColsAreStrictKey(colSet)
 }
 
 // IsUnorderedGroupBy returns true if the given input ordering for the group by

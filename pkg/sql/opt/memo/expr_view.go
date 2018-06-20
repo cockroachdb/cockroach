@@ -365,9 +365,20 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		tp.Childf("cost: %.2f", ev.bestExpr().cost)
 	}
 
-	// Format weak keys.
-	if !f.HasFlags(opt.ExprFmtHideKeys) {
-		ev.formatWeakKeys(tp)
+	// Format functional dependencies.
+	if !f.HasFlags(opt.ExprFmtHideFuncDeps) {
+		// Show the key separately from the rest of the FDs. Do this by copying
+		// the FD to the stack (fast shallow copy), and then calling ClearKey.
+		fd := logProps.Relational.FuncDeps
+		key, ok := fd.Key()
+		if ok {
+			tp.Childf("key: %s", key)
+		}
+
+		fd.ClearKey()
+		if !fd.Empty() {
+			tp.Childf("fd: %s", fd)
+		}
 	}
 
 	if !physProps.Ordering.Empty() {
@@ -519,23 +530,6 @@ func (ev ExprView) formatPresentation(
 		logProps.FormatCol(f, &buf, col.Label, col.ID)
 	}
 	tp.Child(buf.String())
-}
-
-func (ev ExprView) formatWeakKeys(tp treeprinter.Node) {
-	var buf bytes.Buffer
-	rel := ev.Logical().Relational
-	for i, key := range rel.WeakKeys {
-		if i != 0 {
-			buf.WriteRune(' ')
-		}
-		if !key.SubsetOf(rel.NotNullCols) {
-			buf.WriteString("weak")
-		}
-		buf.WriteString(key.String())
-	}
-	if buf.Len() != 0 {
-		tp.Childf("keys: %s", buf.String())
-	}
 }
 
 // HasOnlyConstChildren returns true if all children of ev are constant values
