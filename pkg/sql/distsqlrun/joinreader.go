@@ -323,6 +323,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				if len(spans) == 0 {
 					// No fetching needed since we have collected no spans and
 					// the input has signaled that no more records are coming.
+					jr.pushTrailingMeta(jr.ctx)
 					jr.out.Close()
 					return nil
 				}
