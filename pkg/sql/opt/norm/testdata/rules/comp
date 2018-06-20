@@ -226,6 +226,12 @@ select
 # FoldNullComparisonLeft, FoldNullComparisonRight
 # --------------------------------------------------
 
+# TODO(justin): re-add to the test below when we support JSON ops.
+# null::jsonb @> '"foo"' OR '"foo"' <@ null::jsonb OR
+# null::jsonb ? 'foo' OR '{}' ? null::string OR
+# null::jsonb ?| ARRAY['foo'] OR '{}' ?| null::string[] OR
+# null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
+
 # Use null::type to circumvent type checker constant folding.
 opt
 SELECT *
@@ -246,11 +252,7 @@ WHERE
     null::string ~ 'foo' OR 'foo' ~ null::string OR
     null::string !~ 'foo' OR 'foo' !~ null::string OR
     null::string ~* 'foo' OR 'foo' ~* null::string OR
-    null::string !~* 'foo' OR 'foo' !~* null::string OR
-    null::jsonb @> '"foo"' OR '"foo"' <@ null::jsonb OR
-    null::jsonb ? 'foo' OR '{}' ? null::string OR
-    null::jsonb ?| ARRAY['foo'] OR '{}' ?| null::string[] OR
-    null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
+    null::string !~* 'foo' OR 'foo' !~* null::string
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)

@@ -161,7 +161,7 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *props.Colum
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet)
 
-	case opt.ExplainOp, opt.ShowTraceForSessionOp:
+	case opt.ExplainOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
 		return sb.colStatMetadata(colSet)
 	}
 
