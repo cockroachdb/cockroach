@@ -26,12 +26,12 @@ type ChaosTimer interface {
 
 // Periodic is a chaos timing using fixed durations.
 type Periodic struct {
-	Down, Up time.Duration
+	Period, DownTime time.Duration
 }
 
 // Timing implements ChaosTimer.
 func (p Periodic) Timing() (time.Duration, time.Duration) {
-	return p.Down, p.Up
+	return p.Period, p.DownTime
 }
 
 // Chaos stops and restarts nodes in a cluster.
@@ -45,6 +45,9 @@ type Chaos struct {
 	// Stopper is a channel that the chaos agent listens on. The agent will
 	// terminate cleanly once it receives on the channel.
 	Stopper <-chan time.Time
+	// DrainAndQuit is used to determine if want to kill the node vs draining it
+	// first and shutting down gracefully.
+	DrainAndQuit bool
 }
 
 // Runner returns a closure that runs chaos against the given cluster without
@@ -56,30 +59,37 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 		if err != nil {
 			return err
 		}
+		period, downTime := ch.Timer.Timing()
+		t := time.NewTicker(period)
 		for {
-			before, between := ch.Timer.Timing()
 			select {
 			case <-ch.Stopper:
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(before):
+			case <-t.C:
 			}
 
 			target := ch.Target()
-			l.printf("killing %v (slept %s)\n", target, before)
 			m.ExpectDeath()
-			c.Stop(ctx, target)
+
+			if ch.DrainAndQuit {
+				l.printf("stopping and draining %v\n", target)
+				c.Stop(ctx, target, stopArgs("--sig=15"))
+			} else {
+				l.printf("killing %v\n", target)
+				c.Stop(ctx, target)
+			}
 
 			select {
 			case <-ch.Stopper:
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(between):
+			case <-time.After(downTime):
 			}
 
-			c.l.printf("restarting %v after %s of downtime\n", target, between)
+			c.l.printf("restarting %v after %s of downtime\n", target, downTime)
 			c.Start(ctx, target)
 		}
 	}

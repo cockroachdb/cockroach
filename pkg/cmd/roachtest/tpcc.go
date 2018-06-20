@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -256,7 +257,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// Search between 1 and b.LoadWarehouses for the largest number of
 		// warehouses that can be operated on while sustaining a throughput
 		// threshold, set to a fraction of max tpmC.
-		precision := b.LoadWarehouses / 200
+		precision := int(math.Max(1.0, float64(b.LoadWarehouses/200)))
 		initStepSize := precision
 		s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
 		res, err := s.Search(func(warehouses int) (bool, error) {
@@ -280,9 +281,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 				// Kill one node at a time.
 				ch := Chaos{
-					Timer:   Periodic{Down: 1 * time.Second, Up: 90 * time.Second},
-					Target:  roachNodes.randNode,
-					Stopper: loadDone,
+					Timer:        Periodic{Period: 90 * time.Second, DownTime: 1 * time.Second},
+					Target:       roachNodes.randNode,
+					Stopper:      loadDone,
+					DrainAndQuit: true,
 				}
 				m.Go(ch.Runner(c, m))
 			}
