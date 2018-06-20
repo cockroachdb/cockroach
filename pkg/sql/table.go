@@ -218,12 +218,17 @@ func (tc *TableCollection) getTableVersion(
 		return nil, nil, nil
 	}
 
-	isSystemDB := tn.Catalog() == sqlbase.SystemDB.Name
-	if isSystemDB || testDisableTableLeases {
-		// We don't go through the normal lease mechanism for system
-		// tables. The system.lease and system.descriptor table, in
-		// particular, are problematic because they are used for acquiring
-		// leases itself, creating a chicken&egg problem.
+	// We don't go through the normal lease mechanism for system tables
+	// that are not the role members table.
+	if testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
+		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
+		// TODO(vivek): Ideally we'd avoid caching for only the
+		// system.descriptor and system.lease tables, because they are
+		// used for acquiring leases, creating a chicken&egg problem.
+		// But doing so turned problematic and the tests pass only by also
+		// disabling caching of system.eventlog, system.rangelog, and
+		// system.users. For now we're sticking to disabling caching of
+		// all system descriptors except the role-members-table.
 		flags.avoidCached = true
 		phyAccessor := UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(tn, flags)
@@ -460,6 +465,27 @@ func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
 	return ok
 }
 
+// returns all the idVersion pairs that have undergone a schema change.
+// Returns nil for no schema changes. The version returned for each
+// schema change is Version - 2, because that's the one that will be
+// used when checking for table descriptor two version invariance.
+// Also returns strings representing the new <name, version> pairs
+func (tc *TableCollection) getTablesWithNewVersion() []IDVersion {
+	var tables []IDVersion
+	for _, table := range tc.uncommittedTables {
+		if !tc.isCreatedTable(table.ID) {
+			tables = append(tables, IDVersion{
+				name: table.Name,
+				id:   table.ID,
+				// Used to check that there are no leases at Version - 2.
+				// Note the version has already been incremented.
+				version: table.Version - 2,
+			})
+		}
+	}
+	return tables
+}
+
 type dbAction bool
 
 const (
@@ -628,15 +654,6 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange sets the UpVersion bit and queues up a schema
-// changer.
-func (p *planner) notifySchemaChange(
-	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) {
-	tableDesc.UpVersion = true
-	p.queueSchemaChange(tableDesc, mutationID)
-}
-
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
 func (p *planner) queueSchemaChange(
@@ -713,8 +730,17 @@ func (p *planner) writeTableDescToBatch(
 			return err
 		}
 	} else {
+		// Only increment the table descriptor version once in this transaction.
+		// If the descriptor version had been incremented before it would have
+		// been placed in the uncommitted tables list.
+		if p.Tables().getUncommittedTableByID(tableDesc.ID) == nil {
+			if err := incrementVersion(ctx, tableDesc, p.txn); err != nil {
+				return err
+			}
+		}
+
 		// Schedule a schema changer for later.
-		p.notifySchemaChange(tableDesc, mutationID)
+		p.queueSchemaChange(tableDesc, mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
@@ -732,19 +758,4 @@ func (p *planner) writeTableDescToBatch(
 
 	b.Put(descKey, descVal)
 	return nil
-}
-
-// bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.
-func (p *planner) bumpTableVersion(ctx context.Context, tn *tree.TableName) error {
-	var tableDesc *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(tn,
-			p.ObjectLookupFlags(ctx, true /*required*/))
-	})
-	if err != nil {
-		return err
-	}
-
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
 }

@@ -670,6 +670,7 @@ func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *sqlbase.Table
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
+		tableDesc.ModificationTime = txn.CommitTimestamp()
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 }
@@ -716,6 +717,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Give the table an old format version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
+	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -732,7 +734,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		t.Fatalf("expected descriptor to be in DROP state, but was in %s", tableDesc.State)
 	}
 	tableDesc.FormatVersion = sqlbase.InterleavedFormatVersion
-	tableDesc.UpVersion = true
+	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
 		t.Fatal(err)
 	}

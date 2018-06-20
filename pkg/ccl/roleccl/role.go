@@ -164,7 +164,7 @@ func grantRolePlanHook(
 	for _, r := range grant.Roles {
 		for _, m := range grant.Members {
 			affected, err := p.ExecCfg().InternalExecutor.Exec(
-				ctx, "grant-role", nil, /* txn */
+				ctx, "grant-role", p.Txn(),
 				memberStmt,
 				r, m, grant.AdminOption,
 			)
@@ -255,7 +255,7 @@ func revokeRolePlanHook(
 					security.RootUser, sqlbase.AdminRole)
 			}
 			affected, err := p.ExecCfg().InternalExecutor.Exec(
-				ctx, "revoke-role", nil, /* stmt */
+				ctx, "revoke-role", p.Txn(),
 				memberStmt,
 				r, m,
 			)
