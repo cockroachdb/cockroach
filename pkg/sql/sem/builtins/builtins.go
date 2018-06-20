@@ -1064,6 +1064,81 @@ CockroachDB supports the following flags:
 		},
 	),
 
+	"like_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
+			},
+			types.Bool,
+			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+		)),
+
+	"not_like_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				dmatch, err := tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
+				if err != nil {
+					return dmatch, err
+				}
+				bmatch, err := tree.GetBool(dmatch)
+				return tree.MakeDBool(!bmatch), err
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+		)),
+
+	"ilike_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
+			},
+			types.Bool,
+			"Matches case insensetively `unescaped` with `pattern` using 'escape' as an escape token.",
+		)),
+
+	"not_ilike_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				dmatch, err := tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
+				if err != nil {
+					return dmatch, err
+				}
+				bmatch, err := tree.GetBool(dmatch)
+				return tree.MakeDBool(!bmatch), err
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches case insensetively with `pattern` using 'escape' as an escape token.",
+		)),
+
+	"similar_to_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				return tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
+			},
+			types.Bool,
+			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+		)),
+
+	"not_similar_to_escape": makeBuiltin(defProps(),
+		stringOverload3(
+			"unescaped", "pattern", "escape",
+			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+				dmatch, err := tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
+				if err != nil {
+					return dmatch, err
+				}
+				bmatch, err := tree.GetBool(dmatch)
+				return tree.MakeDBool(!bmatch), err
+			},
+			types.Bool,
+			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+		)),
+
 	"initcap": makeBuiltin(defProps(),
 		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
