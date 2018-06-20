@@ -105,12 +105,11 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 var OptimizerClusterMode = settings.RegisterEnumSetting(
 	"sql.defaults.optimizer",
 	"Default cost-based optimizer mode",
-	"Off",
+	"on",
 	map[int64]string{
-		int64(sessiondata.OptimizerAlways): "Always",
-		int64(sessiondata.OptimizerLocal):  "Local",
-		int64(sessiondata.OptimizerOff):    "Off",
-		int64(sessiondata.OptimizerOn):     "On",
+		int64(sessiondata.OptimizerLocal): "local",
+		int64(sessiondata.OptimizerOff):   "off",
+		int64(sessiondata.OptimizerOn):    "on",
 	},
 )
 
@@ -118,11 +117,11 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
 	"Default distributed SQL execution mode",
-	"Auto",
+	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "Off",
-		int64(sessiondata.DistSQLAuto): "Auto",
-		int64(sessiondata.DistSQLOn):   "On",
+		int64(sessiondata.DistSQLOff):  "off",
+		int64(sessiondata.DistSQLAuto): "auto",
+		int64(sessiondata.DistSQLOn):   "on",
 	},
 )
 
