@@ -21,6 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -69,6 +71,12 @@ func newMergeJoiner(
 	m := &mergeJoiner{
 		leftSource:  leftSource,
 		rightSource: rightSource,
+	}
+
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		m.leftSource = NewInputStatCollector(m.leftSource)
+		m.rightSource = NewInputStatCollector(m.rightSource)
+		m.finishTrace = m.outputStatsToTrace
 	}
 
 	if err := m.joinerBase.init(
@@ -244,4 +252,50 @@ func (m *mergeJoiner) ConsumerDone() {
 func (m *mergeJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	m.internalClose()
+}
+
+var _ DistSQLSpanStats = &MergeJoinerStats{}
+
+const mergeJoinerTagPrefix = "mergejoiner."
+
+// Stats implements the SpanStats interface.
+func (mjs *MergeJoinerStats) Stats() map[string]string {
+	// statsMap starts off as the left input stats map.
+	statsMap := mjs.LeftInputStats.Stats(mergeJoinerTagPrefix + "left.")
+	rightInputStatsMap := mjs.RightInputStats.Stats(mergeJoinerTagPrefix + "right.")
+	// Merge the two input maps.
+	for k, v := range rightInputStatsMap {
+		statsMap[k] = v
+	}
+	return statsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
+	return append(
+		mjs.LeftInputStats.StatsForQueryPlan("left "),
+		mjs.RightInputStats.StatsForQueryPlan("right ")...,
+	)
+}
+
+// outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
+// fail silently if the mergeJoiner is not collecting stats.
+func (m *mergeJoiner) outputStatsToTrace() {
+	lis, ok := getInputStats(m.flowCtx, m.leftSource)
+	if !ok {
+		return
+	}
+	ris, ok := getInputStats(m.flowCtx, m.rightSource)
+	if !ok {
+		return
+	}
+	if sp := opentracing.SpanFromContext(m.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&MergeJoinerStats{
+				LeftInputStats:  lis,
+				RightInputStats: ris,
+			},
+		)
+	}
 }

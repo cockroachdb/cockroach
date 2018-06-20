@@ -1041,6 +1041,12 @@ func newProcessor(
 			flowCtx, processorID, inputs[0], post, outputs[0], core.MetadataTestReceiver.SenderIDs,
 		)
 	}
+	if core.ProjectSet != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newProjectSetProcessor(flowCtx, processorID, core.ProjectSet, inputs[0], post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
