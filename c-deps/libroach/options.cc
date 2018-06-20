@@ -268,9 +268,14 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
     // load situations we'll be using somewhat more than 1 memtable,
     // but usually not significantly more unless there is an I/O
     // throughput problem.
+    //
+    // We ensure that at least 1MB is allocated for the block cache.
+    // Some unit tests expect to see a non-zero block cache hit rate,
+    // but they use a cache that is small enough that all of it would
+    // otherwise be reserved for the memtable.
     std::lock_guard<std::mutex> guard(db_opts.cache->mu);
     const int64_t capacity = db_opts.cache->rep->GetCapacity();
-    const int64_t new_capacity = std::max<int64_t>(0, capacity - options.write_buffer_size);
+    const int64_t new_capacity = std::max<int64_t>(1 << 20, capacity - options.write_buffer_size);
     db_opts.cache->rep->SetCapacity(new_capacity);
   }
 
