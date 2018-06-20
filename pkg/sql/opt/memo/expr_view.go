@@ -360,7 +360,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideCost) && ev.best != normBestOrdinal {
-		tp.Childf("cost: %.2f", ev.bestExpr().cost)
+		tp.Childf("cost: %.9g", ev.bestExpr().cost)
 	}
 
 	// Format functional dependencies.
