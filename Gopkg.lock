@@ -12,7 +12,8 @@
     "internal/version",
     "storage",
   ]
-  revision = "094187a3a68a589c8217a46b90af0efae38542b9"
+  revision = "0fd7230b2a7505833d5f69b75cbd6c9582401479"
+  version = "v0.23.0"
 
 [[projects]]
   name = "github.com/Azure/azure-sdk-for-go"
@@ -1297,6 +1298,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bea31ac3645efde6e281cd477725432516f4a1c98bc0600d50f4a4daed069fb0"
+  inputs-digest = "a718d1cdb47e3857a4335d58ac3041c233a4d1990f7619d61b2062d780623674"
   solver-name = "gps-cdcl"
   solver-version = 1

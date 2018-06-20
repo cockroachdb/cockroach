@@ -65,12 +65,6 @@ ignored = [
   name = "github.com/rubyist/circuitbreaker"
   branch = "master"
 
-# https://github.com/GoogleCloudPlatform/google-cloud-go/issues/784
-# Remove this when that commit is in a tagged release.
-[[constraint]]
-  name = "cloud.google.com/go"
-  revision = "094187a3a68a589c8217a46b90af0efae38542b9"
-
 # https://github.com/xwb1989/sqlparser/issues/31
 # https://github.com/xwb1989/sqlparser/issues/32
 [[constraint]]
