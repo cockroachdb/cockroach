@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -83,6 +82,7 @@ func newTableReader(
 		flowCtx,
 		processorID,
 		output,
+		nil, /* memMonitor */
 		procStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
@@ -255,32 +255,26 @@ func (tr *tableReader) ConsumerClosed() {
 
 var _ DistSQLSpanStats = &TableReaderStats{}
 
+const tableReaderTagPrefix = "tablereader."
+
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {
-	return map[string]string{
-		"tablereader.input.rows": fmt.Sprintf("%d", trs.InputStats.NumRows),
-		"tablereader.stalltime":  fmt.Sprintf("%v", trs.InputStats.RoundStallTime()),
-	}
+	return trs.InputStats.Stats(tableReaderTagPrefix)
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
-	return trs.InputStats.StatsForQueryPlan()
+	return trs.InputStats.StatsForQueryPlan("" /* prefix */)
 }
 
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	isc, ok := tr.input.(*InputStatCollector)
+	is, ok := getInputStats(tr.flowCtx, tr.input)
 	if !ok {
 		return
 	}
-	sp := opentracing.SpanFromContext(tr.ctx)
-	if sp == nil {
-		return
+	if sp := opentracing.SpanFromContext(tr.ctx); sp != nil {
+		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
 	}
-	if tr.flowCtx.testingKnobs.OverrideStallTime {
-		isc.InputStats.StallTime = 0
-	}
-	tracing.SetSpanStats(sp, &TableReaderStats{InputStats: isc.InputStats})
 }

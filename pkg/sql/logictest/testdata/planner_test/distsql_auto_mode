@@ -131,3 +131,8 @@ query T
 SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.w GROUP BY kv.k]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyck09r3DAQxe_9FGJOCQjW9uYkKDi9tCnBW0JaKMUE1Zo6IrZlZuQmIex3L5IXUjvrXTZHP72f9OaPX6BzBgvdIoP6BSmUEnpyFTI7CtJouDJPoBIJtusHH-RSQuUIQb2At75BUHCrfzd4g9ogrRKQYNBr28Rre7Ktpuf84S9IIPfIglAbJYKNvW4a4W2LSiQMEjaDVyJPodxKcIN_fZC9rhFUupXvC5UuhHo8GmopSrYY5TXB0DkySGgmr5eBPGbZU88Xzfdfne2QVtm0nAb_-LM8Pf9Itr73Z3l2DjKKYlZb1N50PVJz6yi-8bJ3hEawNahE9ICEVj-JFltHz2JgDBeITzvZWH6YiLsRyzxbbO36lClf1jVhrb2j1XralTwM_bL4eVdsbu-K79fXoUVB-vF516Jj67i3rqXUF6ekvkHuXcc4X4y9NydhG9DUOG4Xu4Eq_Eauis-Mn5vIRcEg-_E0Gz-uungUf57_4fQEOJvD2UF4PYGTObw-CF_M4HL74V8AAAD__6X-hQk=
+
+query T
+SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(v) FROM kv];
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkTFrwzAQhff-CvFmQSyPmkzpkqUpoVvxoFpHELUsozu3CcH_vdga2hRSkvHevXfvgztjSJ6eXSSGfYNBqzHm1BFzyotUDFt_hK00wjBOssitRpcywZ4hQXqCxat772lPzlPeVNDwJC7069kxh-jyqfn4hEZOX6wyOW_VYmNxfa8kRLKqYmjsJrGqqdHOGmmSn0IWdyBYM-vboZ4CSxg62ZhLosbcQBLdUUWKKZ_UxLS41ONVrPoerD3xmAamC6hrl6u51SB_oPIPTlPu6CWnbq0p427NrYInlrI1ZdgOZbUA_g6bf8P1n3A7P3wHAAD__xv4thY=

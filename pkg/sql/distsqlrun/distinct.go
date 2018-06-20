@@ -18,10 +18,15 @@ import (
 	"context"
 	"sync"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -84,16 +89,31 @@ func NewDistinct(
 		distinctCols.Add(int(col))
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &Distinct{
 		input:        input,
 		orderedCols:  spec.OrderedColumns,
 		distinctCols: distinctCols,
-		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
+		memAcc:       memMonitor.MakeBoundAccount(),
 		types:        input.OutputTypes(),
 	}
 
+	var returnProcessor RowSourcedProcessor = d
+	if allSorted {
+		// We can use the faster sortedDistinct processor.
+		sd := &SortedDistinct{
+			Distinct: *d,
+		}
+		// Set d to the new distinct copy for further initialization.
+		// TODO(asubiotto): We should have a distinctBase, rather than making a copy
+		// of a distinct processor.
+		d = &sd.Distinct
+		returnProcessor = sd
+	}
+
 	if err := d.init(
-		d, post, d.types, flowCtx, processorID, output,
+		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		procStateOpts{
 			inputsToDrain: []RowSource{d.input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -106,14 +126,12 @@ func NewDistinct(
 	d.lastGroupKey = d.out.rowAlloc.AllocRow(len(d.types))
 	d.haveLastGroupKey = false
 
-	if allSorted {
-		// We can use the faster sortedDistinct processor.
-		return &SortedDistinct{
-			Distinct: *d,
-		}, nil
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		d.input = NewInputStatCollector(d.input)
+		d.finishTrace = d.outputStatsToTrace
 	}
 
-	return d, nil
+	return returnProcessor, nil
 }
 
 // Start is part of the RowSource interface.
@@ -186,6 +204,7 @@ func (d *Distinct) close() {
 	// Need to close the mem accounting while the context is still valid.
 	d.memAcc.Close(d.ctx)
 	d.internalClose()
+	d.memMonitor.Stop(d.ctx)
 }
 
 // Next is part of the RowSource interface.
@@ -294,4 +313,37 @@ func (d *Distinct) ConsumerDone() {
 func (d *Distinct) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	d.close()
+}
+
+var _ DistSQLSpanStats = &DistinctStats{}
+
+const distinctTagPrefix = "distinct."
+
+// Stats implements the SpanStats interface.
+func (ds *DistinctStats) Stats() map[string]string {
+	inputStatsMap := ds.InputStats.Stats(distinctTagPrefix)
+	inputStatsMap[distinctTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
+	return inputStatsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (ds *DistinctStats) StatsForQueryPlan() []string {
+	return append(
+		ds.InputStats.StatsForQueryPlan(""),
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
+	)
+}
+
+// outputStatsToTrace outputs the collected distinct stats to the trace. Will
+// fail silently if the Distinct processor is not collecting stats.
+func (d *Distinct) outputStatsToTrace() {
+	is, ok := getInputStats(d.flowCtx, d.input)
+	if !ok {
+		return
+	}
+	if sp := opentracing.SpanFromContext(d.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp, &DistinctStats{InputStats: is, MaxAllocatedMem: d.memMonitor.MaximumBytes()},
+		)
+	}
 }

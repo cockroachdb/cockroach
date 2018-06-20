@@ -118,10 +118,6 @@ type aggregatorBase struct {
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
-	// memMonitor is only set when collecting stats. It is a child monitor of the
-	// shared flow monitor to separate memory allocations that the aggregator
-	// makes from the rest of the flow.
-	memMonitor *mon.BytesMonitor
 	bucketsAcc mon.BoundAccount
 
 	groupCols        columns
@@ -150,18 +146,10 @@ func (ag *aggregatorBase) init(
 	output RowReceiver,
 	trailingMetaCallback func() []ProducerMetadata,
 ) error {
-	memMonitor := flowCtx.EvalCtx.Mon
 	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = NewInputStatCollector(input)
-
-		// Start private memory monitor to track the memory usage of the aggregator.
-		privateMemMonitor := mon.MakeMonitorInheritWithLimit(
-			"aggregator-stat-mem", 0 /* limit */, memMonitor,
-		)
-		privateMemMonitor.Start(ctx, memMonitor, mon.BoundAccount{})
-		ag.memMonitor = &privateMemMonitor
-		memMonitor = &privateMemMonitor
 		ag.finishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
@@ -213,50 +201,48 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = retType
 	}
 
-	return ag.processorBase.init(self, post, ag.outputTypes, flowCtx, processorID, output, procStateOpts{
-		inputsToDrain:        []RowSource{ag.input},
-		trailingMetaCallback: trailingMetaCallback,
-	})
+	return ag.processorBase.init(
+		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
+		procStateOpts{
+			inputsToDrain:        []RowSource{ag.input},
+			trailingMetaCallback: trailingMetaCallback,
+		},
+	)
 }
 
 var _ DistSQLSpanStats = &AggregatorStats{}
 
+const aggregatorTagPrefix = "aggregator."
+
 // Stats implements the SpanStats interface.
 func (as *AggregatorStats) Stats() map[string]string {
-	return map[string]string{
-		"aggregator.input.rows": fmt.Sprintf("%d", as.InputStats.NumRows),
-		"aggregator.stalltime":  fmt.Sprintf("%v", as.InputStats.RoundStallTime()),
-		"aggregator.mem.max":    humanizeutil.IBytes(as.MaxAllocatedMem),
-	}
+	inputStatsMap := as.InputStats.Stats(aggregatorTagPrefix)
+	inputStatsMap[aggregatorTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
+	return inputStatsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (as *AggregatorStats) StatsForQueryPlan() []string {
 	return append(
-		as.InputStats.StatsForQueryPlan(),
-		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(as.MaxAllocatedMem)),
+		as.InputStats.StatsForQueryPlan("" /* prefix */),
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)),
 	)
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {
-	isc, ok := ag.input.(*InputStatCollector)
+	is, ok := getInputStats(ag.flowCtx, ag.input)
 	if !ok {
 		return
 	}
-	sp := opentracing.SpanFromContext(ag.ctx)
-	if sp == nil {
-		return
+	if sp := opentracing.SpanFromContext(ag.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&AggregatorStats{
+				InputStats:      is,
+				MaxAllocatedMem: ag.memMonitor.MaximumBytes(),
+			},
+		)
 	}
-	if ag.flowCtx.testingKnobs.OverrideStallTime {
-		isc.InputStats.StallTime = 0
-	}
-	tracing.SetSpanStats(
-		sp,
-		&AggregatorStats{
-			InputStats:      isc.InputStats,
-			MaxAllocatedMem: ag.memMonitor.MaximumBytes(),
-		},
-	)
 }
 
 // hashAggregator is a specialization of aggregatorBase that must keep track of
@@ -399,9 +385,7 @@ func (ag *hashAggregator) close() {
 				ag.buckets[bucket].close(ag.ctx)
 			}
 		}
-		if ag.memMonitor != nil {
-			ag.memMonitor.Stop(ag.ctx)
-		}
+		ag.memMonitor.Stop(ag.ctx)
 	}
 }
 
@@ -412,9 +396,7 @@ func (ag *orderedAggregator) close() {
 		if ag.bucket != nil {
 			ag.bucket.close(ag.ctx)
 		}
-		if ag.memMonitor != nil {
-			ag.memMonitor.Stop(ag.ctx)
-		}
+		ag.memMonitor.Stop(ag.ctx)
 	}
 }
 
