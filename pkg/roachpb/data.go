@@ -1136,6 +1136,11 @@ func CanTransactionRetryAtRefreshedTimestamp(
 			return false, nil
 		}
 	case *WriteTooOldError:
+		// TODO(andrei): Chances of success for on write-too-old conditions might be
+		// usually small: if our txn previously read the key that generated this
+		// error, obviously the refresh will fail. It might be worth trying to
+		// detect these cases and save the futile attempt; we'd need to have access
+		// to the key that generated the error.
 		timestamp.Forward(writeTooOldRetryTimestamp(txn, err))
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(
