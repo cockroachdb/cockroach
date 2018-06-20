@@ -699,6 +699,11 @@ func startArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
 }
 
+// stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
+func stopArgs(extraArgs ...string) option {
+	return roachprodArgOption(extraArgs)
+}
+
 type roachprodArgOption []string
 
 func (o roachprodArgOption) option() {}
@@ -762,12 +767,19 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+
+	args := []string{
+		roachprod,
+		"stop",
+	}
+	args = append(args, roachprodArgs(opts)...)
+	args = append(args, c.makeNodes(opts...))
 	if atomic.LoadInt32(&interrupted) == 1 {
 		c.t.Fatal("interrupted")
 	}
 	c.status("stopping cluster")
 	defer c.status()
-	err := execCmd(ctx, c.l, roachprod, "stop", c.makeNodes(opts...))
+	err := execCmd(ctx, c.l, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
