@@ -91,7 +91,7 @@ func AggregateVariance(data DataSeries) float64 {
 		delta2 := dp.Value - mean
 		meanSquaredDist += delta * delta2
 	}
-	return meanSquaredDist / float64(len(data)-1)
+	return meanSquaredDist / float64(len(data))
 }
 
 // getAggFunction is a convenience method used to process an aggregator option
