@@ -8,7 +8,6 @@ import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
-import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -47,6 +46,7 @@ interface DataDistributionProps {
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+  tablesByName: { [name: string]: number };
 }
 
 class DataDistribution extends React.Component<DataDistributionProps> {
@@ -107,19 +107,8 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     return replica ? 1 : 0;
   }
 
-  tableIDForName(name: string) {
-    let id = 0;
-    _.forEach(this.props.dataDistribution.database_info, (dbInfo) => {
-      _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
-        if (tableName === name) {
-          id = tableInfo.id.toInt();
-          // TODO(vilterp): just do a normal for loop and bail out early
-          // or build a map of this in a selector
-          // or change the return type of the endpoint...
-        }
-      });
-    });
-    return id;
+  tableIDForName(name: string): number {
+    return this.props.tablesByName[name];
   }
 
   getRangeAtPath(dbPath: TreePath): IRangeInfo {
@@ -206,6 +195,7 @@ interface DataDistributionPageProps {
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+  tablesByName: { [name: string]: number };
   refreshDataDistribution: typeof refreshDataDistribution;
   refreshLeaseholdersAndQPS: typeof refreshLeaseholdersAndQPS;
   refreshNodes: typeof refreshNodes;
@@ -252,6 +242,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
             <DataDistribution
               localityTree={this.props.localityTree}
               dataDistribution={this.props.dataDistribution}
+              tablesByName={this.props.tablesByName}
               leaseholdersAndQPS={this.props.leaseholdersAndQPS}
               sortedZoneConfigs={this.props.sortedZoneConfigs}
             />
@@ -272,6 +263,23 @@ const sortedZoneConfigs = createSelector(
   },
 );
 
+const tablesByName = createSelector(
+  (state: AdminUIState) => state.cachedData.dataDistribution,
+  (dataDistributionState) => {
+    if (!dataDistributionState.data) {
+      return {};
+    }
+
+    const tables: { [name: string]: number } = {};
+    _.forEach(dataDistributionState.data.database_info, (dbInfo) => {
+      _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
+        tables[tableName] = tableInfo.id.toNumber();
+      });
+    });
+    return tables;
+  },
+);
+
 // tslint:disable-next-line:variable-name
 const DataDistributionPageConnected = connect(
   (state: AdminUIState) => ({
@@ -279,6 +287,7 @@ const DataDistributionPageConnected = connect(
     leaseholdersAndQPS: state.cachedData.leaseholdersAndQPS.data,
     sortedZoneConfigs: sortedZoneConfigs(state),
     localityTree: selectLocalityTree(state),
+    tablesByName: tablesByName(state),
   }),
   {
     refreshDataDistribution,
