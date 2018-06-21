@@ -229,6 +229,12 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   }
 
   render() {
+    const isLoading = (
+      !this.props.dataDistribution ||
+      !this.props.localityTree ||
+      !this.props.leaseholdersAndQPS
+    );
+
     return (
       <div>
         <Helmet>
@@ -240,7 +246,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
         <section style={{ paddingTop: 10, paddingLeft: 30, display: "block" }}>
           <Loading
             className="loading-image loading-image__spinner-left"
-            loading={!this.props.dataDistribution || !this.props.localityTree}
+            loading={isLoading}
             image={spinner}
           >
             <DataDistribution
