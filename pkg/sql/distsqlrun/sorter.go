@@ -177,8 +177,8 @@ func newSortAllProcessor(
 			input.OutputTypes(),
 			proc.evalCtx,
 			flowCtx.TempStorage,
-			flowCtx.diskMonitor,
 			memMonitor,
+			flowCtx.diskMonitor,
 		)
 		proc.rows = &rc
 	} else {
