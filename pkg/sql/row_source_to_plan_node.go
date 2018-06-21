@@ -38,10 +38,10 @@ type rowSourceToPlanNode struct {
 
 var _ planNode = &rowSourceToPlanNode{}
 
-func makeRowSourceToPlanNode(s distsqlrun.RowSource) *rowSourceToPlanNode {
+func makeRowSourceToPlanNode(s distsqlrun.RowSource) rowSourceToPlanNode {
 	row := make(tree.Datums, len(s.OutputTypes()))
 
-	return &rowSourceToPlanNode{
+	return rowSourceToPlanNode{
 		source:   s,
 		datumRow: row,
 	}

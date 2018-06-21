@@ -310,6 +310,7 @@ func doExpandPlan(
 		// ordering.
 		match := planPhysicalProps(n.plan).computeMatch(n.ordering)
 		n.needSort = (match < len(n.ordering))
+		n.matchLen = match
 
 	case *distinctNode:
 		plan, err = expandDistinctNode(ctx, p, params, n)

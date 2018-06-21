@@ -17,6 +17,8 @@ package distsqlrun
 import (
 	"context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -62,7 +64,7 @@ func (s *sorterBase) init(
 	)
 }
 
-func newSorter(
+func NewSorter(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -70,7 +72,7 @@ func newSorter(
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	count := int64(0)
 	if post.Limit != 0 {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
@@ -103,6 +105,13 @@ func newSorter(
 	return newSortChunksProcessor(flowCtx, processorID, spec, input, post, output)
 }
 
+type SortProcessor interface {
+	RowSourcedProcessor
+	// Strategy returns a human-readable string that explains the sort strategy
+	// in use, or empty if it's the default sort-all strategy.
+	Strategy() string
+}
+
 // sortAllProcessor reads in all values into the wrapped rows and
 // uses sort.Sort to sort all values in-place. It has a worst-case time
 // complexity of O(n*log(n)) and a worst-case space complexity of O(n).
@@ -118,8 +127,7 @@ type sortAllProcessor struct {
 	i rowIterator
 }
 
-var _ Processor = &sortAllProcessor{}
-var _ RowSource = &sortAllProcessor{}
+var _ SortProcessor = &sortAllProcessor{}
 
 const sortAllProcName = "sortAll"
 
@@ -131,7 +139,7 @@ func newSortAllProcessor(
 	input RowSource,
 	post *PostProcessSpec,
 	out RowReceiver,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
 		flowCtx.testingKnobs.MemoryLimitBytes > 0
@@ -286,6 +294,11 @@ func (s *sortAllProcessor) ConsumerClosed() {
 	s.close()
 }
 
+// Strategy is part of the SortProcessor interface.
+func (s *sortAllProcessor) Strategy() string {
+	return ""
+}
+
 // sortTopKProcessor creates a max-heap in its wrapped rows and keeps
 // this heap populated with only the top k values seen. It accomplishes this
 // by comparing new values (before the deep copy) with the top of the heap.
@@ -312,8 +325,7 @@ type sortTopKProcessor struct {
 	k    int64
 }
 
-var _ Processor = &sortTopKProcessor{}
-var _ RowSource = &sortTopKProcessor{}
+var _ SortProcessor = &sortTopKProcessor{}
 
 const sortTopKProcName = "sortTopK"
 
@@ -325,7 +337,7 @@ func newSortTopKProcessor(
 	post *PostProcessSpec,
 	out RowReceiver,
 	k int64,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
@@ -425,6 +437,11 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 	s.close()
 }
 
+// Strategy is part of the SortProcessor interface.
+func (s *sortTopKProcessor) Strategy() string {
+	return fmt.Sprintf("top %d", s.k)
+}
+
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksProcessor struct {
@@ -439,8 +456,7 @@ type sortChunksProcessor struct {
 	nextChunkRow sqlbase.EncDatumRow
 }
 
-var _ Processor = &sortChunksProcessor{}
-var _ RowSource = &sortChunksProcessor{}
+var _ SortProcessor = &sortChunksProcessor{}
 
 const sortChunksProcName = "sortChunks"
 
@@ -451,7 +467,7 @@ func newSortChunksProcessor(
 	input RowSource,
 	post *PostProcessSpec,
 	out RowReceiver,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
@@ -599,4 +615,9 @@ func (s *sortChunksProcessor) ConsumerDone() {
 func (s *sortChunksProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	s.close()
+}
+
+// Strategy is part of the SortProcessor interface.
+func (s *sortChunksProcessor) Strategy() string {
+	return "chunks"
 }

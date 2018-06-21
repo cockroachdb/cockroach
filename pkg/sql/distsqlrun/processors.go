@@ -941,7 +941,7 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSorter(ctx, flowCtx, processorID, core.Sorter, inputs[0], post, outputs[0])
+		return NewSorter(ctx, flowCtx, processorID, core.Sorter, inputs[0], post, outputs[0])
 	}
 	if core.Distinct != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
