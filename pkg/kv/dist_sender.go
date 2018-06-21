@@ -49,14 +49,20 @@ var (
 		Help: "Number of batches processed"}
 	metaDistSenderPartialBatchCount = metric.Metadata{
 		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed"}
+		Help: "Number of partial batches processed after being divided on range boundaries"}
+	metaDistSenderAsyncSentCount = metric.Metadata{
+		Name: "distsender.batches.async.sent",
+		Help: "Number of partial batches sent asynchronously"}
+	metaDistSenderAsyncThrottledCount = metric.Metadata{
+		Name: "distsender.batches.async.throttled",
+		Help: "Number of partial batches not sent asynchronously due to throttling"}
 	metaTransportSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent",
 		Help: "Number of RPCs sent"}
 	metaTransportLocalSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent.local",
 		Help: "Number of local RPCs sent"}
-	metaDistSenderNextReplicaErrCount = metric.Metadata{
+	metaTransportSenderNextReplicaErrCount = metric.Metadata{
 		Name: "distsender.rpc.sent.nextreplicaerror",
 		Help: "Number of RPCs sent due to per-replica errors"}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
@@ -74,6 +80,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 type DistSenderMetrics struct {
 	BatchCount             *metric.Counter
 	PartialBatchCount      *metric.Counter
+	AsyncSentCount         *metric.Counter
+	AsyncThrottledCount    *metric.Counter
 	SentCount              *metric.Counter
 	LocalSentCount         *metric.Counter
 	NextReplicaErrCount    *metric.Counter
@@ -84,9 +92,11 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	return DistSenderMetrics{
 		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
+		AsyncSentCount:         metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncThrottledCount:    metric.NewCounter(metaDistSenderAsyncThrottledCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
-		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
+		NextReplicaErrCount:    metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 	}
 }
@@ -131,7 +141,6 @@ type DistSender struct {
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
 	asyncSenderSem   chan struct{}
-	asyncSenderCount int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -228,12 +237,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 // sender's activity.
 func (ds *DistSender) Metrics() DistSenderMetrics {
 	return ds.metrics
-}
-
-// GetParallelSendCount returns the number of parallel batch requests
-// the dist sender has dispatched in its lifetime.
-func (ds *DistSender) GetParallelSendCount() int32 {
-	return atomic.LoadInt32(&ds.asyncSenderCount)
 }
 
 // RangeDescriptorCache gives access to the DistSender's range cache.
@@ -917,10 +920,11 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ctx, "kv.DistSender: sending partial batch",
 		ds.asyncSenderSem, false, /* wait */
 		func(ctx context.Context) {
-			atomic.AddInt32(&ds.asyncSenderCount, 1)
+			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)
 		},
 	); err != nil {
+		ds.metrics.AsyncThrottledCount.Inc(1)
 		return false
 	}
 	return true
