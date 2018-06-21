@@ -8,12 +8,11 @@
     border-bottom 1px solid black
 
   th, td
-    padding 5px
     border-left 1px solid lightgrey
     border-right 1px solid lightgrey
 
-  td.value
-    text-align center
+  th
+    padding 5px
 
   &__metric-label
     font-style italic
@@ -39,5 +38,9 @@
   &__column-header--internal-node:hover
     background-color rgb(240, 240, 240)
 
-  &__cell-value
+  &__cell
     text-align right
+    padding 0
+
+  &__cell-value
+    padding 5px
