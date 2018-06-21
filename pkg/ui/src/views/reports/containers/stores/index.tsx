@@ -10,8 +10,6 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 
-import "./stores.styl";
-
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.StoresResponse;
   lastError: Error;
@@ -58,9 +56,9 @@ class Stores extends React.Component<StoresProps, {}> {
     );
   }
 
-  renderStore(store: protos.cockroach.server.serverpb.IStoreDetails, key: number) {
+  renderStore(store: protos.cockroach.server.serverpb.IStoreDetails) {
     return (
-      <table key={key} className="stores-table">
+      <table key={store.store_id} className="stores-table">
         <tbody>
           { this.renderSimpleRow("Store ID", store.store_id.toString()) }
           <EncryptionStatus store={store} />
@@ -122,8 +120,8 @@ class Stores extends React.Component<StoresProps, {}> {
         <h1>Stores</h1>
         <h2>{header} stores</h2>
         {
-          _.map(stores.stores, (store, key) => (
-            this.renderStore(store, key)
+          _.map(_.sortBy(stores.stores, (store) => store.store_id), (store) => (
+            this.renderStore(store)
           ))
         }
       </div>
