@@ -10,10 +10,10 @@ import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { refreshQueries } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { statementAttr } from "src/util/constants";
+import { statementAttr, appAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
-import { NumericStat, stdDev } from "src/util/appStats";
+import { NumericStat, stdDev, aggregateStatementStats } from "src/util/appStats";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import * as protos from "src/js/protos";
@@ -101,7 +101,9 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     return (
       <div>
         <Helmet>
-          <title>Details | Statements</title>
+          <title>
+            { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
+          </title>
         </Helmet>
         <section className="section">
           <h2>Statement Details</h2>
@@ -241,8 +243,20 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
 
 const selectStatement = createSelector(
   (state: AdminUIState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
-  (_state: AdminUIState, props: RouterState) => props.params[statementAttr],
-  (haystack, needle) => haystack && _.find(haystack, hay => hay.key.query === needle),
+  (_state: AdminUIState, props: RouterState) => props,
+  (statements, props) => {
+    if (!statements) {
+      return false;
+    }
+
+    const query = props.params[statementAttr];
+    const app = props.params[appAttr];
+
+    const results = _.filter(statements, stmt => stmt.key.query === query && (!app || stmt.key.app === app));
+    const agg = aggregateStatementStats(results);
+
+    return agg[0];
+  },
 );
 
 // tslint:disable-next-line:variable-name
