@@ -1,0 +1,17 @@
+# =============================================================================
+# groupby.opt contains exploration rules for the groupby operators
+# =============================================================================
+#min on ordered index value
+[MinIndexLimit, Explore]
+(GroupBy
+  $input:*
+  $aggs: (Aggregations [(Min (Variable $ex:*))] *)
+  $def:*
+)
+=>
+(GroupBy
+  (Limit $input (Const (GetConstOfOne)) (GetOrdering $ex))
+  $aggs
+  $def
+)
+

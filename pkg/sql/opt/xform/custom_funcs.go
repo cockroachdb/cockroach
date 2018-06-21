@@ -318,3 +318,12 @@ func (c *CustomFuncs) OneResultPerInput(def memo.PrivateID) bool {
 	// left lookup join and the KeyCols form a key in the table.
 	return lookupJoinDef.IsIndexJoin(c.e.mem.Metadata())
 }
+
+func (c *CustomFuncs) GetConstOfOne() memo.PrivateID {
+	return c.e.f.InternDatum(tree.NewDInt(1))
+}
+
+func (c *CustomFuncs) GetOrdering(col memo.PrivateID) memo.PrivateID {
+	ordering := opt.Ordering{opt.OrderingColumn(c.ExtractColID(col))}
+	return c.e.f.InternOrdering(ordering)
+}
