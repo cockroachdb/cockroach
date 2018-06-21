@@ -147,6 +147,10 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
 
 rocksdb::Logger* NewDBLogger(int go_log_level) { return new DBLogger(go_log_level); }
 
+rocksdb::TablePropertiesCollectorFactory* DBMakeTimeBoundCollector() {
+  return new TimeBoundTblPropCollectorFactory();
+}
+
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.

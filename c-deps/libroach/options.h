@@ -28,4 +28,9 @@ rocksdb::Logger* NewDBLogger(int go_log_level);
 // DBMakeOptions constructs a rocksdb::Options given a DBOptions.
 rocksdb::Options DBMakeOptions(DBOptions db_opts);
 
+// DBMakeTimeBoundCollector returns a TablePropertiesCollector hook to store the
+// min and max MVCC timestamps present in each sstable in the metadata for that
+// sstable. Used by the time bounded iterator optimization.
+rocksdb::TablePropertiesCollectorFactory* DBMakeTimeBoundCollector();
+
 }  // namespace cockroach

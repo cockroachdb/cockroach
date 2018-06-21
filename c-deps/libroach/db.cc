@@ -704,6 +704,13 @@ DBSstFileWriter* DBSstFileWriterNew() {
   options->comparator = &kComparator;
   options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
+  // Use the TablePropertiesCollector hook to store the min and max MVCC
+  // timestamps present in each sstable in the metadata for that sstable. Used
+  // by the time bounded iterator optimization.
+  std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(
+      DBMakeTimeBoundCollector());
+  options->table_properties_collector_factories.push_back(time_bound_prop_collector);
+
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
   options->env = memenv.get();
