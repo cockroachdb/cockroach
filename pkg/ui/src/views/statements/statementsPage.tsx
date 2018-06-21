@@ -43,11 +43,12 @@ interface StatementsPageState {
   sortSetting: SortSetting;
 }
 
-function StatementLink(props: { statement: string }) {
+function StatementLink(props: { statement: string, app: string }) {
   const summary = summarize(props.statement);
+  const base = props.app ? `/statement/${props.app}` : "/statement";
 
   return (
-    <Link to={ `/statement/${encodeURIComponent(props.statement)}` }>
+    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div title={ props.statement }>{ shortStatement(summary, props.statement) }</div>
     </Link>
   );
@@ -71,7 +72,7 @@ function calculateCumulativeTime(query: CollectedStatementStatistics$Properties)
   return count * latency;
 }
 
-function makeStatementsColumns(statements: CollectedStatementStatistics$Properties[])
+function makeStatementsColumns(statements: CollectedStatementStatistics$Properties[], selectedApp: string)
     : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
   const countBar = countBarChart(statements);
   const rowsBar = rowsBarChart(statements);
@@ -81,7 +82,7 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
     {
       title: "Statement",
       className: "statements-table__col-query-text",
-      cell: (query) => <StatementLink statement={ query.key.query } />,
+      cell: (query) => <StatementLink statement={ query.key.query } app={ selectedApp } />,
       sort: (query) => query.key.query,
     },
     {
@@ -173,7 +174,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         <StatementsSortedTable
           className="statements-table"
           data={queries}
-          columns={makeStatementsColumns(queries)}
+          columns={makeStatementsColumns(queries, selectedApp)}
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
@@ -185,7 +186,9 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     return (
       <section className="section" style={{ maxWidth: "none" }}>
         <Helmet>
-          <title>Statements</title>
+          <title>
+            { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
+          </title>
         </Helmet>
 
         <h1 style={{ marginBottom: 20 }}>Statements</h1>
