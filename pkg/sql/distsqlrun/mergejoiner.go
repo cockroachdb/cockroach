@@ -91,9 +91,9 @@ func newMergeJoiner(
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
-		leftSource,
+		m.leftSource,
 		convertToColumnOrdering(spec.LeftOrdering),
-		rightSource,
+		m.rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
 	)
