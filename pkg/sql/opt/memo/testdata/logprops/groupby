@@ -175,7 +175,7 @@ SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) 
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=333]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xyzs

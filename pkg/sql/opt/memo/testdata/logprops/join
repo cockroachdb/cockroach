@@ -143,7 +143,7 @@ project
       │    │    └── select
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=111]
+      │    │         ├── stats: [rows=111.111111]
       │    │         ├── scan uv
       │    │         │    ├── columns: u:5(int)
       │    │         │    └── stats: [rows=1000]
@@ -219,11 +219,11 @@ right-join
  │         │    │    └── offset
  │         │    │         ├── columns: uv.u:8(int!null)
  │         │    │         ├── outer: (1)
- │         │    │         ├── stats: [rows=110]
+ │         │    │         ├── stats: [rows=110.111111]
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── stats: [rows=111]
+ │         │    │         │    ├── stats: [rows=111.111111]
  │         │    │         │    ├── scan uv
  │         │    │         │    │    ├── columns: uv.u:8(int)
  │         │    │         │    │    └── stats: [rows=1000]
@@ -301,11 +301,11 @@ project
       │    │    └── offset
       │    │         ├── columns: uv.u:8(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=110]
+      │    │         ├── stats: [rows=110.111111]
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=111]
+      │    │         │    ├── stats: [rows=111.111111]
       │    │         │    ├── scan uv
       │    │         │    │    ├── columns: uv.u:8(int)
       │    │         │    │    └── stats: [rows=1000]
@@ -348,7 +348,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111]
+ ├── stats: [rows=110111.111]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
@@ -359,11 +359,11 @@ semi-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=110.111111]
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111]
+ │    │    ├── stats: [rows=111.111111]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -402,7 +402,7 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111]
+ ├── stats: [rows=110111.111]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
@@ -413,11 +413,11 @@ anti-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=110.111111]
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111]
+ │    │    ├── stats: [rows=111.111111]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -480,7 +480,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM (SELECT x) INNER JOIN (SELECT y) O
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=333]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
@@ -494,7 +494,7 @@ select
                 ├── columns: x:5(int) y:6(int)
                 ├── outer: (1-3)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=0.1000]
+                ├── stats: [rows=0.1]
                 ├── key: ()
                 ├── fd: ()-->(5,6)
                 ├── project
@@ -590,7 +590,7 @@ semi-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111]
+ │    │    ├── stats: [rows=111.111111]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -651,7 +651,7 @@ anti-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111]
+ │    │    ├── stats: [rows=111.111111]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -669,7 +669,7 @@ SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
 inner-join
  ├── columns: column1:1(int) u:2(int) v:3(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4000]
+ ├── stats: [rows=0.4]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [2 - 2]
@@ -701,7 +701,7 @@ SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON Tru
 left-join
  ├── columns: column1:1(int) u:2(int) v:3(int)
  ├── cardinality: [0 - 6]
- ├── stats: [rows=0.6000]
+ ├── stats: [rows=0.6]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [3 - 3]
@@ -735,7 +735,7 @@ SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON Tr
 right-join
  ├── columns: u:1(int) v:2(int) column1:4(int)
  ├── cardinality: [0 - 6]
- ├── stats: [rows=0.6000]
+ ├── stats: [rows=0.6]
  ├── limit
  │    ├── columns: u:1(int) v:2(int!null)
  │    ├── cardinality: [0 - 2]
@@ -769,7 +769,7 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON T
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4000]
+ ├── stats: [rows=0.4]
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
@@ -796,7 +796,7 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4000]
+ ├── stats: [rows=0.4]
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
@@ -847,7 +847,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 1) FULL JOIN (SELECT * FROM xysd LIMIT 1
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.1000]
+ ├── stats: [rows=0.1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── limit
@@ -919,7 +919,7 @@ SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
- ├── stats: [rows=30777]
+ ├── stats: [rows=30777.1544]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
  ├── scan xysd
@@ -930,15 +930,15 @@ left-join
  ├── group-by
  │    ├── columns: u:5(int!null) sum:8(decimal)
  │    ├── grouping columns: u:5(int!null)
- │    ├── stats: [rows=308, distinct(5)=308]
+ │    ├── stats: [rows=307.771544, distinct(5)=307.771544]
  │    ├── key: (5)
  │    ├── fd: (5)-->(8)
  │    ├── project
  │    │    ├── columns: u:5(int!null) v:6(int!null)
- │    │    ├── stats: [rows=333, distinct(5)=308]
+ │    │    ├── stats: [rows=333.333333, distinct(5)=307.771544]
  │    │    └── select
  │    │         ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null)
- │    │         ├── stats: [rows=333, distinct(5)=308]
+ │    │         ├── stats: [rows=333.333333, distinct(5)=307.771544]
  │    │         ├── key: (7)
  │    │         ├── fd: (7)-->(5,6)
  │    │         ├── scan uv
@@ -998,21 +998,21 @@ SELECT * FROM (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) RIGHT JO
 ----
 right-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
- ├── stats: [rows=30777]
+ ├── stats: [rows=30777.1544]
  ├── key: (1,5)
  ├── fd: (1)-->(4), (5)-->(6-8), (7,8)~~>(5,6)
  ├── group-by
  │    ├── columns: u:1(int!null) sum:4(decimal)
  │    ├── grouping columns: u:1(int!null)
- │    ├── stats: [rows=308, distinct(1)=308]
+ │    ├── stats: [rows=307.771544, distinct(1)=307.771544]
  │    ├── key: (1)
  │    ├── fd: (1)-->(4)
  │    ├── project
  │    │    ├── columns: u:1(int!null) v:2(int!null)
- │    │    ├── stats: [rows=333, distinct(1)=308]
+ │    │    ├── stats: [rows=333.333333, distinct(1)=307.771544]
  │    │    └── select
  │    │         ├── columns: u:1(int!null) v:2(int!null) rowid:3(int!null)
- │    │         ├── stats: [rows=333, distinct(1)=308]
+ │    │         ├── stats: [rows=333.333333, distinct(1)=307.771544]
  │    │         ├── key: (3)
  │    │         ├── fd: (3)-->(1,2)
  │    │         ├── scan uv
