@@ -152,6 +152,21 @@ func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.Grou
 	return lb.BuildList()
 }
 
+// -----------------------------------------------------------------------
+//
+//  GroupBy functions
+//   General custom match and replace functions used to test and construct
+//    GroupBy properties
+//
+// -----------------------------------------------------------------------
+
+// IsScalarGroupBy returns true if the given grouping columns come from a
+// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
+// with any aggregate functions operating over the entire input expression.
+func (c *CustomFuncs) IsScalarGroupBy(def memo.PrivateID) bool {
+	return c.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Empty()
+}
+
 // ----------------------------------------------------------------------
 //
 // Private extraction functions
