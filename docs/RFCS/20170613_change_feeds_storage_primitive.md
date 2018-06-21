@@ -170,11 +170,11 @@ followed by a `Checkpoint()` event.
 #### Wire format
 
 The exact format in which events are reported are TBD. RangeFeed processing will
-require that Raft log-provided `WriteBatch`es be decoded and sanitized in order
-to properly track intents, filter based on key ranges, and remove range-local
-updates. Because we will have already incurred this decoding and filtering cost,
-it is likely that the wire format will be a protobuf union type that closely
-resembles the events presented in [Types of events](#types-of-events).
+require that Raft log be decoded and sanitized in order to properly track
+intents, filter based on key ranges, and remove range-local updates. Because we
+will have already incurred this decoding and filtering cost, it is likely that
+the wire format will be a protobuf union type that closely resembles the events
+presented in [Types of events](#types-of-events).
 
 ### Replica-level
 
@@ -184,7 +184,7 @@ key range for which updates are to be delivered. The `RangeFeed` command first
 grabs `raftMu`, opens a RocksDB snapshot, registers itself with the raft
 processing goroutine and releases `raftMu` again. 
 
-By registering itself, it receives notifications for all future `WriteBatch`es
+By registering itself, it receives notifications for all future updates
 which apply on the Replica, and sends them on the stream to the caller
 (after suitably sanitizing to account only for the updates which are relevant
 to the span the caller has supplied). This means that the `RangeFeed` is driven
@@ -281,10 +281,25 @@ intents on range). This also means that the queue does not need to track the
 specific keys of each intent. This is critical as it should prevent the queue's
 memory footprint from growing large enough to need to spill to disk.
 
+Still, it's conceivable that the queue could grow large enough that it needs to
+spill to disk. In this case, we'll use a temp storage engine to house the queue.
+The representation should be fairly straightforward, and will be organized into
+a two-level structure. Primarily, we'll maintain `<timestamp/txnID>` keys
+pointing to values with the associated `txn key` and `intent refcount`. This
+will allow us to use the RocksDB engine's internal sorting to quickly find the
+oldest transaction. On the side, we'll also need `<txnID>` keys pointing to
+`timestamp` values. This will allow us to forward a transaction's timestamp
+given its ID and a new timestamp. It's unclear how critical this disk spilling
+will be. The first iteration of the `UnresolvedIntentQueue` will just throw an
+error that shuts down the RangeFeed if it grows too large.
+
 The queue will be initially built using the RocksDB snapshot captured under lock
 when the first RangeFeed connected. It will then be incrementally maintained
-(txns added and deleted, refcount adjusted, Timestamp forwarded) as
-`WriteBatch`es decoded off the Raft log write and resolve intents.
+(txns added and deleted, refcount adjusted, Timestamp forwarded) as Raft log
+entries indicate that intents are written and resolved. Care will be needed if
+we allow Raft entries to be processed concurrently with the initial scan. For
+instance, we'll need to allow refcounts to go negative at least until the catch
+up scan has completed.
 
 Whenever an intent is resolved, its transaction's corresponding unresolved
 intent reference count is decremented. When a transaction's ref count reaches 0,
@@ -350,7 +365,7 @@ to run into them later. This will be less of a problem if we persist the
 resolved timestamp and use a `TimeBoundIterator` to skip over the abandoned
 intents when re-building the `UnresolvedIntentQueue`.
 
-#### Decoding WriteBatches
+#### Decoding WriteBatches / 
 
 The heart of this proposal relies on the ability to decode `WriteBatch`es
 present in Raft entries and accurately determine their intended effect on
@@ -408,46 +423,90 @@ version key for the same logical key will be interpreted as an intent write.
 Likewise, the deletion of a meta key will be interpreted as a successful intent
 resolution.
 
-I have some concerns about this. To start, the diagram shows how complicated
+This raises some serious concerns. To start, the diagram shows how complicated
 this decoding process will be. Not only are there a large number of state
-transitions here that we'll have to pattern match against, but I haven't
-convinced myself that this decoding will even be un-ambiguous without additional
-engine reads. That said, I don't think this is insurmountable by any means. My
-bigger concern is that this is creating a very substantial below-Raft dependency
-on the implementation details of our above-Raft MVCC-layer. We're going to have
-to be very careful about making any changes to MVCC once we introduce this
-dependency, and I'm worried about the consequences of this. I think this
-deserves a serious discussion.
+transitions here that we'll have to pattern match against, but its not clear
+whether this decoding will even be un-ambiguous without additional engine reads.
+That said, the process of decoding the WriteBatch itself is not insurmountable
+by any means. The bigger concern is that this is creating a very substantial
+below-Raft dependency on the implementation details of our above-Raft
+MVCC-layer. We're going to have to be very careful about making any changes to
+MVCC once we introduce this dependency, and there may be serious consequences to
+this. Issues like these were what prompted the proposer-evaluated kv refactor,
+and they should not be taken lightly.
 
-For the sake of this proposal though, let's ignore these concerns and pretend
-we have the ability to accurately decode `WriteBatch`es. Once a `WriteBatch`
-is decoded and split up into its component operations, these will then each
-be run through the following logic:
+Because of this, we instead propose an alternative to decoding the `WriteBatch`
+in a Raft command directly. Instead, we propose the introduction of a logical
+list of higher-level MVCC operations to each Raft command. These higher-level
+operations will not be bound to the semantics of the physical operations
+described in the `WriteBatch`, and as such will not restrict changes to them
+in the future. Instead, the operations will describe the changes of the batch
+at the MVCC level. This avoids the previous issue and allows for much easier
+decoding of the operations downstream of Raft.
+
+To start, the following field (alternate name "LogicalOps") will be added to the
+`RaftCommand` proto message:
+
 ```
-match op {
-    InlineWrite | NonTransactionalWrite => SendValueToMatchingFeeds(key, val, ts),
-    IntentWrite    => {
-        UnresolvedIntentQueue[txnID].refcount++
-        UnresolvedIntentQueue[txnID].Timestamp.Forward(ts)
-    }, 
-    IntentUpdate   => UnresolvedIntentQueue[txnID].Timestamp.Forward(ts),
-    IntentCommit   => {
-        UnresolvedIntentQueue[txnID].refcount--
-        SendValueToMatchingFeeds(key, val, ts)
-    },
-    IntentAbort    => UnresolvedIntentQueue[txnID].refcount--,
-    IntentPush     => UnresolvedIntentQueue[txnID].Timestamp.Forward(ts),
-    Merge          => { error },
-    DeleteRange    => { error },
-    GarbageCollect => { },
+repeated MVCCOp mvcc_ops;
+```
+
+The definition of `MVCCOp` will be something like:
+```
+enum Bytes {
+    // The byte slice is provided inline.
+    Inline  { bytes: []byte },
+    // The byte slice is WriteBatch.data[offset:offset+len].
+    Pointer { offset: i32, len: i32 },
+}
+
+enum MVCCOp {
+    WriteValue   { key: Bytes, timestamp: Option<Timestamp>, value: Option<Bytes> },
+    WriteIntent  { txnID: UUID, timestamp: Timestamp },
+    UpdateIntent { txnID: UUID, timestamp: Timestamp },
+    CommitIntent { txnID: UUID, key: Bytes, timestamp: Timestamp },
+    AbortIntent  { txnID: UUID },
+
+    // Probably won't be needed. Unclear whether they will ever be useful.
+    Merge          { key: Bytes, timestamp: Option<Timestamp>, value: Option<Bytes> },
+    ClearRange     { startKey: Bytes, endKey: Bytes },
+    GarbageCollect { key: Bytes, timestamp: Option<Timestamp> },
 }
 ```
 
-Note that not all WriteBatches will contain all information necessary to make
-these decisions. For instance, intent resolution will be identified by the
-deletion of a meta record key, but this will not include the current transaction
-ID in that meta record. This extra information will probably need to be hung
-off of the `RaftCommand` message itself.
+Notably, all byte slice values will optionally point into the WriteBatch itself,
+which will help limit the write amplification caused by replicating both physical
+and logical operations. This optimization can be introduced gradually.
+
+Above Raft, the log of MVCCOps will be constructed side-by-side with the
+`WriteBatch` as each Request is processed within a BatchRequest.
+
+Once the Raft entry is applied below Raft and its MVCC ops are split out, they
+will then each be run through the following logic:
+```
+for op in mvccOps {
+    match op {
+        WriteValue(key, ts, val) => SendValueToMatchingFeeds(key, ts, val),
+        WriteIntent(txnID, ts)   => {
+            UnresolvedIntentQueue[txnID].refcount++
+            UnresolvedIntentQueue[txnID].Timestamp.Forward(ts)
+        }, 
+        UpdateIntent(txnID, ts) => UnresolvedIntentQueue[txnID].Timestamp.Forward(ts),
+        CommitIntent(txnID, key, ts) => {
+            UnresolvedIntentQueue[txnID].refcount--
+            // It's unfortunate that we'll need to perform an engine lookup
+            // for this, but it's not a huge deal. The value should almost
+            // certainly be in RocksDB's memtable or block cache, so there's
+            // not much of a reason for any extra layer of caching.
+            SendValueToMatchingFeeds(key, MVCCGet(key, ts), ts)
+        },
+        AbortIntent    => UnresolvedIntentQueue[txnID].refcount--,
+        Merge          => { error },
+        ClearRange     => { error },
+        GarbageCollect => { },
+    }
+}
+```
 
 ### MVCC-level
 
