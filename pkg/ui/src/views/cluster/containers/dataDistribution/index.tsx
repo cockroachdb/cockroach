@@ -142,7 +142,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
         <section className="section">
           <h1>Data Distribution</h1>
         </section>
-        <section className="section">
+        <section style={{ paddingTop: 10, paddingLeft: 30, display: "block" }}>
           <Loading
             className="loading-image loading-image__spinner-left"
             loading={!this.props.dataDistribution || !this.props.localityTree}
