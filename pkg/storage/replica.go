@@ -4139,7 +4139,15 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 	if !r.quiesceLocked() {
 		return false
 	}
-	for id := range status.Progress {
+
+	min := func(a, b uint64) uint64 {
+		if a < b {
+			return a
+		}
+		return b
+	}
+
+	for id, prog := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
 			continue
 		}
@@ -4157,7 +4165,7 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 			To:     id,
 			Type:   raftpb.MsgHeartbeat,
 			Term:   status.Term,
-			Commit: status.Commit,
+			Commit: min(prog.Match, status.Commit),
 		}
 
 		if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, true) {
