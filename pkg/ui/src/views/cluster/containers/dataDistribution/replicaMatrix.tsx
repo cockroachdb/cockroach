@@ -15,6 +15,7 @@ import {
 import { cockroach } from "src/js/protos";
 import INodeDescriptor = cockroach.roachpb.INodeDescriptor;
 import "./replicaMatrix.styl";
+import { createSelector } from "reselect";
 
 const DOWN_ARROW = "▼";
 const SIDE_ARROW = "▶";
@@ -179,36 +180,22 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   render() {
     const {
       cols,
-      rows,
     } = this.props;
     const {
-      collapsedRows,
       collapsedCols,
     } = this.state;
 
-    const flattenedRows = flatten(rows, collapsedRows, true /* includeNodes */);
+    const propsAndState = {
+      props: this.props,
+      state: this.state,
+    };
+
+    const flattenedRows = selectFlattenedRows(propsAndState);
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
-    const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
+    const flattenedCols = selectFlattenedCols(propsAndState);
 
-    const getValue = this.props.getValue(this.state.selectedMetric);
-
-    // TODO(vilterp): don't loop through cells twice each render (here and in actual render)
-    // maybe just put the scale in a selector or something
-    const allVals: number[] = [];
-    flattenedRows.forEach((row) => {
-      flattenedCols.forEach((col) => {
-        if (!(row.isLeaf || row.isCollapsed)) {
-          return;
-        }
-        const value = sumValuesUnderPaths(rows, cols, row.path, col.path, getValue);
-        allVals.push(value);
-      });
-    });
-
-    const extent = d3.extent(allVals);
-    const scale = d3.scale.linear()
-      .domain([0, extent[1]])
-      .range([100, 50]);
+    const getValue = selectGetValueFun(propsAndState);
+    const scale = selectScale(propsAndState);
 
     return (
       <table className="matrix">
@@ -281,6 +268,72 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   }
 
 }
+
+interface PropsAndState {
+  props: ReplicaMatrixProps;
+  state: ReplicaMatrixState;
+}
+
+const selectFlattenedRows = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
+  (rows: TreeNode<SchemaObject>, collapsedRows: TreePath[]) => {
+    console.log("flattening rows");
+    return flatten(rows, collapsedRows, true /* includeNodes */);
+  },
+);
+
+const selectFlattenedCols = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.props.cols,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
+  (cols: TreeNode<NodeDescriptor$Properties>, collapseCols: TreePath[]) => {
+    console.log("flattening cols");
+    return flatten(cols, collapseCols, false /* includeNodes */);
+  },
+);
+
+const selectGetValueFun = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.state.selectedMetric,
+  (propsAndState: PropsAndState) => propsAndState.props.getValue,
+  (
+    selectedMetric: string,
+    getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number,
+  ) => {
+    return getValue(selectedMetric);
+  },
+);
+
+const selectScale = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (propsAndState: PropsAndState) => propsAndState.props.cols,
+  selectGetValueFun,
+  selectFlattenedRows,
+  selectFlattenedCols,
+  (
+    rows: TreeNode<SchemaObject>,
+    cols: TreeNode<NodeDescriptor$Properties>,
+    getValue: (rowPath: TreePath, colPath: TreePath) => number,
+    flattenedRows: FlattenedNode<SchemaObject>[],
+    flattenedCols: FlattenedNode<NodeDescriptor$Properties>[],
+  ) => {
+    console.log("computing scale");
+    const allVals: number[] = [];
+    flattenedRows.forEach((row) => {
+      flattenedCols.forEach((col) => {
+        if (!(row.isLeaf || row.isCollapsed)) {
+          return;
+        }
+        const value = sumValuesUnderPaths(rows, cols, row.path, col.path, getValue);
+        allVals.push(value);
+      });
+    });
+
+    const extent = d3.extent(allVals);
+    return d3.scale.linear()
+      .domain([0, extent[1]])
+      .range([100, 50]); // TODO(vilterp): factor these out into constants
+  },
+);
 
 export default ReplicaMatrix;
 
