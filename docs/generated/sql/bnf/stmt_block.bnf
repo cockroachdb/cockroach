@@ -86,7 +86,7 @@ explain_stmt ::=
 	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' explainable_stmt
 
 export_stmt ::=
-	'EXPORT' 'INTO' import_data_format string_or_placeholder opt_with_options 'FROM' select_stmt
+	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
 
 grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' name_list
@@ -98,10 +98,10 @@ insert_stmt ::=
 	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
 import_stmt ::=
-	'IMPORT' import_bundle_format '(' string_or_placeholder ')'
-	| 'IMPORT' 'TABLE' table_name 'FROM' import_bundle_format '(' string_or_placeholder ')'
-	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
-	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	'IMPORT' import_format '(' string_or_placeholder ')'
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_format '(' string_or_placeholder ')'
+	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
 pause_stmt ::=
 	'PAUSE' 'JOB' a_expr
@@ -329,11 +329,8 @@ explainable_stmt ::=
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
-import_data_format ::=
-	import_bundle_format
-	| 'CSV'
-	| 'MYSQLOUTFILE'
-	| 'PGCOPY'
+import_format ::=
+	name
 
 privileges ::=
 	'ALL'
@@ -357,10 +354,6 @@ insert_rest ::=
 on_conflict ::=
 	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list where_clause
 	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
-
-import_bundle_format ::=
-	'MYSQLDUMP'
-	| 'PGDUMP'
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -665,7 +658,6 @@ unreserved_keyword ::=
 	| 'CONSTRAINTS'
 	| 'COPY'
 	| 'COVERING'
-	| 'CSV'
 	| 'CUBE'
 	| 'CURRENT'
 	| 'CYCLE'
@@ -734,8 +726,6 @@ unreserved_keyword ::=
 	| 'MATCH'
 	| 'MINUTE'
 	| 'MONTH'
-	| 'MYSQLDUMP'
-	| 'MYSQLOUTFILE'
 	| 'NAMES'
 	| 'NAN'
 	| 'NAME'
@@ -759,8 +749,6 @@ unreserved_keyword ::=
 	| 'PASSWORD'
 	| 'PAUSE'
 	| 'PHYSICAL'
-	| 'PGCOPY'
-	| 'PGDUMP'
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'

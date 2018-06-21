@@ -496,7 +496,6 @@ func importPlanHook(
 				evalCtx := &p.ExtendedEvalContext().EvalContext
 				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime)
 			default:
-				// should be unreachable based on current parser rules.
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 			}
 			if err != nil {
@@ -513,7 +512,6 @@ func importPlanHook(
 			jobDesc = descStr
 		} else {
 			if table == nil {
-				// should be unreachable based on current parser rules.
 				return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
 			}
 			var create *tree.CreateTable
