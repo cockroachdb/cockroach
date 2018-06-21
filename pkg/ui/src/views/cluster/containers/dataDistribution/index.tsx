@@ -27,10 +27,12 @@ import ReplicaMatrix, {
 import { TreeNode, TreePath } from "./tree";
 import "./index.styl";
 
+import IReplicaInfo = cockroach.server.serverpb.LeaseholdersAndQPSResponse.IReplicaInfo;
 type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
 type LeaseholdersAndQPSResponse = cockroach.server.serverpb.LeaseholdersAndQPSResponse;
-type NodeDescriptor = cockroach.roachpb.INodeDescriptor;
-type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
+type INodeDescriptor = cockroach.roachpb.INodeDescriptor;
+type IZoneConfig = cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
+type IRangeInfo = cockroach.server.serverpb.LeaseholdersAndQPSResponse.IRangeInfo;
 
 const ZONE_CONFIG_TEXT = (
   <span>
@@ -44,7 +46,7 @@ interface DataDistributionProps {
   dataDistribution: DataDistributionResponse;
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
-  sortedZoneConfigs: ZoneConfig$Properties[];
+  sortedZoneConfigs: IZoneConfig[];
 }
 
 class DataDistribution extends React.Component<DataDistributionProps> {
@@ -82,57 +84,27 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   }
 
   getLeaseholderCount(dbPath: TreePath, nodePath: TreePath): number {
-    const tableName = dbPath[1];
     const nodeID = nodePath[nodePath.length - 1];
+    const range = this.getRangeAtPath(dbPath);
 
-    const tableID = this.tableIDForName(tableName);
-
-    // gah this is stupid. use int32s
-    // TODO(vilterp): remove this keyBy...
-    const tableInfo = this.props.leaseholdersAndQPS.table_infos[tableID];
-
-    if (tableInfo) {
-      return _.sumBy(tableInfo.range_infos, (rangeInfo) => {
-        return rangeInfo.leaseholder_node_id.toString() === nodeID ? 1 : 0;
-      });
-    } else {
+    if (!range) {
       return 0;
     }
+
+    const isLeaseholder = range.leaseholder_node_id.toString() === nodeID;
+    return isLeaseholder ? 1 : 0;
   }
 
   getQPS(dbPath: TreePath, nodePath: TreePath): number {
-    const tableName = dbPath[1];
-    const nodeID = nodePath[nodePath.length - 1];
+    const replica = this.getReplicaAtPaths(dbPath, nodePath);
 
-    const tableID = this.tableIDForName(tableName);
-
-    // gah this is stupid. use int32s
-    // TODO(vilterp): remove this keyBy...
-    const tableInfo = this.props.leaseholdersAndQPS.table_infos[tableID];
-
-    if (tableInfo) {
-      return _.sumBy(tableInfo.range_infos, (rangeInfo) => {
-        const replicaOnThisNode = rangeInfo.replica_info[nodeID];
-        if (replicaOnThisNode) {
-          return Math.round(replicaOnThisNode.stats.queries_per_second);
-        }
-        return 0;
-      });
-    } else {
-      return 0;
-    }
+    return replica ? Math.round(replica.stats.queries_per_second) : 0;
   }
 
   getReplicaCount(dbPath: TreePath, nodePath: TreePath): number {
-    const [dbName, tableName] = dbPath;
-    const nodeID = nodePath[nodePath.length - 1];
-    const databaseInfo = this.props.dataDistribution.database_info;
+    const replica = this.getReplicaAtPaths(dbPath, nodePath);
 
-    const res = databaseInfo[dbName].table_info[tableName].replica_count_by_node_id[nodeID];
-    if (!res) {
-      return 0;
-    }
-    return FixLong(res).toInt();
+    return replica ? 1 : 0;
   }
 
   tableIDForName(name: string) {
@@ -141,11 +113,40 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
         if (tableName === name) {
           id = tableInfo.id.toInt();
-          // TODO(vilterp): how do you bail out of this early?
+          // TODO(vilterp): just do a normal for loop and bail out early
+          // or build a map of this in a selector
+          // or change the return type of the endpoint...
         }
       });
     });
     return id;
+  }
+
+  getRangeAtPath(dbPath: TreePath): IRangeInfo {
+    const tableName = dbPath[1];
+    const rangeID = dbPath[2];
+    const tableID = this.tableIDForName(tableName);
+    const ranges = this.getRangesForTableID(tableID);
+    return ranges[rangeID];
+  }
+
+  getReplicaAtPaths(dbPath: TreePath, nodePath: TreePath): IReplicaInfo {
+    const nodeID = nodePath[nodePath.length - 1];
+
+    const range = this.getRangeAtPath(dbPath);
+    if (!range) {
+      return null; // TODO(vilterp) under what circumstances does this happen?
+    }
+
+    return range.replica_info[nodeID];
+  }
+
+  getRangesForTableID(tableID: number): { [K: string]: IRangeInfo } {
+    const maybeTableInfo = this.props.leaseholdersAndQPS.table_infos[tableID.toString()];
+    if (maybeTableInfo) {
+      return maybeTableInfo.range_infos;
+    }
+    return {};
   }
 
   render() {
@@ -165,6 +166,10 @@ class DataDistribution extends React.Component<DataDistributionProps> {
             tableName,
             tableID: tableInfo.id.toInt(),
           },
+          children: _.map(this.getRangesForTableID(tableInfo.id.toNumber()), (rangeInfo) => ({
+            name: rangeInfo.id.toString(),
+            data: { dbName, tableName, rangeID: rangeInfo.id.toString() },
+          })),
         })),
       })),
     };
@@ -200,7 +205,7 @@ interface DataDistributionPageProps {
   dataDistribution: DataDistributionResponse;
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
-  sortedZoneConfigs: ZoneConfig$Properties[];
+  sortedZoneConfigs: IZoneConfig[];
   refreshDataDistribution: typeof refreshDataDistribution;
   refreshLeaseholdersAndQPS: typeof refreshLeaseholdersAndQPS;
   refreshNodes: typeof refreshNodes;
@@ -284,7 +289,7 @@ export default DataDistributionPageConnected;
 function nodeTreeFromLocalityTree(
   rootName: string,
   localityTree: LocalityTree,
-): TreeNode<NodeDescriptor> {
+): TreeNode<INodeDescriptor> {
   const children: TreeNode<any>[] = [];
 
   // Add child localities.
