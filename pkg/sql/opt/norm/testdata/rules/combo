@@ -317,12 +317,48 @@ ConstrainLookupJoinIndexScan (no changes)
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
+GenerateMergeJoins
+  Cost: 2466.67
+================================================================================
+   project
+    ├── columns: s:4(string)
+  - └── inner-join
+  + └── inner-join (merge)
+         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+         ├── key: (1,6)
+         ├── fd: (1)-->(2,4)
+         ├── select
+         │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2,4)
+  +      │    ├── ordering: +1
+         │    ├── scan a
+         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+         │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2,4)
+  +      │    │    ├── fd: (1)-->(2,4)
+  +      │    │    └── ordering: +1
+         │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         ├── scan xy
+         │    ├── columns: x:6(int!null)
+  -      │    └── key: (6)
+  -      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +      │    ├── key: (6)
+  +      │    └── ordering: +6
+  +      └── merge-on
+  +           ├── left ordering: +1
+  +           ├── right ordering: +6
+  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+================================================================================
 Final best expression
-  Cost: 2473.33
+  Cost: 2466.67
 ================================================================================
   project
    ├── columns: s:4(string)
-   └── inner-join
+   └── inner-join (merge)
         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
         ├── key: (1,6)
         ├── fd: (1)-->(2,4)
@@ -330,17 +366,23 @@ Final best expression
         │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
         │    ├── key: (1)
         │    ├── fd: (1)-->(2,4)
+        │    ├── ordering: +1
         │    ├── scan a
         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
         │    │    ├── key: (1)
-        │    │    └── fd: (1)-->(2,4)
+        │    │    ├── fd: (1)-->(2,4)
+        │    │    └── ordering: +1
         │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
         │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
         ├── scan xy
         │    ├── columns: x:6(int!null)
-        │    └── key: (6)
-        └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-             └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        │    ├── key: (6)
+        │    └── ordering: +6
+        └── merge-on
+             ├── left ordering: +1
+             ├── right ordering: +6
+             └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+                  └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Exploration patterns with varying costs.
 optsteps
@@ -705,6 +747,9 @@ GenerateIndexScans (higher cost)
          └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
@@ -1556,6 +1601,9 @@ GenerateIndexScans
     │              └── variable: notnull [type=bool, outer=(9)]
     └── projections [outer=(1,10)]
          └── CASE WHEN bool_or AND (xy.x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(1,10)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
   Cost: 3110.00
