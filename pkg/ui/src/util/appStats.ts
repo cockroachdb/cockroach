@@ -2,8 +2,8 @@ import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
-type StatementStatistics = protos.cockroach.sql.StatementStatistics$Properties;
-type CollectedStatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+export type StatementStatistics = protos.cockroach.sql.StatementStatistics$Properties;
+export type CollectedStatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 
 export interface NumericStat {
   mean?: number;
@@ -49,17 +49,39 @@ export function addStatementStats(a: StatementStatistics, b: StatementStatistics
 }
 
 export function aggregateStatementStats(statementStats: CollectedStatementStatistics[]) {
-  const statements = {};
+  const statementsMap: { [query: string]: CollectedStatementStatistics[] } = {};
   statementStats.forEach(
-    (statement: CollectedStatementStatistics$Properties) => {
-      const matches = statements[statement.key.query] || (statements[statement.key.query] = []);
+    (statement: CollectedStatementStatistics) => {
+      const matches = statementsMap[statement.key.query] || (statementsMap[statement.key.query] = []);
       matches.push(statement);
   });
 
-  return _.values(statements).map(statements =>
-    _.reduce(statements, (a, b) => ({
+  return _.values(statementsMap).map(statements =>
+    _.reduce(statements, (a: CollectedStatementStatistics, b: CollectedStatementStatistics) => ({
       key: a.key,
       stats: addStatementStats(a.stats, b.stats),
-    }))
+    })),
   );
+}
+
+export interface ExecutionStatistics {
+  query: string;
+  app: string;
+  distSQL: boolean;
+  failed: boolean;
+  stats: StatementStatistics;
+}
+
+export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
+  return statementStats.map(stmt => ({
+    query: stmt.key.query,
+    app: stmt.key.app,
+    distSQL: stmt.key.distSQL,
+    failed: stmt.key.failed,
+    stats: stmt.stats,
+  }));
+}
+
+export function combineStatementStats(statementStats: StatementStatistics[]): StatementStatistics {
+  return _.reduce(statementStats, addStatementStats);
 }
