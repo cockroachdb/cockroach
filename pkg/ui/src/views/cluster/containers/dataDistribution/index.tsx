@@ -8,7 +8,6 @@ import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
-import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -47,6 +46,7 @@ interface DataDistributionProps {
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+  tablesByName: { [name: string]: number };
 }
 
 class DataDistribution extends React.Component<DataDistributionProps> {
@@ -107,26 +107,15 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     return replica ? 1 : 0;
   }
 
-  tableIDForName(name: string) {
-    let id = 0;
-    _.forEach(this.props.dataDistribution.database_info, (dbInfo) => {
-      _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
-        if (tableName === name) {
-          id = tableInfo.id.toInt();
-          // TODO(vilterp): just do a normal for loop and bail out early
-          // or build a map of this in a selector
-          // or change the return type of the endpoint...
-        }
-      });
-    });
-    return id;
+  tableIDForName(name: string): number {
+    return this.props.tablesByName[name];
   }
 
   getRangeAtPath(dbPath: TreePath): IRangeInfo {
     const tableName = dbPath[1];
     const rangeID = dbPath[2];
     const tableID = this.tableIDForName(tableName);
-    const ranges = this.getRangesForTableID(tableID);
+    const ranges = getRangesForTableID(this.props.leaseholdersAndQPS, tableID);
     return ranges[rangeID];
   }
 
@@ -152,27 +141,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   render() {
     const nodeTree = nodeTreeFromLocalityTree("Cluster", this.props.localityTree);
 
-    const databaseInfo = this.props.dataDistribution.database_info;
-    const dbTree: TreeNode<SchemaObject> = {
-      name: "Cluster",
-      data: { dbName: null, tableName: null },
-      children: _.map(databaseInfo, (dbInfo, dbName) => ({
-        name: dbName,
-        data: { dbName },
-        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
-          name: tableName,
-          data: {
-            dbName,
-            tableName,
-            tableID: tableInfo.id.toInt(),
-          },
-          children: _.map(this.getRangesForTableID(tableInfo.id.toNumber()), (rangeInfo) => ({
-            name: rangeInfo.id.toString(),
-            data: { dbName, tableName, rangeID: rangeInfo.id.toString() },
-          })),
-        })),
-      })),
-    };
+    const schemaTree: TreeNode<SchemaObject> = selectSchemaTree(this.props);
 
     return (
       <div className="data-distribution">
@@ -192,7 +161,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
         <div>
           <ReplicaMatrix
             cols={nodeTree}
-            rows={dbTree}
+            rows={schemaTree}
             getValue={this.getCellValue}
           />
         </div>
@@ -206,6 +175,7 @@ interface DataDistributionPageProps {
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+  tablesByName: { [name: string]: number };
   refreshDataDistribution: typeof refreshDataDistribution;
   refreshLeaseholdersAndQPS: typeof refreshLeaseholdersAndQPS;
   refreshNodes: typeof refreshNodes;
@@ -252,6 +222,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
               <DataDistribution
                 localityTree={this.props.localityTree}
                 dataDistribution={this.props.dataDistribution}
+                tablesByName={this.props.tablesByName}
                 leaseholdersAndQPS={this.props.leaseholdersAndQPS}
                 sortedZoneConfigs={this.props.sortedZoneConfigs}
               />
@@ -263,6 +234,8 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   }
 }
 
+// Selectors
+
 const sortedZoneConfigs = createSelector(
   (state: AdminUIState) => state.cachedData.dataDistribution,
   (dataDistributionState) => {
@@ -273,6 +246,65 @@ const sortedZoneConfigs = createSelector(
   },
 );
 
+const tablesByName = createSelector(
+  (state: AdminUIState) => state.cachedData.dataDistribution,
+  (dataDistributionState) => {
+    if (!dataDistributionState.data) {
+      return {};
+    }
+
+    const tables: { [name: string]: number } = {};
+    _.forEach(dataDistributionState.data.database_info, (dbInfo) => {
+      _.forEach(dbInfo.table_info, (tableInfo, tableName) => {
+        tables[tableName] = tableInfo.id.toNumber();
+      });
+    });
+    return tables;
+  },
+);
+
+function getRangesForTableID(
+  leaseholdersAndQPS: LeaseholdersAndQPSResponse,
+  tableID: number,
+): { [rangeId: string]: IRangeInfo } {
+  const maybeTableInfo = leaseholdersAndQPS.table_infos[tableID.toString()];
+  if (maybeTableInfo) {
+    return maybeTableInfo.range_infos;
+  }
+  return {};
+}
+
+// TODO(vilterp): do I need the two funcs?
+const selectSchemaTree = createSelector(
+  (props: DataDistributionProps) => props.dataDistribution,
+  (props: DataDistributionProps) => props.leaseholdersAndQPS,
+  (dataDistribution: DataDistributionResponse, leaseholdersAndQPS: LeaseholdersAndQPSResponse) => {
+    console.log("computing schema tree");
+    return {
+      name: "Cluster",
+      data: { dbName: null, tableName: null },
+      children: _.map(dataDistribution.database_info, (dbInfo, dbName) => ({
+        name: dbName,
+        data: { dbName },
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
+          name: tableName,
+          data: {
+            dbName,
+            tableName,
+            tableID: tableInfo.id.toInt(),
+          },
+          children: _.map(getRangesForTableID(leaseholdersAndQPS, tableInfo.id.toNumber()), (rangeInfo) => ({
+            name: rangeInfo.id.toString(),
+            data: { dbName, tableName, rangeID: rangeInfo.id.toString() },
+          })),
+        })),
+      })),
+    };
+  },
+);
+
+// Connected Component
+
 // tslint:disable-next-line:variable-name
 const DataDistributionPageConnected = connect(
   (state: AdminUIState) => ({
@@ -280,6 +312,7 @@ const DataDistributionPageConnected = connect(
     leaseholdersAndQPS: state.cachedData.leaseholdersAndQPS.data,
     sortedZoneConfigs: sortedZoneConfigs(state),
     localityTree: selectLocalityTree(state),
+    tablesByName: tablesByName(state),
   }),
   {
     refreshDataDistribution,
