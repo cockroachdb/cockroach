@@ -17,7 +17,6 @@ package props
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -68,8 +67,7 @@ type Statistics struct {
 func (s *Statistics) String() string {
 	var buf bytes.Buffer
 
-	buf.WriteString("[rows=")
-	printFloat(&buf, s.RowCount)
+	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
 	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
 	for _, colStat := range s.ColStats {
 		colStats = append(colStats, *colStat)
@@ -79,8 +77,7 @@ func (s *Statistics) String() string {
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=", col.Cols.String())
-		printFloat(&buf, col.DistinctCount)
+		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
 	}
 	buf.WriteString("]")
 
@@ -136,15 +133,4 @@ func (c ColumnStatistics) Less(i, j int) bool {
 // Swap is part of the Sorter interface.
 func (c ColumnStatistics) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
-}
-
-func printFloat(buf *bytes.Buffer, v float64) {
-	if v >= 100 && v <= 1e+15 || math.Abs(math.Round(v)-v) < .0001 {
-		// Omit fractional digits for integers and for large values.
-		fmt.Fprintf(buf, "%.0f", v)
-	} else if v >= 1 {
-		fmt.Fprintf(buf, "%.2f", v)
-	} else {
-		fmt.Fprintf(buf, "%.4f", v)
-	}
 }

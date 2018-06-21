@@ -50,16 +50,16 @@ SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s
 ----
 project
  ├── columns: count:5(int)
- ├── stats: [rows=65.56]
+ ├── stats: [rows=65.5555556]
  └── group-by
       ├── columns: y:2(int) s:3(string!null) count:5(int)
       ├── grouping columns: y:2(int) s:3(string!null)
-      ├── stats: [rows=65.56, distinct(2,3)=65.56]
+      ├── stats: [rows=65.5555556, distinct(2,3)=65.5555556]
       ├── key: (2,3)
       ├── fd: (2,3)-->(5)
       ├── select
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
-      │    ├── stats: [rows=66.67, distinct(3)=1, distinct(2,3)=65.56]
+      │    ├── stats: [rows=66.6666667, distinct(3)=1, distinct(2,3)=65.5555556]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    ├── lookup-join a
