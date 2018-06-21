@@ -43,8 +43,8 @@ TEST(Libroach, DBOpen) {
   EXPECT_STREQ(stats.encryption_status.data, NULL);
   EXPECT_EQ(stats.total_files, 0);
   EXPECT_EQ(stats.total_bytes, 0);
-  EXPECT_EQ(stats.active_files, 0);
-  EXPECT_EQ(stats.active_bytes, 0);
+  EXPECT_EQ(stats.active_key_files, 0);
+  EXPECT_EQ(stats.active_key_bytes, 0);
 
   DBClose(db);
 }

@@ -207,7 +207,7 @@ DBString DBImpl::GetCompactionStats() {
 DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   // Always initialize the fields.
   stats->encryption_status = DBString();
-  stats->total_files = stats->total_bytes = stats->active_files = stats->active_bytes = 0;
+  stats->total_files = stats->total_bytes = stats->active_key_files = stats->active_key_bytes = 0;
 
   if (env_mgr->env_stats_handler == nullptr || env_mgr->file_registry == nullptr) {
     // We can't compute these if we don't have a file registry or stats handler.
@@ -240,6 +240,12 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   // do not call DisableFileDeletions. This means that some files may be listed by rocksdb but not
   // present in the file registry (deleted between calls). Such files will be considered
   // "plaintext".
+  //
+  // TODO(mberhault): to obtain accurate statistics, we need at least:
+  // - FileRegistry entries for all plaintext files
+  // - Scan files in the FileRegistry
+  // - Disable deletions in rocksdb during the scan
+  // - Report "unknown" files (no registry entry) to avoid false positives.
 
   struct FileStat {
     FileStat() : has_size(false), size(0), entry(nullptr) {}
@@ -286,7 +292,7 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
     file_list[it->name].size = it->size;
   }
 
-  uint64_t total_files = 0, total_bytes = 0, active_files = 0, active_bytes = 0;
+  uint64_t total_files = 0, total_bytes = 0, active_key_files = 0, active_key_bytes = 0;
 
   // Run through the list of found files.
   auto active_key_id = env_mgr->env_stats_handler->GetActiveDataKeyID();
@@ -313,8 +319,8 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
     }
 
     if (id == active_key_id) {
-      active_files++;
-      active_bytes += it->second.size;
+      active_key_files++;
+      active_key_bytes += it->second.size;
     }
 
     total_files++;
@@ -323,8 +329,8 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
 
   stats->total_files = total_files;
   stats->total_bytes = total_bytes;
-  stats->active_files = active_files;
-  stats->active_bytes = active_bytes;
+  stats->active_key_files = active_key_files;
+  stats->active_key_bytes = active_key_bytes;
 
   return kSuccess;
 }

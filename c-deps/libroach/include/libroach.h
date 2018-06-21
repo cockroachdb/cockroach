@@ -315,8 +315,8 @@ typedef struct {
   uint64_t total_files;
   uint64_t total_bytes;
   // Files/bytes using the active data key.
-  uint64_t active_files;
-  uint64_t active_bytes;
+  uint64_t active_key_files;
+  uint64_t active_key_bytes;
   // encryption status (CCL only).
   // This is a serialized enginepbccl/stats.proto:EncryptionStatus
   DBString encryption_status;
