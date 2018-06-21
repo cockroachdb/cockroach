@@ -93,7 +93,7 @@ func (fs fakeStore) StoreID() roachpb.StoreID {
 	return fs.storeID
 }
 
-func (fs fakeStore) Descriptor() (*roachpb.StoreDescriptor, error) {
+func (fs fakeStore) Descriptor(_ bool) (*roachpb.StoreDescriptor, error) {
 	return &fs.desc, nil
 }
 

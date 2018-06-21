@@ -304,9 +304,14 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).
-	if leaseChangingHands && (prevLease.OwnedBy(r.store.StoreID()) ||
-		newLease.OwnedBy(r.store.StoreID())) {
-		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
+	prevOwner := prevLease.OwnedBy(r.store.StoreID())
+	currentOwner := newLease.OwnedBy(r.store.StoreID())
+	if leaseChangingHands && (prevOwner || currentOwner) {
+		if currentOwner {
+			r.store.maybeGossipOnCapacityChange(ctx, leaseAddEvent)
+		} else if prevOwner {
+			r.store.maybeGossipOnCapacityChange(ctx, leaseRemoveEvent)
+		}
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
 		}
