@@ -370,13 +370,6 @@ func (c *CustomFuncs) IsUnorderedGroupBy(def memo.PrivateID) bool {
 	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Any()
 }
 
-// IsScalarGroupBy returns true if the given grouping columns come from a
-// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
-// with any aggregate functions operating over the entire input expression.
-func (c *CustomFuncs) IsScalarGroupBy(def memo.PrivateID) bool {
-	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Empty()
-}
-
 // ----------------------------------------------------------------------
 //
 // Limit Rules

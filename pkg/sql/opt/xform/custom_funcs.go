@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -440,4 +441,31 @@ func isJoinEquality(
 		return true, rhsCol, lhsCol
 	}
 	return false, 0, 0
+}
+
+// ----------------------------------------------------------------------
+//
+// GroupBy Rules
+//   Custom match and replace functions used with groupby.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// MakeOne returns a memo.GroupID pointing
+// to a Constant Datum Int with value 1. This is required
+// because optgen cannot create constants inline.
+func (c *CustomFuncs) MakeOne() memo.GroupID {
+	return c.e.f.ConstructConst(c.e.f.InternDatum(tree.NewDInt(1)))
+}
+
+// MakeAscOrderingChoiceFromColumn constructs a new OrderingChoice with
+// one element in the sequence: the columnID in the ascending direction.
+func (c *CustomFuncs) MakeAscOrderingChoiceFromColumn(col memo.PrivateID) memo.PrivateID {
+	oc := props.OrderingChoice{}
+	oc.AppendCol(c.ExtractColID(col), false /* descending */)
+	return c.e.f.InternOrderingChoice(&oc)
+}
+
+// AnyType returns the private ID of a new AnyTime type.
+func (c *CustomFuncs) AnyType() memo.PrivateID {
+	return c.e.f.InternType(types.Any)
 }
