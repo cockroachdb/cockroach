@@ -24,13 +24,27 @@ import (
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// makeInternalRowData makes an InternalTimeSeriesData object from a collection of data
-// samples. Input is the start timestamp, the sample duration, and the set of
-// samples. Sample data must be ordered by timestamp.
+// makeInternalRowData makes an InternalTimeSeriesData object from a collection
+// of data samples. The result will be in the soon-deprecated row format. Input
+// is the start timestamp, the sample duration, and the set of samples. As
+// opposed to the ToInternal() method, there are two key differences:
+//
+// 1. This method always procueds a single InternalTimeSeriesData object with
+// the provided startTimestamp, rather than breaking up the datapoints into
+// several slabs based on a slab duration.
+//
+// 2. The provided data samples are downsampled according to the sampleDuration,
+// mimicking the process that would be used to create a data rollup. Therefore,
+// the resulting InternalTimeSeriesData will have one sample for each sample
+// period.
+//
+// Sample data must be provided ordered by timestamp or the output will be
+// unpredictable.
 func makeInternalRowData(
 	startTimestamp, sampleDuration int64, samples []tspb.TimeSeriesDatapoint,
 ) roachpb.InternalTimeSeriesData {
@@ -76,9 +90,24 @@ func makeInternalRowData(
 	return result
 }
 
-// makeInternalColumnData makes an InternalTimeSeriesData object from a collection of data
-// samples. Input is the start timestamp, the sample duration, and the set of
-// samples. Sample data must be ordered by timestamp.
+// makeInternalRowData makes an InternalTimeSeriesData object from a collection
+// of data samples. The result will be in columnar format. Input is the start
+// timestamp, the sample duration, and the set of samples. As opposed to the
+// ToInternal() method, there are two key differences:
+//
+// 1. This method always procueds a single InternalTimeSeriesData object with
+// the provided startTimestamp, rather than breaking up the datapoints into
+// several slabs based on a slab duration.
+//
+// 2. The provided data samples are downsampled according to the sampleDuration,
+// mimicking the process that would be used to create a data rollup. Therefore,
+// the resulting InternalTimeSeriesData will have one entry for each offset
+// period. Additionally, if there are multiple datapoints in any sample period,
+// then the desired result is assumed to be a rollup and every resulting sample
+// period will have values for all rollup columns.
+//
+// Sample data must be provided ordered by timestamp or the output will be
+// unpredictable.
 func makeInternalColumnData(
 	startTimestamp, sampleDuration int64, samples []tspb.TimeSeriesDatapoint,
 ) roachpb.InternalTimeSeriesData {
@@ -169,6 +198,117 @@ func makeInternalColumnData(
 	}
 
 	return result
+}
+
+func TestMakeInternalData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	data := []tspb.TimeSeriesDatapoint{
+		tsdp(110, 20),
+		tsdp(120, 300),
+		tsdp(130, 400),
+		tsdp(140, 800),
+		tsdp(180, 200),
+		tsdp(190, 240),
+		tsdp(210, 500),
+		tsdp(230, 490),
+		tsdp(320, 590),
+		tsdp(350, 990),
+	}
+
+	// Confirm non-rollup case.
+	nonRollupRow := makeInternalRowData(50, 10, data)
+	nonRollupColumn := makeInternalColumnData(50, 10, data)
+	expectedNonRollupRow := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: 50,
+		SampleDurationNanos: 10,
+	}
+	expectedNonRollupColumn := expectedNonRollupRow
+	for _, val := range data {
+		offset := int32((val.TimestampNanos - 50) / 10)
+		expectedNonRollupRow.Samples = append(expectedNonRollupRow.Samples, roachpb.InternalTimeSeriesSample{
+			Offset: offset,
+			Count:  1,
+			Sum:    val.Value,
+		})
+		expectedNonRollupColumn.Offset = append(expectedNonRollupColumn.Offset, offset)
+		expectedNonRollupColumn.Last = append(expectedNonRollupColumn.Last, val.Value)
+	}
+	if a, e := nonRollupRow, expectedNonRollupRow; !reflect.DeepEqual(a, e) {
+		t.Errorf("nonRollupRow got %v, wanted %v", a, e)
+	}
+	if a, e := nonRollupColumn, expectedNonRollupColumn; !reflect.DeepEqual(a, e) {
+		t.Errorf("nonRollupColumn got %v, wanted %v", a, e)
+	}
+
+	// Confirm rollup-generating case. Values are checked against the
+	// independently-verified methods of the testmodel package.
+	rollupRow := makeInternalRowData(50, 50, data)
+	rollupColumn := makeInternalColumnData(50, 50, data)
+	expectedRollupRow := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: 50,
+		SampleDurationNanos: 50,
+	}
+	expectedRollupColumn := expectedRollupRow
+
+	dataSeries := testmodel.DataSeries(data)
+	// Last and Offset column.
+	for _, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateLast) {
+		offset := int32((dp.TimestampNanos - 50) / 50)
+		expectedRollupRow.Samples = append(expectedRollupRow.Samples, roachpb.InternalTimeSeriesSample{
+			Offset: offset,
+		})
+		expectedRollupColumn.Offset = append(expectedRollupColumn.Offset, offset)
+		expectedRollupColumn.Last = append(expectedRollupColumn.Last, dp.Value)
+	}
+	// Sum column.
+	for i, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateSum) {
+		expectedRollupRow.Samples[i].Sum = dp.Value
+		expectedRollupColumn.Sum = append(expectedRollupColumn.Sum, dp.Value)
+	}
+	// Max column.
+	for i, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateMax) {
+		expectedRollupRow.Samples[i].Max = proto.Float64(dp.Value)
+		expectedRollupColumn.Max = append(expectedRollupColumn.Max, dp.Value)
+	}
+	// Min column.
+	for i, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateMin) {
+		expectedRollupRow.Samples[i].Min = proto.Float64(dp.Value)
+		expectedRollupColumn.Min = append(expectedRollupColumn.Min, dp.Value)
+	}
+	// Count column.
+	for i, dp := range dataSeries.GroupByResolution(50, func(ds testmodel.DataSeries) float64 {
+		return float64(len(ds))
+	}) {
+		count := uint32(int32(dp.Value))
+		expectedRollupRow.Samples[i].Count = count
+		// Min and max are omitted from samples with a count of 1.
+		if count < 2 {
+			expectedRollupRow.Samples[i].Min = nil
+			expectedRollupRow.Samples[i].Max = nil
+		}
+		expectedRollupColumn.Count = append(expectedRollupColumn.Count, count)
+	}
+	// First column.
+	for _, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateFirst) {
+		expectedRollupColumn.First = append(expectedRollupColumn.First, dp.Value)
+	}
+	// Variance column.
+	for _, dp := range dataSeries.GroupByResolution(50, testmodel.AggregateVariance) {
+		expectedRollupColumn.Variance = append(expectedRollupColumn.Variance, dp.Value)
+	}
+
+	if a, e := rollupRow, expectedRollupRow; !reflect.DeepEqual(a, e) {
+		t.Errorf("rollupRow got %v, wanted %v", a, e)
+		for _, diff := range pretty.Diff(a, e) {
+			t.Error(diff)
+		}
+	}
+	if a, e := rollupColumn, expectedRollupColumn; !reflect.DeepEqual(a, e) {
+		t.Errorf("rollupColumn got %v, wanted %v", a, e)
+		for _, diff := range pretty.Diff(a, e) {
+			t.Error(diff)
+		}
+	}
 }
 
 func verifySpanIteratorPosition(t *testing.T, actual, expected timeSeriesSpanIterator) {
