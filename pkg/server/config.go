@@ -386,7 +386,10 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
-		ConnResultsBufferBytes: defaultConnResultsBufferBytes,
+		// TODO(dan): Hack. Remove this env override once changefeeds have
+		// control over buffering.
+		ConnResultsBufferBytes: envutil.EnvOrDefaultInt(
+			"COCKROACH_CONN_RESULTS_BUFFER_BYTES", defaultConnResultsBufferBytes),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
