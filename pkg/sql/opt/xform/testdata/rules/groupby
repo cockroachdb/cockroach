@@ -1,0 +1,129 @@
+exec-ddl
+CREATE TABLE abc (
+  a CHAR PRIMARY KEY,
+  b FLOAT,
+  c BOOLEAN,
+  d DECIMAL
+)
+----
+TABLE abc
+ ├── a string not null
+ ├── b float
+ ├── c bool
+ ├── d decimal
+ └── INDEX primary
+      └── a string not null
+
+opt
+SELECT min(a) FROM abc
+----
+group-by
+ ├── columns: min:5(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc
+ │    ├── columns: a:1(string!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=string, outer=(1)]
+           └── variable: abc.a [type=string, outer=(1)]
+
+opt
+SELECT min(b) FROM abc
+----
+group-by
+ ├── columns: min:5(float)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc
+ │    └── columns: b:2(float)
+ └── aggregations [outer=(2)]
+      └── min [type=float, outer=(2)]
+           └── variable: abc.b [type=float, outer=(2)]
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  INDEX yy (y),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z float
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX xy
+ │    ├── x int not null
+ │    └── y int
+ ├── INDEX zyx
+ │    ├── z float
+ │    ├── y int
+ │    └── x int not null
+ └── INDEX yy
+      ├── y int
+      └── x int not null
+
+opt
+SELECT min(x) FROM xyz
+----
+group-by
+ ├── columns: min:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=int, outer=(1)]
+           └── variable: xyz.x [type=int, outer=(1)]
+
+opt
+SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
+----
+group-by
+ ├── columns: min:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null)
+ │    ├── constraint: /1/2: [/0 - /0] [/4 - /4] [/7 - /7]
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=int, outer=(1)]
+           └── variable: xyz.x [type=int, outer=(1)]
+
+opt
+SELECT min(y) FROM xyz
+----
+group-by
+ ├── columns: min:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@yy
+ │    ├── columns: y:2(int!null)
+ │    ├── constraint: /2/1: (/NULL - ]
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
+ └── aggregations [outer=(2)]
+      └── any-not-null [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
