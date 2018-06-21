@@ -837,10 +837,10 @@ func (pb *processorBase) internalClose() bool {
 	return closing
 }
 
-// newMemMonitor is a utility function used by processors to create a new
+// newMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
-func newMemMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
+func newMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
 	monitor := mon.MakeMonitorInheritWithLimit(name, 0 /* limit */, parent)
 	monitor.Start(ctx, parent, mon.BoundAccount{})
 	return &monitor

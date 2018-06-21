@@ -17,8 +17,13 @@ package distsqlrun
 import (
 	"context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -32,6 +37,8 @@ type sorterBase struct {
 	// ProcOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
+
+	diskMonitor *mon.BytesMonitor
 }
 
 func (s *sorterBase) init(
@@ -53,13 +60,60 @@ func (s *sorterBase) init(
 		count = int64(post.Limit) + int64(post.Offset)
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		input = NewInputStatCollector(input)
+		s.finishTrace = s.outputStatsToTrace
+	}
+
 	s.input = input
 	s.ordering = ordering
 	s.matchLen = matchLen
 	s.count = count
+	s.diskMonitor = newMonitor(ctx, flowCtx.diskMonitor, "sorter-disk")
 	return s.processorBase.init(
 		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
 	)
+}
+
+var _ DistSQLSpanStats = &SorterStats{}
+
+const sorterTagPrefix = "sorter."
+
+// Stats implements the SpanStats interface.
+func (ss *SorterStats) Stats() map[string]string {
+	statsMap := ss.InputStats.Stats(sorterTagPrefix)
+	statsMap[sorterTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
+	statsMap[sorterTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
+	return statsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (ss *SorterStats) StatsForQueryPlan() []string {
+	return append(
+		ss.InputStats.StatsForQueryPlan("" /* prefix */),
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
+	)
+}
+
+// outputStatsToTrace outputs the collected sorter stats to the trace. Will fail
+// silently if stats are not being collected.
+func (s *sorterBase) outputStatsToTrace() {
+	is, ok := getInputStats(s.flowCtx, s.input)
+	if !ok {
+		return
+	}
+	if sp := opentracing.SpanFromContext(s.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&SorterStats{
+				InputStats:       is,
+				MaxAllocatedMem:  s.memMonitor.MaximumBytes(),
+				MaxAllocatedDisk: s.diskMonitor.MaximumBytes(),
+			},
+		)
+	}
 }
 
 func newSorter(
@@ -152,7 +206,7 @@ func newSortAllProcessor(
 		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		memMonitor = &limitedMon
 	} else {
-		memMonitor = newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall")
+		memMonitor = newMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall-mem")
 	}
 
 	proc := &sortAllProcessor{}
@@ -178,7 +232,7 @@ func newSortAllProcessor(
 			proc.evalCtx,
 			flowCtx.TempStorage,
 			memMonitor,
-			flowCtx.diskMonitor,
+			proc.diskMonitor,
 		)
 		proc.rows = &rc
 	} else {
@@ -272,6 +326,7 @@ func (s *sortAllProcessor) close() {
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
 		s.memMonitor.Stop(ctx)
+		s.diskMonitor.Stop(ctx)
 	}
 }
 
@@ -328,8 +383,9 @@ func newSortTopKProcessor(
 ) (Processor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
+	memMonitor := newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "sorttopk-mem")
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, nil, /* memMonitor */
+		proc, flowCtx, processorID, input, post, out, memMonitor,
 		ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
@@ -411,6 +467,8 @@ func (s *sortTopKProcessor) close() {
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
 		s.input.ConsumerClosed()
+		s.memMonitor.Stop(ctx)
+		s.diskMonitor.Stop(ctx)
 	}
 }
 
@@ -455,8 +513,9 @@ func newSortChunksProcessor(
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
+	memMonitor := newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "sortchunks-mem")
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, nil /* memMonitor */, ordering, spec.OrderingMatchLen,
+		proc, flowCtx, processorID, input, post, out, memMonitor, ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -587,6 +646,8 @@ func (s *sortChunksProcessor) close() {
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
 		s.input.ConsumerClosed()
+		s.memMonitor.Stop(ctx)
+		s.diskMonitor.Stop(ctx)
 	}
 }
 
