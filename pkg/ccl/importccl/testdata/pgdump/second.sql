@@ -33,13 +33,15 @@ CREATE TABLE public.second (
 -- Data for Name: second; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.second VALUES (0, '0');
-INSERT INTO public.second VALUES (1, '1');
-INSERT INTO public.second VALUES (2, '2');
-INSERT INTO public.second VALUES (3, '3');
-INSERT INTO public.second VALUES (4, '4');
-INSERT INTO public.second VALUES (5, '5');
-INSERT INTO public.second VALUES (6, '6');
+COPY public.second (i, s) FROM stdin;
+0	0
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+\.
 
 
 --
