@@ -1,0 +1,80 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied.  See the License for the specific language governing
+// permissions and limitations under the License.
+
+#include "timebound.h"
+#include <rocksdb/table_properties.h>
+#include <rocksdb/slice.h>
+#include <rocksdb/status.h>
+#include <rocksdb/types.h>
+#include "encoding.h"
+
+namespace cockroach {
+
+namespace {
+
+class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const char* Name() const override { return "TimeBoundTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
+    *properties = rocksdb::UserCollectedProperties{
+        {"crdb.ts.min", ts_min_},
+        {"crdb.ts.max", ts_max_},
+    };
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value,
+                             rocksdb::EntryType type, rocksdb::SequenceNumber seq,
+                             uint64_t file_size) override {
+    rocksdb::Slice unused;
+    rocksdb::Slice ts;
+    if (SplitKey(user_key, &unused, &ts) && !ts.empty()) {
+      ts.remove_prefix(1);  // The NUL prefix.
+      if (ts_max_.empty() || ts.compare(ts_max_) > 0) {
+        ts_max_.assign(ts.data(), ts.size());
+      }
+      if (ts_min_.empty() || ts.compare(ts_min_) < 0) {
+        ts_min_.assign(ts.data(), ts.size());
+      }
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+ private:
+  std::string ts_min_;
+  std::string ts_max_;
+};
+
+class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+ public:
+  explicit TimeBoundTblPropCollectorFactory() {}
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new TimeBoundTblPropCollector();
+  }
+  const char* Name() const override { return "TimeBoundTblPropCollectorFactory"; }
+};
+
+}  // namespace
+
+rocksdb::TablePropertiesCollectorFactory* DBMakeTimeBoundCollector() {
+  return new TimeBoundTblPropCollectorFactory();
+}
+
+}  // namespace cockroach
