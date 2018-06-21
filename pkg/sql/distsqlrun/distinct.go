@@ -90,7 +90,7 @@ func NewDistinct(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
+	memMonitor := newMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &Distinct{
 		input:        input,
 		orderedCols:  spec.OrderedColumns,

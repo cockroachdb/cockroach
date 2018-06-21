@@ -65,6 +65,7 @@
 		AggregatorStats
 		DistinctStats
 		MergeJoinerStats
+		SorterStats
 */
 package distsqlrun
 
