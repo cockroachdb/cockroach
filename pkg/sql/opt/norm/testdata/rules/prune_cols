@@ -552,40 +552,50 @@ SELECT a.i, xy.* FROM a INNER JOIN xy ON a.k=xy.x
 project
  ├── columns: i:2(int) x:5(int!null) y:6(int)
  ├── fd: (5)-->(6)
- └── inner-join
+ └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int) x:5(int!null) y:6(int)
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
       │    ├── key: (5)
-      │    └── fd: (5)-->(6)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # Columns used by both projection and on condition, left join.
 opt
 SELECT a.k, a.i, xy.* FROM a LEFT JOIN xy ON a.k=xy.x AND a.i<5
 ----
-left-join
+left-join (merge)
  ├── columns: k:1(int!null) i:2(int) x:5(int) y:6(int)
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
- │    └── fd: (1)-->(2)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  ├── scan xy
  │    ├── columns: x:5(int!null) y:6(int)
  │    ├── key: (5)
- │    └── fd: (5)-->(6)
- └── filters [type=bool, outer=(1,2,5), constraints=(/1: (/NULL - ]; /2: (/NULL - /4]; /5: (/NULL - ])]
-      ├── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │    ├── fd: (5)-->(6)
+ │    └── ordering: +5
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +5
+      └── filters [type=bool, outer=(1,2,5), constraints=(/1: (/NULL - ]; /2: (/NULL - /4]; /5: (/NULL - ])]
+           ├── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
 # Columns only used by on condition, right join
 opt
@@ -594,19 +604,24 @@ SELECT xy.* FROM a RIGHT JOIN xy ON a.k=xy.x
 project
  ├── columns: x:5(int!null) y:6(int)
  ├── fd: (5)-->(6)
- └── right-join
+ └── right-join (merge)
       ├── columns: k:1(int) x:5(int!null) y:6(int)
       ├── key: (1,5)
       ├── fd: (5)-->(6)
       ├── scan a
       │    ├── columns: k:1(int!null)
-      │    └── key: (1)
+      │    ├── key: (1)
+      │    └── ordering: +1
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
       │    ├── key: (5)
-      │    └── fd: (5)-->(6)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # Columns needed only by projection, full join.
 opt
@@ -692,19 +707,24 @@ project
       ├── columns: k:1(int!null) i:2(int) xy.x:5(int!null) xy.x:7(int!null) xy.y:8(int)
       ├── key: (1,5,7)
       ├── fd: (1)-->(2), (7)-->(8)
-      ├── inner-join
+      ├── inner-join (merge)
       │    ├── columns: k:1(int!null) i:2(int) xy.x:5(int!null)
       │    ├── key: (1,5)
       │    ├── fd: (1)-->(2)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
       │    ├── scan xy
       │    │    ├── columns: xy.x:5(int!null)
-      │    │    └── key: (5)
-      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    ├── key: (5)
+      │    │    └── ordering: +5
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +5
+      │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │              └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       ├── scan xy
       │    ├── columns: xy.x:7(int!null) xy.y:8(int)
       │    ├── key: (7)
@@ -723,40 +743,50 @@ SELECT xy.*, a.i FROM xy INNER JOIN a ON xy.x=a.k
 project
  ├── columns: x:1(int!null) y:2(int) i:4(int)
  ├── fd: (1)-->(2)
- └── inner-join
+ └── inner-join (merge)
       ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int)
       ├── key: (1,3)
       ├── fd: (1)-->(2), (3)-->(4)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan a
       │    ├── columns: k:3(int!null) i:4(int)
       │    ├── key: (3)
-      │    └── fd: (3)-->(4)
-      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │    ├── fd: (3)-->(4)
+      │    └── ordering: +3
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +3
+           └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+                └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
 
 # Columns used by both projection and on condition, left join.
 opt
 SELECT xy.*, a.k, a.i FROM xy LEFT JOIN a ON xy.x=a.k AND a.i<xy.x
 ----
-left-join
+left-join (merge)
  ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
- │    └── fd: (1)-->(2)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  ├── scan a
  │    ├── columns: k:3(int!null) i:4(int)
  │    ├── key: (3)
- │    └── fd: (3)-->(4)
- └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ])]
-      ├── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-      └── a.i < xy.x [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    ├── fd: (3)-->(4)
+ │    └── ordering: +3
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +3
+      └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ])]
+           ├── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           └── a.i < xy.x [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
 
 # Columns only used by on condition, right join
 opt
@@ -765,19 +795,24 @@ SELECT xy.* FROM xy RIGHT JOIN a ON xy.x=a.k
 project
  ├── columns: x:1(int) y:2(int)
  ├── fd: (1)-->(2)
- └── right-join
+ └── right-join (merge)
       ├── columns: x:1(int) y:2(int) k:3(int!null)
       ├── key: (1,3)
       ├── fd: (1)-->(2)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan a
       │    ├── columns: k:3(int!null)
-      │    └── key: (3)
-      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │    ├── key: (3)
+      │    └── ordering: +3
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +3
+           └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+                └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
 
 # Columns needed only by projection, full join.
 opt
@@ -867,19 +902,24 @@ project
       │    ├── columns: xy.x:1(int!null) xy.y:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── inner-join
+      ├── inner-join (merge)
       │    ├── columns: k:3(int!null) xy.x:7(int!null) xy.y:8(int)
       │    ├── key: (3,7)
       │    ├── fd: (7)-->(8)
       │    ├── scan a
       │    │    ├── columns: k:3(int!null)
-      │    │    └── key: (3)
+      │    │    ├── key: (3)
+      │    │    └── ordering: +3
       │    ├── scan xy
       │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
       │    │    ├── key: (7)
-      │    │    └── fd: (7)-->(8)
-      │    └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +3
+      │         ├── right ordering: +7
+      │         └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+      │              └── a.k = xy.x [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
       └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
            └── xy.y < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
@@ -909,17 +949,22 @@ project
  ├── columns: k:1(int!null) x:5(int) r:7(int)
  ├── key: (1,5)
  ├── fd: (1,5)-->(7)
- ├── left-join
+ ├── left-join (merge)
  │    ├── columns: k:1(int!null) x:5(int)
  │    ├── key: (1,5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
- │    │    └── key: (1)
+ │    │    ├── key: (1)
+ │    │    └── ordering: +1
  │    ├── scan xy
  │    │    ├── columns: x:5(int!null)
- │    │    └── key: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │    ├── key: (5)
+ │    │    └── ordering: +5
+ │    └── merge-on
+ │         ├── left ordering: +1
+ │         ├── right ordering: +5
+ │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │              └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  └── projections [outer=(1,5)]
       └── a.k + xy.x [type=int, outer=(1,5)]
 
@@ -1125,7 +1170,7 @@ SELECT a.k, xy.y FROM a INNER JOIN xy ON a.k=xy.x WHERE a.i < 5
 ----
 project
  ├── columns: k:1(int!null) y:6(int)
- └── inner-join
+ └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int!null) x:5(int!null) y:6(int)
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
@@ -1133,18 +1178,24 @@ project
       │    ├── columns: k:1(int!null) i:2(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
       │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       │         └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
       │    ├── key: (5)
-      │    └── fd: (5)-->(6)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 opt
 SELECT k FROM (SELECT k, min(s) FROM a GROUP BY k HAVING sum(i) > 5)
