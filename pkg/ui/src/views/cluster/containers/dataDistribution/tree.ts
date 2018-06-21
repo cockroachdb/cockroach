@@ -347,7 +347,7 @@ function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
  * If `f` returns false, the traversal stops. Otherwise, the traversal
  * continues.
  */
-function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath) => boolean) {
+export function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath) => boolean) {
   function recur(node: TreeNode<T>, path: TreePath) {
     const continueTraversal = f(node, path);
     if (!continueTraversal) {

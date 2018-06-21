@@ -9,7 +9,7 @@ import {
   flatten,
   sumValuesUnderPaths,
   LayoutCell,
-  FlattenedNode,
+  FlattenedNode, visitNodes,
 } from "./tree";
 import { cockroach } from "src/js/protos";
 import INodeDescriptor = cockroach.roachpb.INodeDescriptor;
@@ -44,9 +44,23 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   constructor(props: ReplicaMatrixProps) {
     super(props);
+
+    const collapsedPaths = [
+      ["system"],
+      ["defaultdb"],
+      ["postgres"],
+    ];
+    visitNodes(props.rows, (node, path) => {
+      if (node.data.tableName) { // [db, table]
+        collapsedPaths.push(path);
+        return false;
+      }
+      return true;
+    });
+
     // TODO(vilterp): put all this state in the URL
     this.state = {
-      collapsedRows: [["system"], ["defaultdb"], ["postgres"]],
+      collapsedRows: collapsedPaths,
       collapsedCols: [],
       selectedMetric: METRIC_REPLICAS,
     };
