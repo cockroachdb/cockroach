@@ -54,8 +54,8 @@ TEST(LibroachCCL, DBOpen) {
     EXPECT_STREQ(stats.encryption_status.data, NULL);
     EXPECT_EQ(stats.total_files, 0);
     EXPECT_EQ(stats.total_bytes, 0);
-    EXPECT_EQ(stats.active_files, 0);
-    EXPECT_EQ(stats.active_bytes, 0);
+    EXPECT_EQ(stats.active_key_files, 0);
+    EXPECT_EQ(stats.active_key_bytes, 0);
 
     DBClose(db);
   }
@@ -90,11 +90,11 @@ TEST(LibroachCCL, DBOpen) {
     // Make sure the file/bytes stats are non-zero and all marked as using the active key.
     EXPECT_NE(stats.total_files, 0);
     EXPECT_NE(stats.total_bytes, 0);
-    EXPECT_NE(stats.active_files, 0);
-    EXPECT_NE(stats.active_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
 
-    EXPECT_EQ(stats.total_files, stats.active_files);
-    EXPECT_EQ(stats.total_bytes, stats.active_bytes);
+    EXPECT_EQ(stats.total_files, stats.active_key_files);
+    EXPECT_EQ(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
   }
@@ -203,11 +203,11 @@ TEST(LibroachCCL, EncryptionStats) {
     // Make sure the file/bytes stats are non-zero and all marked as using the active key.
     EXPECT_NE(stats.total_files, 0);
     EXPECT_NE(stats.total_bytes, 0);
-    EXPECT_NE(stats.active_files, 0);
-    EXPECT_NE(stats.active_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
 
-    EXPECT_EQ(stats.total_files, stats.active_files);
-    EXPECT_EQ(stats.total_bytes, stats.active_bytes);
+    EXPECT_EQ(stats.total_files, stats.active_key_files);
+    EXPECT_EQ(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
   }
@@ -242,12 +242,12 @@ TEST(LibroachCCL, EncryptionStats) {
     // Make sure the file/bytes stats are non-zero.
     EXPECT_NE(stats.total_files, 0);
     EXPECT_NE(stats.total_bytes, 0);
-    EXPECT_NE(stats.active_files, 0);
-    EXPECT_NE(stats.active_bytes, 0);
+    EXPECT_NE(stats.active_key_files, 0);
+    EXPECT_NE(stats.active_key_bytes, 0);
 
     // However, we won't be at the total as we have the SST from the plaintext run still around.
-    EXPECT_NE(stats.total_files, stats.active_files);
-    EXPECT_NE(stats.total_bytes, stats.active_bytes);
+    EXPECT_NE(stats.total_files, stats.active_key_files);
+    EXPECT_NE(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
   }

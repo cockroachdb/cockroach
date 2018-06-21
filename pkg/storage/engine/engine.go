@@ -353,10 +353,10 @@ type EnvStats struct {
 	TotalFiles uint64
 	// TotalBytes is the total size of files reported by rocksdb.
 	TotalBytes uint64
-	// ActiveFiles is the number of files using the active data key.
-	ActiveFiles uint64
-	// ActiveBytes is the size of files using the active data key.
-	ActiveBytes uint64
+	// ActiveKeyFiles is the number of files using the active data key.
+	ActiveKeyFiles uint64
+	// ActiveKeyBytes is the size of files using the active data key.
+	ActiveKeyBytes uint64
 	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
 }

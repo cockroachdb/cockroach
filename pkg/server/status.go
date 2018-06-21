@@ -1536,8 +1536,8 @@ func (s *statusServer) Stores(
 			}
 			storeDetails.TotalFiles = envStats.TotalFiles
 			storeDetails.TotalBytes = envStats.TotalBytes
-			storeDetails.ActiveFiles = envStats.ActiveFiles
-			storeDetails.ActiveBytes = envStats.ActiveBytes
+			storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
+			storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
 		}
 
 		resp.Stores = append(resp.Stores, storeDetails)
