@@ -210,7 +210,7 @@ project
       ├── fd: (1)-->(2)
       ├── prune: (2)
       ├── interesting orderings: (+1)
-      ├── semi-join
+      ├── semi-join (merge)
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
@@ -220,16 +220,21 @@ project
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2)
+      │    │    ├── ordering: +1
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    ├── scan xy
       │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
       │    │    ├── key: (7)
       │    │    ├── fd: (7)-->(8)
+      │    │    ├── ordering: +7
       │    │    ├── prune: (7,8)
       │    │    └── interesting orderings: (+7)
-      │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy
       │    ├── columns: xy.x:5(int!null)
       │    ├── key: (5)
@@ -255,7 +260,7 @@ project
       ├── fd: (1)-->(2)
       ├── prune: (2)
       ├── interesting orderings: (+1)
-      ├── anti-join
+      ├── anti-join (merge)
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
@@ -265,16 +270,21 @@ project
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2)
+      │    │    ├── ordering: +1
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    ├── scan xy
       │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
       │    │    ├── key: (7)
       │    │    ├── fd: (7)-->(8)
+      │    │    ├── ordering: +7
       │    │    ├── prune: (7,8)
       │    │    └── interesting orderings: (+7)
-      │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy
       │    ├── columns: xy.x:5(int!null)
       │    ├── key: (5)
