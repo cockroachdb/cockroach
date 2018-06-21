@@ -34,28 +34,22 @@ import (
 
 // Job manages logging the progress of long-running system processes, like
 // backups and restores, to the system.jobs table.
-//
-// The Record field can be directly modified before Created is called. Updates
-// to the Record field after the job has been created will not be written to the
-// database, however, even when calling e.g. Started or Succeeded.
 type Job struct {
 	// TODO(benesch): avoid giving Job a reference to Registry. This will likely
 	// require inverting control: rather than having the worker call Created,
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id     *int64
-	Record Record
-	txn    *client.Txn
-
-	mu struct {
+	id  *int64
+	txn *client.Txn
+	mu  struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
 	}
 }
 
-// Record stores the job fields that are not automatically managed by Job.
+// Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	Description   string
 	Username      string
@@ -127,21 +121,7 @@ func (j *Job) ID() *int64 {
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called.
 func (j *Job) Created(ctx context.Context) error {
-	return j.created(ctx, j.registry.makeJobID(), nil)
-}
-
-func (j *Job) created(ctx context.Context, id int64, lease *jobspb.Lease) error {
-	payload := &jobspb.Payload{
-		Description:   j.Record.Description,
-		Username:      j.Record.Username,
-		DescriptorIDs: j.Record.DescriptorIDs,
-		Details:       jobspb.WrapPayloadDetails(j.Record.Details),
-		Lease:         lease,
-	}
-	progress := &jobspb.Progress{
-		Details: jobspb.WrapProgressDetails(j.Record.Progress),
-	}
-	return j.insert(ctx, id, payload, progress)
+	return j.insert(ctx, j.registry.makeJobID(), nil /* lease */)
 }
 
 // Started marks the tracked job as started.
@@ -348,20 +328,25 @@ func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
 	)
 }
 
-// Payload returns the most recently sent Payload for this Job. Will return an
-// empty Payload until Created() is called on a new Job.
+// Payload returns the most recently sent Payload for this Job.
 func (j *Job) Payload() jobspb.Payload {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.payload
 }
 
-// Progress returns the most recently sent Progress for this Job. Will return an
-// empty Progress until Created() is called on a new Job.
+// Progress returns the most recently sent Progress for this Job.
 func (j *Job) Progress() jobspb.Progress {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.progress
+}
+
+// Details returns the details from the most recently sent Payload for this Job.
+func (j *Job) Details() jobspb.Details {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.mu.payload.UnwrapDetails()
 }
 
 // FractionCompleted returns completion according to the in-memory job state.
@@ -387,23 +372,6 @@ func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn
 	return j.registry.db.Txn(ctx, fn)
 }
 
-func (j *Job) initialize(payload *jobspb.Payload, progress *jobspb.Progress) (err error) {
-	j.Record.Description = payload.Description
-	j.Record.Username = payload.Username
-	j.Record.DescriptorIDs = payload.DescriptorIDs
-	if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
-		return err
-	}
-	if j.Record.Progress, err = progress.UnwrapDetails(); err != nil {
-		return err
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.mu.payload = *payload
-	j.mu.progress = *progress
-	return nil
-}
-
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
@@ -425,16 +393,18 @@ func (j *Job) load(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	return j.initialize(payload, progress)
+	j.mu.payload = *payload
+	j.mu.progress = *progress
+	return nil
 }
 
-func (j *Job) insert(
-	ctx context.Context, id int64, payload *jobspb.Payload, progress *jobspb.Progress,
-) error {
+func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 	if j.id != nil {
 		// Already created - do nothing.
 		return nil
 	}
+
+	j.mu.payload.Lease = lease
 
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Note: although the following uses OrigTimestamp and
@@ -443,12 +413,12 @@ func (j *Job) insert(
 		// to be equal *or greater* than previously inserted timestamps
 		// computed by now(). For now OrigTimestamp can only move forward
 		// and the assertion OrigTimestamp >= now() holds at all times.
-		progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
-		payloadBytes, err := protoutil.Marshal(payload)
+		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
+		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 		if err != nil {
 			return err
 		}
-		progressBytes, err := protoutil.Marshal(progress)
+		progressBytes, err := protoutil.Marshal(&j.mu.progress)
 		if err != nil {
 			return err
 		}
@@ -459,8 +429,6 @@ func (j *Job) insert(
 	}); err != nil {
 		return err
 	}
-	j.mu.payload = *payload
-	j.mu.progress = *progress
 	j.id = &id
 	return nil
 }
@@ -574,9 +542,6 @@ func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 				payload.Lease, oldLease)
 		}
 		payload.Lease = j.registry.newLease()
-		if err := j.initialize(payload, progress); err != nil {
-			return false, err
-		}
 		return true, nil
 	})
 }

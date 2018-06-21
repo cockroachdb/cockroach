@@ -154,9 +154,9 @@ func GetResumeSpansFromJob(
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't find job %d", jobID)
 	}
-	details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
+	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return nil, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Record.Details)
+		return nil, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	return details.ResumeSpanList[mutationIdx].ResumeSpans, nil
 }
@@ -190,9 +190,9 @@ func SetResumeSpansInJob(
 		return errors.Wrapf(err, "can't find job %d", jobID)
 	}
 
-	details, ok := job.Record.Details.(jobspb.SchemaChangeDetails)
+	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Record.Details)
+		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
 	return job.WithTxn(txn).SetDetails(ctx, details)
