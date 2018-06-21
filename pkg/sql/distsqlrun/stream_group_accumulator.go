@@ -17,8 +17,11 @@ package distsqlrun
 import (
 	"context"
 
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -42,21 +45,26 @@ type streamGroupAccumulator struct {
 	leftoverRow sqlbase.EncDatumRow
 
 	rowAlloc sqlbase.EncDatumRowAlloc
+
+	memAcc mon.BoundAccount
 }
 
 func makeStreamGroupAccumulator(
-	src RowSource, ordering sqlbase.ColumnOrdering,
+	src RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,
 		types:    src.OutputTypes(),
 		ordering: ordering,
+		memAcc:   memMonitor.MakeBoundAccount(),
 	}
 }
 
 func (s *streamGroupAccumulator) start(ctx context.Context) {
 	s.src.Start(ctx)
 }
+
+const sizeOfEncDatumRowStruct = int64(unsafe.Sizeof(sqlbase.EncDatumRow{}))
 
 // nextGroup returns the next group from the inputs. The returned slice is not safe
 // to use after the next call to nextGroup.
@@ -88,7 +96,17 @@ func (s *streamGroupAccumulator) nextGroup(
 
 		if len(s.curGroup) == 0 {
 			if s.curGroup == nil {
+				if err := s.memAcc.Grow(evalCtx.Ctx(), sizeOfEncDatumRowStruct*64); err != nil {
+					return nil, &ProducerMetadata{Err: err}
+				}
 				s.curGroup = make([]sqlbase.EncDatumRow, 0, 64)
+			}
+			alreadyAccountedFor := sizeOfEncDatumRowStruct
+			if len(s.curGroup) >= 64 {
+				alreadyAccountedFor = 0
+			}
+			if err := s.memAcc.Grow(evalCtx.Ctx(), int64(row.Size())-alreadyAccountedFor); err != nil {
+				return nil, &ProducerMetadata{Err: err}
 			}
 			s.curGroup = append(s.curGroup, row)
 			continue
@@ -114,4 +132,8 @@ func (s *streamGroupAccumulator) nextGroup(
 			return ret, nil
 		}
 	}
+}
+
+func (s *streamGroupAccumulator) close(ctx context.Context) {
+	s.memAcc.Close(ctx)
 }

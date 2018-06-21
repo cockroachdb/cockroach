@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -156,6 +157,11 @@ func CompareEncDatumRowForMerge(
 	return 0, nil
 }
 
+func (sm *streamMerger) close(ctx context.Context) {
+	sm.left.close(ctx)
+	sm.right.close(ctx)
+}
+
 // makeStreamMerger creates a streamMerger, joining rows from leftSource with
 // rows from rightSource.
 //
@@ -166,6 +172,7 @@ func makeStreamMerger(
 	rightSource RowSource,
 	rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,
+	memMonitor *mon.BytesMonitor,
 ) (streamMerger, error) {
 	if len(leftOrdering) != len(rightOrdering) {
 		return streamMerger{}, errors.Errorf(
@@ -178,8 +185,8 @@ func makeStreamMerger(
 	}
 
 	return streamMerger{
-		left:         makeStreamGroupAccumulator(leftSource, leftOrdering),
-		right:        makeStreamGroupAccumulator(rightSource, rightOrdering),
+		left:         makeStreamGroupAccumulator(leftSource, leftOrdering, memMonitor),
+		right:        makeStreamGroupAccumulator(rightSource, rightOrdering, memMonitor),
 		nullEquality: nullEquality,
 	}, nil
 }
