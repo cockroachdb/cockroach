@@ -7989,7 +7989,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tick(); err != nil {
+			if _, err := r.tick(nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -8043,7 +8043,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tick(); err != nil {
+		if _, err := r.tick(nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -9201,11 +9201,17 @@ func TestSplitMsgApps(t *testing.T) {
 }
 
 type testQuiescer struct {
+	desc           roachpb.RangeDescriptor
 	numProposals   int
 	status         *raft.Status
 	lastIndex      uint64
 	raftReady      bool
 	ownsValidLease bool
+	livenessMap    map[roachpb.NodeID]bool
+}
+
+func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
+	return &q.desc
 }
 
 func (q *testQuiescer) raftStatusRLocked() *raft.Status {
@@ -9242,6 +9248,13 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// true. The transform function is intended to perform one mutation to
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
+				desc: roachpb.RangeDescriptor{
+					Replicas: []roachpb.ReplicaDescriptor{
+						{NodeID: 1, ReplicaID: 1},
+						{NodeID: 2, ReplicaID: 2},
+						{NodeID: 3, ReplicaID: 3},
+					},
+				},
 				status: &raft.Status{
 					ID: 1,
 					HardState: raftpb.HardState{
@@ -9261,9 +9274,14 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
+				livenessMap: map[roachpb.NodeID]bool{
+					1: true,
+					2: true,
+					3: true,
+				},
 			}
 			q = transform(q)
-			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.numProposals)
+			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.numProposals, q.livenessMap)
 			if expected != ok {
 				t.Fatalf("expected %v, but found %v", expected, ok)
 			}
@@ -9323,6 +9341,28 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		q.raftReady = true
 		return q
 	})
+	// Create a mismatch between the raft progress replica IDs and the
+	// replica IDs in the range descriptor.
+	for i := 0; i < 3; i++ {
+		test(false, func(q *testQuiescer) *testQuiescer {
+			q.desc.Replicas[i].ReplicaID = roachpb.ReplicaID(4 + i)
+			return q
+		})
+	}
+	// Pass a nil liveness map.
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.livenessMap = nil
+		return q
+	})
+	// Verify quiesce even when replica progress doesn't match, if
+	// the replica is on a non-live node.
+	for _, i := range []uint64{1, 2, 3} {
+		test(true, func(q *testQuiescer) *testQuiescer {
+			q.livenessMap[roachpb.NodeID(i)] = false
+			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
+			return q
+		})
+	}
 }
 
 func TestReplicaRecomputeStats(t *testing.T) {

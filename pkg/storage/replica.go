@@ -1550,6 +1550,10 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
+	return r.mu.state.Desc
+}
+
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
@@ -3416,6 +3420,12 @@ func (r *Replica) quiesceLocked() bool {
 	return true
 }
 
+func (r *Replica) unquiesce() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unquiesceLocked()
+}
+
 func (r *Replica) unquiesceLocked() {
 	if r.mu.quiescent {
 		ctx := r.AnnotateCtx(context.TODO())
@@ -3894,7 +3904,7 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
-func (r *Replica) tick() (bool, error) {
+func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -3918,7 +3928,7 @@ func (r *Replica) tick() (bool, error) {
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked() {
+	if r.maybeQuiesceLocked(livenessMap) {
 		return false, nil
 	}
 
@@ -3992,9 +4002,9 @@ func (r *Replica) tick() (bool, error) {
 // those ranges never quiesce. One thought for handling both these scenarios is
 // to hook into the StorePool and its notion of "down" nodes. But that might
 // not be sensitive enough.
-func (r *Replica) maybeQuiesceLocked() bool {
+func (r *Replica) maybeQuiesceLocked(livenessMap map[roachpb.NodeID]bool) bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals))
+	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals), livenessMap)
 	if !ok {
 		return false
 	}
@@ -4002,6 +4012,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 }
 
 type quiescer interface {
+	descRLocked() *roachpb.RangeDescriptor
 	raftStatusRLocked() *raft.Status
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
@@ -4033,7 +4044,11 @@ func (r *Replica) maybeTransferRaftLeader(
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int,
+	ctx context.Context,
+	q quiescer,
+	now hlc.Timestamp,
+	numProposals int,
+	livenessMap map[roachpb.NodeID]bool,
 ) (*raft.Status, bool) {
 	if numProposals != 0 {
 		if log.V(4) {
@@ -4098,25 +4113,26 @@ func shouldReplicaQuiesce(
 		}
 		return nil, false
 	}
-	var foundSelf bool
-	for id, progress := range status.Progress {
-		if id == status.ID {
-			foundSelf = true
-		}
-		if progress.Match != status.Applied {
+	for _, rep := range q.descRLocked().Replicas {
+		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; !ok {
+			if log.V(4) {
+				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
+					rep.ReplicaID, progress)
+			}
+			return nil, false
+		} else if progress.Match != status.Applied {
+			// Skip any node in the descriptor which is not live.
+			if livenessMap != nil && !livenessMap[rep.NodeID] {
+				log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
+					rep.NodeID, progress)
+				continue
+			}
 			if log.V(4) {
 				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
-					id, progress.Match, status.Applied)
+					rep.ReplicaID, progress.Match, status.Applied)
 			}
 			return nil, false
 		}
-	}
-	if !foundSelf {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
-				status.ID, status.Progress)
-		}
-		return nil, false
 	}
 	if q.hasRaftReadyRLocked() {
 		if log.V(4) {
