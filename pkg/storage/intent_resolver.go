@@ -617,6 +617,7 @@ func (ir *intentResolver) runAsyncTask(
 	if err == stop.ErrThrottled && allowSyncProcessing {
 		// A limited task was not available. Rather than waiting for one, we
 		// reuse the current goroutine.
+		ir.store.metrics.IntentResolverAsyncThrottled.Inc(1)
 		taskFn(ctx)
 	} else if err != nil {
 		return errors.Wrapf(err, "during async intent resolution")
