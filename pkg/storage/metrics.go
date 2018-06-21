@@ -457,6 +457,11 @@ var (
 		Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
 
+	// Intent resolver metrics.
+	metaIntentResolverAsyncThrottled = metric.Metadata{
+		Name: "intentresolver.async.throttled",
+		Help: "Number of intent resolution attempts not run asynchronously due to throttling"}
+
 	// Slow request metrics.
 	metaSlowCommandQueueRequests = metric.Metadata{
 		Name: "requests.slow.commandqueue",
@@ -661,6 +666,9 @@ type StoreMetrics struct {
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
 
+	// Intent resolver metrics.
+	IntentResolverAsyncThrottled *metric.Counter
+
 	// Slow request counts.
 	SlowCommandQueueRequests *metric.Gauge
 	SlowLeaseRequests        *metric.Gauge
@@ -848,6 +856,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+
+		// Intent resolver metrics.
+		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
 
 		// Wedge request counters.
 		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),

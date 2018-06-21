@@ -597,7 +597,7 @@ func (ir *intentResolver) maybePushTransactions(
 
 // runAsyncTask semi-synchronously runs a generic task function. If
 // there is spare capacity in the limited async task semaphore, it's
-// run asynchonrously; otherwise, it's run synchronously if
+// run asynchronously; otherwise, it's run synchronously if
 // allowSyncProcessing is true; if false, an error is returned.
 func (ir *intentResolver) runAsyncTask(
 	ctx context.Context, r *Replica, allowSyncProcessing bool, taskFn func(context.Context),
@@ -614,11 +614,16 @@ func (ir *intentResolver) runAsyncTask(
 		false, /* wait */
 		taskFn,
 	)
-	if err == stop.ErrThrottled && allowSyncProcessing {
-		// A limited task was not available. Rather than waiting for one, we
-		// reuse the current goroutine.
-		taskFn(ctx)
-	} else if err != nil {
+	if err != nil {
+		if err == stop.ErrThrottled {
+			ir.store.metrics.IntentResolverAsyncThrottled.Inc(1)
+			if allowSyncProcessing {
+				// A limited task was not available. Rather than waiting for
+				// one, we reuse the current goroutine.
+				taskFn(ctx)
+				return nil
+			}
+		}
 		return errors.Wrapf(err, "during async intent resolution")
 	}
 	return nil
