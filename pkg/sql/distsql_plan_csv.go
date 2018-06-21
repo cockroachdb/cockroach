@@ -244,7 +244,7 @@ func LoadCSV(
 
 	// Determine if we need to run the sampling plan or not.
 
-	details := job.Record.Details.(jobspb.ImportDetails)
+	details := job.Details().(jobspb.ImportDetails)
 	samples := details.Samples
 	var parsedTables map[sqlbase.ID]*sqlbase.TableDescriptor
 	if samples == nil {
@@ -460,7 +460,7 @@ func LoadCSV(
 		func(ts hlc.Timestamp) {},
 	)
 
-	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
+	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		dsp.Run(&planCtx, txn, &p, recv, evalCtx)
 		return resultRows.Err()
@@ -594,7 +594,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 	)
-	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
+	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Payload().Description)
 	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
 	samples = nil
 	dsp.Run(planCtx, nil, &p, recv, evalCtx)
@@ -602,7 +602,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		return nil, nil, err
 	}
 
-	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Record.Description)
+	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Payload().Description)
 
 	return samples, parsedTables, nil
 }

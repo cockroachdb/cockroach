@@ -551,7 +551,7 @@ func (sc *SchemaChanger) backfillIndexes(
 ) error {
 	// Pick a read timestamp for our index backfill, or reuse the previously
 	// stored one.
-	details := *sc.job.Payload().Details.(*jobspb.Payload_SchemaChange).SchemaChange
+	details := sc.job.Details().(jobspb.SchemaChangeDetails)
 	if details.ReadAsOf == (hlc.Timestamp{}) {
 		details.ReadAsOf = sc.clock.Now()
 		if err := sc.job.SetDetails(ctx, details); err != nil {

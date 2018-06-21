@@ -1375,7 +1375,7 @@ type restoreResumer struct {
 func (r *restoreResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobspb.RestoreDetails)
+	details := job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
 	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
@@ -1406,7 +1406,7 @@ func (r *restoreResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobspb.RestoreDetails)
+	details := job.Details().(jobspb.RestoreDetails)
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -1426,7 +1426,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username, r.settings); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 

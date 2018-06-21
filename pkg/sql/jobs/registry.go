@@ -192,7 +192,7 @@ func (r *Registry) StartJob(
 	id := r.makeJobID()
 	resumeCtx, cancel := r.makeCtx()
 	r.register(id, cancel)
-	if err := j.created(ctx, id, r.newLease()); err != nil {
+	if err := j.insert(ctx, id, r.newLease()); err != nil {
 		r.unregister(id)
 		return nil, nil, err
 	}
@@ -206,10 +206,19 @@ func (r *Registry) StartJob(
 
 // NewJob creates a new Job.
 func (r *Registry) NewJob(record Record) *Job {
-	return &Job{
-		Record:   record,
+	job := &Job{
 		registry: r,
 	}
+	job.mu.payload = jobspb.Payload{
+		Description:   record.Description,
+		Username:      record.Username,
+		DescriptorIDs: record.DescriptorIDs,
+		Details:       jobspb.WrapPayloadDetails(record.Details),
+	}
+	job.mu.progress = jobspb.Progress{
+		Details: jobspb.WrapProgressDetails(record.Progress),
+	}
+	return job
 }
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
@@ -336,7 +345,7 @@ func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error 
 			// and fail to clear/set that field appropriately. Thus it seems that the
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
-			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(job.Record.Description, "ROLL BACK") {
+			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
 				return job.WithTxn(txn).canceled(ctx, NoopFn)
 			}
 		}
@@ -425,7 +434,7 @@ func (r *Registry) resume(
 ) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
-		phs, cleanup := r.planFn("resume-job", job.Record.Username)
+		phs, cleanup := r.planFn("resume-job", job.Payload().Username)
 		defer cleanup()
 		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
 		if resumeErr != nil && ctx.Err() != nil {

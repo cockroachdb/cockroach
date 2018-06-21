@@ -1075,7 +1075,7 @@ type backupResumer struct {
 func (b *backupResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobspb.BackupDetails)
+	details := job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
@@ -1132,7 +1132,7 @@ func (b *backupResumer) OnTerminal(
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
-		details := job.Record.Details.(jobspb.BackupDetails)
+		details := job.Details().(jobspb.BackupDetails)
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err

@@ -231,7 +231,7 @@ func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
-	details := job.Record.Details.(jobspb.ChangefeedDetails)
+	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
 	return runChangefeedFlow(ctx, execCfg, details, *progress, startedCh, job.Progressed)
 }
