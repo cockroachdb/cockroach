@@ -9,10 +9,10 @@ import {
   flatten,
   sumValuesUnderPaths,
   LayoutCell,
-  FlattenedNode,
+  FlattenedNode, visitNodes,
 } from "./tree";
 import { cockroach } from "src/js/protos";
-import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
+import INodeDescriptor = cockroach.roachpb.INodeDescriptor;
 import "./replicaMatrix.styl";
 
 const DOWN_ARROW = "▼";
@@ -25,7 +25,7 @@ interface ReplicaMatrixState {
 }
 
 interface ReplicaMatrixProps {
-  cols: TreeNode<NodeDescriptor$Properties>;
+  cols: TreeNode<INodeDescriptor>;
   rows: TreeNode<SchemaObject>;
   getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number;
 }
@@ -44,9 +44,23 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   constructor(props: ReplicaMatrixProps) {
     super(props);
+
+    const collapsedPaths = [
+      ["system"],
+      ["defaultdb"],
+      ["postgres"],
+    ];
+    visitNodes(props.rows, (node, path) => {
+      if (node.data.tableName) { // [db, table]
+        collapsedPaths.push(path);
+        return false;
+      }
+      return true;
+    });
+
     // TODO(vilterp): put all this state in the URL
     this.state = {
-      collapsedRows: [["system"], ["defaultdb"], ["postgres"]],
+      collapsedRows: collapsedPaths,
       collapsedCols: [],
       selectedMetric: METRIC_REPLICAS,
     };
@@ -76,7 +90,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     });
   }
 
-  colLabel(col: LayoutCell<NodeDescriptor$Properties>): string {
+  colLabel(col: LayoutCell<INodeDescriptor>): string {
     if (col.isPlaceholder) {
       return null;
     }
@@ -91,14 +105,26 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   }
 
   rowLabel(row: FlattenedNode<SchemaObject>): string {
-    if (row.isLeaf) {
+    if (row.data.rangeID) {
+      return `r${row.data.rangeID}`;
+    }
+
+    if (row.data.tableName) {
       return row.data.tableName;
     }
 
-    const arrow = row.isCollapsed ? SIDE_ARROW : DOWN_ARROW;
-    const label = row.data.dbName ? `DB: ${row.data.dbName}` : "Cluster";
+    return row.data.dbName ? `DB: ${row.data.dbName}` : "Cluster";
+  }
 
-    return `${arrow} ${label}`;
+  rowLabelAndArrow(row: FlattenedNode<SchemaObject>): string {
+    const label = this.rowLabel(row);
+    const arrow = row.isCollapsed ? SIDE_ARROW : DOWN_ARROW;
+
+    if (row.isLeaf) {
+      return label;
+    } else {
+      return `${arrow} ${label}`;
+    }
   }
 
   handleChangeMetric = (evt: React.FormEvent<HTMLSelectElement>) => {
@@ -183,7 +209,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                   )}
                   style={{ paddingLeft: row.depth * ROW_TREE_INDENT_PX + ROW_LEFT_MARGIN_PX }}
                 >
-                  {this.rowLabel(row)}
+                  {this.rowLabelAndArrow(row)}
                 </th>
                 {flattenedCols.map((col) => {
                   return (
@@ -220,4 +246,5 @@ export interface SchemaObject {
   dbName?: string;
   tableName?: string;
   tableID?: number;
+  rangeID?: string;
 }
