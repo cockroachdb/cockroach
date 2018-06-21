@@ -295,6 +295,9 @@ func (ri *RowInserter) InsertRow(
 		if err := ri.Fks.checkAll(ctx, values); err != nil {
 			return err
 		}
+		if err := ri.Fks.checker.runCheck(ctx, nil, values); err != nil {
+			return err
+		}
 	}
 
 	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
@@ -815,7 +818,13 @@ func (ru *RowUpdater) UpdateRow(
 		}
 
 		if checkFKs == CheckFKs {
-			if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+				return nil, err
+			}
+			if len(ru.Fks.inbound.fks) == 0 && len(ru.Fks.outbound.fks) == 0 {
+				return ru.newValues, nil
+			}
+			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
 		}
@@ -912,7 +921,13 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if checkFKs == CheckFKs {
-		if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+			return nil, err
+		}
+		if len(ru.Fks.inbound.fks) == 0 && len(ru.Fks.outbound.fks) == 0 {
+			return ru.newValues, nil
+		}
+		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 	}
@@ -1092,7 +1107,8 @@ func (rd *RowDeleter) DeleteRow(
 		}
 	}
 	if checkFKs == CheckFKs {
-		return rd.Fks.checkAll(ctx, values)
+		rd.Fks.checkAll(ctx, values)
+		return rd.Fks.checker.runCheck(ctx, values, nil)
 	}
 	return nil
 }
