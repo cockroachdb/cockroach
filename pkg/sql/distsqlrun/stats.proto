@@ -66,3 +66,10 @@ message SorterStats {
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }
+
+// JoinReaderStats are the stats collected during a joinReader run.
+message JoinReaderStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
+  InputStats primary_index_lookup_stats = 3;
+}

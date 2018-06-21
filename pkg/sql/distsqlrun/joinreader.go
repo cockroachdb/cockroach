@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -53,9 +54,13 @@ type joinReader struct {
 	index     *sqlbase.IndexDescriptor
 	colIdxMap map[sqlbase.ColumnID]int
 
-	fetcher  sqlbase.RowFetcher
-	alloc    sqlbase.DatumAlloc
-	rowAlloc sqlbase.EncDatumRowAlloc
+	// fetcherInput wraps fetcher in a RowSource implementation and should be used
+	// to get rows from the fetcher. This enables the joinReader to wrap the
+	// fetcherInput with a stat collector when necessary.
+	fetcherInput RowSource
+	fetcher      sqlbase.RowFetcher
+	alloc        sqlbase.DatumAlloc
+	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	input      RowSource
 	inputTypes []sqlbase.ColumnType
@@ -69,9 +74,12 @@ type joinReader struct {
 
 	// These fields are set only for lookup joins on secondary indexes which
 	// require an additional primary index lookup.
-	primaryFetcher     *sqlbase.RowFetcher
-	primaryColumnTypes []sqlbase.ColumnType
-	primaryKeyPrefix   []byte
+	// primaryFetcherInput wraps primaryFetcher in a RowSource implementation for
+	// the same reason that fetcher is wrapped.
+	primaryFetcherInput RowSource
+	primaryFetcher      *sqlbase.RowFetcher
+	primaryColumnTypes  []sqlbase.ColumnType
+	primaryKeyPrefix    []byte
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
@@ -142,6 +150,11 @@ func newJoinReader(
 	// neededIndexColumns is the set of columns we need to fetch from jr.index.
 	var neededIndexColumns util.FastIntSet
 
+	collectingStats := false
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		collectingStats = true
+	}
+
 	if jr.index == &jr.desc.PrimaryIndex ||
 		jr.neededRightCols().SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
 		// jr.index includes all the needed output columns, so only need one lookup.
@@ -165,6 +178,11 @@ func newJoinReader(
 			return nil, err
 		}
 		jr.primaryKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.desc.PrimaryIndex.ID)
+
+		jr.primaryFetcherInput = &rowFetcherWrapper{RowFetcher: jr.primaryFetcher}
+		if collectingStats {
+			jr.primaryFetcherInput = NewInputStatCollector(jr.primaryFetcherInput)
+		}
 	}
 	_, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
@@ -172,6 +190,11 @@ func newJoinReader(
 	)
 	if err != nil {
 		return nil, err
+	}
+	jr.fetcherInput = &rowFetcherWrapper{RowFetcher: &jr.fetcher}
+	if collectingStats {
+		jr.input = NewInputStatCollector(jr.input)
+		jr.fetcherInput = NewInputStatCollector(jr.fetcherInput)
 	}
 
 	// TODO(radu): verify the input types match the index key types
@@ -273,6 +296,9 @@ func (jr *joinReader) generateKey(
 }
 
 func (jr *joinReader) pushTrailingMeta(ctx context.Context) {
+	// TODO(asubiotto): Once joinReader implements RowSource, set
+	// processorBase.finishTrace = jr.outputStatsToTrace
+	jr.outputStatsToTrace()
 	sendTraceData(ctx, jr.out.output)
 	sendTxnCoordMetaMaybe(jr.flowCtx.txn, jr.out.output)
 }
@@ -323,6 +349,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				if len(spans) == 0 {
 					// No fetching needed since we have collected no spans and
 					// the input has signaled that no more records are coming.
+					jr.pushTrailingMeta(jr.ctx)
 					jr.out.Close()
 					return nil
 				}
@@ -398,10 +425,9 @@ func (jr *joinReader) indexJoinLookup(
 		return true, err
 	}
 	for {
-		row, _, _, err := jr.fetcher.NextRow(ctx)
-		if err != nil {
-			err = scrub.UnwrapScrubError(err)
-			return true, err
+		row, meta := jr.fetcherInput.Next()
+		if meta != nil {
+			return true, scrub.UnwrapScrubError(meta.Err)
 		}
 		if row == nil {
 			// Done with this batch.
@@ -468,10 +494,9 @@ func (jr *joinReader) lookupJoinLookup(
 		lookupRows = lookupRows[:0]
 		for len(lookupRows) < joinReaderBatchSize {
 			key := jr.fetcher.IndexKeyString(len(jr.lookupCols))
-			row, _, _, err := jr.fetcher.NextRow(ctx)
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
-				return true, err
+			row, meta := jr.fetcherInput.Next()
+			if meta != nil {
+				return true, scrub.UnwrapScrubError(meta.Err)
 			}
 			if row == nil {
 				// Done with this batch.
@@ -603,9 +628,9 @@ func (jr *joinReader) primaryLookup(
 		if !ok {
 			return nil, errors.Errorf("failed to find key %v in keyToInputRowIdx %v", key, keyToInputRowIdx)
 		}
-		row, _, _, err := jr.primaryFetcher.NextRow(ctx)
-		if err != nil {
-			return nil, err
+		row, meta := jr.primaryFetcherInput.Next()
+		if meta != nil {
+			return nil, meta.Err
 		}
 		if row == nil {
 			return nil, errors.Errorf("expected %d rows but found %d", batchSize, i)
@@ -614,9 +639,9 @@ func (jr *joinReader) primaryLookup(
 	}
 
 	// Verify that we consumed all the fetched rows.
-	nextRow, _, _, err := jr.primaryFetcher.NextRow(ctx)
-	if err != nil {
-		return nil, err
+	nextRow, meta := jr.primaryFetcherInput.Next()
+	if meta != nil {
+		return nil, meta.Err
 	}
 	if nextRow != nil {
 		return nil, errors.Errorf("expected %d rows but found more", batchSize)
@@ -632,11 +657,75 @@ func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	jr.input.Start(ctx)
+	jr.fetcherInput.Start(ctx)
+	if jr.primaryFetcherInput != nil {
+		jr.primaryFetcherInput.Start(ctx)
+	}
 	ctx = jr.startInternal(ctx, joinReaderProcName)
 	defer tracing.FinishSpan(jr.span)
 
 	err := jr.mainLoop(ctx)
 	if err != nil {
 		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.pushTrailingMeta, jr.input)
+	}
+}
+
+var _ DistSQLSpanStats = &JoinReaderStats{}
+
+const joinReaderTagPrefix = "joinreader."
+
+// Stats implements the SpanStats interface.
+func (jrs *JoinReaderStats) Stats() map[string]string {
+	statsMap := jrs.InputStats.Stats(joinReaderTagPrefix)
+	toMerge := jrs.IndexLookupStats.Stats(joinReaderTagPrefix + "index.")
+	for k, v := range toMerge {
+		statsMap[k] = v
+	}
+	if jrs.PrimaryIndexLookupStats != nil {
+		toMerge = jrs.PrimaryIndexLookupStats.Stats(joinReaderTagPrefix + "primary.index.")
+		for k, v := range toMerge {
+			statsMap[k] = v
+		}
+	}
+	return statsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
+	is := append(
+		jrs.InputStats.StatsForQueryPlan(""),
+		jrs.IndexLookupStats.StatsForQueryPlan("index ")...,
+	)
+	if jrs.PrimaryIndexLookupStats != nil {
+		is = append(is, jrs.PrimaryIndexLookupStats.StatsForQueryPlan("primary index ")...)
+	}
+	return is
+}
+
+// outputStatsToTrace outputs the collected joinReader stats to the trace. Will
+// fail silently if the joinReader is not collecting stats.
+func (jr *joinReader) outputStatsToTrace() {
+	is, ok := getInputStats(jr.flowCtx, jr.input)
+	if !ok {
+		return
+	}
+	ils, ok := getInputStats(jr.flowCtx, jr.fetcherInput)
+	if !ok {
+		return
+	}
+
+	jrs := &JoinReaderStats{
+		InputStats:       is,
+		IndexLookupStats: ils,
+	}
+	if jr.primaryFetcher != nil {
+		eils, ok := getInputStats(jr.flowCtx, jr.primaryFetcherInput)
+		if !ok {
+			return
+		}
+		jrs.PrimaryIndexLookupStats = &eils
+	}
+	if sp := opentracing.SpanFromContext(jr.ctx); sp != nil {
+		tracing.SetSpanStats(sp, jrs)
 	}
 }
