@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -37,9 +38,15 @@ type streamMerger struct {
 	// during SCRUB secondary index checks.
 	nullEquality bool
 	datumAlloc   sqlbase.DatumAlloc
+	// memMonitor refers to the memory monitor to be used during NextBatch
+	// since we need to account for the memory allocated for cartesian product
+	// of equal rows from left and right sources.
+	memMonitor *mon.BytesMonitor
 }
 
 func (sm *streamMerger) start(ctx context.Context) {
+	sm.left.memAcc = sm.memMonitor.MakeBoundAccount()
+	sm.right.memAcc = sm.memMonitor.MakeBoundAccount()
 	sm.left.start(ctx)
 	sm.right.start(ctx)
 }
@@ -156,6 +163,12 @@ func CompareEncDatumRowForMerge(
 	return 0, nil
 }
 
+func (sm *streamMerger) close(ctx context.Context) {
+	sm.left.memAcc.Close(ctx)
+	sm.right.memAcc.Close(ctx)
+	sm.memMonitor.Stop(ctx)
+}
+
 // makeStreamMerger creates a streamMerger, joining rows from leftSource with
 // rows from rightSource.
 //
@@ -166,6 +179,7 @@ func makeStreamMerger(
 	rightSource RowSource,
 	rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,
+	memMonitor *mon.BytesMonitor,
 ) (streamMerger, error) {
 	if len(leftOrdering) != len(rightOrdering) {
 		return streamMerger{}, errors.Errorf(
@@ -181,5 +195,6 @@ func makeStreamMerger(
 		left:         makeStreamGroupAccumulator(leftSource, leftOrdering),
 		right:        makeStreamGroupAccumulator(rightSource, rightOrdering),
 		nullEquality: nullEquality,
+		memMonitor:   memMonitor,
 	}, nil
 }
