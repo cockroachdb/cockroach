@@ -37,7 +37,7 @@ SELECT f FROM a WHERE k < 0 AND k > 10 ORDER BY f DESC
 sort
  ├── columns: f:2(float!null)
  ├── stats: [rows=0]
- ├── cost: 0.01
+ ├── cost: 0
  ├── ordering: -2
  └── project
       ├── columns: f:2(float!null)
