@@ -152,7 +152,7 @@ func newSortAllProcessor(
 		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		memMonitor = &limitedMon
 	} else {
-		memMonitor = newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall")
+		memMonitor = newMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall")
 	}
 
 	proc := &sortAllProcessor{}

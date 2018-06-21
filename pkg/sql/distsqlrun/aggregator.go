@@ -147,7 +147,7 @@ func (ag *aggregatorBase) init(
 	trailingMetaCallback func() []ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := newMemMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
+	memMonitor := newMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = NewInputStatCollector(input)
 		ag.finishTrace = ag.outputStatsToTrace
