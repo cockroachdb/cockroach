@@ -474,6 +474,17 @@ func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
 	return prefix
 }
 
+// ExtractConstCols returns a set of columns which are restricted to be
+// constant by the constraint.
+func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	var res opt.ColSet
+	pre := c.ExactPrefix(evalCtx)
+	for i := 0; i < pre; i++ {
+		res.Add(int(c.Columns.Get(i).ID()))
+	}
+	return res
+}
+
 // ExtractNotNullCols returns a set of columns that cannot be NULL when the
 // constraint holds.
 func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
