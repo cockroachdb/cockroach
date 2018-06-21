@@ -17,7 +17,9 @@ package constraint
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
@@ -223,6 +225,71 @@ func TestConstraintSetUnion(t *testing.T) {
 	test(res, "/1: [/10 - /10]")
 	res = Contradiction.Union(evalCtx, eq10)
 	test(res, "/1: [/10 - /10]")
+}
+
+func TestExtractConstCols(t *testing.T) {
+	type testCase struct {
+		constraints []string
+		expected    opt.ColSet
+	}
+
+	cols := util.MakeFastIntSet
+
+	cases := []testCase{
+		{[]string{`/1: [/10 - /10]`}, cols(1)},
+		{[]string{`/-1: [/10 - /10]`}, cols(1)},
+		{[]string{`/1: [/10 - /11]`}, cols()},
+		{[]string{`/1: [/10 - ]`}, cols()},
+		{[]string{`/1/2: [/10/2 - /10/4]`}, cols(1)},
+		{[]string{`/1/-2: [/10/4 - /10/2]`}, cols(1)},
+		{[]string{`/1/2: [/10/2 - /10/2]`}, cols(1, 2)},
+		{[]string{`/1/2: [/10/2 - /12/2]`}, cols()},
+		{[]string{`/1/2: [/9/2 - /9/2] [/10/2 - /12/2]`}, cols()},
+		{[]string{`/1: [/10 - /10] [/12 - /12]`}, cols()},
+		{
+			[]string{
+				`/1: [/10 - /10]`,
+				`/2: [/8 - /8]`,
+				`/-3: [/13 - /7]`,
+			},
+			cols(1, 2),
+		},
+		{
+			[]string{
+				`/1/2: [/10/4 - /10/5] [/12/4 - /12/5]`,
+				`/2: [/4 - /4]`,
+			},
+			cols(2),
+		},
+		{[]string{`/1: [/10 - /11)`}, cols()},
+		// TODO(justin): column 1 here is constant but we don't infer it as such.
+		{
+			[]string{
+				`/2/1: [/900/4 - /900/4] [/1000/4 - /1000/4] [/1100/4 - /1100/4] [/1400/4 - /1400/4] [/1500/4 - /1500/4]`,
+			},
+			cols(),
+		},
+		{
+			[]string{
+				`/1: [/2 - /3]`,
+				`/2/1: [/10/3 - /11/1]`,
+			},
+			cols(),
+		},
+	}
+
+	evalCtx := tree.NewTestingEvalContext(nil)
+	for _, tc := range cases {
+		cs := Unconstrained
+		for _, constraint := range tc.constraints {
+			constraint := ParseConstraint(evalCtx, constraint)
+			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+		}
+		cols := cs.ExtractConstCols(evalCtx)
+		if !tc.expected.Equals(cols) {
+			t.Errorf("expected constant columns from %s to be %s, was %s", cs, tc.expected, cols)
+		}
+	}
 }
 
 type spanTestData struct {
