@@ -529,6 +529,14 @@ type Store struct {
 
 	scheduler *raftScheduler
 
+	// cachedCapacity caches information on store capacity to prevent
+	// expensive recomputations in case leases or replicas are rapidly
+	// rebalancing.
+	cachedCapacity struct {
+		syncutil.Mutex
+		roachpb.StoreCapacity
+	}
+
 	counts struct {
 		// Number of placeholders removed due to error.
 		removedPlaceholders int32
@@ -891,8 +899,12 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.compactor = compactor.NewCompactor(
 		s.cfg.Settings,
 		s.engine.(engine.WithSSTables),
-		s.Capacity,
-		func(ctx context.Context) { s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction") },
+		func() (roachpb.StoreCapacity, error) {
+			return s.Capacity(false /* useCached */)
+		},
+		func(ctx context.Context) {
+			s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
+		},
 	)
 	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
@@ -1645,11 +1657,11 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 	})
 }
 
-func (s *Store) asyncGossipStore(ctx context.Context, reason string) {
+func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
 	if err := s.stopper.RunAsyncTask(
 		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason),
 		func(ctx context.Context) {
-			if err := s.GossipStore(ctx); err != nil {
+			if err := s.GossipStore(ctx, useCached); err != nil {
 				log.Warningf(ctx, "error gossiping on %s: %s", reason, err)
 			}
 		}); err != nil {
@@ -1658,7 +1670,7 @@ func (s *Store) asyncGossipStore(ctx context.Context, reason string) {
 }
 
 // GossipStore broadcasts the store on the gossip network.
-func (s *Store) GossipStore(ctx context.Context) error {
+func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// This should always return immediately and acts as a sanity check that we
 	// don't try to gossip before we're connected.
 	select {
@@ -1671,7 +1683,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// recursively triggering a gossip of the store capacity.
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
 
-	storeDesc, err := s.Descriptor()
+	storeDesc, err := s.Descriptor(useCached)
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
@@ -1695,8 +1707,10 @@ func (s *Store) GossipStore(ctx context.Context) error {
 type capacityChangeEvent int
 
 const (
-	rangeChangeEvent capacityChangeEvent = iota
-	leaseChangeEvent
+	rangeAddEvent capacityChangeEvent = iota
+	rangeRemoveEvent
+	leaseAddEvent
+	leaseRemoveEvent
 )
 
 // maybeGossipOnCapacityChange decrements the countdown on range
@@ -1704,15 +1718,31 @@ const (
 // immediate gossip of this store's descriptor, to include updated
 // capacity information.
 func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityChangeEvent) {
-	if s.cfg.TestingKnobs.DisableLeaseCapacityGossip && cce == leaseChangeEvent {
+	if s.cfg.TestingKnobs.DisableLeaseCapacityGossip && (cce == leaseAddEvent || cce == leaseRemoveEvent) {
 		return
 	}
-	if (cce == rangeChangeEvent && atomic.AddInt32(&s.gossipRangeCountdown, -1) == 0) ||
-		(cce == leaseChangeEvent && atomic.AddInt32(&s.gossipLeaseCountdown, -1) == 0) {
+
+	// Incrementally adjust stats to keep them up to date even if the
+	// capacity is gossiped, but isn't due yet to be recomputed from scratch.
+	s.cachedCapacity.Lock()
+	switch cce {
+	case rangeAddEvent:
+		s.cachedCapacity.RangeCount++
+	case rangeRemoveEvent:
+		s.cachedCapacity.RangeCount--
+	case leaseAddEvent:
+		s.cachedCapacity.LeaseCount++
+	case leaseRemoveEvent:
+		s.cachedCapacity.LeaseCount--
+	}
+	s.cachedCapacity.Unlock()
+
+	if ((cce == rangeAddEvent || cce == rangeRemoveEvent) && atomic.AddInt32(&s.gossipRangeCountdown, -1) == 0) ||
+		((cce == leaseAddEvent || cce == leaseRemoveEvent) && atomic.AddInt32(&s.gossipLeaseCountdown, -1) == 0) {
 		// Reset countdowns to avoid unnecessary gossiping.
 		atomic.StoreInt32(&s.gossipRangeCountdown, 0)
 		atomic.StoreInt32(&s.gossipLeaseCountdown, 0)
-		s.asyncGossipStore(ctx, "capacity change")
+		s.asyncGossipStore(ctx, "capacity change", true /* useCached */)
 	}
 }
 
@@ -1726,7 +1756,7 @@ func (s *Store) recordNewWritesPerSecond(newVal float64) {
 		return
 	}
 	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
-		s.asyncGossipStore(context.TODO(), "writes-per-second change")
+		s.asyncGossipStore(context.TODO(), "writes-per-second change", false /* useCached */)
 	}
 }
 
@@ -2287,7 +2317,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
-	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
+	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
 
 	return s.processRangeDescriptorUpdateLocked(ctx, origRng)
 }
@@ -2566,7 +2596,7 @@ func (s *Store) removeReplicaImpl(
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	// TODO(peter): Could release s.mu.Lock() here.
-	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
+	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
 
 	return nil
@@ -2608,7 +2638,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Re
 
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
-	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
+	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
 
 	return nil
 }
@@ -2622,21 +2652,29 @@ func (s *Store) Attrs() roachpb.Attributes {
 // this does not include reservations.
 // Note that Capacity() has the side effect of updating some of the store's
 // internal statistics about its replicas.
-func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
-	capacity, err := s.engine.Capacity()
-	if err != nil {
-		return capacity, err
+func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
+	s.cachedCapacity.Lock()
+	defer s.cachedCapacity.Unlock()
+	if useCached && s.cachedCapacity.StoreCapacity != (roachpb.StoreCapacity{}) {
+		return s.cachedCapacity.StoreCapacity, nil
 	}
 
-	capacity.RangeCount = int32(s.ReplicaCount())
+	var err error
+	s.cachedCapacity.StoreCapacity, err = s.engine.Capacity()
+	if err != nil {
+		return s.cachedCapacity.StoreCapacity, err
+	}
 
 	now := s.cfg.Clock.Now()
 	var leaseCount int32
+	var rangeCount int32
 	var logicalBytes int64
 	var totalWritesPerSecond float64
-	bytesPerReplica := make([]float64, 0, capacity.RangeCount)
-	writesPerReplica := make([]float64, 0, capacity.RangeCount)
+	replicaCount := s.metrics.ReplicaCount.Value()
+	bytesPerReplica := make([]float64, 0, replicaCount)
+	writesPerReplica := make([]float64, 0, replicaCount)
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		rangeCount++
 		if r.OwnsValidLease(now) {
 			leaseCount++
 		}
@@ -2652,14 +2690,15 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 		}
 		return true
 	})
-	capacity.LeaseCount = leaseCount
-	capacity.LogicalBytes = logicalBytes
-	capacity.WritesPerSecond = totalWritesPerSecond
-	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
-	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
+	s.cachedCapacity.RangeCount = rangeCount
+	s.cachedCapacity.LeaseCount = leaseCount
+	s.cachedCapacity.LogicalBytes = logicalBytes
+	s.cachedCapacity.WritesPerSecond = totalWritesPerSecond
+	s.cachedCapacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
+	s.cachedCapacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewWritesPerSecond(totalWritesPerSecond)
 
-	return capacity, nil
+	return s.cachedCapacity.StoreCapacity, nil
 }
 
 // ReplicaCount returns the number of replicas contained by this store. This
@@ -2695,8 +2734,8 @@ func (s *Store) MVCCStats() enginepb.MVCCStats {
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
-	capacity, err := s.Capacity()
+func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
+	capacity, err := s.Capacity(useCached)
 	if err != nil {
 		return nil, err
 	}
@@ -3981,7 +4020,7 @@ func (s *Store) tryGetOrCreateReplica(
 }
 
 func (s *Store) updateCapacityGauges() error {
-	desc, err := s.Descriptor()
+	desc, err := s.Descriptor(false /* useCached */)
 	if err != nil {
 		return err
 	}

@@ -1593,7 +1593,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 			desc: "past idle replica campaign timeout",
 			prepFn: func(t *testing.T) {
 				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO()); err != nil {
+					if err := s.GossipStore(context.TODO(), false /* useCached */); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1607,7 +1607,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 			desc: "lease expired all replicas should campaign",
 			prepFn: func(t *testing.T) {
 				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO()); err != nil {
+					if err := s.GossipStore(context.TODO(), false /* useCached */); err != nil {
 						t.Fatal(err)
 					}
 				}

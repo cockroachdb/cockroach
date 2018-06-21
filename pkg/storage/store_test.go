@@ -3087,7 +3087,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 
 	ctx := context.Background()
 
-	desc, err := s.Descriptor()
+	desc, err := s.Descriptor(false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}
