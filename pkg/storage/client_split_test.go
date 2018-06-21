@@ -2719,7 +2719,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	cfg.TestingKnobs.DisableSplitQueue = true
 	s := createTestStoreWithConfig(t, stopper, cfg)
 
-	cap, err := s.Capacity()
+	cap, err := s.Capacity(false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2746,7 +2746,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	cap, err = s.Capacity()
+	cap, err = s.Capacity(false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2784,7 +2784,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	cap, err = s.Capacity()
+	cap, err = s.Capacity(false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}

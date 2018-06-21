@@ -587,7 +587,7 @@ func TestNodeStatusWritten(t *testing.T) {
 
 	expectedStoreStatuses := make(map[roachpb.StoreID]status.StoreStatus)
 	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
-		desc, err := s.Descriptor()
+		desc, err := s.Descriptor(false /* useCached */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -737,7 +737,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		// Check the store to make sure the locality was propagated to its
 		// nodeDescriptor.
 		if err := node.stores.VisitStores(func(store *storage.Store) error {
-			desc, err := store.Descriptor()
+			desc, err := store.Descriptor(false /* useCached */)
 			if err != nil {
 				t.Fatal(err)
 			}
