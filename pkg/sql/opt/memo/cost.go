@@ -33,9 +33,14 @@ func (c Cost) Less(other Cost) bool {
 	// Two plans with the same cost can have slightly different floating point
 	// results (e.g. same subcosts being added up in a different order). So we
 	// treat plans with very similar cost as equal.
-	const epsilon = 1e-5
-
-	return c <= other-epsilon
+	//
+	// We use "units of least precision" for similarity: this is the number of
+	// representable floating point numbers in-between the two values. This is
+	// better than a fixed epsilon because the allowed error is proportional to
+	// the magnitude of the numbers. Because the mantissa is in the low bits, we
+	// can just use the bit representations as integers.
+	const ulpTolerance = 1000
+	return math.Float64bits(float64(c))+ulpTolerance <= math.Float64bits(float64(other))
 }
 
 // Sub subtracts the other cost from this cost and returns the result.

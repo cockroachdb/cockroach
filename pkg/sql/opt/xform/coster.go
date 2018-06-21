@@ -110,17 +110,12 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	rowCount := logical.Relational.Stats.RowCount
-	var cost memo.Cost
-	if rowCount > 0 {
+	cost := memo.Cost(rowCount) * cpuCostFactor
+	if rowCount > 1 {
 		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
 		// certain amount of memory is used, distsql switches to a disk-based sort
 		// with a temp RocksDB store.
 		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCostFactor
-	}
-
-	// The sort should have some overhead even if there are very few rows.
-	if cost < cpuCostFactor {
-		cost = cpuCostFactor
 	}
 
 	return cost + c.computeChildrenCost(candidate)
