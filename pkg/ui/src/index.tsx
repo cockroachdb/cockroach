@@ -134,6 +134,7 @@ ReactDOM.render(
         </Route>
         <Route path="statement">
           <IndexRedirect to="/statements" />
+          <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
           <Route path={ `:${statementAttr}` } component={ StatementDetails } />
         </Route>
 
