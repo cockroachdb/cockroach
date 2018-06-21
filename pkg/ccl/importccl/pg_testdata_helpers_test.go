@@ -133,10 +133,10 @@ func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
 
 				var sb strings.Builder
 				sb.WriteString(`COPY simple TO STDOUT WITH (FORMAT 'text'`)
-				if cfg.opts.Delimiter != '\t' {
+				if cfg.opts.Delimiter != copyDefaultDelimiter {
 					fmt.Fprintf(&sb, `, DELIMITER %q`, cfg.opts.Delimiter)
 				}
-				if cfg.opts.Null != `\N` {
+				if cfg.opts.Null != copyDefaultNull {
 					fmt.Fprintf(&sb, `, NULL "%s"`, cfg.opts.Null)
 				}
 				sb.WriteString(`)`)
@@ -239,7 +239,7 @@ func pgdump(t *testing.T, dest string, tables ...string) {
 		t.Fatal(err)
 	}
 
-	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`, `--inserts`, `--no-owner`, `--no-privileges`}
+	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`, `--no-owner`, `--no-privileges`}
 	for _, table := range tables {
 		args = append(args, `-t`, table)
 	}
