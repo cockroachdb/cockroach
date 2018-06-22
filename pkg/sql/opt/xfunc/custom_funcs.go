@@ -169,9 +169,9 @@ func (c *CustomFuncs) ExtractColList(private memo.PrivateID) opt.ColList {
 	return c.mem.LookupPrivate(private).(opt.ColList)
 }
 
-// ExtractOrdering extracts an opt.Ordering from the given private.
-func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) opt.Ordering {
-	return c.mem.LookupPrivate(private).(opt.Ordering)
+// ExtractOrdering extracts an props.OrderingChoice from the given private.
+func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) *props.OrderingChoice {
+	return c.mem.LookupPrivate(private).(*props.OrderingChoice)
 }
 
 // ExtractProjectionsOpDef extracts a *memo.ProjectionsOpDef from the given
@@ -258,4 +258,11 @@ func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
 // group, then ShortestKey returns ok=false.
 func (c *CustomFuncs) ShortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
 	return c.LookupLogical(group).Relational.FuncDeps.Key()
+}
+
+// HasColsInOrdering returns true if all columns that appear in an ordering are
+// output columns of the given group.
+func (c *CustomFuncs) HasColsInOrdering(group memo.GroupID, ordering memo.PrivateID) bool {
+	outCols := c.OutputCols(group)
+	return c.ExtractOrdering(ordering).SubsetOfCols(outCols)
 }

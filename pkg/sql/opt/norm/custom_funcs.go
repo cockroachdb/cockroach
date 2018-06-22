@@ -367,7 +367,7 @@ func (c *CustomFuncs) GroupingColsAreKey(cols memo.PrivateID, group memo.GroupID
 // IsUnorderedGroupBy returns true if the given input ordering for the group by
 // is unspecified.
 func (c *CustomFuncs) IsUnorderedGroupBy(def memo.PrivateID) bool {
-	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Empty()
+	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Any()
 }
 
 // IsScalarGroupBy returns true if the given grouping columns come from a
@@ -390,18 +390,6 @@ func (c *CustomFuncs) LimitGeMaxRows(limit memo.PrivateID, input memo.GroupID) b
 	limitVal := int64(*c.f.mem.LookupPrivate(limit).(*tree.DInt))
 	maxRows := c.f.mem.GroupProperties(input).Relational.Cardinality.Max
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
-}
-
-// HasColsInOrdering returns true if all columns that appear in an ordering
-// are output columns of the given group.
-func (c *CustomFuncs) HasColsInOrdering(input memo.GroupID, ordering memo.PrivateID) bool {
-	outCols := c.OutputCols(input)
-	for _, ordCol := range c.ExtractOrdering(ordering) {
-		if !outCols.Contains(int(ordCol.ID())) {
-			return false
-		}
-	}
-	return true
 }
 
 // ----------------------------------------------------------------------

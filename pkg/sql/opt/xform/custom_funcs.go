@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -281,7 +282,7 @@ func (c *CustomFuncs) CanLimitScan(def, limit, ordering memo.PrivateID) bool {
 		return false
 	}
 
-	required := c.e.mem.LookupPrivate(ordering).(opt.Ordering)
+	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
 	return scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
 }
 
@@ -293,18 +294,6 @@ func (c *CustomFuncs) LimitScanDef(def, limit memo.PrivateID) memo.PrivateID {
 	defCopy := *c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	defCopy.HardLimit = int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
 	return c.e.mem.InternScanOpDef(&defCopy)
-}
-
-// HasOrderingCols returns true if the output columns produced by a group
-// contain all columns in an ordering.
-func (c *CustomFuncs) HasOrderingCols(input memo.GroupID, ordering memo.PrivateID) bool {
-	outCols := c.OutputCols(input)
-	for _, c := range c.ExtractOrdering(ordering) {
-		if !outCols.Contains(int(c.ID())) {
-			return false
-		}
-	}
-	return true
 }
 
 // OneResultPerInput returns true if the given LookupJoinOp always produces

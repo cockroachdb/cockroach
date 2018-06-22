@@ -66,19 +66,6 @@ project
            └── ordering: +1
 
 build
-SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER BY ordinality
-----
-project
- ├── columns: a:1(int!null) ordinality:5(int!null)
- ├── ordering: +5
- └── row-number
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
-      ├── ordering: +5
-      └── scan abcd
-           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
-           └── ordering: +1
-
-build
 SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
 ----
 project
