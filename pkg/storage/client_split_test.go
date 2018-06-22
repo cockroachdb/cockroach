@@ -146,7 +146,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return r
 	}
 
-	thresh := storage.GetGCQueueTxnCleanupThreshold().Nanoseconds()
+	thresh := storagebase.TxnCleanupThreshold.Nanoseconds()
 	// Pick a non-gcable and gcable timestamp, respectively. Avoid the clock's
 	// exact timestamp because of unpredictable logical ticks.
 	tsFresh := hlc.Timestamp{WallTime: manualClock.UnixNano() - thresh + 1}
@@ -2252,7 +2252,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Advance the clock past the transaction cleanup expiration.
-	manual.Increment(storage.GetGCQueueTxnCleanupThreshold().Nanoseconds() + 1)
+	manual.Increment(storagebase.TxnCleanupThreshold.Nanoseconds() + 1)
 
 	// First, create a split after addressing records.
 	args := adminSplitArgs(keys.SystemPrefix)

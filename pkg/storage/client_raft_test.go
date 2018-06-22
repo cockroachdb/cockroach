@@ -1242,7 +1242,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		}
 
 		return roachpb.NewError(
-			storage.NewReplicaCorruptionError(errors.New("boom")),
+			roachpb.NewReplicaCorruptionError(errors.New("boom")),
 		)
 	}
 
