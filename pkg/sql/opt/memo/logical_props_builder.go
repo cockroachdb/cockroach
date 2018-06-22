@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -126,9 +127,13 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Functional Dependencies
 	// -----------------------
-	// Initialize key FD's from the table schema, minus any columns that are not
-	// projected by the Scan operator.
+	// Initialize key FD's from the table schema, including constant columns from
+	// the constraint, minus any columns that are not projected by the Scan
+	// operator.
 	relational.FuncDeps.CopyFrom(b.makeTableFuncDep(md, def.Table))
+	if def.Constraint != nil {
+		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
+	}
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -181,9 +186,11 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	// Functional Dependencies
 	// -----------------------
-	// Start with copy of FuncDepSet from input and modify with any additional
-	// not-null columns, then possibly simplify by calling ProjectCols.
+	// Start with copy of FuncDepSet from input, add FDs from the WHERE clause,
+	// modify with any additional not-null columns, then possibly simplify by
+	// calling ProjectCols.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	relational.FuncDeps.AddFrom(&filterProps.FuncDeps)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -309,6 +316,12 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
+	// Add not-null constraints from ON predicate for inner and semi-joins.
+	switch ev.Operator() {
+	case opt.InnerJoinOp, opt.SemiJoinApplyOp:
+		b.applyNotNullConstraint(relational, onProps.Constraints)
+	}
+
 	// Outer Columns
 	// -------------
 	// Any outer columns from the filter that are not bound by the input columns
@@ -335,7 +348,14 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	relational.FuncDeps.CopyFrom(&leftProps.FuncDeps)
 
 	switch ev.Operator() {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		// Add FDs from the ON predicate, which include equivalent columns and
+		// constant columns. Any FDs involving columns from the right side will
+		// be removed below.
+		relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+		fallthrough
+
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Inherit FDs from left side, since right side simply acts like a filter.
 		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 
@@ -347,11 +367,14 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		//      for the null-supplying side of the join.
 		relational.FuncDeps.MakeProduct(&rightProps.FuncDeps)
 
-		// TODO(andyk): Add ON predicate effects, like null rejection, equivalent
-		//              columns, and constant columns.
 		notNullCols := leftProps.NotNullCols.Union(rightProps.NotNullCols)
 
 		switch ev.Operator() {
+		case opt.InnerJoinOp:
+			// Add FDs from the ON predicate, which include equivalent columns and
+			// constant columns.
+			relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+
 		case opt.RightJoinOp, opt.RightJoinApplyOp:
 			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
 
@@ -928,13 +951,65 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
 
 	case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
-		// Calculate constraints for any expressions that could be filters.
+		// Calculate constraints and FDs for any expressions that could be filters.
+
+		// Constraints
+		// -----------
 		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: b.evalCtx}
 		scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(ev)
 		if scalar.Constraints.IsUnconstrained() {
 			scalar.Constraints, scalar.TightConstraints = nil, false
 		}
+
+		// Functional Dependencies
+		// -----------------------
+		// Add constant columns. No need to add not null columns, because they
+		// are only relevant if there are lax FDs that can be made strict.
+		if scalar.Constraints != nil {
+			constCols := scalar.Constraints.ExtractConstCols(b.evalCtx)
+			scalar.FuncDeps.AddConstants(constCols)
+		}
+
+		// Check for filter conjuncts of the form: x = y.
+		for i := 0; i < ev.ChildCount(); i++ {
+			child := ev.Child(i)
+			if child.Operator() == opt.EqOp {
+				left := child.Child(0)
+				right := child.Child(1)
+				if left.Operator() == opt.VariableOp && right.Operator() == opt.VariableOp {
+					colLeft := left.Private().(opt.ColumnID)
+					colRight := right.Private().(opt.ColumnID)
+					// We currently only add equivalences for columns that do not have a
+					// composite key encoding. This is a conservative measure to ensure
+					// that we don't infer filters incorrectly. For example, consider
+					// this query:
+					//
+					//   SELECT * FROM
+					//     (VALUES (1.0)) AS t1(x),
+					//     (VALUES (1.00)) AS t2(y)
+					//   WHERE x=y AND x::text = '1.0';
+					//
+					// It should return the following result:
+					//
+					//     x  |  y
+					//   -----+------
+					//    1.0 | 1.00
+					//
+					// But if we use the equality predicate x=y to infer an additional
+					// filter y::text = '1.0', the query would return nothing.
+					//
+					// TODO(rytaft): In the future, we may want to add the equivalency
+					// anyway, but only map a predicate if it involves a comparison
+					// operator, such as x < 5.
+					if !sqlbase.DatumTypeHasCompositeKeyEncoding(ev.Metadata().ColumnType(colLeft)) &&
+						!sqlbase.DatumTypeHasCompositeKeyEncoding(ev.Metadata().ColumnType(colRight)) {
+						scalar.FuncDeps.AddEquivalency(colLeft, colRight)
+					}
+				}
+			}
+		}
 	}
+
 	return logical
 }
 
