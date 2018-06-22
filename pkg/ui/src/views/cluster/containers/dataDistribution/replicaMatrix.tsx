@@ -11,7 +11,7 @@ import {
   flatten,
   sumValuesUnderPaths,
   LayoutCell,
-  FlattenedNode, visitNodes, PaginationState,
+  FlattenedNode, visitNodes, PaginationState, SortState,
 } from "./tree";
 import { cockroach } from "src/js/protos";
 import INodeDescriptor = cockroach.roachpb.INodeDescriptor;
@@ -32,7 +32,7 @@ interface ReplicaMatrixState {
   collapsedRows: TreePath[];
   collapsedCols: TreePath[];
   selectedMetric: string;
-  paginatedPaths: AssocList<TreePath, PaginationState>;
+  paginationStates: AssocList<TreePath, PaginationState>;
 }
 
 interface ReplicaMatrixProps {
@@ -74,7 +74,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
       collapsedRows: collapsedPaths,
       collapsedCols: [],
       selectedMetric: METRIC_REPLICAS,
-      paginatedPaths: [],
+      paginationStates: [],
     };
   }
 
@@ -199,7 +199,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   handleChangePage = (rowPath: TreePath, delta: number) => {
     this.setState({
-      paginatedPaths: putAssocList(this.state.paginatedPaths, rowPath, (ps) => {
+      paginationStates: putAssocList(this.state.paginationStates, rowPath, (ps) => {
         if (ps) {
           return {
             ...ps,
@@ -209,10 +209,63 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         return {
           page: 1, // paging to the right for the first time
           path: rowPath,
-          sortDesc: true,
+          sortState: SortState.NONE,
         };
       }),
     });
+  }
+
+  handleChangeSortState = (rowPath: TreePath, newState: SortState) => {
+    this.setState({
+      paginationStates: putAssocList(this.state.paginationStates, rowPath, (ps) => {
+        if (ps) {
+          return {
+            ...ps,
+            sortState: newState,
+          };
+        }
+        return {
+          page: 0,
+          path: rowPath,
+          sortState: newState,
+        };
+      }),
+    });
+  }
+
+  renderPager(row: FlattenedNode<SchemaObject>, numFlattenedCols: number) {
+    const paginationState = getAssocList(this.state.paginationStates, row.path);
+    const page = paginationState ? paginationState.page : 0;
+    const children = row.node.children;
+    const numChildren = children ? children.length : 0;
+    const numPages = Math.ceil(numChildren / PAGE_SIZE);
+
+    return (
+      <tr>
+        <td />
+        <td colSpan={numFlattenedCols} style={{ padding: 5 }}>
+          <button
+            onClick={() => this.handleChangePage(row.path, -1)}
+            disabled={page === 0}
+          >
+            &lt; Prev
+          </button>
+          {" "}
+          {page + 1} out of {numPages}
+          {" "}
+          <button
+            onClick={() => this.handleChangePage(row.path, 1)}
+            disabled={page === numPages - 1}
+          >
+            Next &gt;
+          </button>
+          <SortStateSelector
+            state={paginationState ? paginationState.sortState : SortState.NONE}
+            onChange={(newSortState) => this.handleChangeSortState(row.path, newSortState)}
+          />
+        </td>
+      </tr>
+    );
   }
 
   render() {
@@ -265,12 +318,6 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         </thead>
         <tbody>
           {flattenedRows.map((row) => {
-            const paginationState = getAssocList(this.state.paginatedPaths, row.path);
-            const page = paginationState ? paginationState.page : 0;
-            const children = row.node.children;
-            const numChildren = children ? children.length : 0;
-            const numPages = Math.ceil(numChildren / PAGE_SIZE);
-
             return [
               <tr
                 key={row.path.join("/")}
@@ -305,26 +352,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                 })}
               </tr>,
               (row.isPaginated && !(row.isCollapsed || row.isLeaf))
-                ? <tr>
-                    <td />
-                    <td colSpan={flattenedCols.length} style={{ padding: 5 }}>
-                      <button
-                        onClick={() => this.handleChangePage(row.path, -1)}
-                        disabled={page === 0}
-                      >
-                        &lt; Prev
-                      </button>
-                      {" "}
-                      {page + 1} out of {numPages}
-                      {" "}
-                      <button
-                        onClick={() => this.handleChangePage(row.path, 1)}
-                        disabled={page === numPages - 1}
-                      >
-                        Next &gt;
-                      </button>
-                    </td>
-                  </tr>
+                ? this.renderPager(row, flattenedCols.length)
                 : null,
             ];
           })}
@@ -333,6 +361,30 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     );
   }
 
+}
+
+// TODO(vilterp): just use a radio button?
+function SortStateSelector(props: { state: SortState, onChange: (sortState: SortState) => void }) {
+  function option(val: SortState) {
+    return (
+      <span
+        className={classNames(
+          "sort-state-selector__option",
+          { "sort-state-selector__option--selected": val === props.state },
+        )}
+        onClick={() => props.onChange(val)}
+      >
+        {val}
+      </span>
+    );
+  }
+  return (
+    <span className="sort-state-selector">
+      {option(SortState.ASC)}
+      {option(SortState.DESC)}
+      {option(SortState.NONE)}
+    </span>
+  );
 }
 
 function CustomLink(props: { to: string, children: React.ReactNode }) {
@@ -350,17 +402,35 @@ interface PropsAndState {
   state: ReplicaMatrixState;
 }
 
+const selectGetValueFun = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.state.selectedMetric,
+  (propsAndState: PropsAndState) => propsAndState.props.getValue,
+  (
+    selectedMetric: string,
+    getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number,
+  ) => {
+    return getValue(selectedMetric);
+  },
+);
+
 const selectFlattenedRows = createSelector(
   (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (propsAndState: PropsAndState) => propsAndState.props.cols,
   (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
-  (propsAndState: PropsAndState) => propsAndState.state.paginatedPaths,
+  (propsAndState: PropsAndState) => propsAndState.state.paginationStates,
+  selectGetValueFun,
   (
     rows: TreeNode<SchemaObject>,
+    cols: TreeNode<NodeDescriptor$Properties>,
     collapsedRows: TreePath[],
     paginationStates: AssocList<TreePath, PaginationState>,
+    getValue: (rowPath: TreePath, colPath: TreePath) => number,
   ) => {
     console.log("flattening rows");
-    return flatten(rows, collapsedRows, true /* includeNodes */, paginationStates, PAGE_SIZE);
+    const sortBy = (path: TreePath) => {
+      return sumValuesUnderPaths(rows, cols, path, [], getValue);
+    };
+    return flatten(rows, collapsedRows, true /* includeNodes */, paginationStates, PAGE_SIZE, sortBy);
   },
 );
 
@@ -370,17 +440,6 @@ const selectFlattenedCols = createSelector(
   (cols: TreeNode<INodeDescriptor>, collapseCols: TreePath[]) => {
     console.log("flattening cols");
     return flatten(cols, collapseCols, false /* includeNodes */);
-  },
-);
-
-const selectGetValueFun = createSelector(
-  (propsAndState: PropsAndState) => propsAndState.state.selectedMetric,
-  (propsAndState: PropsAndState) => propsAndState.props.getValue,
-  (
-    selectedMetric: string,
-    getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number,
-  ) => {
-    return getValue(selectedMetric);
   },
 );
 
