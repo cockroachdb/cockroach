@@ -736,3 +736,14 @@ build-scalar
 ARRAY['"foo"'::json]
 ----
 error: arrays of jsonb not allowed
+
+opt
+SELECT -((-9223372036854775808):::int)
+----
+project
+ ├── columns: "?column?":1(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── unary-minus [type=int]
+           └── const: -9223372036854775808 [type=int]
