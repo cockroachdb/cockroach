@@ -703,11 +703,21 @@ type WindowFrameBound struct {
 	OffsetExpr Expr
 }
 
+// HasOffset returns whether node contains an offset.
+func (node *WindowFrameBound) HasOffset() bool {
+	return node.BoundType == OffsetPreceding || node.BoundType == OffsetFollowing
+}
+
 // WindowFrameBounds specifies boundaries of the window frame.
 // The row at StartBound is included whereas the row at EndBound is not.
 type WindowFrameBounds struct {
 	StartBound *WindowFrameBound
 	EndBound   *WindowFrameBound
+}
+
+// HasOffset returns whether node contains an offset in either of the bounds.
+func (node *WindowFrameBounds) HasOffset() bool {
+	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
 // WindowFrame represents static state of window frame over which calculations are made.

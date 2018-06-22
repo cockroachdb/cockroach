@@ -180,9 +180,9 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
+	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
 
 	// We need to discard all values that are no longer in the frame.
 	w.sw.removeAllBefore(start)
@@ -227,10 +227,10 @@ type slidingWindowSumFunc struct {
 
 // removeAllBefore subtracts the values from all the rows that are no longer in the frame.
 func (w *slidingWindowSumFunc) removeAllBefore(
-	ctx context.Context, wfr *tree.WindowFrameRun,
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) error {
 	var err error
-	for idx := w.prevStart; idx < wfr.FrameStartIdx() && idx < w.prevEnd; idx++ {
+	for idx := w.prevStart; idx < wfr.FrameStartIdx(evalCtx) && idx < w.prevEnd; idx++ {
 		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 			continue
 		}
@@ -263,10 +263,10 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
+	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
 
 	// We need to discard all values that are no longer in the frame.
-	err := w.removeAllBefore(ctx, wfr)
+	err := w.removeAllBefore(ctx, evalCtx, wfr)
 	if err != nil {
 		return tree.DNull, err
 	}
@@ -318,14 +318,14 @@ func (w *avgWindowFunc) Compute(
 
 	var frameSize int
 	if wfr.FilterColIdx != noFilterIdx {
-		for idx := wfr.FrameStartIdx(); idx < wfr.FrameEndIdx(); idx++ {
+		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
 			if wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 				continue
 			}
 			frameSize++
 		}
 	} else {
-		frameSize = wfr.FrameSize()
+		frameSize = wfr.FrameSize(evalCtx)
 	}
 
 	switch t := sum.(type) {
