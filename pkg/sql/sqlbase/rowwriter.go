@@ -528,7 +528,7 @@ func MakeRowUpdater(
 	alloc *DatumAlloc,
 ) (RowUpdater, error) {
 	rowUpdater, err := makeRowUpdaterWithoutCascader(
-		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, alloc,
+		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, alloc, evalCtx,
 	)
 	if err != nil {
 		return RowUpdater{}, err
@@ -552,6 +552,7 @@ func makeRowUpdaterWithoutCascader(
 	requestedCols []ColumnDescriptor,
 	updateType rowUpdaterType,
 	alloc *DatumAlloc,
+	evalCtx *tree.EvalContext,
 ) (RowUpdater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
@@ -642,7 +643,7 @@ func makeRowUpdaterWithoutCascader(
 		// them, so request them all.
 		var err error
 		if ru.rd, err = makeRowDeleterWithoutCascader(
-			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
+			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc, evalCtx,
 		); err != nil {
 			return RowUpdater{}, err
 		}
@@ -973,7 +974,7 @@ func MakeRowDeleter(
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	rowDeleter, err := makeRowDeleterWithoutCascader(
-		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
+		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc, evalCtx,
 	)
 	if err != nil {
 		return RowDeleter{}, err
@@ -997,6 +998,7 @@ func makeRowDeleterWithoutCascader(
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
+	evalCtx *tree.EvalContext,
 ) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
