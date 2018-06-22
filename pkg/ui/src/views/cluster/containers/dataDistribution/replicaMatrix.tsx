@@ -9,9 +9,14 @@ import {
   TreePath,
   layoutTreeHorizontal,
   flatten,
-  sumValuesUnderPaths,
   LayoutCell,
-  FlattenedNode, visitNodes, PaginationState, SortState,
+  FlattenedNode,
+  visitNodes,
+  PaginationState,
+  SortState,
+  isLeaf,
+  augmentWithSize,
+  TreeWithSize,
 } from "./tree";
 import { cockroach } from "src/js/protos";
 import INodeDescriptor = cockroach.roachpb.INodeDescriptor;
@@ -179,17 +184,12 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   renderCell(
     row: FlattenedNode<SchemaObject>,
-    col: FlattenedNode<INodeDescriptor>,
     scale: d3.scale.Linear<number, number>,
-    getValue: (rowPath: TreePath, colPath: TreePath) => number,
+    value: number,
   ) {
     if (!(row.isLeaf || row.isCollapsed)) {
       return null;
     }
-
-    const value = sumValuesUnderPaths(
-      this.props.rows, this.props.cols, row.path, col.path, getValue,
-    );
 
     if (value === 0) {
       return null;
@@ -281,6 +281,8 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   }
 
   render() {
+    console.log("======== ReplicaMatrix render ========");
+
     const {
       cols,
     } = this.props;
@@ -297,8 +299,11 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = selectFlattenedCols(propsAndState);
 
-    const getValue = selectGetValueFun(propsAndState);
+    const { allVals: valuesArray } = selectAllVals(propsAndState);
     const scale = selectScale(propsAndState);
+
+    const masterGrid = selectMasterGrid(propsAndState);
+    console.log({ masterGrid });
 
     return (
       <table className="matrix">
@@ -329,7 +334,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
           ))}
         </thead>
         <tbody>
-          {flattenedRows.map((row) => {
+          {flattenedRows.map((row, rowIdx) => {
             return [
               <tr
                 key={row.path.join("/")}
@@ -352,13 +357,13 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                 >
                   {this.rowLabelAndArrow(row)}
                 </th>
-                {flattenedCols.map((col) => {
+                {flattenedCols.map((col, colIdx) => {
                   return (
                     <td
                       key={col.path.join("/")}
                       className="matrix__cell"
                     >
-                      {this.renderCell(row, col, scale, getValue)}
+                      {this.renderCell(row, scale, valuesArray[rowIdx][colIdx])}
                     </td>
                   );
                 })}
@@ -407,7 +412,7 @@ function CustomLink(props: { to: string, children: React.ReactNode }) {
   );
 }
 
-// Selectors
+// SELECTORS
 
 interface PropsAndState {
   props: ReplicaMatrixProps;
@@ -421,66 +426,176 @@ const selectGetValueFun = createSelector(
     selectedMetric: string,
     getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number,
   ) => {
+    console.log("computing selectGetValueFun");
     return getValue(selectedMetric);
   },
 );
 
-const selectFlattenedRows = createSelector(
+const selectRowsWithSize = createSelector(
   (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (rows: TreeNode<SchemaObject>) => {
+    return augmentWithSize(rows);
+  },
+);
+
+const selectColsWithSize = createSelector(
   (propsAndState: PropsAndState) => propsAndState.props.cols,
+  (cols: TreeNode<INodeDescriptor>) => {
+    return augmentWithSize(cols);
+  },
+);
+
+// TODO(vilterp): make this depend on the master grid
+interface SumAndIncrease {
+  sum: number;
+  increase: number;
+}
+
+const selectMasterGrid = createSelector(
+  selectRowsWithSize,
+  selectColsWithSize,
+  selectGetValueFun,
+  function makeMasterGrid(
+    rows: TreeWithSize<SchemaObject>,
+    cols: TreeWithSize<INodeDescriptor>,
+    getValue: (rowPath: TreePath, colPath: TreePath) => number,
+  ) {
+    console.log("computing master grid");
+    // TODO(vilterp): build this as we go
+    const outputRows: number[][] = [];
+    for (let i = 0; i < rows.size; i++) {
+      const row: number[] = [];
+      for (let j = 0; j < cols.size; j++) {
+        row.push(0);
+      }
+      outputRows.push(row);
+    }
+
+    function visitRows(rowPath: TreePath, rowIdx: number, row: TreeWithSize<SchemaObject>): SumAndIncrease {
+      // console.log("visitRows", rowPath, rowIdx);
+
+      function visitCols(colPath: TreePath, colIdx: number, col: TreeWithSize<INodeDescriptor>): SumAndIncrease {
+        // console.log("visitCols", colPath, rowIdx);
+
+        if (isLeaf(col.node)) {
+          const value = getValue(rowPath, colPath);
+          outputRows[rowIdx][colIdx] = value;
+          return {
+            sum: value,
+            increase: 1,
+          };
+        }
+        let innerSum = 0;
+        let innerIncrease = 1;
+        if (col.children) {
+          col.children.forEach((colChild) => {
+            const { sum: childSum, increase: childIncrease } = visitCols(
+              [...colPath, colChild.node.name], colIdx + innerIncrease, colChild,
+            );
+            innerSum += childSum;
+            innerIncrease += childIncrease;
+          });
+          // console.log("sum", rowPath, rowIdx, colPath, colIdx, innerSum);
+          outputRows[rowIdx][colIdx] = innerSum;
+        }
+        return {
+          sum: innerSum,
+          increase: innerIncrease,
+        };
+      }
+
+      let increase = 1;
+      let sum = 0;
+      if (isLeaf(row.node)) {
+        const { sum: colsSum } = visitCols([], 0, cols);
+        sum += colsSum;
+      } else {
+        row.children.forEach((rowChild) => {
+          const { sum: childSum, increase: childIncrease } = visitRows(
+            [...rowPath, rowChild.node.name], rowIdx + increase, rowChild,
+          );
+          for (let c = 0; c < cols.size; c++) {
+            outputRows[rowIdx][c] += outputRows[rowIdx + increase][c];
+          }
+          sum += childSum;
+          increase += childIncrease;
+        });
+      }
+
+      return {
+        sum,
+        increase,
+      };
+    }
+
+    visitRows([], 0, rows);
+    return outputRows;
+  },
+);
+
+const selectFlattenedRows = createSelector(
+  selectMasterGrid,
+  selectRowsWithSize,
   (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
   (propsAndState: PropsAndState) => propsAndState.state.paginationStates,
-  selectGetValueFun,
   (
-    rows: TreeNode<SchemaObject>,
-    cols: TreeNode<INodeDescriptor>,
+    masterGrid: number[][],
+    rows: TreeWithSize<SchemaObject>,
     collapsedRows: TreePath[],
     paginationStates: AssocList<TreePath, PaginationState>,
-    getValue: (rowPath: TreePath, colPath: TreePath) => number,
   ) => {
     console.log("flattening rows");
-    const sortBy = (path: TreePath) => {
-      return sumValuesUnderPaths(rows, cols, path, [], getValue);
+    const sortBy = (masterRowIdx: number) => {
+      return masterGrid[masterRowIdx][0];
     };
     return flatten(rows, collapsedRows, true /* includeNodes */, paginationStates, PAGE_SIZE, sortBy);
   },
 );
 
 const selectFlattenedCols = createSelector(
-  (propsAndState: PropsAndState) => propsAndState.props.cols,
+  selectColsWithSize,
   (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
-  (cols: TreeNode<INodeDescriptor>, collapseCols: TreePath[]) => {
+  (cols: TreeWithSize<INodeDescriptor>, collapseCols: TreePath[]) => {
     console.log("flattening cols");
     return flatten(cols, collapseCols, false /* includeNodes */);
   },
 );
 
-const selectScale = createSelector(
-  (propsAndState: PropsAndState) => propsAndState.props.rows,
-  (propsAndState: PropsAndState) => propsAndState.props.cols,
-  selectGetValueFun,
+const selectAllVals = createSelector(
+  selectMasterGrid,
   selectFlattenedRows,
   selectFlattenedCols,
   (
-    rows: TreeNode<SchemaObject>,
-    cols: TreeNode<INodeDescriptor>,
-    getValue: (rowPath: TreePath, colPath: TreePath) => number,
+    masterGrid: number[][],
     flattenedRows: FlattenedNode<SchemaObject>[],
     flattenedCols: FlattenedNode<INodeDescriptor>[],
   ) => {
-    console.log("computing scale");
-    const allVals: number[] = [];
+    const allVals: number[][] = [];
+    const inSingleArray: number[] = [];
     flattenedRows.forEach((row) => {
+      const rowVals: number[] = [];
+      allVals.push(rowVals);
       flattenedCols.forEach((col) => {
         if (!(row.isLeaf || row.isCollapsed)) {
           return;
         }
-        const value = sumValuesUnderPaths(rows, cols, row.path, col.path, getValue);
-        allVals.push(value);
+        const value = masterGrid[row.masterIdx][col.masterIdx];
+        rowVals.push(value);
+        inSingleArray.push(value);
       });
     });
+    return {
+      allVals,
+      inSingleArray,
+    };
+  },
+);
 
-    const extent = d3.extent(allVals);
+const selectScale = createSelector(
+  selectAllVals,
+  ({ inSingleArray }) => {
+    console.log("computing scale");
+    const extent = d3.extent(inSingleArray);
     return d3.scale.linear()
       .domain([0, extent[1]])
       .range([100, 50]); // TODO(vilterp): factor these out into constants
