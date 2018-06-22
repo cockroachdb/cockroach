@@ -179,17 +179,12 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   renderCell(
     row: FlattenedNode<SchemaObject>,
-    col: FlattenedNode<INodeDescriptor>,
     scale: d3.scale.Linear<number, number>,
-    getValue: (rowPath: TreePath, colPath: TreePath) => number,
+    value: number,
   ) {
     if (!(row.isLeaf || row.isCollapsed)) {
       return null;
     }
-
-    const value = sumValuesUnderPaths(
-      this.props.rows, this.props.cols, row.path, col.path, getValue,
-    );
 
     if (value === 0) {
       return null;
@@ -297,7 +292,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = selectFlattenedCols(propsAndState);
 
-    const getValue = selectGetValueFun(propsAndState);
+    const { allVals: valuesArray } = selectAllVals(propsAndState);
     const scale = selectScale(propsAndState);
 
     return (
@@ -329,7 +324,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
           ))}
         </thead>
         <tbody>
-          {flattenedRows.map((row) => {
+          {flattenedRows.map((row, rowIdx) => {
             return [
               <tr
                 key={row.path.join("/")}
@@ -352,13 +347,13 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                 >
                   {this.rowLabelAndArrow(row)}
                 </th>
-                {flattenedCols.map((col) => {
+                {flattenedCols.map((col, colIdx) => {
                   return (
                     <td
                       key={col.path.join("/")}
                       className="matrix__cell"
                     >
-                      {this.renderCell(row, col, scale, getValue)}
+                      {this.renderCell(row, scale, valuesArray[rowIdx][colIdx])}
                     </td>
                   );
                 })}
@@ -455,7 +450,7 @@ const selectFlattenedCols = createSelector(
   },
 );
 
-const selectScale = createSelector(
+const selectAllVals = createSelector(
   (propsAndState: PropsAndState) => propsAndState.props.rows,
   (propsAndState: PropsAndState) => propsAndState.props.cols,
   selectGetValueFun,
@@ -468,19 +463,32 @@ const selectScale = createSelector(
     flattenedRows: FlattenedNode<SchemaObject>[],
     flattenedCols: FlattenedNode<INodeDescriptor>[],
   ) => {
-    console.log("computing scale");
-    const allVals: number[] = [];
+    const allVals: number[][] = [];
+    const inSingleArray: number[] = [];
     flattenedRows.forEach((row) => {
+      const rowVals: number[] = [];
+      allVals.push(rowVals);
       flattenedCols.forEach((col) => {
         if (!(row.isLeaf || row.isCollapsed)) {
           return;
         }
         const value = sumValuesUnderPaths(rows, cols, row.path, col.path, getValue);
-        allVals.push(value);
+        rowVals.push(value);
+        inSingleArray.push(value);
       });
     });
+    return {
+      allVals,
+      inSingleArray,
+    };
+  },
+);
 
-    const extent = d3.extent(allVals);
+const selectScale = createSelector(
+  selectAllVals,
+  ({ inSingleArray }) => {
+    console.log("computing scale");
+    const extent = d3.extent(inSingleArray);
     return d3.scale.linear()
       .domain([0, extent[1]])
       .range([100, 50]); // TODO(vilterp): factor these out into constants
