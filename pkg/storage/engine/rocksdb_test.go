@@ -229,7 +229,7 @@ func TestIterBounds(t *testing.T) {
 		createEngine func() Reader
 	}{
 		{"batch", func() Reader { return db.NewBatch() }},
-		{"readonly", func() Reader { return db.NewReadOnly() }},
+		{"itercacher", func() Reader { return db.NewIterCacher() }},
 		{"snapshot", func() Reader { return db.NewSnapshot() }},
 		{"engine", func() Reader { return db }},
 	}
@@ -314,7 +314,7 @@ func TestIterBounds(t *testing.T) {
 
 			// Perform additional tests if the engine supports writes.
 			w, isReadWriter := e.(ReadWriter)
-			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
+			if !isReadWriter {
 				return
 			}
 			if err := w.Put(mvccKey("c"), []byte("val")); err != nil {
@@ -368,9 +368,7 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 	}
 }
 
-func benchmarkIterOnReadWriter(
-	b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
-) {
+func benchmarkIterOnReader(b *testing.B, writes int, f func(Engine) Engine, closeReader bool) {
 	engine := createTestEngine()
 	defer engine.Close()
 
@@ -380,9 +378,9 @@ func benchmarkIterOnReadWriter(
 		}
 	}
 
-	readWriter := f(engine)
-	if closeReadWriter {
-		defer readWriter.Close()
+	reader := f(engine)
+	if closeReader {
+		defer reader.Close()
 	}
 
 	r := rand.New(rand.NewSource(5))
@@ -390,7 +388,7 @@ func benchmarkIterOnReadWriter(
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := readWriter.NewIterator(IterOptions{Prefix: true})
+		iter := reader.NewIterator(IterOptions{Prefix: true})
 		iter.Seek(key)
 		iter.Close()
 	}

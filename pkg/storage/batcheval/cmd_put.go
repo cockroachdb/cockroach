@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Put, DefaultDeclareKeys, Put)
+	RegisterMutatingCommand(roachpb.Put, DefaultDeclareKeys, Put)
 }
 
 // Put sets the value for a specified key.

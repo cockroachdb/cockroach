@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.TransferLease, declareKeysRequestLease, TransferLease)
+	RegisterMutatingCommand(roachpb.TransferLease, declareKeysRequestLease, TransferLease)
 }
 
 // TransferLease sets the lease holder for the range.

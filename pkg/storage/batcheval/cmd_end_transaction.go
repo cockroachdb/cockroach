@@ -47,7 +47,7 @@ import (
 var TxnAutoGC = true
 
 func init() {
-	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, evalEndTransaction)
+	RegisterMutatingCommand(roachpb.EndTransaction, declareKeysEndTransaction, evalEndTransaction)
 }
 
 func declareKeysEndTransaction(

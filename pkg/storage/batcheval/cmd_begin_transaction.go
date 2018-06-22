@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.BeginTransaction, declareKeysBeginTransaction, BeginTransaction)
+	RegisterMutatingCommand(roachpb.BeginTransaction, declareKeysBeginTransaction, BeginTransaction)
 }
 
 // declareKeysWriteTransaction is the shared portion of

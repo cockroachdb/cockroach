@@ -27,14 +27,14 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.QueryIntent, DefaultDeclareKeys, QueryIntent)
+	RegisterReadOnlyCommand(roachpb.QueryIntent, DefaultDeclareKeys, QueryIntent)
 }
 
 // QueryIntent checks if an intent exists for the specified
 // transaction at the given key. If the intent is missing,
 // the request reacts according to its IfMissing field.
 func QueryIntent(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryIntentRequest)
 	h := cArgs.Header

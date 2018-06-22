@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.HeartbeatTxn, declareKeysHeartbeatTransaction, HeartbeatTxn)
+	RegisterMutatingCommand(roachpb.HeartbeatTxn, declareKeysHeartbeatTransaction, HeartbeatTxn)
 }
 
 func declareKeysHeartbeatTransaction(

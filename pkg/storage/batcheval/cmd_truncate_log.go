@@ -32,7 +32,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.TruncateLog, declareKeysTruncateLog, TruncateLog)
+	RegisterMutatingCommand(roachpb.TruncateLog, declareKeysTruncateLog, TruncateLog)
 }
 
 func declareKeysTruncateLog(

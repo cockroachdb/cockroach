@@ -29,11 +29,10 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
+	RegisterMutatingCommand(roachpb.AddSSTable, DefaultDeclareKeys, evalAddSSTable)
 }
 
-// EvalAddSSTable evaluates an AddSSTable command.
-func EvalAddSSTable(
+func evalAddSSTable(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)

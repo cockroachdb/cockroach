@@ -91,7 +91,11 @@ func evaluateCommand(
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
-		pd, err = cmd.Eval(ctx, batch, cArgs, reply)
+		if cmd.EvalReadOnly != nil {
+			pd, err = cmd.EvalReadOnly(ctx, batch, cArgs, reply)
+		} else {
+			pd, err = cmd.EvalMutating(ctx, batch, cArgs, reply)
+		}
 	} else {
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}

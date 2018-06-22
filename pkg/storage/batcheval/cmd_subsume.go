@@ -29,7 +29,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Subsume, declareKeysSubsume, Subsume)
+	RegisterMutatingCommand(roachpb.Subsume, declareKeysSubsume, Subsume)
 }
 
 func declareKeysSubsume(
