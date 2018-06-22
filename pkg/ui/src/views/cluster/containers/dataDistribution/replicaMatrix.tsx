@@ -180,10 +180,8 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   render() {
     const {
       cols,
-      rows,
     } = this.props;
     const {
-      collapsedRows,
       collapsedCols,
     } = this.state;
 
@@ -196,7 +194,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
     const flattenedCols = selectFlattenedCols(propsAndState);
 
-    const getValue = this.props.getValue(this.state.selectedMetric);
+    const getValue = selectGetValueFun(propsAndState);
     const scale = selectScale(propsAndState);
 
     return (
@@ -277,42 +275,48 @@ interface PropsAndState {
 }
 
 const selectFlattenedRows = createSelector(
-  (propsAndState: PropsAndState) => propsAndState,
-  (propsAndState: PropsAndState) => {
+  (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
+  (rows: TreeNode<SchemaObject>, collapsedRows: TreePath[]) => {
     console.log("flattening rows");
-    return flatten(
-      propsAndState.props.rows,
-      propsAndState.state.collapsedRows,
-      true /* includeNodes */,
-    );
+    return flatten(rows, collapsedRows, true /* includeNodes */);
   },
 );
 
 const selectFlattenedCols = createSelector(
-  (propsAndState: PropsAndState) => propsAndState,
-  (propsAndState: PropsAndState) => {
+  (propsAndState: PropsAndState) => propsAndState.props.cols,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
+  (cols: TreeNode<NodeDescriptor$Properties>, collapseCols: TreePath[]) => {
     console.log("flattening cols");
-    return flatten(
-      propsAndState.props.cols,
-      propsAndState.state.collapsedCols,
-      false /* includeNodes */,
-    );
+    return flatten(cols, collapseCols, false /* includeNodes */);
+  },
+);
+
+const selectGetValueFun = createSelector(
+  (propsAndState: PropsAndState) => propsAndState.state.selectedMetric,
+  (propsAndState: PropsAndState) => propsAndState.props.getValue,
+  (
+    selectedMetric: string,
+    getValue: (metric: string) => (rowPath: TreePath, colPath: TreePath) => number,
+  ) => {
+    return getValue(selectedMetric);
   },
 );
 
 const selectScale = createSelector(
-  (propsAndState: PropsAndState) => propsAndState,
+  (propsAndState: PropsAndState) => propsAndState.props.rows,
+  (propsAndState: PropsAndState) => propsAndState.props.cols,
+  selectGetValueFun,
   selectFlattenedRows,
   selectFlattenedCols,
   (
-    propsAndState: PropsAndState,
+    rows: TreeNode<SchemaObject>,
+    cols: TreeNode<NodeDescriptor$Properties>,
+    getValue: (rowPath: TreePath, colPath: TreePath) => number,
     flattenedRows: FlattenedNode<SchemaObject>[],
     flattenedCols: FlattenedNode<NodeDescriptor$Properties>[],
   ) => {
     console.log("computing scale");
-    const { rows, cols } = propsAndState.props;
-    const getValue = propsAndState.props.getValue(propsAndState.state.selectedMetric);
-
     const allVals: number[] = [];
     flattenedRows.forEach((row) => {
       flattenedCols.forEach((col) => {
