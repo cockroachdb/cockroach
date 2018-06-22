@@ -815,6 +815,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 		return false
 	}
 
+	if txn.Key == nil {
+		return true
+	}
+
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
 
