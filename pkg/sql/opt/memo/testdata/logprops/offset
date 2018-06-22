@@ -178,21 +178,21 @@ offset
  ├── columns: s:4(string) x:1(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── key: (1)
- ├── fd: (1)-->(4)
+ ├── key: ()
+ ├── fd: ()-->(1,4)
  ├── select
  │    ├── columns: x:1(int!null) s:4(string)
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
- │    ├── key: (1)
- │    ├── fd: (1)-->(4)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,4)
  │    ├── scan xyzs@secondary
  │    │    ├── columns: x:1(int!null) s:4(string)
  │    │    ├── limit: 100
  │    │    ├── stats: [rows=100, distinct(1)=100]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(4)
- │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
  │              ├── variable: xyzs.x [type=int, outer=(1)]
  │              └── const: 1 [type=int]
