@@ -515,3 +515,18 @@ func IsDateTimeType(t T) bool {
 		return false
 	}
 }
+
+// IsAdditiveType returns true if the T
+// supports addition and subtraction.
+func IsAdditiveType(t T) bool {
+	switch t {
+	case Int:
+		return true
+	case Float:
+		return true
+	case Decimal:
+		return true
+	default:
+		return IsDateTimeType(t)
+	}
+}

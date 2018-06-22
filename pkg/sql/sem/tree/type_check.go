@@ -870,13 +870,16 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 		// In RANGE mode, offsets must be non-null and non-negative datums of a type
 		// dependent on the type of the ordering column. Non-nullity and
 		// non-negativity will be checked later.
-		if startBound.OffsetExpr != nil || (endBound != nil && endBound.OffsetExpr != nil) {
-			// At least one of the bounds is of type `value PRECEDING` or 'value FOLLOWING'.
-			// We require ordering on a single column.
+		if bounds.HasOffset() {
+			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
+			// We require ordering on a single column that supports addition/subtraction.
 			if len(windowDef.OrderBy) != 1 {
-				return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires that the ORDER BY clause specify exactly one column")
+				return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
 			}
 			requiredType = windowDef.OrderBy[0].Expr.(TypedExpr).ResolvedType()
+			if !types.IsAdditiveType(requiredType) {
+				return pgerror.NewErrorf(pgerror.CodeWindowingError, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+			}
 			if types.IsDateTimeType(requiredType) {
 				// Spec: for datetime ordering columns, the required type is an 'interval'.
 				requiredType = types.Interval
@@ -885,14 +888,14 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 	default:
 		panic("unexpected WindowFrameMode")
 	}
-	if startBound.OffsetExpr != nil {
+	if startBound.HasOffset() {
 		typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, requiredType, "window frame start")
 		if err != nil {
 			return err
 		}
 		startBound.OffsetExpr = typedStartOffsetExpr
 	}
-	if endBound != nil && endBound.OffsetExpr != nil {
+	if endBound != nil && endBound.HasOffset() {
 		typedEndOffsetExpr, err := typeCheckAndRequire(ctx, endBound.OffsetExpr, requiredType, "window frame end")
 		if err != nil {
 			return err
