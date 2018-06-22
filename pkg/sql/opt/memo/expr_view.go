@@ -452,18 +452,19 @@ func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
 		hasConstraints := !f.HasFlags(opt.ExprFmtHideConstraints) &&
 			scalar.Constraints != nil &&
 			!scalar.Constraints.IsUnconstrained()
+		hasFuncDeps := !f.HasFlags(opt.ExprFmtHideFuncDeps) && !scalar.FuncDeps.Empty()
 
-		if showType || hasOuterCols || hasConstraints {
+		if showType || hasOuterCols || hasConstraints || hasFuncDeps {
 			buf.WriteString(" [")
 			if showType {
 				fmt.Fprintf(buf, "type=%s", scalar.Type)
-				if hasOuterCols || hasConstraints {
+				if hasOuterCols || hasConstraints || hasFuncDeps {
 					buf.WriteString(", ")
 				}
 			}
 			if hasOuterCols {
 				fmt.Fprintf(buf, "outer=%s", scalar.OuterCols)
-				if hasConstraints {
+				if hasConstraints || hasFuncDeps {
 					buf.WriteString(", ")
 				}
 			}
@@ -473,6 +474,12 @@ func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
 					buf.WriteString("; tight")
 				}
 				buf.WriteString(")")
+				if hasFuncDeps {
+					buf.WriteString(", ")
+				}
+			}
+			if hasFuncDeps {
+				fmt.Fprintf(buf, "fd=%s", scalar.FuncDeps)
 			}
 			buf.WriteString("]")
 		}
