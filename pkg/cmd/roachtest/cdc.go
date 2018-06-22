@@ -26,7 +26,7 @@ import (
 )
 
 func registerCDC(r *registry) {
-	runCDC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
+	runCDC := func(ctx context.Context, t *test, c *cluster, warehouses int, initialScan bool) {
 		crdbNodes := c.Range(1, c.nodes-1)
 		workloadNode := c.Node(c.nodes)
 		kafkaNode := c.Node(c.nodes)
@@ -54,6 +54,9 @@ func registerCDC(r *registry) {
 		c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
 
 		db := c.Conn(ctx, 1)
+		if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
+			c.t.Fatal(err)
+		}
 		defer func() {
 			// Shut down any running feeds. Not neceesary for the nightly, but nice
 			// for development.
@@ -65,7 +68,7 @@ func registerCDC(r *registry) {
 		}()
 
 		doneCh := make(chan struct{}, 1)
-		var maxLatency time.Duration
+		var initialScanLatency, maxLatency time.Duration
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, crdbNodes)
@@ -89,13 +92,14 @@ func registerCDC(r *registry) {
 			}
 			c.l.printf("starting cursor at %s\n", cursor)
 
-			// TODO(dan): This intentionally skips the initial scan for now by
-			// using the `WITH cursor` option.
 			var jobID int
-			if err = db.QueryRow(
-				`CREATE CHANGEFEED FOR DATABASE tpcc INTO $1 WITH timestamps, cursor=$2`,
-				`kafka://`+c.InternalIP(ctx, kafkaNode)[0]+`:9092`, cursor,
-			).Scan(&jobID); err != nil {
+			createStmt := `CREATE CHANGEFEED FOR DATABASE tpcc INTO $1 WITH timestamps`
+			extraArgs := []interface{}{`kafka://` + c.InternalIP(ctx, kafkaNode)[0] + `:9092`}
+			if !initialScan {
+				createStmt += `, cursor=$2`
+				extraArgs = append(extraArgs, cursor)
+			}
+			if err = db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
 				return err
 			}
 			t.Status("watching changefeed")
@@ -121,12 +125,23 @@ func registerCDC(r *registry) {
 				if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 					return err
 				}
-				highwater := timeutil.Unix(0, progress.GetChangefeed().Highwater.WallTime)
-				latency := timeutil.Since(highwater)
-				if latency > maxLatency {
-					maxLatency = latency
+				if nanos := progress.GetChangefeed().Highwater.WallTime; nanos > 0 {
+					if initialScan && initialScanLatency == 0 {
+						initialScanLatency = timeutil.Since(timeutil.Unix(0, nanos))
+						if maxAllowed := 3 * time.Minute; initialScanLatency > maxAllowed {
+							t.Fatalf("initial scan latency was more than allowed: %s vs %s",
+								initialScanLatency, maxAllowed)
+						}
+						l.printf("initial scan latency %s\n", initialScanLatency)
+						t.Status("finished initial scan")
+						continue
+					}
+					latency := timeutil.Since(timeutil.Unix(0, nanos))
+					if latency > maxLatency {
+						maxLatency = latency
+					}
+					l.printf("end-to-end latency %s max so far %s\n", latency, maxLatency)
 				}
-				l.printf("end-to-end latency %s max so far %s\n", latency, maxLatency)
 			}
 		})
 		m.Wait()
@@ -137,11 +152,19 @@ func registerCDC(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   "cdc/w=100/nodes=3",
+		Name:   "cdc/w=100/nodes=3/init=false",
 		Nodes:  nodes(4, cpu(16)),
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCDC(ctx, t, c, 100)
+			runCDC(ctx, t, c, 100, false /* initialScan */)
+		},
+	})
+	r.Add(testSpec{
+		Name:   "cdc/w=10/nodes=3/init=true",
+		Nodes:  nodes(4, cpu(16)),
+		Stable: false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCDC(ctx, t, c, 10, true /* initialScan */)
 		},
 	})
 }
