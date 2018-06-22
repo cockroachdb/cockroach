@@ -206,7 +206,7 @@ func (w *framableAggregateWindowFunc) Compute(
 	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx), tree.DNull}
 
 	// Accumulate all values in the window frame.
-	for i := wfr.FrameStartIdx(); i < wfr.FrameEndIdx(); i++ {
+	for i := wfr.FrameStartIdx(evalCtx); i < wfr.FrameEndIdx(evalCtx); i++ {
 		args := wfr.ArgsByRowIdx(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.
@@ -475,9 +475,9 @@ func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 }
 
 func (firstValueWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows[wfr.FrameStartIdx()].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows[wfr.FrameStartIdx(evalCtx)].Row[wfr.ArgIdxStart], nil
 }
 
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -490,9 +490,9 @@ func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 }
 
 func (lastValueWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows[wfr.FrameEndIdx()-1].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows[wfr.FrameEndIdx(evalCtx)-1].Row[wfr.ArgIdxStart], nil
 }
 
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -509,7 +509,7 @@ var errInvalidArgumentForNthValue = pgerror.NewErrorf(
 	pgerror.CodeInvalidParameterValueError, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
 	arg := wfr.Args()[1]
 	if arg == tree.DNull {
@@ -521,10 +521,10 @@ func (nthValueWindow) Compute(
 		return nil, errInvalidArgumentForNthValue
 	}
 
-	if nth > wfr.FrameSize() {
+	if nth > wfr.FrameSize(evalCtx) {
 		return tree.DNull, nil
 	}
-	return wfr.Rows[wfr.FrameStartIdx()+nth-1].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows[wfr.FrameStartIdx(evalCtx)+nth-1].Row[wfr.ArgIdxStart], nil
 }
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}

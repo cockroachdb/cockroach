@@ -7196,26 +7196,9 @@ opt_partition_clause:
 opt_frame_clause:
   RANGE frame_extent
   {
-    bounds := $2.windowFrameBounds()
-    startBound := bounds.StartBound
-    endBound := bounds.EndBound
-    switch {
-    case startBound.BoundType == tree.ValuePreceding:
-      sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
-      return 1
-    case startBound.BoundType == tree.ValueFollowing:
-      sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
-      return 1
-    case endBound != nil && endBound.BoundType == tree.ValuePreceding:
-      sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
-      return 1
-    case endBound != nil && endBound.BoundType == tree.ValueFollowing:
-      sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
-      return 1
-    }
     $$.val = &tree.WindowFrame{
       Mode: tree.RANGE,
-      Bounds: bounds,
+      Bounds: $2.windowFrameBounds(),
     }
   }
 | ROWS frame_extent
