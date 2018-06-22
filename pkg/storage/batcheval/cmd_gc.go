@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.GC, declareKeysGC, GC)
+	RegisterMutatingCommand(roachpb.GC, declareKeysGC, GC)
 }
 
 func declareKeysGC(

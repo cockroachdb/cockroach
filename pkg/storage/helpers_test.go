@@ -471,10 +471,10 @@ func SetMockAddSSTable() (undo func()) {
 	}
 
 	batcheval.UnregisterCommand(roachpb.AddSSTable)
-	batcheval.RegisterCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
+	batcheval.RegisterMutatingCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
 	return func() {
 		batcheval.UnregisterCommand(roachpb.AddSSTable)
-		batcheval.RegisterCommand(roachpb.AddSSTable, prev.DeclareKeys, prev.Eval)
+		batcheval.RegisterMutatingCommand(roachpb.AddSSTable, prev.DeclareKeys, prev.EvalMutating)
 	}
 }
 

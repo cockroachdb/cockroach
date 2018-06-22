@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.DeleteRange, DefaultDeclareKeys, DeleteRange)
+	RegisterMutatingCommand(roachpb.DeleteRange, DefaultDeclareKeys, DeleteRange)
 }
 
 // DeleteRange deletes the range of key/value pairs specified by

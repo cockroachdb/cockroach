@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
+	RegisterReadOnlyCommand(roachpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
 }
 
 // RefreshRange scans the key range specified by start key through end
@@ -33,7 +33,7 @@ func init() {
 // the txn's original timestamp and less recently than the txn's
 // current timestamp.
 func RefreshRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRangeRequest)
 	h := cArgs.Header

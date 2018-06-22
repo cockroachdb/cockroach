@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.InitPut, DefaultDeclareKeys, InitPut)
+	RegisterMutatingCommand(roachpb.InitPut, DefaultDeclareKeys, InitPut)
 }
 
 // InitPut sets the value for a specified key only if it doesn't exist. It

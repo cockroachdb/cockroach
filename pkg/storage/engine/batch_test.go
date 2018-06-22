@@ -154,9 +154,8 @@ func shouldNotPanic(t *testing.T, f func(), funcName string) {
 	f()
 }
 
-// TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via
-// engine.NewReadOnly()) all Reader methods work, and all Writer methods panic
-// as "not implemented". Also basic iterating functionality is verified.
+// TestIterCacherBasics verifies that an iterator cacher (obtained via
+// engine.NewIterCacher()) can read, write, and iterate successfully.
 func TestReadOnlyBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -164,15 +163,16 @@ func TestReadOnlyBasics(t *testing.T) {
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
-	b := e.NewReadOnly()
+	b := e.NewIterCacher()
 	if b.Closed() {
-		t.Fatal("read-only is expectedly found to be closed")
+		t.Fatal("iter-cacher is expectedly found to be closed")
 	}
 	a := mvccKey("a")
 	getVal := &roachpb.Value{}
 	successTestCases := []func(){
 		func() { _, _ = b.Get(a) },
 		func() { _, _, _, _ = b.GetProto(a, getVal) },
+		func() { _ = b.Put(a, []byte("val")) },
 		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
 		func() { b.NewIterator(IterOptions{}).Close() },
 		func() { b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}, false).Close() },
@@ -180,28 +180,16 @@ func TestReadOnlyBasics(t *testing.T) {
 	defer func() {
 		b.Close()
 		if !b.Closed() {
-			t.Fatal("even after calling Close, a read-only should not be closed")
+			t.Fatal("rocksDBIterCacher is not closed after calling Close")
 		}
-		shouldPanic(t, func() { b.Close() }, "Close", "closing an already-closed rocksDBReadOnly")
-		for i, f := range successTestCases {
-			shouldPanic(t, f, string(i), "using a closed rocksDBReadOnly")
-		}
+		shouldPanic(t, func() { b.Close() }, "Close", "closing an already-closed rocksDBIterCacher")
+		shouldPanic(t, func() {
+			b.NewIterator(IterOptions{}).Close()
+		}, "NewIterator", "using a closed rocksDBIterCacher")
 	}()
 
 	for i, f := range successTestCases {
 		shouldNotPanic(t, f, string(i))
-	}
-
-	// For a read-only ReadWriter, all Writer methods should panic.
-	failureTestCases := []func(){
-		func() { _ = b.ApplyBatchRepr(nil, false) },
-		func() { _ = b.Clear(a) },
-		func() { _ = b.ClearRange(a, a) },
-		func() { _ = b.Merge(a, nil) },
-		func() { _ = b.Put(a, nil) },
-	}
-	for i, f := range failureTestCases {
-		shouldPanic(t, f, string(i), "not implemented")
 	}
 
 	if err := e.Put(mvccKey("a"), []byte("value")); err != nil {

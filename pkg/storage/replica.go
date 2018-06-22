@@ -2599,12 +2599,12 @@ func (r *Replica) executeReadOnlyBatch(
 	// "wrong" key range being served after the range has been split.
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
-	readOnly := r.store.Engine().NewReadOnly()
+	var eng engine.ReadWriter = r.store.Engine().NewIterCacher()
 	if util.RaceEnabled {
-		readOnly = spanset.NewReadWriter(readOnly, spans)
+		eng = spanset.NewReadWriter(eng, spans)
 	}
-	defer readOnly.Close()
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
+	defer eng.Close()
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), eng, rec, nil, ba)
 
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
@@ -5389,7 +5389,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	batch engine.ReadWriter, origReqs []roachpb.RequestUnion, distinctSpans bool,
+	batch engine.Reader, origReqs []roachpb.RequestUnion, distinctSpans bool,
 ) []roachpb.RequestUnion {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}

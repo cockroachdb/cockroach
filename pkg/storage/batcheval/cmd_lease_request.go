@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RequestLease, declareKeysRequestLease, RequestLease)
+	RegisterMutatingCommand(roachpb.RequestLease, declareKeysRequestLease, RequestLease)
 }
 
 // RequestLease sets the range lease for this range. The command fails

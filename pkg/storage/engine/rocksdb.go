@@ -932,24 +932,22 @@ func (r *RocksDB) NewSnapshot() Reader {
 	}
 }
 
-// NewReadOnly returns a new ReadWriter wrapping this rocksdb engine.
-func (r *RocksDB) NewReadOnly() ReadWriter {
-	return &rocksDBReadOnly{
-		parent:   r,
-		isClosed: false,
-	}
+// NewIterCacher returns a new Engine wrapping this RocksDB engine that caches
+// its iterators.
+func (r *RocksDB) NewIterCacher() Engine {
+	return &rocksDBIterCacher{RocksDB: r}
 }
 
-type rocksDBReadOnly struct {
-	parent     *RocksDB
+type rocksDBIterCacher struct {
+	*RocksDB
 	prefixIter reusableIterator
 	normalIter reusableIterator
 	isClosed   bool
 }
 
-func (r *rocksDBReadOnly) Close() {
+func (r *rocksDBIterCacher) Close() {
 	if r.isClosed {
-		panic("closing an already-closed rocksDBReadOnly")
+		panic("closing an already-closed rocksDBIterCacher")
 	}
 	r.isClosed = true
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
@@ -960,48 +958,24 @@ func (r *rocksDBReadOnly) Close() {
 	}
 }
 
-// Read-only batches are not committed
-func (r *rocksDBReadOnly) Closed() bool {
+func (r *rocksDBIterCacher) Closed() bool {
 	return r.isClosed
 }
 
-func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
+// NewIterator returns an iterator over the underlying engine. Note that the
+// returned iterator is cached and re-used for the lifetime of the
+// rocksDBIterCacher. A panic will be thrown if multiple prefix or normal
+// (non-prefix) iterators are used simultaneously on the same rocksDBIterCacher.
+func (r *rocksDBIterCacher) NewIterator(opts IterOptions) Iterator {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
-	}
-	return dbGet(r.parent.rdb, key)
-}
-
-func (r *rocksDBReadOnly) GetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
-	}
-	return dbGetProto(r.parent.rdb, key, msg)
-}
-
-func (r *rocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
-	}
-	return dbIterate(r.parent.rdb, r, start, end, f)
-}
-
-// NewIterator returns an iterator over the underlying engine. Note
-// that the returned iterator is cached and re-used for the lifetime of the
-// rocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
-// iterators are used simultaneously on the same rocksDBReadOnly.
-func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
-	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed rocksDBIterCacher")
 	}
 	iter := &r.normalIter
 	if opts.Prefix {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
+		iter.rocksDBIterator.init(r.rdb, opts, r, r.RocksDB)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1010,45 +984,13 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
-func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
+func (r *rocksDBIterCacher) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed rocksDBIterCacher")
 	}
 	it := &rocksDBIterator{}
-	it.initTimeBound(r.parent.rdb, start, end, withStats, r)
+	it.initTimeBound(r.rdb, start, end, withStats, r)
 	return it
-}
-
-// Writer methods are not implemented for rocksDBReadOnly. Ideally, the code could be refactored so that
-// a Reader could be supplied to evaluateBatch
-
-// Writer is the write interface to an engine's data.
-func (r *rocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) Clear(key MVCCKey) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) Merge(key MVCCKey, value []byte) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) Put(key MVCCKey, value []byte) error {
-	panic("not implemented")
-}
-
-func (r *rocksDBReadOnly) LogData(data []byte) error {
-	panic("not implemented")
 }
 
 // NewBatch returns a new batch wrapping this rocksdb engine.

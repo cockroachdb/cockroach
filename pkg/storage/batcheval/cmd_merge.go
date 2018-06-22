@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Merge, DefaultDeclareKeys, Merge)
+	RegisterMutatingCommand(roachpb.Merge, DefaultDeclareKeys, Merge)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an

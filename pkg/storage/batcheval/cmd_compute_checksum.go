@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.ComputeChecksum, DefaultDeclareKeys, ComputeChecksum)
+	RegisterReadOnlyCommand(roachpb.ComputeChecksum, DefaultDeclareKeys, ComputeChecksum)
 }
 
 // Version numbers for Replica checksum computation. Requests fail unless the
@@ -39,7 +39,7 @@ const (
 // a particular snapshot. The checksum is later verified through a
 // CollectChecksumRequest.
 func ComputeChecksum(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 

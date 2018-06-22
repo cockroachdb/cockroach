@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Scan, DefaultDeclareKeys, Scan)
+	RegisterReadOnlyCommand(roachpb.Scan, DefaultDeclareKeys, Scan)
 }
 
 // Scan scans the key range specified by start key through end key
@@ -31,7 +31,7 @@ func init() {
 // stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func Scan(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ScanRequest)
 	h := cArgs.Header

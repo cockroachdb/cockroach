@@ -37,7 +37,7 @@ import (
 const clearRangeBytesThreshold = 512 << 10 // 512KiB
 
 func init() {
-	RegisterCommand(roachpb.ClearRange, declareKeysClearRange, ClearRange)
+	RegisterMutatingCommand(roachpb.ClearRange, declareKeysClearRange, ClearRange)
 }
 
 func declareKeysClearRange(

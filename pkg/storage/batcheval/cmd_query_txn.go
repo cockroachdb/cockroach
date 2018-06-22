@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.QueryTxn, declareKeysQueryTransaction, QueryTxn)
+	RegisterReadOnlyCommand(roachpb.QueryTxn, declareKeysQueryTransaction, QueryTxn)
 }
 
 func declareKeysQueryTransaction(
@@ -46,7 +46,7 @@ func declareKeysQueryTransaction(
 // other txns which are waiting on this transaction in order
 // to find dependency cycles.
 func QueryTxn(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryTxnRequest)
 	reply := resp.(*roachpb.QueryTxnResponse)

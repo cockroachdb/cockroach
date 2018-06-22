@@ -34,25 +34,41 @@ type Command struct {
 	// type) and return special side effects (if any) in the Result.
 	// If it writes to the engine it should also update
 	// *CommandArgs.Stats.
-	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
+	EvalReadOnly func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error)
+	EvalMutating func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
 var cmds = make(map[roachpb.Method]Command)
 
 // RegisterCommand makes a command available for execution. It must only be
 // called before any evaluation takes place.
-func RegisterCommand(
+func RegisterMutatingCommand(
 	method roachpb.Method,
 	declare func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
 	impl func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
+	register(method, Command{
+		DeclareKeys:  declare,
+		EvalMutating: impl,
+	})
+}
+
+func RegisterReadOnlyCommand(
+	method roachpb.Method,
+	declare func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
+	impl func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error),
+) {
+	register(method, Command{
+		DeclareKeys:  declare,
+		EvalReadOnly: impl,
+	})
+}
+
+func register(method roachpb.Method, command Command) {
 	if _, ok := cmds[method]; ok {
 		log.Fatalf(context.TODO(), "cannot overwrite previously registered method %v", method)
 	}
-	cmds[method] = Command{
-		DeclareKeys: declare,
-		Eval:        impl,
-	}
+	cmds[method] = command
 }
 
 // UnregisterCommand is provided for testing and allows removing a command.

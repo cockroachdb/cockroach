@@ -23,11 +23,11 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.DeprecatedVerifyChecksum, DefaultDeclareKeys, deprecatedVerifyChecksum)
+	RegisterReadOnlyCommand(roachpb.DeprecatedVerifyChecksum, DefaultDeclareKeys, deprecatedVerifyChecksum)
 }
 
 func deprecatedVerifyChecksum(
-	context.Context, engine.ReadWriter, CommandArgs, roachpb.Response,
+	context.Context, engine.Reader, CommandArgs, roachpb.Response,
 ) (result.Result, error) {
 	return result.Result{}, nil
 }

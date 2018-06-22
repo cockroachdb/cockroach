@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	batcheval.RegisterCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
+	batcheval.RegisterMutatingCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
 }
 
 func evalAddSSTable(

@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
+	RegisterMutatingCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
 }
 
 func declareKeysResolveIntentRange(

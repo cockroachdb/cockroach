@@ -25,14 +25,14 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
+	RegisterReadOnlyCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
 }
 
 // Refresh checks the key for more recently written values than the
 // txn's original timestamp and less recently than the txn's current
 // timestamp.
 func Refresh(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRequest)
 	h := cArgs.Header

@@ -31,7 +31,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.PushTxn, declareKeysPushTransaction, PushTxn)
+	RegisterMutatingCommand(roachpb.PushTxn, declareKeysPushTransaction, PushTxn)
 }
 
 func declareKeysPushTransaction(
