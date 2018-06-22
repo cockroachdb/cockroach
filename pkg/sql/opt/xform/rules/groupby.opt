@@ -1,17 +1,17 @@
 # =============================================================================
 # groupby.opt contains exploration rules for the groupby operators
 # =============================================================================
-#min on ordered index value
-[MinIndexLimit, Explore]
+# ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a lower cost plan
+# if the column min(x) is applied to is indexed.
+[ReplaceMinWithLimit, Explore]
 (GroupBy
   $input:*
-  $aggs: (Aggregations [(Min (Variable $ex:*))] *)
-  $def:*
+  $aggs:(Aggregations [(Min (Variable $col:*))])
+  $def:* & (EmptyGroupByDef $def)
 )
 =>
 (GroupBy
-  (Limit $input (Const (GetConstOfOne)) (GetOrdering $ex))
+  (Limit $input (MakeOne) (MakeOrderingFromColumn $col))
   $aggs
   $def
 )
-

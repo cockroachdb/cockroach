@@ -152,6 +152,21 @@ func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.Grou
 	return lb.BuildList()
 }
 
+// -----------------------------------------------------------------------
+//
+//  GroupBy functions
+//   General custom match and replace functions used to test and construct
+//    GroupBy properties
+//
+// -----------------------------------------------------------------------
+
+// EmptyGroupDef returns if the GroupByDef GroupingCols is empty
+// This assumes is that empty GroupingCols implies empty Ordering list
+func (c *CustomFuncs) EmptyGroupByDef(def memo.PrivateID) bool {
+	groupByDef := c.mem.LookupPrivate(def).(*memo.GroupByDef)
+	return groupByDef.GroupingCols.Empty()
+}
+
 // ----------------------------------------------------------------------
 //
 // Private extraction functions

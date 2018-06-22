@@ -319,11 +319,29 @@ func (c *CustomFuncs) OneResultPerInput(def memo.PrivateID) bool {
 	return lookupJoinDef.IsIndexJoin(c.e.mem.Metadata())
 }
 
-func (c *CustomFuncs) GetConstOfOne() memo.PrivateID {
-	return c.e.f.InternDatum(tree.NewDInt(1))
+// ----------------------------------------------------------------------
+//
+// GroupBy Rules
+//   Custom match and replace functions used with groupby.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// MakeConstOfOne returns a memo.PrivateID pointing
+// to a Constant Datum Int with value 1. This is required
+// because optgen cannot create constants inline
+func (c *CustomFuncs) MakeOne() memo.GroupID {
+	return c.e.f.ConstructConst(c.e.f.InternDatum(tree.NewDInt(1)))
 }
 
-func (c *CustomFuncs) GetOrdering(col memo.PrivateID) memo.PrivateID {
+// EmptyGroupDef returns if the GroupByDef GroupingCols is empty
+// This assumes is that empty GroupingCols implies empty Ordering list
+func (c *CustomFuncs) EmptyGroupByDef(def memo.PrivateID) bool {
+	groupByDef := c.e.mem.LookupPrivate(def).(*memo.GroupByDef)
+	return groupByDef.GroupingCols.Empty()
+}
+
+// MakeOrderingFromColID creates an Ordering for a column based on the an input ColID
+func (c *CustomFuncs) MakeOrderingFromColumn(col memo.PrivateID) memo.PrivateID {
 	ordering := opt.Ordering{opt.OrderingColumn(c.ExtractColID(col))}
 	return c.e.f.InternOrdering(ordering)
 }

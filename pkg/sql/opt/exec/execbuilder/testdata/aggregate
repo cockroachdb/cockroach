@@ -328,7 +328,6 @@ group      ·            ·       (min int)  ·
 ·          spans        ALL     ·          ·
 ·          limit        1       ·          ·
 
-# TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
@@ -339,7 +338,6 @@ group      ·            ·                  (min int)  ·
 ·          spans        /0-/1 /4-/5 /7-/8  ·          ·
 ·          limit        1                  ·          ·
 
-# TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
@@ -452,7 +450,6 @@ INSERT INTO ab VALUES
   (4, 40),
   (5, 50)
 
-# TODO(radu): we don't support the single-row optimization yet.
 #exec nodist
 #EXPLAIN (EXPRS) SELECT min(a) FROM abc
 #----
