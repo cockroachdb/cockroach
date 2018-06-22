@@ -84,6 +84,10 @@ type sstBatcher struct {
 	splits []roachpb.Key
 	// nextSplitIdx is index of first key in splits > batchStartKey.
 	nextSplitIdx int
+
+	// checkpoint is the *source* key at which the current batch started (ie. the
+	// key to which the source should be rewound to retry the batch).
+	checkpoint roachpb.Key
 }
 
 func (b *sstBatcher) add(key engine.MVCCKey, value []byte) error {
@@ -139,9 +143,11 @@ func (b *sstBatcher) shouldFlush(nextKey roachpb.Key) bool {
 	return b.sstWriter.DataSize >= b.maxSize
 }
 
-func (b *sstBatcher) flush(ctx context.Context, db *client.DB) error {
+func (b *sstBatcher) flush(
+	ctx context.Context, db *client.DB, checkpoint []byte,
+) (roachpb.Key, error) {
 	if b.sstWriter.DataSize == 0 {
-		return nil
+		return nil, nil
 	}
 	start := roachpb.Key(append([]byte(nil), b.batchStartKey...))
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
@@ -150,18 +156,19 @@ func (b *sstBatcher) flush(ctx context.Context, db *client.DB) error {
 
 	sstBytes, err := b.sstWriter.Finish()
 	if err != nil {
-		return errors.Wrapf(err, "finishing constructed sstable")
+		return nil, errors.Wrapf(err, "finishing constructed sstable")
 	}
 	if err := AddSSTable(ctx, db, start, end, sstBytes); err != nil {
 		if mismatch, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
 			b.addSplit(mismatch)
+			return b.checkpoint, err
 		}
-		// TODO(dt): retry with the updated splits.
-		return err
+		return nil, err
 	}
 	b.rowCounter.DataSize = b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	return nil
+	b.checkpoint = append(b.checkpoint[:0], checkpoint...)
+	return nil, nil
 }
 
 func (b *sstBatcher) Close() {
@@ -254,6 +261,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		return nil, err
 	}
 	defer batcher.Close()
+	batcher.checkpoint = append(batcher.checkpoint, args.DataSpan.Key...)
 
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
@@ -263,77 +271,96 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	var keyScratch, valueScratch []byte
 
 	for {
-		ok, err := iter.Valid()
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			break
-		}
-
-		if args.EndTime != (hlc.Timestamp{}) {
-			// TODO(dan): If we have to skip past a lot of versions to find the
-			// latest one before args.EndTime, then this could be slow.
-			if args.EndTime.Less(iter.UnsafeKey().Timestamp) {
-				iter.Next()
-				continue
-			}
-		}
-
-		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
-			break
-		}
-		if len(iter.UnsafeValue()) == 0 {
-			// Value is deleted.
-			iter.NextKey()
-			continue
-		}
-
-		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
-		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
-		value := roachpb.Value{RawBytes: valueScratch}
-		iter.NextKey()
-
-		key.Key, ok, err = kr.RewriteKey(key.Key)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			// If the key rewriter didn't match this key, it's not data for the
-			// table(s) we're interested in.
-			if log.V(3) {
-				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
-			}
-			continue
-		}
-
-		// Check if we need to flush current batch *before* adding the next k/v --
-		// the batcher may want to flush the keys it already has, either because it
-		// is full or because it wants this key in a separate batch due to splits.
-		if batcher.shouldFlush(key.Key) {
-			if err := batcher.flush(ctx, db); err != nil {
-				return nil, errors.Wrapf(err, "import [%s, %s)", startKeyMVCC.Key, endKeyMVCC.Key)
-			}
-			if err := batcher.reset(); err != nil {
+		for {
+			ok, err := iter.Valid()
+			if err != nil {
 				return nil, err
 			}
-		}
+			if !ok {
+				break
+			}
 
-		// Rewriting the key means the checksum needs to be updated.
-		value.ClearChecksum()
-		value.InitChecksum(key.Key)
+			if args.EndTime != (hlc.Timestamp{}) {
+				// TODO(dan): If we have to skip past a lot of versions to find the
+				// latest one before args.EndTime, then this could be slow.
+				if args.EndTime.Less(iter.UnsafeKey().Timestamp) {
+					iter.Next()
+					continue
+				}
+			}
 
-		if log.V(3) {
-			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
+			if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
+				break
+			}
+			if len(iter.UnsafeValue()) == 0 {
+				// Value is deleted.
+				iter.NextKey()
+				continue
+			}
+
+			keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
+			valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
+			key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+			value := roachpb.Value{RawBytes: valueScratch}
+			iter.NextKey()
+
+			key.Key, ok, err = kr.RewriteKey(key.Key)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				// If the key rewriter didn't match this key, it's not data for the
+				// table(s) we're interested in.
+				if log.V(3) {
+					log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
+				}
+				continue
+			}
+
+			// Check if we need to flush current batch *before* adding the next k/v --
+			// the batcher may want to flush the keys it already has, either because it
+			// is full or because it wants this key in a separate batch due to splits.
+			if batcher.shouldFlush(key.Key) {
+				if retry, err := batcher.flush(ctx, db, keyScratch); err != nil {
+					if retry != nil {
+						log.VEventf(ctx, 2, "sst rejected, retrying from %v", retry)
+						if err := batcher.reset(); err != nil {
+							return nil, err
+						}
+						iter.Seek(engine.MVCCKey{Key: retry})
+						continue
+					}
+					return nil, errors.Wrapf(err, "import [%s, %s)", startKeyMVCC.Key, endKeyMVCC.Key)
+				}
+				if err := batcher.reset(); err != nil {
+					return nil, err
+				}
+			}
+
+			// Rewriting the key means the checksum needs to be updated.
+			value.ClearChecksum()
+			value.InitChecksum(key.Key)
+
+			if log.V(3) {
+				log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
+			}
+			if err := batcher.add(key, value.RawBytes); err != nil {
+				return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
+			}
 		}
-		if err := batcher.add(key, value.RawBytes); err != nil {
-			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
+		// Flush out the last batch.
+		if retry, err := batcher.flush(ctx, db, nil); err != nil {
+			if retry != nil {
+				log.VEventf(ctx, 2, "sst rejected, retrying from %v", retry)
+				if err := batcher.reset(); err != nil {
+					return nil, err
+				}
+				iter.Seek(engine.MVCCKey{Key: retry})
+				continue
+			}
+			return nil, err
 		}
-	}
-	// Flush out the last batch.
-	if err := batcher.flush(ctx, db); err != nil {
-		return nil, err
+		break
 	}
 	log.Event(ctx, "done")
 	return &roachpb.ImportResponse{Imported: batcher.totalRows}, nil
