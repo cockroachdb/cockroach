@@ -40,6 +40,21 @@ type TableLookup struct {
 	Table       *TableDescriptor
 	IsAdding    bool
 	CheckHelper *CheckHelper
+
+	updatedRows *RowContainer
+	deletedRows *RowContainer
+}
+
+func (tl *TableLookup) initRowContainers(evalCtx *tree.EvalContext) error {
+	// t.updatedRows = NewRowContainer(
+
+	// )
+
+	// t.deletedRows = NewRowContainer(
+
+	// )
+
+	return nil
 }
 
 // TableLookupFunction is the function type used by TablesNeededForFKs that will
@@ -175,12 +190,13 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	table TableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
 	analyzeExpr AnalyzeExprFunction,
-) (TableLookupsByID, error) {
+) (baseFKHelper, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
 		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
@@ -490,6 +506,7 @@ func makeFKDeleteHelper(
 	otherTables TableLookupsByID,
 	colMap map[ColumnID]int,
 	alloc *DatumAlloc,
+	evalCtx *tree.EvalContext,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
 		otherTables: otherTables,
@@ -617,8 +634,13 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 }
 
 type baseFKHelper struct {
-	txn          *client.Txn
-	rf           RowFetcher
+	evalCtx *tree.EvalContext
+	txn     *client.Txn
+	rf      RowFetcher
+
+	tables  TableLookupsByID
+	indexes map[ID][]IndexID
+
 	searchTable  *TableDescriptor // the table being searched (for err msg)
 	searchIdx    *IndexDescriptor // the index that must (not) contain a value
 	prefixLen    int
@@ -629,6 +651,7 @@ type baseFKHelper struct {
 }
 
 func makeBaseFKHelper(
+	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	otherTables TableLookupsByID,
 	writeIdx IndexDescriptor,
@@ -637,7 +660,14 @@ func makeBaseFKHelper(
 	alloc *DatumAlloc,
 	dir FKCheck,
 ) (baseFKHelper, error) {
-	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].Table, dir: dir}
+	b := baseFKHelper{
+		evalCtx:     evalCtx,
+		txn:         txn,
+		tables:      otherTables,
+		writeIdx:    writeIdx,
+		searchTable: otherTables[ref.Table].Table,
+		dir:         dir,
+	}
 	if b.searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
@@ -678,6 +708,14 @@ func makeBaseFKHelper(
 	}
 	return b, nil
 }
+
+/*
+
+
+
+
+
+ */
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key

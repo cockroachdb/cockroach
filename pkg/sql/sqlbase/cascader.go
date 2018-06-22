@@ -1172,7 +1172,6 @@ func (c *cascader) cascadeAll(
 					skipList[j] = struct{}{}
 				}
 			}
-
 			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
 			}
