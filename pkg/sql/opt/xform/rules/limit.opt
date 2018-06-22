@@ -29,7 +29,7 @@
       $def:* & (OneResultPerInput $def)
     )
     $limit:*
-    $ordering:* & (HasOrderingCols $input $ordering)
+    $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
 (LookupJoin

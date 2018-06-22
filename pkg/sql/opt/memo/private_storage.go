@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -146,6 +147,22 @@ func (ps *privateStorage) internOrdering(ordering opt.Ordering) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, ordering)
 }
 
+// internOrderingChoice adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internOrderingChoice always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internOrderingChoice(ordering *props.OrderingChoice) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeOrderingChoice(ordering)
+	typ := (*opt.Ordering)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, ordering)
+}
+
 // internFuncOpDef adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internFuncOpDef always
@@ -215,7 +232,7 @@ func (ps *privateStorage) internGroupByDef(def *GroupByDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	ps.keyBuf.writeOrdering(def.Ordering)
+	ps.keyBuf.writeOrderingChoice(&def.Ordering)
 	// Add a separator between the ordering and the set. Note that the column IDs
 	// cannot be 0.
 	ps.keyBuf.writeUvarint(0)
@@ -293,8 +310,8 @@ func (ps *privateStorage) internMergeOnDef(def *MergeOnDef) PrivateID {
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeUvarint(uint64(def.JoinType))
-	ps.keyBuf.writeOrdering(def.LeftEq)
-	ps.keyBuf.writeOrdering(def.RightEq)
+	ps.keyBuf.writeOrderingChoice(&def.LeftEq)
+	ps.keyBuf.writeOrderingChoice(&def.RightEq)
 	typ := (*MergeOnDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -310,7 +327,7 @@ func (ps *privateStorage) internRowNumberDef(def *RowNumberDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	ps.keyBuf.writeOrdering(def.Ordering)
+	ps.keyBuf.writeOrderingChoice(&def.Ordering)
 	ps.keyBuf.writeUvarint(uint64(def.ColID))
 
 	typ := (*RowNumberDef)(nil)
@@ -458,6 +475,25 @@ func (kb *keyBuffer) writeOrdering(ordering opt.Ordering) {
 	for _, col := range ordering {
 		kb.writeVarint(int64(col))
 	}
+}
+
+// writeOrderingChoice writes a series of varints, one for each column in the
+// set, in the order of the ordering.
+func (kb *keyBuffer) writeOrderingChoice(ordering *props.OrderingChoice) {
+	for _, col := range ordering.Columns {
+		kb.writeColSet(col.Group)
+
+		// Write an extra 0 for descending columns (column IDs cannot be 0).
+		if col.Descending {
+			kb.writeUvarint(0)
+		}
+
+		// Always add a separator between groups (column IDs cannot be 0).
+		kb.writeUvarint(0)
+	}
+
+	// Write optional columns.
+	kb.writeColSet(ordering.Optional)
 }
 
 // writeColSet writes a series of varints, one for each column in the list, in

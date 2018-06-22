@@ -17,6 +17,10 @@ package props
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
@@ -57,6 +61,7 @@ import (
 type OrderingChoice struct {
 	// Optional is the set of columns that can appear at any position in the
 	// ordering. Columns in Optional must not appear in the Columns sequence.
+	// In addition, if Columns is empty, then Optional must be as well.
 	// After initial construction, Optional is immutable. To update, replace
 	// with a different set containing the desired columns.
 	Optional opt.ColSet
@@ -80,6 +85,98 @@ type OrderingColumnChoice struct {
 	// Descending is true if the sort key column is ordered from highest to
 	// lowest. Otherwise, it's ordered from lowest to highest.
 	Descending bool
+}
+
+const (
+	colChoiceRegexStr = `(?:\((\d+(?:\|\d+)*)\))`
+	ordColRegexStr    = `^(?:(?:\+|\-)(?:(\d+)|` + colChoiceRegexStr + `))$`
+	colListRegexStr   = `(\d+(?:,\d+)*)`
+	optRegexStr       = `^\s*([\S]+)?\s*(?:opt\(` + colListRegexStr + `\))?\s*$`
+)
+
+var once sync.Once
+var optRegex, ordColRegex *regexp.Regexp
+
+// ParseOrderingChoice parses the string representation of an OrderingChoice for
+// testing purposes. Here are some examples of the string format:
+//
+//   +1
+//   -(1|2),+3
+//   +(1|2),+3 opt(5,6)
+//
+// The input string is expected to be valid; ParseOrderingChoice will panic if
+// it is not.
+func ParseOrderingChoice(s string) OrderingChoice {
+	once.Do(func() {
+		optRegex = regexp.MustCompile(optRegexStr)
+		ordColRegex = regexp.MustCompile(ordColRegexStr)
+	})
+
+	var ordering OrderingChoice
+
+	// Separate string into column sequence and optional column parts:
+	//   +(1|2),+3 opt(5,6)
+	//     matches[1]: +(1|2),+3
+	//     matches[2]: opt(5,6)
+	matches := optRegex.FindStringSubmatch(s)
+	if matches == nil {
+		panic(fmt.Sprintf("could not parse ordering choice: %s", s))
+	}
+
+	// Handle Any case.
+	if len(matches[1]) == 0 {
+		return OrderingChoice{}
+	}
+
+	// Split column sequence by comma:
+	//   +(1|2),+3:
+	//     +(1|2)
+	//     +3
+	for _, ordColStr := range strings.Split(matches[1], ",") {
+		// Parse one item in the column sequence:
+		//   +(1|2):
+		//     matches[1]: <empty>
+		//     matches[2]: 1|2
+		//
+		//   +3:
+		//     matches[1]: 3
+		//     matches[2]: <empty>
+		ordColMatches := ordColRegex.FindStringSubmatch(ordColStr)
+
+		// First character is the direction indicator.
+		var colChoice OrderingColumnChoice
+		colChoice.Descending = strings.HasPrefix(ordColStr, "-")
+
+		if len(ordColMatches[1]) != 0 {
+			// Single column in equivalence group.
+			id, _ := strconv.Atoi(ordColMatches[1])
+			colChoice.Group.Add(id)
+		} else {
+			// Split multiple columns in equivalence group by pipe:
+			//   1|2:
+			//     1
+			//     2
+			for _, idStr := range strings.Split(ordColMatches[2], "|") {
+				id, _ := strconv.Atoi(idStr)
+				colChoice.Group.Add(id)
+			}
+		}
+
+		ordering.Columns = append(ordering.Columns, colChoice)
+	}
+
+	// Parse any optional columns by splitting by comma:
+	//   opt(5,6):
+	//     5
+	//     6
+	if len(matches[2]) != 0 {
+		for _, idStr := range strings.Split(matches[2], ",") {
+			id, _ := strconv.Atoi(idStr)
+			ordering.Optional.Add(id)
+		}
+	}
+
+	return ordering
 }
 
 // Any is true if this instance allows any ordering (any length, any columns).
@@ -116,57 +213,59 @@ func (oc *OrderingChoice) ColSet() opt.ColSet {
 // set. In other words, is this set of ordering choices at least as restrictive
 // as the input set? Here are some examples:
 //
+//   <empty>           matches <empty>
+//   +1                matches <empty>        (given set is prefix)
 //   +1                matches +1
 //   +1,-2             matches +1             (given set is prefix)
 //   +1,-2             matches +1,-2
-//   +1                matches +1 opt(2)      (optional col is ignored)
+//   +1                matches +1 opt(2)      (unused optional col is ignored)
 //   -2,+1             matches +1 opt(2)      (optional col is ignored)
-//   -2 opt(1)         matches -2 opt(1,3)
-//   +1,-2             matches opt(1)         (given set is prefix + optional)
 //   +1                matches +(1|2)         (subset of choice)
 //   +(1|2)            matches +(1|2|3)       (subset of choice)
-//   +(1|2)            matches +1 opt(2)      (minus optional col)
+//   +(1|2),-4         matches +(1|2|3),-(4|5)
+//   +(1|2) opt(4)     matches +(1|2|3) opt(4)
 //
+//   <empty>           !matches +1
+//   +1                !matches -1            (direction mismatch)
 //   +1                !matches +1,-2         (prefix matching not commutative)
 //   +1 opt(2)         !matches +1            (extra optional cols not allowed)
+//   +1 opt(2)         !matches +1 opt(3)
+//   +(1|2)            !matches -(1|2)        (direction mismatch)
+//   +(1|2)            !matches +(3|4)        (no intersection)
+//   +(1|2)            !matches +(2|3)        (intersects, but not subset)
 //   +(1|2|3)          !matches +(1|2)        (subset of choice not commutative)
+//   +(1|2)            !matches +1 opt(2)
 //
 func (oc *OrderingChoice) SubsetOf(other *OrderingChoice) bool {
 	if !oc.Optional.SubsetOf(other.Optional) {
 		return false
 	}
 
-	if len(other.Columns) == 0 {
-		return true
-	}
-
-	j := 0
-	for i := range oc.Columns {
-		left := &oc.Columns[i]
-		right := other.Columns[j]
-
-		leftGroup := left.Group
-		if leftGroup.Intersects(other.Optional) {
-			if leftGroup.SubsetOf(other.Optional) {
-				continue
-			}
-			leftGroup = leftGroup.Difference(other.Optional)
-		}
-
-		if left.Descending != right.Descending {
-			break
-		}
-
-		if !leftGroup.SubsetOf(right.Group) {
-			break
-		}
-
-		j++
-		if j >= len(other.Columns) {
+	left, right := 0, 0
+	for {
+		if right >= len(other.Columns) {
 			return true
 		}
+		if left >= len(oc.Columns) {
+			return false
+		}
+
+		leftCol := &oc.Columns[left]
+		rightCol := other.Columns[right]
+
+		if leftCol.Descending != rightCol.Descending || !leftCol.Group.SubsetOf(rightCol.Group) {
+			// Failed to match the right column, so last hope is that the left
+			// column is optional in the right set.
+			if leftCol.Group.Intersects(other.Optional) {
+				left++
+				continue
+			}
+			return false
+		}
+
+		left++
+		right++
 	}
-	return false
 }
 
 // SubsetOfCols is true if at least one column in each ordering column group is
@@ -209,9 +308,12 @@ func (oc *OrderingChoice) MatchesAt(index int, col opt.OrderingColumn) bool {
 }
 
 // AppendCol adds a new column to the end of the sequence of ordering columns
-// maintained by this instance.
-func (oc *OrderingChoice) AppendCol(col *OrderingColumnChoice) {
-	oc.Columns = append(oc.Columns, *col)
+// maintained by this instance. The new column has the given ID and direction as
+// the only ordering choice.
+func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
+	ordCol := OrderingColumnChoice{Descending: descending}
+	ordCol.Group.Add(int(id))
+	oc.Columns = append(oc.Columns, ordCol)
 }
 
 // Copy returns a complete copy of this instance, with a private version of the
@@ -222,6 +324,53 @@ func (oc *OrderingChoice) Copy() OrderingChoice {
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
 	return other
+}
+
+// CanSimplify returns true if a call to Simplify would result in any changes to
+// the OrderingChoice. Changes include additional constant columns, removed
+// groups, and additional equivalent columns. This is used to quickly check
+// whether Simplify needs to be called without requiring allocations in the
+// common case. This logic should be changed in concert with the Simplify logic.
+func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
+	if oc.Any() {
+		// Any ordering allowed, so can't simplify further.
+		return false
+	}
+
+	// Check whether optional columns can be added by the FD set.
+	optional := fdset.ComputeClosure(oc.Optional)
+	if !optional.Equals(oc.Optional) {
+		return true
+	}
+
+	closure := optional
+	for i := range oc.Columns {
+		group := &oc.Columns[i]
+
+		// If group contains an optional column, then group can be simplified
+		// or removed entirely.
+		if group.Group.Intersects(optional) {
+			return true
+		}
+
+		// If group is functionally determined by previous groups, then it can
+		// be removed entirely.
+		if group.Group.SubsetOf(closure) {
+			return true
+		}
+
+		// Check whether new equivalent columns can be added by the FD set.
+		equiv := fdset.ComputeEquivClosure(group.Group)
+		if !equiv.Equals(group.Group) {
+			return true
+		}
+
+		// Add this group's columns and find closure with new columns.
+		closure.UnionWith(equiv)
+		closure = fdset.ComputeClosure(closure)
+	}
+
+	return false
 }
 
 // Simplify uses the given FD set to streamline the orderings allowed by this
@@ -241,6 +390,7 @@ func (oc *OrderingChoice) Copy() OrderingChoice {
 //        Sigmod Record. Volume 25 Issue 2, June 1996. Pages 57-67.
 //        https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf
 //
+// This logic should be changed in concert with the CanSimplify logic.
 func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 	oc.Optional = fdset.ComputeClosure(oc.Optional)
 
@@ -258,14 +408,14 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 			group.Group = group.Group.Difference(oc.Optional)
 		}
 
-		// Expand group with equivalent columns from FD set.
-		group.Group = fdset.ComputeEquivClosure(group.Group)
-
 		// If this group is functionally determined from previous groups, then
 		// discard it.
 		if group.Group.SubsetOf(closure) {
 			continue
 		}
+
+		// Expand group with equivalent columns from FD set.
+		group.Group = fdset.ComputeEquivClosure(group.Group)
 
 		// Add this group's columns and find closure with the new columns.
 		closure.UnionWith(group.Group)
@@ -277,6 +427,11 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		n++
 	}
 	oc.Columns = oc.Columns[:n]
+
+	if len(oc.Columns) == 0 {
+		// Normalize Any case by dropping any optional columns.
+		oc.Optional = opt.ColSet{}
+	}
 }
 
 // Truncate removes all ordering columns beyond the given index. For example,
@@ -290,6 +445,10 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 func (oc *OrderingChoice) Truncate(prefix int) {
 	if prefix < len(oc.Columns) {
 		oc.Columns = oc.Columns[:prefix]
+		if len(oc.Columns) == 0 {
+			// Normalize Any case by dropping any optional columns.
+			oc.Optional = opt.ColSet{}
+		}
 	}
 }
 

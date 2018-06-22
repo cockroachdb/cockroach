@@ -278,7 +278,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	// If a particular column presentation is required of the expression, then
 	// print columns using that information.
-	if physProps.Presentation.Defined() {
+	if !physProps.Presentation.Any() {
 		ev.formatPresentation(f, tp, physProps.Presentation)
 	} else {
 		// Special handling to improve the columns display for certain ops.
@@ -322,7 +322,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		groupingColSet := def.GroupingCols
 		ordering := def.Ordering
 		logProps.FormatColSet(f, tp, "grouping columns:", groupingColSet)
-		if !ordering.Empty() {
+		if !ordering.Any() {
 			tp.Childf("ordering: %s", ordering.String())
 		}
 
@@ -385,7 +385,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		}
 	}
 
-	if !physProps.Ordering.Empty() {
+	if !physProps.Ordering.Any() {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
 
