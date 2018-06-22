@@ -59,9 +59,9 @@ build
 SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1(int!null) y:3(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan onecolumn
@@ -75,12 +75,12 @@ build
 SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: onecolumn.x:1(int)
+      ├── columns: onecolumn.x:1(int!null)
       └── inner-join
-           ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+           ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
            ├── scan onecolumn
            │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
            ├── scan onecolumn
@@ -94,9 +94,9 @@ build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan onecolumn
@@ -350,11 +350,11 @@ build
 SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
 ----
 limit
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  ├── project
- │    ├── columns: x:1(int)
+ │    ├── columns: x:1(int!null)
  │    └── inner-join
- │         ├── columns: x:1(int) column1:3(int)
+ │         ├── columns: x:1(int!null) column1:3(int!null)
  │         ├── project
  │         │    ├── columns: x:1(int)
  │         │    └── scan onecolumn
@@ -410,9 +410,9 @@ build
 SELECT * FROM onecolumn AS a(x) JOIN empty AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1(int!null) y:3(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) empty.x:3(int!null) empty.rowid:4(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan empty
@@ -426,9 +426,9 @@ build
 SELECT * FROM onecolumn AS a JOIN empty AS b USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) empty.x:3(int!null) empty.rowid:4(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan empty
@@ -442,9 +442,9 @@ build
 SELECT * FROM empty AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1(int!null) y:3(int!null)
  └── inner-join
-      ├── columns: empty.x:1(int) empty.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: empty.x:1(int!null) empty.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
       ├── scan empty
       │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
       ├── scan onecolumn
@@ -458,9 +458,9 @@ build
 SELECT * FROM empty AS a JOIN onecolumn AS b USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: empty.x:1(int) empty.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+      ├── columns: empty.x:1(int!null) empty.rowid:2(int!null) onecolumn.x:3(int!null) onecolumn.rowid:4(int!null)
       ├── scan empty
       │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
       ├── scan onecolumn
@@ -675,9 +675,9 @@ build
 SELECT * FROM onecolumn NATURAL JOIN twocolumn
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1(int!null) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -691,9 +691,9 @@ build
 SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1(int!null) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -707,9 +707,9 @@ build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:2(int) x:4(int) y:5(int)
+ ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int!null)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int!null) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -723,9 +723,9 @@ build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 ----
 project
- ├── columns: x:1(int) y:2(int) x:4(int) y:5(int)
+ ├── columns: x:1(int!null) y:2(int!null) x:4(int) y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int!null) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -739,9 +739,9 @@ build
 SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 project
- ├── columns: x:1(int) x:3(int) y:4(int)
+ ├── columns: x:1(int!null) x:3(int) y:4(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int!null) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -755,9 +755,9 @@ build
 SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 project
- ├── columns: x:1(int) x:3(int) y:4(int)
+ ├── columns: x:1(int!null) x:3(int) y:4(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int!null) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -772,9 +772,9 @@ build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 project
- ├── columns: x:1(int) y:2(int) x:4(int) y:5(int)
+ ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -788,9 +788,9 @@ build
 SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1(int!null) y:4(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int!null) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -901,9 +901,9 @@ build
 SELECT * FROM a INNER JOIN b ON a.i = b.i
 ----
 project
- ├── columns: i:1(int) i:3(int) b:4(bool)
+ ├── columns: i:1(int!null) i:3(int!null) b:4(bool)
  └── inner-join
-      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b:4(bool) b.rowid:5(int!null)
+      ├── columns: a.i:1(int!null) a.rowid:2(int!null) b.i:3(int!null) b:4(bool) b.rowid:5(int!null)
       ├── scan a
       │    └── columns: a.i:1(int) a.rowid:2(int!null)
       ├── scan b
@@ -996,17 +996,17 @@ build
 SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
 limit
- ├── columns: x:1(int) x:3(int) y:4(int) b:6(int) d:8(int) e:9(int)
+ ├── columns: x:1(int!null) x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
  ├── ordering: +1
  ├── sort
- │    ├── columns: onecolumn.x:1(int) twocolumn.x:3(int) twocolumn.y:4(int) onecolumn.x:6(int) twocolumn.x:8(int) twocolumn.y:9(int)
+ │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int)
  │    ├── ordering: +1
  │    └── project
- │         ├── columns: onecolumn.x:1(int) twocolumn.x:3(int) twocolumn.y:4(int) onecolumn.x:6(int) twocolumn.x:8(int) twocolumn.y:9(int)
+ │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int)
  │         └── inner-join
- │              ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null) twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
  │              ├── inner-join
- │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null)
+ │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int!null) onecolumn.rowid:7(int!null)
  │              │    ├── inner-join
  │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
  │              │    │    ├── scan onecolumn
@@ -1038,9 +1038,9 @@ build
 SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
 ----
 project
- ├── columns: x:1(int) x:3(int) y:4(int)
+ ├── columns: x:1(int!null) x:3(int!null) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
@@ -1068,9 +1068,9 @@ build
 SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: x:1(int) rowid:2(int!null) column1:3(int)
+      ├── columns: x:1(int!null) rowid:2(int!null) column1:3(int!null)
       ├── scan onecolumn
       │    └── columns: x:1(int) rowid:2(int!null)
       ├── values
@@ -1090,9 +1090,9 @@ build
 SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) x:5(int)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) x:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── project
@@ -1113,17 +1113,17 @@ build
 SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
 ----
 limit
- ├── columns: x:1(int) y:2(int) y:5(int) y:8(int)
+ ├── columns: x:1(int!null) y:2(int) y:5(int) y:8(int)
  ├── ordering: +1
  ├── sort
- │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
  │    ├── ordering: +1
  │    └── project
- │         ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │         ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
  │         └── inner-join
- │              ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │              ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int!null) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
  │              ├── inner-join
- │              │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │              │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
  │              │    ├── scan twocolumn
  │              │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
  │              │    ├── scan twocolumn
@@ -1144,14 +1144,14 @@ build
 SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
 ----
 sort
- ├── columns: s:1(int) x:4(int) x:7(int) y:2(int) y:5(int) y:8(int)
+ ├── columns: s:1(int!null) x:4(int!null) x:7(int!null) y:2(int) y:5(int) y:8(int)
  ├── ordering: +1
  └── project
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.x:7(int) twocolumn.y:8(int)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.x:7(int!null) twocolumn.y:8(int)
       └── inner-join
-           ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+           ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int!null) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
            ├── inner-join
-           │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+           │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
            │    ├── scan twocolumn
            │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
            │    ├── scan twocolumn
@@ -1222,11 +1222,11 @@ build
 SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) othercolumn.x:3(int) othercolumn.rowid:4(int!null) onecolumn.x:5(int) onecolumn.rowid:6(int!null) othercolumn.x:7(int) othercolumn.rowid:8(int!null)
+      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) othercolumn.x:3(int!null) othercolumn.rowid:4(int!null) onecolumn.x:5(int!null) onecolumn.rowid:6(int!null) othercolumn.x:7(int!null) othercolumn.rowid:8(int!null)
       ├── inner-join
-      │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+      │    ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) othercolumn.x:3(int!null) othercolumn.rowid:4(int!null)
       │    ├── scan onecolumn
       │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       │    ├── scan othercolumn
@@ -1236,7 +1236,7 @@ project
       │              ├── variable: onecolumn.x [type=int]
       │              └── variable: othercolumn.x [type=int]
       ├── inner-join
-      │    ├── columns: onecolumn.x:5(int) onecolumn.rowid:6(int!null) othercolumn.x:7(int) othercolumn.rowid:8(int!null)
+      │    ├── columns: onecolumn.x:5(int!null) onecolumn.rowid:6(int!null) othercolumn.x:7(int!null) othercolumn.rowid:8(int!null)
       │    ├── scan onecolumn
       │    │    └── columns: onecolumn.x:5(int) onecolumn.rowid:6(int!null)
       │    ├── scan othercolumn
@@ -1286,7 +1286,7 @@ SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 project
  ├── columns: y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -1302,7 +1302,7 @@ SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 project
  ├── columns: y:5(int)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int!null) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -1316,9 +1316,9 @@ build
 SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  └── inner-join
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+      ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int!null) twocolumn.rowid:6(int!null)
       ├── scan twocolumn
       │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
       ├── scan twocolumn
@@ -1333,12 +1333,12 @@ SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 sort
- ├── columns: k:2(int) u:1(int) w:4(int)
+ ├── columns: k:2(int!null) u:1(int) w:4(int)
  ├── ordering: +1
  └── project
-      ├── columns: column1:1(int) column2:2(int) column2:4(int)
+      ├── columns: column1:1(int) column2:2(int!null) column2:4(int)
       └── inner-join
-           ├── columns: column1:1(int) column2:2(int) column1:3(int) column2:4(int)
+           ├── columns: column1:1(int) column2:2(int!null) column1:3(int!null) column2:4(int)
            ├── values
            │    ├── columns: column1:1(int) column2:2(int)
            │    ├── tuple [type=tuple{int, int}]
@@ -1603,11 +1603,11 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
 select
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ ├── columns: a:1(int!null) b:2(int!null) n:4(int!null) sq:5(int!null)
  ├── project
- │    ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ │    ├── columns: a:1(int!null) b:2(int!null) n:4(int!null) sq:5(int!null)
  │    └── inner-join
- │         ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
+ │         ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null) n:4(int!null) sq:5(int!null)
  │         ├── scan pairs
  │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
  │         ├── scan square
@@ -1674,9 +1674,9 @@ build
 SELECT * FROM t1 JOIN t2 USING(x)
 ----
 project
- ├── columns: x:2(int) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
+ ├── columns: x:2(int!null) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1690,9 +1690,9 @@ build
 SELECT * FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── columns: x:2(int!null) y:4(int!null) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1710,9 +1710,9 @@ build
 SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int) x:2(int) x:8(int)
+ ├── columns: x:2(int!null) x:2(int!null) x:8(int!null)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1730,9 +1730,9 @@ build
 SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── columns: x:2(int!null) y:4(int!null) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1750,9 +1750,9 @@ build
 SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
 ----
 project
- ├── columns: col1:1(int) x:2(int) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int) col4:9(int)
+ ├── columns: col1:1(int) x:2(int!null) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int!null) col4:9(int)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1866,9 +1866,9 @@ build
 SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
 ----
 project
- ├── columns: x:8(int) x:2(int) x:2(int)
+ ├── columns: x:8(int!null) x:2(int!null) x:2(int!null)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
@@ -1905,9 +1905,9 @@ build
 SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
 project
- ├── columns: x:2(int)
+ ├── columns: x:2(int!null)
  └── inner-join
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int)
+      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int)
       ├── scan t1
       │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── project
@@ -1978,7 +1978,7 @@ build
 SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
 inner-join
- ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) a:5(int) b:6(int!null) c:7(int!null) d:8(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
  ├── scan pkba
  │    └── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int) pkba.d:4(int)
  ├── scan pkbc
@@ -2000,9 +2000,9 @@ build
 SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  └── inner-join
-      ├── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int) pkba.d:4(int) pkbad.a:5(int!null) pkbad.b:6(int!null) pkbad.c:7(int) pkbad.d:8(int!null)
+      ├── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int!null) pkba.d:4(int!null) pkbad.a:5(int!null) pkbad.b:6(int!null) pkbad.c:7(int!null) pkbad.d:8(int!null)
       ├── scan pkba
       │    └── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int) pkba.d:4(int)
       ├── scan pkbad
@@ -2090,9 +2090,9 @@ build
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
 project
- ├── columns: s:2(collatedstring{en_u_ks_level1}) s:2(collatedstring{en_u_ks_level1}) s:4(collatedstring{en_u_ks_level1})
+ ├── columns: s:2(collatedstring{en_u_ks_level1}!null) s:2(collatedstring{en_u_ks_level1}!null) s:4(collatedstring{en_u_ks_level1}!null)
  └── inner-join
-      ├── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1}!null) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1}!null)
       ├── scan str1
       │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
       ├── scan str2
@@ -2850,9 +2850,9 @@ build
 SELECT * FROM foo NATURAL JOIN bar
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float!null)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -2877,9 +2877,9 @@ build
 SELECT * FROM foo JOIN bar USING (b)
 ----
 project
- ├── columns: b:2(int) a:1(int) c:3(float) d:4(float) a:6(int) c:8(float) d:9(int)
+ ├── columns: b:2(int!null) a:1(int) c:3(float) d:4(float) a:6(int) c:8(float) d:9(int)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -2894,9 +2894,9 @@ build
 SELECT * FROM foo JOIN bar USING (a, b)
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) c:8(float) d:9(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) c:8(float) d:9(int)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -2915,9 +2915,9 @@ build
 SELECT * FROM foo JOIN bar USING (a, b, c)
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) d:9(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float) d:9(int)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -2939,9 +2939,9 @@ build
 SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) a:6(int) b:7(float) c:8(float) d:9(int)
+ ├── columns: a:1(int) b:2(int!null) c:3(float) d:4(float) a:6(int) b:7(float!null) c:8(float) d:9(int)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -2956,9 +2956,9 @@ build
 SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) a:6(int) b:7(float) c:8(float) d:9(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) a:6(int!null) b:7(float!null) c:8(float) d:9(int)
  └── inner-join
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       ├── scan foo
       │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       ├── scan bar
@@ -3020,11 +3020,11 @@ build
 SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float!null) d:4(float!null) c:8(float!null) d:9(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float!null) c:8(float!null) d:9(int!null)
  └── select
-      ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
+      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
       ├── inner-join
-      │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       │    ├── scan foo
       │    │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
       │    ├── scan bar

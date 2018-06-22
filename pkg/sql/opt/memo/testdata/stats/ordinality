@@ -149,7 +149,7 @@ select
  │         ├── stats: [rows=4000]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
- └── filters [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight)]
+ └── filters [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
       └── eq [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight)]
            ├── variable: ordinality [type=int, outer=(3)]
            └── const: 2 [type=int]

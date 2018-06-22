@@ -56,13 +56,13 @@ SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
 project
  ├── columns: a:1(int!null)
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1) [removed: (2)]
+ ├── fd: (1)-->(2,3), (2,3)-->(1), ()-->(2) [removed: (2)]
  ├── ordering: +3 opt(2)
  └── scan abcde@bc
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       ├── constraint: /2/3: (/1/NULL - /1]
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1)
+      ├── fd: (1)-->(2,3), (2,3)-->(1), ()-->(2)
       └── ordering: +3 opt(2)
 
 # d is required for the ordering, so requires a lookup-join.
@@ -72,17 +72,17 @@ SELECT a FROM abcde WHERE b=1 ORDER BY c, b, d
 sort
  ├── columns: a:1(int!null)
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
+ ├── fd: (1)-->(2-4), (2,3)~~>(1,4), ()-->(2)
  ├── ordering: +3,+4 opt(2)
  └── index-join abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
+      ├── fd: (1)-->(2-4), (2,3)~~>(1,4), ()-->(2)
       └── scan abcde@bc
            ├── columns: a:1(int!null) b:2(int!null) c:3(int)
            ├── constraint: /2/3: [/1 - /1]
            ├── key: (1)
-           └── fd: ()-->(2), (1)-->(2,3), (2,3)~~>(1)
+           └── fd: (1)-->(2,3), (2,3)~~>(1), ()-->(2)
 
 # --------------------------------------------------
 # PruneRootCols
@@ -139,7 +139,7 @@ project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int)
       ├── constraint: /2/3: [/1 - /1]
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(2,3), (2,3)~~>(1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1), ()-->(2)
       └── ordering: +3 opt(2)
 
 # Filter "b", but do not use it in the projection or ORDER BY. Add an additional
@@ -159,9 +159,9 @@ sort
       └── index-join abcde
            ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
            ├── key: (1)
-           ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
+           ├── fd: (1)-->(2-4), (2,3)~~>(1,4), ()-->(2)
            └── scan abcde@bc
                 ├── columns: a:1(int!null) b:2(int!null) c:3(int)
                 ├── constraint: /2/3: [/1 - /1]
                 ├── key: (1)
-                └── fd: ()-->(2), (1)-->(2,3), (2,3)~~>(1)
+                └── fd: (1)-->(2,3), (2,3)~~>(1), ()-->(2)

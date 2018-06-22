@@ -84,7 +84,7 @@ select
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: a.x [type=int, outer=(1)]
            └── const: 1 [type=int]
@@ -116,7 +116,7 @@ select
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight), fd=()-->(1,2)]
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
@@ -555,7 +555,7 @@ select
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
 opt
@@ -568,7 +568,7 @@ select
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
            └── variable: abc.b [type=bool, outer=(2)]
 
@@ -582,7 +582,7 @@ select
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight), fd=()-->(2)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
       │    ├── variable: abc.a [type=int, outer=(1)]
       │    └── const: 5 [type=int]
@@ -678,7 +678,7 @@ scan c@v
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 0.00648979592
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(3)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -691,7 +691,7 @@ scan c@v
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 0.00648979592
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(2)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -704,7 +704,7 @@ scan c@v
  ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
  ├── cost: 0.00216326531
  ├── key: (1)
- ├── fd: ()-->(2,3), (1)-->(2,3)
+ ├── fd: ()-->(2,3)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -717,7 +717,7 @@ scan c@v
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 0.00648979592
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(3)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -730,7 +730,7 @@ scan c@v
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 0.00648979592
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(2)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -743,7 +743,7 @@ scan c@v
  ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
  ├── cost: 0.00216326531
  ├── key: (1)
- ├── fd: ()-->(2,3), (1)-->(2,3)
+ ├── fd: ()-->(2,3)
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
@@ -877,7 +877,7 @@ select
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 1070
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(2)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
@@ -888,7 +888,7 @@ select
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight), fd=()-->(2)]
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(2,3)]
            │    ├── variable: d.p [type=int, outer=(2)]
@@ -912,7 +912,7 @@ select
  ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
  ├── cost: 1070
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,3)
+ ├── fd: (1)-->(2,3), ()-->(3)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
@@ -923,7 +923,7 @@ select
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight), fd=()-->(3)]
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(2,3)]
            │    ├── variable: d.p [type=int, outer=(2)]

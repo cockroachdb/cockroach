@@ -47,22 +47,22 @@ limit
  ├── columns: b:2(int) c:3(int)
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: ()-->(4,5), (1)-->(2-5), (2,3)~~>(1,4,5)
+ ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5), ()-->(4,5)
  ├── ordering: +2,+3,+1 opt(4,5)
  ├── sort
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int!null) e:5(int!null)
  │    ├── key: (1)
- │    ├── fd: ()-->(4,5), (1)-->(2-5), (2,3)~~>(1,4,5)
+ │    ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5), ()-->(4,5)
  │    ├── ordering: +2,+3,+1 opt(4,5)
  │    └── select
  │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int!null) e:5(int!null)
  │         ├── key: (1)
- │         ├── fd: ()-->(4,5), (1)-->(2-5), (2,3)~~>(1,4,5)
+ │         ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5), ()-->(4,5)
  │         ├── scan abcde
  │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
- │         └── filters [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/2 - /2]; tight)]
+ │         └── filters [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/2 - /2]; tight), fd=()-->(4,5)]
  │              ├── abcde.d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
  │              └── abcde.e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight)]
  └── const: 10 [type=int]

@@ -69,13 +69,13 @@ project
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
       ├── stats: [rows=8e-06, distinct(1)=8e-06, distinct(2)=8e-06, distinct(3)=8e-06]
       ├── key: (3)
-      ├── fd: ()-->(1,2), (3)-->(1,2)
+      ├── fd: ()-->(1,2)
       ├── scan b
       │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
       │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100, distinct(3)=10000]
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
-      └── filters [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight)]
+      └── filters [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight), fd=()-->(1,2)]
            └── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight)]
                 ├── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - ]; tight)]
                 │    ├── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight)]
@@ -121,13 +121,13 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=10, distinct(2)=1]
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(2)
+ ├── fd: ()-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=4000, distinct(2)=400]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── filters [type=bool, outer=(1,2), constraints=(/2: [/5 - /5])]
+ └── filters [type=bool, outer=(1,2), constraints=(/2: [/5 - /5]), fd=()-->(2)]
       └── and [type=bool, outer=(1,2), constraints=(/2: [/5 - /5])]
            ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
            │    ├── variable: a.y [type=int, outer=(2)]
