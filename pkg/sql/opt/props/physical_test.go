@@ -38,8 +38,8 @@ func TestPhysicalProps(t *testing.T) {
 	phys = &props.Physical{Presentation: presentation}
 	testPhysicalProps(t, phys, "p:a:1,b:2")
 
-	if !presentation.Defined() {
-		t.Error("presentation should be defined")
+	if presentation.Any() {
+		t.Error("presentation should not be empty")
 	}
 
 	if !presentation.Equals(presentation) {
@@ -50,13 +50,14 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should not equal the empty presentation")
 	}
 
-	// Add Ordering props.
-	ordering := opt.Ordering{1, 5}
+	// Add ordering props.
+	ordering := props.ParseOrderingChoice("+1,+5")
 	phys.Ordering = ordering
 	testPhysicalProps(t, phys, "p:a:1,b:2 o:+1,+5")
 }
 
 func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {
+	t.Helper()
 	actual := physProps.Fingerprint()
 	if actual != expected {
 		t.Errorf("\nexpected: %s\nactual: %s", expected, actual)

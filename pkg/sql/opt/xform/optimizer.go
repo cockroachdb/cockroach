@@ -431,8 +431,8 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 func (o *Optimizer) enforceProps(
 	eid memo.ExprID, required memo.PhysicalPropsID,
 ) (fullyOptimized bool) {
-	props := o.mem.LookupPhysicalProps(required)
-	innerProps := *props
+	requiredProps := o.mem.LookupPhysicalProps(required)
+	innerProps := *requiredProps
 
 	// Ignore the Presentation property, since any relational or enforcer
 	// operator can provide it.
@@ -443,9 +443,9 @@ func (o *Optimizer) enforceProps(
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
 	var enforcerOp opt.Operator
-	if !props.Ordering.Empty() {
+	if !requiredProps.Ordering.Any() {
 		enforcerOp = opt.SortOp
-		innerProps.Ordering = nil
+		innerProps.Ordering = props.OrderingChoice{}
 	} else {
 		// No remaining properties, so no more enforcers.
 		if innerProps.Defined() {

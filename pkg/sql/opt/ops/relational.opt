@@ -304,13 +304,14 @@ define ExceptAll {
 
 # Limit returns a limited subset of the results in the input relation.
 # The limit expression is a scalar value; the operator returns at most this many
-# rows. The private field is an opt.Ordering which indicates the desired
-# row ordering (the first rows with respect to this ordering are returned).
+# rows. The private field is a props.OrderingChoice which indicates the row
+# ordering required from the input (the first rows with respect to this ordering
+# are returned).
 [Relational]
 define Limit {
     Input    Expr
     Limit    Expr
-    Ordering Ordering
+    Ordering OrderingChoice
 }
 
 # Offset filters out the first Offset rows of the input relation; used in
@@ -319,7 +320,7 @@ define Limit {
 define Offset {
     Input    Expr
     Offset   Expr
-    Ordering Ordering
+    Ordering OrderingChoice
 }
 
 # Max1Row enforces that its input must return at most one row. It is used as

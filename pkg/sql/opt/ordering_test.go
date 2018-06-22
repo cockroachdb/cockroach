@@ -46,6 +46,14 @@ func TestOrdering(t *testing.T) {
 		t.Error("ordering should provide the empty ordering")
 	}
 
+	if !ordering.ColSet().Equals(util.MakeFastIntSet(1, 5)) {
+		t.Error("ordering colset should equal the ordering columns")
+	}
+
+	if !(opt.Ordering{}).ColSet().Equals(opt.ColSet{}) {
+		t.Error("empty ordering should have empty column set")
+	}
+
 	if !ordering.Equals(ordering) {
 		t.Error("ordering should be equal with itself")
 	}

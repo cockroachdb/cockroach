@@ -866,11 +866,11 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 	// Inherit functional dependencies from input, and add strict key FD for the
 	// additional key column.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(def.ColID)), relational.OutputCols)
 	if key, ok := relational.FuncDeps.Key(); ok {
 		// Any existing keys are still keys.
 		relational.FuncDeps.AddStrictKey(key, relational.OutputCols)
 	}
+	relational.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(def.ColID)), relational.OutputCols)
 
 	// Cardinality
 	// -----------

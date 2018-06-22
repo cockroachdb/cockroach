@@ -39,14 +39,14 @@ type physicalPropsBuilder struct {
 func (b physicalPropsBuilder) canProvide(eid memo.ExprID, required memo.PhysicalPropsID) bool {
 	requiredProps := b.mem.LookupPhysicalProps(required)
 
-	if requiredProps.Presentation.Defined() {
+	if !requiredProps.Presentation.Any() {
 		if !b.canProvidePresentation(eid, requiredProps.Presentation) {
 			return false
 		}
 	}
 
-	if !requiredProps.Ordering.Empty() {
-		if !b.canProvideOrdering(eid, requiredProps.Ordering) {
+	if !requiredProps.Ordering.Any() {
+		if !b.canProvideOrdering(eid, &requiredProps.Ordering) {
 			return false
 		}
 	}
@@ -70,10 +70,11 @@ func (b physicalPropsBuilder) canProvidePresentation(
 }
 
 // canProvideOrdering returns true if the given expression can provide the
-// required ordering property.
-func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required opt.Ordering) bool {
-	// TODO(justin): we should trim any ordering in `required` which contains a
-	// key to its shortest prefix which still contains a key.
+// required ordering property. The required ordering is assumed to have already
+// been reduced using functional dependency analysis.
+func (b physicalPropsBuilder) canProvideOrdering(
+	eid memo.ExprID, required *props.OrderingChoice,
+) bool {
 	mexpr := b.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("ordering property doesn't apply to non-relational operators")
@@ -105,11 +106,13 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required opt.O
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(opt.Ordering).Provides(required)
+		provided := b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
+		return provided.SubsetOf(required)
 
 	case opt.OffsetOp:
 		// Offset can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(opt.Ordering).Provides(required)
+		provided := b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
+		return provided.SubsetOf(required)
 	}
 
 	return false
@@ -117,18 +120,11 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required opt.O
 
 // orderingBoundBy returns whether or not input provides all columns present in
 // ordering.
-func (b physicalPropsBuilder) orderingBoundBy(ordering opt.Ordering, input memo.GroupID) bool {
+func (b physicalPropsBuilder) orderingBoundBy(
+	ordering *props.OrderingChoice, input memo.GroupID,
+) bool {
 	inputCols := b.mem.GroupProperties(input).Relational.OutputCols
-	for _, colOrder := range ordering {
-		if colOrder < 0 {
-			// Descending order, so recover original index.
-			colOrder = -colOrder
-		}
-		if !inputCols.Contains(int(colOrder)) {
-			return false
-		}
-	}
-	return true
+	return ordering.SubsetOfCols(inputCols)
 }
 
 // buildChildProps returns the set of physical properties required of the nth
@@ -173,17 +169,17 @@ func (b physicalPropsBuilder) buildChildProps(
 	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp:
 		// Limit/Offset/RowNumber require the ordering in their private.
 		if nth == 0 {
-			var ordering opt.Ordering
+			var ordering *props.OrderingChoice
 			switch mexpr.Operator() {
 			case opt.LimitOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(opt.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
 			case opt.OffsetOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(opt.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
 			case opt.RowNumberOp:
 				def := b.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
-				ordering = def.Ordering
+				ordering = &def.Ordering
 			}
-			childProps.Ordering = ordering
+			childProps.Ordering = *ordering
 		}
 
 	case opt.GroupByOp:
