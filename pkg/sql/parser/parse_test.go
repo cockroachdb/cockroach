@@ -150,6 +150,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT, UNIQUE (b))`},
 		{`CREATE TABLE a (b INT, UNIQUE (b) STORING (c))`},
 		{`CREATE TABLE a (b INT, INDEX (b))`},
+		{`CREATE TABLE a (b INT, INVERTED INDEX (b))`},
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo)`},
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo ON UPDATE RESTRICT)`},
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo ON DELETE RESTRICT)`},
