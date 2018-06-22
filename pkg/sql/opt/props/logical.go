@@ -208,6 +208,29 @@ type Scalar struct {
 	// detection fast and easy so that the hoister doesn't waste time searching
 	// subtrees that don't contain subqueries.
 	HasCorrelatedSubquery bool
+
+	// FuncDeps is a set of functional dependencies (FDs) inferred from a
+	// boolean expression. This field is only populated for Filters expressions.
+	// FDs that can be inferred from Filters expressions include:
+	//  - Constant column FDs such as ()-->(1,2) from conjuncts such as
+	//    x = 5 AND y = 10.
+	//  - Equivalent column FDs such as (1)==(2), (2)==(1) from conjuncts such
+	//    as x = y.
+	//
+	// It is useful to calculate FDs on Filters expressions, because it allows
+	// additional filters to be inferred for push-down. For example, consider
+	// the query:
+	//
+	//   SELECT * FROM a, b WHERE a.x = b.x AND a.x > 5;
+	//
+	// By adding the equivalency FD for a.x = b.x, we can infer an additional
+	// filter, b.x > 5. This allows us to rewrite the query as:
+	//
+	//   SELECT * FROM (SELECT * FROM a WHERE a.x > 5) AS a,
+	//     (SELECT * FROM b WHERE b.x > 5) AS b WHERE a.x = b.x;
+	//
+	// For more details, see the header comment for FuncDepSet.
+	FuncDeps FuncDepSet
 }
 
 // OuterCols is a helper method that returns either the relational or scalar
