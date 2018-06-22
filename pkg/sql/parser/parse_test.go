@@ -1185,6 +1185,25 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT a #- '{x}'`, `SELECT json_remove_path(a, '{x}')`},
 
+		{`SELECT 'a' LIKE '\a' ESCAPE '\'`, `SELECT like_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' LIKE '-\___-\' ESCAPE '-'`, `SELECT like_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' LIKE '\a' ESCAPE ''`, `SELECT like_escape('a', e'\\a', '')`},
+		{`SELECT 'a' NOT LIKE '\a' ESCAPE '\'`, `SELECT not_like_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' NOT LIKE '-\___-\' ESCAPE '-'`, `SELECT not_like_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' NOT LIKE '\a' ESCAPE ''`, `SELECT not_like_escape('a', e'\\a', '')`},
+		{`SELECT 'a' ILIKE '\a' ESCAPE '\'`, `SELECT ilike_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' ILIKE '-\___-\' ESCAPE '-'`, `SELECT ilike_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' ILIKE '\a' ESCAPE ''`, `SELECT ilike_escape('a', e'\\a', '')`},
+		{`SELECT 'a' NOT ILIKE '\a' ESCAPE '\'`, `SELECT not_ilike_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' NOT ILIKE '-\___-\' ESCAPE '-'`, `SELECT not_ilike_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' NOT ILIKE '\a' ESCAPE ''`, `SELECT not_ilike_escape('a', e'\\a', '')`},
+		{`SELECT 'a' SIMILAR TO '\a' ESCAPE '\'`, `SELECT similar_to_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' SIMILAR TO '-\___-\' ESCAPE '-'`, `SELECT similar_to_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' SIMILAR TO '\a' ESCAPE ''`, `SELECT similar_to_escape('a', e'\\a', '')`},
+		{`SELECT 'a' NOT SIMILAR TO '\a' ESCAPE '\'`, `SELECT not_similar_to_escape('a', e'\\a', e'\\')`},
+		{`SELECT '\abc\' NOT SIMILAR TO '-\___-\' ESCAPE '-'`, `SELECT not_similar_to_escape(e'\\abc\\', e'-\\___-\\', '-')`},
+		{`SELECT 'a' NOT SIMILAR TO '\a' ESCAPE ''`, `SELECT not_similar_to_escape('a', e'\\a', '')`},
+
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.
 		{`SELECT FAMILY(x)`, // lint: uppercase function OK
