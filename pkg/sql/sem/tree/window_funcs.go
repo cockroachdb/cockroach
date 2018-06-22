@@ -16,6 +16,10 @@ package tree
 
 import (
 	"context"
+
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // IndexedRow is a row with a corresponding index.
@@ -31,8 +35,8 @@ type WindowFrameRun struct {
 	ArgIdxStart      int          // the index which arguments to the window function begin
 	ArgCount         int          // the number of window function arguments
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset int
-	EndBoundOffset   int
+	StartBoundOffset int          // non-negative logical or physical offset from the current row for the start of the frame.
+	EndBoundOffset   int          // non-negative logical or physical offset from the current row for the end of the frame.
 
 	// changes for each row (each call to WindowFunc.Add)
 	RowIdx int // the current row index
@@ -42,8 +46,27 @@ type WindowFrameRun struct {
 	PeerRowCount int // the number of rows in the current peer group
 }
 
+// getValueByOffset returns a datum calculated as the value of the current row
+// plus offset (logical) and an error if encountered.
+func (wfr WindowFrameRun) getValueByOffset(offset int) (Datum, error) {
+	switch v := wfr.valueAt(wfr.RowIdx).(type) {
+	case *DInt:
+		return NewDInt(*v + DInt(offset)), nil
+	case *DFloat:
+		return NewDFloat(*v + DFloat(offset)), nil
+	case *DDecimal:
+		value := &DDecimal{}
+		tmpDec := &DDecimal{}
+		tmpDec.SetCoefficient(int64(offset))
+		_, err := ExactCtx.Add(&value.Decimal, &v.Decimal, &tmpDec.Decimal)
+		return value, err
+	default:
+		return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "non-numerical column provided for windowing with logical offset in RANGE mode")
+	}
+}
+
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr WindowFrameRun) FrameStartIdx() int {
+func (wfr WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return 0
 	}
@@ -53,14 +76,49 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		case UnboundedPreceding:
 			return 0
 		case ValuePreceding:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			// We use binary search on [low, high] interval to find the first row
+			// whose value is greater or equal to 'value'.
+			value, err := wfr.getValueByOffset(-wfr.StartBoundOffset)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			low, high := 0, wfr.RowIdx
+			for low < high {
+				mid := low + (high-low)/2
+				middle := wfr.valueAt(mid)
+				if middle.Compare(evalCtx, value) < 0 {
+					low = mid + 1
+				} else {
+					high = mid
+				}
+			}
+			return low
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.FirstPeerIdx
 		case ValueFollowing:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			// We use binary search on [low, high] interval to find the first row
+			// whose value is greater or equal to 'value'.
+			value, err := wfr.getValueByOffset(wfr.StartBoundOffset)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			low, high := wfr.RowIdx, wfr.PartitionSize()-1
+			for low < high {
+				mid := low + (high-low)/2
+				middle := wfr.valueAt(mid)
+				if middle.Compare(evalCtx, value) < 0 {
+					low = mid + 1
+				} else {
+					high = mid
+				}
+			}
+			if low == wfr.PartitionSize()-1 && wfr.valueAt(low).Compare(evalCtx, value) < 0 {
+				// The largest value is smaller than 'value', so the frame starts
+				// "beyond" the partition.
+				return wfr.PartitionSize()
+			}
+			return low
 		default:
 			panic("unexpected WindowFrameBoundType in RANGE mode")
 		}
@@ -91,7 +149,7 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr WindowFrameRun) FrameEndIdx() int {
+func (wfr WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
@@ -104,13 +162,46 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case ValuePreceding:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			// We use binary search on [low, high] interval to find the first row
+			// whose value is greater than 'value'.
+			value, err := wfr.getValueByOffset(-wfr.EndBoundOffset)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			low, high := 0, wfr.RowIdx+1
+			for low < high {
+				mid := low + (high-low)/2
+				middle := wfr.valueAt(mid)
+				if middle.Compare(evalCtx, value) <= 0 {
+					low = mid + 1
+				} else {
+					high = mid
+				}
+			}
+			return low
 		case CurrentRow:
 			return wfr.DefaultFrameSize()
 		case ValueFollowing:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			// We use binary search on [low, high] interval to find the first row
+			// whose value is greater than 'value'.
+			// Note: when all values are smaller or equal to 'value', we correctly
+			// return PartitionSize() as index and do not compare 'value' to the
+			// value from that index (it would cause IndexOutOfBoundsError).
+			value, err := wfr.getValueByOffset(wfr.EndBoundOffset)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			low, high := wfr.RowIdx, wfr.PartitionSize()
+			for low < high {
+				mid := low + (high-low)/2
+				middle := wfr.valueAt(mid)
+				if middle.Compare(evalCtx, value) <= 0 {
+					low = mid + 1
+				} else {
+					high = mid
+				}
+			}
+			return low
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing()
 		default:
@@ -147,11 +238,11 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 }
 
 // FrameSize returns the number of rows in the current frame.
-func (wfr WindowFrameRun) FrameSize() int {
+func (wfr WindowFrameRun) FrameSize(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
-	size := wfr.FrameEndIdx() - wfr.FrameStartIdx()
+	size := wfr.FrameEndIdx(evalCtx) - wfr.FrameStartIdx(evalCtx)
 	if size <= 0 {
 		size = 0
 	}
@@ -198,6 +289,22 @@ func (wfr WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
 // ArgsByRowIdx returns the argument set of the row at idx.
 func (wfr WindowFrameRun) ArgsByRowIdx(idx int) Datums {
 	return wfr.Rows[idx].Row[wfr.ArgIdxStart : wfr.ArgIdxStart+wfr.ArgCount]
+}
+
+// valueAt returns the first value of the row at idx.
+func (wfr WindowFrameRun) valueAt(idx int) Datum {
+	if len(wfr.Args()) == 0 {
+		return DNull
+	}
+	return wfr.ArgsByRowIdx(idx)[0]
+}
+
+// RequiresAscendingOrdering returns whether we need rows to be ordered by the column
+// on which windowing takes place. We require this only in RANGE mode with either
+// 'value' PRECEDING or 'value' FOLLOWING for at least one of the bounds.
+func (wfr WindowFrameRun) RequiresAscendingOrdering() bool {
+	return wfr.Frame != nil && wfr.Frame.Mode == RANGE &&
+		(wfr.Frame.Bounds.StartBound.OffsetExpr != nil || (wfr.Frame.Bounds.EndBound != nil && wfr.Frame.Bounds.EndBound.OffsetExpr != nil))
 }
 
 // WindowFunc performs a computation on each row using data from a provided WindowFrameRun.

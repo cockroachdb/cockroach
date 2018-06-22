@@ -736,6 +736,20 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			// we need a way to 'reset' the aggregate, so this constructor will be used for that.
 			aggConstructor := windowFn.expr.GetAggregateConstructor()
 
+			if aggConstructor != nil && frameRun.RequiresAscendingOrdering() {
+				// We need ordering to be foremost on the column over which windowing
+				// will take place when aggregating. If aggConstructor is nil,
+				// we will be computing window-specific function (not aggregator),
+				// so we actually don't require a particular ordering.
+				if windowFn.columnOrdering == nil ||
+					windowFn.columnOrdering[0].Direction != encoding.Ascending {
+					// TODO(yuzefovich): figure out how to check whether the ordering is on
+					// the correct column.
+					// windowFn.columnOrdering[0].ColIdx != windowFn.argIdxStart {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "window aggregation over frame with RANGE mode needs ascending ordering on the column over which aggregation takes place")
+				}
+			}
+
 			var peerGrouper peerGroupChecker
 			if windowFn.columnOrdering != nil {
 				// If an ORDER BY clause is provided, order the partition and use the
