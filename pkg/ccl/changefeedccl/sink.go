@@ -12,15 +12,24 @@ import (
 	"context"
 	"strings"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
+// SinkRow is a row to be emitting to a changefeed sink.
+type SinkRow struct {
+	Topic      string
+	Key, Value []byte
+}
+
 // Sink is an abstration for anything that a changefeed may emit into.
 type Sink interface {
-	EmitRow(ctx context.Context, topic string, key, value []byte) error
+	EmitRows(ctx context.Context, rows []SinkRow) error
 	EmitResolvedTimestamp(ctx context.Context, payload []byte) error
 	Close() error
 }
@@ -42,6 +51,12 @@ type kafkaSink struct {
 
 	kafkaTopicPrefix string
 	topicsSeen       map[string]struct{}
+
+	rowsEmitted  uint64
+	bytesEmitted uint64
+
+	// For allocation avoidance
+	messages []*sarama.ProducerMessage
 }
 
 func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error) {
@@ -73,17 +88,34 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 	return sink, nil
 }
 
-func (s *kafkaSink) EmitRow(_ context.Context, topic string, key, value []byte) error {
-	topic = s.kafkaTopicPrefix + topic
-	if _, ok := s.topicsSeen[topic]; !ok {
-		s.topicsSeen[topic] = struct{}{}
+func (s *kafkaSink) EmitRows(ctx context.Context, rows []SinkRow) error {
+	s.messages = s.messages[:0]
+
+	var bytes uint64
+	for _, row := range rows {
+		topic := s.kafkaTopicPrefix + row.Topic
+		if _, ok := s.topicsSeen[topic]; !ok {
+			s.topicsSeen[topic] = struct{}{}
+		}
+		s.messages = append(s.messages, &sarama.ProducerMessage{
+			Topic: topic,
+			Key:   sarama.ByteEncoder(row.Key),
+			Value: sarama.ByteEncoder(row.Value),
+		})
+		bytes += uint64(len(row.Key) + len(row.Value))
 	}
-	_, _, err := s.SendMessage(&sarama.ProducerMessage{
-		Topic: topic,
-		Key:   sarama.ByteEncoder(key),
-		Value: sarama.ByteEncoder(value),
-	})
-	return errors.Wrapf(err, `sending message to kafka topic %s`, topic)
+	if err := s.SendMessages(s.messages); err != nil {
+		return errors.Wrapf(err, `sending %d messages to kafka`, len(s.messages))
+	}
+
+	s.rowsEmitted += uint64(len(s.messages))
+	s.bytesEmitted += bytes
+	if log.V(1) {
+		log.Infof(ctx, "emitted %d records (%s) to kafka. total %d records (%s)",
+			len(s.messages), humanize.IBytes(bytes), s.rowsEmitted, humanize.IBytes(s.bytesEmitted))
+	}
+
+	return nil
 }
 
 func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
@@ -138,12 +170,17 @@ type channelSink struct {
 	alloc     sqlbase.DatumAlloc
 }
 
-func (s *channelSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
-	return s.emitDatums(ctx, tree.Datums{
-		s.alloc.NewDString(tree.DString(topic)),
-		s.alloc.NewDBytes(tree.DBytes(key)),
-		s.alloc.NewDBytes(tree.DBytes(value)),
-	})
+func (s *channelSink) EmitRows(ctx context.Context, rows []SinkRow) error {
+	for _, row := range rows {
+		if err := s.emitDatums(ctx, tree.Datums{
+			s.alloc.NewDString(tree.DString(row.Topic)),
+			s.alloc.NewDBytes(tree.DBytes(row.Key)),
+			s.alloc.NewDBytes(tree.DBytes(row.Value)),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *channelSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
