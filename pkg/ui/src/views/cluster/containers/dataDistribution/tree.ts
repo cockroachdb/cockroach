@@ -237,10 +237,17 @@ export interface FlattenedNode<T> {
   isPaginated: boolean;
 }
 
+// TODO(vilterp): this is defined somewhere else... Sortable table?
+export enum SortState {
+  ASC = "ASC",
+  DESC = "DESC",
+  NONE = "NONE",
+}
+
 export interface PaginationState {
   path: TreePath;
   page: number;
-  sortDesc: boolean;
+  sortState: SortState;
 }
 
 /**
@@ -298,6 +305,7 @@ export function flatten<T>(
   includeInternalNodes: boolean,
   paginationStates: AssocList<TreePath, PaginationState> = [],
   pageSize: number = Number.MAX_VALUE,
+  sortBy?: (path: TreePath) => number,
 ): FlattenedNode<T>[] {
   const output: FlattenedNode<T>[] = [];
   recur(tree, []);
@@ -337,14 +345,39 @@ export function flatten<T>(
         : 0;
       const offset = page * pageSize;
 
-      for (let i = offset; i < Math.min(node.children.length, offset + pageSize); i++) {
-        const child = node.children[i];
+      const sortState = paginationState ? paginationState.sortState : SortState.NONE;
+      const sortedChildren = sortChildren(node.children, pathSoFar, sortState, sortBy);
+
+      for (let i = offset; i < Math.min(sortedChildren.length, offset + pageSize); i++) {
+        const child = sortedChildren[i];
         recur(child, [...pathSoFar, child.name]);
       }
     }
   }
 
   return output;
+}
+
+function sortChildren<T>(
+  children: TreeNode<T>[],
+  pathSoFar: TreePath,
+  sortState: SortState,
+  sortBy?: (path: TreePath) => number,
+): TreeNode<T>[] {
+  if (sortState === SortState.NONE) {
+    return children;
+  }
+  if (!sortBy) {
+    throw Error(`sortState ${sortState} but no sortBy provided`);
+  }
+  const sortedChildren = _.sortBy(children, (child) => {
+    const childPath = [...pathSoFar, child.name];
+    return sortBy(childPath);
+  });
+  if (sortState === SortState.DESC) {
+    sortedChildren.reverse();
+  }
+  return sortedChildren;
 }
 
 /**
