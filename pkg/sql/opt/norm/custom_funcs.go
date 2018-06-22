@@ -761,3 +761,23 @@ func (c *CustomFuncs) IsOne(input memo.GroupID) bool {
 	}
 	return false
 }
+
+// NegateNumeric applies a unary minus to a numeric value.
+func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
+	d := c.f.mem.LookupPrivate(c.f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
+	var id memo.PrivateID
+	switch t := d.(type) {
+	case *tree.DDecimal:
+		d := &tree.DDecimal{}
+		d.Decimal.Neg(&t.Decimal)
+		id = c.f.InternDatum(d)
+	case *tree.DFloat:
+		id = c.f.InternDatum(tree.NewDFloat(-*t))
+	case *tree.DInt:
+		id = c.f.InternDatum(tree.NewDInt(-*t))
+	default:
+		panic("unrecognized numeric type")
+	}
+
+	return c.f.ConstructConst(id)
+}
