@@ -1,4 +1,5 @@
 import _ from "lodash";
+import {AssocList, getAssocList} from "oss/src/views/cluster/containers/dataDistribution/assocList";
 
 export interface TreeNode<T> {
   name: string;
@@ -24,7 +25,7 @@ export function isLeaf<T>(t: TreeNode<T>): boolean {
  * Is represented as:
  *
  *    [ [             <LayoutCell for a>         ],
- *     [ <LayoutCell for b>, <LayoutCell for c> ] ]
+ *      [ <LayoutCell for b>, <LayoutCell for c> ] ]
  *
  */
 export type Layout<T> = LayoutCell<T>[][];
@@ -231,8 +232,15 @@ export interface FlattenedNode<T> {
   depth: number;
   isLeaf: boolean;
   isCollapsed: boolean;
-  data: T;
+  node: TreeNode<T>;
   path: TreePath;
+  isPaginated: boolean;
+}
+
+export interface PaginationState {
+  path: TreePath;
+  page: number;
+  sortDesc: boolean;
 }
 
 /**
@@ -288,10 +296,13 @@ export function flatten<T>(
   tree: TreeNode<T>,
   collapsedPaths: TreePath[],
   includeInternalNodes: boolean,
+  paginationStates: AssocList<TreePath, PaginationState> = [],
+  pageSize: number = Number.MAX_VALUE,
 ): FlattenedNode<T>[] {
   const output: FlattenedNode<T>[] = [];
+  recur(tree, []);
 
-  visitNodes(tree, (node: TreeNode<T>, pathSoFar: TreePath): boolean => {
+  function recur(node: TreeNode<T>, pathSoFar: TreePath) {
     const depth = pathSoFar.length;
 
     if (isLeaf(node)) {
@@ -299,8 +310,9 @@ export function flatten<T>(
         depth,
         isLeaf: true,
         isCollapsed: false,
-        data: node.data,
+        node,
         path: pathSoFar,
+        isPaginated: false,
       });
       return true;
     }
@@ -312,14 +324,25 @@ export function flatten<T>(
         depth,
         isLeaf: false,
         isCollapsed: !isExpanded,
-        data: node.data,
+        node,
         path: pathSoFar,
+        isPaginated: (node.children || []).length > pageSize,
       });
     }
 
-    // Continue the traversal if this node is expanded.
-    return isExpanded;
-  });
+    if (isExpanded && node.children) {
+      const paginationState = getAssocList(paginationStates, pathSoFar);
+      const page = paginationState
+        ? paginationState.page
+        : 0;
+      const offset = page * pageSize;
+
+      for (let i = offset; i < Math.min(node.children.length, offset + pageSize); i++) {
+        const child = node.children[i];
+        recur(child, [...pathSoFar, child.name]);
+      }
+    }
+  }
 
   return output;
 }
@@ -347,19 +370,23 @@ function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
  * If `f` returns false, the traversal stops. Otherwise, the traversal
  * continues.
  */
-export function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath) => boolean) {
-  function recur(node: TreeNode<T>, path: TreePath) {
-    const continueTraversal = f(node, path);
+export function visitNodes<T>(
+  root: TreeNode<T>,
+  f: (node: TreeNode<T>, path: TreePath, childIdx: number) => boolean,
+) {
+  function recur(node: TreeNode<T>, path: TreePath, childIdx: number) {
+    const continueTraversal = f(node, path, childIdx);
     if (!continueTraversal) {
       return;
     }
     if (node.children) {
-      node.children.forEach((child) => {
-        recur(child, [...path, child.name]);
-      });
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        recur(child, [...path, child.name], i);
+      }
     }
   }
-  recur(root, []);
+  recur(root, [], 0);
 }
 
 /**

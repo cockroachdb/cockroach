@@ -132,7 +132,7 @@ describe("tree", () => {
 
   });
 
-  describe("flatten", () => {
+  describe.only("flatten", () => {
 
     const tree = {
       name: "a", data: "a",
