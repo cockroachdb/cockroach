@@ -488,9 +488,8 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 type sortChunksProcessor struct {
 	sorterBase
 
-	rows     memRowContainer
-	alloc    sqlbase.DatumAlloc
-	rowAlloc sqlbase.EncDatumRowAlloc
+	rows  memRowContainer
+	alloc sqlbase.DatumAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
@@ -578,8 +577,6 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 		return false, err
 	}
 
-	defer s.rows.Sort(ctx)
-
 	// We will accumulate rows to form a chunk such that they all share the same values
 	// as prefix for the first s.matchLen ordering columns.
 	for {
@@ -599,7 +596,7 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 			return false, err
 		}
 		if chunkCompleted {
-			s.nextChunkRow = s.rowAlloc.CopyRow(nextChunkRow)
+			s.nextChunkRow = nextChunkRow
 			break
 		}
 
@@ -607,6 +604,8 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 			return false, err
 		}
 	}
+
+	s.rows.Sort(ctx)
 
 	return true, nil
 }
@@ -622,7 +621,10 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for s.state == stateRunning {
 		// If we don't have an active chunk, clear and refill it.
 		if s.rows.Len() == 0 {
-			s.rows.Clear(s.rows.evalCtx.Ctx())
+			if err := s.rows.UnsafeReset(s.rows.evalCtx.Ctx()); err != nil {
+				s.moveToDraining(err)
+				break
+			}
 			valid, err := s.fill()
 			if !valid || err != nil {
 				s.moveToDraining(err)
