@@ -15,10 +15,7 @@
 package storage
 
 import (
-	"context"
-
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,107 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-// writeInitialReplicaState sets up a new Range, but without writing an
-// associated Raft state (which must be written separately via
-// synthesizeRaftState before instantiating a Replica). The main task is to
-// persist a ReplicaState which does not start from zero but presupposes a few
-// entries already having applied. The supplied MVCCStats are used for the Stats
-// field after adjusting for persisting the state itself, and the updated stats
-// are returned.
-func writeInitialReplicaState(
-	ctx context.Context,
-	st *cluster.Settings,
-	eng engine.ReadWriter,
-	ms enginepb.MVCCStats,
-	desc roachpb.RangeDescriptor,
-	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
-	txnSpanGCThreshold hlc.Timestamp,
-) (enginepb.MVCCStats, error) {
-	rsl := stateloader.Make(st, desc.RangeID)
-
-	var s storagebase.ReplicaState
-	s.TruncatedState = &roachpb.RaftTruncatedState{
-		Term:  raftInitialLogTerm,
-		Index: raftInitialLogIndex,
-	}
-	s.RaftAppliedIndex = s.TruncatedState.Index
-	s.Desc = &roachpb.RangeDescriptor{
-		RangeID: desc.RangeID,
-	}
-	s.Stats = &ms
-	s.Lease = &lease
-	s.GCThreshold = &gcThreshold
-	s.TxnSpanGCThreshold = &txnSpanGCThreshold
-
-	// If the MinSupported cluster version is high enough to guarantee that all
-	// nodes will understand the AppliedStateKey then we can just straight to
-	// using it without ever writing the legacy stats and index keys.
-	if st.Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
-		s.UsingAppliedStateKey = true
-	} else {
-		if err := engine.AccountForLegacyMVCCStats(s.Stats, desc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	}
-
-	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
-	} else if (existingLease != roachpb.Lease{}) {
-		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
-	}
-
-	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, eng); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
-	} else if (*existingGCThreshold != hlc.Timestamp{}) {
-		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
-	}
-
-	if existingTxnSpanGCThreshold, err := rsl.LoadTxnSpanGCThreshold(ctx, eng); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading TxnSpanGCThreshold")
-	} else if (*existingTxnSpanGCThreshold != hlc.Timestamp{}) {
-		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
-	}
-
-	newMS, err := rsl.Save(ctx, eng, s)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-
-	return newMS, nil
-}
-
-// writeInitialState calls writeInitialReplicaState followed by
-// synthesizeRaftState. It is typically called during bootstrap. The supplied
-// MVCCStats are used for the Stats field after adjusting for persisting the
-// state itself, and the updated stats are returned.
-func writeInitialState(
-	ctx context.Context,
-	st *cluster.Settings,
-	eng engine.ReadWriter,
-	ms enginepb.MVCCStats,
-	desc roachpb.RangeDescriptor,
-	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
-	txnSpanGCThreshold hlc.Timestamp,
-) (enginepb.MVCCStats, error) {
-	newMS, err := writeInitialReplicaState(ctx, st, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := stateloader.Make(st, desc.RangeID).SynthesizeRaftState(ctx, eng); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	return newMS, nil
-}
 
 // ClusterSettings returns the node's ClusterSettings.
 func (r *Replica) ClusterSettings() *cluster.Settings {
