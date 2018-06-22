@@ -295,9 +295,6 @@ func (ri *RowInserter) InsertRow(
 		if err := ri.Fks.checkAll(ctx, values); err != nil {
 			return err
 		}
-		if err := ri.Fks.checker.runCheck(ctx, nil, values); err != nil {
-			return err
-		}
 	}
 
 	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
@@ -528,7 +525,7 @@ func MakeRowUpdater(
 	alloc *DatumAlloc,
 ) (RowUpdater, error) {
 	rowUpdater, err := makeRowUpdaterWithoutCascader(
-		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, alloc, evalCtx,
+		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, alloc,
 	)
 	if err != nil {
 		return RowUpdater{}, err
@@ -552,7 +549,6 @@ func makeRowUpdaterWithoutCascader(
 	requestedCols []ColumnDescriptor,
 	updateType rowUpdaterType,
 	alloc *DatumAlloc,
-	evalCtx *tree.EvalContext,
 ) (RowUpdater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
@@ -643,7 +639,7 @@ func makeRowUpdaterWithoutCascader(
 		// them, so request them all.
 		var err error
 		if ru.rd, err = makeRowDeleterWithoutCascader(
-			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc, evalCtx,
+			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
 		); err != nil {
 			return RowUpdater{}, err
 		}
@@ -819,13 +815,7 @@ func (ru *RowUpdater) UpdateRow(
 		}
 
 		if checkFKs == CheckFKs {
-			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
-				return nil, err
-			}
-			if len(ru.Fks.inbound.fks) == 0 && len(ru.Fks.outbound.fks) == 0 {
-				return ru.newValues, nil
-			}
-			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
+			if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
 		}
@@ -922,13 +912,7 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if checkFKs == CheckFKs {
-		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
-			return nil, err
-		}
-		if len(ru.Fks.inbound.fks) == 0 && len(ru.Fks.outbound.fks) == 0 {
-			return ru.newValues, nil
-		}
-		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 	}
@@ -974,7 +958,7 @@ func MakeRowDeleter(
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	rowDeleter, err := makeRowDeleterWithoutCascader(
-		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc, evalCtx,
+		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
 	)
 	if err != nil {
 		return RowDeleter{}, err
@@ -998,7 +982,6 @@ func makeRowDeleterWithoutCascader(
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
-	evalCtx *tree.EvalContext,
 ) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
@@ -1109,8 +1092,7 @@ func (rd *RowDeleter) DeleteRow(
 		}
 	}
 	if checkFKs == CheckFKs {
-		rd.Fks.checkAll(ctx, values)
-		return rd.Fks.checker.runCheck(ctx, values, nil)
+		return rd.Fks.checkAll(ctx, values)
 	}
 	return nil
 }
