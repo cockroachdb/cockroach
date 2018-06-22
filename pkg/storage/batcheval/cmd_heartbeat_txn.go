@@ -32,7 +32,7 @@ func init() {
 func declareKeysHeartbeatTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DeclareKeysWriteTransaction(desc, header, req, spans)
+	declareKeysWriteTransaction(desc, header, req, spans)
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(spanset.SpanReadOnly, roachpb.Span{

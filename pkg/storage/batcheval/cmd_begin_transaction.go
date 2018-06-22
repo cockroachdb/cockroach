@@ -31,9 +31,9 @@ func init() {
 	RegisterCommand(roachpb.BeginTransaction, declareKeysBeginTransaction, BeginTransaction)
 }
 
-// DeclareKeysWriteTransaction is the shared portion of
-// declareKeys{Begin,End,Heartbeat}Transaction
-func DeclareKeysWriteTransaction(
+// declareKeysWriteTransaction is the shared portion of
+// declareKeys{Begin,End,Heartbeat}Transaction.
+func declareKeysWriteTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
@@ -47,7 +47,7 @@ func DeclareKeysWriteTransaction(
 func declareKeysBeginTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DeclareKeysWriteTransaction(desc, header, req, spans)
+	declareKeysWriteTransaction(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),

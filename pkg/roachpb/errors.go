@@ -570,6 +570,12 @@ func (*RaftGroupDeletedError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RaftGroupDeletedError{}
 
+// NewReplicaCorruptionError creates a new error indicating a corrupt replica,
+// with the supplied list of errors given as history.
+func NewReplicaCorruptionError(err error) *ReplicaCorruptionError {
+	return &ReplicaCorruptionError{ErrorMsg: err.Error()}
+}
+
 func (e *ReplicaCorruptionError) Error() string {
 	return e.message(nil)
 }
