@@ -1,6 +1,7 @@
 import d3 from "d3";
 import _ from "lodash";
 import React, { Component } from "react";
+import { Link } from "react-router";
 import classNames from "classnames";
 
 import {
@@ -101,42 +102,50 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     });
   }
 
-  colLabel(col: LayoutCell<INodeDescriptor>): string {
+  colLabel(col: LayoutCell<INodeDescriptor>) {
     if (col.isPlaceholder) {
       return null;
     }
 
     if (col.isLeaf) {
-      return `n${col.data.node_id}`;
+      return <CustomLink to={`/node/${col.data.node_id}`}>n{col.data.node_id}</CustomLink>;
     }
 
     const arrow = col.isCollapsed ? SIDE_ARROW : DOWN_ARROW;
     const localityLabel = col.path.length === 0 ? "Cluster" : col.path[col.path.length - 1];
-    return `${arrow} ${localityLabel}`;
+    return <span>{arrow} {localityLabel}</span>;
   }
 
-  rowLabel(row: FlattenedNode<SchemaObject>): string {
+  rowLabel(row: FlattenedNode<SchemaObject>) {
     const data = row.node.data;
 
     if (data.rangeID) {
-      return `r${data.rangeID}`;
+      return (
+        <CustomLink to={`/reports/range/${data.rangeID}`}>
+          r{data.rangeID}
+        </CustomLink>
+      );
     }
 
     if (data.tableName) {
-      return data.tableName;
+      return (
+        <CustomLink to={`/database/${data.dbName}/table/${data.tableName}`}>
+          {data.tableName}
+        </CustomLink>
+      );
     }
 
     return data.dbName ? `DB: ${data.dbName}` : "Cluster";
   }
 
-  rowLabelAndArrow(row: FlattenedNode<SchemaObject>): string {
+  rowLabelAndArrow(row: FlattenedNode<SchemaObject>) {
     const label = this.rowLabel(row);
     const arrow = row.isCollapsed ? SIDE_ARROW : DOWN_ARROW;
 
     if (row.isLeaf) {
       return label;
     } else {
-      return `${arrow} ${label}`;
+      return <span>{arrow} {label}</span>;
     }
   }
 
@@ -158,7 +167,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   renderCell(
     row: FlattenedNode<SchemaObject>,
-    col: FlattenedNode<NodeDescriptor$Properties>,
+    col: FlattenedNode<INodeDescriptor>,
     scale: d3.scale.Linear<number, number>,
     getValue: (rowPath: TreePath, colPath: TreePath) => number,
   ) {
@@ -326,6 +335,14 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
 }
 
+function CustomLink(props: { to: string, children: React.ReactNode }) {
+  return (
+    <Link to={props.to} target="_blank" onClick={(evt) => evt.stopPropagation()}>
+      {props.children}
+    </Link>
+  );
+}
+
 // Selectors
 
 interface PropsAndState {
@@ -350,7 +367,7 @@ const selectFlattenedRows = createSelector(
 const selectFlattenedCols = createSelector(
   (propsAndState: PropsAndState) => propsAndState.props.cols,
   (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
-  (cols: TreeNode<NodeDescriptor$Properties>, collapseCols: TreePath[]) => {
+  (cols: TreeNode<INodeDescriptor>, collapseCols: TreePath[]) => {
     console.log("flattening cols");
     return flatten(cols, collapseCols, false /* includeNodes */);
   },
@@ -375,10 +392,10 @@ const selectScale = createSelector(
   selectFlattenedCols,
   (
     rows: TreeNode<SchemaObject>,
-    cols: TreeNode<NodeDescriptor$Properties>,
+    cols: TreeNode<INodeDescriptor>,
     getValue: (rowPath: TreePath, colPath: TreePath) => number,
     flattenedRows: FlattenedNode<SchemaObject>[],
-    flattenedCols: FlattenedNode<NodeDescriptor$Properties>[],
+    flattenedCols: FlattenedNode<INodeDescriptor>[],
   ) => {
     console.log("computing scale");
     const allVals: number[] = [];
