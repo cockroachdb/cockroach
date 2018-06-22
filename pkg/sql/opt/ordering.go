@@ -51,6 +51,22 @@ func (c OrderingColumn) Descending() bool {
 	return c < 0
 }
 
+func (c OrderingColumn) String() string {
+	var buf bytes.Buffer
+	c.Format(&buf)
+	return buf.String()
+}
+
+// Format prints a string representation to the buffer.
+func (c OrderingColumn) Format(buf *bytes.Buffer) {
+	if c.Descending() {
+		buf.WriteByte('-')
+	} else {
+		buf.WriteByte('+')
+	}
+	fmt.Fprintf(buf, "%d", c.ID())
+}
+
 // ColListToSet converts a column id list to a column id set.
 func ColListToSet(colList ColList) ColSet {
 	var r ColSet
@@ -81,12 +97,7 @@ func (o Ordering) Format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		if col.Descending() {
-			buf.WriteByte('-')
-		} else {
-			buf.WriteByte('+')
-		}
-		fmt.Fprintf(buf, "%d", col.ID())
+		col.Format(buf)
 	}
 }
 
