@@ -292,7 +292,7 @@ func (ri *RowInserter) InsertRow(
 	}
 
 	if checkFKs == CheckFKs {
-		if err := ri.Fks.checkAll(ctx, values); err != nil {
+		if err := ri.Fks.addAllIdxChecks(ctx, values); err != nil {
 			return err
 		}
 		if err := ri.Fks.checker.runCheck(ctx, nil, values); err != nil {

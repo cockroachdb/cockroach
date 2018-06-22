@@ -425,7 +425,7 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
+func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
