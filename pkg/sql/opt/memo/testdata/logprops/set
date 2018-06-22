@@ -63,18 +63,18 @@ intersect
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
       ├── stats: [rows=1.42857143, distinct(3-5)=1.42857143]
       ├── key: (5)
-      ├── fd: ()-->(3), (5)-->(3,4)
+      ├── fd: (5)-->(3,4), ()-->(3)
       └── select
            ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3-5)=1.42857143]
            ├── key: (5)
-           ├── fd: ()-->(3), (5)-->(3,4)
+           ├── fd: (5)-->(3,4), ()-->(3)
            ├── scan uv
            │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
            │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
            │    ├── key: (5)
            │    └── fd: (5)-->(3,4)
-           └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+           └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
                 └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                      ├── variable: uv.u [type=int, outer=(3)]
                      └── const: 1 [type=int]
@@ -110,13 +110,13 @@ except
                 ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                 ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3,4)=1.42857143]
                 ├── key: (5)
-                ├── fd: ()-->(3), (5)-->(3,4)
+                ├── fd: (5)-->(3,4), ()-->(3)
                 ├── scan uv
                 │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
                 │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
                 │    ├── key: (5)
                 │    └── fd: (5)-->(3,4)
-                └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+                └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
                      └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
                           ├── variable: uv.u [type=int, outer=(3)]
                           └── const: 1 [type=int]

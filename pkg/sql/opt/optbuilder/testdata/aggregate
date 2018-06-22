@@ -2456,9 +2456,9 @@ project
       ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) sum:9(decimal)
       ├── grouping columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       ├── project
-      │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) d:8(decimal)
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) d:8(decimal!null)
       │    └── inner-join
-      │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
+      │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(string!null) b:6(float) c:7(bool) d:8(decimal!null)
       │         ├── scan kv
       │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │         ├── scan abc

@@ -57,7 +57,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) 
 explain
  ├── columns: Tree:5(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
  └── inner-join
-      ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
       ├── scan xy
       │    └── columns: x:1(int!null) y:2(int)
       ├── values
