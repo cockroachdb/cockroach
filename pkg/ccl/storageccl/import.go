@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"sort"
 
 	"github.com/pkg/errors"
 
@@ -77,13 +78,25 @@ type sstBatcher struct {
 	sstWriter     engine.RocksDBSstFileWriter
 	batchStartKey []byte
 	batchEndKey   []byte
+
+	// splits is a sorted list of split-points that is updated when flush sees
+	// a range-key-mismatch reply from dist sender.
+	splits []roachpb.Key
+	// nextSplitIdx is index of first key in splits > batchStartKey.
+	nextSplitIdx int
 }
 
 func (b *sstBatcher) add(key engine.MVCCKey, value []byte) error {
-	// Update the range currently represented in this batch, as
-	// necessary.
+	// Update the range currently represented in this batch, as necessary.
 	if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
+		// Find the next split key that will be upper-bound for our batch.
+		for i := range b.splits {
+			b.nextSplitIdx = i
+			if bytes.Compare(key.Key, b.splits[i]) < 0 {
+				break
+			}
+		}
 	}
 	if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
 		b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
@@ -107,7 +120,22 @@ func (b *sstBatcher) reset() error {
 	return nil
 }
 
+func (b *sstBatcher) addSplit(err *roachpb.RangeKeyMismatchError) {
+	k := err.MismatchedRange.EndKey.AsRawKey()
+	i := sort.Search(len(b.splits), func(i int) bool { return bytes.Compare(b.splits[i], k) >= 0 })
+	if i == len(b.splits) {
+		b.splits = append(b.splits, k)
+	} else if !bytes.Equal(b.splits[i], k) {
+		b.splits = append(b.splits, nil)
+		copy(b.splits[i+1:], b.splits[i:])
+		b.splits[i] = k
+	}
+}
+
 func (b *sstBatcher) shouldFlush(nextKey roachpb.Key) bool {
+	if b.nextSplitIdx < len(b.splits) && bytes.Compare(nextKey, b.splits[b.nextSplitIdx]) >= 0 {
+		return true
+	}
 	return b.sstWriter.DataSize >= b.maxSize
 }
 
@@ -125,8 +153,10 @@ func (b *sstBatcher) flush(ctx context.Context, db *client.DB) error {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
 	if err := AddSSTable(ctx, db, start, end, sstBytes); err != nil {
-		// TODO(dt): if we get a RangeKeyMismatchError, update batching split points
-		// and then tell the caller to try again.
+		if mismatch, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
+			b.addSplit(mismatch)
+		}
+		// TODO(dt): retry with the updated splits.
 		return err
 	}
 	b.rowCounter.DataSize = b.sstWriter.DataSize
@@ -143,7 +173,6 @@ func AddSSTable(ctx context.Context, db *client.DB, start, end roachpb.Key, sstB
 	const maxAddSSTableRetries = 10
 	for i := 0; ; i++ {
 		log.VEventf(ctx, 2, "sending AddSSTable [%s,%s)", start, end)
-		// TODO(dan): This will fail if the range has split.
 		err := db.AddSSTable(ctx, start, end, sstBytes)
 		if err == nil {
 			return nil
@@ -229,9 +258,11 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
 	defer iter.Close()
+	iter.Seek(startKeyMVCC)
+
 	var keyScratch, valueScratch []byte
 
-	for iter.Seek(startKeyMVCC); ; {
+	for {
 		ok, err := iter.Valid()
 		if err != nil {
 			return nil, err
