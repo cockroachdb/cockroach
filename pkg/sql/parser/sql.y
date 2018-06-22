@@ -1508,8 +1508,14 @@ alter_column_default:
   }
 
 opt_alter_column_using:
-  USING a_expr { $$ = $2 }
-| /* EMPTY */ {}
+  USING a_expr
+  {
+     $$.val = $2.expr()
+  }
+| /* EMPTY */
+  {
+     $$.val = nil
+  }
 
 
 opt_drop_behavior:
