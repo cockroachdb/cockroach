@@ -15,6 +15,8 @@
 package sqlbase
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -41,9 +43,14 @@ type FKHelper struct {
 
 	tableIdxInfo map[ID]tableSearchIdxInfo
 
-	tables TableLookupsByID
-	dir    FKCheck
-	batch  roachpb.BatchRequest
+	oldRows *RowContainer
+	newRows *RowContainer
+
+	tables       TableLookupsByID
+	dir          FKCheck
+	batch        roachpb.BatchRequest
+	batchToORIdx []int
+	batchToNRIdx []int
 }
 
 func makeFKHelper(
@@ -58,13 +65,22 @@ func makeFKHelper(
 ) (FKHelper, error) {
 
 	fkHelper := FKHelper{
-		evalCtx:    evalCtx,
-		txn:        txn,
-		tables:     otherTables,
-		writeTable: writeTable,
-		writeIdx:   writeIdx,
-		dir:        dir,
+		evalCtx:      evalCtx,
+		txn:          txn,
+		tables:       otherTables,
+		writeTable:   writeTable,
+		writeIdx:     writeIdx,
+		dir:          dir,
+		batchToORIdx: make([]int, 0),
+		batchToNRIdx: make([]int, 0),
 	}
+
+	colInfo, err := makeColTypeInfo(&writeTable, colMap)
+	if err != nil {
+		return FKHelper{}, err
+	}
+	fkHelper.oldRows.Init(evalCtx.Mon.MakeBoundAccount(), colInfo, 0)
+	fkHelper.newRows.Init(evalCtx.Mon.MakeBoundAccount(), colInfo, 0)
 
 	refs := make([]ForeignKeyReference, 0)
 
@@ -92,7 +108,6 @@ func makeFKHelper(
 		}
 	}
 
-Outer:
 	for _, ref := range refs {
 		searchTable := otherTables[ref.Table].Table
 		if _, ok := fkHelper.tableIdxInfo[ref.Table]; !ok {
@@ -107,13 +122,28 @@ Outer:
 		tableIdxInfo := fkHelper.tableIdxInfo[ref.Table]
 		searchPrefix := MakeIndexKeyPrefix(searchTable, ref.Index)
 		searchIdx, err := searchTable.FindIndexByID(ref.Index)
-
 		if err != nil {
 			return FKHelper{}, nil
 		}
+
 		prefixLen := len(searchIdx.ColumnIDs)
 		if len(writeIdx.ColumnIDs) < prefixLen {
 			prefixLen = len(writeIdx.ColumnIDs)
+		}
+
+		tableIdxInfo.colIDToRowIdx[searchIdx.ID] = make(map[ColumnID]int, len(writeIdx.ColumnIDs))
+
+		nulls := true
+		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
+			if found, ok := colMap[writeColID]; ok {
+				tableIdxInfo.colIDToRowIdx[searchIdx.ID][searchIdx.ColumnIDs[i]] = found
+				nulls = false
+			} else if !nulls {
+				return FKHelper{}, errors.Errorf("missing value for column %q in multi-part foreign key", writeIdx.ColumnNames[i])
+			}
+		}
+		if nulls {
+			continue
 		}
 
 		tableArgs := RowFetcherTableArgs{
@@ -134,21 +164,6 @@ Outer:
 			return FKHelper{}, nil
 		}
 
-		tableIdxInfo.colIDToRowIdx[searchIdx.ID] = make(map[ColumnID]int, len(writeIdx.ColumnIDs))
-
-		nulls := true
-		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
-			if found, ok := colMap[writeColID]; ok {
-				tableIdxInfo.colIDToRowIdx[searchIdx.ID][searchIdx.ColumnIDs[i]] = found
-				nulls = false
-			} else if !nulls {
-				return FKHelper{}, errors.Errorf("missing value for column %q in multi-part foreign key", writeIdx.ColumnNames[i])
-			}
-		}
-		if nulls {
-			continue Outer
-		}
-
 		tableIdxInfo.searchPrefixes = append(tableIdxInfo.searchPrefixes, searchPrefix)
 		tableIdxInfo.searchIdxs = append(tableIdxInfo.searchIdxs, searchIdx)
 		tableIdxInfo.prefixLens = append(tableIdxInfo.prefixLens, prefixLen)
@@ -159,10 +174,59 @@ Outer:
 	return fkHelper, nil
 }
 
-func (fk *FKHelper) addCheck() {
-
+func (fk *FKHelper) getSpans(row tree.Datums) ([]roachpb.Span, error) {
+	var spans []roachpb.Span
+	for id, info := range fk.tableIdxInfo {
+		for i := 0; i < len(info.searchIdxs); i++ {
+			var key roachpb.Key
+			if row != nil {
+				keyBytes, _, err := EncodePartialIndexKey(fk.tables[id].Table, info.searchIdxs[i], info.prefixLens[i], info.colIDToRowIdx[info.searchIdxs[i].ID], row, info.searchPrefixes[i])
+				if err != nil {
+					return spans, err
+				}
+				key = roachpb.Key(keyBytes)
+			} else {
+				key = roachpb.Key(info.searchPrefixes[i])
+			}
+			spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
+		}
+	}
+	return spans, nil
 }
 
-func (fk *FKHelper) runChecks() {
+func (fk *FKHelper) addChecks(ctx context.Context, oldRow tree.Datums, newRow tree.Datums) error {
 
+	oldRowIdx := -1
+	newRowIdx := -1
+
+	if oldRow != nil {
+		fk.oldRows.AddRow(ctx, oldRow)
+		oldRowIdx = fk.oldRows.Len() - 1
+	}
+	if newRow != nil {
+		fk.newRows.AddRow(ctx, newRow)
+		newRowIdx = fk.newRows.Len() - 1
+	}
+	spans, err := fk.getSpans(oldRow)
+	if err != nil {
+		return err
+	}
+
+	r := roachpb.RequestUnion{}
+	for _, span := range spans {
+		scan := roachpb.ScanRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(span),
+		}
+		r.MustSetInner(&scan)
+		fk.batch.Requests = append(fk.batch.Requests, r)
+		fk.batchToORIdx = append(fk.batchToORIdx, oldRowIdx)
+		fk.batchToNRIdx = append(fk.batchToNRIdx, newRowIdx)
+	}
+
+	return nil
+}
+
+func (fk *FKHelper) runChecks() error {
+
+	return nil
 }
