@@ -115,7 +115,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     const tableName = dbPath[1];
     const rangeID = dbPath[2];
     const tableID = this.tableIDForName(tableName);
-    const ranges = this.getRangesForTableID(tableID);
+    const ranges = getRangesForTableID(this.props.leaseholdersAndQPS, tableID);
     return ranges[rangeID];
   }
 
@@ -141,27 +141,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   render() {
     const nodeTree = nodeTreeFromLocalityTree("Cluster", this.props.localityTree);
 
-    const databaseInfo = this.props.dataDistribution.database_info;
-    const dbTree: TreeNode<SchemaObject> = {
-      name: "Cluster",
-      data: { dbName: null, tableName: null },
-      children: _.map(databaseInfo, (dbInfo, dbName) => ({
-        name: dbName,
-        data: { dbName },
-        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
-          name: tableName,
-          data: {
-            dbName,
-            tableName,
-            tableID: tableInfo.id.toInt(),
-          },
-          children: _.map(this.getRangesForTableID(tableInfo.id.toNumber()), (rangeInfo) => ({
-            name: rangeInfo.id.toString(),
-            data: { dbName, tableName, rangeID: rangeInfo.id.toString() },
-          })),
-        })),
-      })),
-    };
+    const schemaTree: TreeNode<SchemaObject> = selectSchemaTree(this.props);
 
     return (
       <div className="data-distribution">
@@ -181,7 +161,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
         <div>
           <ReplicaMatrix
             cols={nodeTree}
-            rows={dbTree}
+            rows={schemaTree}
             getValue={this.getCellValue}
           />
         </div>
@@ -253,6 +233,8 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   }
 }
 
+// Selectors
+
 const sortedZoneConfigs = createSelector(
   (state: AdminUIState) => state.cachedData.dataDistribution,
   (dataDistributionState) => {
@@ -277,6 +259,46 @@ const tablesByName = createSelector(
       });
     });
     return tables;
+  },
+);
+
+function getRangesForTableID(
+  leaseholdersAndQPS: LeaseholdersAndQPSResponse,
+  tableID: number,
+): { [rangeId: string]: IRangeInfo } {
+  const maybeTableInfo = leaseholdersAndQPS.table_infos[tableID.toString()];
+  if (maybeTableInfo) {
+    return maybeTableInfo.range_infos;
+  }
+  return {};
+}
+
+// TODO(vilterp): do I need the two funcs?
+const selectSchemaTree = createSelector(
+  (props: DataDistributionProps) => props.dataDistribution,
+  (props: DataDistributionProps) => props.leaseholdersAndQPS,
+  (dataDistribution: DataDistributionResponse, leaseholdersAndQPS: LeaseholdersAndQPSResponse) => {
+    console.log("construct schema tree");
+    return {
+      name: "Cluster",
+      data: { dbName: null, tableName: null },
+      children: _.map(dataDistribution.database_info, (dbInfo, dbName) => ({
+        name: dbName,
+        data: { dbName },
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
+          name: tableName,
+          data: {
+            dbName,
+            tableName,
+            tableID: tableInfo.id.toInt(),
+          },
+          children: _.map(getRangesForTableID(leaseholdersAndQPS, tableInfo.id.toNumber()), (rangeInfo) => ({
+            name: rangeInfo.id.toString(),
+            data: { dbName, tableName, rangeID: rangeInfo.id.toString() },
+          })),
+        })),
+      })),
+    };
   },
 );
 
