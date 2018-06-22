@@ -192,7 +192,7 @@ offset
  │    │    ├── stats: [rows=100, distinct(1)=100]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(4)
- │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
  │              ├── variable: xyzs.x [type=int, outer=(1)]
  │              └── const: 1 [type=int]

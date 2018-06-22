@@ -633,7 +633,7 @@ select
  ├── fd: ()-->(1,2)
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/true - /true]; /2: [/true - /true]; tight)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/true - /true]; /2: [/true - /true]; tight), fd=()-->(1,2)]
       ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
       └── variable: c.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
@@ -645,7 +645,7 @@ select
  ├── fd: ()-->(1)
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
- └── filters [type=bool, outer=(1-5), constraints=(/1: [/true - /true])]
+ └── filters [type=bool, outer=(1-5), constraints=(/1: [/true - /true]), fd=()-->(1)]
       ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
       └── (c.b AND c.c) OR (c.d AND c.e) [type=bool, outer=(2-5)]
 
