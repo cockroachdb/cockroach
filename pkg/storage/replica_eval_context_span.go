@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -127,7 +128,7 @@ func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 // on Replica.ContainsKey.
 func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 	desc := rec.Desc() // already asserts
-	return containsKey(*desc, key)
+	return storagebase.ContainsKey(*desc, key)
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.

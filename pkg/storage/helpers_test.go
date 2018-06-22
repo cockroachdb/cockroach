@@ -496,10 +496,6 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
-func GetGCQueueTxnCleanupThreshold() time.Duration {
-	return txnCleanupThreshold
-}
-
 func (nl *NodeLiveness) SetDrainingInternal(
 	ctx context.Context, liveness *Liveness, drain bool,
 ) error {

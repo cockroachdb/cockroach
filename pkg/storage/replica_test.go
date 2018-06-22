@@ -216,7 +216,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
-			if _, err := writeInitialState(
+			if _, err := stateloader.WriteInitialState(
 				ctx,
 				tc.store.ClusterSettings(),
 				tc.store.Engine(),
@@ -6367,7 +6367,7 @@ func TestReplicaCorruption(t *testing.T) {
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
+				return roachpb.NewError(roachpb.NewReplicaCorruptionError(errors.New("boom")))
 			}
 			return nil
 		}
@@ -6752,7 +6752,7 @@ func TestIntentIntersect(t *testing.T) {
 		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
 		var all []string
-		in, out := intersectSpan(tc.intent, roachpb.RangeDescriptor{
+		in, out := storagebase.IntersectSpan(tc.intent, roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(tc.from),
 			EndKey:   roachpb.RKey(tc.to),
 		})
@@ -7498,9 +7498,9 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 		errStruct *roachpb.ReplicaCorruptionError
 		expErr    string
 	}{
-		{NewReplicaCorruptionError(errors.New("")), "replica corruption (processed=false)"},
-		{NewReplicaCorruptionError(errors.New("foo")), "replica corruption (processed=false): foo"},
-		{NewReplicaCorruptionError(errors.Wrap(errors.New("bar"), "foo")), "replica corruption (processed=false): foo: bar"},
+		{roachpb.NewReplicaCorruptionError(errors.New("")), "replica corruption (processed=false)"},
+		{roachpb.NewReplicaCorruptionError(errors.New("foo")), "replica corruption (processed=false): foo"},
+		{roachpb.NewReplicaCorruptionError(errors.Wrap(errors.New("bar"), "foo")), "replica corruption (processed=false): foo: bar"},
 	} {
 		// This uses fmt.Sprint because that ends up calling Error() and is the
 		// intended use. A previous version of this test called String() directly

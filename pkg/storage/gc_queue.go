@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,15 +52,6 @@ const (
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
-
-	// txnCleanupThreshold is the threshold after which a transaction is
-	// considered abandoned and fit for removal, as measured by the
-	// maximum of its last heartbeat and timestamp. Abort spans for the
-	// transaction are cleaned up at the same time.
-	//
-	// TODO(tschottdorf): need to enforce at all times that this is much
-	// larger than the heartbeat interval used by the coordinator.
-	txnCleanupThreshold = time.Hour
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
@@ -717,7 +709,7 @@ func RunGC(
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-txnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold

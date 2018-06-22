@@ -600,7 +600,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	now := manual.UnixNano()
 
-	gcExpiration := now - txnCleanupThreshold.Nanoseconds()
+	gcExpiration := now - storagebase.TxnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
