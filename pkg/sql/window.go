@@ -37,8 +37,6 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
-	sourceCols int
-
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
 	// can be propagated directly from the "wrapped" node.
@@ -122,7 +120,6 @@ func (p *planner) window(
 	if err := window.extractWindowFunctions(s); err != nil {
 		return nil, err
 	}
-	window.sourceCols = len(s.columns)
 
 	if err := p.constructWindowDefinitions(ctx, window, n, s); err != nil {
 		return nil, err
@@ -511,7 +508,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
 				// windowFuncHolders at this point, so if we see an aggregate
-				// function in the window renders, it is above a windowing level.
+				// function in the window renders, it is above the windowing level.
 				if t.GetAggregateConstructor() != nil {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
@@ -657,7 +654,10 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
 				}
 				if isNegative(evalCtx, dStartOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 				}
 				frameRun.StartBoundOffset = dStartOffset
 			}
@@ -671,9 +671,20 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
 				}
 				if isNegative(evalCtx, dEndOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
 				frameRun.EndBoundOffset = dEndOffset
+			}
+			if frameRun.RequiresOrdering() {
+				if len(windowFn.columnOrdering) != 1 {
+					// TODO: This check is done during type checking. Should we panic?
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires that the ORDER BY clause specify exactly one column")
+				}
+				frameRun.OrdColIdx = windowFn.columnOrdering[0].ColIdx
+				frameRun.OrdDirection = windowFn.columnOrdering[0].Direction
 			}
 		}
 
@@ -707,8 +718,11 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.run.wrappedRenderVals.At(rowI)
-			sourceVals := row[:n.sourceCols]
-			entry := indexedRow{idx: rowI, row: sourceVals}
+			// We need the whole row and not just arguments to window functions since
+			// in RANGE mode we might need access to the column over which the rows
+			// are sorted, and all such columns come after all arguments to window
+			// functions.
+			entry := indexedRow{idx: rowI, row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
@@ -747,12 +761,6 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		//   * Segment Tree
 		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
 		for _, partition := range partitions {
-			// TODO(nvanbenschoten): Handle framing here. Right now we only handle the default
-			// framing option of RANGE UNBOUNDED PRECEDING. With ORDER BY, this sets the frame
-			// to be all rows from the partition start up through the current row's last ORDER BY
-			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
-			// since all rows become peers of the current row. Once we add better framing support,
-			// we should flesh this logic out more.
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 

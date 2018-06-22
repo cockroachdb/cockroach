@@ -875,7 +875,7 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 			// At least one of the bounds is of type `value PRECEDING` or 'value FOLLOWING'.
 			// We require ordering on a single column.
 			if len(windowDef.OrderBy) != 1 {
-				return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires that the ORDER BY clause specify exactly one column")
+				return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
 			}
 			requiredType = windowDef.OrderBy[0].Expr.(TypedExpr).ResolvedType()
 			if types.IsDateTimeType(requiredType) {

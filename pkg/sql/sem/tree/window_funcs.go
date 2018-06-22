@@ -16,6 +16,15 @@ package tree
 
 import (
 	"context"
+	"fmt"
+	"sort"
+
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
 // IndexedRows are rows with the corresponding indices.
@@ -35,11 +44,13 @@ type IndexedRow interface {
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
 	Rows             IndexedRows
-	ArgIdxStart      int          // the index which arguments to the window function begin
-	ArgCount         int          // the number of window function arguments
-	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset Datum
-	EndBoundOffset   Datum
+	ArgIdxStart      int                // the index which arguments to the window function begin
+	ArgCount         int                // the number of window function arguments
+	Frame            *WindowFrame       // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
+	StartBoundOffset Datum              // non-null, non-negative logical or physical offset from the current row for the start of the frame
+	EndBoundOffset   Datum              // non-null, non-negative logical or physical offset from the current row for the end of the frame
+	OrdColIdx        int                // Column over which rows are ordered within the partition. It is only required in RANGE mode.
+	OrdDirection     encoding.Direction // Direction of the ordering over OrdColIdx.
 
 	// changes for each row (each call to WindowFunc.Add)
 	RowIdx int // the current row index
@@ -49,8 +60,108 @@ type WindowFrameRun struct {
 	PeerRowCount int // the number of rows in the current peer group
 }
 
+// getValueByOffset returns a datum calculated as the value of the current row
+// in the column over which rows are ordered plus/minus logic offset, and an
+// error if encountered. It should be used only in RANGE mode.
+func (wfr WindowFrameRun) getValueByOffset(offset Datum, negative bool) (Datum, error) {
+	if wfr.OrdDirection == encoding.Descending {
+		// If rows are in descending order, we want to perform the "opposite"
+		// addition/subtraction to default ascending order.
+		negative = !negative
+	}
+	var ok bool
+	switch v := wfr.valueAt(wfr.RowIdx).(type) {
+	case *DInt:
+		o := MustBeDInt(offset)
+		if negative {
+			return NewDInt(*v - o), nil
+		}
+		return NewDInt(*v + o), nil
+	case *DFloat:
+		var o *DFloat
+		if o, ok = offset.(*DFloat); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected FLOAT offset in RANGE mode")
+		}
+		if negative {
+			return NewDFloat(*v - *o), nil
+		}
+		return NewDFloat(*v + *o), nil
+	case *DDecimal:
+		var o *DDecimal
+		if o, ok = offset.(*DDecimal); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected DECIMAL offset in RANGE mode")
+		}
+		value := &DDecimal{}
+		var err error
+		if negative {
+			_, err = ExactCtx.Sub(&value.Decimal, &v.Decimal, &o.Decimal)
+		} else {
+			_, err = ExactCtx.Add(&value.Decimal, &v.Decimal, &o.Decimal)
+		}
+		return value, err
+	case *DDate:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		if negative {
+			return NewDDate(*v - DDate(o.Days)), nil
+		}
+		return NewDDate(*v + DDate(o.Days)), nil
+	case *DTime:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		t := timeofday.TimeOfDay(*v)
+		if negative {
+			return MakeDTime(t.Add(o.Duration.Mul(-1))), nil
+		}
+		return MakeDTime(t.Add(o.Duration)), nil
+	case *DTimeTZ:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		t := v.TimeOfDay
+		if negative {
+			return MakeDTimeTZ(t.Add(o.Duration.Mul(-1)), v.Location), nil
+		}
+		return MakeDTimeTZ(t.Add(o.Duration), v.Location), nil
+	case *DTimestamp:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		if negative {
+			return MakeDTimestamp(duration.Add(v.Time, o.Duration.Mul(-1)), time.Microsecond), nil
+		}
+		return MakeDTimestamp(duration.Add(v.Time, o.Duration), time.Microsecond), nil
+	case *DTimestampTZ:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		if negative {
+			return MakeDTimestampTZ(duration.Add(v.Time, o.Duration.Mul(-1)), time.Microsecond), nil
+		}
+		return MakeDTimestampTZ(duration.Add(v.Time, o.Duration), time.Microsecond), nil
+	case *DInterval:
+		var o *DInterval
+		if o, ok = offset.(*DInterval); !ok {
+			return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "expected INTERVAL offset in RANGE mode")
+		}
+		if negative {
+			return &DInterval{Duration: v.Duration.Sub(o.Duration)}, nil
+		}
+		return &DInterval{Duration: v.Duration.Add(o.Duration)}, nil
+	default:
+		return DNull, pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
+	}
+}
+
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr WindowFrameRun) FrameStartIdx() int {
+func (wfr WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return 0
 	}
@@ -60,14 +171,44 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		case UnboundedPreceding:
 			return 0
 		case ValuePreceding:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			value, err := wfr.getValueByOffset(wfr.StartBoundOffset, true)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			if wfr.OrdDirection == encoding.Descending {
+				// We use binary search on [0, wfr.RowIdx) interval to find the first row
+				// whose value is smaller or equal to 'value'. If such row is not found,
+				// then Search will correctly return wfr.RowIdx.
+				return sort.Search(wfr.RowIdx, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) <= 0 })
+			}
+			// We use binary search on [0, wfr.RowIdx) interval to find the first row
+			// whose value is greater or equal to 'value'. If such row is not found,
+			// then Search will correctly return wfr.RowIdx.
+			return sort.Search(wfr.RowIdx, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) >= 0 })
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.FirstPeerIdx
 		case ValueFollowing:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			value, err := wfr.getValueByOffset(wfr.StartBoundOffset, false)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			var idx int
+			if wfr.OrdDirection == encoding.Ascending {
+				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval to find the first row
+				// whose value is greater or equal to 'value'.
+				idx = sort.Search(wfr.PartitionSize(), func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) >= 0 })
+			} else {
+				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval to find the first row
+				// whose value is smaller or equal to 'value'.
+				idx = sort.Search(wfr.PartitionSize(), func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) <= 0 })
+			}
+			if idx < wfr.RowIdx {
+				// This case is possible when offset == 0.
+				// ValueFollowing cannot offset backward.
+				idx = wfr.RowIdx
+			}
+			return idx
 		default:
 			panic("unexpected WindowFrameBoundType in RANGE mode")
 		}
@@ -112,7 +253,7 @@ func (wfr WindowFrameRun) IsDefaultFrame() bool {
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr WindowFrameRun) FrameEndIdx() int {
+func (wfr WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
@@ -125,13 +266,36 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case ValuePreceding:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			value, err := wfr.getValueByOffset(wfr.EndBoundOffset, true)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			if wfr.OrdDirection == encoding.Descending {
+				// We use binary search on [0, wfr.RowIdx] interval to find the first row
+				// whose value is smaller than 'value'. If such row is not found,
+				// then Search will correctly return wfr.RowIdx+1.
+				return sort.Search(wfr.RowIdx+1, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) < 0 })
+			}
+			// We use binary search on [0, wfr.RowIdx] interval to find the first row
+			// whose value is greater than 'value'. If such row is not found,
+			// then Search will correctly return wfr.RowIdx+1.
+			return sort.Search(wfr.RowIdx+1, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) > 0 })
 		case CurrentRow:
-			return wfr.DefaultFrameSize()
+			// Spec: in RANGE mode CURRENT ROW means that the frame end with the current row's last peer.
+			return wfr.FirstPeerIdx + wfr.PeerRowCount
 		case ValueFollowing:
-			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
-			panic("unsupported WindowFrameBoundType in RANGE mode")
+			value, err := wfr.getValueByOffset(wfr.EndBoundOffset, false)
+			if err != nil {
+				panic(fmt.Sprintf("error received: %v", err))
+			}
+			if wfr.OrdDirection == encoding.Descending {
+				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval to find the first row
+				// whose value is smaller than 'value'.
+				return sort.Search(wfr.PartitionSize(), func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) < 0 })
+			}
+			// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval to find the first row
+			// whose value is greater than 'value'.
+			return sort.Search(wfr.PartitionSize(), func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) > 0 })
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing()
 		default:
@@ -170,11 +334,11 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 }
 
 // FrameSize returns the number of rows in the current frame.
-func (wfr WindowFrameRun) FrameSize() int {
+func (wfr WindowFrameRun) FrameSize(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
-	size := wfr.FrameEndIdx() - wfr.FrameStartIdx()
+	size := wfr.FrameEndIdx(evalCtx) - wfr.FrameStartIdx(evalCtx)
 	if size <= 0 {
 		size = 0
 	}
@@ -221,6 +385,18 @@ func (wfr WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
 // ArgsByRowIdx returns the argument set of the row at idx.
 func (wfr WindowFrameRun) ArgsByRowIdx(idx int) Datums {
 	return wfr.Rows.GetRow(idx).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+}
+
+// valueAt returns the first argument of the window function at the row idx.
+func (wfr WindowFrameRun) valueAt(idx int) Datum {
+	return wfr.Rows.GetRow(idx).GetDatum(wfr.OrdColIdx)
+}
+
+// RequiresOrdering returns whether we require ordering on a single column. We
+// do only in RANGE mode with 'value' PRECEDING/FOLLOWING types of bounds.
+func (wfr WindowFrameRun) RequiresOrdering() bool {
+	return wfr.Frame.Mode == RANGE && (wfr.Frame.Bounds.StartBound.OffsetExpr != nil ||
+		(wfr.Frame.Bounds.EndBound != nil && wfr.Frame.Bounds.EndBound.OffsetExpr != nil))
 }
 
 // WindowFunc performs a computation on each row using data from a provided WindowFrameRun.

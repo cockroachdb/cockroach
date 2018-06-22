@@ -180,9 +180,9 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
+	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
 
 	// We need to discard all values that are no longer in the frame.
 	w.sw.removeAllBefore(start)
@@ -224,10 +224,10 @@ type slidingWindowSumFunc struct {
 
 // removeAllBefore subtracts the values from all the rows that are no longer in the frame.
 func (w *slidingWindowSumFunc) removeAllBefore(
-	ctx context.Context, wfr *tree.WindowFrameRun,
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) error {
 	var err error
-	for idx := w.prevStart; idx < wfr.FrameStartIdx() && idx < w.prevEnd; idx++ {
+	for idx := w.prevStart; idx < wfr.FrameStartIdx(evalCtx) && idx < w.prevEnd; idx++ {
 		value := wfr.ArgsByRowIdx(idx)[0]
 		switch v := value.(type) {
 		case *tree.DInt:
@@ -257,10 +257,10 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
+	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
 
 	// We need to discard all values that are no longer in the frame.
-	err := w.removeAllBefore(ctx, wfr)
+	err := w.removeAllBefore(ctx, evalCtx, wfr)
 	if err != nil {
 		return tree.DNull, err
 	}
@@ -309,17 +309,17 @@ func (w *avgWindowFunc) Compute(
 
 	switch t := sum.(type) {
 	case *tree.DFloat:
-		return tree.NewDFloat(*t / tree.DFloat(wfr.FrameSize())), nil
+		return tree.NewDFloat(*t / tree.DFloat(wfr.FrameSize(evalCtx))), nil
 	case *tree.DDecimal:
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(wfr.FrameSize(evalCtx)), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &t.Decimal, count)
 		return &avg, err
 	case *tree.DInt:
 		dd := tree.DDecimal{}
 		dd.SetCoefficient(int64(*t))
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(wfr.FrameSize(evalCtx)), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
 	default:
