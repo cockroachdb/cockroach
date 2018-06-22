@@ -313,7 +313,7 @@ func (desc *IndexDescriptor) ColNamesString() string {
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
-func (desc *IndexDescriptor) SQLString(tableName string) string {
+func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	if desc.Unique {
 		f.WriteString("UNIQUE ")
@@ -322,9 +322,9 @@ func (desc *IndexDescriptor) SQLString(tableName string) string {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
-	if tableName != "" {
+	if *tableName != AnonymousTable {
 		f.WriteString("ON ")
-		f.WriteString(tableName)
+		f.FormatNode(tableName)
 	}
 	f.FormatNameP(&desc.Name)
 	f.WriteString(" (")

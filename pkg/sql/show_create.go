@@ -226,7 +226,7 @@ func (p *planner) showCreateTable(
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(""))
+			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
 			if err := p.showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
