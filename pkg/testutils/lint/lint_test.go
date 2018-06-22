@@ -724,10 +724,15 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		var buf bytes.Buffer
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s", s)
+			fmt.Fprintln(&buf, s)
 		}); err != nil {
 			t.Error(err)
+		}
+		errs := buf.String()
+		if len(errs) > 0 {
+			t.Errorf("\n%s", errs)
 		}
 
 		if err := cmd.Wait(); err != nil {
