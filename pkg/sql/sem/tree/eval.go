@@ -64,6 +64,33 @@ var (
 // SecondsInDay is the number of seconds in a Day.
 const SecondsInDay = 24 * 60 * 60
 
+// Negate returns the negative of a non-math.MinInt64 DInt.
+func (d *DInt) Negate() *DInt {
+	return NewDInt(-*d)
+}
+
+// Negate returns the negative of a DFloat.
+func (d *DFloat) Negate() *DFloat {
+	return NewDFloat(-*d)
+}
+
+// Negate returns the negative of a DDecimal.
+func (d *DDecimal) Negate() *DDecimal {
+	dec := &d.Decimal
+	dd := &DDecimal{}
+	dd.Decimal.Neg(dec)
+	return dd
+}
+
+// Negate returns the negative of a DInterval.
+func (d *DInterval) Negate() *DInterval {
+	i := d.Duration
+	i.Nanos = -i.Nanos
+	i.Days = -i.Days
+	i.Months = -i.Months
+	return &DInterval{Duration: i}
+}
+
 // UnaryOp is a unary operator.
 type UnaryOp struct {
 	Typ        types.T
@@ -135,35 +162,28 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 				if i == math.MinInt64 {
 					return nil, errIntOutOfRange
 				}
-				return NewDInt(-i), nil
+				return i.Negate(), nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Float,
 			ReturnType: types.Float,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return NewDFloat(-*d.(*DFloat)), nil
+				return d.(*DFloat).Negate(), nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Decimal,
 			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				dec := &d.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				dd.Decimal.Neg(dec)
-				return dd, nil
+				return d.(*DDecimal).Negate(), nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Interval,
 			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				i := d.(*DInterval).Duration
-				i.Nanos = -i.Nanos
-				i.Days = -i.Days
-				i.Months = -i.Months
-				return &DInterval{Duration: i}, nil
+				return d.(*DInterval).Negate(), nil
 			},
 		},
 	},

@@ -228,6 +228,16 @@ index-constraints vars=(int) index=(@1 desc)
 ----
 [/5 - /5]
 
+index-constraints vars=(int) index=(@1)
+@1 = -1
+----
+[/-1 - /-1]
+
+index-constraints vars=(decimal) index=(@1)
+@1 = -2.0
+----
+[/-2.0 - /-2.0]
+
 index-constraints vars=(int) index=(@1 desc)
 @1 IS DISTINCT FROM 5
 ----
