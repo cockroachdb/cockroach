@@ -68,7 +68,7 @@ const SecondsInDay = 24 * 60 * 60
 type UnaryOp struct {
 	Typ        types.T
 	ReturnType types.T
-	fn         func(*EvalContext, Datum) (Datum, error)
+	Fn         func(*EvalContext, Datum) (Datum, error)
 
 	types   TypeList
 	retType ReturnTyper
@@ -106,21 +106,21 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
@@ -130,7 +130,7 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := MustBeDInt(d)
 				if i == math.MinInt64 {
 					return nil, errIntOutOfRange
@@ -141,14 +141,14 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDFloat(-*d.(*DFloat)), nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				dec := &d.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				dd.Decimal.Neg(dec)
@@ -158,7 +158,7 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := d.(*DInterval).Duration
 				i.Nanos = -i.Nanos
 				i.Days = -i.Days
@@ -172,14 +172,14 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 		UnaryOp{
 			Typ:        types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^MustBeDInt(d)), nil
 			},
 		},
 		UnaryOp{
 			Typ:        types.INet,
 			ReturnType: types.INet,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(d).IPAddr
 				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
 			},
@@ -3728,7 +3728,7 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if d == DNull {
 		return DNull, nil
 	}
-	res, err := expr.fn.fn(ctx, d)
+	res, err := expr.fn.Fn(ctx, d)
 	if err != nil {
 		return nil, err
 	}

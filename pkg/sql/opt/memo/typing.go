@@ -347,3 +347,24 @@ func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ overloa
 	}
 	return overload{}, false
 }
+
+// EvalUnaryOp evaluates a unary expression on top of a constant value, returning
+// a datum referring to the evaluated result. If an appropriate overload is not
+// found, EvalUnaryOp returns an error.
+func EvalUnaryOp(evalCtx *tree.EvalContext, op opt.Operator, ev ExprView) (tree.Datum, error) {
+	if !ev.IsConstValue() {
+		panic("expected const value")
+	}
+
+	unaryOp := opt.UnaryOpReverseMap[op]
+	datum := ExtractConstDatum(ev)
+
+	typ := datum.ResolvedType()
+	for _, unaryOverloads := range tree.UnaryOps[unaryOp] {
+		o := unaryOverloads.(tree.UnaryOp)
+		if o.Typ.Equivalent(typ) {
+			return o.Fn(evalCtx, datum)
+		}
+	}
+	return nil, fmt.Errorf("no overload found for %s applied to %s", op, typ)
+}

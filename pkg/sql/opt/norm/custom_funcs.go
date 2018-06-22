@@ -761,3 +761,22 @@ func (c *CustomFuncs) IsOne(input memo.GroupID) bool {
 	}
 	return false
 }
+
+// CanFoldUnaryMinus checks if a constant numeric value can be negated.
+func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
+	d := c.f.mem.LookupPrivate(c.f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
+	if t, ok := d.(*tree.DInt); ok {
+		return *t != math.MinInt64
+	}
+	return true
+}
+
+// NegateNumeric applies a unary minus to a numeric value.
+func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
+	ev := memo.MakeNormExprView(c.f.mem, input)
+	r, err := memo.EvalUnaryOp(c.f.evalCtx, opt.UnaryMinusOp, ev)
+	if err != nil {
+		panic(err)
+	}
+	return c.f.ConstructConst(c.f.InternDatum(r))
+}
