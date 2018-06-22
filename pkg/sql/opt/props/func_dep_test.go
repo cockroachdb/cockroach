@@ -60,6 +60,94 @@ func TestFuncDeps_ColsAreKey(t *testing.T) {
 	}
 }
 
+func TestFuncDeps_ComputeClosure(t *testing.T) {
+	// (a)-->(b,c,d)
+	// (b,c,e)-->(f)
+	// (d)==(e)
+	// (e)==(d)
+	fd1 := &props.FuncDepSet{}
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 2)
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 3)
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 4)
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(2, 3, 5), 6)
+	fd1.AddEquivalency(4, 5)
+	verifyFD(t, fd1, "(1)-->(2-4), (2,3,5)-->(6), (4)==(5), (5)==(4)")
+
+	// ()~~>(a)
+	// (a)~~>(d)
+	// ()-->(b)
+	// (b)==(c)
+	// (c)==(b)
+	// (d)-->(e)
+	fd2 := &props.FuncDepSet{}
+	fd2.AddConstants(util.MakeFastIntSet(1, 2))
+	fd2.AddSynthesizedCol(util.MakeFastIntSet(1), 4)
+	fd2.MakeOuter(util.MakeFastIntSet(1, 4), util.MakeFastIntSet())
+	fd2.AddEquivalency(2, 3)
+	fd2.AddSynthesizedCol(util.MakeFastIntSet(4), 5)
+	verifyFD(t, fd2, "()~~>(1), (1)~~>(4), ()-->(2), (2)==(3), (3)==(2), (4)-->(5)")
+
+	testcases := []struct {
+		fd       *props.FuncDepSet
+		in       opt.ColSet
+		expected opt.ColSet
+	}{
+		{fd: fd1, in: util.MakeFastIntSet(), expected: util.MakeFastIntSet()},
+		{fd: fd1, in: util.MakeFastIntSet(1), expected: util.MakeFastIntSet(1, 2, 3, 4, 5, 6)},
+		{fd: fd1, in: util.MakeFastIntSet(2), expected: util.MakeFastIntSet(2)},
+		{fd: fd1, in: util.MakeFastIntSet(2, 3, 4), expected: util.MakeFastIntSet(2, 3, 4, 5, 6)},
+		{fd: fd1, in: util.MakeFastIntSet(4), expected: util.MakeFastIntSet(4, 5)},
+
+		{fd: fd2, in: util.MakeFastIntSet(), expected: util.MakeFastIntSet(2, 3)},
+		{fd: fd2, in: util.MakeFastIntSet(1), expected: util.MakeFastIntSet(1, 2, 3)},
+		{fd: fd2, in: util.MakeFastIntSet(1, 4), expected: util.MakeFastIntSet(1, 2, 3, 4, 5)},
+	}
+
+	for _, tc := range testcases {
+		closure := tc.fd.ComputeClosure(tc.in)
+		if !closure.Equals(tc.expected) {
+			t.Errorf("in: %s, expected: %s, actual: %s", tc.in, tc.expected, closure)
+		}
+	}
+}
+
+func TestFuncDeps_ComputeEquivClosure(t *testing.T) {
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (d)==(a)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd1 := &props.FuncDepSet{}
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 5)
+	fd1.MakeOuter(util.MakeFastIntSet(1, 5), util.MakeFastIntSet())
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 6)
+	fd1.AddEquivalency(1, 2)
+	fd1.AddEquivalency(2, 3)
+	fd1.AddEquivalency(1, 4)
+	verifyFD(t, fd1, "(1)~~>(5), (1)-->(6), (1)==(2,4), (2)==(1,3), (3)==(2), (4)==(1)")
+
+	testcases := []struct {
+		fd       *props.FuncDepSet
+		in       opt.ColSet
+		expected opt.ColSet
+	}{
+		{fd: fd1, in: util.MakeFastIntSet(), expected: util.MakeFastIntSet()},
+		{fd: fd1, in: util.MakeFastIntSet(1), expected: util.MakeFastIntSet(1, 2, 3, 4)},
+		{fd: fd1, in: util.MakeFastIntSet(2), expected: util.MakeFastIntSet(1, 2, 3, 4)},
+		{fd: fd1, in: util.MakeFastIntSet(3), expected: util.MakeFastIntSet(1, 2, 3, 4)},
+		{fd: fd1, in: util.MakeFastIntSet(4), expected: util.MakeFastIntSet(1, 2, 3, 4)},
+		{fd: fd1, in: util.MakeFastIntSet(5, 6), expected: util.MakeFastIntSet(5, 6)},
+	}
+
+	for _, tc := range testcases {
+		closure := tc.fd.ComputeEquivClosure(tc.in)
+		if !closure.Equals(tc.expected) {
+			t.Errorf("in: %s, expected: %s, actual: %s", tc.in, tc.expected, closure)
+		}
+	}
+}
+
 func TestFuncDeps_AddStrictKey(t *testing.T) {
 	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
 	// SELECT DISTINCT ON (p) m, n, p, q FROM mnpq
@@ -609,6 +697,9 @@ func verifyFD(t *testing.T, f *props.FuncDepSet, expected string) {
 		if reduced := f.ReduceCols(key); !reduced.Equals(key) {
 			t.Errorf("expected FD to have candidate key, but had %s: %s", key, f)
 		}
+
+		closure := f.ComputeClosure(key)
+		testColsAreStrictKey(t, f, closure, true)
 	} else {
 		testColsAreStrictKey(t, f, opt.ColSet{}, false)
 	}

@@ -534,6 +534,59 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// ComputeClosure returns the strict closure of the given columns. The closure
+// includes the input columns plus all columns that are functionally dependent
+// on those columns, either directly or indirectly. Consider this set of FD's:
+//
+//   (a)-->(b,c,d)
+//   (b,c,e)-->(f)
+//   (d)-->(e)
+//
+// The strict closure of (a) is (a,b,c,d,e,f), because (a) determines all other
+// columns. Therefore, if two rows have the same value for (a), then the rows
+// will be duplicates, since all other columns will be equal.
+func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
+	cols = cols.Copy()
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+
+		if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			cols.UnionWith(fd.to)
+
+			// Restart iteration to get transitive closure.
+			i = -1
+		}
+	}
+	return cols
+}
+
+// ComputeEquivClosure returns the equivalence closure of the given columns. The
+// closure includes the input columns plus all columns that are equivalent to
+// any of these columns, either directly or indirectly. For example:
+//
+//   (a)==(b)
+//   (b)==(c)
+//   (a)==(d)
+//
+// The equivalence closure for (a) is (a,b,c,d) because (a) is transitively
+// equivalent to all other columns. Therefore, all columns must have equal
+// non-NULL values, or else all must be NULL (see definition for NULL= in the
+// comment for FuncDepSet).
+func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
+	cols = cols.Copy()
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+
+		if fd.equiv && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			cols.UnionWith(fd.to)
+
+			// Restart iteration to get transitive closure.
+			i = -1
+		}
+	}
+	return cols
+}
+
 // AddStrictKey adds a FD for a new key. The given key columns are reduced to a
 // candidate key, and that becomes the determinant for the allCols column set.
 // The resulting FD is strict, meaning that a NULL key value always maps to the
