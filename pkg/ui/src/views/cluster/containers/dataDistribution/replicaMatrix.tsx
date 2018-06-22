@@ -421,7 +421,7 @@ const selectFlattenedRows = createSelector(
   selectGetValueFun,
   (
     rows: TreeNode<SchemaObject>,
-    cols: TreeNode<NodeDescriptor$Properties>,
+    cols: TreeNode<INodeDescriptor>,
     collapsedRows: TreePath[],
     paginationStates: AssocList<TreePath, PaginationState>,
     getValue: (rowPath: TreePath, colPath: TreePath) => number,

@@ -645,6 +645,9 @@ message LeaseholdersAndQPSResponse {
     // TODO(vilterp): I am pretty confused about why this is called RangeStatistics
     // when it seems to be ReplicaStatistics
     RangeStatistics stats = 1 [(gogoproto.nullable) = false];
+
+    // TODO(vilterp): include entire MVCCStats?
+    int64 live_bytes = 2;
   }
 
   message RangeInfo {

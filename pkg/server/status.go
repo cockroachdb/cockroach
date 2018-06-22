@@ -1578,6 +1578,7 @@ func (s *statusServer) Stores(
 	return resp, nil
 }
 
+// TODO(vilterp): come up with a better name for this
 // LeaseholdersAndQPS combs through the information in the RaftDebug endpoint,
 // only returning leaseholder and QPS info. It also decodes range keys so they
 // can be assigned to tables.
@@ -1601,7 +1602,9 @@ func (s *statusServer) LeaseholdersAndQPS(
 		var tableInfo *serverpb.LeaseholdersAndQPSResponse_TableInfo
 		// get replicas
 		for _, replInfo := range rangeStatus.Nodes {
-			replicaInfo := serverpb.LeaseholdersAndQPSResponse_ReplicaInfo{}
+			replicaInfo := serverpb.LeaseholdersAndQPSResponse_ReplicaInfo{
+				LiveBytes: replInfo.Range.State.Stats.LiveBytes,
+			}
 			// map to table
 			startKey := replInfo.Range.State.Desc.StartKey.AsRawKey()
 			_, tableID, err := keys.DecodeTablePrefix(startKey)
