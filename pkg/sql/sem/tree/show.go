@@ -35,7 +35,7 @@ type ShowVar struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
-	ctx.WriteString(node.Name)
+	ctx.FormatNameP(&node.Name)
 }
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.

@@ -328,6 +328,7 @@ func TestParse(t *testing.T) {
 		{`SHOW barfoo`},
 		{`SHOW database`},
 		{`SHOW timezone`},
+		{`SHOW "BLAH"`},
 
 		{`SHOW CLUSTER SETTING a`},
 		{`SHOW CLUSTER SETTING all`},
