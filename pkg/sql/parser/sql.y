@@ -6441,25 +6441,49 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.Like, Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr LIKE a_expr ESCAPE a_expr %prec ESCAPE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("like_escape"), Exprs: tree.Exprs{$1.expr(), $3.expr(), $5.expr()}}
+  }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NotLike, Left: $1.expr(), Right: $4.expr()}
   }
+| a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec ESCAPE
+ {
+   $$.val = &tree.FuncExpr{Func: tree.WrapFunction("not_like_escape"), Exprs: tree.Exprs{$1.expr(), $4.expr(), $6.expr()}}
+ }
 | a_expr ILIKE a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.ILike, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr ILIKE a_expr ESCAPE a_expr %prec ESCAPE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("ilike_escape"), Exprs: tree.Exprs{$1.expr(), $3.expr(), $5.expr()}}
   }
 | a_expr NOT_LA ILIKE a_expr %prec NOT_LA
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NotILike, Left: $1.expr(), Right: $4.expr()}
   }
+| a_expr NOT_LA ILIKE a_expr ESCAPE a_expr %prec ESCAPE
+ {
+   $$.val = &tree.FuncExpr{Func: tree.WrapFunction("not_ilike_escape"), Exprs: tree.Exprs{$1.expr(), $4.expr(), $6.expr()}}
+ }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.SimilarTo, Left: $1.expr(), Right: $4.expr()}
   }
+| a_expr SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("similar_to_escape"), Exprs: tree.Exprs{$1.expr(), $4.expr(), $6.expr()}}
+  }
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NotSimilarTo, Left: $1.expr(), Right: $5.expr()}
+  }
+| a_expr NOT_LA SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("not_similar_to_escape"), Exprs: tree.Exprs{$1.expr(), $5.expr(), $7.expr()}}
   }
 | a_expr '~' a_expr
   {
@@ -7966,6 +7990,7 @@ unreserved_keyword:
 | DROP
 | EMIT
 | ENCODING
+| ESCAPE
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
