@@ -22,6 +22,7 @@ import {
   getAssocList,
   putAssocList,
 } from "src/views/cluster/containers/dataDistribution/assocList";
+import { Bytes } from "src/util/format";
 
 const DOWN_ARROW = "▼";
 const SIDE_ARROW = "▶";
@@ -50,6 +51,7 @@ const ROW_LEFT_MARGIN_PX = 5;
 export const METRIC_REPLICAS = "REPLICAS";
 export const METRIC_LEASEHOLDERS = "LEASEHOLDERS";
 export const METRIC_QPS = "QPS";
+export const METRIC_LIVE_BYTES = "LIVE_BYTES";
 
 class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
@@ -161,8 +163,18 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         <option value={METRIC_REPLICAS}># Replicas</option>
         <option value={METRIC_LEASEHOLDERS}># Leaseholders</option>
         <option value={METRIC_QPS}>QPS</option>
+        <option value={METRIC_LIVE_BYTES}>Size (Live Bytes)</option>
       </select>
     );
+  }
+
+  formatValue(value: number) {
+    switch (this.state.selectedMetric) {
+      case METRIC_LIVE_BYTES:
+        return Bytes(value);
+      default:
+        return value;
+    }
   }
 
   renderCell(
@@ -192,7 +204,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         className="matrix__cell-value"
         style={{ backgroundColor: backgroundColor, color: textColor }}
       >
-        {value}
+        {this.formatValue(value)}
       </div>
     );
   }
