@@ -105,9 +105,7 @@ func (sc *AbortSpan) Get(
 }
 
 // Iterate walks through the AbortSpan, invoking the given callback for
-// each unmarshaled entry with the key, the transaction ID and the decoded
-// entry.
-// TODO(tschottdorf): should not use a pointer to UUID.
+// each unmarshaled entry with the MVCC key and the decoded entry.
 func (sc *AbortSpan) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortSpanEntry),
 ) {
