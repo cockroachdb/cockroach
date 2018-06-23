@@ -724,24 +724,47 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 		return
 	}
 
-	constDep := -1
-	n := 0
-	for i := range f.deps {
+	// Determine complete set of constants by computing closure.
+	cols = f.ComputeClosure(cols)
+
+	// Ensure that first FD in the set is a strict constant FD.
+	if len(f.deps) == 0 || !f.deps[0].hasStrictConstants() {
+		deps := make([]funcDep, len(f.deps)+1)
+		deps[0] = funcDep{to: cols, strict: true}
+		copy(deps[1:], f.deps)
+		f.deps = deps
+	} else {
+		// Update existing constant FD to include all constant columns in the set.
+		f.deps[0].to = cols
+	}
+
+	// Remove any other FDs made redundant by adding the constants.
+	n := 1
+	for i := 1; i < len(f.deps); i++ {
 		fd := &f.deps[i]
-		if fd.strict && !fd.equiv {
-			if constDep == -1 && fd.from.Empty() {
-				// Found existing constant dependency, so add to that later.
-				constDep = n
-			} else if fd.from.Intersects(cols) {
-				// Constants in the from side of a strict dependency are no-ops,
-				// so remove them. This may allow the entire FD to be removed.
-				fd.from = fd.from.Difference(cols)
-				if fd.from.Empty() {
-					// Determinant is constant, so dependants must be as well. Remove
-					// the dependency from the set (using continue will skip it).
-					cols = cols.Union(fd.to)
+
+		// Always retain equivalency information, even for constants.
+		if !fd.equiv {
+			if fd.strict {
+				// Constant columns can be removed from the determinant of a strict
+				// FD. If all determinant columns are constant, then the entire FD
+				// can be removed, since this means that the dependant columns must
+				// also be constant (and were part of constant closure added to the
+				// constant FD above).
+				if fd.from.Intersects(cols) {
+					if fd.from.SubsetOf(cols) {
+						continue
+					}
+					fd.from = fd.from.Difference(cols)
+				}
+			}
+
+			if fd.to.Intersects(cols) {
+				// Dependant constants are redundant, so remove them.
+				if fd.to.SubsetOf(cols) {
 					continue
 				}
+				fd.to = fd.to.Difference(cols)
 			}
 		}
 
@@ -751,17 +774,6 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 		n++
 	}
 	f.deps = f.deps[:n]
-
-	if constDep == -1 {
-		// Prepend constants for small performance boost when computing closure.
-		deps := make([]funcDep, len(f.deps)+1)
-		deps[0] = funcDep{to: cols, strict: true}
-		copy(deps[1:], f.deps)
-		f.deps = deps
-	} else {
-		// Add to existing dependency.
-		f.deps[constDep].to = f.deps[constDep].to.Union(cols)
-	}
 
 	// Try to reduce the key based on the new constants.
 	if f.hasKey {
@@ -1183,6 +1195,10 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 func (f *FuncDepSet) setKey(key opt.ColSet) {
 	f.hasKey = true
 	f.key = key
+}
+
+func (f *funcDep) hasStrictConstants() bool {
+	return f.strict && f.from.Empty()
 }
 
 // makeLax sets the strict flag to false, indicating a lax dependency. In
