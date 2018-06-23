@@ -255,9 +255,9 @@ func TestFuncDeps_MakeNotNull(t *testing.T) {
 	loj.AddConstants(util.MakeFastIntSet(1, 2, 10, 12))
 	verifyFD(t, loj, "(11): ()-->(1-5,10,12), (11)-->(13)")
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 10, 11, 12))
-	verifyFD(t, loj, "(11): ()~~>(10,12), (11)-->(10,12,13), ()-->(1-5)")
+	verifyFD(t, loj, "(11): ()-->(1-5), ()~~>(10,12), (11)-->(10,12,13)")
 	loj.MakeNotNull(util.MakeFastIntSet(1, 2, 12))
-	verifyFD(t, loj, "(11): ()~~>(10), (11)-->(10,12,13), ()-->(1-5,12)")
+	verifyFD(t, loj, "(11): ()-->(1-5,12), ()~~>(10), (11)-->(10,13)")
 
 	// Test MakeNotNull triggering key reduction.
 	//   SELECT * FROM (SELECT DISTINCT b, c, d, e FROM abcde) WHERE b IS NOT NULL AND c IS NOT NULL
@@ -567,7 +567,7 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	loj.MakeNotNull(util.MakeFastIntSet(2, 3, 12))
 	verifyFD(t, loj, "(10,11): ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 12))
-	verifyFD(t, loj, "(10,11): ()~~>(2,3), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(2,3,13), ()-->(12)")
+	verifyFD(t, loj, "(10,11): ()-->(12), ()~~>(2,3), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(2,3,13)")
 
 	// Test equivalency on both sides of outer join.
 	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON b=c AND c=d AND m=p AND m=q
