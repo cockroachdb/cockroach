@@ -7,7 +7,6 @@
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/port.h>
-#include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -16,6 +15,11 @@
 #include "third_party/protobuf/version.h"
 #endif
 // @@protoc_insertion_point(includes)
+
+namespace protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_FileEntry;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_FileRegistry_FilesEntry_DoNotUse;
+}  // namespace protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto
 namespace cockroach {
 namespace storage {
 namespace engine {
@@ -40,15 +44,9 @@ class FileEntryDefaultTypeInternal {
 }  // namespace storage
 }  // namespace cockroach
 namespace protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto {
-void InitDefaultsFileRegistry_FilesEntry_DoNotUseImpl() {
+static void InitDefaultsFileRegistry_FilesEntry_DoNotUse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileEntry();
   {
     void* ptr = &::cockroach::storage::engine::enginepb::_FileRegistry_FilesEntry_DoNotUse_default_instance_;
     new (ptr) ::cockroach::storage::engine::enginepb::FileRegistry_FilesEntry_DoNotUse();
@@ -56,20 +54,13 @@ void InitDefaultsFileRegistry_FilesEntry_DoNotUseImpl() {
   ::cockroach::storage::engine::enginepb::FileRegistry_FilesEntry_DoNotUse::InitAsDefaultInstance();
 }
 
-void InitDefaultsFileRegistry_FilesEntry_DoNotUse() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsFileRegistry_FilesEntry_DoNotUseImpl);
-}
+::google::protobuf::internal::SCCInfo<1> scc_info_FileRegistry_FilesEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsFileRegistry_FilesEntry_DoNotUse}, {
+      &protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileEntry.base,}};
 
-void InitDefaultsFileRegistryImpl() {
+static void InitDefaultsFileRegistry() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileRegistry_FilesEntry_DoNotUse();
   {
     void* ptr = &::cockroach::storage::engine::enginepb::_FileRegistry_default_instance_;
     new (ptr) ::cockroach::storage::engine::enginepb::FileRegistry();
@@ -78,19 +69,13 @@ void InitDefaultsFileRegistryImpl() {
   ::cockroach::storage::engine::enginepb::FileRegistry::InitAsDefaultInstance();
 }
 
-void InitDefaultsFileRegistry() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsFileRegistryImpl);
-}
+::google::protobuf::internal::SCCInfo<1> scc_info_FileRegistry =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsFileRegistry}, {
+      &protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileRegistry_FilesEntry_DoNotUse.base,}};
 
-void InitDefaultsFileEntryImpl() {
+static void InitDefaultsFileEntry() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
   {
     void* ptr = &::cockroach::storage::engine::enginepb::_FileEntry_default_instance_;
     new (ptr) ::cockroach::storage::engine::enginepb::FileEntry();
@@ -99,9 +84,13 @@ void InitDefaultsFileEntryImpl() {
   ::cockroach::storage::engine::enginepb::FileEntry::InitAsDefaultInstance();
 }
 
-void InitDefaultsFileEntry() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsFileEntryImpl);
+::google::protobuf::internal::SCCInfo<0> scc_info_FileEntry =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsFileEntry}, {}};
+
+void InitDefaults() {
+  ::google::protobuf::internal::InitSCC(&scc_info_FileRegistry_FilesEntry_DoNotUse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_FileRegistry.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_FileEntry.base);
 }
 
 }  // namespace protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto
@@ -149,16 +138,14 @@ const int FileRegistry::kFilesFieldNumber;
 
 FileRegistry::FileRegistry()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
-    ::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileRegistry();
-  }
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileRegistry.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.FileRegistry)
 }
 FileRegistry::FileRegistry(const FileRegistry& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL),
-      _cached_size_(0) {
+      _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   files_.MergeFrom(from.files_);
   version_ = from.version_;
@@ -167,7 +154,6 @@ FileRegistry::FileRegistry(const FileRegistry& from)
 
 void FileRegistry::SharedCtor() {
   version_ = 0;
-  _cached_size_ = 0;
 }
 
 FileRegistry::~FileRegistry() {
@@ -179,22 +165,13 @@ void FileRegistry::SharedDtor() {
 }
 
 void FileRegistry::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  _cached_size_.Set(size);
 }
 const FileRegistry& FileRegistry::default_instance() {
-  ::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileRegistry();
+  ::google::protobuf::internal::InitSCC(&protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileRegistry.base);
   return *internal_default_instance();
 }
 
-FileRegistry* FileRegistry::New(::google::protobuf::Arena* arena) const {
-  FileRegistry* n = new FileRegistry;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
 
 void FileRegistry::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.FileRegistry)
@@ -219,7 +196,7 @@ bool FileRegistry::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.FileRegistry)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -310,7 +287,7 @@ void FileRegistry::SerializeWithCachedSizes(
 
     if (output->IsSerializationDeterministic() &&
         this->files().size() > 1) {
-      ::google::protobuf::scoped_array<SortItem> items(
+      ::std::unique_ptr<SortItem[]> items(
           new SortItem[this->files().size()]);
       typedef ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >::size_type size_type;
       size_type n = 0;
@@ -320,7 +297,7 @@ void FileRegistry::SerializeWithCachedSizes(
         items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
       }
       ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
-      ::google::protobuf::scoped_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
+      ::std::unique_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
       for (size_type i = 0; i < n; i++) {
         entry.reset(files_.NewEntryWrapper(
             items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
@@ -329,7 +306,7 @@ void FileRegistry::SerializeWithCachedSizes(
         Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
       }
     } else {
-      ::google::protobuf::scoped_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
+      ::std::unique_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
       for (::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >::const_iterator
           it = this->files().begin();
           it != this->files().end(); ++it) {
@@ -357,7 +334,7 @@ size_t FileRegistry::ByteSizeLong() const {
   total_size += 1 *
       ::google::protobuf::internal::FromIntSize(this->files_size());
   {
-    ::google::protobuf::scoped_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
+    ::std::unique_ptr<FileRegistry_FilesEntry_DoNotUse> entry;
     for (::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >::const_iterator
         it = this->files().begin();
         it != this->files().end(); ++it) {
@@ -374,9 +351,7 @@ size_t FileRegistry::ByteSizeLong() const {
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = cached_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  SetCachedSize(cached_size);
   return total_size;
 }
 
@@ -418,7 +393,6 @@ void FileRegistry::InternalSwap(FileRegistry* other) {
   files_.Swap(&other->files_);
   swap(version_, other->version_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string FileRegistry::GetTypeName() const {
@@ -437,16 +411,14 @@ const int FileEntry::kEncryptionSettingsFieldNumber;
 
 FileEntry::FileEntry()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
-    ::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileEntry();
-  }
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileEntry.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.FileEntry)
 }
 FileEntry::FileEntry(const FileEntry& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL),
-      _cached_size_(0) {
+      _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   encryption_settings_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.encryption_settings().size() > 0) {
@@ -459,7 +431,6 @@ FileEntry::FileEntry(const FileEntry& from)
 void FileEntry::SharedCtor() {
   encryption_settings_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   env_type_ = 0;
-  _cached_size_ = 0;
 }
 
 FileEntry::~FileEntry() {
@@ -472,22 +443,13 @@ void FileEntry::SharedDtor() {
 }
 
 void FileEntry::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  _cached_size_.Set(size);
 }
 const FileEntry& FileEntry::default_instance() {
-  ::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaultsFileEntry();
+  ::google::protobuf::internal::InitSCC(&protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::scc_info_FileEntry.base);
   return *internal_default_instance();
 }
 
-FileEntry* FileEntry::New(::google::protobuf::Arena* arena) const {
-  FileEntry* n = new FileEntry;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
 
 void FileEntry::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.FileEntry)
@@ -512,7 +474,7 @@ bool FileEntry::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.FileEntry)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -606,9 +568,7 @@ size_t FileEntry::ByteSizeLong() const {
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = cached_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  SetCachedSize(cached_size);
   return total_size;
 }
 
@@ -650,10 +610,10 @@ void FileEntry::Swap(FileEntry* other) {
 }
 void FileEntry::InternalSwap(FileEntry* other) {
   using std::swap;
-  encryption_settings_.Swap(&other->encryption_settings_);
+  encryption_settings_.Swap(&other->encryption_settings_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(env_type_, other->env_type_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string FileEntry::GetTypeName() const {
@@ -666,5 +626,18 @@ void FileEntry::InternalSwap(FileEntry* other) {
 }  // namespace engine
 }  // namespace storage
 }  // namespace cockroach
+namespace google {
+namespace protobuf {
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::storage::engine::enginepb::FileRegistry_FilesEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::storage::engine::enginepb::FileRegistry_FilesEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::storage::engine::enginepb::FileRegistry_FilesEntry_DoNotUse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::storage::engine::enginepb::FileRegistry* Arena::CreateMaybeMessage< ::cockroach::storage::engine::enginepb::FileRegistry >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::storage::engine::enginepb::FileRegistry >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::storage::engine::enginepb::FileEntry* Arena::CreateMaybeMessage< ::cockroach::storage::engine::enginepb::FileEntry >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::storage::engine::enginepb::FileEntry >(arena);
+}
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)

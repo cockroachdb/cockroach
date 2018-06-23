@@ -24,14 +24,9 @@ import { Location, selectLocations, selectLocationTree } from "./locations";
  *
  * This method turns a Location$Properties into a plain object, so we can do
  * a regular deepEquals assertion on it, to make the tests somewhat readable.
- * Unfortunately, because TypeScript thinks we're holding on to just a simple
- * Location$Properties rather than a Location class, we can't call toObject on
- * it directly.  Fortunately, there's a fast path in the fromObject code that
- * returns the original object immediately if it is, in fact, an instance of the
- * Location class.
  */
 function climbOutOfTheMorass(loc: Location): { [k: string]: any } {
-  return protos.cockroach.server.serverpb.LocationsResponse.Location.fromObject(loc).toObject();
+  return protos.cockroach.server.serverpb.LocationsResponse.Location.toObject(loc);
 }
 
 function makeStateWithLocations(locationData: Location[]) {
