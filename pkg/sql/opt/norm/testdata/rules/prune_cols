@@ -293,31 +293,51 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- └── scan a
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
+      ├── cardinality: [0 - 10]
       ├── key: (1)
-      └── fd: (1)-->(2,4)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── scan a
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
+      ├── cardinality: [0 - 10]
       ├── key: (1)
-      └── fd: (1)-->(2,4)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # Project uses subset of Limit columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down to Scan.
@@ -369,7 +389,7 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -377,16 +397,20 @@ project
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── scan a
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    └── ordering: +1,+2
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
@@ -396,11 +420,15 @@ project
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── scan a
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    └── ordering: +1,+2
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # Project uses subset of Offset columns, but no additional Project should be
@@ -465,7 +493,7 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -479,18 +507,22 @@ project
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
-      │    │    └── ordering: +1,+2
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
@@ -506,12 +538,16 @@ project
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
-      │    │    └── ordering: +1,+2
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 

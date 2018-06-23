@@ -144,8 +144,11 @@ func (o *Optimizer) Memo() *memo.Memo {
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) memo.ExprView {
-	required := o.mem.InternPhysicalProps(requiredProps)
-	state := o.optimizeGroup(root, required)
+	// Optimize the root node according to the properties required of it.
+	root, requiredProps = o.optimizeRootWithProps(root, requiredProps)
+
+	// Now optimize the entire expression tree.
+	state := o.optimizeGroup(root, o.mem.InternPhysicalProps(requiredProps))
 
 	// Validate the resulting operator.
 	ev := memo.MakeExprView(o.mem, state.best)
@@ -503,6 +506,65 @@ func (o *Optimizer) ensureOptState(group memo.GroupID, required memo.PhysicalPro
 		o.stateMap[key] = state
 	}
 	return state
+}
+
+// optimizeRootWithProps tries to simplify the root operator based on the
+// properties required of it. This may trigger the creation of a new root and
+// new properties.
+func (o *Optimizer) optimizeRootWithProps(
+	root memo.GroupID, rootProps *props.Physical,
+) (memo.GroupID, *props.Physical) {
+	relational := o.mem.GroupProperties(root).Relational
+	if relational == nil {
+		// Only need to optimize relational root operators.
+		return root, rootProps
+	}
+
+	// [SimplifyRootOrdering]
+	// SimplifyRootOrdering removes redundant columns from the root properties, based
+	// on the operator's functional dependencies.
+	if !rootProps.Ordering.Any() {
+		fdset := &relational.FuncDeps
+		if rootProps.Ordering.CanSimplify(fdset) {
+			if o.matchedRule == nil || o.matchedRule(opt.SimplifyRootOrdering) {
+				var simplified props.Physical
+				simplified.Presentation = rootProps.Presentation
+				simplified.Ordering = rootProps.Ordering.Copy()
+				simplified.Ordering.Simplify(fdset)
+				if len(simplified.Ordering.Columns) == 0 {
+					// Discard any optional columns as well if there are no required
+					// columns.
+					simplified.Ordering = props.OrderingChoice{}
+				}
+				rootProps = &simplified
+
+				if o.appliedRule != nil {
+					o.appliedRule(opt.SimplifyRootOrdering, root, 0)
+				}
+			}
+		}
+	}
+
+	// [PruneRootCols]
+	// PruneRootCols discards columns that are not needed by the root's ordering
+	// or presentation properties.
+	neededCols := rootProps.Ordering.ColSet()
+	for _, col := range rootProps.Presentation {
+		neededCols.Add(int(col.ID))
+	}
+	if !neededCols.SubsetOf(relational.OutputCols) {
+		panic("columns required of root must be subset of output columns")
+	}
+	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
+		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
+			root = o.f.CustomFuncs().PruneCols(root, neededCols)
+			if o.appliedRule != nil {
+				o.appliedRule(opt.PruneRootCols, root, 0)
+			}
+		}
+	}
+
+	return root, rootProps
 }
 
 // optStateKey associates optState with a group that is being optimized with

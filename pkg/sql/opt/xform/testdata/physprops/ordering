@@ -37,13 +37,13 @@ scan a
  ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  └── ordering: +1
 
-# Order by additional column.
+# Order by additional column (should be dropped by optimizer).
 opt
 SELECT * FROM a ORDER BY x, y DESC, z
 ----
 scan a
  ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
- └── ordering: +1,-2,+3
+ └── ordering: +1,-2
 
 # Order by suffix (scan shouldn't be able to provide).
 opt
@@ -129,17 +129,17 @@ sort
 
 # Ordering cannot be passed through because it includes computed column.
 opt
-SELECT x, 1 one, y FROM a ORDER BY x, one
+SELECT x, y+1 AS computed, y FROM a ORDER BY x, computed
 ----
 sort
- ├── columns: x:1(int!null) one:5(int!null) y:2(float!null)
+ ├── columns: x:1(int!null) computed:5(float) y:2(float!null)
  ├── ordering: +1,+5
  └── project
-      ├── columns: one:5(int!null) x:1(int!null) y:2(float!null)
+      ├── columns: computed:5(float) x:1(int!null) y:2(float!null)
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null)
       └── projections
-           └── const: 1 [type=int]
+           └── a.y + 1.0 [type=float]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).
@@ -321,16 +321,16 @@ SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
 memo (optimized)
  ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: +5,+1]"
+ │    ├── "[presentation: y:2] [ordering: +5]"
  │    │    ├── best: (row-number G2)
- │    │    └── cost: 1060.00
+ │    │    └── cost: 1050.00
  │    └── ""
  │         ├── best: (row-number G2)
- │         └── cost: 1060.00
- └── G2: (scan a,cols=(1,2))
+ │         └── cost: 1050.00
+ └── G2: (scan a,cols=(2))
       └── ""
-           ├── best: (scan a,cols=(1,2))
-           └── cost: 1060.00
+           ├── best: (scan a,cols=(2))
+           └── cost: 1050.00
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
@@ -356,7 +356,7 @@ SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, 
 ----
 memo (optimized)
  ├── G1: (row-number G2 ordering=+2)
- │    ├── "[presentation: y:2] [ordering: +5,+2]"
+ │    ├── "[presentation: y:2] [ordering: +5]"
  │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
  │    │    └── cost: 1149.66
  │    └── ""
