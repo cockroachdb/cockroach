@@ -700,11 +700,67 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 		return
 	}
 
-	var aSet, bSet opt.ColSet
-	aSet.Add(int(a))
-	bSet.Add(int(b))
-	f.addDependency(aSet, bSet, true /* strict */, true /* equiv */)
-	f.addDependency(bSet, aSet, true /* strict */, true /* equiv */)
+	var foundA, foundB, addConst bool
+	var equiv opt.ColSet
+	equiv.Add(int(a))
+	equiv.Add(int(b))
+	equiv = f.ComputeEquivClosure(equiv)
+
+	n := 0
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+
+		if fd.from.Empty() {
+			// If any equivalent column is a constant, then all are constants.
+			if fd.to.Intersects(equiv) && !equiv.SubsetOf(fd.to) {
+				addConst = true
+			}
+		} else if fd.from.SubsetOf(equiv) {
+			// All determinant columns are equivalent to one another.
+			if fd.equiv {
+				// Ensure that each equivalent column directly maps to all other
+				// columns in the group.
+				fd.to = fd.to.Union(equiv)
+				fd.to.DifferenceWith(fd.from)
+				foundA = foundA || fd.from.Contains(int(a))
+				foundB = foundB || fd.from.Contains(int(b))
+			} else if fd.to.Intersects(equiv) {
+				// Remove dependant columns that are equivalent, because equivalence
+				// is a stronger relationship than a strict or lax dependency.
+				if fd.to.SubsetOf(equiv) {
+					continue
+				}
+				fd.to = fd.to.Difference(equiv)
+			}
+		}
+
+		if n != i {
+			f.deps[n] = f.deps[i]
+		}
+		n++
+	}
+	f.deps = f.deps[:n]
+
+	if addConst {
+		// Ensure that all equivalent columns are marked as constant.
+		f.AddConstants(equiv)
+	}
+
+	if !foundA || !foundB {
+		addEquiv := func(id opt.ColumnID) {
+			fd := funcDep{strict: true, equiv: true}
+			fd.from.Add(int(id))
+			fd.to = equiv.Copy()
+			fd.to.Remove(int(id))
+			f.deps = append(f.deps, fd)
+		}
+		if !foundA {
+			addEquiv(a)
+		}
+		if !foundB {
+			addEquiv(b)
+		}
+	}
 
 	// Try to reduce the key based on the new equivalency.
 	if f.hasKey {
@@ -727,7 +783,8 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 	// Determine complete set of constants by computing closure.
 	cols = f.ComputeClosure(cols)
 
-	// Ensure that first FD in the set is a strict constant FD.
+	// Ensure that first FD in the set is a strict constant FD and make sure the
+	// constants are part of it.
 	if len(f.deps) == 0 || !f.deps[0].hasStrictConstants() {
 		deps := make([]funcDep, len(f.deps)+1)
 		deps[0] = funcDep{to: cols, strict: true}

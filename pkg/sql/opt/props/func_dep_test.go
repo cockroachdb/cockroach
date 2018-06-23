@@ -85,7 +85,7 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 	fd2.MakeOuter(util.MakeFastIntSet(1, 4), util.MakeFastIntSet())
 	fd2.AddEquivalency(2, 3)
 	fd2.AddSynthesizedCol(util.MakeFastIntSet(4), 5)
-	verifyFD(t, fd2, "()~~>(1), (1)~~>(4), ()-->(2), (2)==(3), (3)==(2), (4)-->(5)")
+	verifyFD(t, fd2, "()-->(2,3), ()~~>(1), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
 
 	testcases := []struct {
 		fd       *props.FuncDepSet
@@ -125,7 +125,7 @@ func TestFuncDeps_ComputeEquivClosure(t *testing.T) {
 	fd1.AddEquivalency(1, 2)
 	fd1.AddEquivalency(2, 3)
 	fd1.AddEquivalency(1, 4)
-	verifyFD(t, fd1, "(1)~~>(5), (1)-->(6), (1)==(2,4), (2)==(1,3), (3)==(2), (4)==(1)")
+	verifyFD(t, fd1, "(1)~~>(5), (1)-->(6), (1)==(2-4), (2)==(1,3,4), (3)==(1,2,4), (4)==(1-3)")
 
 	testcases := []struct {
 		fd       *props.FuncDepSet
@@ -292,7 +292,7 @@ func TestFuncDeps_AddEquivalency(t *testing.T) {
 	amn.CopyFrom(product)
 	amn.AddEquivalency(1, 10)
 	amn.AddEquivalency(1, 11)
-	verifyFD(t, &amn, "(11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10,11), (10)==(1), (11)==(1)")
+	verifyFD(t, &amn, "(11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10,11), (10)==(1,11), (11)==(1,10)")
 	testColsAreStrictKey(t, &amn, util.MakeFastIntSet(1), true)
 	testColsAreStrictKey(t, &amn, util.MakeFastIntSet(10), true)
 	testColsAreStrictKey(t, &amn, util.MakeFastIntSet(11), true)
@@ -314,7 +314,7 @@ func TestFuncDeps_AddEquivalency(t *testing.T) {
 	cnst := makeJoinFD(t)
 	cnst.AddEquivalency(10, 11)
 	cnst.AddConstants(util.MakeFastIntSet(11))
-	verifyFD(t, cnst, "(): ()-->(1-5,10-13), (1)==(10), (10)==(1,11), (11)==(10)")
+	verifyFD(t, cnst, "(): ()-->(1-5,10-13), (1)==(10,11), (10)==(1,11), (11)==(1,10)")
 }
 
 func TestFuncDeps_AddConstants(t *testing.T) {
@@ -578,9 +578,9 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	loj.AddEquivalency(3, 4)
 	loj.AddEquivalency(10, 12)
 	loj.AddEquivalency(10, 13)
-	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (2)==(3), (3)==(2,4), (4)==(3), (10)==(12,13), (12)==(10), (13)==(10)")
+	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 13))
-	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (2)==(3), (3)==(2,4), (4)==(3), (10)==(12,13), (12)==(10), (13)==(10)")
+	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
 
 	// Join keyless relations with nullable columns.
 	//   SELECT * FROM (SELECT d, e, d+e FROM abcde) LEFT JOIN (SELECT p, q, p+q FROM mnpq) ON True
