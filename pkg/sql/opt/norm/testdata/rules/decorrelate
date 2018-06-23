@@ -1098,21 +1098,36 @@ project
       │    │              │         ├── key: ()
       │    │              │         └── fd: ()-->(8)
       │    │              └── const: 100 [type=int]
-      │    ├── limit
+      │    ├── select
       │    │    ├── columns: xy.y:7(int!null)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(7)
-      │    │    ├── select
+      │    │    ├── limit
       │    │    │    ├── columns: xy.y:7(int!null)
       │    │    │    ├── outer: (1)
-      │    │    │    ├── fd: (7)==(1), (1)==(7) [removed: (1)]
-      │    │    │    ├── scan xy
-      │    │    │    │    └── columns: xy.y:7(int)
-      │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
-      │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    └── const: 1 [type=int]
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(7)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: xy.y:7(int!null)
+      │    │    │    │    ├── outer: (1)
+      │    │    │    │    ├── fd: (7)==(1), (1)==(7) [removed: (1)]
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: xy.y:7(int)
+      │    │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
+      │    │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │    │    └── const: 1 [type=int]
+      │    │    └── filters [type=bool]
+      │    │         └── eq [type=bool]
+      │    │              ├── subquery [type=int]
+      │    │              │    └── scan xy
+      │    │              │         ├── columns: xy.x:8(int!null)
+      │    │              │         ├── limit: 1
+      │    │              │         ├── key: ()
+      │    │              │         └── fd: ()-->(8)
+      │    │              └── const: 100 [type=int]
       │    └── true [type=bool]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
            └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]

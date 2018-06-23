@@ -168,6 +168,7 @@ render          ·         ·          (b, a, c, d, a, c, d)     ·
       └── scan  ·         ·          (a, b, c, d)              ·
 ·               table     t@primary  ·                         ·
 ·               spans     ALL        ·                         ·
+·               filter    b < '3'    ·                         ·
 
 statement ok
 TRUNCATE TABLE t
