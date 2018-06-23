@@ -117,8 +117,6 @@ const (
 	LeaseInfo
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
-	// DeprecatedVerifyChecksum is no longer used.
-	DeprecatedVerifyChecksum
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
