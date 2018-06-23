@@ -47,7 +47,7 @@ enum ValueType {
   // storage for various types. The DELIMITED_foo entries each represent a foo
   // variant that self-delimits length.
   UNKNOWN = 0;
-  NULL = 7;
+  NULL_ = 7;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;
