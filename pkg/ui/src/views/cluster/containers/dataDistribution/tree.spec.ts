@@ -153,7 +153,7 @@ describe("tree", () => {
       ],
     };
 
-    describe("with includeNodes = true", () => {
+    describe.only("with includeNodes = true", () => {
 
       it("lays out a tree with nothing collapsed", () => {
         const actualFlattened = flatten(tree, [], true);
@@ -167,6 +167,11 @@ describe("tree", () => {
           { depth: 2, isLeaf: true, isCollapsed: false, data: "g", path: ["e", "g"] },
         ];
 
+        console.log("flattened");
+        actualFlattened.forEach((node) => {
+          console.log(node.path, node.masterIdx);
+        });
+
         assert.deepEqual(actualFlattened, expectedFlattened);
       });
 
@@ -179,6 +184,11 @@ describe("tree", () => {
           { depth: 2, isLeaf: true, isCollapsed: false, data: "f", path: ["e", "f"] },
           { depth: 2, isLeaf: true, isCollapsed: false, data: "g", path: ["e", "g"] },
         ];
+
+        console.log("flattened");
+        actualFlattened.forEach((node) => {
+          console.log(node.path, node.masterIdx);
+        });
 
         assert.deepEqual(actualFlattened, expectedFlattened);
       });

@@ -28,7 +28,12 @@ import ReplicaMatrix, {
 import { TreeNode, TreePath } from "./tree";
 import "./index.styl";
 
+<<<<<<< HEAD
 import IReplicaInfo = cockroach.server.serverpb.LeaseholdersAndQPSResponse.IReplicaInfo;
+=======
+import ReplicaInfo$Properties = cockroach.server.serverpb.LeaseholdersAndQPSResponse.ReplicaInfo$Properties;
+import NodeDescriptor$Properties = cockroach.roachpb.NodeDescriptor$Properties;
+>>>>>>> 3e396d27c... ui: precompute all sums in a "master grid" selector
 type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
 type LeaseholdersAndQPSResponse = cockroach.server.serverpb.LeaseholdersAndQPSResponse;
 type INodeDescriptor = cockroach.roachpb.INodeDescriptor;
@@ -46,8 +51,12 @@ const ZONE_CONFIG_TEXT = (
 interface DataDistributionProps {
   dataDistribution: DataDistributionResponse;
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
+<<<<<<< HEAD
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+=======
+  nodeTree: TreeNode<NodeDescriptor$Properties>;
+>>>>>>> 3e396d27c... ui: precompute all sums in a "master grid" selector
   tablesByName: { [name: string]: number };
 }
 
@@ -149,8 +158,8 @@ class DataDistribution extends React.Component<DataDistributionProps> {
   }
 
   render() {
-    const nodeTree = nodeTreeFromLocalityTree("Cluster", this.props.localityTree);
-
+    console.log("========== DataDistribution render ============");
+    // TODO(vilterp): should I be calling this from mapStateToProps?
     const schemaTree: TreeNode<SchemaObject> = selectSchemaTree(this.props);
 
     return (
@@ -170,7 +179,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
         </div>
         <div>
           <ReplicaMatrix
-            cols={nodeTree}
+            cols={this.props.nodeTree}
             rows={schemaTree}
             getValue={this.getCellValue}
           />
@@ -183,8 +192,12 @@ class DataDistribution extends React.Component<DataDistributionProps> {
 interface DataDistributionPageProps {
   dataDistribution: DataDistributionResponse;
   leaseholdersAndQPS: LeaseholdersAndQPSResponse;
+<<<<<<< HEAD
   localityTree: LocalityTree;
   sortedZoneConfigs: IZoneConfig[];
+=======
+  nodeTree: TreeNode<NodeDescriptor$Properties>;
+>>>>>>> 3e396d27c... ui: precompute all sums in a "master grid" selector
   tablesByName: { [name: string]: number };
   refreshDataDistribution: typeof refreshDataDistribution;
   refreshLeaseholdersAndQPS: typeof refreshLeaseholdersAndQPS;
@@ -211,7 +224,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   render() {
     const isLoading = (
       !this.props.dataDistribution ||
-      !this.props.localityTree ||
+      !this.props.nodeTree ||
       !this.props.leaseholdersAndQPS
     );
 
@@ -230,7 +243,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
             image={spinner}
           >
             <DataDistribution
-              localityTree={this.props.localityTree}
+              nodeTree={this.props.nodeTree}
               dataDistribution={this.props.dataDistribution}
               tablesByName={this.props.tablesByName}
               leaseholdersAndQPS={this.props.leaseholdersAndQPS}
@@ -283,6 +296,18 @@ function getRangesForTableID(
   return {};
 }
 
+const selectNodeTree = createSelector(
+  selectLocalityTree,
+  (localityTree): TreeNode<NodeDescriptor$Properties> => {
+    console.log("computing node tree");
+    if (!localityTree) {
+      return null;
+    }
+
+    return nodeTreeFromLocalityTree("Cluster", localityTree);
+  },
+);
+
 // TODO(vilterp): do I need the two funcs?
 const selectSchemaTree = createSelector(
   (props: DataDistributionProps) => props.dataDistribution,
@@ -320,7 +345,7 @@ const DataDistributionPageConnected = connect(
     dataDistribution: state.cachedData.dataDistribution.data,
     leaseholdersAndQPS: state.cachedData.leaseholdersAndQPS.data,
     sortedZoneConfigs: sortedZoneConfigs(state),
-    localityTree: selectLocalityTree(state),
+    nodeTree: selectNodeTree(state),
     tablesByName: tablesByName(state),
   }),
   {
