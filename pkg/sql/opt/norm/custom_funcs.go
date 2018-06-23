@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
@@ -301,6 +303,12 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 	return c.f.ConstructFilters(lb.BuildList())
 }
 
+// HasEquivalence returns true if the given filter expresses at least one
+// equivalence between two columns, such as a.x=b.y.
+func (c *CustomFuncs) HasEquivalence(filter memo.GroupID) bool {
+	return c.LookupLogical(filter).Scalar.FuncDeps.HasEquivalence()
+}
+
 // ----------------------------------------------------------------------
 //
 // Join Rules
@@ -344,6 +352,180 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 		return c.f.ConstructLeftJoinApply(left, right, on)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
+}
+
+// CanMap returns true if it is possible to map a boolean expression src, which
+// is a conjunct in the given filters expression, to use the output columns of
+// the relational expression dst.
+//
+// In order for one column to map to another, the two columns must be
+// equivalent. This happens when there is an equality predicate such as a.x=b.x
+// in the ON or WHERE clause. CanMap checks that for each column in src, there
+// is at least one equivalent column in dst.
+//
+// For example, consider this query:
+//
+//   SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
+//
+// Since there is an equality predicate on a.x=b.x, it is possible to map
+// a.x + b.y = 5 to b.x + b.y = 5, and that allows the filter to be pushed down
+// to the right side of the join. In this case, CanMap returns true when src is
+// a.x + b.y = 5 and dst is (Scan b), but false when src is a.x + b.y = 5 and
+// dst is (Scan a).
+//
+// If src has a correlated subquery, CanMap returns false.
+func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
+	// Fast path if src is already bound by dst.
+	if c.IsBoundBy(src, dst) {
+		return true
+	}
+
+	if c.HasCorrelatedSubquery(src) {
+		return false
+	}
+
+	fd := c.LookupLogical(filters).Scalar.FuncDeps
+
+	// For canMap to be true, each column in src must map to at least one column
+	// in dst.
+	for i, ok := c.OuterCols(src).Next(0); ok; i, ok = c.OuterCols(src).Next(i + 1) {
+		// We do not map columns that have a composite key encoding. This is a
+		// conservative measure to ensure that we don't infer filters incorrectly.
+		// For example, consider this query:
+		//
+		//   SELECT * FROM
+		//     (VALUES (1.0)) AS t1(x),
+		//     (VALUES (1.00)) AS t2(y)
+		//   WHERE x=y AND x::text = '1.0';
+		//
+		// It should return the following result:
+		//
+		//     x  |  y
+		//   -----+------
+		//    1.0 | 1.00
+		//
+		// But if we use the equality predicate x=y to map x to y and infer an
+		// additional filter y::text = '1.0', the query would return nothing.
+		//
+		// TODO(rytaft): In the future, we may want to allow the mapping if the
+		// filter involves a comparison operator, such as x < 5.
+		srcColType := c.f.Metadata().ColumnType(opt.ColumnID(i))
+		if sqlbase.DatumTypeHasCompositeKeyEncoding(srcColType) {
+			return false
+		}
+
+		eqCols := fd.ComputeEquivClosure(util.MakeFastIntSet(i))
+		if !eqCols.Intersects(c.OutputCols(dst)) {
+			return false
+		}
+
+		eqCols.IntersectionWith(c.OutputCols(dst))
+		found := false
+		for j, ok := eqCols.Next(0); ok; j, ok = eqCols.Next(j + 1) {
+			dstColType := c.f.Metadata().ColumnType(opt.ColumnID(j))
+			// The column types must be equivalent so we do not infer invalid
+			// filters. Operations that are valid with one type may be invalid
+			// with a different type.
+			if srcColType.Equivalent(dstColType) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Map maps a boolean expression src, which is a conjunct in the given filters
+// expression, to use the output columns of the relational expression dst.
+//
+// Map assumes that CanMap has already returned true, and therefore a mapping
+// is possible (see the comment above CanMap for details).
+//
+// For each column in src that is not also in dst, Map replaces it with an
+// equivalent column in dst. If there are multiple equivalent columns in dst,
+// it chooses one arbitrarily. Map does not replace any columns in subqueries,
+// since we know there are no correlated subqueries (otherwise CanMap would
+// have returned false).
+//
+// For example, consider this query:
+//
+//   SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
+//
+// If Map is called with src as a.x + b.y = 5 and dst as (Scan b), it returns
+// b.x + b.y = 5. Map should not be called with the equality predicate
+// a.x = b.x, because it would just return the tautology b.x = b.x.
+func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
+	// Fast path if src is already bound by dst.
+	if c.IsBoundBy(src, dst) {
+		return src
+	}
+
+	fd := c.LookupLogical(filters).Scalar.FuncDeps
+
+	// Map each column in src to one column in dst. We choose an arbitrary column
+	// (the one with the smallest ColumnID that has a matching type) if there are
+	// multiple choices.
+	var colMap util.FastIntMap
+	c.OuterCols(src).ForEach(func(srcCol int) {
+		eqCols := fd.ComputeEquivClosure(util.MakeFastIntSet(srcCol))
+		eqCols.IntersectionWith(c.OutputCols(dst))
+		if eqCols.Contains(srcCol) {
+			colMap.Set(srcCol, srcCol)
+		} else {
+			for dstCol, ok := eqCols.Next(0); ok; dstCol, ok = eqCols.Next(dstCol + 1) {
+				srcColType := c.f.Metadata().ColumnType(opt.ColumnID(srcCol))
+				dstColType := c.f.Metadata().ColumnType(opt.ColumnID(dstCol))
+				// The column types must be equivalent so we do not infer invalid
+				// filters. Operations that are valid with one type may be invalid
+				// with a different type. We know that at least one such equivalent
+				// column exists since CanMap checks this.
+				if srcColType.Equivalent(dstColType) {
+					colMap.Set(srcCol, dstCol)
+					break
+				}
+			}
+
+			if _, ok := colMap.Get(srcCol); !ok {
+				panic(fmt.Errorf(
+					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
+					memo.MakeNormExprView(c.f.mem, src).FormatString(opt.ExprFmtHideScalars),
+					memo.MakeNormExprView(c.f.mem, dst).FormatString(opt.ExprFmtHideScalars),
+				))
+			}
+		}
+	})
+
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced.
+	var replace memo.ReplaceChildFunc
+	replace = func(child memo.GroupID) memo.GroupID {
+		expr := c.f.mem.NormExpr(child)
+
+		switch expr.Operator() {
+		case opt.VariableOp:
+			varColID := c.ExtractColID(expr.AsVariable().Col())
+			outCol, _ := colMap.Get(int(varColID))
+			if int(varColID) == outCol {
+				// Avoid constructing a new variable if possible.
+				return child
+			}
+			return c.f.ConstructVariable(c.f.InternColumnID(opt.ColumnID(outCol)))
+
+		case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+			// There are no correlated subqueries, so we don't need to recurse here.
+			return child
+		}
+
+		ev := memo.MakeNormExprView(c.f.mem, child)
+		return ev.Replace(c.f.evalCtx, replace).Group()
+	}
+
+	return replace(src)
 }
 
 // ----------------------------------------------------------------------
