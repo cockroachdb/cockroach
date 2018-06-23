@@ -1,0 +1,90 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    UNIQUE INDEX bc (b, c)
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null (storing)
+
+# --------------------------------------------------
+# SimplifyRootOrdering
+# --------------------------------------------------
+opt
+SELECT * FROM abcde ORDER BY a, b, c, d
+----
+scan abcde
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+ └── ordering: +1
+
+opt
+SELECT * FROM abcde ORDER BY b, c, a, d LIMIT 10
+----
+lookup-join abcde
+ ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ ├── key columns: [1]
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+ ├── ordering: +2,+3,+1
+ └── scan abcde@bc
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── limit: 10
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      └── ordering: +2,+3,+1
+
+# --------------------------------------------------
+# PruneRootCols
+# --------------------------------------------------
+# Remove functionally dependent column that's only used in ordering, which
+# triggers an opportunity to prune output columns, which in turn makes the
+# lookup-join unnecessary.
+opt
+SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
+----
+scan abcde@bc
+ ├── columns: c:3(int)
+ ├── limit: 10
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ └── ordering: +2,+3,+1
+
+# Don't prune when the resulting Project cannot be merged with an operator lower
+# in the tree (in this case the GroupBy).
+opt
+SELECT d FROM (SELECT d, d+1 AS one FROM abcde) GROUP BY d, one ORDER BY d, one
+----
+sort
+ ├── columns: d:4(int)
+ ├── key: (4)
+ ├── fd: (4)-->(6)
+ ├── ordering: +4
+ └── group-by
+      ├── columns: d:4(int) one:6(int)
+      ├── grouping columns: d:4(int) one:6(int)
+      ├── key: (4)
+      ├── fd: (4)-->(6)
+      └── project
+           ├── columns: one:6(int) d:4(int)
+           ├── fd: (4)-->(6)
+           ├── scan abcde
+           │    └── columns: d:4(int)
+           └── projections [outer=(4)]
+                └── abcde.d + 1 [type=int, outer=(4)]
