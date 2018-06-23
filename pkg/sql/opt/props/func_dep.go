@@ -509,6 +509,19 @@ func (f *FuncDepSet) ColsAreLaxKey(cols opt.ColSet) bool {
 	return f.colsAreKey(cols, false /* strict */)
 }
 
+// HasEquivalence returns true if there is at least one equivalence functional
+// dependency involving columns that have not been removed.
+func (f *FuncDepSet) HasEquivalence() bool {
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+
+		if fd.equiv && !fd.from.SubsetOf(f.removed) && !fd.to.SubsetOf(f.removed) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReduceCols removes redundant columns from the given set. Redundant columns
 // can be functionally determined from the remaining columns. If the columns
 // contain a key for the relation, then the reduced columns will form a

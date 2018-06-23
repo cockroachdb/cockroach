@@ -505,11 +505,10 @@ SELECT *
 join       ·         ·
  │         type      inner
  │         equality  (b) = (sq)
- │         pred      (a IS NULL) OR (a < sq)
  ├── scan  ·         ·
  │         table     pairs@primary
  │         spans     ALL
- │         filter    (a > 1) AND ((a IS NULL) OR (a > 2))
+ │         filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
  └── scan  ·         ·
 ·          table     square@primary
 ·          spans     /2-/5/#
@@ -734,7 +733,7 @@ render          ·               ·                    (x, y, u, v)        ·
       │         spans           /3-                  ·                   ·
       └── scan  ·               ·                    (x, y, v)           +x,+y
 ·               table           xyv@primary          ·                   ·
-·               spans           ALL                  ·                   ·
+·               spans           /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -799,7 +798,6 @@ filter               ·               ·                    (x, y, u, v)        
 ·                    spans           ALL                  ·                   ·
 
 # Verify that we transfer constraints between the two sides.
-# TODO(andyk): Need to actually transfer the constraints
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
@@ -813,7 +811,7 @@ join       ·               ·                    (x, y, u, x, y, v)  ·
  │         spans           /1-/1/10             ·                   ·
  └── scan  ·               ·                    (x, y, v)           +x,+y
 ·          table           xyv@primary          ·                   ·
-·          spans           ALL                  ·                   ·
+·          spans           /1-/1/10             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -828,22 +826,22 @@ join       ·               ·                    (x, y, u, x, y, v)  ·
  │         spans           /1-/1/10             ·                   ·
  └── scan  ·               ·                    (x, y, v)           +x,+y
 ·          table           xyv@primary          ·                   ·
-·          spans           ALL                  ·                   ·
+·          spans           /1-/1/10             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       ·               ·                                                 (x, y, u, x, y, v)  ·
- │         type            left outer                                        ·                   ·
- │         equality        (x, y) = (x, y)                                   ·                   ·
- │         mergeJoinOrder  +"(x=x)",+"(y=y)"                                 ·                   ·
- │         pred            (((x = x) AND (y = y)) AND (x = 1)) AND (y < 10)  ·                   ·
- ├── scan  ·               ·                                                 (x, y, u)           +x,+y
- │         table           xyu@primary                                       ·                   ·
- │         spans           ALL                                               ·                   ·
- └── scan  ·               ·                                                 (x, y, v)           +x,+y
-·          table           xyv@primary                                       ·                   ·
-·          spans           ALL                                               ·                   ·
+join       ·               ·                    (x, y, u, x, y, v)  ·
+ │         type            left outer           ·                   ·
+ │         equality        (x, y) = (x, y)      ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"    ·                   ·
+ │         pred            (x = x) AND (y = y)  ·                   ·
+ ├── scan  ·               ·                    (x, y, u)           +x,+y
+ │         table           xyu@primary          ·                   ·
+ │         spans           ALL                  ·                   ·
+ └── scan  ·               ·                    (x, y, v)           +x,+y
+·          table           xyv@primary          ·                   ·
+·          spans           /1-/1/10             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -928,17 +926,17 @@ filter               ·               ·                    (x, y, u, v)        
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       ·               ·                                                 (x, y, u, x, y, v)  ·
- │         type            left outer                                        ·                   ·
- │         equality        (x, y) = (x, y)                                   ·                   ·
- │         mergeJoinOrder  +"(x=x)",+"(y=y)"                                 ·                   ·
- │         pred            (((x = x) AND (y = y)) AND (x = 1)) AND (y < 10)  ·                   ·
- ├── scan  ·               ·                                                 (x, y, u)           +x,+y
- │         table           xyu@primary                                       ·                   ·
- │         spans           ALL                                               ·                   ·
- └── scan  ·               ·                                                 (x, y, v)           +x,+y
-·          table           xyv@primary                                       ·                   ·
-·          spans           ALL                                               ·                   ·
+join       ·               ·                    (x, y, u, x, y, v)  ·
+ │         type            left outer           ·                   ·
+ │         equality        (x, y) = (x, y)      ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"    ·                   ·
+ │         pred            (x = x) AND (y = y)  ·                   ·
+ ├── scan  ·               ·                    (x, y, u)           +x,+y
+ │         table           xyu@primary          ·                   ·
+ │         spans           ALL                  ·                   ·
+ └── scan  ·               ·                    (x, y, v)           +x,+y
+·          table           xyv@primary          ·                   ·
+·          spans           /1-/1/10             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
