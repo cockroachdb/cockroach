@@ -374,7 +374,7 @@ func (tm *testModelRunner) makeQuery(
 		},
 		QueryMemoryOptions: QueryMemoryOptions{
 			// Large budget, but not maximum to avoid overflows.
-			BudgetBytes:             math.MaxInt64 / 8,
+			BudgetBytes:             math.MaxInt64,
 			EstimatedSources:        currentEstimatedSources,
 			InterpolationLimitNanos: 0,
 			Columnar:                tm.DB.WriteColumnar(),
@@ -417,6 +417,22 @@ func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 	)
 }
 
+func (mq *modelQuery) queryModel() testmodel.DataSeries {
+	return mq.modelRunner.model.Query(
+		resolutionModelKey(mq.Name, mq.diskResolution),
+		mq.Sources,
+		mq.GetDownsampler(),
+		mq.GetSourceAggregator(),
+		mq.GetDerivative(),
+		mq.diskResolution.SlabDuration(),
+		mq.SampleDurationNanos,
+		mq.StartNanos,
+		mq.EndNanos,
+		mq.InterpolationLimitNanos,
+		mq.NowNanos,
+	)
+}
+
 // assertSuccess runs the query against both the real database and the model
 // database, ensuring that the query succeeds and that the real result matches
 // the model result. The two supplied parameters are a form of sanity check,
@@ -433,19 +449,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 	}
 
 	// Query the model.
-	modelDatapoints := mq.modelRunner.model.Query(
-		resolutionModelKey(mq.Name, mq.diskResolution),
-		mq.Sources,
-		mq.GetDownsampler(),
-		mq.GetSourceAggregator(),
-		mq.GetDerivative(),
-		mq.diskResolution.SlabDuration(),
-		mq.SampleDurationNanos,
-		mq.StartNanos,
-		mq.EndNanos,
-		mq.InterpolationLimitNanos,
-		mq.NowNanos,
-	)
+	modelDatapoints := mq.queryModel()
 	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
 		for _, diff := range pretty.Diff(a, e) {
 			mq.modelRunner.t.Error(diff)
@@ -459,6 +463,28 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 	if a, e := len(actualSources), expectedSourceCount; a != e {
 		mq.modelRunner.t.Logf("actual sources: %v", actualSources)
 		mq.modelRunner.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
+	}
+}
+
+// assertMatchesModel asserts that the results of the query are identical when
+// executed against the real database and the model. This is the same as
+// assertSuccess, but does not include the sanity checks for datapoint count and
+// source count. This method is intended for use in tests which are generated
+// procedurally.
+func (mq *modelQuery) assertMatchesModel() {
+	// Query the real DB.
+	actualDatapoints, _, err := mq.queryDB()
+	if err != nil {
+		mq.modelRunner.t.Fatal(err)
+	}
+
+	// Query the model.
+	modelDatapoints := mq.queryModel()
+	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
+		mq.modelRunner.t.Errorf("actual %v expected %v", a, e)
+		for _, diff := range pretty.Diff(a, e) {
+			mq.modelRunner.t.Error(diff)
+		}
 	}
 }
 

@@ -195,13 +195,15 @@ func TestQueryDownsampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		// Query with sampleDuration that is too small, expect error.
-		query := tm.makeQuery("", Resolution10s, 0, 10000)
-		query.SampleDurationNanos = 1
-		query.assertError("was not less")
+		{
+			query := tm.makeQuery("", Resolution10s, 0, 10000)
+			query.SampleDurationNanos = 1
+			query.assertError("was not less")
 
-		// Query with sampleDuration which is not an even multiple of the resolution.
-		query.SampleDurationNanos = Resolution10s.SampleDuration() + 1
-		query.assertError("not a multiple")
+			// Query with sampleDuration which is not an even multiple of the resolution.
+			query.SampleDurationNanos = Resolution10s.SampleDuration() + 1
+			query.assertError("not a multiple")
+		}
 
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 			tsd("test.metric", "source1",
@@ -230,15 +232,24 @@ func TestQueryDownsampling(t *testing.T) {
 		tm.assertKeyCount(9)
 		tm.assertModelCorrect()
 
-		query = tm.makeQuery("test.metric", resolution1ns, 0, 60)
-		query.SampleDurationNanos = 10
-		query.assertSuccess(6, 2)
+		{
+			query := tm.makeQuery("test.metric", resolution1ns, 0, 60)
+			query.SampleDurationNanos = 10
+			query.assertSuccess(6, 2)
 
-		query.Sources = []string{"source1"}
-		query.assertSuccess(5, 1)
+			query.Sources = []string{"source1"}
+			query.assertSuccess(5, 1)
 
-		query.Sources = []string{"source2"}
-		query.assertSuccess(4, 1)
+			query.Sources = []string{"source2"}
+			query.assertSuccess(4, 1)
+		}
+
+		// Query boundaries don't align to downsample period.
+		{
+			query := tm.makeQuery("test.metric", resolution1ns, 15, 35)
+			query.SampleDurationNanos = 10
+			query.assertSuccess(3, 2)
+		}
 	})
 }
 
@@ -328,6 +339,20 @@ func TestInterpolationLimit(t *testing.T) {
 			query.assertSuccess(9, 2)
 			query.InterpolationLimitNanos = 10
 			query.assertSuccess(9, 2)
+		}
+
+		// With derivative.
+		{
+			query := tm.makeQuery("metric.innergaps", resolution1ns, 0, 9)
+			query.Sources = []string{"source1", "source2"}
+			query.setDerivative(tspb.TimeSeriesQueryDerivative_DERIVATIVE)
+			query.assertSuccess(8, 2)
+			query.InterpolationLimitNanos = 2
+			query.assertSuccess(8, 2)
+			query.InterpolationLimitNanos = 3
+			query.assertSuccess(8, 2)
+			query.InterpolationLimitNanos = 10
+			query.assertSuccess(8, 2)
 		}
 	})
 }

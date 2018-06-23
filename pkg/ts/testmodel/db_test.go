@@ -166,6 +166,27 @@ func TestModelDBQuery(t *testing.T) {
 				dp(400, 3.75e+09),
 			},
 		},
+		// Same as first query, but with interpolation disabled AND a derivative
+		// option. Exercises the interplay between derivative and interpolation.
+		{
+			seriesName:         "testmetric",
+			sources:            nil,
+			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
+			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
+			derivative:         tspb.TimeSeriesQueryDerivative_DERIVATIVE,
+			slabDuration:       1000,
+			sampleDuration:     100,
+			start:              0,
+			end:                10000,
+			interpolationLimit: 1,
+			nowNanos:           math.MaxInt64,
+			expected: DataSeries{
+				dp(100, 3.5e+09),
+				dp(200, 9e+09),
+				dp(300, 2e+09),
+				dp(400, 3.75e+09),
+			},
+		},
 		// Same as first query, but with a single source specified.
 		{
 			seriesName:         "testmetric",

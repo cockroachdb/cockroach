@@ -83,6 +83,21 @@ func (qmc QueryMemoryContext) Close(ctx context.Context) {
 	}
 }
 
+// overflowSafeMultiply64 is a check for signed integer multiplication taken
+// from https://github.com/JohnCGriffin/overflow/blob/master/overflow_impl.go
+func overflowSafeMultiply64(a, b int64) (int64, bool) {
+	if a == 0 || b == 0 {
+		return 0, true
+	}
+	c := a * b
+	if (c < 0) == ((a < 0) != (b < 0)) {
+		if c/b == a {
+			return c, true
+		}
+	}
+	return c, false
+}
+
 // GetMaxTimespan computes the longest timespan that can be safely queried while
 // remaining within the given memory budget. Inputs are the resolution of data
 // being queried, the budget, the estimated number of sources, and the
@@ -125,5 +140,9 @@ func (qmc QueryMemoryContext) GetMaxTimespan(r Resolution) (int64, error) {
 		return 0, fmt.Errorf("insufficient memory budget to attempt query")
 	}
 
-	return numSlabs * slabDuration, nil
+	maxDuration, valid := overflowSafeMultiply64(numSlabs, slabDuration)
+	if valid {
+		return maxDuration, nil
+	}
+	return math.MaxInt64, nil
 }
