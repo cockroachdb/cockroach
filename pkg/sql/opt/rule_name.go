@@ -29,6 +29,9 @@ const (
 	// Manual Rule Names
 	// ------------------------------------------------------------
 
+	SimplifyRootOrdering
+	PruneRootCols
+
 	// NumManualRules tracks the number of manually-defined rules.
 	NumManualRuleNames
 )
