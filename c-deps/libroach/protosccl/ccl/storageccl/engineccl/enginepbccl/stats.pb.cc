@@ -7,7 +7,6 @@
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/port.h>
-#include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -16,6 +15,10 @@
 #include "third_party/protobuf/version.h"
 #endif
 // @@protoc_insertion_point(includes)
+
+namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_KeyInfo;
+}  // namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto
 namespace cockroach {
 namespace ccl {
 namespace storageccl {
@@ -32,15 +35,9 @@ class EncryptionStatusDefaultTypeInternal {
 }  // namespace ccl
 }  // namespace cockroach
 namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto {
-void InitDefaultsEncryptionStatusImpl() {
+static void InitDefaultsEncryptionStatus() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::InitDefaultsKeyInfo();
   {
     void* ptr = &::cockroach::ccl::storageccl::engineccl::enginepbccl::_EncryptionStatus_default_instance_;
     new (ptr) ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus();
@@ -49,9 +46,12 @@ void InitDefaultsEncryptionStatusImpl() {
   ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus::InitAsDefaultInstance();
 }
 
-void InitDefaultsEncryptionStatus() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsEncryptionStatusImpl);
+::google::protobuf::internal::SCCInfo<1> scc_info_EncryptionStatus =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsEncryptionStatus}, {
+      &protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::scc_info_KeyInfo.base,}};
+
+void InitDefaults() {
+  ::google::protobuf::internal::InitSCC(&scc_info_EncryptionStatus.base);
 }
 
 }  // namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto
@@ -88,16 +88,14 @@ const int EncryptionStatus::kActiveDataKeyFieldNumber;
 
 EncryptionStatus::EncryptionStatus()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
-    ::protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto::InitDefaultsEncryptionStatus();
-  }
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto::scc_info_EncryptionStatus.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus)
 }
 EncryptionStatus::EncryptionStatus(const EncryptionStatus& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL),
-      _cached_size_(0) {
+      _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_active_store_key()) {
     active_store_key_ = new ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo(*from.active_store_key_);
@@ -116,7 +114,6 @@ void EncryptionStatus::SharedCtor() {
   ::memset(&active_store_key_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&active_data_key_) -
       reinterpret_cast<char*>(&active_store_key_)) + sizeof(active_data_key_));
-  _cached_size_ = 0;
 }
 
 EncryptionStatus::~EncryptionStatus() {
@@ -130,22 +127,13 @@ void EncryptionStatus::SharedDtor() {
 }
 
 void EncryptionStatus::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  _cached_size_.Set(size);
 }
 const EncryptionStatus& EncryptionStatus::default_instance() {
-  ::protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto::InitDefaultsEncryptionStatus();
+  ::google::protobuf::internal::InitSCC(&protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fstats_2eproto::scc_info_EncryptionStatus.base);
   return *internal_default_instance();
 }
 
-EncryptionStatus* EncryptionStatus::New(::google::protobuf::Arena* arena) const {
-  EncryptionStatus* n = new EncryptionStatus;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
 
 void EncryptionStatus::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus)
@@ -176,7 +164,7 @@ bool EncryptionStatus::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -233,13 +221,13 @@ void EncryptionStatus::SerializeWithCachedSizes(
   // .cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo active_store_key = 1;
   if (this->has_active_store_key()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      1, *this->active_store_key_, output);
+      1, this->_internal_active_store_key(), output);
   }
 
   // .cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo active_data_key = 2;
   if (this->has_active_data_key()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, *this->active_data_key_, output);
+      2, this->_internal_active_data_key(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -257,20 +245,18 @@ size_t EncryptionStatus::ByteSizeLong() const {
   if (this->has_active_store_key()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *this->active_store_key_);
+        *active_store_key_);
   }
 
   // .cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo active_data_key = 2;
   if (this->has_active_data_key()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *this->active_data_key_);
+        *active_data_key_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = cached_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  SetCachedSize(cached_size);
   return total_size;
 }
 
@@ -314,7 +300,6 @@ void EncryptionStatus::InternalSwap(EncryptionStatus* other) {
   swap(active_store_key_, other->active_store_key_);
   swap(active_data_key_, other->active_data_key_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string EncryptionStatus::GetTypeName() const {
@@ -328,5 +313,12 @@ void EncryptionStatus::InternalSwap(EncryptionStatus* other) {
 }  // namespace storageccl
 }  // namespace ccl
 }  // namespace cockroach
+namespace google {
+namespace protobuf {
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionStatus >(arena);
+}
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
