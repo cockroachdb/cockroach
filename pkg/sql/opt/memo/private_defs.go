@@ -106,11 +106,11 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required opt.Ordering) 
 	// 2. The index columns are a prefix of the ordering columns (this
 	//    works because the columns are always a key, so any additional
 	//    columns are unnecessary).
-	// TODO(andyk): Use UniqueColumnCount when issues with nulls are solved,
+	// TODO(andyk): Use LaxKeyColumnCount when issues with nulls are solved,
 	//              since unique index can still have duplicate nulls.
 	cnt := index.ColumnCount()
 	if s.Index == opt.PrimaryIndex {
-		cnt = index.UniqueColumnCount()
+		cnt = index.KeyColumnCount()
 	}
 	if len(required) < cnt {
 		cnt = len(required)
