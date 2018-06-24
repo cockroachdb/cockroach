@@ -577,3 +577,24 @@ SELECT pk, col0 FROM tab1 WHERE (col3 BETWEEN 66 AND 87) ORDER BY 1 DESC
 5 69
 3 70
 2 87
+
+# Use a unique index with a nullable column. Rows with a NULL value for that
+# column will have the PK columns added to the key, whereas rows with a non-NULL
+# value will not. Ensure that when the index is used, it returns all rows.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a, b), UNIQUE INDEX c (c))
+
+statement ok
+INSERT INTO abc (a, b, c) VALUES (0, 1, NULL);
+INSERT INTO abc (a, b, c) VALUES (0, 2, NULL);
+INSERT INTO abc (a, b, c) VALUES (1, 1, NULL);
+INSERT INTO abc (a, b, c) VALUES (1, 2, NULL);
+INSERT INTO abc (a, b, c) VALUES (2, 1, 1);
+INSERT INTO abc (a, b, c) VALUES (2, 2, 2);
+
+query III rowsort
+SELECT * FROM abc WHERE (c IS NULL OR c=2) AND a>0
+----
+1  1  NULL
+1  2  NULL
+2  2  2

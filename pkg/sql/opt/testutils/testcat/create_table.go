@@ -32,6 +32,17 @@ const (
 	nonUniqueIndex
 )
 
+type colType int
+
+const (
+	// keyCol is part of both lax and strict keys.
+	keyCol colType = iota
+	// strictKeyCol is only part of strict key.
+	strictKeyCol
+	// nonKeyCol is not part of lax or strict key.
+	nonKeyCol
+)
+
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
@@ -135,12 +146,17 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 	idx := &Index{Name: tt.makeIndexName(def.Name, typ)}
 
-	// Add explicit columns and mark key columns as not null.
+	// Add explicit columns and mark primary key columns as not null.
+	notNullIndex := true
 	for _, colDef := range def.Columns {
-		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, true /* makeUnique */)
+		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
 
 		if typ == primaryIndex {
 			col.Nullable = false
+		}
+
+		if col.Nullable {
+			notNullIndex = false
 		}
 	}
 
@@ -152,7 +168,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// Add the rest of the columns in the table.
 		for i := range tt.Columns {
 			if !pkOrdinals.Contains(i) {
-				idx.addColumnByOrdinal(tt, i, tree.Ascending, false /* makeUnique */)
+				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
 		if len(tt.Indexes) != 0 {
@@ -163,7 +179,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 	}
 
 	// Add implicit key columns from primary index.
-	pkCols := tt.Indexes[opt.PrimaryIndex].Columns[:tt.Indexes[opt.PrimaryIndex].Unique]
+	pkCols := tt.Indexes[opt.PrimaryIndex].Columns[:tt.Indexes[opt.PrimaryIndex].KeyCount]
 	for _, pkCol := range pkCols {
 		// Only add columns that aren't already part of index.
 		found := false
@@ -174,13 +190,24 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		}
 
 		if !found {
-			// Implicit column is only part of the index's set of unique columns
-			// if the index *was not* declared as unique in the first place. The
-			// implicit columns are added to make the index unique (as well as
-			// to "cover" the primary index for lookups).
 			name := string(pkCol.Column.ColName())
-			makeUnique := typ != uniqueIndex
-			idx.addColumn(tt, name, tree.Ascending, makeUnique)
+
+			if typ == uniqueIndex {
+				// If unique index has no NULL columns, then the implicit columns
+				// are added as storing columns. Otherwise, they become part of the
+				// strict key, since they're needed to ensure uniqueness (but they
+				// are not part of the lax key).
+				if notNullIndex {
+					idx.addColumn(tt, name, tree.Ascending, nonKeyCol)
+				} else {
+					idx.addColumn(tt, name, tree.Ascending, strictKeyCol)
+				}
+			} else {
+				// Implicit columns are always added to the key for a non-unique
+				// index. In addition, there is no separate lax key, so the lax
+				// key column count = key column count.
+				idx.addColumn(tt, name, tree.Ascending, keyCol)
+			}
 		}
 	}
 
@@ -195,7 +222,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 			}
 		}
 		if !found {
-			idx.addColumn(tt, string(name), tree.Ascending, false /* makeUnique */)
+			idx.addColumn(tt, string(name), tree.Ascending, nonKeyCol)
 		}
 	}
 
@@ -215,13 +242,13 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 }
 
 func (ti *Index) addColumn(
-	tt *Table, name string, direction tree.Direction, makeUnique bool,
+	tt *Table, name string, direction tree.Direction, colType colType,
 ) *Column {
-	return ti.addColumnByOrdinal(tt, tt.FindOrdinal(name), direction, makeUnique)
+	return ti.addColumnByOrdinal(tt, tt.FindOrdinal(name), direction, colType)
 }
 
 func (ti *Index) addColumnByOrdinal(
-	tt *Table, ord int, direction tree.Direction, makeUnique bool,
+	tt *Table, ord int, direction tree.Direction, colType colType,
 ) *Column {
 	col := tt.Column(ord)
 	idxCol := opt.IndexColumn{
@@ -230,10 +257,17 @@ func (ti *Index) addColumnByOrdinal(
 		Descending: direction == tree.Descending,
 	}
 	ti.Columns = append(ti.Columns, idxCol)
-	if makeUnique {
-		// Need to add to the index's count of columns that are part of its
-		// unique key.
-		ti.Unique++
+
+	// Update key column counts.
+	switch colType {
+	case keyCol:
+		// Column is part of both any lax key, as well as the strict key.
+		ti.LaxKeyCount++
+		ti.KeyCount++
+
+	case strictKeyCol:
+		// Column is only part of the strict key.
+		ti.KeyCount++
 	}
 	return col.(*Column)
 }
