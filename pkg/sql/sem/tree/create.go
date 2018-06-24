@@ -511,6 +511,9 @@ func (node *IndexTableDef) SetName(name Name) {
 
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
+	if node.Inverted {
+		ctx.WriteString("INVERTED ")
+	}
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
@@ -526,9 +529,6 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
-	}
-	if node.Inverted {
-		ctx.WriteString("INVERTED ")
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)

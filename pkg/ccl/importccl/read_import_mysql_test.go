@@ -197,7 +197,8 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 		)
 	}
 	for i := range expected.Indexes {
-		e, g := expected.Indexes[i].SQLString(expected.Name), got.Indexes[i].SQLString(expected.Name)
+		tableName := tree.NewUnqualifiedTableName(tree.Name(expected.Name))
+		e, g := expected.Indexes[i].SQLString(tableName), got.Indexes[i].SQLString(tableName)
 		if e != g {
 			t.Fatalf("index %d: expected\n%s\ngot\n%s\n", i, e, g)
 		}
