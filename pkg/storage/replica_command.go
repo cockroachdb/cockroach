@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // evaluateCommand delegates to the eval method for the given
@@ -1125,8 +1126,8 @@ func splitTrigger(
 	// and compute stats for it instead of having a constraint that the
 	// left hand side is smaller.
 
-	// Compute (absolute) stats for LHS range. This means that no more writes
-	// to the LHS must happen below this point.
+	// Compute (absolute) stats for LHS range. Don't write to the LHS below;
+	// this needs to happen before this step.
 	leftMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
@@ -1144,13 +1145,46 @@ func splitTrigger(
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
-	// Initialize the RHS range's AbortSpan by copying the LHS's.
-	seqCount, err := rec.AbortSpan().CopyInto(batch, &bothDeltaMS, split.RightDesc.RangeID)
-	if err != nil {
-		// TODO(tschottdorf): ReplicaCorruptionError.
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
+	// Initialize the RHS range's AbortSpan by copying the LHS's. Put a little extra
+	// effort into only copying records that are required: certain workloads create
+	// sizable abort spans, and repeated splitting can blow them up further. Once
+	// it reaches approximately the Raft MaxCommandSize, splits become impossible,
+	// which is pretty bad (see #25233).
+	{
+		var abortSpanCopyCount, abortSpanSkipCount int
+		// Abort span entries before this span are eligible for GC, so we don't
+		// copy them into the new range. We could try to delete them from the LHS
+		// as well, but that could create a large Raft command in itself. Plus,
+		// we'd have to adjust the stats computations.
+		threshold := ts.Add(-txnCleanupThreshold.Nanoseconds(), 0)
+		var scratch [64]byte
+		if err := rec.AbortSpan().Iterate(ctx, batch, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
+			if entry.Timestamp.Less(threshold) {
+				// The entry would be garbage collected (if GC had run), so
+				// don't bother copying it. Note that we can't filter on the key,
+				// that is just where the txn record lives, but it doesn't tell
+				// us whether the intents that triggered the abort span record
+				// where on the LHS, RHS, or both.
+				abortSpanSkipCount++
+				return nil
+			}
+
+			abortSpanCopyCount++
+			var txnID uuid.UUID
+			txnID, err = keys.DecodeAbortSpanKey(k, scratch[:0])
+			if err != nil {
+				return err
+			}
+			return engine.MVCCPutProto(ctx, batch, &bothDeltaMS,
+				keys.AbortSpanKey(split.RightDesc.RangeID, txnID),
+				hlc.Timestamp{}, nil, &entry,
+			)
+		}); err != nil {
+			// TODO(tschottdorf): ReplicaCorruptionError.
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
+		}
+		log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
 	}
-	log.Eventf(ctx, "copied AbortSpan (%d entries)", seqCount)
 
 	// Compute (absolute) stats for RHS range.
 	var rightMS enginepb.MVCCStats
@@ -1482,10 +1516,8 @@ func mergeTrigger(
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
 
-	// Copy the RHS range's AbortSpan to the new LHS one.
-	if _, err := rec.AbortSpan().CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
-		return result.Result{}, errors.Errorf("unable to copy AbortSpan to new split range: %s", err)
-	}
+	// TODO(benesch): copy the non-expired abort span records from the RHS into the LHS.
+	// See the corresponding code for splits.
 
 	// Remove the RHS range's metadata. Note that we don't need to
 	// keep track of stats here, because we already set the right range's
