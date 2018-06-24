@@ -10,8 +10,8 @@ TABLE xysd
  │    └── x int not null
  └── INDEX secondary
       ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
+      ├── d decimal not null (lax)
+      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT, v INT NOT NULL)

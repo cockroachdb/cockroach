@@ -59,7 +59,7 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	tab := md.Table(scanOpDef.Table)
 
 	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
-	pkCols := make(opt.ColList, primaryIndex.UniqueColumnCount())
+	pkCols := make(opt.ColList, primaryIndex.KeyColumnCount())
 	for i := range pkCols {
 		pkCols[i] = md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)
 	}
@@ -142,7 +142,7 @@ func (c *CustomFuncs) constrainedScanOpDef(
 	// Fill out data structures needed to initialize the idxconstraint library.
 	md := c.e.mem.Metadata()
 	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
-	columns := make([]opt.OrderingColumn, index.UniqueColumnCount())
+	columns := make([]opt.OrderingColumn, index.KeyColumnCount())
 	var notNullCols opt.ColSet
 	for i := range columns {
 		col := index.Column(i)

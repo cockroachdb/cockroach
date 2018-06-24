@@ -10,8 +10,8 @@ TABLE a
  │    └── x int not null
  └── INDEX secondary
       ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
+      ├── d decimal not null (lax)
+      └── x int not null
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -70,7 +70,7 @@ project
       │    │    ├── fd: (1)-->(2,3)
       │    │    └── scan a@secondary
       │    │         ├── columns: x:1(int!null) s:3(string!null)
-      │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
+      │    │         ├── constraint: /-3/4/1: [/'foo' - /'foo']
       │    │         ├── stats: [rows=200, distinct(3)=1]
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(3)

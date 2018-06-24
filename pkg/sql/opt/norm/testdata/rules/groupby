@@ -25,8 +25,8 @@ TABLE a
  │    └── j jsonb (storing)
  └── INDEX fi_idx
       ├── f float
-      ├── i int not null
-      └── k int not null (storing)
+      ├── i int not null (lax)
+      └── k int not null
 
 exec-ddl
 CREATE TABLE sort (k INT PRIMARY KEY, v INT, w INT)

@@ -967,7 +967,7 @@ func (b *logicalPropsBuilder) makeTableFuncDep(
 			continue
 		}
 		strict := true
-		for col := 0; col < index.UniqueColumnCount(); col++ {
+		for col := 0; col < index.LaxKeyColumnCount(); col++ {
 			ord := index.Column(col).Ordinal
 			colID := md.TableColumn(tabID, ord)
 			keyCols.Add(int(colID))

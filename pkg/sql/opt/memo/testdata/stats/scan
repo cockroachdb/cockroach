@@ -10,8 +10,8 @@ TABLE a
  │    └── x int not null
  └── INDEX secondary
       ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
+      ├── d decimal not null (lax)
+      └── x int not null
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[

@@ -740,8 +740,8 @@ TABLE bar
  ├── INDEX primary
  │    └── id int not null
  └── INDEX i_bar
-      ├── baz string
-      └── id int not null (storing)
+      ├── baz string (lax)
+      └── id int not null
 
 build
 SELECT * FROM bar ORDER BY baz, id

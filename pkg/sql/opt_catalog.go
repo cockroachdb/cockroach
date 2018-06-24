@@ -210,7 +210,8 @@ type optIndex struct {
 	storedCols []sqlbase.ColumnID
 
 	numCols       int
-	numUniqueCols int
+	numKeyCols    int
+	numLaxKeyCols int
 }
 
 var _ opt.Index = &optIndex{}
@@ -243,10 +244,27 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
 	}
 
-	// If index is not unique, extra key columns are added.
-	oi.numUniqueCols = len(desc.ColumnIDs)
-	if !desc.Unique {
-		oi.numUniqueCols += len(desc.ExtraColumnIDs)
+	oi.numLaxKeyCols = len(desc.ColumnIDs)
+	if desc.Unique {
+		notNull := true
+		for _, id := range desc.ColumnIDs {
+			ord := tab.lookupColumnOrdinal(id)
+			if tab.desc.Columns[ord].Nullable {
+				notNull = false
+				break
+			}
+		}
+
+		// Unique index has at least one null column, so extra primary key
+		// columns are added.
+		if !notNull {
+			oi.numKeyCols = oi.numLaxKeyCols + len(desc.ExtraColumnIDs)
+		} else {
+			oi.numKeyCols = oi.numLaxKeyCols
+		}
+	} else {
+		// Index is not unique, so extra primary key columns are added.
+		oi.numKeyCols = oi.numLaxKeyCols + len(desc.ExtraColumnIDs)
 	}
 }
 
@@ -265,9 +283,14 @@ func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// UniqueColumnCount is part of the opt.Index interface.
-func (oi *optIndex) UniqueColumnCount() int {
-	return oi.numUniqueCols
+// KeyColumnCount is part of the opt.Index interface.
+func (oi *optIndex) KeyColumnCount() int {
+	return oi.numKeyCols
+}
+
+// LaxKeyColumnCount is part of the opt.Index interface.
+func (oi *optIndex) LaxKeyColumnCount() int {
+	return oi.numLaxKeyCols
 }
 
 // Column is part of the opt.Index interface.

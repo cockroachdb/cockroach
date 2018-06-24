@@ -18,8 +18,8 @@ TABLE a
  │    └── k int not null
  └── INDEX secondary
       ├── s string desc
-      ├── f float
-      ├── k int not null (storing)
+      ├── f float (lax)
+      ├── k int not null
       └── j jsonb (storing)
 
 exec-ddl
@@ -445,7 +445,7 @@ ConstrainScan
          ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
   +      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
-  +      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  +      │    ├── constraint: /-4/3/1: [/'foo'/100.00000000000001 - /'foo']
          │    ├── key: (1)
   -      │    └── fd: (1)-->(3,4), (3,4)~~>(1)
   -      └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
@@ -466,12 +466,12 @@ SimplifyFilters
   - └── select
   + └── scan a@secondary
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
-  +      ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  +      ├── constraint: /-4/3/1: [/'foo'/100.00000000000001 - /'foo']
          ├── key: (1)
   -      ├── fd: (1)-->(3,4), (3,4)-->(1)
   -      ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
-  -      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  -      │    ├── constraint: /-4/3/1: [/'foo'/100.00000000000001 - /'foo']
   -      │    ├── key: (1)
   -      │    └── fd: (1)-->(3,4), (3,4)-->(1)
   -      └── filters [type=bool]
@@ -488,7 +488,7 @@ Final best expression
    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
    └── scan a@secondary
         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
-        ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+        ├── constraint: /-4/3/1: [/'foo'/100.00000000000001 - /'foo']
         ├── key: (1)
         └── fd: (1)-->(3,4), (3,4)-->(1)
 
