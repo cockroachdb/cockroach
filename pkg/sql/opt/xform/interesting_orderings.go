@@ -68,7 +68,7 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 		if index.IsInverted() {
 			continue
 		}
-		numIndexCols := index.UniqueColumnCount()
+		numIndexCols := index.KeyColumnCount()
 		o := make(opt.Ordering, 0, numIndexCols)
 		for j := 0; j < numIndexCols; j++ {
 			indexCol := index.Column(j)

@@ -210,7 +210,8 @@ type optIndex struct {
 	storedCols []sqlbase.ColumnID
 
 	numCols       int
-	numUniqueCols int
+	numKeyCols    int
+	numLaxKeyCols int
 }
 
 var _ opt.Index = &optIndex{}
@@ -243,10 +244,34 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
 	}
 
-	// If index is not unique, extra key columns are added.
-	oi.numUniqueCols = len(desc.ColumnIDs)
-	if !desc.Unique {
-		oi.numUniqueCols += len(desc.ExtraColumnIDs)
+	if desc.Unique {
+		notNull := true
+		for _, id := range desc.ColumnIDs {
+			ord := tab.lookupColumnOrdinal(id)
+			if tab.desc.Columns[ord].Nullable {
+				notNull = false
+				break
+			}
+		}
+
+		if notNull {
+			// Unique index with no null columns: columns from index are sufficient
+			// to form a key without needing extra primary key columns. There is no
+			// separate lax key.
+			oi.numLaxKeyCols = len(desc.ColumnIDs)
+			oi.numKeyCols = oi.numLaxKeyCols
+		} else {
+			// Unique index with at least one nullable column: extra primary key
+			// columns will be added to the row key when one of the unique index
+			// columns has a NULL value.
+			oi.numLaxKeyCols = len(desc.ColumnIDs)
+			oi.numKeyCols = oi.numLaxKeyCols + len(desc.ExtraColumnIDs)
+		}
+	} else {
+		// Non-unique index: extra primary key columns are always added to the row
+		// key. There is no separate lax key.
+		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
+		oi.numKeyCols = oi.numLaxKeyCols
 	}
 }
 
@@ -265,9 +290,14 @@ func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// UniqueColumnCount is part of the opt.Index interface.
-func (oi *optIndex) UniqueColumnCount() int {
-	return oi.numUniqueCols
+// KeyColumnCount is part of the opt.Index interface.
+func (oi *optIndex) KeyColumnCount() int {
+	return oi.numKeyCols
+}
+
+// LaxKeyColumnCount is part of the opt.Index interface.
+func (oi *optIndex) LaxKeyColumnCount() int {
+	return oi.numLaxKeyCols
 }
 
 // Column is part of the opt.Index interface.
