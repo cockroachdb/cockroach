@@ -2526,14 +2526,9 @@ func MVCCGarbageCollect(
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
-// from the key ranges listed in keys.NoSplitSpans (or listed in
-// keys.NoSplitSpansWithoutMeta2Splits if allowMeta2Splits is false).
+// from the key ranges listed in keys.NoSplitSpans.
 func MVCCFindSplitKey(
-	ctx context.Context,
-	engine Reader,
-	key, endKey roachpb.RKey,
-	targetSize int64,
-	allowMeta2Splits bool,
+	ctx context.Context, engine Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
 		key = roachpb.RKey(keys.LocalMax)
@@ -2601,8 +2596,7 @@ func MVCCFindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
 		MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
-		targetSize,
-		allowMeta2Splits)
+		targetSize)
 	if err != nil {
 		return nil, err
 	}

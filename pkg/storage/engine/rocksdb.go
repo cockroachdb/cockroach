@@ -1380,10 +1380,10 @@ func (r *batchIterator) ComputeStats(
 }
 
 func (r *batchIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool,
+	start, end, minSplitKey MVCCKey, targetSize int64,
 ) (MVCCKey, error) {
 	r.batch.flushMutations()
-	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
+	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
 func (r *batchIterator) MVCCGet(
@@ -2059,11 +2059,11 @@ func (r *rocksDBIterator) ComputeStats(
 }
 
 func (r *rocksDBIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool,
+	start, end, minSplitKey MVCCKey, targetSize int64,
 ) (MVCCKey, error) {
 	var splitKey C.DBString
 	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), goToCKey(minSplitKey),
-		C.int64_t(targetSize), C.bool(allowMeta2Splits), &splitKey)
+		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err
 	}
@@ -2713,8 +2713,8 @@ func (r *RocksDB) DeleteDirAndFiles(dir string) error {
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
 // equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
-func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
-	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(allowMeta2Splits)))
+func IsValidSplitKey(key roachpb.Key) bool {
+	return bool(C.MVCCIsValidSplitKey(goToCSlice(key)))
 }
 
 // lockFile sets a lock on the specified file using RocksDB's file locking interface.
