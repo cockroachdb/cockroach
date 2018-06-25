@@ -1086,7 +1086,7 @@ func (c *cascader) cascadeAll(
 		}
 		for deletedRows.Len() > 0 {
 			// TODO(bram): Can these be batched?
-			if err := rowDeleter.Fks.checkAll(ctx, deletedRows.At(0)); err != nil {
+			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
 				return err
 			}
 			deletedRows.PopFirst()
