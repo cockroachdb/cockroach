@@ -336,6 +336,79 @@ func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolut
 	}
 }
 
+// rollup time series from the model. "nowNanos" represents the current time,
+// and is used to compute threshold ages. Only time series in the provided list
+// of time series/resolution pairs will be considered for rollup.
+func (tm *testModelRunner) rollup(nowNanos int64, timeSeries ...timeSeriesResolutionInfo) {
+	// Rollup time series from the system under test.
+	qmc := MakeQueryMemoryContext(tm.workerMemMonitor, tm.resultMemMonitor, QueryMemoryOptions{
+		// Large budget, but not maximum to avoid overflows.
+		BudgetBytes:             math.MaxInt64,
+		EstimatedSources:        1, // Not needed for rollups
+		InterpolationLimitNanos: 0,
+		Columnar:                tm.DB.WriteColumnar(),
+	})
+	tm.rollupWithMemoryContext(qmc, nowNanos, timeSeries...)
+}
+
+// rollupWithMemoryContext performs the rollup operation using a custom memory
+// context).
+func (tm *testModelRunner) rollupWithMemoryContext(
+	qmc QueryMemoryContext, nowNanos int64, timeSeries ...timeSeriesResolutionInfo,
+) {
+	if err := tm.DB.rollupTimeSeries(
+		context.TODO(),
+		timeSeries,
+		hlc.Timestamp{
+			WallTime: nowNanos,
+			Logical:  0,
+		},
+		qmc,
+	); err != nil {
+		tm.t.Fatalf("error rolling up time series data: %s", err)
+	}
+
+	// Prune the appropriate resolution-specific series from the test model using
+	// VisitSeries.
+	thresholds := tm.DB.computeThresholds(nowNanos)
+	for _, ts := range timeSeries {
+		// Track any data series which are pruned from the original resolution -
+		// they will be recorded into the rollup resolution.
+		type sourceDataPair struct {
+			source string
+			data   testmodel.DataSeries
+		}
+		var toRecord []sourceDataPair
+
+		// Visit each data series for the given name and resolution (may have multiple
+		// sources). Prune the data down to *only* time periods after the pruning
+		// thresholds - additionally, record any pruned data into the target rollup
+		// resolution for this resolution.
+		tm.model.VisitSeries(
+			resolutionModelKey(ts.Name, ts.Resolution),
+			func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
+				pruned := data.TimeSlice(thresholds[ts.Resolution], math.MaxInt64)
+				if len(pruned) != len(data) {
+					toRecord = append(toRecord, sourceDataPair{
+						source: source,
+						data:   data.TimeSlice(0, thresholds[ts.Resolution]),
+					})
+					return pruned, true
+				}
+				return data, false
+			},
+		)
+		for _, data := range toRecord {
+			targetResolution, _ := ts.Resolution.TargetRollupResolution()
+			tm.model.Record(
+				resolutionModelKey(ts.Name, targetResolution),
+				data.source,
+				data.data,
+			)
+		}
+	}
+}
+
 // modelQuery encapsulates all of the parameters to execute a query along with
 // some context for executing that query. This structure is a useful abstraction
 // for tests, when tests utilize default values for most query fields but
@@ -418,7 +491,28 @@ func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 }
 
 func (mq *modelQuery) queryModel() testmodel.DataSeries {
-	return mq.modelRunner.model.Query(
+	var result testmodel.DataSeries
+	startTime := mq.StartNanos
+	if rollupResolution, ok := mq.diskResolution.TargetRollupResolution(); ok &&
+		mq.verifyDiskResolution(rollupResolution) == nil {
+		result = mq.modelRunner.model.Query(
+			resolutionModelKey(mq.Name, rollupResolution),
+			mq.Sources,
+			mq.GetDownsampler(),
+			mq.GetSourceAggregator(),
+			mq.GetDerivative(),
+			rollupResolution.SlabDuration(),
+			mq.SampleDurationNanos,
+			mq.StartNanos,
+			mq.EndNanos,
+			mq.InterpolationLimitNanos,
+			mq.NowNanos,
+		)
+		if len(result) > 0 {
+			startTime = result[len(result)-1].TimestampNanos
+		}
+	}
+	result = append(result, mq.modelRunner.model.Query(
 		resolutionModelKey(mq.Name, mq.diskResolution),
 		mq.Sources,
 		mq.GetDownsampler(),
@@ -426,11 +520,12 @@ func (mq *modelQuery) queryModel() testmodel.DataSeries {
 		mq.GetDerivative(),
 		mq.diskResolution.SlabDuration(),
 		mq.SampleDurationNanos,
-		mq.StartNanos,
+		startTime,
 		mq.EndNanos,
 		mq.InterpolationLimitNanos,
 		mq.NowNanos,
-	)
+	)...)
+	return result
 }
 
 // assertSuccess runs the query against both the real database and the model
@@ -472,6 +567,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 // source count. This method is intended for use in tests which are generated
 // procedurally.
 func (mq *modelQuery) assertMatchesModel() {
+	mq.modelRunner.t.Helper()
 	// Query the real DB.
 	actualDatapoints, _, err := mq.queryDB()
 	if err != nil {
