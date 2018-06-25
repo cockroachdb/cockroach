@@ -21,6 +21,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -206,6 +208,49 @@ func (tsi *timeSeriesSpanIterator) min() float64 {
 		return *min
 	}
 	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) first() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.First[tsi.inner]
+		}
+		return data.Last[tsi.inner]
+	}
+
+	// First was not recorded in the planned row-format rollups, but since these
+	// rollups were never actually generated we can safely use sum.
+	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) last() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		return data.Last[tsi.inner]
+	}
+
+	// Last was not recorded in the planned row-format rollups, but since these
+	// rollups were never actually generated we can safely use sum.
+	return data.Samples[tsi.inner].Sum
+}
+
+func (tsi *timeSeriesSpanIterator) variance() float64 {
+	data := tsi.span[tsi.outer]
+	if tsi.isColumnar() {
+		if tsi.isRollup() {
+			return data.Variance[tsi.inner]
+		}
+		return 0
+	}
+
+	// Variance was not recorded in the planned row-format rollups, but since
+	// these rollups were never actually generated we can safely return 0.
+	return 0
+}
+
+func (tsi *timeSeriesSpanIterator) average() float64 {
+	return tsi.sum() / float64(tsi.count())
 }
 
 func (tsi *timeSeriesSpanIterator) setOffset(value int32) {
@@ -430,35 +475,55 @@ func (db *DB) Query(
 	// Create sourceSet, which tracks unique sources seen while querying.
 	sourceSet := make(map[string]struct{})
 
-	// Compute the maximum timespan width which can be queried for this resolution
-	// without exceeding the memory budget.
-	maxTimespanWidth, err := mem.GetMaxTimespan(diskResolution)
-	if err != nil {
-		return nil, nil, err
+	resolutions := []Resolution{diskResolution}
+	if rollupResolution, ok := diskResolution.TargetRollupResolution(); ok {
+		if timespan.verifyDiskResolution(rollupResolution) == nil {
+			resolutions = []Resolution{rollupResolution, diskResolution}
+		}
 	}
 
-	if maxTimespanWidth > timespan.width() {
-		if err := db.queryChunk(
-			ctx, query, diskResolution, timespan, mem, &result, sourceSet,
-		); err != nil {
+	for _, resolution := range resolutions {
+		// Compute the maximum timespan width which can be queried for this resolution
+		// without exceeding the memory budget.
+		maxTimespanWidth, err := mem.GetMaxTimespan(resolution)
+		if err != nil {
 			return nil, nil, err
 		}
-	} else {
-		// Break up the timespan into "chunks" where each chunk will fit into the
-		// memory budget. Query and process each chunk individually, appending
-		// results to the same output collection.
-		chunkTime := timespan
-		chunkTime.EndNanos = chunkTime.StartNanos + maxTimespanWidth
-		for ; chunkTime.StartNanos < timespan.EndNanos; chunkTime.moveForward(maxTimespanWidth + timespan.SampleDurationNanos) {
-			if chunkTime.EndNanos > timespan.EndNanos {
-				// Final chunk may be a smaller window.
-				chunkTime.EndNanos = timespan.EndNanos
-			}
+
+		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
-				ctx, query, diskResolution, chunkTime, mem, &result, sourceSet,
+				ctx, query, resolution, timespan, mem, &result, sourceSet,
 			); err != nil {
 				return nil, nil, err
 			}
+		} else {
+			// Break up the timespan into "chunks" where each chunk will fit into the
+			// memory budget. Query and process each chunk individually, appending
+			// results to the same output collection.
+			chunkTime := timespan
+			chunkTime.EndNanos = chunkTime.StartNanos + maxTimespanWidth
+			for ; chunkTime.StartNanos < timespan.EndNanos; chunkTime.moveForward(maxTimespanWidth + timespan.SampleDurationNanos) {
+				if chunkTime.EndNanos > timespan.EndNanos {
+					// Final chunk may be a smaller window.
+					chunkTime.EndNanos = timespan.EndNanos
+				}
+				if err := db.queryChunk(
+					ctx, query, resolution, chunkTime, mem, &result, sourceSet,
+				); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+
+		// If results were returned and there are multiple resolutions, determine
+		// if we have satisfied the entire query. If not, determine where the query
+		// for the next resolution should begin.
+		if len(resolutions) > 1 && len(result) > 0 {
+			lastTime := result[len(result)-1].TimestampNanos
+			if lastTime >= timespan.EndNanos {
+				break
+			}
+			timespan.StartNanos = lastTime
 		}
 	}
 
@@ -502,26 +567,9 @@ func (db *DB) queryChunk(
 	}
 
 	// Assemble data into an ordered timeSeriesSpan for each source.
-	sourceSpans := make(map[string]timeSeriesSpan)
-	for _, row := range data {
-		var data roachpb.InternalTimeSeriesData
-		if err := row.ValueProto(&data); err != nil {
-			return err
-		}
-		_, source, _, _, err := DecodeDataKey(row.Key)
-		if err != nil {
-			return err
-		}
-		sampleSize := sizeOfSample
-		if data.IsColumnar() {
-			sampleSize = sizeOfInt32 + sizeOfFloat64
-		}
-		if err := acc.Grow(
-			ctx, sampleSize*int64(data.SampleCount())+sizeOfTimeSeriesData,
-		); err != nil {
-			return err
-		}
-		sourceSpans[source] = append(sourceSpans[source], data)
+	sourceSpans, err := convertKeysToSpans(ctx, data, &acc)
+	if err != nil {
+		return err
 	}
 	if len(sourceSpans) == 0 {
 		return nil
@@ -813,7 +861,9 @@ func (db *DB) readFromDatabase(
 }
 
 // readAllSourcesFromDatabase retrieves data for the given series name, at the
-// given disk resolution, across the supplied time span, for all sources.
+// given disk resolution, across the supplied time span, for all sources. The
+// optional limit is used when memory usage is being limited by the number of
+// keys, rather than by timespan.
 func (db *DB) readAllSourcesFromDatabase(
 	ctx context.Context, seriesName string, diskResolution Resolution, timespan QueryTimespan,
 ) ([]client.KeyValue, error) {
@@ -834,6 +884,35 @@ func (db *DB) readAllSourcesFromDatabase(
 		return nil, err
 	}
 	return b.Results[0].Rows, nil
+}
+
+// convertKeysToSpans converts a batch of KeyValues queried from disk into a
+// map of data spans organized by source.
+func convertKeysToSpans(
+	ctx context.Context, data []client.KeyValue, acc *mon.BoundAccount,
+) (map[string]timeSeriesSpan, error) {
+	sourceSpans := make(map[string]timeSeriesSpan)
+	for _, row := range data {
+		var data roachpb.InternalTimeSeriesData
+		if err := row.ValueProto(&data); err != nil {
+			return nil, err
+		}
+		_, source, _, _, err := DecodeDataKey(row.Key)
+		if err != nil {
+			return nil, err
+		}
+		sampleSize := sizeOfSample
+		if data.IsColumnar() {
+			sampleSize = sizeOfInt32 + sizeOfFloat64
+		}
+		if err := acc.Grow(
+			ctx, sampleSize*int64(data.SampleCount())+sizeOfTimeSeriesData,
+		); err != nil {
+			return nil, err
+		}
+		sourceSpans[source] = append(sourceSpans[source], data)
+	}
+	return sourceSpans, nil
 }
 
 func verifySourceAggregator(agg tspb.TimeSeriesQueryAggregator) error {

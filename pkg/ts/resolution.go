@@ -111,6 +111,19 @@ func (r Resolution) IsRollup() bool {
 	return r == Resolution30m || r == resolution50ns
 }
 
+// TargetRollupResolution returns a target resolution that data from this
+// resolution should be rolled up into in lieu of deletion. For example,
+// Resolution10s has a target rollup resolution of Resolution30m.
+func (r Resolution) TargetRollupResolution() (Resolution, bool) {
+	switch r {
+	case Resolution10s:
+		return Resolution30m, true
+	case resolution1ns:
+		return resolution50ns, true
+	}
+	return r, false
+}
+
 func normalizeToPeriod(timestampNanos int64, period int64) int64 {
 	return timestampNanos - timestampNanos%period
 }
