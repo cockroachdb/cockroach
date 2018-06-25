@@ -468,13 +468,17 @@ func processAbortSpan(
 	abortSpan := abortspan.New(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
-	abortSpan.Iterate(ctx, snap, func(key []byte, v roachpb.AbortSpanEntry) {
+	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++
 			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
-	})
+		return nil
+	}); err != nil {
+		// Still return whatever we managed to collect.
+		log.Warning(ctx, err)
+	}
 	return gcKeys
 }
 
