@@ -315,6 +315,15 @@ func (u *sqlSymUnion) orders() []*tree.Order {
 func (u *sqlSymUnion) groupBy() tree.GroupBy {
     return u.val.(tree.GroupBy)
 }
+func (u *sqlSymUnion) windowFrame() *tree.WindowFrame {
+    return u.val.(*tree.WindowFrame)
+}
+func (u *sqlSymUnion) windowFrameBounds() tree.WindowFrameBounds {
+    return u.val.(tree.WindowFrameBounds)
+}
+func (u *sqlSymUnion) windowFrameBound() *tree.WindowFrameBound {
+    return u.val.(*tree.WindowFrameBound)
+}
 func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
     return u.val.(tree.DistinctOn)
 }
@@ -932,7 +941,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Window> window_clause window_definition_list
 %type <*tree.WindowDef> window_definition over_clause window_specification
 %type <str> opt_existing_window_name
-%type <empty> opt_frame_clause frame_extent frame_bound
+%type <*tree.WindowFrame> opt_frame_clause
+%type <tree.WindowFrameBounds> frame_extent
+%type <*tree.WindowFrameBound> frame_bound
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
@@ -7148,6 +7159,7 @@ window_specification:
       RefName: tree.Name($2),
       Partitions: $3.exprs(),
       OrderBy: $4.orderBy(),
+      Frame: $5.windowFrame(),
     }
   }
 
@@ -7182,23 +7194,110 @@ opt_partition_clause:
 // This is only a subset of the full SQL:2008 frame_clause grammar. We don't
 // support <window frame exclusion> yet.
 opt_frame_clause:
-  RANGE frame_extent { return unimplemented(sqllex, "frame range") }
-| ROWS frame_extent { return unimplemented(sqllex, "frame rows") }
-| /* EMPTY */ {}
+  RANGE frame_extent
+  {
+    bounds := $2.windowFrameBounds()
+    startBound := bounds.StartBound
+    endBound := bounds.EndBound
+    switch {
+    case startBound.BoundType == tree.ValuePreceding:
+      sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
+      return 1
+    case startBound.BoundType == tree.ValueFollowing:
+      sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
+      return 1
+    case endBound != nil && endBound.BoundType == tree.ValuePreceding:
+      sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
+      return 1
+    case endBound != nil && endBound.BoundType == tree.ValueFollowing:
+      sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
+      return 1
+    }
+    $$.val = &tree.WindowFrame{
+      Mode: tree.RANGE,
+      Bounds: bounds,
+    }
+  }
+| ROWS frame_extent
+  {
+    $$.val = &tree.WindowFrame{
+      Mode: tree.ROWS,
+      Bounds: $2.windowFrameBounds(),
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.WindowFrame)(nil)
+  }
 
 frame_extent:
-  frame_bound { return unimplemented(sqllex, "frame_extent") }
-| BETWEEN frame_bound AND frame_bound { return unimplemented(sqllex, "frame_extent") }
+  frame_bound
+  {
+    startBound := $1.windowFrameBound()
+    switch {
+    case startBound.BoundType == tree.UnboundedFollowing:
+      sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
+      return 1
+    case startBound.BoundType == tree.ValueFollowing:
+      sqllex.Error("frame starting from following row cannot end with current row")
+      return 1
+    }
+    $$.val = tree.WindowFrameBounds{StartBound: startBound}
+  }
+| BETWEEN frame_bound AND frame_bound
+  {
+    startBound := $2.windowFrameBound()
+    endBound := $4.windowFrameBound()
+    switch {
+    case startBound.BoundType == tree.UnboundedFollowing:
+      sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
+      return 1
+    case endBound.BoundType == tree.UnboundedPreceding:
+      sqllex.Error("frame end cannot be UNBOUNDED PRECEDING")
+      return 1
+    case startBound.BoundType == tree.CurrentRow && endBound.BoundType == tree.ValuePreceding:
+      sqllex.Error("frame starting from current row cannot have preceding rows")
+      return 1
+    case startBound.BoundType == tree.ValueFollowing && endBound.BoundType == tree.ValuePreceding:
+      sqllex.Error("frame starting from following row cannot have preceding rows")
+      return 1
+    case startBound.BoundType == tree.ValueFollowing && endBound.BoundType == tree.CurrentRow:
+      sqllex.Error("frame starting from following row cannot have preceding rows")
+      return 1
+    }
+    $$.val = tree.WindowFrameBounds{StartBound: startBound, EndBound: endBound}
+  }
 
 // This is used for both frame start and frame end, with output set up on the
 // assumption it's frame start; the frame_extent productions must reject
 // invalid cases.
 frame_bound:
-  UNBOUNDED PRECEDING { return unimplemented(sqllex, "frame_bound") }
-| UNBOUNDED FOLLOWING { return unimplemented(sqllex, "frame_bound") }
-| CURRENT ROW { return unimplemented(sqllex, "frame_bound") }
-| a_expr PRECEDING { return unimplemented(sqllex, "frame_bound") }
-| a_expr FOLLOWING { return unimplemented(sqllex, "frame_bound") }
+  UNBOUNDED PRECEDING
+  {
+    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
+  }
+| UNBOUNDED FOLLOWING
+  {
+    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
+  }
+| CURRENT ROW
+  {
+    $$.val = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+  }
+| a_expr PRECEDING
+  {
+    $$.val = &tree.WindowFrameBound{
+      OffsetExpr: $1.expr(),
+      BoundType: tree.ValuePreceding,
+    }
+  }
+| a_expr FOLLOWING
+  {
+    $$.val = &tree.WindowFrameBound{
+      OffsetExpr: $1.expr(),
+      BoundType: tree.ValueFollowing,
+    }
+  }
 
 // Supporting nonterminals for expressions.
 
