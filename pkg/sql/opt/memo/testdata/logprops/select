@@ -23,8 +23,8 @@ SELECT * FROM xy WHERE x=1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=1, distinct(1)=1]
- ├── key: (1)
- ├── fd: (1)-->(2)
+ ├── key: ()
+ ├── fd: ()-->(1,2)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=1000]

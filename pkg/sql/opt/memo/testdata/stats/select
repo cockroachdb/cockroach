@@ -64,11 +64,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 project
  ├── columns: x:1(int!null) z:2(int!null)
  ├── stats: [rows=8e-06]
+ ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
       ├── stats: [rows=8e-06, distinct(1)=8e-06, distinct(2)=8e-06, distinct(3)=8e-06]
       ├── key: (3)
-      ├── fd: (3)-->(1,2)
+      ├── fd: ()-->(1,2), (3)-->(1,2)
       ├── scan b
       │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
       │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100, distinct(3)=10000]
@@ -120,7 +121,7 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=10, distinct(2)=1]
  ├── key: (1)
- ├── fd: (1)-->(2)
+ ├── fd: ()-->(2), (1)-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=4000, distinct(2)=400]

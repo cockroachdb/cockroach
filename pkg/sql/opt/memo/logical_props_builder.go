@@ -186,6 +186,9 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
+	if filterProps.Constraints != nil {
+		relational.FuncDeps.AddConstants(filterProps.Constraints.ExtractConstCols(b.evalCtx))
+	}
 
 	// Cardinality
 	// -----------

@@ -353,11 +353,11 @@ Initial expression
   project
    ├── columns: s:4(string!null) k:1(int!null)
    ├── key: (1)
-   ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+   ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
    └── select
         ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
         ├── key: (1)
-        ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+        ├── fd: ()-->(4), (1)-->(2-5), (3)-->(1,2,5)
         ├── scan a
         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
         │    ├── key: (1)
@@ -371,11 +371,11 @@ SimplifyFilters
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+    ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
     └── select
          ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
          ├── key: (1)
-         ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+         ├── fd: ()-->(4), (1)-->(2-5), (3)-->(1,2,5)
          ├── scan a
          │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
          │    ├── key: (1)
@@ -391,13 +391,13 @@ PruneSelectCols
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+    ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
     └── select
   -      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
   +      ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-  -      ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
-  +      ├── fd: (1)-->(3,4), (3,4)-->(1)
+  -      ├── fd: ()-->(4), (1)-->(2-5), (3)-->(1,2,5)
+  +      ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
          ├── scan a
   -      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   +      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
@@ -414,11 +414,11 @@ GenerateIndexScans
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+    ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
     └── select
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-         ├── fd: (1)-->(3,4), (3,4)-->(1)
+         ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
   -      ├── scan a
   +      ├── scan a@secondary
          │    ├── columns: k:1(int!null) f:3(float) s:4(string)
@@ -437,11 +437,11 @@ ConstrainScan
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+    ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
     └── select
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-         ├── fd: (1)-->(3,4), (3,4)-->(1)
+         ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
          ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
   +      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
@@ -462,13 +462,13 @@ SimplifyFilters
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+    ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
   - └── select
   + └── scan a@secondary
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   +      ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
          ├── key: (1)
-  -      ├── fd: (1)-->(3,4), (3,4)-->(1)
+  -      ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
   -      ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   -      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
@@ -477,7 +477,7 @@ SimplifyFilters
   -      └── filters [type=bool]
   -           ├── true [type=bool]
   -           └── true [type=bool]
-  +      └── fd: (1)-->(3,4), (3,4)-->(1)
+  +      └── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
 ================================================================================
 Final best expression
   Cost: 0.51
@@ -485,12 +485,12 @@ Final best expression
   project
    ├── columns: s:4(string!null) k:1(int!null)
    ├── key: (1)
-   ├── fd: (1)-->(3,4), (3,4)-->(1) [removed: (3)]
+   ├── fd: ()-->(4), (1)-->(3,4), (3)-->(1) [removed: (3)]
    └── scan a@secondary
         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
         ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
         ├── key: (1)
-        └── fd: (1)-->(3,4), (3,4)-->(1)
+        └── fd: ()-->(4), (1)-->(3,4), (3)-->(1)
 
 # Decorrelation pattern.
 optsteps
