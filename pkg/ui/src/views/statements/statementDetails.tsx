@@ -1,6 +1,6 @@
 import d3 from "d3";
 import _ from "lodash";
-import React from "react";
+import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
@@ -13,12 +13,20 @@ import { AdminUIState } from "src/redux/state";
 import { statementAttr, appAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
-import { NumericStat, stdDev, aggregateStatementStats } from "src/util/appStats";
+import { intersperse } from "src/util/intersperse";
+import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
-import * as protos from "src/js/protos";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
+
+interface AggregateStatistics {
+  statement: string;
+  app: string[];
+  distSQL: boolean[];
+  failed: boolean[];
+  stats: StatementStatistics;
+}
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
@@ -32,10 +40,8 @@ function AppLink(props: { app: string }) {
   );
 }
 
-type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
-
 interface StatementDetailsOwnProps {
-  statement: StatementStatistics;
+  statement: AggregateStatistics;
   refreshQueries: typeof refreshQueries;
 }
 
@@ -124,7 +130,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
       return null;
     }
 
-    const { stats, key } = this.props.statement;
+    const { stats, statement, app, distSQL, failed } = this.props.statement;
 
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
@@ -137,7 +143,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
       <div className="content l-columns">
         <div className="l-columns__left">
           <section className="section">
-            <SqlBox value={ this.props.statement.key.query } />
+            <SqlBox value={ statement } />
           </section>
           <section className="section">
             <h3>Execution Count</h3>
@@ -223,15 +229,17 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <tbody>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>App</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}><AppLink app={ key.app } /></td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>
+                  { intersperse<ReactNode>(app.map(a => <AppLink app={ a } key={ a } />), ", ") }
+                </td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used DistSQL?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.distSQL ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(distSQL) }</td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.failed ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(failed) }</td>
               </tr>
             </tbody>
           </table>
@@ -241,21 +249,37 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
   }
 }
 
+function renderBools(bools: boolean[]) {
+  if (bools.length === 0) {
+    return "(unknown)";
+  }
+  if (bools.length === 1) {
+    return bools[0] ? "Yes" : "No";
+  }
+  return "(both included)";
+}
+
 const selectStatement = createSelector(
   (state: AdminUIState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
   (_state: AdminUIState, props: RouterState) => props,
-  (statements, props) => {
-    if (!statements) {
-      return false;
+  (queries, props) => {
+    if (!queries) {
+      return null;
     }
 
-    const query = props.params[statementAttr];
+    const statement = props.params[statementAttr];
     const app = props.params[appAttr];
 
-    const results = _.filter(statements, stmt => stmt.key.query === query && (!app || stmt.key.app === app));
-    const agg = aggregateStatementStats(results);
+    const statements = flattenStatementStats(queries);
+    const results = _.filter(statements, stmt => stmt.statement === statement && (!app || stmt.app === app));
 
-    return agg[0];
+    return {
+      statement,
+      stats: combineStatementStats(results.map(s => s.stats)),
+      app: _.uniq(results.map(s => s.app)),
+      distSQL: _.uniq(results.map(s => s.distSQL)),
+      failed: _.uniq(results.map(s => s.failed)),
+    };
   },
 );
 
