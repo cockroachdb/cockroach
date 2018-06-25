@@ -152,7 +152,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     }
 
     const selectedApp = this.props.params[appAttr] || "";
-    const appOptions = [{ value: "", label: "All" }, { value: "(unset)", label: "(unset)"  }];
+    const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
     return (
@@ -254,15 +254,18 @@ const selectApps = createSelector(
       return [];
     }
 
+    let sawBlank = false;
     const apps: { [app: string]: boolean } = {};
     state.data.queries.forEach(
       (statement: CollectedStatementStatistics$Properties) => {
         if (statement.key.app) {
           apps[statement.key.app] = true;
+        } else {
+          sawBlank = true;
         }
       },
     );
-    return Object.keys(apps);
+    return (sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
   },
 );
 
