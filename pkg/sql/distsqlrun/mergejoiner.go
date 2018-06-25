@@ -80,7 +80,7 @@ func newMergeJoiner(
 	}
 
 	if err := m.joinerBase.init(
-		flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		nil /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{leftSource, rightSource},

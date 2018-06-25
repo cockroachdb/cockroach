@@ -276,6 +276,7 @@ func newZigzagJoiner(
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
+		nil, /* self */
 		flowCtx,
 		processorID,
 		leftColumnTypes,
