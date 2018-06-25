@@ -135,10 +135,9 @@ sort       ·      ·          (a, b, c)  +b,+a
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@primary
-·          spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
@@ -151,10 +150,9 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@primary
-·          spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 # Check that the sort key reuses the existing render.
 query TTTTT
@@ -343,18 +341,15 @@ sort       ·      ·
 ·          table  abc@bc
 ·          spans  ALL
 
-# TODO(radu): sort is unnecessary here, because bc is unique
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-sort            ·      ·
- │              order  +c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  /2-/3
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@bc
+·          spans  /2-/3
 
-# TODO(radu): sort is unnecessary here, because bc is unique
+# TODO(radu): sort is unnecessary here, because bc is unique (need revscan)
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
@@ -366,18 +361,15 @@ sort            ·      ·
 ·               spans  /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-# TODO(radu): sort is not needed, because a is constant, and abc is ordered on bc
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render          ·         ·            (b, c)     ·
- │              render 0  b            ·          ·
- │              render 1  c            ·          ·
- └── sort       ·         ·            (a, b, c)  +b,+c
-      │         order     +b,+c        ·          ·
-      └── scan  ·         ·            (a, b, c)  ·
-·               table     abc@primary  ·          ·
-·               spans     /1-/2        ·          ·
+render     ·         ·            (b, c)     ·
+ │         render 0  b            ·          ·
+ │         render 1  c            ·          ·
+ └── scan  ·         ·            (a, b, c)  +b,+c
+·          table     abc@primary  ·          ·
+·          spans     /1-/2        ·          ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))

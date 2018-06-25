@@ -98,34 +98,18 @@ type ScanOpDef struct {
 // CanProvideOrdering returns true if the scan operator returns rows that
 // satisfy the given required ordering.
 func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.OrderingChoice) bool {
-	// Scan naturally orders according to the order of the scanned index.
+	// Scan naturally orders according to scanned index's key columns.
+	var ordering props.OrderingChoice
 	index := md.Table(s.Table).Index(s.Index)
-
-	// The index can provide the required ordering in either of these cases:
-	// 1. The ordering columns are a prefix of the index columns.
-	// 2. The index columns are a prefix of the ordering columns (this
-	//    works because the columns are always a key, so any additional
-	//    columns are unnecessary).
-	// TODO(andyk): Use LaxKeyColumnCount when issues with nulls are solved,
-	//              since unique index can still have duplicate nulls.
-	cnt := index.ColumnCount()
-	if s.Index == opt.PrimaryIndex {
-		cnt = index.KeyColumnCount()
-	}
-	if len(required.Columns) < cnt {
-		cnt = len(required.Columns)
-	}
-
-	for i, j := 0, 0; i < cnt; i++ {
+	for i := 0; i < index.KeyColumnCount(); i++ {
+		var orderingCol props.OrderingColumnChoice
 		indexCol := index.Column(i)
 		colID := md.TableColumn(s.Table, indexCol.Ordinal)
-		orderingCol := opt.MakeOrderingColumn(colID, indexCol.Descending)
-		if !required.MatchesAt(i, orderingCol) {
-			return false
-		}
-		j++
+		orderingCol.Descending = indexCol.Descending
+		orderingCol.Group.Add(int(colID))
+		ordering.AppendCol(&orderingCol)
 	}
-	return true
+	return ordering.SubsetOf(required)
 }
 
 // GroupByDef defines the value of the Def private field of the GroupBy

@@ -377,8 +377,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	physPropsFactory := &physicalPropsBuilder{mem: o.mem}
-	if physPropsFactory.canProvide(eid, required) {
+	if o.canProvidePhysicalProps(eid, required) {
 		e := o.mem.Expr(eid)
 		candidateBest := memo.MakeBestExpr(e.Operator(), eid, required)
 		for child := 0; child < e.ChildCount(); child++ {
@@ -386,7 +385,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 
 			// Given required parent properties, get the properties required from
 			// the nth child.
-			childRequired := physPropsFactory.buildChildProps(eid, required, child)
+			childRequired := o.buildChildPhysicalProps(eid, required, child)
 
 			// Recursively optimize the child group with respect to that set of
 			// properties.
@@ -521,26 +520,23 @@ func (o *Optimizer) optimizeRootWithProps(
 	}
 
 	// [SimplifyRootOrdering]
-	// SimplifyRootOrdering removes redundant columns from the root properties, based
-	// on the operator's functional dependencies.
-	if !rootProps.Ordering.Any() {
-		fdset := &relational.FuncDeps
-		if rootProps.Ordering.CanSimplify(fdset) {
-			if o.matchedRule == nil || o.matchedRule(opt.SimplifyRootOrdering) {
-				var simplified props.Physical
-				simplified.Presentation = rootProps.Presentation
-				simplified.Ordering = rootProps.Ordering.Copy()
-				simplified.Ordering.Simplify(fdset)
-				if len(simplified.Ordering.Columns) == 0 {
-					// Discard any optional columns as well if there are no required
-					// columns.
-					simplified.Ordering = props.OrderingChoice{}
-				}
-				rootProps = &simplified
+	// SimplifyRootOrdering removes redundant columns from the root properties,
+	// based on the operator's functional dependencies.
+	if rootProps.Ordering.CanSimplify(&relational.FuncDeps) {
+		if o.matchedRule == nil || o.matchedRule(opt.SimplifyRootOrdering) {
+			var simplified props.Physical
+			simplified.Presentation = rootProps.Presentation
+			simplified.Ordering = rootProps.Ordering.Copy()
+			simplified.Ordering.Simplify(&relational.FuncDeps)
+			if len(simplified.Ordering.Columns) == 0 {
+				// Discard any optional columns as well if there are no required
+				// columns.
+				simplified.Ordering = props.OrderingChoice{}
+			}
+			rootProps = &simplified
 
-				if o.appliedRule != nil {
-					o.appliedRule(opt.SimplifyRootOrdering, root, 0)
-				}
+			if o.appliedRule != nil {
+				o.appliedRule(opt.SimplifyRootOrdering, root, 0)
 			}
 		}
 	}
@@ -548,10 +544,7 @@ func (o *Optimizer) optimizeRootWithProps(
 	// [PruneRootCols]
 	// PruneRootCols discards columns that are not needed by the root's ordering
 	// or presentation properties.
-	neededCols := rootProps.Ordering.ColSet()
-	for _, col := range rootProps.Presentation {
-		neededCols.Add(int(col.ID))
-	}
+	neededCols := rootProps.ColSet()
 	if !neededCols.SubsetOf(relational.OutputCols) {
 		panic("columns required of root must be subset of output columns")
 	}
