@@ -135,10 +135,9 @@ sort       ·      ·          (a, b, c)  +b,+a
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@primary
-·          spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
@@ -151,10 +150,9 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@primary
-·          spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 # Check that the sort key reuses the existing render.
 query TTTTT

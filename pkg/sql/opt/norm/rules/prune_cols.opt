@@ -242,3 +242,16 @@
     )
     $projections
 )
+
+# PruneExplainCols discards Explain input columns that are never used by its
+# required physical properties.
+[PruneExplainCols, Normalize]
+(Explain
+    $input:*
+    $def:* & (CanPruneCols $input (NeededColsExplain $def))
+)
+=>
+(Explain
+    (PruneCols $input (NeededColsExplain $def))
+    $def
+)
