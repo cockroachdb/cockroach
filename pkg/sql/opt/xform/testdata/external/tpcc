@@ -311,7 +311,7 @@ CREATE TABLE new_order
     no_o_id  integer   not null,
     no_d_id  integer   not null,
     no_w_id  integer   not null,
-    primary key (no_w_id, no_d_id, no_o_id)
+    primary key (no_w_id, no_d_id, no_o_id DESC)
 ) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
 ----
 TABLE new_order
@@ -321,7 +321,7 @@ TABLE new_order
  └── INDEX primary
       ├── no_w_id int not null
       ├── no_d_id int not null
-      └── no_o_id int not null
+      └── no_o_id int not null desc
 
 exec-ddl
 ALTER TABLE new_order INJECT STATISTICS '[
@@ -640,30 +640,24 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
-sort
+project
  ├── columns: c_id:1(int!null)
  ├── stats: [rows=6.80272109e-07]
- ├── cost: 7.55102041e-07
+ ├── cost: 7.4829932e-07
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
  ├── prune: (1,4)
- └── project
-      ├── columns: customer.c_id:1(int!null) customer.c_first:4(string)
-      ├── stats: [rows=6.80272109e-07]
+ └── scan customer@customer_idx
+      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
+      ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
+      ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
       ├── cost: 7.4829932e-07
       ├── key: (1)
-      ├── fd: (1)-->(4)
+      ├── fd: ()-->(2,3,6), (1)-->(4,6)
+      ├── ordering: +4 opt(2,3,6)
       ├── prune: (1,4)
-      └── scan customer@customer_idx
-           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
-           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-           ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
-           ├── cost: 7.4829932e-07
-           ├── key: (1)
-           ├── fd: ()-->(2,3,6), (1)-->(4,6)
-           ├── prune: (1,4)
-           └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+      └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
 
 # --------------------------------------------------
 # 2.6 The Order Status Transaction
@@ -702,40 +696,38 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
-sort
+project
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
  ├── stats: [rows=6.80272109e-07]
- ├── cost: 3.63945578e-06
+ ├── cost: 3.63265306e-06
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  ├── prune: (1,4,5,17)
- └── project
-      ├── columns: customer.c_id:1(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_balance:17(decimal)
-      ├── stats: [rows=6.80272109e-07]
+ └── lookup-join customer
+      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null) customer.c_balance:17(decimal)
+      ├── key columns: [3 2 1]
+      ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
       ├── cost: 3.63265306e-06
       ├── key: (1)
-      ├── fd: (1)-->(4,5,17)
+      ├── fd: ()-->(2,3,6), (1)-->(4-6,17)
+      ├── ordering: +4 opt(2,3,6)
       ├── prune: (1,4,5,17)
-      └── lookup-join customer
-           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null) customer.c_balance:17(decimal)
-           ├── key columns: [3 2 1]
+      ├── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+      └── scan customer@customer_idx
+           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
+           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
            ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
-           ├── cost: 3.63265306e-06
+           ├── cost: 7.4829932e-07
            ├── key: (1)
-           ├── fd: ()-->(2,3,6), (1)-->(4-6,17)
-           ├── prune: (1,4,5,17)
-           ├── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
-           └── scan customer@customer_idx
-                ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
-                ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-                ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
-                ├── cost: 7.4829932e-07
-                ├── key: (1)
-                ├── fd: ()-->(2,3,6), (1)-->(4,6)
-                ├── prune: (1,4)
-                └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+           ├── fd: ()-->(2,3,6), (1)-->(4,6)
+           ├── ordering: +4 opt(2,3,6)
+           ├── prune: (1,4)
+           └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
 
+# TODO(andyk): We should be pushing limit/sort below the lookup-join, but row
+# estimation inaccuracy and index-join limitations currently prevent that.
+# TODO(andyk): Need revscan to get very best plan.
 opt format=show-all
 SELECT o_id, o_entry_d, o_carrier_id
 FROM "order"
@@ -747,7 +739,7 @@ project
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=6.80272109e-07]
- ├── cost: 3.53061224e-06
+ ├── cost: 3.53741497e-06
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  ├── prune: (1,5,6)
@@ -756,31 +748,36 @@ project
       ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
       ├── cardinality: [0 - 1]
       ├── stats: [rows=6.80272109e-07]
-      ├── cost: 3.53061224e-06
+      ├── cost: 3.53741497e-06
       ├── key: ()
       ├── fd: ()-->(1-6)
       ├── prune: (5,6)
       ├── interesting orderings: (-1)
-      ├── lookup-join order
+      ├── sort
       │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
-      │    ├── key columns: [3 2 1]
       │    ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
-      │    ├── cost: 3.53061224e-06
+      │    ├── cost: 3.53741497e-06
       │    ├── key: (1)
       │    ├── fd: ()-->(2-4), (1)-->(4-6)
       │    ├── ordering: -1 opt(2-4)
       │    ├── prune: (1,5,6)
-      │    ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
-      │    └── scan order@secondary
-      │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null)
-      │         ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
+      │    └── lookup-join order
+      │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │         ├── key columns: [3 2 1]
       │         ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
-      │         ├── cost: 7.34693878e-07
+      │         ├── cost: 3.53061224e-06
       │         ├── key: (1)
-      │         ├── fd: ()-->(2-4), (1)-->(4)
-      │         ├── ordering: -1 opt(2-4)
-      │         ├── prune: (1)
-      │         └── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
+      │         ├── fd: ()-->(2-4), (1)-->(4-6)
+      │         ├── prune: (1,5,6)
+      │         └── scan order@secondary
+      │              ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null)
+      │              ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
+      │              ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
+      │              ├── cost: 7.34693878e-07
+      │              ├── key: (1)
+      │              ├── fd: ()-->(2-4), (1)-->(4)
+      │              ├── prune: (1)
+      │              └── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
       └── const: 1 [type=int]
 
 opt format=show-all
@@ -819,6 +816,7 @@ project
 # indicating transaction completion. The result of the deferred execution is
 # recorded into a result file.
 # --------------------------------------------------
+# TODO(andyk): Need revscan to get rid of sort.
 opt format=show-all
 SELECT no_o_id
 FROM new_order
@@ -830,7 +828,7 @@ project
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.142857143]
- ├── cost: 0.151428571
+ ├── cost: 0.152857143
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
@@ -839,20 +837,26 @@ project
       ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.142857143]
-      ├── cost: 0.151428571
+      ├── cost: 0.152857143
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── interesting orderings: (+1)
-      ├── scan new_order
+      ├── sort
       │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
-      │    ├── constraint: /3/2/1: [/10/100 - /10/100]
       │    ├── stats: [rows=0.142857143, distinct(2)=0.142857143, distinct(3)=0.142857143]
-      │    ├── cost: 0.151428571
+      │    ├── cost: 0.152857143
       │    ├── key: (1)
       │    ├── fd: ()-->(2,3)
       │    ├── ordering: +1 opt(2,3)
       │    ├── prune: (1)
-      │    └── interesting orderings: (+3,+2,+1)
+      │    └── scan new_order
+      │         ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │         ├── constraint: /3/2/-1: [/10/100 - /10/100]
+      │         ├── stats: [rows=0.142857143, distinct(2)=0.142857143, distinct(3)=0.142857143]
+      │         ├── cost: 0.151428571
+      │         ├── key: (1)
+      │         ├── fd: ()-->(2,3)
+      │         └── prune: (1)
       └── const: 1 [type=int]
 
 opt format=show-all
@@ -1043,7 +1047,7 @@ sort
       │    ├── cost: 95400
       │    ├── key: (1-3)
       │    ├── prune: (1-3)
-      │    └── interesting orderings: (+3,+2,+1)
+      │    └── interesting orderings: (+3,+2,-1)
       └── aggregations [outer=(1)]
            └── max [type=int, outer=(1)]
                 └── variable: new_order.no_o_id [type=int, outer=(1)]
@@ -1121,7 +1125,7 @@ group-by
  │    │    │    ├── cost: 95400
  │    │    │    ├── key: (1-3)
  │    │    │    ├── prune: (1-3)
- │    │    │    └── interesting orderings: (+3,+2,+1)
+ │    │    │    └── interesting orderings: (+3,+2,-1)
  │    │    └── aggregations [outer=(1)]
  │    │         ├── max [type=int, outer=(1)]
  │    │         │    └── variable: new_order.no_o_id [type=int, outer=(1)]
@@ -1219,7 +1223,7 @@ except-all
  │    ├── cost: 95400
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,+1)
+ │    └── interesting orderings: (+3,+2,-1)
  └── project
       ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null)
       ├── stats: [rows=1.42857143]
@@ -1292,7 +1296,7 @@ except-all
       ├── cost: 95400
       ├── key: (9-11)
       ├── prune: (9-11)
-      └── interesting orderings: (+11,+10,+9)
+      └── interesting orderings: (+11,+10,-9)
 
 opt format=show-all
 (
@@ -1466,14 +1470,14 @@ group-by
  │    │    │         ├── stats: [rows=1.42857143, distinct(15)=1]
  │    │    │         ├── cost: 1150000
  │    │    │         ├── fd: ()-->(15)
- │    │    │         ├── ordering: +11,+10,-9
+ │    │    │         ├── ordering: +11,+10,-9 opt(15)
  │    │    │         ├── prune: (9-11)
  │    │    │         ├── interesting orderings: (+11,+10,-9)
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
  │    │    │         │    ├── stats: [rows=1000000, distinct(15)=700000]
  │    │    │         │    ├── cost: 1140000
- │    │    │         │    ├── ordering: +11,+10,-9
+ │    │    │         │    ├── ordering: +11,+10,-9 opt(15)
  │    │    │         │    ├── prune: (9-11,15)
  │    │    │         │    └── interesting orderings: (+11,+10,-9)
  │    │    │         └── filters [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight)]

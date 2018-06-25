@@ -902,12 +902,13 @@ sort
 build
 SELECT a FROM abcd ORDER BY a, b, c
 ----
-project
+sort
  ├── columns: a:1(int!null)
  ├── ordering: +1,+2,+3
- └── scan abcd
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
-      └── ordering: +1,+2,+3
+ └── project
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      └── scan abcd
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1

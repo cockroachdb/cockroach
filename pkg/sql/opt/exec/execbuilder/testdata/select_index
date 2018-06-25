@@ -1060,7 +1060,7 @@ limit           ·       ·
 ·               table   noncover@primary
 ·               spans   ALL
 
-# TODO(radu): need to prefer the order-matching index
+# TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
