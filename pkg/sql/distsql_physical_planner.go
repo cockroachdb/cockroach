@@ -932,6 +932,7 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	nodeID := replInfo.NodeDesc.NodeID
 	if err := dsp.checkNodeHealthAndVersion(planCtx, replInfo.NodeDesc); err != nil {
 		log.Eventf(planCtx.ctx, "not planning on node %d. %v", nodeID, err)
+		return dsp.nodeDesc.NodeID, nil
 	}
 	return nodeID, nil
 }
