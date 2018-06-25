@@ -17,7 +17,7 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
-import { aggregateStatementStats } from "src/util/appStats";
+import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { Duration } from "src/util/format";
 import { summarize, StatementSummary } from "src/util/sql/summarize";
@@ -30,12 +30,19 @@ import "./statements.styl";
 type CollectedStatementStatistics$Properties = protos.cockroach.sql.CollectedStatementStatistics$Properties;
 type RouteProps = RouteComponentProps<any, any>;
 
-class StatementsSortedTable extends SortedTable<CollectedStatementStatistics$Properties> {}
+interface AggregateStatistics {
+  statement: string;
+  stats: StatementStatistics;
+}
+
+class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 interface StatementsPageProps {
-  statements: CachedDataReducerState<QueriesResponseMessage>;
+  valid: boolean;
+  statements: AggregateStatistics[];
   apps: string[];
   totalStatements: number;
+  lastReset: string;
   refreshQueries: typeof refreshQueries;
 }
 
@@ -65,15 +72,15 @@ function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 
-function calculateCumulativeTime(query: CollectedStatementStatistics$Properties) {
-  const count = FixLong(query.stats.count).toInt();
-  const latency = query.stats.service_lat.mean;
+function calculateCumulativeTime(stats: StatementStatistics) {
+  const count = FixLong(stats.count).toInt();
+  const latency = stats.service_lat.mean;
 
   return count * latency;
 }
 
-function makeStatementsColumns(statements: CollectedStatementStatistics$Properties[], selectedApp: string)
-    : ColumnDescriptor<CollectedStatementStatistics$Properties>[] {
+function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
+    : ColumnDescriptor<AggregateStatistics>[] {
   const countBar = countBarChart(statements);
   const rowsBar = rowsBarChart(statements);
   const latencyBar = latencyBarChart(statements);
@@ -82,28 +89,28 @@ function makeStatementsColumns(statements: CollectedStatementStatistics$Properti
     {
       title: "Statement",
       className: "statements-table__col-query-text",
-      cell: (query) => <StatementLink statement={ query.key.query } app={ selectedApp } />,
-      sort: (query) => query.key.query,
+      cell: (stmt) => <StatementLink statement={ stmt.statement } app={ selectedApp } />,
+      sort: (stmt) => stmt.statement,
     },
     {
       title: "Time",
-      cell: (query) => Duration(calculateCumulativeTime(query) * 1e9),
-      sort: calculateCumulativeTime,
+      cell: (stmt) => Duration(calculateCumulativeTime(stmt.stats) * 1e9),
+      sort: (stmt) => calculateCumulativeTime(stmt.stats),
     },
     {
       title: "Count",
       cell: countBar,
-      sort: (query) => FixLong(query.stats.count).toInt(),
+      sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
       title: "Mean Rows",
       cell: rowsBar,
-      sort: (query) => query.stats.num_rows.mean,
+      sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
       title: "Mean Latency",
       cell: latencyBar,
-      sort: (query) => query.stats.service_lat.mean,
+      sort: (stmt) => stmt.stats.service_lat.mean,
     },
   ];
 }
@@ -139,12 +146,10 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 
   renderStatements() {
-    if (!this.props.statements.data) {
+    if (!this.props.valid) {
       // This should really be handled by a loader component.
       return null;
     }
-
-    const { last_reset, queries } = this.props.statements.data;
 
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }, { value: "(unset)", label: "(unset)"  }];
@@ -164,17 +169,17 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         </PageConfig>
 
         <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
-          {queries.length}
+          {this.props.statements.length}
           {selectedApp ? ` of ${this.props.totalStatements} ` : " "}
           statement fingerprints.
           Query history is cleared once an hour;
-          last cleared {Print.Timestamp(last_reset)}.
+          last cleared {this.props.lastReset}.
         </div>
 
         <StatementsSortedTable
           className="statements-table"
-          data={queries}
-          columns={makeStatementsColumns(queries, selectedApp)}
+          data={this.props.statements}
+          columns={makeStatementsColumns(this.props.statements, selectedApp)}
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
@@ -194,7 +199,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         <h1 style={{ marginBottom: 20 }}>Statements</h1>
 
         <Loading
-          loading={_.isNil(this.props.statements.data)}
+          loading={_.isNil(this.props.statements)}
           className="loading-image loading-image__spinner"
           image={spinner}
         >
@@ -211,10 +216,10 @@ const selectStatements = createSelector(
   (_state: AdminUIState, props: RouteProps) => props,
   (state: CachedDataReducerState<QueriesResponseMessage>, props: RouteProps) => {
     if (!state.data) {
-      return state;
+      return null;
     }
 
-    let statements = state.data.queries;
+    let statements = flattenStatementStats(state.data.queries);
     if (props.params[appAttr]) {
       let criteria = props.params[appAttr];
       if (criteria === "(unset)") {
@@ -222,17 +227,23 @@ const selectStatements = createSelector(
       }
 
       statements = statements.filter(
-        (statement: CollectedStatementStatistics$Properties) =>
-          statement.key.app === criteria,
+        (statement: ExecutionStatistics) => statement.app === criteria,
       );
     }
 
-    return {
-      data: {
-        last_reset: state.data.last_reset,
-        queries: aggregateStatementStats(statements),
-      },
-    };
+    const statementsMap: { [statement: string]: StatementStatistics[] } = {};
+    statements.forEach(stmt => {
+      const matches = statementsMap[stmt.statement] || (statementsMap[stmt.statement] = []);
+      matches.push(stmt.stats);
+    });
+
+    return Object.keys(statementsMap).map(stmt => {
+      const stats = statementsMap[stmt];
+      return {
+        statement: stmt,
+        stats: combineStatementStats(stats),
+      };
+    });
   },
 );
 
@@ -266,12 +277,25 @@ const selectTotalStatements = createSelector(
   },
 );
 
+const selectLastReset = createSelector(
+  (state: AdminUIState) => state.cachedData.queries,
+  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+    if (!state.data) {
+      return "unknown";
+    }
+
+    return Print.Timestamp(state.data.last_reset);
+  },
+);
+
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
   (state: AdminUIState, props: RouteProps) => ({
     statements: selectStatements(state, props),
     apps: selectApps(state),
     totalStatements: selectTotalStatements(state),
+    lastReset: selectLastReset(state),
+    valid: state.cachedData.queries.valid,
   }),
   {
     refreshQueries,

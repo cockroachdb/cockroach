@@ -65,7 +65,7 @@ export function aggregateStatementStats(statementStats: CollectedStatementStatis
 }
 
 export interface ExecutionStatistics {
-  query: string;
+  statement: string;
   app: string;
   distSQL: boolean;
   failed: boolean;
@@ -74,7 +74,7 @@ export interface ExecutionStatistics {
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    query: stmt.key.query,
+    statement: stmt.key.query,
     app: stmt.key.app,
     distSQL: stmt.key.distSQL,
     failed: stmt.key.failed,

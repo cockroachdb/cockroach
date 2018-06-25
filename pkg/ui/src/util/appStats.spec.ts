@@ -99,7 +99,7 @@ describe("flattenStatementStats", () => {
     assert.equal(flattened.length, stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].query, stats[i].key.query);
+      assert.equal(flattened[i].statement, stats[i].key.query);
       assert.equal(flattened[i].app, stats[i].key.app);
       assert.equal(flattened[i].distSQL, stats[i].key.distSQL);
       assert.equal(flattened[i].failed, stats[i].key.failed);
