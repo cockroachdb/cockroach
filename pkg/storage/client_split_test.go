@@ -21,6 +21,8 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"sort"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -92,6 +95,127 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		if !testutils.IsPError(pErr, "cannot split") {
 			t.Errorf("%q: unexpected split error %s", key, pErr)
 		}
+	}
+}
+
+// Verify that on a split, only the non-expired abort span records are copied
+// into the right hand side of the split.
+func TestStoreSplitAbortSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	manualClock := hlc.NewManualClock(2400 * time.Hour.Nanoseconds())
+	clock := hlc.NewClock(manualClock.UnixNano, time.Millisecond)
+	storeCfg := storage.TestStoreConfig(clock)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	ctx := context.Background()
+
+	left, middle, right := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
+		txn := roachpb.MakeTransaction("test", key, 0, enginepb.SERIALIZABLE, ts, 0)
+		return &txn
+	}
+
+	var expAll []roachpb.AbortSpanEntry
+
+	populateAbortSpan := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.ResolveIntentRequest {
+		pushee := txn(key, ts)
+		expAll = append(expAll, roachpb.AbortSpanEntry{
+			Key:       key,
+			Timestamp: ts,
+		})
+		return &roachpb.ResolveIntentRequest{
+			Span: roachpb.Span{
+				Key: key,
+			},
+			IntentTxn: pushee.TxnMeta,
+			Status:    roachpb.ABORTED,
+			Poison:    true,
+		}
+	}
+
+	key := func(k roachpb.Key, i int) roachpb.Key {
+		var r []byte
+		r = append(r, k...)
+		r = append(r, []byte(strconv.Itoa(i))...)
+		return r
+	}
+
+	thresh := storage.GetGCQueueTxnCleanupThreshold().Nanoseconds()
+	// Pick a non-gcable and gcable timestamp, respectively. Avoid the clock's
+	// exact timestamp because of unpredictable logical ticks.
+	tsFresh := hlc.Timestamp{WallTime: manualClock.UnixNano() - thresh + 1}
+	tsStale := hlc.Timestamp{WallTime: manualClock.UnixNano() - thresh - 1}
+
+	args := []roachpb.Request{
+		populateAbortSpan(key(left, 1), tsFresh),
+		populateAbortSpan(key(left, 2), tsStale),
+		populateAbortSpan(key(middle, 1), tsFresh),
+		populateAbortSpan(key(middle, 2), tsStale),
+		populateAbortSpan(key(right, 1), tsFresh),
+		populateAbortSpan(key(right, 2), tsStale),
+		adminSplitArgs(middle),
+	}
+
+	// Nothing gets removed from the LHS during the split. This could
+	// be done but has to be done carefully to avoid large Raft proposals,
+	// and the stats computation needs to be checked carefully.
+	expL := []roachpb.AbortSpanEntry{
+		{Key: key(left, 1), Timestamp: tsFresh},
+		{Key: key(left, 2), Timestamp: tsStale},
+		{Key: key(middle, 1), Timestamp: tsFresh},
+		{Key: key(middle, 2), Timestamp: tsStale},
+		{Key: key(right, 1), Timestamp: tsFresh},
+		{Key: key(right, 2), Timestamp: tsStale},
+	}
+
+	// But we don't blindly copy everything over to the RHS. Only entries with
+	// recent timestamp are duplicated. This is important because otherwise the
+	// Raft command size can blow up and splits fail.
+	expR := []roachpb.AbortSpanEntry{
+		{Key: key(left, 1), Timestamp: tsFresh},
+		{Key: key(middle, 1), Timestamp: tsFresh},
+		{Key: key(right, 1), Timestamp: tsFresh},
+	}
+
+	for _, arg := range args {
+		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{RangeID: 1}, arg)
+		if pErr != nil {
+			t.Fatalf("while sending +%v: %s", arg, pErr)
+		}
+	}
+
+	collect := func(as *abortspan.AbortSpan) []roachpb.AbortSpanEntry {
+		var results []roachpb.AbortSpanEntry
+		if err := as.Iterate(ctx, store.Engine(), func(_ roachpb.Key, entry roachpb.AbortSpanEntry) error {
+			entry.Priority = 0 // don't care about that
+			results = append(results, entry)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		sort.Slice(results, func(i, j int) bool {
+			c := bytes.Compare(results[i].Key, results[j].Key)
+			if c == 0 {
+				return results[i].Timestamp.Less(results[j].Timestamp)
+			}
+			return c < 0
+		})
+		return results
+	}
+
+	l := collect(store.LookupReplica(keys.MustAddr(left), nil).AbortSpan())
+	r := collect(store.LookupReplica(keys.MustAddr(right), nil).AbortSpan())
+
+	if !reflect.DeepEqual(expL, l) {
+		t.Fatalf("left hand side: expected %+v, got %+v", expL, l)
+	}
+	if !reflect.DeepEqual(expR, r) {
+		t.Fatalf("right hand side: expected %+v, got %+v", expR, r)
 	}
 }
 
