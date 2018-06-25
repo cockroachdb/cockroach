@@ -47,6 +47,7 @@ type joinerBase struct {
 // opts is passed along to the underlying processorBase. The zero value is used
 // if the processor using the joinerBase is not implementing RowSource.
 func (jb *joinerBase) init(
+	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
 	leftTypes []sqlbase.ColumnType,
@@ -106,7 +107,7 @@ func (jb *joinerBase) init(
 	outputTypes := condTypes[:outputSize]
 
 	if err := jb.processorBase.init(
-		nil, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
+		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
 	); err != nil {
 		return err
 	}
