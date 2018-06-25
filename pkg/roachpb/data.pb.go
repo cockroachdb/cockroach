@@ -370,7 +370,7 @@ type Transaction struct {
 	// future of 5), and restarts.
 	// Using instead its candidate commit timestamp, it wouldn't see a conflict
 	// and commit, but this is not the expected outcome (the expected outcome is
-	// {key1: 6} (since txn2 is not expected to commit)) and we would be
+	// {key1: 6} (since txn1 is not expected to commit)) and we would be
 	// experiencing the Lost Update Anomaly.
 	//
 	// Note that in practice, before restarting, txn1 would still lay down an
