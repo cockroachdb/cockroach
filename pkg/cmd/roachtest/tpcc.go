@@ -199,9 +199,11 @@ func loadTPCCBench(
 	}
 
 	zonesArg := ""
-
+	rebalanceWait := time.Duration(b.LoadWarehouses/150) * time.Minute
 	if b.Geo {
-		zonesArg = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`, len(b.Zones), strings.Join(b.Zones, ","))
+		zonesArg = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`,
+			len(b.Zones), strings.Join(b.Zones, ","))
+		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
 	}
 
 	// Split and scatter the tables. Set duration to 1ms so that the load
@@ -209,7 +211,26 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("ulimit -n 32768; "+
 		"./workload run tpcc --warehouses=%d --split --scatter "+
 		"--duration=3m %s {pgurl:1}", b.LoadWarehouses, zonesArg)
-	return c.RunE(ctx, loadNode, cmd)
+	if err := c.RunE(ctx, loadNode, cmd); err != nil {
+		return err
+	}
+
+	c.l.printf("waiting %v for rebalancing\n", rebalanceWait)
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='24MiB'`)
+	if err != nil {
+		return err
+	}
+
+	// TODO(nvanbenschoten): we should find a way to make this reactive and
+	// wait until no zone constraints are being violated.
+	select {
+	case <-time.After(rebalanceWait):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)
+	return err
 }
 
 // tpccbench is a suite of benchmarking tools that run TPC-C against CockroachDB
