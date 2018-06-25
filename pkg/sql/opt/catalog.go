@@ -129,16 +129,19 @@ type Index interface {
 	// index have a separate lax key, in which case LaxKeyColumnCount equals
 	// KeyColumnCount. Here are the cases:
 	//
-	//   PRIMARY KEY               : lax key cols = key cols
-	//   UNIQUE INDEX, no null cols: lax key cols = key cols
-	//   UNIQUE INDEX, null cols   : lax key cols < key cols
-	//   INDEX (not unique)        : lax key cols = key cols
+	//   PRIMARY KEY                : lax key cols = key cols
+	//   INDEX (not unique)         : lax key cols = key cols
+	//   UNIQUE INDEX, not-null cols: lax key cols = key cols
+	//   UNIQUE INDEX, nullable cols: lax key cols < key cols
 	//
-	// For a given row, all index columns < LaxKeyColumnCount are guaranteed to
-	// be part of the row's key. All index columns >= LaxKeyColumnCount *may* be
-	// stored in either the row's key or its value, depending on several factors.
-	// These rules hold true even when the index does not have a separate lax key,
-	// since in that case, LaxKeyColumnCount = KeyColumnCount.
+	// In the first three cases, all strict key columns (and thus all lax key
+	// columns as well) are guaranteed to be encoded in the row's key (as opposed
+	// to in its value). However, for a UNIQUE INDEX with at least one NULL-able
+	// column, only the lax key columns are guaranteed to be encoded in the row's
+	// key. The strict key columns are only encoded in the row's key when at least
+	// one of the lax key columns has a NULL value. Therefore, whether the row's
+	// key contains all the strict key columns is data-dependent, not schema-
+	// dependent.
 	LaxKeyColumnCount() int
 
 	// Column returns the ith IndexColumn within the index definition, where
