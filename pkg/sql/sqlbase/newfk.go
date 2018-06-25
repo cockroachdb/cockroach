@@ -227,6 +227,9 @@ func (fk *FKHelper) addChecks(ctx context.Context, oldRow tree.Datums, newRow tr
 }
 
 func (fk *FKHelper) runChecks() error {
+	if len(fk.batch.Requests) == 0 {
+		return nil
+	}
 
 	return nil
 }
