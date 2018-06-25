@@ -798,6 +798,13 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 	for _, tbl := range details.Tables {
 		tableDesc := tbl.Desc
 		tableDesc.State = sqlbase.TableDescriptor_DROP
+		// If the DropTime if set, a table uses RangeClear for fast data removal. This
+		// operation starts at DropTime + the GC TTL. If we used now() here, it would
+		// not clean up data until the TTL from the time of the error. Instead, use 1
+		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
+		// possible. This is safe since the table data was never visible to users,
+		// and so we don't need to preserve MVCC semantics.
+		tableDesc.DropTime = 1
 		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
 	}
 	return txn.Run(ctx, b)
