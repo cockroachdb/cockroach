@@ -187,7 +187,6 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 		}
 	}
 
-	var sp constraint.Span
 	constrainedCols := make([]opt.OrderingColumn, 0, lhs.ChildCount())
 	colIdxsInLHS := make([]int, 0, lhs.ChildCount())
 	for i, n := 0, lhs.ChildCount(); i < n; i++ {
@@ -227,8 +226,8 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	spans.Alloc(rhs.ChildCount())
 
 	keyCtx.Columns.Init(constrainedCols)
-	vals := make(tree.Datums, len(colIdxsInLHS))
 	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		vals := make(tree.Datums, len(colIdxsInLHS))
 		val := rhs.Child(i)
 
 		hasNull := false
@@ -257,6 +256,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 		}
 
 		key := constraint.MakeCompositeKey(vals...)
+		var sp constraint.Span
 		sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
 		spans.Append(&sp)
 	}
@@ -265,7 +265,37 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 
 	var c constraint.Constraint
 	c.Init(&keyCtx, &spans)
-	return constraint.SingleConstraint(&c), tight
+	con := constraint.SingleConstraint(&c)
+
+	// Now add a constraint for each individual column. This makes extracting
+	// constant columns much simpler.
+	// TODO(justin): remove this when #27018 is resolved.
+	for i, idx := range colIdxsInLHS {
+		// We already have a constraint starting with the first column: the
+		// multi-column constraint we added above.
+		if i == 0 {
+			continue
+		}
+		var spans constraint.Spans
+		keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+		keyCtx.Columns.InitSingle(constrainedCols[i])
+		for j, n := 0, rhs.ChildCount(); j < n; j++ {
+			val := rhs.Child(j)
+			elem := val.Child(idx)
+			datum := ExtractConstDatum(elem)
+			key := constraint.MakeKey(datum)
+			var sp constraint.Span
+			sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+			spans.Append(&sp)
+		}
+
+		spans.SortAndMerge(&keyCtx)
+		var c constraint.Constraint
+		c.Init(&keyCtx, &spans)
+		con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
+	}
+
+	return con, tight
 }
 
 func (cb *constraintsBuilder) buildConstraintForTupleInequality(
