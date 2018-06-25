@@ -1106,12 +1106,12 @@ func (rd *RowDeleter) DeleteRow(
 			return err
 		}
 	}
-	if rd.Fks.checker != nil && checkFKs == CheckFKs {
-		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
-			return err
-		}
-		return rd.Fks.checker.runCheck(ctx, values, nil)
-	}
+	// if rd.CheckFKs == CheckFKs && checkFKs == CheckFKs {
+	// 	if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+	// 		return err
+	// 	}
+	// 	return rd.Fks.checker.runCheck(ctx, values, nil)
+	// }
 	return nil
 }
 
