@@ -98,12 +98,8 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans if
-	// allowMeta2Splits is true and keys.NoSplitSpansWithoutMeta2Splits if
-	// allowMeta2Splits is false.
-	//
-	// TODO(nvanbenschoten): remove allowMeta2Splits in version 2.1.
-	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
+	// chosen from the key ranges listed in keys.NoSplitSpans.
+	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet retrieves the value for the key at the specified timestamp. The
 	// value is returned in batch repr format with the key being present as the
 	// empty string. If an intent exists at the specified key, it will be

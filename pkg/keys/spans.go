@@ -34,9 +34,6 @@ var (
 	//   Meta1KeyMax, which would allow meta1 to get out of order.
 	Meta2MaxSpan = roachpb.Span{Key: Meta2KeyMax, EndKey: MetaMax}
 
-	// MetaSpan holds all the addressing records.
-	MetaSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: MetaMax}
-
 	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
@@ -49,12 +46,7 @@ var (
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
 	// SystemConfigSpan: system objects which will be gossiped.
 	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan, SystemConfigSpan}
-
-	// NoSplitSpansWithoutMeta2Splits describes the ranges that were never
-	// to be split before we supported meta2 splits.
-	NoSplitSpansWithoutMeta2Splits = []roachpb.Span{MetaSpan, NodeLivenessSpan, SystemConfigSpan}
 )
 
 // Silence unused warnings. These variables are actually used by gen_cpp_keys.go.
 var _ = NoSplitSpans
-var _ = NoSplitSpansWithoutMeta2Splits
