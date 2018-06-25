@@ -890,8 +890,8 @@ EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
 render           ·         ·            (x)                    ·
  │               render 0  x            ·                      ·
- └── index-join  ·         ·            (x, y, rowid[hidden])  +y
-      ├── scan   ·         ·            (y, rowid[hidden])     +y
+ └── index-join  ·         ·            (x, y, rowid[hidden])  ·
+      ├── scan   ·         ·            (y, rowid[hidden])     ·
       │          table     xy@xy_y_idx  ·                      ·
       │          spans     /1-/2        ·                      ·
       └── scan   ·         ·            (x, y, rowid[hidden])  ·

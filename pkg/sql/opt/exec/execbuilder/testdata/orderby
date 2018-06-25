@@ -570,6 +570,10 @@ CREATE TABLE blocks (
 
 # Test that ordering goes "through" a renderNode that has a duplicate render of
 # an order-by column (#13696).
+# Note that if we have a hard limit of 1, the scanNode won't necessarily have an
+# ordering; if we ever plan multiple tablereaders in this case, we must make
+# sure to set the merge ordering below to the natural order of the index we are
+# scanning.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----

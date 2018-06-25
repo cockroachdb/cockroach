@@ -630,6 +630,7 @@ SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
 ----
 select
  ├── columns: a:1(bool!null) b:2(bool!null) c:3(bool) d:4(bool) e:5(bool)
+ ├── fd: ()-->(1,2)
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/true - /true]; /2: [/true - /true]; tight)]
@@ -641,6 +642,7 @@ SELECT * FROM c WHERE (b AND a AND c) OR (d AND e AND a)
 ----
 select
  ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── fd: ()-->(1)
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── filters [type=bool, outer=(1-5), constraints=(/1: [/true - /true])]

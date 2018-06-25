@@ -99,6 +99,7 @@ SELECT * FROM (SELECT concat(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
 select
  ├── columns: v:5(string!null)
  ├── stats: [rows=20, distinct(5)=1]
+ ├── fd: ()-->(5)
  ├── project
  │    ├── columns: concat:5(string)
  │    ├── stats: [rows=2000, distinct(5)=100]
