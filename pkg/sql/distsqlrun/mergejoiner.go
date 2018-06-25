@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"fmt"
 
@@ -83,7 +82,7 @@ func newMergeJoiner(
 	}
 
 	if err := m.joinerBase.init(
-		flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{leftSource, rightSource},
@@ -112,18 +111,6 @@ func newMergeJoiner(
 	}
 
 	return m, nil
-}
-
-// Run is part of the Processor interface.
-func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if m.out.output == nil {
-		panic("mergeJoiner output not initialized for emitting rows")
-	}
-	ctx = m.Start(ctx)
-	Run(ctx, m, m.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.

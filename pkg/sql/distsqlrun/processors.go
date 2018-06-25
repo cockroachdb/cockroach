@@ -737,6 +737,7 @@ var procNameToLogTag = map[string]string{
 	distinctProcName:                "distinct",
 	hashAggregatorProcName:          "hashAgg",
 	hashJoinerProcName:              "hashJoiner",
+	indexJoinerProcName:             "indexJoiner",
 	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
 	joinReaderProcName:              "joinReader",
 	mergeJoinerProcName:             "mergeJoiner",

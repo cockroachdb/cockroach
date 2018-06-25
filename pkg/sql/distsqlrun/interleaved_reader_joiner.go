@@ -164,6 +164,7 @@ func newInterleavedReaderJoiner(
 
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.joinerBase.init(
+		nil, /* self */
 		flowCtx,
 		processorID,
 		irj.tables[0].post.outputTypes,

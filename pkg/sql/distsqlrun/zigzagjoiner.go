@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -276,6 +275,7 @@ func newZigzagJoiner(
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
+		z, /* self */
 		flowCtx,
 		processorID,
 		leftColumnTypes,
@@ -312,18 +312,6 @@ func newZigzagJoiner(
 	}
 	z.side = 0
 	return z, nil
-}
-
-// Run is part of the processor interface.
-func (z *zigzagJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if z.out.output == nil {
-		panic("zigzagJoiner output not initialized for emitting rows")
-	}
-	z.Start(ctx)
-	Run(z.ctx, z, z.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // Start is part of the RowSource interface.
