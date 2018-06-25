@@ -16,8 +16,9 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -381,6 +382,16 @@ message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
 }
 
+// An IntentMissingError indicates that a QueryIntent request expected
+// an intent to be present at its specified key but the intent was
+// not there.
+message IntentMissingError {
+  option (gogoproto.equal) = true;
+
+  // The non-matching intent that was found at that key, if any.
+  optional Intent wrong_intent = 1;
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -421,6 +432,7 @@ message ErrorDetail {
   optional MixedSuccessError mixed_success = 33;
   optional BatchTimestampBeforeGCError timestamp_before = 34;
   optional TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
+  optional IntentMissingError intent_missing = 36;
 }
 
 // TransactionRestart indicates how an error should be handled in a

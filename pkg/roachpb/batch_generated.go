@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [39]int32
+type reqCounts [40]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -85,16 +85,18 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[32]++
 		case r.QueryTxn != nil:
 			counts[33]++
-		case r.AdminScatter != nil:
+		case r.QueryIntent != nil:
 			counts[34]++
-		case r.AddSstable != nil:
+		case r.AdminScatter != nil:
 			counts[35]++
-		case r.RecomputeStats != nil:
+		case r.AddSstable != nil:
 			counts[36]++
-		case r.Refresh != nil:
+		case r.RecomputeStats != nil:
 			counts[37]++
-		case r.RefreshRange != nil:
+		case r.Refresh != nil:
 			counts[38]++
+		case r.RefreshRange != nil:
+			counts[39]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -137,6 +139,7 @@ var requestNames = []string{
 	"Export",
 	"Import",
 	"QueryTxn",
+	"QueryIntent",
 	"AdmScatter",
 	"AddSstable",
 	"RecomputeStats",
@@ -210,11 +213,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf31 []ExportResponse
 	var buf32 []ImportResponse
 	var buf33 []QueryTxnResponse
-	var buf34 []AdminScatterResponse
-	var buf35 []AddSSTableResponse
-	var buf36 []RecomputeStatsResponse
-	var buf37 []RefreshResponse
-	var buf38 []RefreshRangeResponse
+	var buf34 []QueryIntentResponse
+	var buf35 []AdminScatterResponse
+	var buf36 []AddSSTableResponse
+	var buf37 []RecomputeStatsResponse
+	var buf38 []RefreshResponse
+	var buf39 []RefreshRangeResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -422,36 +426,42 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].QueryTxn = &buf33[0]
 			buf33 = buf33[1:]
-		case r.AdminScatter != nil:
+		case r.QueryIntent != nil:
 			if buf34 == nil {
-				buf34 = make([]AdminScatterResponse, counts[34])
+				buf34 = make([]QueryIntentResponse, counts[34])
 			}
-			br.Responses[i].AdminScatter = &buf34[0]
+			br.Responses[i].QueryIntent = &buf34[0]
 			buf34 = buf34[1:]
-		case r.AddSstable != nil:
+		case r.AdminScatter != nil:
 			if buf35 == nil {
-				buf35 = make([]AddSSTableResponse, counts[35])
+				buf35 = make([]AdminScatterResponse, counts[35])
 			}
-			br.Responses[i].AddSstable = &buf35[0]
+			br.Responses[i].AdminScatter = &buf35[0]
 			buf35 = buf35[1:]
-		case r.RecomputeStats != nil:
+		case r.AddSstable != nil:
 			if buf36 == nil {
-				buf36 = make([]RecomputeStatsResponse, counts[36])
+				buf36 = make([]AddSSTableResponse, counts[36])
 			}
-			br.Responses[i].RecomputeStats = &buf36[0]
+			br.Responses[i].AddSstable = &buf36[0]
 			buf36 = buf36[1:]
-		case r.Refresh != nil:
+		case r.RecomputeStats != nil:
 			if buf37 == nil {
-				buf37 = make([]RefreshResponse, counts[37])
+				buf37 = make([]RecomputeStatsResponse, counts[37])
 			}
-			br.Responses[i].Refresh = &buf37[0]
+			br.Responses[i].RecomputeStats = &buf37[0]
 			buf37 = buf37[1:]
-		case r.RefreshRange != nil:
+		case r.Refresh != nil:
 			if buf38 == nil {
-				buf38 = make([]RefreshRangeResponse, counts[38])
+				buf38 = make([]RefreshResponse, counts[38])
 			}
-			br.Responses[i].RefreshRange = &buf38[0]
+			br.Responses[i].Refresh = &buf38[0]
 			buf38 = buf38[1:]
+		case r.RefreshRange != nil:
+			if buf39 == nil {
+				buf39 = make([]RefreshRangeResponse, counts[39])
+			}
+			br.Responses[i].RefreshRange = &buf39[0]
+			buf39 = buf39[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
