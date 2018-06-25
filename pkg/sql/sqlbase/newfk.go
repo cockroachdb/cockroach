@@ -16,6 +16,7 @@ package sqlbase
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -59,7 +60,7 @@ type FKHelper struct {
 	oldRows *RowContainer
 	newRows *RowContainer
 
-	tables          TableLookupsByID
+	Tables          TableLookupsByID
 	dir             FKCheck
 	batch           roachpb.BatchRequest
 	batchToORIdx    []int
@@ -80,7 +81,7 @@ func makeFKHelper(
 	fkHelper := FKHelper{
 		evalCtx:      evalCtx,
 		txn:          txn,
-		tables:       otherTables,
+		Tables:       otherTables,
 		writeIdxs:    make(map[IndexID]writeIdxInfo),
 		dir:          dir,
 		batchToORIdx: make([]int, 0),
@@ -91,12 +92,15 @@ func makeFKHelper(
 	if err != nil {
 		return FKHelper{}, err
 	}
-	fkHelper.oldRows.Init(evalCtx.Mon.MakeBoundAccount(), colInfo, 0)
-	fkHelper.newRows.Init(evalCtx.Mon.MakeBoundAccount(), colInfo, 0)
+
+	fkHelper.oldRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
+
+	fkHelper.newRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
 
 	for _, idx := range writeTable.AllNonDropIndexes() {
 		writeIdxInfo := fkHelper.writeIdxs[idx.ID]
 		writeIdxInfo.idx = idx
+		writeIdxInfo.searchIdxInfo = make(map[ID]indexLookupByID)
 		fkHelper.writeIdxs[idx.ID] = writeIdxInfo
 		if dir == CheckInserts || dir == CheckUpdates {
 			if idx.ForeignKey.IsSet() {
@@ -190,16 +194,34 @@ func (fk *FKHelper) getSpans(row tree.Datums) ([]roachpb.Span, []indexInfo, erro
 	var indexesInfo []indexInfo
 	for writeIdxID, writeIdxInfo := range fk.writeIdxs {
 		for id, info := range writeIdxInfo.searchIdxInfo {
-			for indexID, lookup := range info {
+			for indexID, searchIdxLookup := range info {
+
+				searchIdx := searchIdxLookup.idx
+
+				nulls := true
+				for _, colID := range searchIdx.ColumnIDs[:searchIdxLookup.prefixLen] {
+					found, ok := searchIdxLookup.colIDToRowIdx[colID]
+					if !ok {
+						panic(fmt.Sprintf("fk ids (%v) missing column id %d", searchIdxLookup.colIDToRowIdx, colID))
+					}
+					if row[found] != tree.DNull {
+						nulls = false
+						break
+					}
+				}
+				if nulls {
+					continue
+				}
+
 				var key roachpb.Key
 				if row != nil {
-					keyBytes, _, err := EncodePartialIndexKey(fk.tables[id].Table, lookup.idx, lookup.prefixLen, lookup.colIDToRowIdx, row, lookup.searchPrefix)
+					keyBytes, _, err := EncodePartialIndexKey(fk.Tables[id].Table, searchIdxLookup.idx, searchIdxLookup.prefixLen, searchIdxLookup.colIDToRowIdx, row, searchIdxLookup.searchPrefix)
 					if err != nil {
 						return spans, indexesInfo, err
 					}
 					key = roachpb.Key(keyBytes)
 				} else {
-					key = roachpb.Key(lookup.searchPrefix)
+					key = roachpb.Key(searchIdxLookup.searchPrefix)
 				}
 				spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
 				indexesInfo = append(indexesInfo,
@@ -257,6 +279,12 @@ func (fk *FKHelper) reset(ctx context.Context) {
 	fk.batchToNRIdx = fk.batchToNRIdx[:0]
 }
 
+// Shutdown shuts down the fk helper completely
+func (fk *FKHelper) Shutdown(ctx context.Context) {
+	fk.oldRows.Close(ctx)
+	fk.newRows.Close(ctx)
+}
+
 // RunChecks runs all accumulated checks.
 func (fk *FKHelper) RunChecks(ctx context.Context) error {
 	if len(fk.batch.Requests) == 0 {
@@ -274,17 +302,18 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 
 	for i, resp := range br.Responses {
 		fetcher.KVs = resp.GetInner().(*roachpb.ScanResponse).Rows
-		writeIdx := fk.batchToCheckIdx[i].writeIdx
+		writeIdxID := fk.batchToCheckIdx[i].writeIdx
 		tableID := fk.batchToCheckIdx[i].tableID
 		indexID := fk.batchToCheckIdx[i].indexID
 
-		indexLookup := fk.writeIdxs[writeIdx].searchIdxInfo[tableID][indexID]
+		indexLookup := fk.writeIdxs[writeIdxID].searchIdxInfo[tableID][indexID]
+		writeIdx := fk.writeIdxs[writeIdxID].idx
 
 		searchIdx := indexLookup.idx
 		rf := indexLookup.rowFetcher
 		prefixLen := indexLookup.prefixLen
 		colIDToRowIdx := indexLookup.colIDToRowIdx
-		tableName := fk.tables[tableID].Table.Name
+		tableName := fk.Tables[tableID].Table.Name
 		if err := rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
 		}
@@ -305,13 +334,20 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 				if fk.batchToORIdx[i] == -1 {
 					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 						"foreign key violation: non-empty columns %s referenced in table %q",
-						fk.writeIdxs[writeIdx].idx.ColumnNames[:prefixLen], tableName)
+						fk.writeIdxs[writeIdxID].idx.ColumnNames[:prefixLen], tableName)
 				}
-
+				oldRow := fk.oldRows.At(fk.batchToORIdx[i])
+				fkValues := make(tree.Datums, prefixLen)
+				for valueIdx, colID := range searchIdx.ColumnIDs[:prefixLen] {
+					fkValues[valueIdx] = oldRow[colIDToRowIdx[colID]]
+				}
+				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+					"foreign key violation: values %v in columns %s referenced in table %q",
+					fkValues, writeIdx.ColumnNames[:prefixLen], tableName)
 			}
 
 		default:
-			log.Fatalf(ctx, "impossible case: baseFKHelper has dir=%v", fk.dir)
+			log.Fatalf(ctx, "impossible case: FKHelper has dir=%v", fk.dir)
 		}
 
 	}
@@ -338,7 +374,6 @@ func TablesNeededForFKsNew(
 	analyzeExpr AnalyzeExprFunction,
 	colMap map[ColumnID]int,
 	alloc *DatumAlloc,
-	dir FKCheck,
 ) (FKHelper, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
@@ -366,7 +401,7 @@ func TablesNeededForFKsNew(
 				table,
 				colMap,
 				alloc,
-				dir,
+				usage,
 			)
 			if err != nil {
 				return FKHelper{}, err
