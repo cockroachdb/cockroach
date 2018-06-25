@@ -37,8 +37,8 @@ SELECT * FROM a WHERE k=1 AND f=1.0
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string)
- ├── key: (1)
- ├── fd: (1)-->(2-4)
+ ├── key: ()
+ ├── fd: ()-->(1-4)
  ├── prune: (2,4)
  ├── interesting orderings: (+1)
  ├── scan a
@@ -149,7 +149,7 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7), ()-->(7)
+      ├── fd: ()-->(7), (1)-->(2-4,7), ()-->(7)
       ├── prune: (2-4)
       ├── interesting orderings: (+1)
       ├── left-join-apply
@@ -360,14 +360,14 @@ union-all
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── constraint: /1: [/1 - /1]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
  │    ├── prune: (2)
  │    └── interesting orderings: (+1)
  └── select
       ├── columns: x:5(int!null) y:6(int!null)
       ├── key: (5)
-      ├── fd: (5)-->(6)
+      ├── fd: ()-->(6), (5)-->(6)
       ├── prune: (5)
       ├── interesting orderings: (+5)
       ├── scan xy

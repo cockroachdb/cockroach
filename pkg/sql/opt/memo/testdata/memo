@@ -19,7 +19,7 @@ TABLE b
 build
 SELECT y, b.x, y+1 AS c
 FROM a, b
-WHERE a.y=1 AND a.x::string=b.x
+WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
@@ -31,26 +31,26 @@ limit
  ├── ordering: +2
  ├── sort
  │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int)
- │    ├── stats: [rows=1428.57143]
+ │    ├── stats: [rows=333333.333]
  │    ├── fd: (2)-->(5)
  │    ├── ordering: +2
  │    └── project
  │         ├── columns: c:5(int) y:2(int!null) b.x:3(string!null)
- │         ├── stats: [rows=1428.57143]
+ │         ├── stats: [rows=333333.333]
  │         ├── fd: (2)-->(5)
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
- │         │    ├── stats: [rows=1428.57143, distinct(2)=1]
+ │         │    ├── stats: [rows=333333.333]
  │         │    ├── key: (1,3)
  │         │    ├── fd: (1)-->(2), (3)-->(4)
  │         │    ├── inner-join
  │         │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:3(string!null) z:4(decimal!null)
- │         │    │    ├── stats: [rows=1000000, distinct(2)=700]
+ │         │    │    ├── stats: [rows=1000000]
  │         │    │    ├── key: (1,3)
  │         │    │    ├── fd: (1)-->(2), (3)-->(4)
  │         │    │    ├── scan a
  │         │    │    │    ├── columns: a.x:1(int!null) y:2(int)
- │         │    │    │    ├── stats: [rows=1000, distinct(2)=700]
+ │         │    │    │    ├── stats: [rows=1000]
  │         │    │    │    ├── key: (1)
  │         │    │    │    └── fd: (1)-->(2)
  │         │    │    ├── scan b
@@ -59,9 +59,9 @@ limit
  │         │    │    │    ├── key: (3)
  │         │    │    │    └── fd: (3)-->(4)
  │         │    │    └── true [type=bool]
- │         │    └── filters [type=bool, outer=(1-3), constraints=(/2: [/1 - /1])]
- │         │         └── and [type=bool, outer=(1-3), constraints=(/2: [/1 - /1])]
- │         │              ├── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         │    └── filters [type=bool, outer=(1-3), constraints=(/2: [/2 - ])]
+ │         │         └── and [type=bool, outer=(1-3), constraints=(/2: [/2 - ])]
+ │         │              ├── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  │         │              │    ├── variable: a.y [type=int, outer=(2)]
  │         │              │    └── const: 1 [type=int]
  │         │              └── eq [type=bool, outer=(1,3)]
@@ -77,7 +77,7 @@ limit
 opt
 SELECT y, b.x, y+1 AS c
 FROM a, b
-WHERE a.y=1 AND a.x::string=b.x
+WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
@@ -96,27 +96,27 @@ project
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │    ├── stats: [rows=142.857143]
+ │    │    ├── stats: [rows=33333.3333]
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2
  │    │    └── inner-join
  │    │         ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │         ├── stats: [rows=142.857143]
+ │    │         ├── stats: [rows=33333.3333]
  │    │         ├── key: (1,3)
  │    │         ├── fd: (1)-->(2)
  │    │         ├── select
  │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
- │    │         │    ├── stats: [rows=1.42857143, distinct(2)=1]
+ │    │         │    ├── stats: [rows=333.333333]
  │    │         │    ├── key: (1)
  │    │         │    ├── fd: (1)-->(2)
  │    │         │    ├── scan a
  │    │         │    │    ├── columns: a.x:1(int!null) y:2(int)
- │    │         │    │    ├── stats: [rows=1000, distinct(2)=700]
+ │    │         │    │    ├── stats: [rows=1000]
  │    │         │    │    ├── key: (1)
  │    │         │    │    └── fd: (1)-->(2)
- │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │    │         │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  │    │         │              ├── variable: a.y [type=int, outer=(2)]
  │    │         │              └── const: 1 [type=int]
  │    │         ├── scan b
@@ -137,7 +137,7 @@ project
 memo
 SELECT y, b.x, y+1 AS c
 FROM a, b
-WHERE a.y=1 AND a.x::string=b.x
+WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
@@ -145,25 +145,25 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 2106.68
+ │    │    └── cost: 7441.56
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 2106.68
+ │         └── cost: 7441.56
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 2106.68
+ │    │    └── cost: 7441.56
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2106.68
+ │         └── cost: 7441.56
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 2096.45
+ │    │    └── cost: 2433.33
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 2106.68
+ │         └── cost: 7441.56
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (select G10 G11)
@@ -181,7 +181,7 @@ memo (optimized)
  │         └── cost: 1040.00
  ├── G11: (filters G13)
  ├── G12: (eq G14 G15)
- ├── G13: (eq G16 G17)
+ ├── G13: (gt G16 G17)
  ├── G14: (variable b.x)
  ├── G15: (cast G18 STRING)
  ├── G16: (variable a.y)

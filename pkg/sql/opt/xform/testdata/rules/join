@@ -170,12 +170,15 @@ SELECT * FROM abc JOIN xyz ON a=x AND b=y WHERE b=1 AND y=1
 ----
 inner-join
  ├── columns: a:1(int) b:2(int!null) c:3(int) x:5(int) y:6(int!null) z:7(int)
+ ├── fd: ()-->(2), ()-->(6)
  ├── scan abc@bc
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
- │    └── constraint: /2/3/4: [/1 - /1]
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
  ├── scan xyz@yz
  │    ├── columns: x:5(int) y:6(int!null) z:7(int)
- │    └── constraint: /6/7/8: [/1 - /1]
+ │    ├── constraint: /6/7/8: [/1 - /1]
+ │    └── fd: ()-->(6)
  └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ])]
       ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]

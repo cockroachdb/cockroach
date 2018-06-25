@@ -37,7 +37,7 @@ SELECT * FROM a WHERE i=5 AND s<'foo'
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(2), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -142,7 +142,7 @@ SELECT * FROM (SELECT * FROM a WHERE i<5) WHERE s='foo'
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -175,9 +175,10 @@ SELECT * FROM (SELECT i, i+1 AS r, f FROM a) a WHERE f=10.0
 ----
 project
  ├── columns: i:2(int) r:6(int) f:3(float!null)
- ├── fd: (2)-->(6)
+ ├── fd: ()-->(3), (2)-->(6)
  ├── select
  │    ├── columns: i:2(int) f:3(float!null)
+ │    ├── fd: ()-->(3)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
  │    └── filters [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
@@ -191,7 +192,7 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
  ├── columns: i:2(int) div:6(decimal!null) f:3(float)
- ├── fd: (2)-->(6)
+ ├── fd: ()-->(6), (2)-->(6)
  ├── project
  │    ├── columns: div:6(decimal) i:2(int) f:3(float)
  │    ├── fd: (2)-->(6)
@@ -208,12 +209,13 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
  ├── columns: i:2(int!null) div:6(decimal!null) f:3(float!null)
- ├── fd: (2)-->(6)
+ ├── fd: ()-->(2,3,6), (2)-->(6)
  ├── project
  │    ├── columns: div:6(decimal) i:2(int!null) f:3(float!null)
- │    ├── fd: (2)-->(6)
+ │    ├── fd: ()-->(2,3), (2)-->(6)
  │    ├── select
  │    │    ├── columns: i:2(int!null) f:3(float!null)
+ │    │    ├── fd: ()-->(2,3)
  │    │    ├── scan a
  │    │    │    └── columns: i:2(int) f:3(float)
  │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight)]
@@ -234,7 +236,7 @@ project
  ├── select
  │    ├── columns: i:2(int) f:3(float) column6:6(float!null)
  │    ├── key: (2,3)
- │    ├── fd: (2,3)-->(6)
+ │    ├── fd: ()-->(6), (2,3)-->(6)
  │    ├── group-by
  │    │    ├── columns: i:2(int) f:3(float) column6:6(float)
  │    │    ├── grouping columns: i:2(int) f:3(float)
@@ -259,11 +261,11 @@ SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(3), (1)-->(2-5), (6)-->(7)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(3), (1)-->(2-5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -289,15 +291,15 @@ SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND a.i<xy.y AND (a.s='fo
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int!null)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(3), (1)-->(2-5), (6)-->(7)
  ├── left-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ │    ├── fd: ()-->(3), (1)-->(2-5), (6)-->(7)
  │    ├── select
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
+ │    │    ├── fd: ()-->(3), (1)-->(2-5)
  │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -327,11 +329,11 @@ SELECT * FROM a INNER JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 inner-join
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(2), (1)-->(2-5), (6)-->(7)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(2), (1)-->(2-5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
@@ -352,7 +354,7 @@ SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100
 select
  ├── columns: k:1(int) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(2), (1)-->(2-5), (6)-->(7)
  ├── right-join (merge)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
@@ -382,7 +384,7 @@ SELECT * FROM a FULL JOIN xy ON a.k=xy.x WHERE a.i=100
 select
  ├── columns: k:1(int) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(2), (1)-->(2-5), (6)-->(7)
  ├── full-join (merge)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
@@ -412,11 +414,11 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(2), (1)-->(2-5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -443,11 +445,11 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(2), (1)-->(2-5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -476,7 +478,7 @@ SELECT * FROM xy INNER JOIN a ON xy.x=a.k WHERE a.f=1.1
 inner-join (merge)
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── fd: (1)-->(2), ()-->(5), (3)-->(4-7)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -485,7 +487,7 @@ inner-join (merge)
  ├── select
  │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    ├── key: (3)
- │    ├── fd: (3)-->(4-7)
+ │    ├── fd: ()-->(5), (3)-->(4-7)
  │    ├── ordering: +3
  │    ├── scan a
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
@@ -506,11 +508,11 @@ SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k WHERE a.f=1.1 AND a.i<xy.y AND (a.s='f
 select
  ├── columns: x:1(int) y:2(int!null) k:3(int!null) i:4(int!null) f:5(float!null) s:6(string) j:7(jsonb)
  ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── fd: (1)-->(2), ()-->(5), (3)-->(4-7)
  ├── right-join (merge)
  │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    ├── key: (1,3)
- │    ├── fd: (1)-->(2), (3)-->(4-7)
+ │    ├── fd: (1)-->(2), ()-->(5), (3)-->(4-7)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── key: (1)
@@ -519,7 +521,7 @@ select
  │    ├── select
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    │    ├── key: (3)
- │    │    ├── fd: (3)-->(4-7)
+ │    │    ├── fd: ()-->(5), (3)-->(4-7)
  │    │    ├── ordering: +3
  │    │    ├── scan a
  │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
@@ -544,7 +546,7 @@ SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100
 select
  ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int!null) f:5(float) s:6(string) j:7(jsonb)
  ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── fd: ()-->(4), (1)-->(2), (3)-->(4-7)
  ├── left-join (merge)
  │    ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  │    ├── key: (1,3)
@@ -574,7 +576,7 @@ SELECT * FROM xy FULL JOIN a ON a.k=xy.x WHERE a.i=100
 select
  ├── columns: x:1(int) y:2(int) k:3(int) i:4(int!null) f:5(float) s:6(string) j:7(jsonb)
  ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── fd: ()-->(4), (1)-->(2), (3)-->(4-7)
  ├── full-join (merge)
  │    ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  │    ├── key: (1,3)
@@ -746,11 +748,11 @@ SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int!null) y:7(int!null)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(3,4), (1)-->(2-5), ()-->(7), (6)-->(7)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(3,4), (1)-->(2-5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -763,7 +765,7 @@ inner-join (merge)
  ├── select
  │    ├── columns: x:6(int!null) y:7(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
+ │    ├── fd: ()-->(7), (6)-->(7)
  │    ├── ordering: +6
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
@@ -785,11 +787,11 @@ SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── fd: ()-->(2), (1)-->(2-5), (6)-->(7)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: ()-->(2), (1)-->(2-5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -821,10 +823,11 @@ SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 group-by
  ├── columns: i:2(int!null) count:6(int)
  ├── grouping columns: i:2(int!null)
- ├── key: (2)
- ├── fd: (2)-->(6)
+ ├── key: ()
+ ├── fd: ()-->(2,6)
  ├── select
  │    ├── columns: i:2(int!null)
+ │    ├── fd: ()-->(2)
  │    ├── scan a
  │    │    └── columns: i:2(int)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
@@ -839,9 +842,11 @@ SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 group-by
  ├── columns: i:2(int!null)
  ├── grouping columns: i:2(int!null)
- ├── key: (2)
+ ├── key: ()
+ ├── fd: ()-->(2)
  └── select
       ├── columns: i:2(int!null)
+      ├── fd: ()-->(2)
       ├── scan a
       │    └── columns: i:2(int)
       └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
@@ -854,7 +859,7 @@ SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='fo
 select
  ├── columns: k:1(int!null) i:2(int!null) m:6(string!null)
  ├── key: (1)
- ├── fd: (1)-->(2,6)
+ ├── fd: ()-->(6), (1)-->(2,6)
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int!null) m:6(string)
  │    ├── grouping columns: k:1(int!null) i:2(int!null)
@@ -926,7 +931,8 @@ SELECT k FROM b WHERE k IS NULL
 scan b
  ├── columns: k:1(int!null)
  ├── constraint: /1: contradiction
- └── key: (1)
+ ├── key: ()
+ └── fd: ()-->(1)
 
 opt
 SELECT k,i FROM b WHERE k IS NOT NULL AND k > 4 AND i < 100 AND i IS NOT NULL
