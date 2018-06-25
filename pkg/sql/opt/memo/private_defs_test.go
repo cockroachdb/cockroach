@@ -31,8 +31,8 @@ func TestScanCanProvideOrdering(t *testing.T) {
 			"i INT, " +
 			"s STRING, " +
 			"f FLOAT, " +
-			"INDEX (i, k), " +
-			"INDEX (s DESC) STORING(f))",
+			"INDEX (i, k) STORING(f), " +
+			"UNIQUE INDEX (s DESC, f))",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -41,47 +41,35 @@ func TestScanCanProvideOrdering(t *testing.T) {
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))
 
-	// INDEX (i, k)
+	// PRIMARY KEY (k)
+	primary := 0
+	// INDEX (i, k) STORING(f)
 	altIndex1 := 1
-	// INDEX (s DESC) STORING(f)
+	// INDEX (s DESC, f)
 	altIndex2 := 2
-
-	k := opt.OrderingColumn(md.TableColumn(a, 0))
-	i := opt.OrderingColumn(md.TableColumn(a, 1))
-	s := opt.OrderingColumn(md.TableColumn(a, 2))
-	f := opt.OrderingColumn(md.TableColumn(a, 3))
 
 	testcases := []struct {
 		index    int
-		ordering opt.Ordering
+		ordering string
 		expected bool
 	}{
-		// Ordering is longer than index.
-		{index: altIndex1, ordering: opt.Ordering{i, k, s}, expected: true},
-		{index: altIndex1, ordering: opt.Ordering{k, i, s}, expected: false},
-
-		// Index is longer than ordering.
-		{index: altIndex1, ordering: opt.Ordering{i}, expected: true},
-		{index: altIndex1, ordering: opt.Ordering{k}, expected: false},
-
-		// Index contains descending column.
-		{index: altIndex2, ordering: opt.Ordering{-s}, expected: true},
-		{index: altIndex2, ordering: opt.Ordering{s}, expected: false},
-
-		// Index contains storing column.
-		{index: altIndex2, ordering: opt.Ordering{-s, k, f}, expected: true},
-		{index: altIndex2, ordering: opt.Ordering{-s, k, i}, expected: false},
+		{index: primary, ordering: "", expected: true},
+		{index: primary, ordering: "+1", expected: true},
+		{index: primary, ordering: "+1,+2", expected: false},
+		{index: altIndex1, ordering: "", expected: true},
+		{index: altIndex1, ordering: "+1 opt(2)", expected: true},
+		{index: altIndex1, ordering: "-2,+1", expected: false},
+		{index: altIndex2, ordering: "", expected: true},
+		{index: altIndex2, ordering: "-3,+(4|1)", expected: true},
+		{index: altIndex2, ordering: "-3,+4,+1", expected: true},
 	}
 
 	for _, tc := range testcases {
-		var oc props.OrderingChoice
-		for _, col := range tc.ordering {
-			oc.AppendCol(col.ID(), col.Descending())
-		}
-
 		def := &memo.ScanOpDef{Table: a, Index: tc.index}
-		if def.CanProvideOrdering(md, &oc) != tc.expected {
-			t.Errorf("expected %v, got %v", tc.expected, !tc.expected)
+		required := props.ParseOrderingChoice(tc.ordering)
+		actual := def.CanProvideOrdering(md, &required)
+		if actual != tc.expected {
+			t.Errorf("index: %d, required: %s, expected %v", tc.index, tc.ordering, tc.expected)
 		}
 	}
 }

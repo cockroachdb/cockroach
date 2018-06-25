@@ -56,6 +56,15 @@ func (p *Physical) Defined() bool {
 	return !p.Presentation.Any() || !p.Ordering.Any()
 }
 
+// ColSet returns the set of columns used by any of the physical properties.
+func (p *Physical) ColSet() opt.ColSet {
+	colSet := p.Ordering.ColSet()
+	for _, col := range p.Presentation {
+		colSet.Add(int(col.ID))
+	}
+	return colSet
+}
+
 // FormatString writes physical properties to a human-readable format.
 func (p *Physical) FormatString(verbose bool) string {
 	hasProjection := !p.Presentation.Any()

@@ -359,8 +359,7 @@ project
       │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    ├── limit: 1
       │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(6,7)
-      │    │    │    └── ordering: +6
+      │    │    │    └── fd: ()-->(6,7)
       │    │    └── projections [outer=(6,7)]
       │    │         └── xy.y + 1 [type=int, outer=(7)]
       │    └── merge-on
