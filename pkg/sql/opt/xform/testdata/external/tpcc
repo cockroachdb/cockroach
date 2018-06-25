@@ -604,26 +604,25 @@ FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
 ----
-sort
+project
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)
  ├── stats: [rows=5]
- ├── cost: 6.3660964
+ ├── cost: 6.25
+ ├── key: (1)
+ ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
  ├── prune: (1,3,8,14-17)
- └── project
-      ├── columns: stock.s_i_id:1(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
-      ├── stats: [rows=5]
+ ├── interesting orderings: (+1)
+ └── scan stock
+      ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
+      ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
+      ├── stats: [rows=5, distinct(1)=5, distinct(2)=1]
       ├── cost: 6.25
-      ├── prune: (1,3,8,14-17)
-      └── scan stock
-           ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
-           ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
-           ├── stats: [rows=5, distinct(1)=5, distinct(2)=1]
-           ├── cost: 6.25
-           ├── key: (1,2)
-           ├── fd: (1,2)-->(3,8,14-17)
-           ├── prune: (3,8,14-17)
-           └── interesting orderings: (+2,+1) (+1,+2)
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3,8,14-17)
+      ├── ordering: +1 opt(2)
+      ├── prune: (3,8,14-17)
+      └── interesting orderings: (+2,+1) (+1,+2)
 
 # --------------------------------------------------
 # 2.5 The Payment Transaction
