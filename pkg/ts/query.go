@@ -826,6 +826,10 @@ func verifySourceAggregator(agg tspb.TimeSeriesQueryAggregator) error {
 		return nil
 	case tspb.TimeSeriesQueryAggregator_MAX:
 		return nil
+	case tspb.TimeSeriesQueryAggregator_FIRST,
+		tspb.TimeSeriesQueryAggregator_LAST,
+		tspb.TimeSeriesQueryAggregator_VARIANCE:
+		return errors.Errorf("aggregator %s is not yet supported", agg.String())
 	}
 	return errors.Errorf("query specified unknown time series aggregator %s", agg.String())
 }
@@ -840,6 +844,10 @@ func verifyDownsampler(downsampler tspb.TimeSeriesQueryAggregator) error {
 		return nil
 	case tspb.TimeSeriesQueryAggregator_MAX:
 		return nil
+	case tspb.TimeSeriesQueryAggregator_FIRST,
+		tspb.TimeSeriesQueryAggregator_LAST,
+		tspb.TimeSeriesQueryAggregator_VARIANCE:
+		return errors.Errorf("downsampler %s is not yet supported", downsampler.String())
 	}
 	return errors.Errorf("query specified unknown time series downsampler %s", downsampler.String())
 }

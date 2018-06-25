@@ -33,11 +33,6 @@ func AggregateSum(data DataSeries) float64 {
 	return total
 }
 
-// AggregateLast returns the last value in the provided data series.
-func AggregateLast(data DataSeries) float64 {
-	return data[len(data)-1].Value
-}
-
 // AggregateAverage returns the average value of the points in the provided data
 // series.
 func AggregateAverage(data DataSeries) float64 {
@@ -71,6 +66,34 @@ func AggregateMin(data DataSeries) float64 {
 	return min
 }
 
+// AggregateFirst returns the first value in the provided data series.
+func AggregateFirst(data DataSeries) float64 {
+	return data[0].Value
+}
+
+// AggregateLast returns the last value in the provided data series.
+func AggregateLast(data DataSeries) float64 {
+	return data[len(data)-1].Value
+}
+
+// AggregateVariance returns the variance of the provided data series. The returned
+// variance is the sample variance, not the population variance.
+func AggregateVariance(data DataSeries) float64 {
+	mean := 0.0
+	meanSquaredDist := 0.0
+	if len(data) < 2 {
+		return 0
+	}
+	for i, dp := range data {
+		// Welford's algorithm for computing variance.
+		delta := dp.Value - mean
+		mean += delta / float64(i+1)
+		delta2 := dp.Value - mean
+		meanSquaredDist += delta * delta2
+	}
+	return meanSquaredDist / float64(len(data)-1)
+}
+
 // getAggFunction is a convenience method used to process an aggregator option
 // from our time series query protobuffer format.
 func getAggFunction(agg tspb.TimeSeriesQueryAggregator) aggFunc {
@@ -83,6 +106,12 @@ func getAggFunction(agg tspb.TimeSeriesQueryAggregator) aggFunc {
 		return AggregateMax
 	case tspb.TimeSeriesQueryAggregator_MIN:
 		return AggregateMin
+	case tspb.TimeSeriesQueryAggregator_FIRST:
+		return AggregateFirst
+	case tspb.TimeSeriesQueryAggregator_LAST:
+		return AggregateLast
+	case tspb.TimeSeriesQueryAggregator_VARIANCE:
+		return AggregateVariance
 	}
 
 	// The model should not be called with an invalid aggregator option.
