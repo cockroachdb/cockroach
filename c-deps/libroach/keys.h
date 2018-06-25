@@ -17,10 +17,5 @@ const std::vector<std::pair<rocksdb::Slice, rocksdb::Slice> > kSortedNoSplitSpan
   std::make_pair(rocksdb::Slice("\x03\xff\xff", 3), rocksdb::Slice("\x04", 1)),
   std::make_pair(rocksdb::Slice("", 0), rocksdb::Slice("\x03", 1)),
 };
-const std::vector<std::pair<rocksdb::Slice, rocksdb::Slice> > kSortedNoSplitSpansWithoutMeta2Splits = {
-  std::make_pair(rocksdb::Slice("\x88", 1), rocksdb::Slice("\x93", 1)),
-  std::make_pair(rocksdb::Slice("\x04\x00\x6c\x69\x76\x65\x6e\x65\x73\x73\x2d", 11), rocksdb::Slice("\x04\x00\x6c\x69\x76\x65\x6e\x65\x73\x73\x2e", 11)),
-  std::make_pair(rocksdb::Slice("", 0), rocksdb::Slice("\x04", 1)),
-};
 
 }  // namespace cockroach
