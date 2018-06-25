@@ -719,7 +719,7 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 			var ok bool
 			endpoint.TargetAddr, ok = nodeAddresses[p2.Node]
 			if !ok {
-				panic(fmt.Sprintf("node %d node in nodeAddresses map", p2.Node))
+				panic(fmt.Sprintf("node %d not in nodeAddresses map", p2.Node))
 			}
 		}
 
