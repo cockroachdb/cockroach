@@ -18,6 +18,29 @@ TABLE xy
  └── INDEX primary
       └── x int not null
 
+exec-ddl
+CREATE TABLE abcde (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    UNIQUE INDEX bc (b, c)
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null (storing)
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -1243,3 +1266,23 @@ project
            ├── ordering: +3
            └── scan a
                 └── columns: i:2(int) f:3(float) s:4(string)
+
+# --------------------------------------------------
+# PruneExplainCols
+# --------------------------------------------------
+opt
+EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
+----
+explain
+ ├── columns: Tree:6(string) Field:7(string) Description:8(string)
+ └── project
+      ├── columns: a:1(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1) [removed: (2)]
+      ├── ordering: +3 opt(2)
+      └── scan abcde@bc
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+           ├── constraint: /2/3: (/1/NULL - /1]
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1)
+           └── ordering: +3 opt(2)
