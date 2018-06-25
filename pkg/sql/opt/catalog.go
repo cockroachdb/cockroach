@@ -89,12 +89,57 @@ type Index interface {
 	// clause), as well as implicitly added primary key columns.
 	ColumnCount() int
 
-	// UniqueColumnCount returns the number of columns in the index that are
-	// part of its unique key. Every index has a set of unique columns, even if
-	// it was not originally declared unique, due to implicitly added primary
-	// key columns. The unique columns are always a prefix of the full column
-	// list, where UniqueColumnCount <= ColumnCount.
-	UniqueColumnCount() int
+	// KeyColumnCount returns the number of columns in the index that are part
+	// of its unique key. No two rows in the index will have the same values for
+	// those columns (where NULL values are treated as equal). Every index has a
+	// set of key columns, regardless of how it was defined, because Cockroach
+	// will implicitly add primary key columns to any index which would not
+	// otherwise have a key, like when:
+	//
+	//   1. Index was not declared as UNIQUE.
+	//   2. Index was UNIQUE, but one or more columns have NULL values.
+	//
+	// The second case is subtle, because UNIQUE indexes treat NULL values as if
+	// they are *not* equal to one another. For example, this is allowed with a
+	// unique index, even though it appears there are duplicate rows:
+	//
+	//   b     c
+	//   -------
+	//   NULL  1
+	//   NULL  1
+	//
+	// Since keys treat NULL values as if they *are* equal to each other,
+	// Cockroach must append the primary key columns in order to ensure this
+	// index has a key. If the primary key of this table was column (a), then
+	// the key of this secondary index would be (b,c,a).
+	//
+	// The key columns are always a prefix of the full column list, where
+	// KeyColumnCount <= ColumnCount.
+	KeyColumnCount() int
+
+	// LaxKeyColumnCount returns the number of columns in the index that are
+	// part of its "lax" key. Lax keys follow the same rules as keys (sometimes
+	// referred to as "strict" keys), except that NULL values are treated as
+	// *not* equal to one another, as in the case for UNIQUE indexes. This means
+	// that two rows can appear to have duplicate values when one of those values
+	// is NULL. See the KeyColumnCount comment for more details and an example.
+	//
+	// The lax key columns are always a prefix of the key columns, where
+	// LaxKeyColumnCount <= KeyColumnCount. However, it is not required that an
+	// index have a separate lax key, in which case LaxKeyColumnCount equals
+	// KeyColumnCount. Here are the cases:
+	//
+	//   PRIMARY KEY               : lax key cols = key cols
+	//   UNIQUE INDEX, no null cols: lax key cols = key cols
+	//   UNIQUE INDEX, null cols   : lax key cols < key cols
+	//   INDEX (not unique)        : lax key cols = key cols
+	//
+	// For a given row, all index columns < LaxKeyColumnCount are guaranteed to
+	// be part of the row's key. All index columns >= LaxKeyColumnCount *may* be
+	// stored in either the row's key or its value, depending on several factors.
+	// These rules hold true even when the index does not have a separate lax key,
+	// since in that case, LaxKeyColumnCount = KeyColumnCount.
+	LaxKeyColumnCount() int
 
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
@@ -200,8 +245,9 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 	colCount := idx.ColumnCount()
 	if isPrimary {
 		// Omit the "stored" columns from the primary index.
-		colCount = idx.UniqueColumnCount()
+		colCount = idx.KeyColumnCount()
 	}
+
 	for i := 0; i < colCount; i++ {
 		buf.Reset()
 
@@ -211,7 +257,7 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 			fmt.Fprintf(&buf, " desc")
 		}
 
-		if i >= idx.UniqueColumnCount() {
+		if i >= idx.LaxKeyColumnCount() {
 			fmt.Fprintf(&buf, " (storing)")
 		}
 

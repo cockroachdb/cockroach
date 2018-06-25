@@ -203,13 +203,14 @@ type Index struct {
 	Name    string
 	Columns []opt.IndexColumn
 
-	// Unique is the number of columns that make up the unique key for the
-	// index. The columns are always a non-empty prefix of the Columns
-	// collection, so Unique is > 0 and < len(Columns). Note that this is even
-	// true for indexes that were not declared as unique, since primary key
-	// columns will be implicitly added to the index in order to ensure it is
-	// always unique.
-	Unique int
+	// KeyCount is the number of columns that make up the unique key for the
+	// index. See the opt.Index.KeyColumnCount for more details.
+	KeyCount int
+
+	// LaxKeyCount is the number of columns that make up a lax key for the
+	// index, which allows duplicate rows when at least one of the values is
+	// NULL. See the opt.Index.LaxKeyColumnCount for more details.
+	LaxKeyCount int
 }
 
 // IdxName is part of the opt.Index interface.
@@ -227,9 +228,14 @@ func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
 }
 
-// UniqueColumnCount is part of the opt.Index interface.
-func (ti *Index) UniqueColumnCount() int {
-	return ti.Unique
+// KeyColumnCount is part of the opt.Index interface.
+func (ti *Index) KeyColumnCount() int {
+	return ti.KeyCount
+}
+
+// LaxKeyColumnCount is part of the opt.Index interface.
+func (ti *Index) LaxKeyColumnCount() int {
+	return ti.LaxKeyCount
 }
 
 // Column is part of the opt.Index interface.

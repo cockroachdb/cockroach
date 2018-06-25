@@ -966,22 +966,19 @@ func (b *logicalPropsBuilder) makeTableFuncDep(
 			// Skip inverted indexes for now.
 			continue
 		}
-		strict := true
-		for col := 0; col < index.UniqueColumnCount(); col++ {
+
+		// If index has a separate lax key, add a lax key FD. Otherwise, add a
+		// strict key. See the comment for opt.Index.LaxKeyColumnCount.
+		for col := 0; col < index.LaxKeyColumnCount(); col++ {
 			ord := index.Column(col).Ordinal
 			colID := md.TableColumn(tabID, ord)
 			keyCols.Add(int(colID))
-			if tab.Column(ord).IsNullable() {
-				strict = false
-			}
 		}
-
-		// Add either strict or lax key FD, depending on whether all the key
-		// columns were not null.
-		if strict {
-			fd.AddStrictKey(keyCols, allCols)
-		} else {
+		if index.LaxKeyColumnCount() < index.KeyColumnCount() {
+			// This case only occurs for a UNIQUE index having a NULL-able column.
 			fd.AddLaxKey(keyCols, allCols)
+		} else {
+			fd.AddStrictKey(keyCols, allCols)
 		}
 	}
 	md.SetTableAnnotation(tabID, fdAnnID, fd)
