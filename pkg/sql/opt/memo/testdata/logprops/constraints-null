@@ -31,6 +31,7 @@ SELECT * FROM t WHERE a IS NULL
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=1.42857143, distinct(1)=1]
+ ├── fd: ()-->(1)
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -59,6 +60,7 @@ SELECT * FROM t WHERE b IS NULL AND c IS NULL
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── fd: ()-->(2,3)
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700, distinct(3)=700]

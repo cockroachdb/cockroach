@@ -266,12 +266,12 @@ intersect
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2, distinct(4,5,7)=2]
       ├── key: (7)
-      ├── fd: (7)-->(4,5)
+      ├── fd: ()-->(4), (7)-->(4,5)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1, distinct(4,5,7)=2]
            ├── key: (7)
-           ├── fd: (7)-->(4-6)
+           ├── fd: ()-->(4), (7)-->(4-6)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
@@ -304,12 +304,12 @@ intersect-all
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2]
       ├── key: (7)
-      ├── fd: (7)-->(4,5)
+      ├── fd: ()-->(4), (7)-->(4,5)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1]
            ├── key: (7)
-           ├── fd: (7)-->(4-6)
+           ├── fd: ()-->(4), (7)-->(4-6)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000]
@@ -419,14 +419,16 @@ except
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2, distinct(4,5)=2]
+      ├── fd: ()-->(4)
       └── project
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2, distinct(4,5)=2]
+           ├── fd: ()-->(4)
            └── select
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1, distinct(4,5)=2]
                 ├── key: (7)
-                ├── fd: (7)-->(4-6)
+                ├── fd: ()-->(4), (7)-->(4-6)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
@@ -458,14 +460,16 @@ except-all
  └── project
       ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2]
+      ├── fd: ()-->(4)
       └── project
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2]
+           ├── fd: ()-->(4)
            └── select
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1]
                 ├── key: (7)
-                ├── fd: (7)-->(4-6)
+                ├── fd: ()-->(4), (7)-->(4-6)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000]
@@ -559,6 +563,7 @@ SELECT * FROM (SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b) WHERE y = 5
 select
  ├── columns: y:2(int!null) s:3(string)
  ├── stats: [rows=12.5, distinct(2)=1]
+ ├── fd: ()-->(2)
  ├── except-all
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── left columns: y:2(int) a.s:3(string)
