@@ -52,7 +52,7 @@ interface StatementsPageState {
 
 function StatementLink(props: { statement: string, app: string }) {
   const summary = summarize(props.statement);
-  const base = props.app ? `/statement/${props.app}` : "/statement";
+  const base = props.app ? `/statements/${props.app}` : "/statement";
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
