@@ -97,24 +97,6 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ProjectOp:
 		ep, err = b.buildProject(ev)
 
-	case opt.InnerJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.InnerJoin)
-
-	case opt.LeftJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.LeftOuterJoin)
-
-	case opt.RightJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.RightOuterJoin)
-
-	case opt.FullJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.FullOuterJoin)
-
-	case opt.SemiJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.LeftSemiJoin)
-
-	case opt.AntiJoinOp:
-		ep, err = b.buildJoin(ev, sqlbase.LeftAntiJoin)
-
 	case opt.GroupByOp:
 		ep, err = b.buildGroupBy(ev)
 
@@ -140,7 +122,17 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.RowNumberOp:
 		ep, err = b.buildRowNumber(ev)
 
+	case opt.MergeJoinOp:
+		ep, err = b.buildMergeJoin(ev)
+
 	default:
+		if ev.IsJoinNonApply() {
+			ep, err = b.buildHashJoin(ev)
+			break
+		}
+		if ev.IsJoinApply() {
+			return execPlan{}, errors.Errorf("could not decorrelate subquery")
+		}
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
 	if err != nil {
@@ -331,46 +323,119 @@ func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
-func (b *Builder) buildJoin(ev memo.ExprView, joinType sqlbase.JoinType) (execPlan, error) {
-	left, err := b.buildRelational(ev.Child(0))
+func (b *Builder) buildHashJoin(ev memo.ExprView) (execPlan, error) {
+	joinType := joinOpToJoinType(ev.Operator())
+	left, right, onExpr, outputCols, err := b.initJoinBuild(
+		ev.Child(0), ev.Child(1), ev.Child(2), joinType,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	right, err := b.buildRelational(ev.Child(1))
+	ep := execPlan{outputCols: outputCols}
+	ep.root, err = b.factory.ConstructHashJoin(joinType, left.root, right.root, onExpr)
 	if err != nil {
 		return execPlan{}, err
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildMergeJoin(ev memo.ExprView) (execPlan, error) {
+	mergeOn := ev.Child(2)
+	def := mergeOn.Private().(*memo.MergeOnDef)
+	joinType := joinOpToJoinType(def.JoinType)
+
+	left, right, onExpr, outputCols, err := b.initJoinBuild(
+		ev.Child(0), ev.Child(1), mergeOn.Child(0), joinType,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	leftOrd := make(sqlbase.ColumnOrdering, len(def.LeftEq))
+	rightOrd := make(sqlbase.ColumnOrdering, len(def.LeftEq))
+	for i := range def.LeftEq {
+		dir := encoding.Ascending
+		if def.LeftEq[i].Descending() {
+			dir = encoding.Descending
+		}
+		leftOrd[i].Direction = dir
+		leftOrd[i].ColIdx = int(left.getColumnOrdinal(def.LeftEq[i].ID()))
+		rightOrd[i].Direction = dir
+		rightOrd[i].ColIdx = int(right.getColumnOrdinal(def.RightEq[i].ID()))
+	}
+	ep := execPlan{outputCols: outputCols}
+	ep.root, err = b.factory.ConstructMergeJoin(
+		joinType, left.root, right.root, onExpr, leftOrd, rightOrd,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return ep, nil
+}
+
+// initJoinBuild builds the inputs to the join as well as the ON expression.
+func (b *Builder) initJoinBuild(
+	leftChild memo.ExprView,
+	rightChild memo.ExprView,
+	onCond memo.ExprView,
+	joinType sqlbase.JoinType,
+) (leftPlan, rightPlan execPlan, onExpr tree.TypedExpr, outputCols opt.ColMap, _ error) {
+	leftPlan, err := b.buildRelational(leftChild)
+	if err != nil {
+		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+	}
+	rightPlan, err = b.buildRelational(rightChild)
+	if err != nil {
+		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 	}
 
 	// Calculate the outputCols map for the join plan: the first numLeftCols
 	// correspond to the columns from the left, the rest correspond to columns
 	// from the right (except for Anti and Semi joins).
-	numLeftCols := left.outputCols.Len()
-	inputCols := left.outputCols.Copy()
-	right.outputCols.ForEach(func(colIdx, rightIdx int) {
-		inputCols.Set(colIdx, rightIdx+numLeftCols)
+	numLeftCols := leftPlan.outputCols.Len()
+	allCols := leftPlan.outputCols.Copy()
+	rightPlan.outputCols.ForEach(func(colIdx, rightIdx int) {
+		allCols.Set(colIdx, rightIdx+numLeftCols)
 	})
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, inputCols.Len()),
-		ivarMap: inputCols,
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivarMap: allCols,
 	}
-	onExpr, err := b.buildScalar(&ctx, ev.Child(2))
+	onExpr, err = b.buildScalar(&ctx, onCond)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 	}
 
-	var ep execPlan
 	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
 		// For semi and anti join, only the left columns are output.
-		ep.outputCols = left.outputCols
-	} else {
-		ep.outputCols = inputCols
+		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
-	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
-	if err != nil {
-		return execPlan{}, err
+	return leftPlan, rightPlan, onExpr, allCols, nil
+}
+
+func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
+	switch op {
+	case opt.InnerJoinOp:
+		return sqlbase.InnerJoin
+
+	case opt.LeftJoinOp:
+		return sqlbase.LeftOuterJoin
+
+	case opt.RightJoinOp:
+		return sqlbase.RightOuterJoin
+
+	case opt.FullJoinOp:
+		return sqlbase.FullOuterJoin
+
+	case opt.SemiJoinOp:
+		return sqlbase.LeftSemiJoin
+
+	case opt.AntiJoinOp:
+		return sqlbase.LeftAntiJoin
+
+	default:
+		panic(fmt.Sprintf("not a join op %s", op))
 	}
-	return ep, nil
 }
 
 func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {

@@ -212,8 +212,8 @@ func (ef *execFactory) RenameColumns(n exec.Node, colNames []string) (exec.Node,
 	return n, nil
 }
 
-// ConstructJoin is part of the exec.Factory interface.
-func (ef *execFactory) ConstructJoin(
+// ConstructHashJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType, left, right exec.Node, onCond tree.TypedExpr,
 ) (exec.Node, error) {
 	p := ef.planner
@@ -226,7 +226,7 @@ func (ef *execFactory) ConstructJoin(
 		return nil, err
 	}
 	onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normmalizeToNonNil */
+		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
 	)
 	// Try to harvest equality columns from the ON expression.
 	onAndExprs := splitAndExpr(p.EvalContext(), onCond, nil /* exprs */)
@@ -237,6 +237,54 @@ func (ef *execFactory) ConstructJoin(
 	}
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
+}
+
+// ConstructMergeJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructMergeJoin(
+	joinType sqlbase.JoinType,
+	left, right exec.Node,
+	onCond tree.TypedExpr,
+	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+) (exec.Node, error) {
+	p := ef.planner
+	leftSrc := asDataSource(left)
+	rightSrc := asDataSource(right)
+	pred, _, err := p.makeJoinPredicate(
+		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
+	)
+	if err != nil {
+		return nil, err
+	}
+	pred.onCond = pred.iVarHelper.Rebind(
+		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
+	)
+
+	n := len(leftOrdering)
+	if n == 0 || len(rightOrdering) != n {
+		return nil, errors.Errorf("orderings from the left and right side must be the same non-zero length")
+	}
+	pred.leftEqualityIndices = make([]int, n)
+	pred.rightEqualityIndices = make([]int, n)
+	pred.leftColNames = make(tree.NameList, n)
+	pred.rightColNames = make(tree.NameList, n)
+	for i := 0; i < n; i++ {
+		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
+		pred.leftEqualityIndices[i] = leftColIdx
+		pred.rightEqualityIndices[i] = rightColIdx
+		pred.leftColNames[i] = tree.Name(leftSrc.info.SourceColumns[leftColIdx].Name)
+		pred.rightColNames[i] = tree.Name(rightSrc.info.SourceColumns[rightColIdx].Name)
+	}
+
+	node := p.makeJoinNode(leftSrc, rightSrc, pred)
+	node.mergeJoinOrdering = make(sqlbase.ColumnOrdering, n)
+	for i := 0; i < n; i++ {
+		// The mergeJoinOrdering "columns" are equality column indices.  Because of
+		// the way we constructed the equality indices, the ordering will always be
+		// 0,1,2,3..
+		node.mergeJoinOrdering[i].ColIdx = i
+		node.mergeJoinOrdering[i].Direction = leftOrdering[i].Direction
+	}
+	return node, nil
 }
 
 // ConstructGroupBy is part of the exec.Factory interface.

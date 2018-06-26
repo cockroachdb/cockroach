@@ -440,6 +440,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
+	mergeOnDef := &MergeOnDef{LeftEq: opt.Ordering{1, 2, 3}, RightEq: opt.Ordering{4, 5, 6}}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -454,6 +455,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
+		ps.internMergeOnDef(mergeOnDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
