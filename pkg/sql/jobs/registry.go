@@ -424,6 +424,19 @@ func getResumeHook(typ jobspb.Type, settings *cluster.Settings) (Resumer, error)
 	return nil, errors.Errorf("no resumer are available for %s", typ)
 }
 
+type retryJobError string
+
+// NewRetryJobError creates a new error that, if returned by a Resumer,
+// indicates to the jobs registry that the job should be restarted in the
+// background.
+func NewRetryJobError(s string) error {
+	return retryJobError(s)
+}
+
+func (r retryJobError) Error() string {
+	return string(r)
+}
+
 // resume starts or resumes a job. If no error is returned then the job was
 // asynchronously executed. The job is executed with the ctx, so ctx must
 // only by canceled if the job should also be canceled. resultsCh is passed
@@ -438,10 +451,13 @@ func (r *Registry) resume(
 		defer cleanup()
 		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
 		if resumeErr != nil && ctx.Err() != nil {
-			r.unregister(*job.id)
 			// The context was canceled. Tell the user, but don't attempt to mark the
 			// job as failed because it can be resumed by another node.
-			errCh <- errors.Errorf("job %d: node liveness error: restarting in the background", *job.id)
+			resumeErr = NewRetryJobError("node liveness error")
+		}
+		if e, ok := resumeErr.(retryJobError); ok {
+			r.unregister(*job.id)
+			errCh <- errors.Errorf("job %d: %s: restarting in background", *job.id, e)
 			return
 		}
 		terminal := true

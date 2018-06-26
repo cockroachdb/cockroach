@@ -117,6 +117,11 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
 }
 
+// IsUnsplittable returns true iff the BatchRequest an un-splittable request.
+func (ba *BatchRequest) IsUnsplittable() bool {
+	return ba.hasFlag(isUnsplittable)
+}
+
 // IsSingleRequest returns true iff the BatchRequest contains a single request.
 func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
