@@ -65,3 +65,11 @@ $left
 # EliminateUnaryMinus discards a doubled UnaryMinus operator.
 [EliminateUnaryMinus, Normalize]
 (UnaryMinus (UnaryMinus $input:*)) => $input
+
+# FoldUnaryMinus negates a constant value within a UnaryMinus.
+[FoldUnaryMinus, Normalize]
+(UnaryMinus
+  $input:(Const) & (CanFoldUnaryMinus $input)
+)
+=>
+(NegateNumeric $input)

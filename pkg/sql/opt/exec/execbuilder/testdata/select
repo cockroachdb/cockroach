@@ -522,6 +522,54 @@ statement ok
 DROP TABLE flt
 
 # ------------------------------------------------------------------------------
+# Verify we create the correct spans for negative numbers with extra
+# operations.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE num (
+  i int null,
+  unique index (i),
+  f float null,
+  unique index (f),
+  d decimal null,
+  unique index (d),
+  n interval null,
+  unique index (n)
+)
+
+query TTTTT
+EXPLAIN (TYPES) SELECT i FROM num WHERE i = -1:::INT
+----
+scan  ·      ·              (i int)  ·
+·     table  num@num_i_key  ·        ·
+·     spans  /-1-/0         ·        ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
+----
+scan  ·      ·                  (f float)  ·
+·     table  num@num_f_key      ·          ·
+·     spans  /-1-/-1/PrefixEnd  ·          ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
+----
+scan  ·      ·                  (d decimal)  ·
+·     table  num@num_d_key      ·            ·
+·     spans  /-1-/-1/PrefixEnd  ·            ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
+----
+scan  ·      ·              (n interval)  ·
+·     table  num@num_n_key  ·             ·
+·     spans  /-1h-/1d-25h   ·             ·
+
+statement ok
+DROP TABLE num
+
+# ------------------------------------------------------------------------------
 # ANY, ALL tests.
 # ------------------------------------------------------------------------------
 statement ok
