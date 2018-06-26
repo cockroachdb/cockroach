@@ -172,8 +172,11 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           {this.props.statements.length}
           {selectedApp ? ` of ${this.props.totalStatements} ` : " "}
           statement fingerprints.
-          Query history is cleared once an hour;
-          last cleared {this.props.lastReset}.
+          Last cleared {this.props.lastReset}.
+          <br />
+          Statement history is cleared once an hour by default, configured by
+          the cluster setting{" "}
+          <code><pre style={{ display: "inline-block" }}>diagnostics.reporting.interval</pre></code>.
         </div>
 
         <StatementsSortedTable
