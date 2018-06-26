@@ -1048,7 +1048,10 @@ func TestParallelSender(t *testing.T) {
 		}
 	}
 
-	psCount := s.DistSender().GetParallelSendCount()
+	getPSCount := func() int64 {
+		return s.DistSender().Metrics().AsyncSentCount.Count()
+	}
+	psCount := getPSCount()
 
 	// Batch writes to each range.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1060,7 +1063,7 @@ func TestParallelSender(t *testing.T) {
 	}); err != nil {
 		t.Errorf("unexpected error on batch put: %s", err)
 	}
-	newPSCount := s.DistSender().GetParallelSendCount()
+	newPSCount := getPSCount()
 	if c := newPSCount - psCount; c < 9 {
 		t.Errorf("expected at least 9 parallel sends; got %d", c)
 	}
@@ -1072,7 +1075,7 @@ func TestParallelSender(t *testing.T) {
 	} else if l := len(rows); l != len(splitKeys) {
 		t.Fatalf("expected %d rows; got %d", len(splitKeys), l)
 	}
-	newPSCount = s.DistSender().GetParallelSendCount()
+	newPSCount = getPSCount()
 	if c := newPSCount - psCount; c < 9 {
 		t.Errorf("expected at least 9 parallel sends; got %d", c)
 	}
