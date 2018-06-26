@@ -771,6 +771,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 
 			if frameRun.Frame != nil {
 				builtins.AddAggregateConstructorToFramableAggregate(builtin, aggConstructor)
+				builtin = builtins.MaybeReplaceWithFasterImplementation(builtin, evalCtx, frameRun)
 			}
 
 			for frameRun.RowIdx < len(partition) {
