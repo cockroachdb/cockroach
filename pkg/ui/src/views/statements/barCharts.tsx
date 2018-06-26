@@ -294,8 +294,41 @@ export function latencyBreakdown(s: StatementStatistics) {
     },
 
     overallBarChart() {
+      const parse = scale(parseMean);
+      const plan = scale(planMean);
+      const run = scale(runMean);
+      const overhead = scale(overheadMean);
+      const width = scale(clamp(overallMean - overallSd));
+      const spread = scale(overallSd + (overallSd > overallMean ? overallMean : overallSd));
+      const title = "Overall Latency.  Mean: " + overallMean + " Std. Dev.: " + overallSd;
       return (
-        <div>Unimplemented.</div>
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="latency-parse bar-chart__bar"
+            style={{ width: parse + "%", position: "absolute", left: 0 }}
+            title={ title }
+          />
+          <div
+            className="latency-plan bar-chart__bar"
+            style={{ width: plan + "%", position: "absolute", left: parse + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-run bar-chart__bar"
+            style={{ width: run + "%", position: "absolute", left: parse + plan + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-overhead bar-chart__bar"
+            style={{ width: overhead + "%", position: "absolute", left: parse + plan + run + "%" }}
+            title={ title }
+          />
+          <div
+            className="latency-overall-dev bar-chart__bar bar-chart__bar--dev"
+            style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+            title={ title }
+          />
+        </div>
       );
     },
   };
