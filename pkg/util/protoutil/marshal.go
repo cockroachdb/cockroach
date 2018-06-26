@@ -18,6 +18,8 @@ import (
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
+
+	"github.com/cockroachdb/cockroach/pkg/util/unsafeutil"
 )
 
 // Message extends the proto.Message interface with the MarshalTo and Size
@@ -64,7 +66,7 @@ var Interceptor = func(_ Message) {}
 func Marshal(pb Message) ([]byte, error) {
 	pb = MaybeFuzz(pb)
 
-	dest := make([]byte, pb.Size())
+	dest := unsafeutil.NonZeroingMakeByteSlice(pb.Size())
 	if _, err := MarshalToWithoutFuzzing(pb, dest); err != nil {
 		return nil, err
 	}

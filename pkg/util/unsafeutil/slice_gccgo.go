@@ -14,11 +14,9 @@
 
 // +build gccgo
 
-package engine
+package unsafeutil
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 //extern runtime.mallocgc
 func mallocgc(size uintptr, typ unsafe.Pointer, needzero bool) unsafe.Pointer
