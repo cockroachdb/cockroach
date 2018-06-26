@@ -98,9 +98,14 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 	}
 	var r []EndTxnIntents
 	if lResult.EndTxns != nil {
-		for _, eti := range *lResult.EndTxns {
-			if !alwaysOnly || eti.Always {
-				r = append(r, eti)
+		r = *lResult.EndTxns
+		if alwaysOnly {
+			// If alwaysOnly, filter away any !Always EndTxnIntents.
+			r = r[:0]
+			for _, eti := range *lResult.EndTxns {
+				if eti.Always {
+					r = append(r, eti)
+				}
 			}
 		}
 	}
