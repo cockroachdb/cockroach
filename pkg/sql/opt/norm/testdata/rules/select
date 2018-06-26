@@ -896,3 +896,63 @@ select
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0])]
       ├── $1 < '2000-01-01T10:00:00' [type=bool]
       └── c = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+
+# --------------------------------------------------
+# RemoveNotNullOnNotNullCols
+# --------------------------------------------------
+opt
+select k from a where k is not null
+----
+scan a
+ ├── columns: k:1(int!null)
+ └── key: (1)
+
+opt
+select k from a where k is not null and k > 4
+----
+scan a
+ ├── columns: k:1(int!null)
+ └── key: (1)
+
+opt 
+select k from a where k is null
+----
+scan a
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: contradiction
+ └── key: (1)
+
+opt
+select k from a where k is null and k > 4
+----
+scan a
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: contradiction
+ └── key: (1)
+
+opt
+select i from a where i is not null
+----
+select
+ ├── columns: i:2(int!null)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── a.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+opt
+select k from a where i+k is not null
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters [type=bool, outer=(1,2)]
+           └── (a.i + a.k) IS NOT NULL [type=bool, outer=(1,2)]
