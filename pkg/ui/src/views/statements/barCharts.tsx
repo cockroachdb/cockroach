@@ -32,6 +32,7 @@ const latencyBars = [
 ];
 
 const latencyStdDev = bar("latency-overall-dev", "Latency Std. Dev.", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
+const rowsStdDev = bar("rows-dev", "Rows Std. Dev.", (d: StatementStatistics) => stdDevLong(d.stats.num_rows, d.stats.count));
 
 function bar(name: string, title: string, value: (d: StatementStatistics) => number) {
   return { name, title, value };
@@ -134,7 +135,7 @@ export function approximify(value: number) {
 }
 
 export const countBarChart = makeBarChart("Execution Count", countBars, approximify);
-export const rowsBarChart = makeBarChart("Rows Affected.  Mean", rowsBars, approximify);
+export const rowsBarChart = makeBarChart("Rows Affected.  Mean", rowsBars, approximify, rowsStdDev);
 export const latencyBarChart = makeBarChart("Latency.  Mean", latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
