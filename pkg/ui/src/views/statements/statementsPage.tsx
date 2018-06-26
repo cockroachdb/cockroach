@@ -42,7 +42,7 @@ interface StatementsPageProps {
   valid: boolean;
   statements: AggregateStatistics[];
   apps: string[];
-  totalStatements: number;
+  totalFingerprints: number;
   lastReset: string;
   refreshQueries: typeof refreshQueries;
 }
@@ -179,7 +179,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
         <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
           {this.props.statements.length}
-          {selectedApp ? ` of ${this.props.totalStatements} ` : " "}
+          {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
           statement fingerprints.
           Last cleared {this.props.lastReset}.
           <div className="last-cleared-tooltip__tooltip">
@@ -226,6 +226,8 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
 }
 
+// selectStatements returns the array of AggregateStatistics to show on the
+// StatementsPage, based on if the appAttr route parameter is set.
 const selectStatements = createSelector(
   (state: AdminUIState) => state.cachedData.queries,
   (_state: AdminUIState, props: RouteProps) => props,
@@ -262,6 +264,8 @@ const selectStatements = createSelector(
   },
 );
 
+// selectApps returns the array of all apps with statement statistics present
+// in the data.
 const selectApps = createSelector(
   (state: AdminUIState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
@@ -284,7 +288,9 @@ const selectApps = createSelector(
   },
 );
 
-const selectTotalStatements = createSelector(
+// selectTotalFingerprints returns the count of distinct statement fingerprints
+// present in the data.
+const selectTotalFingerprints = createSelector(
   (state: AdminUIState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
     if (!state.data) {
@@ -295,6 +301,8 @@ const selectTotalStatements = createSelector(
   },
 );
 
+// selectLastReset returns a string displaying the last time the statement
+// statistics were reset.
 const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
@@ -311,7 +319,7 @@ const StatementsPageConnected = connect(
   (state: AdminUIState, props: RouteProps) => ({
     statements: selectStatements(state, props),
     apps: selectApps(state),
-    totalStatements: selectTotalStatements(state),
+    totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
     valid: state.cachedData.queries.valid,
   }),
