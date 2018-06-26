@@ -118,21 +118,23 @@ project
  ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── select
+ └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
-      ├── stats: [rows=1000, distinct(5)=1]
+      ├── stats: [rows=1000]
       ├── key: (1)
-      ├── fd: (1)-->(2-5), (3,4)~~>(1,2), ()-->(5)
-      ├── left-join-apply
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int)
-      │    ├── stats: [rows=1000, distinct(5)=1]
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), ()-->(5)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    ├── stats: [rows=1000]
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2), ()~~>(5)
-      │    ├── scan xysd
-      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    │    ├── stats: [rows=1000]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── select
+      │    ├── columns: u:5(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── stats: [rows=1, distinct(5)=1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(5)
       │    ├── max1-row
       │    │    ├── columns: u:5(int!null)
       │    │    ├── outer: (1)
@@ -152,11 +154,11 @@ project
       │    │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │                   ├── variable: uv.u [type=int, outer=(5)]
       │    │                   └── variable: xysd.x [type=int, outer=(1)]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
-           └── eq [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]
-                ├── variable: uv.u [type=int, outer=(5)]
-                └── const: 10 [type=int]
+      │    └── filters [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+      │         └── eq [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]
+      │              ├── variable: uv.u [type=int, outer=(5)]
+      │              └── const: 10 [type=int]
+      └── true [type=bool]
 
 # Right-join.
 build

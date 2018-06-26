@@ -146,24 +146,24 @@ project
  ├── fd: (1)-->(2-4)
  ├── prune: (1-4)
  ├── interesting orderings: (+1)
- └── select
+ └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7), ()-->(7)
+      ├── fd: (1)-->(2-4), ()-->(7)
       ├── prune: (2-4)
       ├── interesting orderings: (+1)
-      ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4,7), ()~~>(7)
-      │    ├── prune: (2-4)
-      │    ├── interesting orderings: (+1)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── prune: (1-4)
-      │    │    └── interesting orderings: (+1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      ├── select
+      │    ├── columns: r:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
       │    ├── max1-row
       │    │    ├── columns: r:7(int)
       │    │    ├── outer: (1)
@@ -190,9 +190,9 @@ project
       │    │         │         └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │         └── projections [outer=(1)]
       │    │              └── a.k + 1 [type=int, outer=(1)]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │         └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      └── true [type=bool]
 
 # SemiJoin operator.
 opt
