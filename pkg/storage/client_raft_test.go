@@ -940,7 +940,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 
 	// Restart store 2.
 	mtc.restartStore(2)
@@ -1071,7 +1071,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 
 			// Start draining stores 0 and 1 to prevent them from grabbing any new
 			// leases.
-			mtc.advanceClock(context.Background())
+			mtc.expireLeases(context.Background())
 			var wg sync.WaitGroup
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
@@ -1102,7 +1102,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 				// See #18554.
 				runtime.Gosched()
 			}
-			mtc.advanceClock(context.Background())
+			mtc.expireLeases(context.Background())
 
 			wg.Wait()
 
@@ -1720,7 +1720,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	}))
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -2336,7 +2336,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Expire leases to ensure any remaining intent resolutions can complete.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an attempt to
@@ -2786,7 +2786,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	testutils.SucceedsSoon(t, func() error {
-		mtc.advanceClock(context.TODO())
+		mtc.expireLeases(context.TODO())
 		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -2870,7 +2870,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// will see that the range has been moved and delete the old
 	// replica.
 	mtc.stores[2].SetReplicaGCQueueActive(true)
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
@@ -3309,7 +3309,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	// Re-enable the GC queue to allow the replica to be destroyed
 	// (after the simulated passage of time).
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[0].SetReplicaGCQueueActive(true)
 	mtc.stores[0].ForceReplicaGCScanAndProcess()
@@ -3339,7 +3339,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	// This test can rapidly advance the clock via mtc.advanceClock(),
+	// This test can rapidly advance the clock via mtc.expireLeases(),
 	// which could lead the replication queue to consider a store dead
 	// and remove a replica in the middle of the test. Disable the
 	// replication queue; we'll control replication manually.
@@ -3396,7 +3396,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// expire-request in a loop until we get our foot in the door.
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	for {
-		mtc.advanceClock(context.TODO())
+		mtc.expireLeases(context.TODO())
 		if _, pErr := client.SendWrappedWith(
 			context.Background(), store1, roachpb.Header{RangeID: repl0.RangeID}, getArgs,
 		); pErr == nil {

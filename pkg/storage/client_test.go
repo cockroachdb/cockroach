@@ -503,14 +503,14 @@ func (t *multiTestContextKVTransport) SendNext(
 			t.mtc.mu.RUnlock()
 			if leaseHolderStore == nil {
 				// The lease holder is known but down, so expire its lease.
-				t.mtc.advanceClock(ctx)
+				t.mtc.expireLeases(ctx)
 			}
 		} else {
 			// stores has the range, is *not* the lease holder, but the
 			// lease holder is not known; this can happen if the lease
 			// holder is removed from the group. Move the manual clock
 			// forward in an attempt to expire the lease.
-			t.mtc.advanceClock(ctx)
+			t.mtc.expireLeases(ctx)
 		}
 	}
 	t.setPending(rep.ReplicaID, false)
@@ -1201,7 +1201,7 @@ func (m *multiTestContext) transferLeaseNonFatal(
 	return nil
 }
 
-// advanceClock advances the mtc's manual clock such that all
+// expireLeases advances the mtc's manual clock such that all
 // expiration-based leases become expired. The liveness records of all the nodes
 // will also become expired on the new clock value (and this will cause all the
 // epoch-based leases to be considered expired until the liveness record is
@@ -1209,7 +1209,7 @@ func (m *multiTestContext) transferLeaseNonFatal(
 //
 // This method asserts that all the stores share the manual clock. Otherwise,
 // the desired effect would be ambiguous.
-func (m *multiTestContext) advanceClock(ctx context.Context) {
+func (m *multiTestContext) expireLeases(ctx context.Context) {
 	for i, clock := range m.clocks {
 		if clock != m.clock {
 			log.Fatalf(ctx, "clock at index %d is different from the shared clock", i)
@@ -1217,6 +1217,37 @@ func (m *multiTestContext) advanceClock(ctx context.Context) {
 	}
 	m.manualClock.Increment(m.storeConfig.LeaseExpiration())
 	log.Infof(ctx, "test clock advanced to: %s", m.clock.Now())
+}
+
+// advanceClock advances the mtc's manual clock and re-heartbeats all
+// nodes to ensure they are considered live at the updated clock time.
+func (m *multiTestContext) advanceClock(ctx context.Context, inc time.Duration) error {
+	for i, clock := range m.clocks {
+		if clock != m.clock {
+			log.Fatalf(ctx, "clock at index %d is different from the shared clock", i)
+		}
+	}
+	m.manualClock.Increment(inc.Nanoseconds())
+	nls := make([]*storage.NodeLiveness, 0, len(m.nodeLivenesses))
+	m.mu.RLock()
+	nls = append(nls, m.nodeLivenesses...)
+	m.mu.RUnlock()
+	for _, nl := range nls {
+		l, err := nl.Self()
+		if err != nil {
+			return err
+		}
+		for {
+			if err := nl.Heartbeat(ctx, l); err != nil {
+				if err == storage.ErrEpochIncremented {
+					continue
+				}
+				return err
+			}
+			break
+		}
+	}
+	return nil
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the

@@ -1018,7 +1018,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Expire current leases and put a key to RHS of split to request
 	// an epoch-based lease.
 	testutils.SucceedsSoon(t, func() error {
-		mtc.advanceClock(context.TODO())
+		mtc.expireLeases(context.TODO())
 		if err := mtc.stores[0].DB().Put(context.TODO(), "a", "foo"); err != nil {
 			return err
 		}

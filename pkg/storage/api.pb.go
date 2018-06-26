@@ -19,6 +19,7 @@
 		Liveness
 		RangeLogEvent
 		RaftHeartbeat
+		ClosedTSInfo
 		RaftMessageRequest
 		RaftMessageRequestBatch
 		RaftMessageResponseUnion

@@ -19,6 +19,7 @@ option go_package = "storage";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "storage/storagebase/state.proto";
+import "util/hlc/timestamp.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -39,6 +40,22 @@ message RaftHeartbeat {
   optional uint64 term = 4 [(gogoproto.nullable) = false];
   optional uint64 commit = 5 [(gogoproto.nullable) = false];
   optional bool quiesce = 6 [(gogoproto.nullable) = false];
+}
+
+// ClosedTSInfo contains information necessary to determine whether
+// reads can be serviced by follower replicas based on their current
+// lease applied index and whether or not they're in a quiescent
+// state.
+message ClosedTSInfo {
+  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // The minimum lease applied index (MLAI) at which the range can
+  // serve reads for timestamps at or before the closed timestamp.
+  optional uint64 min_lease_applied_index = 2 [(gogoproto.nullable) = false];
+  // If quiescing is true, then future closed timestamps reported by
+  // the origin store can be trusted at the last known MLAI.
+  optional bool quiescing = 3 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -65,10 +82,34 @@ message RaftMessageRequest {
   // the sender.
   optional bool quiesce = 5 [(gogoproto.nullable) = false];
 
-  // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
-  // heartbeats or heartbeat_resps.
+  // A coalesced heartbeat request is any RaftMessageRequest with a
+  // nonzero number of heartbeats or heartbeat_resps.
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  // The following fields support follower reads and are supplied /
+  // valid only on coalesced heartbeat requests.
+  //
+  // TODO(tschottdorf): untangle this from coalesced heartbeats.
+
+  // closed_sequence is incremented on successive coalesced
+  // heartbeats. If a received heartbeat's closed_sequence is not in
+  // order, then the quiesced range map attributed to the sender is
+  // cleared to prevent using the closed timestamp provided here with
+  // a range which might have unquiesced during a missed heartbeat.
+  optional int64 closed_sequence = 8 [(gogoproto.nullable) = false];
+  // closed is the timestamp before which follower replicas being
+  // heartbeat can serve reads as long as they've committed up to the
+  // closed log_index specified with the heartbeat.
+  optional util.hlc.Timestamp closed = 9 [(gogoproto.nullable) = false];
+  // epoch is the node liveness epoch of the sender. If this value
+  // changes between heartbeats, all prior knowledge of closed log
+  // indexes learned from the sender must be discarded.
+  optional int64 epoch = 10 [(gogoproto.nullable) = false];
+  // ranges is a set of ranges with minimum lease applied index (MLAI)
+  // and whether or not the range is quiescent according to the origin
+  // store (the putative leaseholder).
+  repeated ClosedTSInfo ranges = 11 [(gogoproto.nullable) = false];
 }
 
 message RaftMessageRequestBatch {

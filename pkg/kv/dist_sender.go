@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -62,6 +63,11 @@ var (
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name: "distsender.errors.notleaseholder",
 		Help: "Number of NotLeaseHolderErrors encountered"}
+	metaDistSenderFollowerReadEligibleCount = metric.Metadata{
+		Name: "distsender.followerread.eligible",
+		Help: "Number of requests sent to nearest replica due to follower read eligibility"}
+	// TODO(tschottdorf): should track follower-read-mismatches, where we sent to a
+	// follower but that follower wasn't able to serve it.
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -72,22 +78,24 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
-	BatchCount             *metric.Counter
-	PartialBatchCount      *metric.Counter
-	SentCount              *metric.Counter
-	LocalSentCount         *metric.Counter
-	NextReplicaErrCount    *metric.Counter
-	NotLeaseHolderErrCount *metric.Counter
+	BatchCount                *metric.Counter
+	PartialBatchCount         *metric.Counter
+	SentCount                 *metric.Counter
+	LocalSentCount            *metric.Counter
+	NextReplicaErrCount       *metric.Counter
+	NotLeaseHolderErrCount    *metric.Counter
+	FollowerReadEligibleCount *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
 	return DistSenderMetrics{
-		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
-		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
-		SentCount:              metric.NewCounter(metaTransportSentCount),
-		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
-		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
-		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		BatchCount:                metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:         metric.NewCounter(metaDistSenderPartialBatchCount),
+		SentCount:                 metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:            metric.NewCounter(metaTransportLocalSentCount),
+		NextReplicaErrCount:       metric.NewCounter(metaDistSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount:    metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		FollowerReadEligibleCount: metric.NewCounter(metaDistSenderFollowerReadEligibleCount),
 	}
 }
 
@@ -126,12 +134,13 @@ type DistSender struct {
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache *RangeDescriptorCache
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache *LeaseHolderCache
-	transportFactory TransportFactory
-	rpcContext       *rpc.Context
-	rpcRetryOptions  retry.Options
-	asyncSenderSem   chan struct{}
-	asyncSenderCount int32
+	leaseHolderCache     *LeaseHolderCache
+	transportFactory     TransportFactory
+	rpcContext           *rpc.Context
+	rpcRetryOptions      retry.Options
+	asyncSenderSem       chan struct{}
+	asyncSenderCount     int32
+	followerReadInterval time.Duration
 }
 
 var _ client.Sender = &DistSender{}
@@ -151,7 +160,8 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 
-	TestingKnobs ClientTestingKnobs
+	TestingKnobs         ClientTestingKnobs
+	FollowerReadInterval time.Duration
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -160,10 +170,11 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		st:      cfg.Settings,
-		clock:   cfg.Clock,
-		gossip:  g,
-		metrics: makeDistSenderMetrics(),
+		st:                   cfg.Settings,
+		clock:                cfg.Clock,
+		gossip:               g,
+		metrics:              makeDistSenderMetrics(),
+		followerReadInterval: cfg.FollowerReadInterval,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -376,6 +387,38 @@ func (ds *DistSender) getDescriptor(
 	return desc, returnToken, nil
 }
 
+func (ds *DistSender) maybeCanReadFromFollower(ba roachpb.BatchRequest) bool {
+	if ds.followerReadInterval == 0 {
+		return false
+	}
+
+	// TODO(tschottdorf): this is simplistic. We need to gracefully handle the
+	// case of lagging followers, for example by reading from the leaseholder
+	// whenever a follower read fails. With that in, we may still have to
+	// track lagging replicas so we avoid them in the first place, though this
+	// may not matter in practice for a long long time (or ever). A similar
+	// problem exists when resolving an intent during a follower read; on
+	// retry the follower may still have the intent around. We should go to
+	// the leaseholder in that case as well.
+	//
+	// There's also a correctness problem here. We treat any read
+	// as a possible follower read, but follower reads never exhibit uncertainty
+	// restarts. The following can happen:
+	// 1. txn1 starts, gets timestamp 100, and does nothing for ~10s.
+	// 2. txn1 reads via follower read, so leader's timestamp cache does not see the update.
+	// 3. does something else, who knows, commits.
+	// 3. txn2 starts at timestamp 99 and writes a value invalidating the read on the lease
+	// holder.
+	// So basically we need to check whether the transaction has an empty uncertainty
+	// window (which is how we know it's a historical read).
+	estimatedClosedTimestamp := ds.clock.Now().Add(-ds.followerReadInterval.Nanoseconds(), 0)
+	if ba.GetActiveTimestamp(ds.clock.Now).Less(estimatedClosedTimestamp) {
+		ds.metrics.FollowerReadEligibleCount.Inc(1)
+		return true
+	}
+	return false
+}
+
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
@@ -391,12 +434,27 @@ func (ds *DistSender) sendSingleRange(
 	}
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 
-	// If this request needs to go to a lease holder and we know who that is, move
-	// it to the front.
-	if !ba.IsReadOnly() || ba.ReadConsistency.RequiresReadLease() {
-		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
-			if i := replicas.FindReplica(storeID); i >= 0 {
-				replicas.MoveToFront(i)
+	// If this request needs to go to a lease holder and we know who
+	// that is, possibly move it to the front.
+	readOnly := ba.IsReadOnly()
+	if !readOnly || ba.ReadConsistency.RequiresReadLease() {
+		// We can avoid sending to the leaseholder if the batch qualifies
+		// for being served by follower reads.
+		//
+		// TODO(tschottdorf): important improvements are to be made here:
+		// 1. if a follower for whatever reason falls behind, the request will
+		//    bounce back here and we'll choose the same follower again until
+		//    it catches back up. This isn't great; we should limit follower
+		//    read attempts to one per batch, or even blacklist replicas that
+		//    fail repeatedly (though that is lower priority).
+		// 2. we may want to add some jitter here to spread out load among replicas
+		//    with similar latencies (or even actively prefer followers over lease-
+		//    holders).
+		if !readOnly || !ds.maybeCanReadFromFollower(ba) {
+			if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
+				if i := replicas.FindReplica(storeID); i >= 0 {
+					replicas.MoveToFront(i)
+				}
 			}
 		}
 	}

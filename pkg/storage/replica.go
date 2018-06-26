@@ -496,6 +496,26 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+
+		// closed holds the follower read information for the range:
+		// 1. the MLAI (minimum lease applied index); follower reads can't be
+		//    served until this replica's LeaseAppliedIndex has reached the MLAI.
+		// 2. the confirmed closed timestamp, which is updated from 3. whenever
+		//    condition 1 above is first satisfied.
+		// 3. the most recent closed timestamp received for this range. Note that
+		//    this won't be used until it's copied into confTS, see 2.
+		//
+		// Additionally, on receiving a new closed timestamp and MLAI from a
+		// peer, we check whether the previous MLAI was confirmed. If not, the
+		// new update is discarded. This allows a "lagging" node to serve
+		// follower reads further in the past. Without this mechanism, a lagging
+		// node would never get to serve follower reads as each heartbeat would
+		// set the bar higher.
+		closed struct {
+			minLeaseAppliedIndex uint64
+			confTS               hlc.Timestamp
+			ts                   hlc.Timestamp
+		}
 	}
 
 	unreachablesMu struct {
@@ -1319,6 +1339,9 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 // with a timestamp within rangeLeaseRenewalDuration of the lease
 // expiration is served.
 //
+// Whenever a lease status is obtained, it is returned, even when there
+// is an error (this is needed by follower reads).
+//
 // TODO(spencer): for write commands, don't wait while requesting
 //  the range lease. If the lease acquisition fails, the write cmd
 //  will fail as well. If it succeeds, as is likely, then the write
@@ -1450,7 +1473,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			return nil, nil
 		}()
 		if pErr != nil {
-			return LeaseStatus{}, pErr
+			// Note that we return the status even on error as an
+			// optimization for serving follower reads.
+			return status, pErr
 		}
 		if llHandle == nil {
 			// We own a valid lease.
@@ -1988,9 +2013,10 @@ type batchCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope]*cmd
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
-	repl *Replica
-	cmds batchCmdSet
-	ba   roachpb.BatchRequest
+	repl         *Replica
+	cmds         batchCmdSet
+	ba           roachpb.BatchRequest
+	followerRead bool
 }
 
 // done removes pending commands from the command queue and updates
@@ -2000,7 +2026,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// retried. Each request is considered in turn; only those marked as
 	// affecting the cache are processed. Inconsistent reads are
 	// excluded.
-	if retry == proposalNoRetry && ec.ba.ReadConsistency == roachpb.CONSISTENT {
+	if retry == proposalNoRetry && ec.ba.ReadConsistency == roachpb.CONSISTENT && !ec.followerRead {
 		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
@@ -2159,12 +2185,12 @@ func collectSpans(
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, followerRead bool,
 ) (*endCmds, error) {
 	var newCmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 	// Don't use the command queue for inconsistent reads.
-	if ba.ReadConsistency == roachpb.CONSISTENT {
+	if ba.ReadConsistency == roachpb.CONSISTENT && !followerRead {
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -2296,9 +2322,10 @@ func (r *Replica) beginCmds(
 	}
 
 	ec := &endCmds{
-		repl: r,
-		cmds: newCmds,
-		ba:   *ba,
+		repl:         r,
+		cmds:         newCmds,
+		ba:           *ba,
+		followerRead: followerRead,
 	}
 	return ec, nil
 }
@@ -2405,6 +2432,29 @@ func (r *Replica) applyTimestampCache(
 		}
 	}
 	return bumped, nil
+}
+
+// enforceMinProposal ensures that the batch or transaction timestamp
+// is forwarded so that it is greater than or equal to the store's
+// minimum proposal timestamp. Returns whether the batch or transaction
+// timestamp was moved forward as well as a cleanup function which must
+// be invoked after the command is proposed.
+func (r *Replica) enforceMinProposal(ctx context.Context, ba *roachpb.BatchRequest) (bool, func()) {
+	var bumped bool
+	minProp, cleanup := r.store.getMinProposal(ctx)
+	if ba.Txn != nil {
+		if ba.Txn.Timestamp.Less(minProp) {
+			txn := ba.Txn.Clone()
+			bumped = txn.Timestamp.Forward(minProp)
+			ba.Txn = &txn
+		}
+	} else {
+		bumped = ba.Timestamp.Forward(minProp)
+	}
+	if bumped {
+		r.store.metrics.FollowerReadEnforceMinProposal.Inc(1)
+	}
+	return bumped, cleanup
 }
 
 // executeAdminBatch executes the command directly. There is no interaction
@@ -2556,18 +2606,182 @@ func (r *Replica) limitTxnMaxTimestamp(
 	}
 }
 
+// canServiceFollowerRead returns whether the batch request can be
+// serviced by the current replica (a follower), given the current
+// closed timestamp reported to this replica by the leaseholder.
+// Note that this uses the *closed timestamp*, not the confirmed closed
+// timestamp*. The read timestamp should have been checked against the
+// latter, with this method being called only if the confirmed timestamp
+// was behind the read timestamp.
+//
+// This method also updates the confirmed closed timestamp to reflect an
+// advanced applied index, when appropriate.
+func (r *Replica) canServiceFollowerRead(
+	ctx context.Context,
+	status LeaseStatus,
+	leaseholder *roachpb.ReplicaDescriptor,
+	readTS hlc.Timestamp,
+) bool {
+	r.mu.RLock()
+	copyClosed := r.mu.closed
+	quiescent := r.mu.quiescent
+	// TODO(tschottdorf): isn't there a race here for quiescent replicas?
+	// - read some LAI here
+	// - replica unquiesces, applies some new commands
+	// - range quiesces again
+	// - next CT update arrives from store with "quiesced" update and new MLAI
+	// - we never see the new MLAI, but we do update `r.mu.closed.ts` below
+	// - can serve reads that miss some writes
+	//
+	// I think we need to reload the MLAI atomically with moving `closed.ts` forward.
+	lai := r.mu.state.LeaseAppliedIndex
+	r.mu.RUnlock()
+
+	// `r.mu.quiescent` is advisory only. Whether it's set or not may not
+	// correspond to the true quiescence state of the range (which is not a
+	// concept that exists in the first place). For example, the leaseholder may
+	// have unquiesced, but this replica isn't aware yet. Or this replica has
+	// recently unquiesced, but no other replica knows yet. This is acceptable because
+	// as explained below, we use it only to decide on the right strategy below.
+	//
+	// 1. whatever is stored on copyClosed is safe to use, even if the replica unquiesces
+	// 2. a quiescent Raft group typically has no useful timestamp stored in
+	//    copyClosed, and so a freshly unquiesced replica may, in the worst case,
+	//    reject follower reads (but see below for how this case is avoided).
+	// 3. the store closed timestamp in conjunction with the MLAI is always safe to use
+	//    because the incoming updates guarantee that they will MLAI updates for all
+	//    active ranges (and on missing an update, we reset all quiescent MLAIs). But
+	//    if the range is active to begin with, its `closed` struct contains a typically
+	//    up-to-date copy of that timestamp anyway.
+	//
+	// Thus, the quiescence bool above is used only to decide on the appropriate strategy
+	// for proving that a follower read is possible. There are no subtle locking concerns;
+	// the worst case is that a follower read is erroneously rejected.
+
+	// First, check if the desired read timestamp is ahead of the closed timestamp.
+	// If it is, then our only chance of serving the (follower) read is if the range
+	// is quiesced. In that case, we're not going to receive new closed timestamps
+	// proactively but we have to update it from the store...
+	if copyClosed.ts.Less(readTS) {
+		// ... but only if the lease is valid, and the store's closed timestamp is
+		// ahead of the read timestamp.
+		var valid bool
+		var storeClosedTS hlc.Timestamp
+		// See getClosedTimestamp for an explanation of this specific check.
+		if quiescent && status.State == LeaseState_VALID && status.Liveness != nil && leaseholder != nil {
+			storeClosedTS, valid = r.store.getClosedTimestamp(ctx, leaseholder, status.Liveness.Epoch, r.RangeID)
+			if valid {
+				// If our earlier copy of the replica's `closed` struct indicates that the
+				// store closed timestamp is ahead, update the original.
+				// In doing so, the replica can a) serve some reads without going through the
+				// full check again and again and b) come back faster when it unquiesces.
+				//
+				// THe copy is also updated as it's used below, when we re-join the path
+				// taken by non-quiescent replicas.
+				if copyClosed.ts.Less(storeClosedTS) {
+					// Update the per-replica closed timestamp from the store's.
+					copyClosed.ts.Forward(storeClosedTS)
+					r.mu.Lock()
+					r.mu.closed.ts.Forward(storeClosedTS)
+					r.mu.Unlock()
+				}
+			}
+		}
+		// If there is no closed timestamp information available for the
+		// leaseholder, or if the range has not received any heartbeat,
+		// unquiesce and wake leader to trigger closed timestamp reporting.
+		if !valid || copyClosed.minLeaseAppliedIndex == 0 {
+			r.mu.Lock()
+			r.unquiesceAndWakeLeaderLocked()
+			r.mu.Unlock()
+			return false
+		} else if storeClosedTS.Less(readTS) {
+			return false
+		}
+		// If we made it here, we've updated the closed timestamp stored in the range
+		// so that it is now legal to serve a read if the MLAI is current.
+	}
+
+	if lai >= copyClosed.minLeaseAppliedIndex {
+		if copyClosed.confTS.Less(copyClosed.ts) {
+			r.mu.Lock()
+			r.mu.closed.confTS.Forward(copyClosed.ts)
+			r.mu.Unlock()
+		}
+		return true
+	}
+	return false
+}
+
+// canServiceRead returns whether the read-only batch request
+// can be serviced by the current replica. This requires one of:
+// - The read is inconsistent and can be serviced trivially.
+// - The replica is the leaseholder.
+// - The replica is a follower, but the read is at a historical timestamp
+//   at or before the closed timestamp the replica is aware of for the range.
+//
+// This method will try to acquire the lease if necessary.
+//
+// Returns whether the read is a follower read, the lease status, and an error
+// on a lease acquisition failure which could not be handled by a follower read.
+// The lease status is only guaranteed to be populated in the absence of an error
+// and for regular (i.e. consistent and not follower) reads.
+//
+// Being unable to serve the read is communicated by a non-nil error.
+//
+// TODO(tschottdorf): should also return a lease status for follower reads
+// because that's used to handle uncertainty errors and follower read requests
+// look just like normal requests, though the 5s timeout effectively prevents
+// uncertainty problems here.
+//
+// TODO(tschottdorf): rename to tryProveCanRead to indicate the lease side effect?
+func (r *Replica) canServiceRead(
+	ctx context.Context, requiresReadLease bool, readTS hlc.Timestamp,
+) (followerRead bool, status LeaseStatus, _ *roachpb.Error) {
+	if !requiresReadLease {
+		return false, LeaseStatus{}, nil
+	}
+	// If the read is not inconsistent, the read requires the range lease
+	// (unless a follower read is possible).
+	r.mu.RLock()
+	followerRead = !r.mu.closed.confTS.Less(readTS)
+	r.mu.RUnlock()
+
+	// If followerRead is true here, nothing else needs to be checked;
+	// the check has been carried out previously. Otherwise, run the
+	// full check now.
+	if !followerRead {
+		var pErr *roachpb.Error
+		// Try to serve the read based on having (or acquiring) the lease.
+		// If the lease is owned by someone else, check whether the read
+		// is eligible for a follower read.
+		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
+			if !ok || !r.canServiceFollowerRead(ctx, status, nlhe.LeaseHolder, readTS) {
+				if ok {
+					r.store.metrics.FollowerReadSkipped.Inc(1)
+				}
+				return false, status, pErr
+			}
+			followerRead = true
+		}
+	}
+	if followerRead {
+		r.store.metrics.FollowerReadSuccess.Inc(1)
+	}
+	return followerRead, status, nil
+}
+
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease.
-	var status LeaseStatus
-	if ba.ReadConsistency.RequiresReadLease() {
-		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr
-		}
+	followerRead, status, pErr := r.canServiceRead(
+		ctx, ba.ReadConsistency.RequiresReadLease(), ba.Timestamp)
+	if pErr != nil {
+		return nil, pErr
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
@@ -2576,10 +2790,13 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
+	// Add the read to the command queue to gate subsequent overlapping
+	// commands until this command completes. This does not apply for
+	// follower reads - we avoid both the command queue and any updates
+	// to the timestamp cache.
+	var endCmds *endCmds
 	log.Event(ctx, "command queue")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	endCmds, err = r.beginCmds(ctx, &ba, spans, followerRead)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2754,7 +2971,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		// been run to successful completion.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		endCmds, err = r.beginCmds(ctx, &ba, spans, false)
 		if err != nil {
 			return nil, roachpb.NewError(err), proposalNoRetry
 		}
@@ -2787,9 +3004,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+	enforcedTSCache, pErr := r.applyTimestampCache(ctx, &ba)
+	if pErr != nil {
 		return nil, pErr, proposalNoRetry
-	} else if bumped {
+	}
+	// Enforce the store's min proposal timestamp.
+	enforcedMinProp, minPropCleanup := r.enforceMinProposal(ctx, &ba)
+
+	if enforcedTSCache || enforcedMinProp {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
 		// doesn't know about the incremented timestamp). Response
@@ -2800,9 +3022,9 @@ func (r *Replica) tryExecuteWriteBatch(
 		defer func() {
 			if br != nil && ba.Txn != nil && br.Txn == nil {
 				log.Fatalf(ctx, "assertion failed: transaction updated by "+
-					"timestamp cache, but transaction returned in response; "+
+					"tsCache=%t minProp=%t, but transaction returned in response; "+
 					"updated timestamp would have been lost (recovered): "+
-					"%s in batch %s", ba.Txn, ba,
+					"%s in batch %s", enforcedTSCache, enforcedMinProp, ba.Txn, ba,
 				)
 			}
 		}()
@@ -2811,6 +3033,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	log.Event(ctx, "applied timestamp cache")
 
 	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	minPropCleanup() // mandatory cleanup
 	defer func() {
 		// NB: We may be double free-ing here, consider the following cases:
 		//  - The request was evaluated and the command resulted in an error, but a
@@ -3370,6 +3593,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
+			r.setRangeClosedTSInfoLocked(p.ctx, raftGroup.Status(), false)
 			return false, /* unquiesceAndWakeLeader */
 				raftGroup.ProposeConfChange(raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
@@ -3395,9 +3619,86 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
+		//
+		// TODO(tschottdorf): these two lines which are copied above could be moved before the
+		// change replicas branch.
 		r.unquiesceLocked()
+		r.setRangeClosedTSInfoLocked(p.ctx, raftGroup.Status(), false /* quiescing */)
 		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
+}
+
+// setRangeClosedTSInfoLocked either: 1) adds a ClosedTSInfo object if
+// one doesn't exist for the range based on the ID, min lease applied
+// index, and quiesced bool. Or, 2) updates the existing ClosedTSInfo
+// for the range if the quiesced state has changed. The Raft status is
+// used to iterate over follower replicas and add ClosedTSInfo objects
+// to be delivered on future coalesced heartbeats.
+//
+// TODO(tschottdorf): this is called whether we have the lease or not, whenever
+// a proposal is  (even if it's just a destined-to-fail lease request) made.
+// This should be safe (it's hard to avoid) but we need to check that the
+// recipients can interpret these faux updates correctly. It *should* simply
+// be ignored because the origin store doesn't have the lease for the time-
+// stamp being closed (and if it got the lease next, the epoch check would
+// fail).
+func (r *Replica) setRangeClosedTSInfoLocked(
+	ctx context.Context, status *raft.Status, quiescing bool,
+) {
+	if r.store.cfg.ClosedTimestampInterval == 0 {
+		// Follower reads are disabled.
+		return
+	}
+
+	mlai := r.mu.lastAssignedLeaseIndex
+	if r.mu.state.LeaseAppliedIndex > mlai {
+		mlai = r.mu.state.LeaseAppliedIndex
+	}
+	// Get the coalesced lock and create / update the ClosedTSInfo object for the range.
+	r.store.coalescedMu.Lock()
+	defer r.store.coalescedMu.Unlock()
+	info, ok := r.store.coalescedMu.infosByRange[r.RangeID]
+	if !ok {
+		info = &ClosedTSInfo{
+			RangeID:              r.RangeID,
+			MinLeaseAppliedIndex: mlai,
+			Quiescing:            quiescing,
+		}
+		r.store.coalescedMu.infosByRange[r.RangeID] = info
+	} else if info.Quiescing != quiescing {
+		info.Quiescing = quiescing
+		// TODO(tschottdorf): This update is only necessary when the range quiesces
+		// (for then the very latest index must be present). Need to test that specific scenario.
+		info.MinLeaseAppliedIndex = mlai
+	} else {
+		// No update, no need to resend to followers; just return.
+		return
+	}
+	// Schedule delivery of the closed timestamp info to follower replicas.
+	//
+	// TODO(tschottdorf): how does this interact with replication changes? Probably fine
+	// but should test. We'll be sending updates to a store that may not have that range
+	// any more, and a new replica may be delayed until it can serve follower reads. This
+	// could add to failed attempts and thus tail latency, especially if we retry the same
+	// one over and over.
+	for id := range status.Progress {
+		if roachpb.ReplicaID(id) != r.mu.replicaID {
+			rep, err := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(id), r.mu.lastFromReplica)
+			if err != nil {
+				if log.V(4) {
+					log.Infof(ctx, "failed to mark range unquiesced: cannot find replica (%d)", id)
+				}
+			} else {
+				toStore := roachpb.StoreIdent{StoreID: rep.StoreID, NodeID: rep.NodeID}
+				infosByRange, ok := r.store.coalescedMu.closedTSInfos[toStore]
+				if !ok {
+					infosByRange = map[roachpb.RangeID]*ClosedTSInfo{}
+					r.store.coalescedMu.closedTSInfos[toStore] = infosByRange
+				}
+				infosByRange[r.RangeID] = info
+			}
+		}
+	}
 }
 
 // mark the replica as quiesced. Returns true if the Replica is successfully
@@ -3410,10 +3711,9 @@ func (r *Replica) quiesce() bool {
 
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
+
 	if len(r.mu.proposals) != 0 {
-		if log.V(3) {
-			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
-		}
+		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
 		return false
 	}
 	if !r.mu.quiescent {
@@ -4167,32 +4467,17 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 			r.unquiesceLocked()
 			return false
 		}
-		msg := raftpb.Message{
-			From:   uint64(r.mu.replicaID),
-			To:     id,
-			Type:   raftpb.MsgHeartbeat,
-			Term:   status.Term,
-			Commit: status.Commit,
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          status.Term,
+			Commit:        status.Commit,
+			Quiesce:       true,
 		}
-
-		if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, true) {
-			continue
-		}
-
-		req := &RaftMessageRequest{
-			RangeID:     r.RangeID,
-			ToReplica:   toReplica,
-			FromReplica: fromReplica,
-			Message:     msg,
-			Quiesce:     true,
-		}
-		if !r.sendRaftMessageRequest(ctx, req) {
-			r.unquiesceLocked()
-			r.mu.droppedMessages++
-			r.mu.internalRaftGroup.ReportUnreachable(id)
-			return false
-		}
+		r.coalesceHeartbeat(ctx, raftpb.MsgHeartbeat, beat, toReplica)
 	}
+	r.setRangeClosedTSInfoLocked(ctx, status, true /* quiescing */)
 	return true
 }
 
@@ -4349,16 +4634,16 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 		errors.Errorf("replica %d not present in %v, %v", replicaID, fallback, r.mu.state.Desc.Replicas)
 }
 
-// maybeCoalesceHeartbeat returns true if the heartbeat was coalesced and added
-// to the appropriate queue.
-func (r *Replica) maybeCoalesceHeartbeat(
+// coalesceHeartbeat coalesces the supplied heartbeat by adding
+// it to the appropriate queue based on toReplica.
+func (r *Replica) coalesceHeartbeat(
 	ctx context.Context,
-	msg raftpb.Message,
-	toReplica, fromReplica roachpb.ReplicaDescriptor,
-	quiesce bool,
-) bool {
+	msgType raftpb.MessageType,
+	beat RaftHeartbeat,
+	toReplica roachpb.ReplicaDescriptor,
+) {
 	var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
-	switch msg.Type {
+	switch msgType {
 	case raftpb.MsgHeartbeat:
 		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeats
@@ -4366,15 +4651,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeatResponses
 	default:
-		return false
-	}
-	beat := RaftHeartbeat{
-		RangeID:       r.RangeID,
-		ToReplicaID:   toReplica.ReplicaID,
-		FromReplicaID: fromReplica.ReplicaID,
-		Term:          msg.Term,
-		Commit:        msg.Commit,
-		Quiesce:       quiesce,
+		log.Fatalf(ctx, "unexpected message type %s", msgType)
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -4385,7 +4662,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	}
 	hbMap[toStore] = append(hbMap[toStore], beat)
 	r.store.coalescedMu.Unlock()
-	return true
 }
 
 func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Message) {
@@ -4440,10 +4716,10 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 
 // sendRaftMessage sends a Raft message.
 func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
-	r.mu.Lock()
+	r.mu.RLock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
@@ -4456,30 +4732,38 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
+	switch msg.Type {
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
-	if msg.Type == raftpb.MsgSnap {
+	case raftpb.MsgSnap:
 		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
 			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
-		return
-	}
 
-	if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, false) {
-		return
-	}
+		// Heartbeats and heartbeat responses are coalesced.
+	case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          msg.Term,
+			Commit:        msg.Commit,
+		}
+		r.coalesceHeartbeat(ctx, msg.Type, beat, toReplica)
 
-	if !r.sendRaftMessageRequest(ctx, &RaftMessageRequest{
-		RangeID:     r.RangeID,
-		ToReplica:   toReplica,
-		FromReplica: fromReplica,
-		Message:     msg,
-	}) {
-		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-			r.mu.droppedMessages++
-			raftGroup.ReportUnreachable(msg.To)
-			return true, nil
-		}); err != nil {
-			log.Fatal(ctx, err)
+	default:
+		if !r.sendRaftMessageRequest(ctx, &RaftMessageRequest{
+			RangeID:     r.RangeID,
+			ToReplica:   toReplica,
+			FromReplica: fromReplica,
+			Message:     msg,
+		}) {
+			if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+				r.mu.droppedMessages++
+				raftGroup.ReportUnreachable(msg.To)
+				return true, nil
+			}); err != nil {
+				log.Fatal(ctx, err)
+			}
 		}
 	}
 }

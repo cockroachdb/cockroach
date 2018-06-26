@@ -61,7 +61,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 
 	// Stop a node and expire leases.
 	mtc.stopStore(2)
-	mtc.advanceClock(context.TODO())
+	mtc.expireLeases(context.TODO())
 
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
 		context.TODO(), mtc.clock.Now(), repl, config.SystemConfig{}); shouldQ {

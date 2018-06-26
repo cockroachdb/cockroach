@@ -224,6 +224,16 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+func (s *Store) GetMinProposal(ctx context.Context) (hlc.Timestamp, func()) {
+	return s.getMinProposal(ctx)
+}
+
+func (s *Store) GetClosedTimestampAndEpoch(
+	ctx context.Context,
+) (closed hlc.Timestamp, epoch int64) {
+	return s.getClosedTimestampAndEpoch(ctx)
+}
+
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	TimeUntilStoreDead.Override(&cfg.Settings.SV, TestTimeUntilStoreDeadOff)
 	return NewStorePool(
@@ -274,6 +284,12 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftLastIndexLocked()
+}
+
+func (r *Replica) CanServiceRead(
+	ctx context.Context, requiresReadLease bool, readTS hlc.Timestamp,
+) (bool, LeaseStatus, *roachpb.Error) {
+	return r.canServiceRead(ctx, requiresReadLease, readTS)
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
