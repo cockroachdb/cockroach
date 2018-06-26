@@ -38,7 +38,7 @@ func EncodeInt(i int64) string {
 
 // EncodeFloat encodes a bool in the format parseRaw expects.
 func EncodeFloat(f float64) string {
-	return strconv.FormatFloat(f, 'E', -1, 64)
+	return strconv.FormatFloat(f, 'G', -1, 64)
 }
 
 type updater struct {
