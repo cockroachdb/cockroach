@@ -137,7 +137,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
 
     const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart } = countBreakdown(this.props.statement);
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
-    const { parseBarChart, planBarChart, runBarChart, overheadBarChart } = latencyBreakdown(this.props.statement);
+    const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
     return (
       <div className="content l-columns">
@@ -182,7 +182,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
                 { name: "Plan", value: stats.plan_lat, bar: planBarChart },
                 { name: "Run", value: stats.run_lat, bar: runBarChart },
                 { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
-                { name: "Overall", value: stats.service_lat },
+                { name: "Overall", value: stats.service_lat, bar: overallBarChart },
               ]}
             />
           </section>
