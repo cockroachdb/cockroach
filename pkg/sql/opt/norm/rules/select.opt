@@ -202,3 +202,16 @@
     )
     (Filters (ExtractUnboundConditions $list $input))
 )
+
+# RemoveNotNullPredicateOnNotNullColumns removes a filter with an IS NOT NULL condition
+# when the given column has a NOT NULL constraint.
+[RemoveNotNullOnNotNullCols, Normalize]
+(Select
+    $input:*
+    (Filters
+        [ ... (IsNot (Variable $col:*) (Null)) &(IsColNotNull $col $input) ... ]
+    )
+)
+=>
+$input
+
