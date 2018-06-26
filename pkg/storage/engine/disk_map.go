@@ -102,6 +102,9 @@ type SortedDiskMap interface {
 	// SortedDiskMapBatchWriter's default capacity with capacityBytes.
 	NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatchWriter
 
+	// Clear clears the map's data for reuse.
+	Clear() error
+
 	// Close frees up resources held by the map.
 	Close(context.Context)
 }
@@ -253,13 +256,21 @@ func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatc
 	}
 }
 
-// Close implements the SortedDiskMap interface.
-func (r *RocksDBMap) Close(ctx context.Context) {
+// Clear implements the SortedDiskMap interface.
+func (r *RocksDBMap) Clear() error {
 	if err := r.store.ClearRange(
 		MVCCKey{Key: r.prefix},
 		MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
 	); err != nil {
-		log.Error(ctx, errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix))
+		return errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix)
+	}
+	return nil
+}
+
+// Close implements the SortedDiskMap interface.
+func (r *RocksDBMap) Close(ctx context.Context) {
+	if err := r.Clear(); err != nil {
+		log.Error(ctx, err)
 	}
 }
 
