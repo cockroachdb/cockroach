@@ -90,10 +90,11 @@ type ProposalData struct {
 	Request *roachpb.BatchRequest
 }
 
-// finishApplication is when a command application has finished. This will be
-// called downstream of Raft if the command required consensus, but can be
-// called upstream of Raft if the command did not and was never proposed.
-// proposal.doneCh is signaled with pr so that the proposer is unblocked.
+// finishApplication is called when a command application has finished. The
+// method will be called downstream of Raft if the command required consensus,
+// but can be called upstream of Raft if the command did not and was never
+// proposed. proposal.doneCh is signaled with pr so that the proposer is
+// unblocked.
 //
 // It first invokes the endCmds function and then sends the specified
 // proposalResult on the proposal's done channel. endCmds is invoked here in
