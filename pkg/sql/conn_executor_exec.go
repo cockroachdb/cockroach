@@ -651,7 +651,7 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		ex.recordStatementSummary(
-			planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, false /* distSQLUsed*/, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -771,8 +771,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return err
 	}
 	ex.recordStatementSummary(
-		planner, stmt, useDistSQL, ex.extraTxnState.autoRetryCounter,
-		res.RowsAffected(), res.Err(), &ex.server.EngineMetrics,
+		planner, stmt, useDistSQL, optMode != sessiondata.OptimizerOff,
+		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
+		&ex.server.EngineMetrics,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
