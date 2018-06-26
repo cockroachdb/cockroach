@@ -896,3 +896,102 @@ select
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0])]
       ├── $1 < '2000-01-01T10:00:00' [type=bool]
       └── c = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+
+# --------------------------------------------------
+# RemoveNotNullCondition
+# --------------------------------------------------
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+TABLE b
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string not null
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+opt
+SELECT k FROM b WHERE k IS NOT NULL AND k > 4
+----
+scan b
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: [/5 - ]
+ └── key: (1)
+
+opt
+SELECT k FROM b WHERE k IS NULL
+----
+scan b
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: contradiction
+ └── key: (1)
+
+opt
+SELECT k,i FROM b WHERE k IS NOT NULL AND k > 4 AND i < 100 AND i IS NOT NULL
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan b
+ │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── constraint: /1: [/5 - ]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+      ├── b.i < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+opt
+SELECT k,s FROM b WHERE k IS NOT NULL AND s IS NOT NULL
+----
+scan b
+ ├── columns: k:1(int!null) s:4(string!null)
+ ├── key: (1)
+ └── fd: (1)-->(4)
+
+# RemoveNotNullCondition partially applied
+opt
+SELECT k,s,i FROM b WHERE k IS NOT NULL AND s IS NOT NULL AND i IS NOT NULL
+----
+select
+ ├── columns: k:1(int!null) s:4(string!null) i:2(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,4)
+ ├── scan b
+ │    ├── columns: k:1(int!null) i:2(int) s:4(string!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,4)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+# RemoveNotNullCondition rule is not applied
+opt
+SELECT i FROM b WHERE i IS NOT NULL
+----
+select
+ ├── columns: i:2(int!null)
+ ├── scan b
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+# RemoveNotNullCondition rule is not applied
+opt
+SELECT k FROM b WHERE i+k IS NOT NULL
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan b
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters [type=bool, outer=(1,2)]
+           └── (b.i + b.k) IS NOT NULL [type=bool, outer=(1,2)]
