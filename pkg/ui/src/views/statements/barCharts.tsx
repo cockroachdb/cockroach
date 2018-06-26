@@ -16,33 +16,33 @@ const longToInt = (d: number | Long) => FixLong(d).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;
 
 const countBars = [
-  bar("count-first-try", "First Try Count", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
-  bar("count-retry", "Retry Count", (d: StatementStatistics) => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
+  bar("count-first-try", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
+  bar("count-retry", (d: StatementStatistics) => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
 ];
 
 const rowsBars = [
-  bar("rows", "Mean Number of Rows", (d: StatementStatistics) => d.stats.num_rows.mean),
+  bar("rows", (d: StatementStatistics) => d.stats.num_rows.mean),
 ];
 
 const latencyBars = [
-  bar("latency-parse", "Mean Parse Latency", (d: StatementStatistics) => d.stats.parse_lat.mean),
-  bar("latency-plan", "Mean Planning Latency", (d: StatementStatistics) => d.stats.plan_lat.mean),
-  bar("latency-run", "Mean Run Latency", (d: StatementStatistics) => d.stats.run_lat.mean),
-  bar("latency-overhead", "Mean Overhead Latency", (d: StatementStatistics) => d.stats.overhead_lat.mean),
+  bar("latency-parse", (d: StatementStatistics) => d.stats.parse_lat.mean),
+  bar("latency-plan", (d: StatementStatistics) => d.stats.plan_lat.mean),
+  bar("latency-run", (d: StatementStatistics) => d.stats.run_lat.mean),
+  bar("latency-overhead", (d: StatementStatistics) => d.stats.overhead_lat.mean),
 ];
 
-const latencyStdDev = bar("latency-overall-dev", "Latency Std. Dev.", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
-const rowsStdDev = bar("rows-dev", "Rows Std. Dev.", (d: StatementStatistics) => stdDevLong(d.stats.num_rows, d.stats.count));
+const latencyStdDev = bar("latency-overall-dev", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
+const rowsStdDev = bar("rows-dev", (d: StatementStatistics) => stdDevLong(d.stats.num_rows, d.stats.count));
 
-function bar(name: string, title: string, value: (d: StatementStatistics) => number) {
-  return { name, title, value };
+function bar(name: string, value: (d: StatementStatistics) => number) {
+  return { name, value };
 }
 
 function makeBarChart(
   title: string,
-  accessors: { name: string, title: string, value: (d: StatementStatistics) => number }[],
+  accessors: { name: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
-  stdDevAccessor?: { name: string, title: string, value: (d: StatementStatistics) => number },
+  stdDevAccessor?: { name: string, value: (d: StatementStatistics) => number },
 ) {
   return function barChart(rows: StatementStatistics[] = []) {
     function getTotal(d: StatementStatistics) {
@@ -66,7 +66,7 @@ function makeBarChart(
       }
 
       let sum = 0;
-      const bars = accessors.map(({ name, title, value }) => {
+      const bars = accessors.map(({ name, value }) => {
         const v = value(d);
         sum += v;
         return (
@@ -74,7 +74,6 @@ function makeBarChart(
             key={ name + v }
             className={ name + " bar-chart__bar" }
             style={{ width: scale(v) + "%" }}
-            title={ title + ": " + v }
           />
         );
       });
@@ -84,7 +83,7 @@ function makeBarChart(
           return null;
         }
 
-        const { name, title, value } = stdDevAccessor;
+        const { name, value } = stdDevAccessor;
 
         const stddev = value(d);
         const width = stddev + (stddev > sum ? sum : stddev);
@@ -94,7 +93,6 @@ function makeBarChart(
           <div
             className={ name + " bar-chart__bar bar-chart__bar--dev" }
             style={{ width: scale(width) + "%", left: scale(left) + "%" }}
-            title={ title + ": " + stddev }
           />
         );
       }
