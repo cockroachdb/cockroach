@@ -82,121 +82,78 @@
     (Filters (ExtractUnboundConditions $list $input))
 )
 
-# PushSelectIntoJoinLeftAndRight pushes a filter into both the left and right
-# sides of a join if it can be mapped to use the columns of both sides.
-# For example, consider this query:
+# SimplifySelectLeftJoin reduces a LeftJoin operator to an InnerJoin operator
+# (or a FullJoin to a RightJoin) when there is a null-rejecting filter on any
+# column from the right side. The effect of the null-rejecting filter is that
+# output rows with all NULL values on the right side created by the left (or
+# full) join are eliminated, making the join equivalent to an inner (or right)
+# join. For example:
 #
-#   SELECT * FROM a, b WHERE a.x=b.x AND a.y=b.y AND a.x + b.y < 5
+#   SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x WHERE b.y < 5
 #
-# In this case, we can map a.x + b.y < 5 to both sides based on the equality
-# filters a.x=b.x AND a.y=b.y. For the left side, we can map it to
-# a.x + a.y < 5, and for the right side, we can map it to b.x + b.y < 5.
-# Given this mapping, we can safely push the filter down to both sides and
-# remove it from the Select filters list.
+# can be reduced to:
 #
-# Note that we can apply this rule to any join except for semi- and anti-joins
-# because we are filtering *both* sides of the join. If we can only push down
-# to one side, this rule does not apply. For example, if we push a filter to
-# only the right side of a left join, that will not reduce the number of output
-# rows but will result in null columns in the output.
-[PushSelectIntoJoinLeftAndRight, Normalize]
+#   SELECT * FROM a INNER JOIN b ON a.x = b.x WHERE b.y < 5
+#
+# since b.y < 5 is a null-rejecting filter on the right side.
+[SimplifySelectLeftJoin, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
-            RightJoin | RightJoinApply | FullJoin | FullJoinApply
+    $input:(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
         $left:*
         $right:*
         $on:*
     )
-    $filters:(Filters $list:[ ... $condition:^(Eq (Variable) (Variable)) & (CanMap $filters $condition $left) & (CanMap $filters $condition $right) ... ])
+    $filter:(Filters) & (HasNullRejectingFilter $filter $right)
 )
 =>
 (Select
-    ((OpName $input)
-        (Select
-            $left
-            (Filters (InternSingletonList (Map $filters $condition $left)))
-        )
-        (Select
-            $right
-            (Filters (InternSingletonList (Map $filters $condition $right)))
-        )
-        $on
-    )
-    (Filters (RemoveListItem $list $condition))
-)
-
-# MapSelectIntoJoinLeft maps a filter that is not bound by the left side of
-# the join to use the columns from the left side. This will allow
-# the filter to be pushed down by the PushSelectIntoJoinLeft rule.
-# For example, consider this query:
-#
-#   SELECT * FROM a, b WHERE a.x = b.x AND b.x + a.y < 5
-#
-# In this case, we can map b.x + a.y < 5 to the left side by replacing b.x
-# with the equivalent column a.x.
-# NOTE: This rule only applies to cases where it is not possible
-#       to map the filter to both sides. If it can be mapped to both sides, it
-#       will be handled by PushSelectIntoJoinLeftAndRight (which must be
-#       ordered above this rule). For performance reasons, this rule should
-#       be ordered before PushSelectIntoJoinLeft (otherwise,
-#       PushSelectIntoJoinLeft might need to be applied multiple times).
-[MapSelectIntoJoinLeft, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
-        $left:*
-        $right:*
-        $on:*
-    )
-    $filters:(Filters $list:[ ... $condition:* & ^(Eq (Variable) (Variable)) & ^(IsBoundBy $condition $left) & (CanMap $filters $condition $left) ... ])
-)
-=>
-(Select
-    ((OpName $input)
+    (ConstructNonLeftJoin
+        (OpName $input)
         $left
         $right
         $on
     )
-    (Filters (ReplaceListItem $list $condition (Map $filters $condition $left)))
+    $filter
 )
 
-# MapSelectIntoJoinRight is symmetric with MapSelectIntoJoinLeft. It maps
-# Select filter conditions to use columns from the right side of the join
-# rather than the left side. See that rule's comments for more details.
-[MapSelectIntoJoinRight, Normalize]
+# SimplifySelectRightJoin is symmetric with SimplifySelectLeftJoin. It reduces
+# a RightJoin operator to an InnerJoin operator (or a FullJoin to a LeftJoin)
+# when there is a null-rejecting filter on any column from the left side.
+[SimplifySelectRightJoin, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+    $input:(RightJoin | RightJoinApply | FullJoin | FullJoinApply
         $left:*
         $right:*
         $on:*
     )
-    $filters:(Filters $list:[ ... $condition:* & ^(Eq (Variable) (Variable)) & ^(IsBoundBy $condition $right) & (CanMap $filters $condition $right) ... ])
+    $filter:(Filters) & (HasNullRejectingFilter $filter $left)
 )
 =>
 (Select
-    ((OpName $input)
+    (ConstructNonRightJoin
+        (OpName $input)
         $left
         $right
         $on
     )
-    (Filters (ReplaceListItem $list $condition (Map $filters $condition $right)))
+    $filter
 )
 
-# MergeSelectEqualityJoin merges a Select operator with an InnerJoin input by
+# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
 # AND'ing the filter conditions of each and creating a new InnerJoin with that
 # On condition. This is only safe to do with InnerJoin in the general case
 # where the conditions could filter either left or right rows. The special case
 # where a condition filters only one or the other is already taken care of by
 # the PushSelectIntoJoin rules.
-# NOTE: This is a specialization of MergeSelectInnerJoin for the case where
-#       the inner join has an equality filter. It must be ordered before the
-#       PushSelectIntoJoin rules to avoid missing out on the potential for new
-#       filter inference based on equivalent columns.
-[MergeSelectEqualityJoin, Normalize]
+# NOTE: Keep this rule ordered before the PushSelectIntoJoin rules to avoid
+#       missing out on the potential for new filter inference based on
+#       equivalent columns.
+[MergeSelectInnerJoin, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply
         $left:*
         $right:*
-        $on:(HasEquivalence $on)
+        $on:*
     )
     $filter:*
 )
@@ -267,31 +224,6 @@
         $on
     )
     (Filters (ExtractUnboundConditions $list $right))
-)
-
-# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
-# AND'ing the filter conditions of each and creating a new InnerJoin with that
-# On condition. This is only safe to do with InnerJoin in the general case
-# where the conditions could filter either left or right rows. The special case
-# where a condition filters only one or the other is already taken care of by
-# the PushSelectIntoJoin rules.
-# NOTE: Keep this rule ordered after the PushSelectIntoJoin rules, for
-#       performance reasons. It's better to push down below the join in a
-#       single step, when possible.
-[MergeSelectInnerJoin, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply
-        $left:*
-        $right:*
-        $on:*
-    )
-    $filter:*
-)
-=>
-((OpName $input)
-    $left
-    $right
-    (ConcatFilters $on $filter)
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case

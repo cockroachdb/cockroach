@@ -945,56 +945,47 @@ group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 124.6
+ ├── cost: 124.5
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
- ├── select
- │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int) sum_d_ytd:21(decimal!null)
- │    ├── stats: [rows=1.11111111]
- │    ├── cost: 124.6
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(9), (11)-->(21)
+ ├── inner-join
+ │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int!null) sum_d_ytd:21(decimal!null)
+ │    ├── stats: [rows=10]
+ │    ├── cost: 124.5
+ │    ├── key: (11)
+ │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── interesting orderings: (+1) (+11)
- │    ├── full-join
- │    │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal) district.d_w_id:11(int) sum_d_ytd:21(decimal)
+ │    ├── scan warehouse
+ │    │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal)
  │    │    ├── stats: [rows=10]
- │    │    ├── cost: 124.5
- │    │    ├── key: (1,11)
- │    │    ├── fd: (1)-->(9), (11)-->(21)
- │    │    ├── prune: (9,21)
- │    │    ├── interesting orderings: (+1) (+11)
- │    │    ├── scan warehouse
- │    │    │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal)
- │    │    │    ├── stats: [rows=10]
- │    │    │    ├── cost: 11.1
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(9)
- │    │    │    ├── prune: (1,9)
- │    │    │    └── interesting orderings: (+1)
- │    │    ├── group-by
- │    │    │    ├── columns: district.d_w_id:11(int!null) sum_d_ytd:21(decimal)
- │    │    │    ├── grouping columns: district.d_w_id:11(int!null)
- │    │    │    ├── stats: [rows=10, distinct(11)=10]
+ │    │    ├── cost: 11.1
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(9)
+ │    │    ├── prune: (1,9)
+ │    │    └── interesting orderings: (+1)
+ │    ├── group-by
+ │    │    ├── columns: district.d_w_id:11(int!null) sum_d_ytd:21(decimal)
+ │    │    ├── grouping columns: district.d_w_id:11(int!null)
+ │    │    ├── stats: [rows=10, distinct(11)=10]
+ │    │    ├── cost: 113
+ │    │    ├── key: (11)
+ │    │    ├── fd: (11)-->(21)
+ │    │    ├── prune: (21)
+ │    │    ├── interesting orderings: (+11)
+ │    │    ├── scan district
+ │    │    │    ├── columns: district.d_w_id:11(int!null) district.d_ytd:19(decimal)
+ │    │    │    ├── stats: [rows=100, distinct(11)=10]
  │    │    │    ├── cost: 113
- │    │    │    ├── key: (11)
- │    │    │    ├── fd: (11)-->(21)
- │    │    │    ├── prune: (21)
- │    │    │    ├── interesting orderings: (+11)
- │    │    │    ├── scan district
- │    │    │    │    ├── columns: district.d_w_id:11(int!null) district.d_ytd:19(decimal)
- │    │    │    │    ├── stats: [rows=100, distinct(11)=10]
- │    │    │    │    ├── cost: 113
- │    │    │    │    ├── prune: (11,19)
- │    │    │    │    └── interesting orderings: (+11)
- │    │    │    └── aggregations [outer=(19)]
- │    │    │         └── sum [type=decimal, outer=(19)]
- │    │    │              └── variable: district.d_ytd [type=decimal, outer=(19)]
- │    │    └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
- │    │         └── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
- │    │              ├── variable: warehouse.w_id [type=int, outer=(1)]
- │    │              └── variable: district.d_w_id [type=int, outer=(11)]
- │    └── filters [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │    │    │    ├── prune: (11,19)
+ │    │    │    └── interesting orderings: (+11)
+ │    │    └── aggregations [outer=(19)]
+ │    │         └── sum [type=decimal, outer=(19)]
+ │    │              └── variable: district.d_ytd [type=decimal, outer=(19)]
+ │    └── filters [type=bool, outer=(1,9,11,21), constraints=(/1: (/NULL - ]; /9: (/NULL - ]; /11: (/NULL - ]; /21: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ │         ├── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ │         │    ├── variable: warehouse.w_id [type=int, outer=(1)]
+ │         │    └── variable: district.d_w_id [type=int, outer=(11)]
  │         └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
  │              ├── variable: warehouse.w_ytd [type=decimal, outer=(9)]
  │              └── variable: sum_d_ytd [type=decimal, outer=(21)]
