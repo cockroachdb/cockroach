@@ -318,36 +318,50 @@ func (tsi *timeSeriesSpanIterator) value(downsampler tspb.TimeSeriesQueryAggrega
 func (tsi *timeSeriesSpanIterator) valueAtTimestamp(
 	timestamp int64, interpolationLimitNanos int64, downsampler tspb.TimeSeriesQueryAggregator,
 ) (float64, bool) {
-	if !tsi.isValid() {
+	if !tsi.validAtTimestamp(timestamp, interpolationLimitNanos) {
 		return 0, false
 	}
 	if tsi.timestamp == timestamp {
 		return tsi.value(downsampler), true
 	}
 
-	// Cannot interpolate before the first index.
-	if tsi.total == 0 {
+	deriv, valid := tsi.derivative(downsampler)
+	if !valid {
 		return 0, false
 	}
+	return tsi.value(downsampler) - deriv*float64((tsi.timestamp-timestamp)/tsi.samplePeriod()), true
+}
 
+// validAtTimestamp returns true if the iterator can return a valid value for
+// the provided timestamp. This is true either if the iterators current position
+// is the current timestamp, *or* if the provided timestamp is between the
+// iterators current and previous positions *and* the gap between the current
+// and previous positions is less than the provided interpolation limit.
+func (tsi *timeSeriesSpanIterator) validAtTimestamp(timestamp, interpolationLimitNanos int64) bool {
+	if !tsi.isValid() {
+		return false
+	}
+	if tsi.timestamp == timestamp {
+		return true
+	}
+	// Cannot interpolate before the first index.
+	if tsi.total == 0 {
+		return false
+	}
 	prev := *tsi
 	prev.backward()
+
 	// Only interpolate if the timestamp is in between this point and the previous.
 	if timestamp > tsi.timestamp || timestamp <= prev.timestamp {
-		return 0, false
+		return false
 	}
 	// Respect the interpolation limit. Note that an interpolation limit of zero
 	// is a special case still needed for legacy tests.
 	// TODO(mrtracy): remove test cases with interpolation limit zero.
 	if interpolationLimitNanos > 0 && tsi.timestamp-prev.timestamp > interpolationLimitNanos {
-		return 0, false
+		return false
 	}
-
-	deriv, valid := tsi.derivative(downsampler)
-	if !valid {
-		return 0, false
-	}
-	return prev.value(downsampler) + deriv*float64((timestamp-prev.timestamp)/tsi.samplePeriod()), true
+	return true
 }
 
 // derivative returns the current rate of change of the iterator, computed by
@@ -638,16 +652,22 @@ func aggregateSpansToDatapoints(
 			var valid bool
 			switch query.GetDerivative() {
 			case tspb.TimeSeriesQueryDerivative_DERIVATIVE:
-				value, valid = iter.derivative(query.GetDownsampler())
-				// Convert derivative to seconds.
-				value *= float64(time.Second.Nanoseconds()) / float64(timespan.SampleDurationNanos)
-			case tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE:
-				value, valid = iter.derivative(query.GetDownsampler())
-				if value < 0 {
-					value = 0
-				} else {
+				valid = iter.validAtTimestamp(lowestTimestamp, interpolationLimitNanos)
+				if valid {
+					value, valid = iter.derivative(query.GetDownsampler())
 					// Convert derivative to seconds.
-					value *= float64(time.Second.Nanoseconds()) / float64(timespan.SampleDurationNanos)
+					value *= float64(time.Second.Nanoseconds()) / float64(iter.samplePeriod())
+				}
+			case tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE:
+				valid = iter.validAtTimestamp(lowestTimestamp, interpolationLimitNanos)
+				if valid {
+					value, valid = iter.derivative(query.GetDownsampler())
+					if value < 0 {
+						value = 0
+					} else {
+						// Convert derivative to seconds.
+						value *= float64(time.Second.Nanoseconds()) / float64(iter.samplePeriod())
+					}
 				}
 			default:
 				value, valid = iter.valueAtTimestamp(

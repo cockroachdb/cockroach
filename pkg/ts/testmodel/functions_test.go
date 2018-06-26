@@ -88,7 +88,7 @@ func TestAggregates(t *testing.T) {
 			first:    2,
 			last:     6,
 			avg:      4,
-			variance: 4,
+			variance: 2.6666666666666665,
 		},
 		// Negative values, variance still positive.
 		{
@@ -103,7 +103,7 @@ func TestAggregates(t *testing.T) {
 			first:    -3,
 			last:     -6,
 			avg:      -6,
-			variance: 9,
+			variance: 6,
 		},
 		// Some fairly random numbers, variance and average computed from an online
 		// calculator. Gives good confidence that the functions are actually doing
@@ -122,7 +122,7 @@ func TestAggregates(t *testing.T) {
 			first:    60,
 			last:     143,
 			avg:      113,
-			variance: 21041.5,
+			variance: 16833.2,
 		},
 	}
 	for _, tt := range tests {
