@@ -190,7 +190,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <h3>Row Count</h3>
             <NumericStatTable
               count={ count }
-              format={ (v: number) => "" + Math.round(v) }
+              format={ (v: number) => "" + (Math.round(v * 100) / 100) }
               rows={[
                 { name: "Rows", value: stats.num_rows, bar: rowsBarChart },
               ]}

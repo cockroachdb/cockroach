@@ -2,6 +2,8 @@ import d3 from "d3";
 import _ from "lodash";
 import React from "react";
 
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
 import { stdDevLong } from "src/util/appStats";
 import { Duration } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
@@ -141,11 +143,12 @@ export function countBreakdown(s: StatementStatistics) {
     firstAttemptsBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="count-first-try bar-chart__bar"
-            style={{ width: scale(firstAttempts) + "%" }}
-            title={ "First Try Count: " + firstAttempts }
-          />
+          <ToolTipWrapper text={"First Try Count: " + firstAttempts}>
+            <div
+              className="count-first-try bar-chart__bar"
+              style={{ width: scale(firstAttempts) + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -153,11 +156,12 @@ export function countBreakdown(s: StatementStatistics) {
     retriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="count-retry bar-chart__bar"
-            style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
-            title={ "Retry Count: " + retries }
-          />
+          <ToolTipWrapper text={ "Retry Count: " + retries }>
+            <div
+              className="count-retry bar-chart__bar"
+              style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -165,11 +169,12 @@ export function countBreakdown(s: StatementStatistics) {
     maxRetriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="count-retry bar-chart__bar"
-            style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
-            title={ "Max Retries: " + retries }
-          />
+          <ToolTipWrapper text={ "Max Retries: " + retries }>
+            <div
+              className="count-retry bar-chart__bar"
+              style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -180,6 +185,8 @@ export function rowsBreakdown(s: StatementStatistics) {
   const mean = s.stats.num_rows.mean;
   const sd = stdDevLong(s.stats.num_rows, s.stats.count);
 
+  const format = (v: number) => "" + (Math.round(v * 100) / 100);
+
   const scale = d3.scale.linear()
       .domain([0, mean + sd])
       .range([0, 100]);
@@ -189,19 +196,19 @@ export function rowsBreakdown(s: StatementStatistics) {
       const width = scale(clamp(mean - sd));
       const right = scale(mean);
       const spread = scale(sd + (sd > mean ? mean : sd));
-      const title = "Row Count.  Mean: " + mean + " Std.Dev.: " + sd;
+      const title = "Row Count.  Mean: " + format(mean) + " Std.Dev.: " + format(sd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="rows bar-chart__bar"
-            style={{ width: right + "%", position: "absolute", left: 0 }}
-            title={ title }
-          />
-          <div
-            className="rows-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="rows bar-chart__bar"
+              style={{ width: right + "%", position: "absolute", left: 0 }}
+            />
+            <div
+              className="rows-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -232,6 +239,8 @@ export function latencyBreakdown(s: StatementStatistics) {
     overallMean + overallSd,
   );
 
+  const format = (v: number) => Duration(v * 1e9);
+
   const scale = d3.scale.linear()
     .domain([0, max])
     .range([0, 100]);
@@ -241,19 +250,19 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(parseMean - parseSd));
       const right = scale(parseMean);
       const spread = scale(parseSd + (parseSd > parseMean ? parseMean : parseSd));
-      const title = "Parse Latency.  Mean: " + parseMean + " Std. Dev.: " + parseSd;
+      const title = "Parse Latency.  Mean: " + format(parseMean) + " Std. Dev.: " + format(parseSd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="latency-parse bar-chart__bar"
-            style={{ width: right + "%", position: "absolute", left: 0 }}
-            title={ title }
-          />
-          <div
-            className="latency-parse-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="latency-parse bar-chart__bar"
+              style={{ width: right + "%", position: "absolute", left: 0 }}
+            />
+            <div
+              className="latency-parse-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -263,19 +272,19 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(planMean - planSd));
       const right = scale(planMean);
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
-      const title = "Plan Latency.  Mean: " + planMean + " Std. Dev.: " + planSd;
+      const title = "Plan Latency.  Mean: " + format(planMean) + " Std. Dev.: " + format(planSd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="latency-plan bar-chart__bar"
-            style={{ width: right + "%", position: "absolute", left: left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-plan-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="latency-plan bar-chart__bar"
+              style={{ width: right + "%", position: "absolute", left: left + "%" }}
+            />
+            <div
+              className="latency-plan-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -285,19 +294,19 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(runMean - runSd));
       const right = scale(runMean);
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
-      const title = "Run Latency.  Mean: " + runMean + " Std. Dev.: " + runSd;
+      const title = "Run Latency.  Mean: " + format(runMean) + " Std. Dev.: " + format(runSd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="latency-run bar-chart__bar"
-            style={{ width: right + "%", position: "absolute", left: left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-run-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="latency-run bar-chart__bar"
+              style={{ width: right + "%", position: "absolute", left: left + "%" }}
+            />
+            <div
+              className="latency-run-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -307,19 +316,19 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(overheadMean - overheadSd));
       const right = scale(overheadMean);
       const spread = scale(overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd));
-      const title = "Overhead Latency.  Mean: " + overheadMean + " Std. Dev.: " + overheadSd;
+      const title = "Overhead Latency.  Mean: " + format(overheadMean) + " Std. Dev.: " + format(overheadSd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="latency-overhead bar-chart__bar"
-            style={{ width: right + "%", position: "absolute", left: left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-overhead-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="latency-overhead bar-chart__bar"
+              style={{ width: right + "%", position: "absolute", left: left + "%" }}
+            />
+            <div
+              className="latency-overhead-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
@@ -331,34 +340,31 @@ export function latencyBreakdown(s: StatementStatistics) {
       const overhead = scale(overheadMean);
       const width = scale(clamp(overallMean - overallSd));
       const spread = scale(overallSd + (overallSd > overallMean ? overallMean : overallSd));
-      const title = "Overall Latency.  Mean: " + overallMean + " Std. Dev.: " + overallSd;
+      const title = "Overall Latency.  Mean: " + format(overallMean) + " Std. Dev.: " + format(overallSd);
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <div
-            className="latency-parse bar-chart__bar"
-            style={{ width: parse + "%", position: "absolute", left: 0 }}
-            title={ title }
-          />
-          <div
-            className="latency-plan bar-chart__bar"
-            style={{ width: plan + "%", position: "absolute", left: parse + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-run bar-chart__bar"
-            style={{ width: run + "%", position: "absolute", left: parse + plan + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-overhead bar-chart__bar"
-            style={{ width: overhead + "%", position: "absolute", left: parse + plan + run + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-overall-dev bar-chart__bar bar-chart__bar--dev"
-            style={{ width: spread + "%", position: "absolute", left: width + "%" }}
-            title={ title }
-          />
+          <ToolTipWrapper text={ title }>
+            <div
+              className="latency-parse bar-chart__bar"
+              style={{ width: parse + "%", position: "absolute", left: 0 }}
+            />
+            <div
+              className="latency-plan bar-chart__bar"
+              style={{ width: plan + "%", position: "absolute", left: parse + "%" }}
+            />
+            <div
+              className="latency-run bar-chart__bar"
+              style={{ width: run + "%", position: "absolute", left: parse + plan + "%" }}
+            />
+            <div
+              className="latency-overhead bar-chart__bar"
+              style={{ width: overhead + "%", position: "absolute", left: parse + plan + run + "%" }}
+            />
+            <div
+              className="latency-overall-dev bar-chart__bar bar-chart__bar--dev"
+              style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+            />
+          </ToolTipWrapper>
         </div>
       );
     },
