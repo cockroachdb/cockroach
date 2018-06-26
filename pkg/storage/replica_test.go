@@ -8523,21 +8523,6 @@ func TestCommandTimeThreshold(t *testing.T) {
 	}
 }
 
-func TestDeprecatedRequests(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	if reply, err := tc.SendWrapped(&roachpb.DeprecatedVerifyChecksumRequest{}); err != nil {
-		t.Fatal(err)
-	} else if _, ok := reply.(*roachpb.DeprecatedVerifyChecksumResponse); !ok {
-		t.Fatalf("expected %T but got %T", &roachpb.DeprecatedVerifyChecksumResponse{}, reply)
-	}
-}
-
 func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
