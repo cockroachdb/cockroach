@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/rubyist/circuitbreaker"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -509,4 +510,10 @@ func (nl *NodeLiveness) SetDecommissioningInternal(
 	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
 ) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
+}
+
+// GetCircuitBreaker returns the circuit breaker controlling
+// connection attempts to the specified node.
+func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
+	return t.dialer.GetCircuitBreaker(nodeID)
 }
