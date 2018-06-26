@@ -268,10 +268,18 @@ const selectStatement = createSelector(
     }
 
     const statement = props.params[statementAttr];
-    const app = props.params[appAttr];
+    let app = props.params[appAttr];
+    let predicate = stmt => stmt.statement === statement;
+
+    if (app) {
+        if (app == "(unset)") {
+            app = "";
+        }
+        predicate = stmt => stmt.statement === statement && stmt.app === app;
+    }
 
     const statements = flattenStatementStats(queries);
-    const results = _.filter(statements, stmt => stmt.statement === statement && (!app || stmt.app === app));
+    const results = _.filter(statements, predicate);
 
     return {
       statement,
