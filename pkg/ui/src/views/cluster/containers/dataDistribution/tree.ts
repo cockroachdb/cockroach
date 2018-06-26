@@ -306,7 +306,7 @@ export function flatten<T>(
   includeInternalNodes: boolean,
   paginationStates: AssocList<TreePath, PaginationState> = [],
   pageSize: number = Number.MAX_VALUE,
-  sortBy?: (path: TreePath) => number,
+  sortBy?: (masterIndex: number) => number,
 ): FlattenedNode<T>[] {
   const output: FlattenedNode<T>[] = [];
   recur(tree, [], 0);
@@ -355,7 +355,7 @@ export function flatten<T>(
         const offset = page * pageSize;
 
         const sortState = paginationState ? paginationState.sortState : SortState.NONE;
-        const sortedChildren = sortChildren(node.children, pathSoFar, sortState, sortBy);
+        const sortedChildren = sortChildren(node.children, sortState, sortBy);
 
         for (let i = 0; i < offset; i++) {
           const child = sortedChildren[i];
@@ -379,9 +379,8 @@ export function flatten<T>(
 
 function sortChildren<T>(
   children: TreeWithSize<T>[],
-  pathSoFar: TreePath,
   sortState: SortState,
-  sortBy?: (path: TreePath) => number,
+  sortBy?: (masterIndex: number) => number,
 ): TreeWithSize<T>[] {
   if (sortState === SortState.NONE) {
     return children;
@@ -390,29 +389,12 @@ function sortChildren<T>(
     throw Error(`sortState ${sortState} but no sortBy provided`);
   }
   const sortedChildren = _.sortBy(children, (child) => {
-    const childPath = [...pathSoFar, child.node.name];
-    return sortBy(childPath);
+    return sortBy(child.masterIdx);
   });
   if (sortState === SortState.DESC) {
     sortedChildren.reverse();
   }
   return sortedChildren;
-}
-
-/**
- * nodeAtPath returns the node found under `root` at `path`, throwing
- * an error if nothing is found.
- */
-function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
-  if (path.length === 0) {
-    return root;
-  }
-  const pathSegment = path[0];
-  const child = root.children.find((c) => (c.name === pathSegment));
-  if (child === undefined) {
-    throw new Error(`not found: ${path}`);
-  }
-  return nodeAtPath(child, path.slice(1));
 }
 
 /**
@@ -459,104 +441,6 @@ function expandedHeight<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): numbe
 }
 
 /**
- * getLeafPathsUnderPath returns paths to all leaf nodes under the given
- * `path` in `root`.
- *
- * E.g. for the tree T =
- *
- *   a/
- *     b/
- *       c
- *       d
- *     e/
- *       f
- *       g
- *
- * getLeafPaths(T, ['a', 'b']) yields:
- *
- *   [ ['a', 'b', 'c'],
- *     ['a', 'b', 'd'] ]
- *
- */
-function getLeafPathsUnderPath<T>(root: TreeNode<T>, path: TreePath): TreePath[] {
-  const atPath = nodeAtPath(root, path);
-  const output: TreePath[] = [];
-  visitNodes(atPath, (node, subPath) => {
-    if (isLeaf(node)) {
-      output.push([...path, ...subPath]);
-    }
-    return true;
-  });
-  return output;
-}
-
-/**
- * cartProd returns all combinations of elements in `as` and `bs`.
- *
- * e.g. cartProd([1, 2], ['a', 'b'])
- * yields:
- * [
- *   {a: 1, b: 'a'},
- *   {a: 1, b: 'b'},
- *   {a: 2, b: 'a'},
- *   {a: 2, b: 'b'},
- * ]
- */
-function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
-  const output: {a: A, b: B}[] = [];
-  as.forEach((a) => {
-    bs.forEach((b) => {
-      output.push({ a, b });
-    });
-  });
-  return output;
-}
-
-/**
- * sumValuesUnderPaths returns the sum of `getValue(R, C)`
- * for all leaf paths R under `rowPath` in `rowTree`,
- * and all leaf paths C under `colPath` in `rowTree`.
- *
- * E.g. in the matrix
- *
- *  |       |    C_1    |
- *  |       | C_2 | C_3 |
- *  |-------|-----|-----|
- *  | R_a   |     |     |
- *  |   R_b |  1  |  2  |
- *  |   R_c |  3  |  4  |
- *
- * represented by
- *
- *   rowTree = (R_a [R_b R_c])
- *   colTree = (C_1 [C_2 C_3])
- *
- * calling sumValuesUnderPath(rowTree, colTree, ['R_a'], ['C_1'], getValue)
- * sums up all the cells in the matrix, yielding 1 + 2 + 3 + 4 = 10.
- *
- * Calling sumValuesUnderPath(rowTree, colTree, ['R_a', 'R_b'], ['C_1'], getValue)
- * sums up only the cells under R_b,
- * yielding 1 + 2 = 3.
- *
- */
-export function sumValuesUnderPaths<R, C>(
-  rowTree: TreeNode<R>,
-  colTree: TreeNode<C>,
-  rowPath: TreePath,
-  colPath: TreePath,
-  getValue: (row: TreePath, col: TreePath) => number,
-): number {
-  const rowPaths = getLeafPathsUnderPath(rowTree, rowPath);
-  const colPaths = getLeafPathsUnderPath(colTree, colPath);
-  const prod = cartProd(rowPaths, colPaths);
-  let sum = 0;
-  prod.forEach((coords) => {
-    sum += getValue(coords.a, coords.b);
-  });
-  return sum;
-}
-
-/**
  * deepIncludes returns true if `array` contains `val`, doing
  * a deep equality comparison.
  */
@@ -578,30 +462,37 @@ export function repeat<T>(times: number, item: T): T[] {
 
 export interface TreeWithSize<T> {
   size: number;
+  masterIdx: number;
   node: TreeNode<T>;
   children?: TreeWithSize<T>[];
 }
 
 // TODO(vilterp): not store the child arrays twice...
 // maybe actually just add teh size to teh same struct
-export function augmentWithSize<T>(node: TreeNode<T>): TreeWithSize<T> {
-  if (isLeaf(node)) {
+export function augmentWithSize<T>(root: TreeNode<T>): TreeWithSize<T> {
+  function recur(node: TreeNode<T>, masterIdx: number): TreeWithSize<T> {
+    if (isLeaf(node)) {
+      return {
+        size: 1,
+        masterIdx,
+        node,
+      };
+    }
+
+    let size = 0;
+    const children: TreeWithSize<T>[] = [];
+    node.children.forEach((child) => {
+      const augmentedChild = recur(child, masterIdx + size);
+      size += augmentedChild.size;
+      children.push(augmentedChild);
+    });
     return {
-      size: 1,
+      size: size + 1, // add 1 for the node itself
+      children,
       node,
+      masterIdx,
     };
   }
 
-  let size = 1; // node itself
-  const children: TreeWithSize<T>[] = [];
-  node.children.forEach((child) => {
-    const augmentedChild = augmentWithSize(child);
-    size += augmentedChild.size;
-    children.push(augmentedChild);
-  });
-  return {
-    size,
-    children,
-    node,
-  };
+  return recur(root, 0);
 }

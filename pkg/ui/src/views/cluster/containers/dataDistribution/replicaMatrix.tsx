@@ -9,7 +9,6 @@ import {
   TreePath,
   layoutTreeHorizontal,
   flatten,
-  sumValuesUnderPaths,
   LayoutCell,
   FlattenedNode,
   visitNodes,
@@ -447,39 +446,7 @@ const selectColsWithSize = createSelector(
 );
 
 // TODO(vilterp): make this depend on the master grid
-
-const selectFlattenedRows = createSelector(
-  selectRowsWithSize,
-  selectColsWithSize,
-  (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
-  (propsAndState: PropsAndState) => propsAndState.state.paginationStates,
-  selectGetValueFun,
-  (
-    rows: TreeWithSize<SchemaObject>,
-    cols: TreeWithSize<INodeDescriptor>,
-    collapsedRows: TreePath[],
-    paginationStates: AssocList<TreePath, PaginationState>,
-    getValue: (rowPath: TreePath, colPath: TreePath) => number,
-  ) => {
-    console.log("flattening rows");
-    const sortBy = (path: TreePath) => {
-      // TODO(vilterp): get this from the master grid
-      return sumValuesUnderPaths(rows.node, cols.node, path, [], getValue);
-    };
-    return flatten(rows, collapsedRows, true /* includeNodes */, paginationStates, PAGE_SIZE, sortBy);
-  },
-);
-
-const selectFlattenedCols = createSelector(
-  selectColsWithSize,
-  (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
-  (cols: TreeWithSize<INodeDescriptor>, collapseCols: TreePath[]) => {
-    console.log("flattening cols");
-    return flatten(cols, collapseCols, false /* includeNodes */);
-  },
-);
-
-interface SumAndIncreate {
+interface SumAndIncrease {
   sum: number;
   increase: number;
 }
@@ -504,10 +471,10 @@ const selectMasterGrid = createSelector(
       outputRows.push(row);
     }
 
-    function visitRows(rowPath: TreePath, rowIdx: number, row: TreeWithSize<SchemaObject>): SumAndIncreate {
+    function visitRows(rowPath: TreePath, rowIdx: number, row: TreeWithSize<SchemaObject>): SumAndIncrease {
       // console.log("visitRows", rowPath, rowIdx);
 
-      function visitCols(colPath: TreePath, colIdx: number, col: TreeWithSize<INodeDescriptor>): SumAndIncreate {
+      function visitCols(colPath: TreePath, colIdx: number, col: TreeWithSize<INodeDescriptor>): SumAndIncrease {
         // console.log("visitCols", colPath, rowIdx);
 
         if (isLeaf(col.node)) {
@@ -566,6 +533,34 @@ const selectMasterGrid = createSelector(
   },
 );
 
+const selectFlattenedRows = createSelector(
+  selectMasterGrid,
+  selectRowsWithSize,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedRows,
+  (propsAndState: PropsAndState) => propsAndState.state.paginationStates,
+  (
+    masterGrid: number[][],
+    rows: TreeWithSize<SchemaObject>,
+    collapsedRows: TreePath[],
+    paginationStates: AssocList<TreePath, PaginationState>,
+  ) => {
+    console.log("flattening rows");
+    const sortBy = (masterRowIdx: number) => {
+      return masterGrid[masterRowIdx][0];
+    };
+    return flatten(rows, collapsedRows, true /* includeNodes */, paginationStates, PAGE_SIZE, sortBy);
+  },
+);
+
+const selectFlattenedCols = createSelector(
+  selectColsWithSize,
+  (propsAndState: PropsAndState) => propsAndState.state.collapsedCols,
+  (cols: TreeWithSize<INodeDescriptor>, collapseCols: TreePath[]) => {
+    console.log("flattening cols");
+    return flatten(cols, collapseCols, false /* includeNodes */);
+  },
+);
+
 const selectAllVals = createSelector(
   selectMasterGrid,
   selectFlattenedRows,
@@ -585,7 +580,6 @@ const selectAllVals = createSelector(
           return;
         }
         const value = masterGrid[row.masterIdx][col.masterIdx];
-        // console.log("get val from master grid:", row.path, row.masterIdx, col.path, col.masterIdx, "=>", value);
         rowVals.push(value);
         inSingleArray.push(value);
       });

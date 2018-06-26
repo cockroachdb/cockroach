@@ -1,7 +1,7 @@
 import { assert } from "chai";
 
 import {
-  flatten, layoutTreeHorizontal, sumValuesUnderPaths, TreePath, LayoutCell,
+  flatten, layoutTreeHorizontal, LayoutCell,
 } from "./tree";
 
 describe("tree", () => {
@@ -220,58 +220,6 @@ describe("tree", () => {
         assert.deepEqual(actualFlattened, expectedFlattened);
       });
 
-    });
-
-  });
-
-  describe("sumValuesUnderPaths", () => {
-
-    // |       |    C_1    |
-    // |       | C_2 | C_3 |
-    // |-------|-----|-----|
-    // | R_a   |     |     |
-    // |   R_b |  1  |  2  |
-    // |   R_c |  3  |  4  |
-
-    const rowTree = {
-      name: "a",
-      children: [
-        { name: "b" },
-        { name: "c" },
-      ],
-    };
-    const colTree = {
-      name: "1",
-      children: [
-        { name: "2" },
-        { name: "3" },
-      ],
-    };
-    // by row, then col.
-    const values: {[name: string]: {[name: string]: number}} = {
-      "b": {"2": 1, "3": 2},
-      "c": {"2": 3, "3": 4},
-    };
-    function getValue(rowPath: TreePath, colPath: TreePath): number {
-      return values[rowPath[0]][colPath[0]];
-    }
-
-    it("computes a sum for the roots of both trees", () => {
-      const actualSum = sumValuesUnderPaths(rowTree, colTree, [], [], getValue);
-      const expectedSum = 1 + 2 + 3 + 4;
-      assert.equal(actualSum, expectedSum);
-    });
-
-    it("computes a sum for the root of one tree and the leaf of another", () => {
-      const actualSum = sumValuesUnderPaths(rowTree, colTree, ["b"], [], getValue);
-      const expectedSum = 1 + 2;
-      assert.equal(actualSum, expectedSum);
-    });
-
-    it("computes a sum for a single cell (two leaves)", () => {
-      const actualSum = sumValuesUnderPaths(rowTree, colTree, ["b"], ["3"], getValue);
-      const expectedSum = 2;
-      assert.equal(actualSum, expectedSum);
     });
 
   });
