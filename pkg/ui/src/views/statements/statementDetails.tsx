@@ -14,7 +14,7 @@ import { statementAttr, appAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
-import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics } from "src/util/appStats";
+import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
@@ -268,10 +268,18 @@ const selectStatement = createSelector(
     }
 
     const statement = props.params[statementAttr];
-    const app = props.params[appAttr];
+    let app = props.params[appAttr];
+    let predicate = (stmt: ExecutionStatistics) => stmt.statement === statement;
+
+    if (app) {
+        if (app === "(unset)") {
+            app = "";
+        }
+        predicate = (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.app === app;
+    }
 
     const statements = flattenStatementStats(queries);
-    const results = _.filter(statements, stmt => stmt.statement === statement && (!app || stmt.app === app));
+    const results = _.filter(statements, predicate);
 
     return {
       statement,
