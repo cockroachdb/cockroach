@@ -29,6 +29,8 @@ const latencyBars = [
   bar("latency-overhead", "Mean Overhead Latency", (d: StatementStatistics) => d.stats.overhead_lat.mean),
 ];
 
+const latencyStdDev = bar("latency-overall-dev", "Latency Std. Dev.", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
+
 function bar(name: string, title: string, value: (d: StatementStatistics) => number) {
   return { name, title, value };
 }
@@ -36,13 +38,19 @@ function bar(name: string, title: string, value: (d: StatementStatistics) => num
 function makeBarChart(
   accessors: { name: string, title: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
+  stdDevAccessor?: { name: string, title: string, value: (d: StatementStatistics) => number },
 ) {
   return function barChart(rows: StatementStatistics[] = []) {
     function getTotal(d: StatementStatistics) {
       return _.sum(_.map(accessors, ({ value }) => value(d)));
     }
 
-    const extent = d3.extent(rows, getTotal);
+    function getTotalWithStdDev(d: StatementStatistics) {
+      const mean = getTotal(d);
+      return mean + stdDevAccessor.value(d);
+    }
+
+    const extent = d3.extent(rows, stdDevAccessor ? getTotalWithStdDev : getTotal);
 
     const scale = d3.scale.linear()
       .domain([0, extent[1]])
@@ -53,8 +61,10 @@ function makeBarChart(
         scale.domain([0, getTotal(d)]);
       }
 
+      let sum = 0;
       const bars = accessors.map(({ name, title, value }) => {
         const v = value(d);
+        sum += v;
         return (
           <div
             key={ name + v }
@@ -65,10 +75,31 @@ function makeBarChart(
         );
       });
 
+      function renderStdDev() {
+        if (!stdDevAccessor) {
+          return null;
+        }
+
+        const { name, title, value } = stdDevAccessor;
+
+        const stddev = value(d);
+        const width = stddev + (stddev > sum ? sum : stddev);
+        const left = stddev > sum ? 0 : sum - stddev;
+
+        return (
+          <div
+            className={ name + " bar-chart__bar bar-chart__bar--dev" }
+            style={{ width: scale(width) + "%", left: scale(left) + "%" }}
+            title={ title + ": " + stddev }
+          />
+        );
+      }
+
       return (
         <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
           <div className="label">{ formatter(getTotal(d)) }</div>
           { bars }
+          { renderStdDev() }
         </div>
       );
     };
@@ -94,7 +125,7 @@ export function approximify(value: number) {
 
 export const countBarChart = makeBarChart(countBars, approximify);
 export const rowsBarChart = makeBarChart(rowsBars, approximify);
-export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9));
+export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
   const count = longToInt(s.stats.count);
