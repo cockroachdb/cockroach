@@ -29,6 +29,7 @@ func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
 	return queryCounter{
 		txnBeginCount:      s.MustGetSQLCounter(sql.MetaTxnBegin.Name),
 		selectCount:        s.MustGetSQLCounter(sql.MetaSelect.Name),
+		optCount:           s.MustGetSQLCounter(sql.MetaSQLOpt.Name),
 		distSQLSelectCount: s.MustGetSQLCounter(sql.MetaDistSQLSelect.Name),
 		updateCount:        s.MustGetSQLCounter(sql.MetaUpdate.Name),
 		insertCount:        s.MustGetSQLCounter(sql.MetaInsert.Name),
