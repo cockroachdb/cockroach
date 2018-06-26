@@ -163,17 +163,12 @@ export function rowsBreakdown(s: StatementStatistics) {
         <div className="bar-chart bar-chart--breakdown">
           <div
             className="rows bar-chart__bar"
-            style={{ width: width + "%" }}
+            style={{ width: right + "%", position: "absolute", left: 0 }}
             title={ title }
           />
           <div
             className="rows-dev bar-chart__bar"
-            style={{ width: spread + "%" }}
-            title={ title }
-          />
-          <div
-            className="rows bar-chart__bar"
-            style={{ width: 1, position: "absolute", left: right + "%" }}
+            style={{ width: spread + "%", position: "absolute", left: width + "%" }}
             title={ title }
           />
         </div>
@@ -220,17 +215,12 @@ export function latencyBreakdown(s: StatementStatistics) {
         <div className="bar-chart bar-chart--breakdown">
           <div
             className="latency-parse bar-chart__bar"
-            style={{ width: width + "%", position: "absolute", left: 0 }}
+            style={{ width: right + "%", position: "absolute", left: 0 }}
             title={ title }
           />
           <div
             className="latency-parse-dev bar-chart__bar"
             style={{ width: spread + "%", position: "absolute", left: width + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-parse bar-chart__bar"
-            style={{ width: 1, position: "absolute", left: right + "%" }}
             title={ title }
           />
         </div>
@@ -240,24 +230,19 @@ export function latencyBreakdown(s: StatementStatistics) {
     planBarChart() {
       const left = scale(parseMean);
       const width = scale(clamp(planMean - planSd));
-      const right = scale(parseMean + planMean);
+      const right = scale(planMean);
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
       const title = "Plan Latency.  Mean: " + planMean + " Std. Dev.: " + planSd;
       return (
         <div className="bar-chart bar-chart--breakdown">
           <div
             className="latency-plan bar-chart__bar"
-            style={{ width: width + "%", position: "absolute", left: left + "%" }}
+            style={{ width: right + "%", position: "absolute", left: left + "%" }}
             title={ title }
           />
           <div
             className="latency-plan-dev bar-chart__bar"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-plan bar-chart__bar"
-            style={{ width: 1, position: "absolute", left: right + "%" }}
             title={ title }
           />
         </div>
@@ -267,24 +252,19 @@ export function latencyBreakdown(s: StatementStatistics) {
     runBarChart() {
       const left = scale(parseMean + planMean);
       const width = scale(clamp(runMean - runSd));
-      const right = scale(parseMean + planMean + runMean);
+      const right = scale(runMean);
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
       const title = "Run Latency.  Mean: " + runMean + " Std. Dev.: " + runSd;
       return (
         <div className="bar-chart bar-chart--breakdown">
           <div
             className="latency-run bar-chart__bar"
-            style={{ width: width + "%", position: "absolute", left: left + "%" }}
+            style={{ width: right + "%", position: "absolute", left: left + "%" }}
             title={ title }
           />
           <div
             className="latency-run-dev bar-chart__bar"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-run bar-chart__bar"
-            style={{ width: 1, position: "absolute", left: right + "%" }}
             title={ title }
           />
         </div>
@@ -294,24 +274,19 @@ export function latencyBreakdown(s: StatementStatistics) {
     overheadBarChart() {
       const left = scale(parseMean + planMean + runMean);
       const width = scale(clamp(overheadMean - overheadSd));
-      const right = scale(parseMean + planMean + runMean + overheadMean);
+      const right = scale(overheadMean);
       const spread = scale(overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd));
       const title = "Overhead Latency.  Mean: " + overheadMean + " Std. Dev.: " + overheadSd;
       return (
         <div className="bar-chart bar-chart--breakdown">
           <div
             className="latency-overhead bar-chart__bar"
-            style={{ width: width + "%", position: "absolute", left: left + "%" }}
+            style={{ width: right + "%", position: "absolute", left: left + "%" }}
             title={ title }
           />
           <div
             className="latency-overhead-dev bar-chart__bar"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
-            title={ title }
-          />
-          <div
-            className="latency-overhead bar-chart__bar"
-            style={{ width: 1, position: "absolute", left: right + "%" }}
             title={ title }
           />
         </div>
