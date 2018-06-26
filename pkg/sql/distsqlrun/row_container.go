@@ -42,6 +42,10 @@ type sortableRowContainer interface {
 	// NewIterator or NewFinalIterator are not guaranteed to return any rows.
 	NewFinalIterator(context.Context) rowIterator
 
+	// UnsafeReset resets the container, allowing for reuse. It renders all
+	// previously allocated rows unsafe.
+	UnsafeReset(context.Context) error
+
 	// Close frees up resources held by the sortableRowContainer.
 	Close(context.Context)
 }
@@ -293,6 +297,8 @@ type diskBackedRowContainer struct {
 	mrc *memRowContainer
 	drc *diskRowContainer
 
+	spilled bool
+
 	// The following fields are used to create a diskRowContainer when spilling
 	// to disk.
 	engine      engine.Engine
@@ -361,19 +367,40 @@ func (f *diskBackedRowContainer) NewFinalIterator(ctx context.Context) rowIterat
 	return f.src.NewFinalIterator(ctx)
 }
 
-func (f *diskBackedRowContainer) Close(ctx context.Context) {
-	f.src.Close(ctx)
+// UnsafeReset resets the container for reuse. The diskBackedRowContainer will
+// reset to use memory if it is using disk.
+func (f *diskBackedRowContainer) UnsafeReset(ctx context.Context) error {
+	if f.drc != nil {
+		f.drc.Close(ctx)
+		f.src = f.mrc
+		f.drc = nil
+		return nil
+	}
+	return f.mrc.UnsafeReset(ctx)
 }
 
-// Spilled returns whether or not the diskBackedRowContainer has spilled to
-// disk.
+func (f *diskBackedRowContainer) Close(ctx context.Context) {
+	if f.drc != nil {
+		f.drc.Close(ctx)
+	}
+	f.mrc.Close(ctx)
+}
+
+// Spilled returns whether or not the diskBackedRowContainer spilled to disk
+// in its lifetime.
 func (f *diskBackedRowContainer) Spilled() bool {
-	return f.mrc == nil
+	return f.spilled
+}
+
+// UsingDisk returns whether or not the diskBackedRowContainer is currently
+// using disk.
+func (f *diskBackedRowContainer) UsingDisk() bool {
+	return f.drc != nil
 }
 
 func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
-	if f.Spilled() {
-		return errors.New("already spilled to disk")
+	if f.UsingDisk() {
+		return errors.New("already using disk")
 	}
 	drc := makeDiskRowContainer(f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	i := f.mrc.NewFinalIterator(ctx)
@@ -392,10 +419,10 @@ func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
 			return err
 		}
 	}
-	f.mrc.Close(ctx)
-	f.mrc = nil
+	f.mrc.Clear(ctx)
 
 	f.src = &drc
 	f.drc = &drc
+	f.spilled = true
 	return nil
 }
