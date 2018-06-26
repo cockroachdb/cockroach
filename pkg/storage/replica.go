@@ -3080,21 +3080,7 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-
-	// If the proposerLease has a sequence number then we can send this through
-	// Raft instead of sending the entire Lease through Raft.
-	//
-	// NB: We can't check IsMinSupported(VersionLeaseSequence) here because its
-	// value may not have been the same when a lease request was evaluated,
-	// meaning that we have no guarantee that a new lease isn't being proposed
-	// without a sequence number. If we started sending only lease sequence
-	// numbers in this case, we wouldn't be able to distinguish the old and the
-	// new lease.
-	if proposerLease.Sequence != 0 {
-		proposal.command.ProposerLeaseSequence = proposerLease.Sequence
-	} else {
-		proposal.command.DeprecatedProposerLease = &proposerLease
-	}
+	proposal.command.ProposerLeaseSequence = proposerLease.Sequence
 
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",

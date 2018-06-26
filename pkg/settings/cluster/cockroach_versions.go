@@ -21,11 +21,20 @@ import (
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int
 
-// Version constants. To add a version:
+// Version constants.
+//
+// To add a version:
 //   - Add it at the end of this block.
 //   - Add it at the end of the `Versions` block below.
 //   - For major or minor versions, bump BinaryMinimumSupportedVersion. For
 //     example, if introducing the `1.4` release, bump it from `1.2` to `1.3`.
+//
+// To delete a version.
+//   - Remove its associated runtime checks.
+//   - Mark it as "unused" when it is only referenced in this file.
+//   - If the version key after a major or minor version is unused, remove it
+//     and its associated keyedVersion.
+//     - Apply recursively.
 const (
 	VersionBase VersionKey = iota
 	VersionRaftLogTruncationBelowRaft
@@ -34,17 +43,17 @@ const (
 	Version1_1
 	VersionRaftLastIndex
 	VersionMVCCNetworkStats
-	VersionMeta2Splits
+	VersionMeta2Splits // unused
 	VersionRPCNetworkStats
 	VersionRPCVersionCheck
 	VersionClearRange
 	VersionPartitioning
-	VersionLeaseSequence
+	VersionLeaseSequence // unused
 	VersionUnreplicatedTombstoneKey
 	VersionRecomputeStats
 	VersionNoRaftProposalKeys
 	VersionTxnSpanRefresh
-	VersionReadUncommittedRangeLookups
+	VersionReadUncommittedRangeLookups // unused
 	VersionPerReplicaZoneConstraints
 	VersionLeasePreferences
 	Version2_0

@@ -253,9 +253,9 @@ typedef struct {
 
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
-bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
+bool MVCCIsValidSplitKey(DBSlice key);
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
-                          int64_t target_size, bool allow_meta2_splits, DBString* split_key);
+                          int64_t target_size, DBString* split_key);
 
 // DBTxn contains the fields from a roachpb.Transaction that are
 // necessary for MVCC Get and Scan operations. Note that passing a
