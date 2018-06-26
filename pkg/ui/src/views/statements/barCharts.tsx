@@ -38,6 +38,7 @@ function bar(name: string, title: string, value: (d: StatementStatistics) => num
 }
 
 function makeBarChart(
+  title: string,
   accessors: { name: string, title: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
   stdDevAccessor?: { name: string, title: string, value: (d: StatementStatistics) => number },
@@ -97,11 +98,18 @@ function makeBarChart(
         );
       }
 
+      let titleText = title + ": " + formatter(sum);
+      if (stdDevAccessor) {
+        titleText += " Std. Dev.: " + formatter(stdDevAccessor.value(d));
+      }
+
       return (
         <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
-          <div className="label">{ formatter(getTotal(d)) }</div>
-          { bars }
-          { renderStdDev() }
+          <ToolTipWrapper text={ titleText }>
+            <div className="label">{ formatter(getTotal(d)) }</div>
+            { bars }
+            { renderStdDev() }
+          </ToolTipWrapper>
         </div>
       );
     };
@@ -125,9 +133,9 @@ export function approximify(value: number) {
   return "" + Math.round(value);
 }
 
-export const countBarChart = makeBarChart(countBars, approximify);
-export const rowsBarChart = makeBarChart(rowsBars, approximify);
-export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
+export const countBarChart = makeBarChart("Execution Count", countBars, approximify);
+export const rowsBarChart = makeBarChart("Rows Affected.  Mean", rowsBars, approximify);
+export const latencyBarChart = makeBarChart("Latency.  Mean", latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
   const count = longToInt(s.stats.count);
