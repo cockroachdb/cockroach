@@ -692,6 +692,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		return resp.reply, resp.pErr
 	}
 
+	if ba.IsUnsplittable() {
+		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+		return nil, roachpb.NewError(mismatch)
+	}
+
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
 	br = &roachpb.BatchResponse{

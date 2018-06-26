@@ -16,6 +16,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -35,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -649,6 +652,13 @@ func doDistributedCSVTransform(
 			return storageccl.MakeKeyRewriter(descs)
 		},
 	); err != nil {
+		// Check if this was a context canceled error and restart if it was.
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
+				return jobs.NewRetryJobError("node failure")
+			}
+		}
+
 		// If the job was canceled, any of the distsql processors could have been
 		// the first to encounter the .Progress error. This error's string is sent
 		// through distsql back here, so we can't examine the err type in this case

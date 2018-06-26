@@ -148,13 +148,83 @@ func AddSSTable(ctx context.Context, db *client.DB, start, end roachpb.Key, sstB
 		if err == nil {
 			return nil
 		}
+		if m, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
+			return addSplitSSTable(ctx, db, sstBytes, start, m.MismatchedRange.EndKey.AsRawKey())
+		}
 		if _, ok := err.(*roachpb.AmbiguousResultError); i == maxAddSSTableRetries || !ok {
 			return errors.Wrapf(err, "addsstable [%s,%s)", start, end)
 		}
+
 		log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v",
 			start, end, i, err)
 		continue
 	}
+}
+
+func addSplitSSTable(
+	ctx context.Context, db *client.DB, sstBytes []byte, start, splitKey roachpb.Key,
+) error {
+	iter, err := engineccl.NewMemSSTIterator(sstBytes, false)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	w, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	split := false
+	var first, last roachpb.Key
+
+	iter.Seek(engine.MVCCKey{Key: start})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+
+		key := iter.UnsafeKey()
+
+		if !split && key.Key.Compare(splitKey) >= 0 {
+			res, err := w.Finish()
+			if err != nil {
+				return err
+			}
+			if err := AddSSTable(ctx, db, first, last.PrefixEnd(), res); err != nil {
+				return err
+			}
+			w.Close()
+			w, err = engine.MakeRocksDBSstFileWriter()
+			if err != nil {
+				return err
+			}
+
+			split = true
+			first = first[:0]
+			last = last[:0]
+		}
+
+		if len(first) == 0 {
+			first = append(first[:0], key.Key...)
+		}
+		last = append(last[:0], key.Key...)
+
+		if err := w.Add(engine.MVCCKeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
+			return err
+		}
+
+		iter.Next()
+	}
+
+	res, err := w.Finish()
+	if err != nil {
+		return err
+	}
+	return AddSSTable(ctx, db, first, last.PrefixEnd(), res)
 }
 
 // evalImport bulk loads key/value entries.

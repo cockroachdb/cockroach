@@ -1159,6 +1159,80 @@ func TestImportControlJob(t *testing.T) {
 	})
 }
 
+// TestImportWorkerFailure tests that IMPORT can restart after the failure
+// of a worker node.
+func TestImportWorkerFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(mjibson): Although this test passes most of the time it still
+	// sometimes fails because not all kinds of failures caused by shutting a
+	// node down are detected and retried.
+	t.Skip("flakey due to undetected kinds of failures when the node is shutdown")
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	allowResponse := make(chan struct{})
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(r.URL.Path[1:]))
+		}
+	}))
+	defer srv.Close()
+
+	count := 20
+	urls := make([]string, count)
+	for i := 0; i < count; i++ {
+		urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
+	}
+	csvURLs := strings.Join(urls, ", ")
+	query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
+
+	errCh := make(chan error)
+	go func() {
+		_, err := sqlDB.DB.Exec(query)
+		errCh <- err
+	}()
+	select {
+	case allowResponse <- struct{}{}:
+	case err := <-errCh:
+		t.Fatalf("%s: query returned before expected: %s", err, query)
+	}
+	var jobID int64
+	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+
+	// Shut down a node. This should force LoadCSV to fail in its current
+	// execution. It should detect this as a context canceled error.
+	tc.StopServer(1)
+
+	close(allowResponse)
+	// We expect the statement to fail.
+	if err := <-errCh; !testutils.IsError(err, "node failure") {
+		t.Fatal(err)
+	}
+
+	// But the job should be restarted and succeed eventually.
+	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.CheckQueryResults(t,
+		`SELECT * FROM t ORDER BY i`,
+		sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
+	)
+}
+
 // TestImportLivenessWithRestart tests that a node liveness transition
 // during IMPORT correctly resumes after the node executing the job
 // becomes non-live (from the perspective of the jobs registry).

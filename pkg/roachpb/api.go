@@ -103,14 +103,15 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 }
 
 const (
-	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on lease holder
-	isRead                 // read-only cmds don't go through raft, but may run on lease holder
-	isWrite                // write cmds go through raft and must be proposed on lease holder
-	isTxn                  // txn commands may be part of a transaction
-	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
-	isRange                // range commands may span multiple keys
-	isReverse              // reverse commands traverse ranges in descending direction
-	isAlone                // requests which must be alone in a batch
+	isAdmin        = 1 << iota // admin cmds don't go through raft, but run on lease holder
+	isRead                     // read-only cmds don't go through raft, but may run on lease holder
+	isWrite                    // write cmds go through raft and must be proposed on lease holder
+	isTxn                      // txn commands may be part of a transaction
+	isTxnWrite                 // txn write cmds start heartbeat and are marked for intent resolution
+	isRange                    // range commands may span multiple keys
+	isReverse                  // reverse commands traverse ranges in descending direction
+	isAlone                    // requests which must be alone in a batch
+	isUnsplittable             // range command that must not be split during sending
 	// Requests for acquiring a lease skip the (proposal-time) check that the
 	// proposing replica has a valid lease.
 	skipLeaseCheck
@@ -1079,7 +1080,7 @@ func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
 func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
 func (*ImportRequest) flags() int           { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int     { return isAdmin | isAlone | isRange }
-func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange }
+func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange | isUnsplittable }
 
 // RefreshRequest and RefreshRangeRequest both list
 // updates(Read)TSCache, though they actually update the read or write
