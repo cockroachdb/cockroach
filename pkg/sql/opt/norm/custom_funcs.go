@@ -303,10 +303,18 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 	return c.f.ConstructFilters(lb.BuildList())
 }
 
-// HasEquivalence returns true if the given filter expresses at least one
-// equivalence between two columns, such as a.x=b.y.
-func (c *CustomFuncs) HasEquivalence(filter memo.GroupID) bool {
-	return c.LookupLogical(filter).Scalar.FuncDeps.HasEquivalence()
+// HasNullRejectingFilter returns true if the filter causes some of the columns
+// of input to be non-null. If the input contains columns (x, z), filters such
+// as x < 5, x = y, and z IS NOT NULL all satisfy this property.
+func (c *CustomFuncs) HasNullRejectingFilter(filter, input memo.GroupID) bool {
+	filterConstraints := c.LookupLogical(filter).Scalar.Constraints
+	if filterConstraints == nil {
+		return false
+	}
+
+	notNullFilterCols := filterConstraints.ExtractNotNullCols(c.f.evalCtx)
+	inputCols := c.LookupLogical(input).Relational.OutputCols
+	return notNullFilterCols.Intersects(inputCols)
 }
 
 // ----------------------------------------------------------------------

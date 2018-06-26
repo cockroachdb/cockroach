@@ -48,10 +48,16 @@
 # a.x + a.y < 5, and for the right side, we can map it to b.x + b.y < 5.
 # Given this mapping, we can safely push the filter down to both sides and
 # remove it from the ON filters list.
+#
+# Note that this rule is only applied to InnerJoin and SemiJoin, not
+# InnerJoinApply or SemiJoinApply. The apply variants would cause a
+# non-detectable cycle with TryDecorrelateSelect, causing the filters to get
+# remapped to both sides and pushed down over and over again.
+#
 # NOTE: It is important that this rule is first among the join filter push-down
 #       rules.
 [PushFilterIntoJoinLeftAndRight, Normalize]
-(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+(InnerJoin | SemiJoin
     $left:*
     $right:*
     $filters:(Filters
