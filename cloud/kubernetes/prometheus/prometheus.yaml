@@ -1,0 +1,79 @@
+# Create a service account for prometheus to run under
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+# Define the access permissions that prometheus will run with
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+# Associate the service account with the role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: default
+---
+# Select any services with the prometheus:cockroachdb label
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+    prometheus: cockroachdb
+spec:
+  serviceAccountName: prometheus
+  selector:
+    matchLabels:
+      prometheus: cockroachdb
+  endpoints:
+  - port: http
+    path: /_status/vars
+---
+# Have prometheus-operator run a replicated Prometheus cluster
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: cockroachdb
+spec:
+  serviceAccountName: prometheus
+  alerting:
+    alertmanagers:
+    - namespace: default
+      name: alertmanager-cockroachdb
+      port: web
+  serviceMonitorSelector:
+    matchLabels:
+      prometheus: cockroachdb
+  resources:
+    requests:
+      memory: 400Mi
+  ruleSelector:
+    matchLabels:
+      role: alert-rules
+      prometheus: cockroachdb
