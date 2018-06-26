@@ -1,3 +1,7 @@
+// This file significantly duplicates the algorithms available in
+// pkg/roachpb/app_stats.go, in particular the functions on NumericStats
+// to compute variance and add together NumericStats.
+
 import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
