@@ -38,10 +38,11 @@ type indexLookup struct {
 
 type indexLookupByID map[IndexID]indexLookup
 
-type indexInfo struct {
-	writeIdx IndexID
-	tableID  ID
-	indexID  IndexID
+type fkInfo struct {
+	writeTableID  ID
+	writeIdxID    IndexID
+	searchTableID ID
+	searchIndexID IndexID
 }
 
 type writeIdxInfo struct {
@@ -49,30 +50,35 @@ type writeIdxInfo struct {
 	searchIdxInfo map[ID]indexLookupByID
 }
 
+type writeTableInfo struct {
+	table     TableDescriptor
+	oldRows   *RowContainer
+	newRows   *RowContainer
+	writeIdxs map[IndexID]writeIdxInfo
+}
+
+type writeTables map[ID]writeTableInfo
+
 // FKHelper accumulates foreign key checks
 type FKHelper struct {
 	evalCtx *tree.EvalContext
 	txn     *client.Txn
 
-	writeIdx  IndexDescriptor
-	writeIdxs map[IndexID]writeIdxInfo
-
-	oldRows *RowContainer
-	newRows *RowContainer
+	writeTables writeTables
+	//writeIdxs   map[IndexID]writeIdxInfo
 
 	Tables          TableLookupsByID
 	dir             FKCheck
 	batch           roachpb.BatchRequest
 	batchToORIdx    []int
 	batchToNRIdx    []int
-	batchToCheckIdx []indexInfo
+	batchToCheckIdx []fkInfo
 }
 
 func makeFKHelper(
 	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	otherTables TableLookupsByID,
-	writeTable TableDescriptor,
 	colMap map[ColumnID]int,
 	alloc *DatumAlloc,
 	dir FKCheck,
@@ -82,41 +88,52 @@ func makeFKHelper(
 		evalCtx:      evalCtx,
 		txn:          txn,
 		Tables:       otherTables,
-		writeIdxs:    make(map[IndexID]writeIdxInfo),
+		writeTables:  make(writeTables),
 		dir:          dir,
 		batchToORIdx: make([]int, 0),
 		batchToNRIdx: make([]int, 0),
 	}
 
-	colInfo, err := makeColTypeInfo(&writeTable, colMap)
-	if err != nil {
-		return FKHelper{}, err
-	}
 
-	fkHelper.oldRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
+	for id, tableLookup := range otherTables {
+		colInfo, err := makeColTypeInfo(tableLookup.Table, colMap)
+			if err != nil {
+				return FKHelper{}, err
+			}
 
-	fkHelper.newRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
+		writeTableInfo := writeTableInfo{
+			table : tableLookup.Table,
+			oldRows :NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
+			newRows:NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
 
-	for _, idx := range writeTable.AllNonDropIndexes() {
-		writeIdxInfo := fkHelper.writeIdxs[idx.ID]
-		writeIdxInfo.idx = idx
-		writeIdxInfo.searchIdxInfo = make(map[ID]indexLookupByID)
-		fkHelper.writeIdxs[idx.ID] = writeIdxInfo
-		if dir == CheckInserts || dir == CheckUpdates {
-			if idx.ForeignKey.IsSet() {
-				ref := idx.ForeignKey
-				if err := fkHelper.addFKRefInfo(idx, otherTables, colMap, alloc, ref); err != nil {
-					return FKHelper{}, err
+
+		}
+
+		fkHelper.oldRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
+
+		fkHelper.newRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
+
+		for _, idx := range writeTable.AllNonDropIndexes() {
+			writeIdxInfo := fkHelper.writeIdxs[idx.ID]
+			writeIdxInfo.idx = idx
+			writeIdxInfo.searchIdxInfo = make(map[ID]indexLookupByID)
+			fkHelper.writeIdxs[idx.ID] = writeIdxInfo
+			if dir == CheckInserts || dir == CheckUpdates {
+				if idx.ForeignKey.IsSet() {
+					ref := idx.ForeignKey
+					if err := fkHelper.addFKRefInfo(idx, otherTables, colMap, alloc, ref); err != nil {
+						return FKHelper{}, err
+					}
 				}
 			}
-		}
-		if dir == CheckDeletes || dir == CheckUpdates {
-			for _, ref := range idx.ReferencedBy {
-				if otherTables[ref.Table].IsAdding {
-					continue
-				}
-				if err := fkHelper.addFKRefInfo(idx, otherTables, colMap, alloc, ref); err != nil {
-					return FKHelper{}, err
+			if dir == CheckDeletes || dir == CheckUpdates {
+				for _, ref := range idx.ReferencedBy {
+					if otherTables[ref.Table].IsAdding {
+						continue
+					}
+					if err := fkHelper.addFKRefInfo(idx, otherTables, colMap, alloc, ref); err != nil {
+						return FKHelper{}, err
+					}
 				}
 			}
 		}
@@ -189,9 +206,9 @@ func (fk *FKHelper) addFKRefInfo(idx IndexDescriptor, otherTables TableLookupsBy
 	return nil
 }
 
-func (fk *FKHelper) getSpans(row tree.Datums) ([]roachpb.Span, []indexInfo, error) {
+func (fk *FKHelper) getSpans(row tree.Datums) ([]roachpb.Span, []fkInfo, error) {
 	var spans []roachpb.Span
-	var indexesInfo []indexInfo
+	var indexesInfo []fkInfo
 	for writeIdxID, writeIdxInfo := range fk.writeIdxs {
 		for id, info := range writeIdxInfo.searchIdxInfo {
 			for indexID, searchIdxLookup := range info {
@@ -225,10 +242,10 @@ func (fk *FKHelper) getSpans(row tree.Datums) ([]roachpb.Span, []indexInfo, erro
 				}
 				spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
 				indexesInfo = append(indexesInfo,
-					indexInfo{
-						writeIdx: writeIdxID,
-						tableID:  id,
-						indexID:  indexID,
+					fkInfo{
+						writeIdxID:    writeIdxID,
+						searchTableID: id,
+						searchIndexID: indexID,
 					})
 			}
 		}
@@ -302,9 +319,9 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 
 	for i, resp := range br.Responses {
 		fetcher.KVs = resp.GetInner().(*roachpb.ScanResponse).Rows
-		writeIdxID := fk.batchToCheckIdx[i].writeIdx
-		tableID := fk.batchToCheckIdx[i].tableID
-		indexID := fk.batchToCheckIdx[i].indexID
+		writeIdxID := fk.batchToCheckIdx[i].writeIdxID
+		tableID := fk.batchToCheckIdx[i].searchTableID
+		indexID := fk.batchToCheckIdx[i].searchIndexID
 
 		indexLookup := fk.writeIdxs[writeIdxID].searchIdxInfo[tableID][indexID]
 		writeIdx := fk.writeIdxs[writeIdxID].idx

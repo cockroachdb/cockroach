@@ -36,6 +36,8 @@ type cascader struct {
 
 	indexPKRowFetchers map[ID]map[IndexID]RowFetcher // PK RowFetchers by Table ID and Index ID
 
+	fkHelper FKHelper
+
 	// Row Deleters
 	rowDeleters        map[ID]RowDeleter    // RowDeleters by Table ID
 	deleterRowFetchers map[ID]RowFetcher    // RowFetchers for rowDeleters by Table ID
