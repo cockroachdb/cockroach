@@ -15,6 +15,7 @@ import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
 import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
@@ -155,6 +156,14 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
+    const lastClearedHelpText = (
+      <React.Fragment>
+        Statement history is cleared once an hour by default, which can be
+        configured with the cluster setting{" "}
+        <code><pre style={{ display: "inline-block" }}>diagnostics.reporting.interval</pre></code>.
+      </React.Fragment>
+    );
+
     return (
       <div className="statements">
         <PageConfig>
@@ -173,10 +182,13 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           {selectedApp ? ` of ${this.props.totalStatements} ` : " "}
           statement fingerprints.
           Last cleared {this.props.lastReset}.
-          <br />
-          Statement history is cleared once an hour by default, configured by
-          the cluster setting{" "}
-          <code><pre style={{ display: "inline-block" }}>diagnostics.reporting.interval</pre></code>.
+          <div className="last-cleared-tooltip__tooltip">
+            <ToolTipWrapper text={lastClearedHelpText}>
+              <div className="last-cleared-tooltip__tooltip-hover-area">
+                <div className="last-cleared-tooltip__info-icon">i</div>
+              </div>
+            </ToolTipWrapper>
+          </div>
         </div>
 
         <StatementsSortedTable
