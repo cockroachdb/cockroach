@@ -167,7 +167,7 @@ export function rowsBreakdown(s: StatementStatistics) {
             title={ title }
           />
           <div
-            className="rows-dev bar-chart__bar"
+            className="rows-dev bar-chart__bar bar-chart__bar--dev"
             style={{ width: spread + "%", position: "absolute", left: width + "%" }}
             title={ title }
           />
@@ -219,7 +219,7 @@ export function latencyBreakdown(s: StatementStatistics) {
             title={ title }
           />
           <div
-            className="latency-parse-dev bar-chart__bar"
+            className="latency-parse-dev bar-chart__bar bar-chart__bar--dev"
             style={{ width: spread + "%", position: "absolute", left: width + "%" }}
             title={ title }
           />
@@ -241,7 +241,7 @@ export function latencyBreakdown(s: StatementStatistics) {
             title={ title }
           />
           <div
-            className="latency-plan-dev bar-chart__bar"
+            className="latency-plan-dev bar-chart__bar bar-chart__bar--dev"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             title={ title }
           />
@@ -263,7 +263,7 @@ export function latencyBreakdown(s: StatementStatistics) {
             title={ title }
           />
           <div
-            className="latency-run-dev bar-chart__bar"
+            className="latency-run-dev bar-chart__bar bar-chart__bar--dev"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             title={ title }
           />
@@ -285,7 +285,7 @@ export function latencyBreakdown(s: StatementStatistics) {
             title={ title }
           />
           <div
-            className="latency-overhead-dev bar-chart__bar"
+            className="latency-overhead-dev bar-chart__bar bar-chart__bar--dev"
             style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             title={ title }
           />

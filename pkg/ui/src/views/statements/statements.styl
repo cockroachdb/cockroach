@@ -38,6 +38,11 @@
     height 100%
     margin-left -1px
 
+    &--dev
+      position absolute
+      height 60%
+      top 20%
+
   .count-first-try
     background-color $link-color
     border-left 1px solid $link-color
@@ -53,8 +58,6 @@
   .rows-dev
     background-color lighten($link-color, 50%)
     border-left 1px solid lighten($link-color, 50%)
-    height 0.6em
-    top 0.2em
 
   .latency-parse
     background-color $alert-color
@@ -63,8 +66,6 @@
   .latency-parse-dev
     background-color lighten($alert-color, 50%)
     border-left 1px solid lighten($alert-color, 50%)
-    height 0.6em
-    top 0.2em
 
   .latency-plan
     background-color $warning-color
@@ -73,8 +74,6 @@
   .latency-plan-dev
     background-color lighten($warning-color, 50%)
     border-left 1px solid lighten($warning-color, 50%)
-    height 0.6em
-    top 0.2em
 
   .latency-run
     background-color $link-color
@@ -83,8 +82,6 @@
   .latency-run-dev
     background-color lighten($link-color, 50%)
     border-left 1px solid lighten($link-color, 50%)
-    height 0.6em
-    top 0.2em
 
   .latency-overhead
     background-color $alert-color
@@ -93,8 +90,6 @@
   .latency-overhead-dev
     background-color lighten($alert-color, 50%)
     border-left 1px solid lighten($alert-color, 50%)
-    height 0.6em
-    top 0.2em
 
 .numeric-stats-table
   @extend $table-base
