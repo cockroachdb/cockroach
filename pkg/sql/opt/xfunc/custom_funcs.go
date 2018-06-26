@@ -259,3 +259,8 @@ func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
 func (c *CustomFuncs) ShortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
 	return c.LookupLogical(group).Relational.FuncDeps.Key()
 }
+
+// IsColNotNull returns true if the given column has the NotNull property.
+func (c *CustomFuncs) IsColNotNull(col memo.PrivateID, input memo.GroupID) bool {
+	return c.LookupLogical(input).Relational.NotNullCols.Contains(int(c.ExtractColID(col)))
+}
