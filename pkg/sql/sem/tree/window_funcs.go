@@ -31,7 +31,7 @@ type WindowFrameRun struct {
 	ArgIdxStart      int          // the index which arguments to the window function begin
 	ArgCount         int          // the number of window function arguments
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset int
+	StartBoundOffset int          // TODO(yuzefovich): interval offsets like '10 days' PRECEDING need to be supported.
 	EndBoundOffset   int
 
 	// changes for each row (each call to WindowFunc.Add)
@@ -88,6 +88,18 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 	default:
 		panic("unexpected WindowFrameMode")
 	}
+}
+
+// IsDefaultFrame returns whether a frame equivalent to the default frame
+// is being used (default is RANGE UNBOUNDED PRECEDING).
+func (wfr WindowFrameRun) IsDefaultFrame() bool {
+	if wfr.Frame == nil {
+		return true
+	}
+	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
+		return wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow
+	}
+	return false
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
