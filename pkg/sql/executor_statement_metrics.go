@@ -64,7 +64,9 @@ type phaseTimes [sessionNumPhases]time.Time
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
 	// The subset of SELECTs that are processed through DistSQL.
-	DistSQLSelectCount    *metric.Counter
+	DistSQLSelectCount *metric.Counter
+	// The subset of queries that are processed by the cost-based optimizer.
+	SQLOptCount           *metric.Counter
 	DistSQLExecLatency    *metric.Histogram
 	SQLExecLatency        *metric.Histogram
 	DistSQLServiceLatency *metric.Histogram
@@ -89,6 +91,7 @@ func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
 	distSQLUsed bool,
+	optUsed bool,
 	automaticRetryCount int,
 	rowsAffected int,
 	err error,
@@ -122,6 +125,10 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	if automaticRetryCount == 0 {
+		if optUsed {
+			m.SQLOptCount.Inc(1)
+		}
+
 		if distSQLUsed {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)

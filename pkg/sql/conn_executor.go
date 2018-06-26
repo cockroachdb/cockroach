@@ -269,6 +269,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg: cfg,
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
+			SQLOptCount:        metric.NewCounter(MetaSQLOpt),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
 				6*metricsSampleInterval),

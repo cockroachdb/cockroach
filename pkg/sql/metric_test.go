@@ -34,6 +34,7 @@ type queryCounter struct {
 	txnBeginCount      int64
 	selectCount        int64
 	distSQLSelectCount int64
+	optCount           int64
 	updateCount        int64
 	insertCount        int64
 	deleteCount        int64
@@ -54,6 +55,7 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
+		{query: "SET EXPERIMENTAL_OPT = 'off'", miscCount: 1},
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
@@ -81,6 +83,9 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "DROP TABLE mt.n", ddlCount: 1},
 		{query: "SET database = system", miscCount: 1},
+		{query: "SET EXPERIMENTAL_OPT = 'on'", miscCount: 1},
+		{query: "SELECT 3", selectCount: 1, optCount: 1},
+		{query: "SET EXPERIMENTAL_OPT = 'off'", miscCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -128,6 +133,9 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.optCount, err = checkCounterDelta(s, sql.MetaSQLOpt, accum.optCount, tc.optCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 		})

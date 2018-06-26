@@ -155,6 +155,9 @@ var (
 	MetaSQLServiceLatency = metric.Metadata{
 		Name: "sql.service.latency",
 		Help: "Latency in nanoseconds of SQL request execution"}
+	MetaSQLOpt = metric.Metadata{
+		Name: "sql.optimizer.count",
+		Help: "Number of statements which ran with the cost-based optimizer"}
 	MetaDistSQLSelect = metric.Metadata{
 		Name: "sql.distsql.select.count",
 		Help: "Number of DistSQL SELECT statements"}
