@@ -732,10 +732,6 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
-			// In order to calculate aggregates over a particular window frame,
-			// we need a way to 'reset' the aggregate, so this constructor will be used for that.
-			aggConstructor := windowFn.expr.GetAggregateConstructor()
-
 			var peerGrouper peerGroupChecker
 			if windowFn.columnOrdering != nil {
 				// If an ORDER BY clause is provided, order the partition and use the
@@ -769,8 +765,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			frameRun.ArgCount = windowFn.argCount
 			frameRun.RowIdx = 0
 
-			if frameRun.Frame != nil {
-				builtins.AddAggregateConstructorToFramableAggregate(builtin, aggConstructor)
+			if !frameRun.IsDefaultFrame() {
+				// We have a custom frame not equivalent to default one, so if we have
+				// an aggregate function, we want to reset it for each row.
+				// Not resetting is an optimization since we're not computing
+				// the result over the whole frame but only as a result of the current
+				// row and previous results of aggregation.
+				builtins.ShouldReset(builtin)
 			}
 
 			for frameRun.RowIdx < len(partition) {

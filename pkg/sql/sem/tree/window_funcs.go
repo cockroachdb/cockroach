@@ -90,6 +90,18 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 	}
 }
 
+// IsDefaultFrame returns whether a frame equivalent to the default frame
+// is being used (default is RANGE UNBOUNDED PRECEDING).
+func (wfr WindowFrameRun) IsDefaultFrame() bool {
+	if wfr.Frame == nil {
+		return true
+	}
+	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
+		return wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow
+	}
+	return false
+}
+
 // FrameEndIdx returns the index of the first row after the frame.
 func (wfr WindowFrameRun) FrameEndIdx() int {
 	if wfr.Frame == nil {
