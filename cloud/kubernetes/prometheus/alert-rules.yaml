@@ -1,0 +1,218 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: cockroachdb
+    prometheus: cockroachdb
+    role: alert-rules
+  name: prometheus-cockroachdb-rules
+spec:
+  groups:
+  # This creates an alert which always fires to check your AlertManager configuration.
+  # You should delete this once you have verified that your AlertManager is correctly configured.
+  - name: dummy.rules
+    rules:
+    - alert: ExampleAlert
+      expr: vector(1)
+  - name: rules/alerts.rules
+    rules:
+    # Alert for any instance that is unreachable for >5 minutes.
+    - alert: InstanceDown
+      expr: up{job="cockroach"} == 0
+      for: 5m
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
+          down for more than 5 minutes.'
+        summary: Instance {{ $labels.instance }} down
+    # Alert for any instance that is unreachable for >15 minutes.
+    - alert: InstanceDead
+      expr: up{job="cockroach"} == 0
+      for: 15m
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
+          down for more than 15 minutes.'
+        summary: Instance {{ $labels.instance }} dead
+    # Alert on instance restarts.
+    - alert: InstanceRestart
+      expr: resets(sys_uptime{job="cockroach"}[10m]) > 0 and resets(sys_uptime{job="cockroach"}[10m])
+        < 5
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+          {{ $value }} time(s) in 10m'
+        summary: Instance {{ $labels.instance }} restarted
+    # Alert on flapping instances (frequent restarts).
+    - alert: InstanceFlapping
+      expr: resets(sys_uptime{job="cockroach"}[10m]) > 5
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+          {{ $value }} time(s) in 10m'
+        summary: Instance {{ $labels.instance }} flapping
+    # Alert on mismatching "up" (from prometheus) vs "liveness" (from cockroach). We do this at the node level.
+    # This compares per-instance "liveness_livenodes" against the per-cluster count(up == 1).
+    - alert: LivenessMismatch
+      expr: (liveness_livenodes{job="cockroach"}) != ignoring(instance) group_left()
+        (count by(cluster, job) (up{job="cockroach"} == 1))
+      for: 5m
+      labels:
+        severity: testing
+      annotations:
+        description: Prometheus and {{ $labels.instance }} disagree on liveness
+        summary: Liveness mismatch for {{ $labels.instance }}
+    # Alert on version mismatch.
+    # This alert is intentionally loose (30 minutes) to allow for rolling upgrades.
+    # This may need to be adjusted for large clusters.
+    - alert: VersionMismatch
+      expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroach"}))
+        > 1
+      for: 30m
+      annotations:
+        description: Cluster {{ $labels.cluster }} running {{ $value }} different versions
+        summary: Binary version mismatch on {{ $labels.cluster }}
+    # Available capacity alerts.
+    - alert: StoreDiskLow
+      expr: capacity_available:ratio{job="cockroach"} < 0.15
+      annotations:
+        summary: Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value
+          }} available disk fraction
+    - alert: ClusterDiskLow
+      expr: cluster:capacity_available:ratio{job="cockroach"} < 0.2
+      annotations:
+        summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
+    # Zero SQL qps.
+    - alert: ZeroSQLQps
+      expr: sql_conns{job="cockroach"} > 0 and rate(sql_query_count{job="cockroach"}[5m])
+        == 0
+      for: 10m
+      annotations:
+        summary: Instance {{ $labels.instance }} has SQL connections but no queries
+    # Unavailable ranges.
+    - alert: UnavailableRanges
+      expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroach"})) > 0
+      for: 10m
+      labels:
+        severity: testing
+      annotations:
+        summary: Instance {{ $labels.instance }} has {{ $value }} unavailable ranges
+    # Leader-not-leaseholder ranges.
+    - alert: NoLeaseRanges
+      expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroach"}))
+        > 0
+      for: 10m
+      labels:
+        severity: testing
+      annotations:
+        summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
+    # Certificate expiration. Alerts are per node.
+    - alert: CACertificateExpiresSoon
+      expr: (security_certificate_expiration_ca{job="cockroach"} > 0) and (security_certificate_expiration_ca{job="cockroach"}
+        - time()) < 86400 * 366
+      labels:
+        frequency: daily
+      annotations:
+        summary: CA certificate for {{ $labels.instance }} expires in less than a year
+    - alert: NodeCertificateExpiresSoon
+      expr: (security_certificate_expiration_node{job="cockroach"} > 0) and (security_certificate_expiration_node{job="cockroach"}
+        - time()) < 86400 * 183
+      labels:
+        frequency: daily
+      annotations:
+        summary: Node certificate for {{ $labels.instance }} expires in less than six
+          months
+    # Getting close to open file descriptor limit.
+    - alert: HighOpenFDCount
+      expr: sys_fd_open{job="cockroach"} / sys_fd_softlimit{job="cockroach"} > 0.8
+      for: 10m
+      labels:
+        severity: testing
+      annotations:
+        summary: 'Too many open file descriptors on {{ $labels.instance }}: {{ $value
+          }} fraction used'
+  - name: rules/aggregation.rules
+    rules:
+    - record: node:capacity
+      expr: sum without(store) (capacity{job="cockroach"})
+    - record: cluster:capacity
+      expr: sum without(instance) (node:capacity{job="cockroach"})
+    - record: node:capacity_available
+      expr: sum without(store) (capacity_available{job="cockroach"})
+    - record: cluster:capacity_available
+      expr: sum without(instance) (node:capacity_available{job="cockroach"})
+    - record: capacity_available:ratio
+      expr: capacity_available{job="cockroach"} / capacity{job="cockroach"}
+    - record: node:capacity_available:ratio
+      expr: node:capacity_available{job="cockroach"} / node:capacity{job="cockroach"}
+    - record: cluster:capacity_available:ratio
+      expr: cluster:capacity_available{job="cockroach"} / cluster:capacity{job="cockroach"}
+    # Histogram rules: these are fairly expensive to compute live, so we precompute a few percetiles.
+    - record: txn_durations_bucket:rate1m
+      expr: rate(txn_durations_bucket{job="cockroach"}[1m])
+    - record: txn_durations:rate1m:quantile_50
+      expr: histogram_quantile(0.5, txn_durations_bucket:rate1m)
+    - record: txn_durations:rate1m:quantile_75
+      expr: histogram_quantile(0.75, txn_durations_bucket:rate1m)
+    - record: txn_durations:rate1m:quantile_90
+      expr: histogram_quantile(0.9, txn_durations_bucket:rate1m)
+    - record: txn_durations:rate1m:quantile_95
+      expr: histogram_quantile(0.95, txn_durations_bucket:rate1m)
+    - record: txn_durations:rate1m:quantile_99
+      expr: histogram_quantile(0.99, txn_durations_bucket:rate1m)
+    - record: exec_latency_bucket:rate1m
+      expr: rate(exec_latency_bucket{job="cockroach"}[1m])
+    - record: exec_latency:rate1m:quantile_50
+      expr: histogram_quantile(0.5, exec_latency_bucket:rate1m)
+    - record: exec_latency:rate1m:quantile_75
+      expr: histogram_quantile(0.75, exec_latency_bucket:rate1m)
+    - record: exec_latency:rate1m:quantile_90
+      expr: histogram_quantile(0.9, exec_latency_bucket:rate1m)
+    - record: exec_latency:rate1m:quantile_95
+      expr: histogram_quantile(0.95, exec_latency_bucket:rate1m)
+    - record: exec_latency:rate1m:quantile_99
+      expr: histogram_quantile(0.99, exec_latency_bucket:rate1m)
+    - record: round_trip_latency_bucket:rate1m
+      expr: rate(round_trip_latency_bucket{job="cockroach"}[1m])
+    - record: round_trip_latency:rate1m:quantile_50
+      expr: histogram_quantile(0.5, round_trip_latency_bucket:rate1m)
+    - record: round_trip_latency:rate1m:quantile_75
+      expr: histogram_quantile(0.75, round_trip_latency_bucket:rate1m)
+    - record: round_trip_latency:rate1m:quantile_90
+      expr: histogram_quantile(0.9, round_trip_latency_bucket:rate1m)
+    - record: round_trip_latency:rate1m:quantile_95
+      expr: histogram_quantile(0.95, round_trip_latency_bucket:rate1m)
+    - record: round_trip_latency:rate1m:quantile_99
+      expr: histogram_quantile(0.99, round_trip_latency_bucket:rate1m)
+    - record: sql_exec_latency_bucket:rate1m
+      expr: rate(sql_exec_latency_bucket{job="cockroach"}[1m])
+    - record: sql_exec_latency:rate1m:quantile_50
+      expr: histogram_quantile(0.5, sql_exec_latency_bucket:rate1m)
+    - record: sql_exec_latency:rate1m:quantile_75
+      expr: histogram_quantile(0.75, sql_exec_latency_bucket:rate1m)
+    - record: sql_exec_latency:rate1m:quantile_90
+      expr: histogram_quantile(0.9, sql_exec_latency_bucket:rate1m)
+    - record: sql_exec_latency:rate1m:quantile_95
+      expr: histogram_quantile(0.95, sql_exec_latency_bucket:rate1m)
+    - record: sql_exec_latency:rate1m:quantile_99
+      expr: histogram_quantile(0.99, sql_exec_latency_bucket:rate1m)
+    - record: raft_process_logcommit_latency_bucket:rate1m
+      expr: rate(raft_process_logcommit_latency_bucket{job="cockroach"}[1m])
+    - record: raft_process_logcommit_latency:rate1m:quantile_50
+      expr: histogram_quantile(0.5, raft_process_logcommit_latency_bucket:rate1m)
+    - record: raft_process_logcommit_latency:rate1m:quantile_75
+      expr: histogram_quantile(0.75, raft_process_logcommit_latency_bucket:rate1m)
+    - record: raft_process_logcommit_latency:rate1m:quantile_90
+      expr: histogram_quantile(0.9, raft_process_logcommit_latency_bucket:rate1m)
+    - record: raft_process_logcommit_latency:rate1m:quantile_95
+      expr: histogram_quantile(0.95, raft_process_logcommit_latency_bucket:rate1m)
+    - record: raft_process_logcommit_latency:rate1m:quantile_99
+      expr: histogram_quantile(0.99, raft_process_logcommit_latency_bucket:rate1m)
+    - record: raft_process_commandcommit_latency_bucket:rate1m
+      expr: rate(raft_process_commandcommit_latency_bucket{job="cockroach"}[1m])
+    - record: raft_process_commandcommit_latency:rate1m:quantile_50
+      expr: histogram_quantile(0.5, raft_process_commandcommit_latency_bucket:rate1m)
+    - record: raft_process_commandcommit_latency:rate1m:quantile_75
+      expr: histogram_quantile(0.75, raft_process_commandcommit_latency_bucket:rate1m)
+    - record: raft_process_commandcommit_latency:rate1m:quantile_90
+      expr: histogram_quantile(0.9, raft_process_commandcommit_latency_bucket:rate1m)
+    - record: raft_process_commandcommit_latency:rate1m:quantile_95
+      expr: histogram_quantile(0.95, raft_process_commandcommit_latency_bucket:rate1m)
+    - record: raft_process_commandcommit_latency:rate1m:quantile_99
+      expr: histogram_quantile(0.99, raft_process_commandcommit_latency_bucket:rate1m)
