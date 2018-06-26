@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -70,6 +72,19 @@ func (ed *EncDatum) String(typ *ColumnType) string {
 	return ed.stringWithAlloc(typ, nil)
 }
 
+// Size returns a lower bound on the total size of the receiver in bytes,
+// including memory referenced by the receiver.
+func (ed *EncDatum) Size() uintptr {
+	size := unsafe.Sizeof(*ed)
+	if ed.encoded != nil {
+		size += uintptr(len(ed.encoded))
+	}
+	if ed.Datum != nil {
+		size += ed.Datum.Size()
+	}
+	return size
+}
+
 // EncDatumFromEncoded initializes an EncDatum with the given encoded
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
@@ -82,6 +97,22 @@ func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 		encoding: enc,
 		encoded:  encoded,
 		Datum:    nil,
+	}
+}
+
+// encDatumFromEncodedAndDatum initializes an EncDatum with the given encoded
+// value and datum to be used for testing purposes.
+func encDatumFromEncodedAndDatum(enc DatumEncoding, encoded []byte, datum tree.Datum) EncDatum {
+	if len(encoded) == 0 {
+		panic(fmt.Sprintf("empty encoded value"))
+	}
+	if datum == nil {
+		panic(fmt.Sprintf("nil datum"))
+	}
+	return EncDatum{
+		encoding: enc,
+		encoded:  encoded,
+		Datum:    datum,
 	}
 }
 
@@ -351,6 +382,16 @@ func (r EncDatumRow) String(types []ColumnType) string {
 	var b bytes.Buffer
 	r.stringToBuf(types, &DatumAlloc{}, &b)
 	return b.String()
+}
+
+// Size returns a lower bound on the total size all EncDatum in the receiver
+// without accounting for the overhead.
+func (r EncDatumRow) Size() uintptr {
+	size := uintptr(0)
+	for _, ed := range r {
+		size += ed.Size()
+	}
+	return size
 }
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.

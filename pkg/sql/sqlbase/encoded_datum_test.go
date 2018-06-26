@@ -18,6 +18,11 @@ import (
 	"context"
 	"testing"
 
+	"unsafe"
+
+	"time"
+
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -533,4 +538,117 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		}
 	}
 
+}
+
+const EncDatumStructSize = unsafe.Sizeof(EncDatum{})
+const DIntSize = unsafe.Sizeof(tree.DInt(0))
+const DFloatSize = unsafe.Sizeof(tree.DFloat(0))
+const DDecimalStructSize = unsafe.Sizeof(tree.DDecimal{*apd.New(0, 0)})
+const DStringSize = unsafe.Sizeof(*tree.NewDString(""))
+
+func TestEncDatumSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	asc := DatumEncoding_ASCENDING_KEY
+	desc := DatumEncoding_DESCENDING_KEY
+
+	testCases := []struct {
+		encDatum     EncDatum
+		expectedSize uintptr
+	}{
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, int64(0))),
+			expectedSize: EncDatumStructSize + 1, // 1 is encoded with length 1 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, int64(123))),
+			expectedSize: EncDatumStructSize + 2, // 123 is encoded with length 2 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, int64(12345))),
+			expectedSize: EncDatumStructSize + 3, // 12345 is encoded with length 3 byte array
+		},
+		{
+			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_INT}, tree.NewDInt(tree.DInt(123))),
+			expectedSize: EncDatumStructSize + DIntSize,
+		},
+		{
+			encDatum:     encDatumFromEncodedAndDatum(asc, encoding.EncodeVarintAscending(nil, int64(123)), tree.NewDInt(tree.DInt(123))),
+			expectedSize: EncDatumStructSize + 2 + DIntSize, // 123 is encoded with length 2 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeFloatAscending(nil, float64(0))),
+			expectedSize: EncDatumStructSize + 1, // 0.0 is encoded with length 1 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeFloatDescending(nil, float64(123))),
+			expectedSize: EncDatumStructSize + 9, // 123.0 is encoded with length 9 byte array
+		},
+		{
+			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_FLOAT}, tree.NewDFloat(tree.DFloat(123))),
+			expectedSize: EncDatumStructSize + DFloatSize,
+		},
+		{
+			encDatum:     encDatumFromEncodedAndDatum(asc, encoding.EncodeFloatAscending(nil, float64(123)), tree.NewDFloat(tree.DFloat(123))),
+			expectedSize: EncDatumStructSize + 9 + DFloatSize, // 123.0 is encoded with length 9 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeDecimalAscending(nil, apd.New(0, 0))),
+			expectedSize: EncDatumStructSize + 1, // 0.0 is encoded with length 1 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeDecimalDescending(nil, apd.New(123, 2))),
+			expectedSize: EncDatumStructSize + 4, // 123.0 is encoded with length 4 byte array
+		},
+		{
+			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_DECIMAL}, &tree.DDecimal{*apd.New(123, 2)}),
+			expectedSize: EncDatumStructSize + DDecimalStructSize + 40, // In this case, DDecimal references 40 bytes for internal things
+		},
+		{
+			encDatum:     encDatumFromEncodedAndDatum(asc, encoding.EncodeDecimalAscending(nil, apd.New(123, 2)), &tree.DDecimal{*apd.New(123, 2)}),
+			expectedSize: EncDatumStructSize + 4 + DDecimalStructSize + 40, // 12300.0 is encoded with length 4 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeStringAscending(nil, "")),
+			expectedSize: EncDatumStructSize + 3, // "" is encoded with length 3 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeStringDescending(nil, "123⌘")),
+			expectedSize: EncDatumStructSize + 9, // "123⌘" is encoded with length 9 byte array
+		},
+		{
+			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_STRING}, tree.NewDString("12")),
+			expectedSize: EncDatumStructSize + DStringSize + 2,
+		},
+		{
+			encDatum:     encDatumFromEncodedAndDatum(asc, encoding.EncodeStringAscending(nil, "1234"), tree.NewDString("12345")),
+			expectedSize: EncDatumStructSize + 7 + DStringSize + 5, // "1234" is encoded with length 7 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 0, 0, time.FixedZone("EDT", 0)))),
+			expectedSize: EncDatumStructSize + 7, // This time is encoded with length 7 byte array
+		},
+		{
+			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 12, 3456789, time.FixedZone("EDT", 0)))),
+			expectedSize: EncDatumStructSize + 10, // This time is encoded with length 10 byte array
+		},
+	}
+
+	for _, c := range testCases {
+		receivedSize := c.encDatum.Size()
+		if receivedSize != c.expectedSize {
+			t.Errorf("on %v\treceived %d, expected %d", c.encDatum, receivedSize, c.expectedSize)
+		}
+	}
+
+	testRow := make(EncDatumRow, len(testCases))
+	expectedTotalSize := uintptr(0)
+	for idx, c := range testCases {
+		testRow[idx] = c.encDatum
+		expectedTotalSize += c.expectedSize
+	}
+	receivedTotalSize := testRow.Size()
+	if receivedTotalSize != expectedTotalSize {
+		t.Errorf("on %v\treceived %d, expected %d", testRow, receivedTotalSize, expectedTotalSize)
+	}
 }
