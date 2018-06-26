@@ -86,9 +86,11 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
-		// All join ops currently use hash join by default. In the future, we'll
-		// add physical operators for merge join.
+		// All join ops use hash join by default.
 		return c.computeHashJoinCost(candidate, logical)
+
+	case opt.MergeJoinOp:
+		return c.computeMergeJoinCost(candidate, logical)
 
 	case opt.LookupJoinOp:
 		return c.computeLookupJoinCost(candidate, logical)
@@ -163,6 +165,27 @@ func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Lo
 	// amount of memory is used, distsql switches to a disk-based hash join with
 	// a temp RocksDB store.
 	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+
+	// Add an extra cost for creating the hash table and doing lookups.
+	cost *= 1.5
+
+	// Add the CPU cost of emitting the rows.
+	// TODO(radu): ideally we would have an estimate of how many rows we actually
+	// have to run the ON condition on.
+	cost += memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeMergeJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
+
+	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+
+	// Add the CPU cost of emitting the rows.
+	// TODO(radu): ideally we would have an estimate of how many rows we actually
+	// have to run the ON condition on.
+	cost += memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 

@@ -25,11 +25,11 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 project
  ├── columns: k:1(int!null) x:5(int)
  ├── stats: [rows=142.857143]
- ├── cost: 2120.01429
+ ├── cost: 2126.45
  └── inner-join
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int)
       ├── stats: [rows=142.857143]
-      ├── cost: 2120.01429
+      ├── cost: 2126.45
       ├── fd: (1)-->(4)
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)

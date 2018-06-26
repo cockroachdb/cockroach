@@ -82,24 +82,26 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc9q20AQh-99ijCnBLZYs5
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-render          ·         ·                    (x, str)     ·
- │              render 0  x                    ·            ·
- │              render 1  str                  ·            ·
- └── join       ·         ·                    (x, y, str)  ·
-      │         type      inner                ·            ·
-      │         equality  (x) = (y)            ·            ·
-      ├── scan  ·         ·                    (x)          ·
-      │         table     numtosquare@primary  ·            ·
-      │         spans     ALL                  ·            ·
-      │         filter    (x % 2) = 0          ·            ·
-      └── scan  ·         ·                    (y, str)     ·
-·               table     numtostr@primary     ·            ·
-·               spans     ALL                  ·            ·
+render          ·               ·                    (x, str)     ·
+ │              render 0        x                    ·            ·
+ │              render 1        str                  ·            ·
+ └── join       ·               ·                    (x, y, str)  ·
+      │         type            inner                ·            ·
+      │         equality        (x) = (y)            ·            ·
+      │         mergeJoinOrder  +"(x=y)"             ·            ·
+      │         pred            x = y                ·            ·
+      ├── scan  ·               ·                    (x)          +x
+      │         table           numtosquare@primary  ·            ·
+      │         spans           ALL                  ·            ·
+      │         filter          (x % 2) = 0          ·            ·
+      └── scan  ·               ·                    (y, str)     +y
+·               table           numtostr@primary     ·            ·
+·               spans           ALL                  ·            ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc-K2zAQh-99CjNQ2AWVWP6z2QgWfCpND9my7K34oI2nicGxXEmGLiHvXmwXUjupZFfEtzjW55n5fjA6Qiky3PADKmDfgQKBAAiEQCACAjGkBCoptqiUkM2RDlhnv4D5BPKyqnXzd0pgKyQCO4LOdYHA4JW_FfiCPEO58IFAhprnRVumkvmBy_ekrA9aqJ81lwgEPueFRsm8u4R6H72AMbbevN57T57f_QQCz7VmXkIhPREQtf5T_Fzz7d3bc7XvV2vPpwSU5jsERk_k_4agpiG0dGoq-GdT5-_UpZAZSsx6X0ob0nbkymRfuNp_FXmJcvHQb63AH_ouofdPMt_t219n8yQJB3OeZwgdZrjS4EZ8EtWC0uG0V2tHvdp0fKjBbKHSeUNd3iLUYLzYcDaxwbxiH28hNhwvNppNbDiv2NUtxEbjxcaziY3mFUv9Wy_4K_VfUFWiVDhqffvNBJjtsDOiRC23-E2KbVume3xuuXaPZqh09zboHtZl96ppcDwcu8BLF3jlAlNqpukEY8E0OHaBly7wygUeGLuggyHt_02HZt2hEaZ93_6QjlzCMsOWsMywJSwzbAnLDNvCil3CenDRbYYtus2wRbcZtug2wzbdSxfdjy66zbBFtxm26DbDFt1m2KZ75aKbTrksL3folNtyKm1b_lPuy6m0zTm9uD2M0tPTh98BAAD__9mRuhE=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lVFr2zAQx9_3KcTBoKUasWSnaQQBPw0yWDpK34Yf3PiWGBIrk2RYKfnuw_FGZieT7Ar0Fsf6-e5-f9C9QSULXOV71CC-AwMKHCjEQCEBClPIKByUXKPWUjVHWmBZ_AIRUSirQ22avzMKa6kQxBuY0uwQBDznLzt8wrxANYmAQoEmL3enMgdV7nP1mlb13kj9s84VAoXP5c6gEuQmZeQj4UKI5er5lixI1P4ECo-1ESRlkB0pyNr8KX6u-fJKtrnedqudzmcUtMk3CIId6fuGYLYhjPJqiv-3qfN36kqqAhUWnS9lDfn3yLUDkLK7tlZ_uK-oNvhFlhWqyX2X2eEPc5Oyu9uFKjfb9mfjf0VSRhYk5ecwaBr3Rj-PFXuMdaXhlfwkDxPG-gKu1k46tdnwnHmwnFn4nGcBcubDXcfBXPPwrh8CuI6Hu06CuY7Du54HcJ0Mdz0N5joJ75pFgZfFlX6eUB9kpXHQKoiaibDYYCtJy1qt8ZuS61OZ9vHxxJ3u5AK1ad_y9mFZta-aBofDUx945gPPfWDG7DQbYYyPg6c-8MwHnvvAPWMXNO_T0b90bNcdW2HW9R316cQnLDvsCMsOO8Kyw46w7LArrKlPWPc-uu2wQ7cddui2ww7ddtile-aj-8FHtx126LbDDt122KHbDrt0z310szHL8vIOHbMtx9Kuy3_MvhxLu5yzi-1hlZ4dP_wOAAD__ylgyo0=
 
 #
 # -- Aggregation tests --

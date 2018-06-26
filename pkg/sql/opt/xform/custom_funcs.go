@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
@@ -320,4 +321,136 @@ func (c *CustomFuncs) OneResultPerInput(def memo.PrivateID) bool {
 	// TODO(radu): we also know to have exactly one result per input if we have a
 	// left lookup join and the KeyCols form a key in the table.
 	return lookupJoinDef.IsIndexJoin(c.e.mem.Metadata())
+}
+
+// ----------------------------------------------------------------------
+//
+// Join Rules
+//   Custom match and replace functions used with join.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// ConstructMergeJoins spawns MergeJoinOps, based on any interesting orderings.
+func (c *CustomFuncs) ConstructMergeJoins(
+	originalOp opt.Operator, left memo.GroupID, right memo.GroupID, on memo.GroupID,
+) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
+	leftProps := c.e.mem.GroupProperties(left).Relational
+	rightProps := c.e.mem.GroupProperties(right).Relational
+
+	onExpr := memo.MakeNormExprView(c.e.mem, on)
+
+	leftEq, rightEq := harvestEqualityColumns(leftProps.OutputCols, rightProps.OutputCols, onExpr)
+	n := len(leftEq)
+	if n == 0 {
+		return nil
+	}
+
+	leftOrders := GetInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
+	leftOrders.RestrictToCols(opt.ColListToSet(leftEq))
+	rightOrders := GetInterestingOrderings(memo.MakeNormExprView(c.e.mem, right)).Copy()
+	rightOrders.RestrictToCols(opt.ColListToSet(rightEq))
+	if len(leftOrders) == 0 && len(rightOrders) == 0 {
+		return nil
+	}
+
+	var colToEq util.FastIntMap
+	for i := range leftEq {
+		colToEq.Set(int(leftEq[i]), i)
+		colToEq.Set(int(rightEq[i]), i)
+	}
+
+	tryOrder := func(o opt.Ordering) {
+		if len(o) < n {
+			// TODO(radu): we have a partial ordering on the equality columns. We
+			// should augment it with the other columns (in arbitrary order) in the
+			// hope that we can get the full ordering cheaply using a "streaming"
+			// sort. This would not useful now since we don't support streaming sorts.
+			return
+		}
+		def := memo.MergeOnDef{
+			JoinType: originalOp,
+			LeftEq:   make(opt.Ordering, n),
+			RightEq:  make(opt.Ordering, n),
+		}
+		for i := 0; i < n; i++ {
+			eqIdx, _ := colToEq.Get(int(o[i].ID()))
+			def.LeftEq[i] = opt.MakeOrderingColumn(leftEq[eqIdx], o[i].Descending())
+			def.RightEq[i] = opt.MakeOrderingColumn(rightEq[eqIdx], o[i].Descending())
+		}
+		// TODO(radu): simplify the ON condition (we can remove the equalities we
+		// extracted).
+		mergeOn := c.e.f.ConstructMergeOn(on, c.e.mem.InternMergeOnDef(&def))
+		// Create a merge join expression in the same group.
+		mergeJoin := memo.MakeMergeJoinExpr(left, right, mergeOn)
+		c.e.exprs = append(c.e.exprs, memo.Expr(mergeJoin))
+	}
+
+	for _, o := range leftOrders {
+		tryOrder(o)
+	}
+	// TODO(radu): when we have a rule to commute joins, we should only look at
+	// the left-side orderings.
+	for _, o := range rightOrders {
+		tryOrder(o)
+	}
+
+	return c.e.exprs
+}
+
+// harvestEqualityColumns returns a list of pairs of columns (one from the left
+// side, one from the right side) which are constrained to be equal.
+func harvestEqualityColumns(
+	leftCols, rightCols opt.ColSet, on memo.ExprView,
+) (leftEq opt.ColList, rightEq opt.ColList) {
+	if on.Operator() != opt.FiltersOp {
+		return nil, nil
+	}
+	for i := 0; i < on.ChildCount(); i++ {
+		e := on.Child(i)
+		ok, left, right := isJoinEquality(leftCols, rightCols, e)
+		if !ok {
+			continue
+		}
+		// Don't allow any column to show up twice.
+		// TODO(radu): need to figure out the right thing to do in cases
+		// like: left.a = right.a AND left.a = right.b
+		duplicate := false
+		for i := range leftEq {
+			if leftEq[i] == left || rightEq[i] == right {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			leftEq = append(leftEq, left)
+			rightEq = append(rightEq, right)
+		}
+	}
+	return leftEq, rightEq
+}
+
+func isJoinEquality(
+	leftCols, rightCols opt.ColSet, expr memo.ExprView,
+) (ok bool, left, right opt.ColumnID) {
+	if expr.Operator() != opt.EqOp {
+		return false, 0, 0
+	}
+	lhs, rhs := expr.Child(0), expr.Child(1)
+	if lhs.Operator() != opt.VariableOp || rhs.Operator() != opt.VariableOp {
+		return false, 0, 0
+	}
+	// Don't allow mixed types (see #22519).
+	if !lhs.Logical().Scalar.Type.Equivalent(rhs.Logical().Scalar.Type) {
+		return false, 0, 0
+	}
+	lhsCol := lhs.Private().(opt.ColumnID)
+	rhsCol := rhs.Private().(opt.ColumnID)
+	if leftCols.Contains(int(lhsCol)) && rightCols.Contains(int(rhsCol)) {
+		return true, lhsCol, rhsCol
+	}
+	if leftCols.Contains(int(rhsCol)) && rightCols.Contains(int(lhsCol)) {
+		return true, rhsCol, lhsCol
+	}
+	return false, 0, 0
 }

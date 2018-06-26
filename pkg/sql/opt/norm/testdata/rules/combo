@@ -39,7 +39,7 @@ SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
 ----
 ================================================================================
 Initial expression
-  Cost: 2160.00
+  Cost: 3170.00
 ================================================================================
   project
    ├── columns: s:4(string)
@@ -59,7 +59,7 @@ Initial expression
              └── (a.k = xy.x) AND ((a.i + 1) = 10) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 NormalizeCmpPlusConst
-  Cost: 2160.00
+  Cost: 3170.00
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -81,7 +81,7 @@ NormalizeCmpPlusConst
   +           └── (a.k = xy.x) AND (a.i = (10 - 1)) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 SimplifyFilters
-  Cost: 2160.00
+  Cost: 3170.00
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -103,7 +103,7 @@ SimplifyFilters
   +           └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
 ================================================================================
 PushFilterIntoJoinLeft
-  Cost: 2163.33
+  Cost: 2503.33
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -136,7 +136,7 @@ PushFilterIntoJoinLeft
   +           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 PruneJoinLeftCols
-  Cost: 2163.33
+  Cost: 2503.33
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -177,7 +177,7 @@ PruneJoinLeftCols
               └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 PruneSelectCols
-  Cost: 2143.33
+  Cost: 2483.33
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -211,7 +211,7 @@ PruneSelectCols
               └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 EliminateProject
-  Cost: 2143.33
+  Cost: 2483.33
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -248,7 +248,7 @@ EliminateProject
               └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 PruneJoinRightCols
-  Cost: 2133.33
+  Cost: 2473.33
 ================================================================================
    project
     ├── columns: s:4(string)
@@ -317,12 +317,48 @@ ConstrainLookupJoinIndexScan (no changes)
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
+GenerateMergeJoins
+  Cost: 2466.67
+================================================================================
+   project
+    ├── columns: s:4(string)
+  - └── inner-join
+  + └── inner-join (merge)
+         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+         ├── key: (1,6)
+         ├── fd: (1)-->(2,4)
+         ├── select
+         │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2,4)
+  +      │    ├── ordering: +1
+         │    ├── scan a
+         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+         │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2,4)
+  +      │    │    ├── fd: (1)-->(2,4)
+  +      │    │    └── ordering: +1
+         │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         ├── scan xy
+         │    ├── columns: x:6(int!null)
+  -      │    └── key: (6)
+  -      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +      │    ├── key: (6)
+  +      │    └── ordering: +6
+  +      └── merge-on
+  +           ├── left ordering: +1
+  +           ├── right ordering: +6
+  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+================================================================================
 Final best expression
-  Cost: 2133.33
+  Cost: 2466.67
 ================================================================================
   project
    ├── columns: s:4(string)
-   └── inner-join
+   └── inner-join (merge)
         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
         ├── key: (1,6)
         ├── fd: (1)-->(2,4)
@@ -330,17 +366,23 @@ Final best expression
         │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
         │    ├── key: (1)
         │    ├── fd: (1)-->(2,4)
+        │    ├── ordering: +1
         │    ├── scan a
         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
         │    │    ├── key: (1)
-        │    │    └── fd: (1)-->(2,4)
+        │    │    ├── fd: (1)-->(2,4)
+        │    │    └── ordering: +1
         │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
         │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
         ├── scan xy
         │    ├── columns: x:6(int!null)
-        │    └── key: (6)
-        └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-             └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        │    ├── key: (6)
+        │    └── ordering: +6
+        └── merge-on
+             ├── left ordering: +1
+             ├── right ordering: +6
+             └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+                  └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Exploration patterns with varying costs.
 optsteps
@@ -523,7 +565,7 @@ Initial expression
                        └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 ================================================================================
 HoistSelectExists
-  Cost: 3272.22
+  Cost: 4388.89
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -567,7 +609,7 @@ HoistSelectExists
   + └── filters [type=bool]
 ================================================================================
 TryDecorrelateSelect
-  Cost: 3160.00
+  Cost: 4170.00
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -601,7 +643,7 @@ TryDecorrelateSelect
     └── filters [type=bool]
 ================================================================================
 DecorrelateJoin
-  Cost: 3160.00
+  Cost: 4170.00
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -625,7 +667,7 @@ DecorrelateJoin
     └── filters [type=bool]
 ================================================================================
 EliminateEmptyAnd
-  Cost: 3160.00
+  Cost: 4170.00
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -649,7 +691,7 @@ EliminateEmptyAnd
   + └── true [type=bool]
 ================================================================================
 EliminateSelect
-  Cost: 2160.00
+  Cost: 3170.00
 ================================================================================
   -select
   +semi-join
@@ -706,9 +748,12 @@ GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 2160.00
+  Cost: 3170.00
 ================================================================================
   semi-join
    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -812,7 +857,7 @@ PruneScanCols
               └── variable: xy.x [type=int, outer=(1)]
 ================================================================================
 HoistProjectSubquery
-  Cost: 2110.01
+  Cost: 2125.01
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -868,7 +913,7 @@ HoistProjectSubquery
   +      └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EnsureSelectFilters
-  Cost: 2110.01
+  Cost: 2125.01
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -917,7 +962,7 @@ EnsureSelectFilters
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateProject
-  Cost: 2120.01
+  Cost: 2135.01
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -998,7 +1043,7 @@ TryDecorrelateProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateScalarGroupBy
-  Cost: 2126.67
+  Cost: 5466.67
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1075,7 +1120,7 @@ TryDecorrelateScalarGroupBy
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateProjectSelect
-  Cost: 2123.33
+  Cost: 3133.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1146,7 +1191,7 @@ TryDecorrelateProjectSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 DecorrelateJoin
-  Cost: 2123.33
+  Cost: 3133.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1199,7 +1244,7 @@ DecorrelateJoin
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateGroupByProject
-  Cost: 2123.33
+  Cost: 3133.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1269,7 +1314,7 @@ EliminateGroupByProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2120.00
+  Cost: 3130.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1341,7 +1386,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2110.00
+  Cost: 3120.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1414,7 +1459,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneProjectCols
-  Cost: 2110.00
+  Cost: 3120.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1455,7 +1500,7 @@ PruneProjectCols
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 InlineProjectInProject
-  Cost: 2110.00
+  Cost: 3120.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1523,7 +1568,7 @@ GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 GenerateIndexScans
-  Cost: 2100.00
+  Cost: 3110.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1556,9 +1601,12 @@ GenerateIndexScans
     │              └── variable: notnull [type=bool, outer=(9)]
     └── projections [outer=(1,10)]
          └── CASE WHEN bool_or AND (xy.x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(1,10)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 2100.00
+  Cost: 3110.00
 ================================================================================
   project
    ├── columns: r:8(bool)

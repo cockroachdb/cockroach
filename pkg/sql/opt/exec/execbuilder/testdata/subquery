@@ -69,15 +69,17 @@ root                 ·            ·                 (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc)
 ----
-join       ·         ·            (a)  ·
- │         type      semi         ·    ·
- │         equality  (a) = (a)    ·    ·
- ├── scan  ·         ·            (a)  ·
- │         table     abc@primary  ·    ·
- │         spans     ALL          ·    ·
- └── scan  ·         ·            (a)  ·
-·          table     abc@primary  ·    ·
-·          spans     ALL          ·    ·
+join       ·               ·            (a)  ·
+ │         type            semi         ·    ·
+ │         equality        (a) = (a)    ·    ·
+ │         mergeJoinOrder  +"(a=a)"     ·    ·
+ │         pred            a = a        ·    ·
+ ├── scan  ·               ·            (a)  +a
+ │         table           abc@primary  ·    ·
+ │         spans           ALL          ·    ·
+ └── scan  ·               ·            (a)  +a
+·          table           abc@primary  ·    ·
+·          spans           ALL          ·    ·
 
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -159,15 +161,17 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
-join       ·         ·          (x, y)  ·
- │         type      semi       ·       ·
- │         equality  (x) = (x)  ·       ·
- ├── scan  ·         ·          (x, y)  ·
- │         table     a@primary  ·       ·
- │         spans     ALL        ·       ·
- └── scan  ·         ·          (x, z)  ·
-·          table     b@primary  ·       ·
-·          spans     ALL        ·       ·
+join       ·               ·          (x, y)  ·
+ │         type            semi       ·       ·
+ │         equality        (x) = (x)  ·       ·
+ │         mergeJoinOrder  +"(x=x)"   ·       ·
+ │         pred            x = x      ·       ·
+ ├── scan  ·               ·          (x, y)  +x
+ │         table           a@primary  ·       ·
+ │         spans           ALL        ·       ·
+ └── scan  ·               ·          (x, z)  +x
+·          table           b@primary  ·       ·
+·          spans           ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
@@ -185,15 +189,17 @@ join       ·      ·            (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
-join       ·         ·          (x, y)  ·
- │         type      anti       ·       ·
- │         equality  (x) = (x)  ·       ·
- ├── scan  ·         ·          (x, y)  ·
- │         table     a@primary  ·       ·
- │         spans     ALL        ·       ·
- └── scan  ·         ·          (x, z)  ·
-·          table     b@primary  ·       ·
-·          spans     ALL        ·       ·
+join       ·               ·          (x, y)  ·
+ │         type            anti       ·       ·
+ │         equality        (x) = (x)  ·       ·
+ │         mergeJoinOrder  +"(x=x)"   ·       ·
+ │         pred            x = x      ·       ·
+ ├── scan  ·               ·          (x, y)  +x
+ │         table           a@primary  ·       ·
+ │         spans           ALL        ·       ·
+ └── scan  ·               ·          (x, z)  +x
+·          table           b@primary  ·       ·
+·          spans           ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
@@ -207,3 +213,6 @@ join       ·      ·            (x, z)  ·
  └── scan  ·      ·            (x, y)  ·
 ·          table  a@primary    ·       ·
 ·          spans  ALL          ·       ·
+
+query error could not decorrelate subquery
+SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
