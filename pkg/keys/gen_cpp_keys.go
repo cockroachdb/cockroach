@@ -91,7 +91,6 @@ namespace cockroach {
 		fmt.Fprintf(f, "};\n")
 	}
 	genSortedSpans(keys.NoSplitSpans, "NoSplitSpans")
-	genSortedSpans(keys.NoSplitSpansWithoutMeta2Splits, "NoSplitSpansWithoutMeta2Splits")
 
 	fmt.Fprintf(f, `
 }  // namespace cockroach

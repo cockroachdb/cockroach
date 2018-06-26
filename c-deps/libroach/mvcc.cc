@@ -23,7 +23,7 @@ namespace cockroach {
 
 namespace {
 
-bool IsValidSplitKey(const rocksdb::Slice& key, bool allow_meta2_splits) {
+bool IsValidSplitKey(const rocksdb::Slice& key) {
   if (key == kMeta2KeyMax) {
     // We do not allow splits at Meta2KeyMax. The reason for this is that range
     // decriptors are stored at RangeMetaKey(range.EndKey), so the new range
@@ -35,13 +35,10 @@ bool IsValidSplitKey(const rocksdb::Slice& key, bool allow_meta2_splits) {
     // would overlap. See #1206.
     return false;
   }
-  const auto& no_split_spans =
-      allow_meta2_splits ? kSortedNoSplitSpans : kSortedNoSplitSpansWithoutMeta2Splits;
-  for (auto span : no_split_spans) {
-    // kSortedNoSplitSpans and kSortedNoSplitSpansWithoutMeta2Splits are
-    // both reverse sorted (largest to smallest) on the span end key which
-    // allows us to early exit if our key to check is above the end of the
-    // last no-split span.
+  for (auto span : kSortedNoSplitSpans) {
+    // kSortedNoSplitSpans is both reverse sorted (largest to smallest) on the
+    // span end key which allows us to early exit if our key to check is above
+    // the end of the last no-split span.
     if (key.compare(span.second) >= 0) {
       return true;
     }
@@ -218,12 +215,10 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
   return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
 }
 
-bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits) {
-  return IsValidSplitKey(ToSlice(key), allow_meta2_splits);
-}
+bool MVCCIsValidSplitKey(DBSlice key) { return IsValidSplitKey(ToSlice(key)); }
 
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
-                          int64_t target_size, bool allow_meta2_splits, DBString* split_key) {
+                          int64_t target_size, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -246,8 +241,8 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
     }
 
     ++n;
-    const bool valid = n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits) &&
-                       decoded_key.compare(min_split_key) >= 0;
+    const bool valid =
+        n > 1 && IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
