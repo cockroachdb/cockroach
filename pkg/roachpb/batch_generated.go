@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [40]int32
+type reqCounts [39]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -65,38 +65,36 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[22]++
 		case r.ComputeChecksum != nil:
 			counts[23]++
-		case r.DeprecatedVerifyChecksum != nil:
-			counts[24]++
 		case r.CheckConsistency != nil:
-			counts[25]++
+			counts[24]++
 		case r.Noop != nil:
-			counts[26]++
+			counts[25]++
 		case r.InitPut != nil:
-			counts[27]++
+			counts[26]++
 		case r.TransferLease != nil:
-			counts[28]++
+			counts[27]++
 		case r.LeaseInfo != nil:
-			counts[29]++
+			counts[28]++
 		case r.WriteBatch != nil:
-			counts[30]++
+			counts[29]++
 		case r.Export != nil:
-			counts[31]++
+			counts[30]++
 		case r.Import != nil:
-			counts[32]++
+			counts[31]++
 		case r.QueryTxn != nil:
-			counts[33]++
+			counts[32]++
 		case r.QueryIntent != nil:
-			counts[34]++
+			counts[33]++
 		case r.AdminScatter != nil:
-			counts[35]++
+			counts[34]++
 		case r.AddSstable != nil:
-			counts[36]++
+			counts[35]++
 		case r.RecomputeStats != nil:
-			counts[37]++
+			counts[36]++
 		case r.Refresh != nil:
-			counts[38]++
+			counts[37]++
 		case r.RefreshRange != nil:
-			counts[39]++
+			counts[38]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -129,7 +127,6 @@ var requestNames = []string{
 	"RequestLease",
 	"RevScan",
 	"ComputeChksum",
-	"DeprecatedVerifyChksum",
 	"ChkConsistency",
 	"Noop",
 	"InitPut",
@@ -203,22 +200,21 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf21 []RequestLeaseResponse
 	var buf22 []ReverseScanResponse
 	var buf23 []ComputeChecksumResponse
-	var buf24 []DeprecatedVerifyChecksumResponse
-	var buf25 []CheckConsistencyResponse
-	var buf26 []NoopResponse
-	var buf27 []InitPutResponse
-	var buf28 []RequestLeaseResponse
-	var buf29 []LeaseInfoResponse
-	var buf30 []WriteBatchResponse
-	var buf31 []ExportResponse
-	var buf32 []ImportResponse
-	var buf33 []QueryTxnResponse
-	var buf34 []QueryIntentResponse
-	var buf35 []AdminScatterResponse
-	var buf36 []AddSSTableResponse
-	var buf37 []RecomputeStatsResponse
-	var buf38 []RefreshResponse
-	var buf39 []RefreshRangeResponse
+	var buf24 []CheckConsistencyResponse
+	var buf25 []NoopResponse
+	var buf26 []InitPutResponse
+	var buf27 []RequestLeaseResponse
+	var buf28 []LeaseInfoResponse
+	var buf29 []WriteBatchResponse
+	var buf30 []ExportResponse
+	var buf31 []ImportResponse
+	var buf32 []QueryTxnResponse
+	var buf33 []QueryIntentResponse
+	var buf34 []AdminScatterResponse
+	var buf35 []AddSSTableResponse
+	var buf36 []RecomputeStatsResponse
+	var buf37 []RefreshResponse
+	var buf38 []RefreshRangeResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -366,102 +362,96 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].ComputeChecksum = &buf23[0]
 			buf23 = buf23[1:]
-		case r.DeprecatedVerifyChecksum != nil:
-			if buf24 == nil {
-				buf24 = make([]DeprecatedVerifyChecksumResponse, counts[24])
-			}
-			br.Responses[i].DeprecatedVerifyChecksum = &buf24[0]
-			buf24 = buf24[1:]
 		case r.CheckConsistency != nil:
-			if buf25 == nil {
-				buf25 = make([]CheckConsistencyResponse, counts[25])
+			if buf24 == nil {
+				buf24 = make([]CheckConsistencyResponse, counts[24])
 			}
-			br.Responses[i].CheckConsistency = &buf25[0]
-			buf25 = buf25[1:]
+			br.Responses[i].CheckConsistency = &buf24[0]
+			buf24 = buf24[1:]
 		case r.Noop != nil:
-			if buf26 == nil {
-				buf26 = make([]NoopResponse, counts[26])
+			if buf25 == nil {
+				buf25 = make([]NoopResponse, counts[25])
 			}
-			br.Responses[i].Noop = &buf26[0]
-			buf26 = buf26[1:]
+			br.Responses[i].Noop = &buf25[0]
+			buf25 = buf25[1:]
 		case r.InitPut != nil:
-			if buf27 == nil {
-				buf27 = make([]InitPutResponse, counts[27])
+			if buf26 == nil {
+				buf26 = make([]InitPutResponse, counts[26])
 			}
-			br.Responses[i].InitPut = &buf27[0]
-			buf27 = buf27[1:]
+			br.Responses[i].InitPut = &buf26[0]
+			buf26 = buf26[1:]
 		case r.TransferLease != nil:
-			if buf28 == nil {
-				buf28 = make([]RequestLeaseResponse, counts[28])
+			if buf27 == nil {
+				buf27 = make([]RequestLeaseResponse, counts[27])
 			}
-			br.Responses[i].RequestLease = &buf28[0]
-			buf28 = buf28[1:]
+			br.Responses[i].RequestLease = &buf27[0]
+			buf27 = buf27[1:]
 		case r.LeaseInfo != nil:
-			if buf29 == nil {
-				buf29 = make([]LeaseInfoResponse, counts[29])
+			if buf28 == nil {
+				buf28 = make([]LeaseInfoResponse, counts[28])
 			}
-			br.Responses[i].LeaseInfo = &buf29[0]
-			buf29 = buf29[1:]
+			br.Responses[i].LeaseInfo = &buf28[0]
+			buf28 = buf28[1:]
 		case r.WriteBatch != nil:
-			if buf30 == nil {
-				buf30 = make([]WriteBatchResponse, counts[30])
+			if buf29 == nil {
+				buf29 = make([]WriteBatchResponse, counts[29])
 			}
-			br.Responses[i].WriteBatch = &buf30[0]
-			buf30 = buf30[1:]
+			br.Responses[i].WriteBatch = &buf29[0]
+			buf29 = buf29[1:]
 		case r.Export != nil:
-			if buf31 == nil {
-				buf31 = make([]ExportResponse, counts[31])
+			if buf30 == nil {
+				buf30 = make([]ExportResponse, counts[30])
 			}
-			br.Responses[i].Export = &buf31[0]
-			buf31 = buf31[1:]
+			br.Responses[i].Export = &buf30[0]
+			buf30 = buf30[1:]
 		case r.Import != nil:
-			if buf32 == nil {
-				buf32 = make([]ImportResponse, counts[32])
+			if buf31 == nil {
+				buf31 = make([]ImportResponse, counts[31])
 			}
-			br.Responses[i].Import = &buf32[0]
-			buf32 = buf32[1:]
+			br.Responses[i].Import = &buf31[0]
+			buf31 = buf31[1:]
 		case r.QueryTxn != nil:
-			if buf33 == nil {
-				buf33 = make([]QueryTxnResponse, counts[33])
+			if buf32 == nil {
+				buf32 = make([]QueryTxnResponse, counts[32])
 			}
-			br.Responses[i].QueryTxn = &buf33[0]
-			buf33 = buf33[1:]
+			br.Responses[i].QueryTxn = &buf32[0]
+			buf32 = buf32[1:]
 		case r.QueryIntent != nil:
-			if buf34 == nil {
-				buf34 = make([]QueryIntentResponse, counts[34])
+			if buf33 == nil {
+				buf33 = make([]QueryIntentResponse, counts[33])
 			}
-			br.Responses[i].QueryIntent = &buf34[0]
-			buf34 = buf34[1:]
+			br.Responses[i].QueryIntent = &buf33[0]
+			buf33 = buf33[1:]
 		case r.AdminScatter != nil:
-			if buf35 == nil {
-				buf35 = make([]AdminScatterResponse, counts[35])
+			if buf34 == nil {
+				buf34 = make([]AdminScatterResponse, counts[34])
 			}
-			br.Responses[i].AdminScatter = &buf35[0]
-			buf35 = buf35[1:]
+			br.Responses[i].AdminScatter = &buf34[0]
+			buf34 = buf34[1:]
 		case r.AddSstable != nil:
-			if buf36 == nil {
-				buf36 = make([]AddSSTableResponse, counts[36])
+			if buf35 == nil {
+				buf35 = make([]AddSSTableResponse, counts[35])
 			}
-			br.Responses[i].AddSstable = &buf36[0]
-			buf36 = buf36[1:]
+			br.Responses[i].AddSstable = &buf35[0]
+			buf35 = buf35[1:]
 		case r.RecomputeStats != nil:
-			if buf37 == nil {
-				buf37 = make([]RecomputeStatsResponse, counts[37])
+			if buf36 == nil {
+				buf36 = make([]RecomputeStatsResponse, counts[36])
 			}
-			br.Responses[i].RecomputeStats = &buf37[0]
-			buf37 = buf37[1:]
+			br.Responses[i].RecomputeStats = &buf36[0]
+			buf36 = buf36[1:]
 		case r.Refresh != nil:
-			if buf38 == nil {
-				buf38 = make([]RefreshResponse, counts[38])
+			if buf37 == nil {
+				buf37 = make([]RefreshResponse, counts[37])
 			}
-			br.Responses[i].Refresh = &buf38[0]
-			buf38 = buf38[1:]
+			br.Responses[i].Refresh = &buf37[0]
+			buf37 = buf37[1:]
 		case r.RefreshRange != nil:
-			if buf39 == nil {
-				buf39 = make([]RefreshRangeResponse, counts[39])
+			if buf38 == nil {
+				buf38 = make([]RefreshRangeResponse, counts[38])
 			}
-			br.Responses[i].RefreshRange = &buf39[0]
-			buf39 = buf39[1:]
+			br.Responses[i].RefreshRange = &buf38[0]
+			buf38 = buf38[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

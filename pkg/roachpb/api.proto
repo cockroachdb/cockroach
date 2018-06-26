@@ -971,16 +971,6 @@ message ComputeChecksumResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-message DeprecatedVerifyChecksumRequest {
-  option (gogoproto.equal) = true;
-
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-message DeprecatedVerifyChecksumResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
 enum ExportStorageProvider {
   Unknown = 0;
   LocalFile = 1;
@@ -1231,11 +1221,6 @@ message RefreshRangeResponse {
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
-// WARNING: Do not remove fields from RequestUnion. Instead, remove
-// all non-header fields from the request message and prepend its
-// name with "Deprecated". See DeprecatedVerifyChecksumRequest for an
-// example.
-//
 // Be cautious about deprecating fields as doing so can lead to inconsistencies
 // between replicas.
 message RequestUnion {
@@ -1266,7 +1251,7 @@ message RequestUnion {
   RequestLeaseRequest request_lease = 20;
   ReverseScanRequest reverse_scan = 21;
   ComputeChecksumRequest compute_checksum = 22;
-  DeprecatedVerifyChecksumRequest deprecated_verify_checksum = 23;
+  reserved 23;
   CheckConsistencyRequest check_consistency = 24;
   NoopRequest noop = 25;
   InitPutRequest init_put = 26;
@@ -1287,11 +1272,6 @@ message RequestUnion {
 
 // A ResponseUnion contains exactly one of the responses.
 // The values added here must match those in RequestUnion.
-//
-// WARNING: Do not remove fields from ResponseUnion. Instead, remove
-// all non-header fields from the response message and prepend its
-// name with "Deprecated". See DeprecatedVerifyChecksumResponse for an
-// example.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
 
@@ -1320,7 +1300,7 @@ message ResponseUnion {
   RequestLeaseResponse request_lease = 20;
   ReverseScanResponse reverse_scan = 21;
   ComputeChecksumResponse compute_checksum = 22;
-  DeprecatedVerifyChecksumResponse deprecated_verify_checksum = 23;
+  reserved 23;
   CheckConsistencyResponse check_consistency = 24;
   NoopResponse noop = 25;
   InitPutResponse init_put = 26;

@@ -569,9 +569,6 @@ func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
-func (*DeprecatedVerifyChecksumRequest) Method() Method { return DeprecatedVerifyChecksum }
-
-// Method implements the Request interface.
 func (*WriteBatchRequest) Method() Method { return WriteBatch }
 
 // Method implements the Request interface.
@@ -778,12 +775,6 @@ func (lt *LeaseInfoRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (dvcr *DeprecatedVerifyChecksumRequest) ShallowCopy() Request {
-	shallowCopy := *dvcr
 	return &shallowCopy
 }
 
@@ -1081,15 +1072,14 @@ func (*TransferLeaseRequest) flags() int {
 	// lease holder.
 	return isWrite | isAlone | skipLeaseCheck
 }
-func (*RecomputeStatsRequest) flags() int           { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() int          { return isWrite | isRange }
-func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
-func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
-func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
-func (*ExportRequest) flags() int                   { return isRead | isRange | updatesReadTSCache }
-func (*ImportRequest) flags() int                   { return isAdmin | isAlone }
-func (*AdminScatterRequest) flags() int             { return isAdmin | isAlone | isRange }
-func (*AddSSTableRequest) flags() int               { return isWrite | isAlone | isRange }
+func (*RecomputeStatsRequest) flags() int   { return isWrite | isAlone }
+func (*ComputeChecksumRequest) flags() int  { return isWrite | isRange }
+func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
+func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
+func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
+func (*ImportRequest) flags() int           { return isAdmin | isAlone }
+func (*AdminScatterRequest) flags() int     { return isAdmin | isAlone | isRange }
+func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange }
 
 // RefreshRequest and RefreshRangeRequest both list
 // updates(Read)TSCache, though they actually update the read or write
