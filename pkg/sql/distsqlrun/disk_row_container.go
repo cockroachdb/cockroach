@@ -164,6 +164,18 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 // keeps the rows in sorted order.
 func (d *diskRowContainer) Sort(context.Context) {}
 
+func (d *diskRowContainer) UnsafeReset(ctx context.Context) error {
+	_ = d.bufferedRows.Close(ctx)
+	if err := d.diskMap.Clear(); err != nil {
+		return err
+	}
+	d.diskAcc.Clear(ctx)
+	d.bufferedRows = d.diskMap.NewBatchWriter()
+	d.lastReadKey = nil
+	d.rowID = 0
+	return nil
+}
+
 func (d *diskRowContainer) Close(ctx context.Context) {
 	// We can ignore the error here because the flushed data is immediately cleared
 	// in the following Close.

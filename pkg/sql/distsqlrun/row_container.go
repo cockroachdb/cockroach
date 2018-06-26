@@ -42,6 +42,10 @@ type sortableRowContainer interface {
 	// NewIterator or NewFinalIterator are not guaranteed to return any rows.
 	NewFinalIterator(context.Context) rowIterator
 
+	// UnsafeReset resets the container, allowing for reuse. It renders all
+	// previously allocated rows unsafe.
+	UnsafeReset(context.Context) error
+
 	// Close frees up resources held by the sortableRowContainer.
 	Close(context.Context)
 }
@@ -361,14 +365,29 @@ func (f *diskBackedRowContainer) NewFinalIterator(ctx context.Context) rowIterat
 	return f.src.NewFinalIterator(ctx)
 }
 
+// UnsafeReset resets the container for reuse. The diskBackedRowContainer will
+// reset to use memory if it is using disk.
+func (f *diskBackedRowContainer) UnsafeReset(ctx context.Context) error {
+	if f.drc != nil {
+		f.drc.Close(ctx)
+		f.src = f.mrc
+		f.drc = nil
+		return nil
+	}
+	return f.mrc.UnsafeReset(ctx)
+}
+
 func (f *diskBackedRowContainer) Close(ctx context.Context) {
-	f.src.Close(ctx)
+	if f.drc != nil {
+		f.drc.Close(ctx)
+	}
+	f.mrc.Close(ctx)
 }
 
 // Spilled returns whether or not the diskBackedRowContainer has spilled to
 // disk.
 func (f *diskBackedRowContainer) Spilled() bool {
-	return f.mrc == nil
+	return f.drc != nil
 }
 
 func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
@@ -392,8 +411,7 @@ func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
 			return err
 		}
 	}
-	f.mrc.Close(ctx)
-	f.mrc = nil
+	f.mrc.Clear(ctx)
 
 	f.src = &drc
 	f.drc = &drc
