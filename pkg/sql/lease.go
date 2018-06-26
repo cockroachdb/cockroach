@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -658,6 +659,7 @@ func (t *tableState) acquire(
 	// acquisition and us getting control again.
 	s := t.mu.active.findNewest()
 	for ; s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
+		start := timeutil.Now()
 		var resultChan <-chan singleflight.Result
 		resultChan, _ = t.mu.group.DoChan(acquireGroupKey, func() (interface{}, error) {
 			return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
@@ -667,6 +669,9 @@ func (t *tableState) acquire(
 			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
 		}
 		result := <-resultChan
+		if log.V(2) {
+			log.Infof(ctx, "acquired lease on %d, took %v", t.id, timeutil.Since(start))
+		}
 		t.mu.Lock()
 		if result.Err != nil {
 			return nil, result.Err
@@ -1525,6 +1530,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		gossipUpdateC := g.RegisterSystemConfigChannel()
+		ticker := time.NewTicker(base.DefaultTableDescriptorLeaseDuration / 2)
 		for {
 			select {
 			case <-gossipUpdateC:
@@ -1573,10 +1579,60 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 				if m.testingKnobs.TestingLeasesRefreshedEvent != nil {
 					m.testingKnobs.TestingLeasesRefreshedEvent(cfg)
 				}
-
+			case <-ticker.C:
+				m.PreLeaseTables(ctx, db)
 			case <-s.ShouldStop():
 				return
 			}
 		}
 	})
+}
+
+// preLeaseTableLimit is the upper-limit on the number of tables that will be
+// leased proactively, in the background, to keep fresh leases available even
+// before a query is issued that would trigger a lease acquisition. The default
+// value is ideally high enough that most clusters just have all tables leased
+// all the time, but prevents unintended blow-up for clusters that have very
+// large numbers of tables. If a table isn't pre-leased, any traffic to it will
+// still cause a lease to be maintained, so it is OK if this value is smaller
+// than the total number of tables -- it is mostly about making the initial,
+// out-of-box experience avoid the first-use delay.
+var preLeaseTableLimit = settings.RegisterIntSetting(
+	"sql.tables.proactive_lease_limit",
+	"maximum number of tables to proactively lease",
+	50,
+)
+
+// PreLeaseTables attempts to acquire leases on a configured number of tables
+// so that they already have active leases when the first user query that uses
+// them is processed, so that it will not need to block on lease acquisition.
+func (m *LeaseManager) PreLeaseTables(ctx context.Context, db *client.DB) {
+	limit := preLeaseTableLimit.Get(&m.execCfg.Settings.SV)
+	if limit <= 0 {
+		return
+	}
+
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		res, _, err := m.LeaseStore.execCfg.InternalExecutor.Query(
+			ctx, "list-tables", txn,
+			"SELECT id FROM system.namespace WHERE \"parentID\" > 0 LIMIT $1",
+			limit,
+		)
+		if err != nil {
+			return err
+		}
+		if log.V(1) {
+			log.Infof(ctx, "pre-leasing %d tables", len(res))
+		}
+		now := txn.OrigTimestamp()
+		for _, i := range res {
+			id := sqlbase.ID(tree.MustBeDInt(i[0]))
+			if _, _, err := m.Acquire(ctx, now, id); err != nil {
+				log.Warning(ctx, errors.Wrapf(err, "failed to pre-lease table %d", id))
+			}
+		}
+		return nil
+	}); err != nil {
+		log.Warning(ctx, errors.Wrap(err, "failed to pre-lease tables"))
+	}
 }
