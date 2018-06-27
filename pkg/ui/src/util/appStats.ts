@@ -19,7 +19,7 @@ export function variance(stat: NumericStat, count: number) {
 }
 
 export function stdDev(stat: NumericStat, count: number) {
-  return Math.sqrt(variance(stat, count));
+  return Math.sqrt(variance(stat, count)) || 0;
 }
 
 export function stdDevLong(stat: NumericStat, count: number | Long) {
