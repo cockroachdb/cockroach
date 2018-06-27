@@ -28,8 +28,6 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	switch n.Modes.Isolation {
 	case tree.SerializableIsolation:
 		p.sessionDataMutator.SetDefaultIsolationLevel(enginepb.SERIALIZABLE)
-	case tree.SnapshotIsolation:
-		p.sessionDataMutator.SetDefaultIsolationLevel(enginepb.SNAPSHOT)
 	case tree.UnspecifiedIsolation:
 	default:
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Modes.Isolation)

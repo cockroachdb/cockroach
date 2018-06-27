@@ -862,13 +862,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Set the isolation level to Snapshot. This is because the test wants to
-	// check that this "old" transaction will not be allowed to commit at a new
-	// timestamp because of the "deadline" set according to its lease. So, the
-	// test will make sure that the txn is pushed. If the transaction were
-	// Serializable, then the push would cause it to restart regardless of the
-	// deadline.
-	if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
+
+	if _, err := tx.Exec(`SAVEPOINT cockroach_restart`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -885,35 +880,75 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	rows, err := tx.Query(`SELECT * FROM t.kv`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		// The transaction is unable to see column m.
-		var k, v, m string
-		if err := rows.Scan(&k, &v, &m); !testutils.IsError(
-			err, "expected 2 destination arguments in Scan, not 3",
-		) {
-			t.Fatalf("err = %v", err)
-		}
-		err = rows.Scan(&k, &v)
+	func() {
+		rows, err := tx.Query(`SELECT * FROM t.kv`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if k != "a" || v != "b" {
-			t.Fatalf("didn't find expected row: %s %s", k, v)
+		defer rows.Close()
+		for rows.Next() {
+			// The transaction is unable to see column m.
+			var k, v, m string
+			if err := rows.Scan(&k, &v, &m); !testutils.IsError(
+				err, "expected 2 destination arguments in Scan, not 3",
+			) {
+				t.Fatalf("err = %v", err)
+			}
+			err = rows.Scan(&k, &v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if k != "a" || v != "b" {
+				t.Fatalf("didn't find expected row: %s %s", k, v)
+			}
 		}
-	}
+	}()
 
-	// This INSERT will cause the transaction to be pushed past its deadline,
-	// which will be detected when we attempt to Commit() below.
+	// This INSERT will cause the transaction to be pushed and restart,
+	// which will be detected when we attempt to RELEASE SAVEPOINT below.
 	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tx.Commit(); !testutils.IsError(err, "transaction deadline exceeded") {
+	if _, err := tx.Exec(`RELEASE SAVEPOINT cockroach_restart`); !testutils.IsError(err, "restart transaction") {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`ROLLBACK TO SAVEPOINT cockroach_restart`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The transaction has now been pushed past the timestamp of the ALTER.
+	// It still can't see column m because the backfill has not completed,
+	// but this time it will be allowed to commit.
+	func() {
+		rows, err := tx.Query(`SELECT * FROM t.kv`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var k, v, m string
+			if err := rows.Scan(&k, &v, &m); !testutils.IsError(
+				err, "expected 2 destination arguments in Scan, not 3",
+			) {
+				t.Fatalf("err = %v", err)
+			}
+			err = rows.Scan(&k, &v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if k != "a" || v != "b" {
+				t.Fatalf("didn't find expected row: %s %s", k, v)
+			}
+		}
+	}()
+
+	if _, err := tx.Exec(`RELEASE SAVEPOINT cockroach_restart`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 }
