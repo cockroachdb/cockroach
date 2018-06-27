@@ -110,8 +110,8 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.SortOp:
 		ep, err = b.buildSort(ev)
 
-	case opt.LookupJoinOp:
-		ep, err = b.buildLookupJoin(ev)
+	case opt.IndexJoinOp:
+		ep, err = b.buildIndexJoin(ev)
 
 	case opt.ExplainOp:
 		ep, err = b.buildExplain(ev)
@@ -603,12 +603,12 @@ func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
 	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
-func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
+func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 	var err error
-	// If lookup join child is a limit and/or sort operator then flip the order so
-	// that the sort/limit is on top of the lookup join.
+	// If the index join child is a limit and/or sort operator then flip the order
+	// so that the sort/limit is on top of the index join.
 	// TODO(radu): Remove this code once we have support for a more general
-	// lookup join operator.
+	// lookup join execution path.
 	var limit tree.TypedExpr
 	var ordering *props.OrderingChoice
 	child := ev.Child(0)
@@ -630,9 +630,9 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	}
 
 	md := ev.Metadata()
-	def := ev.Private().(*memo.LookupJoinDef)
+	def := ev.Private().(*memo.IndexJoinDef)
 
-	cols := ev.Child(0).Logical().Relational.OutputCols.Union(def.LookupCols)
+	cols := def.Cols
 	needed, output := b.getColumns(md, cols, def.Table)
 	res := execPlan{outputCols: output}
 

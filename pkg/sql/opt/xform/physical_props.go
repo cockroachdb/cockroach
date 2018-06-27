@@ -81,10 +81,10 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 		// depends only on columns present in the input.
 		return o.isOrderingBoundBy(required, mexpr.AsProject().Input())
 
-	case opt.LookupJoinOp:
+	case opt.IndexJoinOp:
 		// Index Join operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
-		return o.isOrderingBoundBy(required, mexpr.AsLookupJoin().Input())
+		return o.isOrderingBoundBy(required, mexpr.AsIndexJoin().Input())
 
 	case opt.ScanOp:
 		// Scan naturally orders according to the order of the scanned index.
@@ -148,7 +148,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 			o.optimizeProjectOrdering(mexpr.AsProject(), &childProps)
 		}
 
-	case opt.SelectOp, opt.LookupJoinOp:
+	case opt.SelectOp, opt.IndexJoinOp:
 		if nth == 0 {
 			// Pass through the ordering.
 			childProps.Ordering = parentProps.Ordering
