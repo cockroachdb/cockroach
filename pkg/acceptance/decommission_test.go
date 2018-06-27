@@ -134,9 +134,8 @@ func testDecommissionInner(
 		idMap[i] = details.NodeID
 	}
 
-	decommissionHeader := []string{"id", "is_live", "gossiped_replicas", "is_decommissioning", "is_draining"}
-	decommissionFooter := []string{"All target nodes report that they hold no more data. Please verify cluster health before removing the nodes."}
-	decommissionFooterLive := []string{"Decommissioning finished. Please verify cluster health before removing the nodes."}
+	decommissionHeader := []string{"id", "is_live", "replicas", "is_decommissioning", "is_draining"}
+	decommissionFooter := []string{"No more data reported on target nodes. Please verify cluster health before removing the nodes."}
 
 	statusHeader := []string{"id", "address", "build", "updated_at", "started_at", "is_live"}
 
@@ -156,7 +155,7 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
-			decommissionFooterLive,
+			decommissionFooter,
 		}
 		log.Infof(ctx, o)
 
@@ -374,9 +373,10 @@ func testDecommissionInner(
 		// decommissioned, as its replica count may drop to zero faster than
 		// liveness times out.
 		exp := [][]string{
+			{"--wait=live is deprecated and is treated as --wait=all"},
 			decommissionHeader,
-			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
-			decommissionFooterLive,
+			{strconv.Itoa(int(target)), `true|false`, "0", `true`, `true|false`},
+			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)

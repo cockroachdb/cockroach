@@ -262,6 +262,42 @@ func TestDB_ReverseScan(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_TxnIterate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.TODO(), b); err != nil {
+		t.Fatal(err)
+	}
+	var rows []client.KeyValue
+	p := 0
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		return txn.Iterate(context.TODO(), "a", "b", 1, func(rs []client.KeyValue) error {
+			p++
+			rows = append(rows, rs...)
+			return nil
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ab": []byte("2"),
+	}
+	const pages = 3 // num pages matching begin/end + 1
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+	if p != pages {
+		t.Errorf("expected %d pages, got %d", pages, p)
+	}
+}
+
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
