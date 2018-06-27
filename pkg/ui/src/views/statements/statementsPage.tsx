@@ -9,7 +9,7 @@ import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
-import Print from "src/views/reports/containers/range/print";
+import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
@@ -20,7 +20,9 @@ import { refreshQueries } from "src/redux/apiReducers";
 import { QueriesResponseMessage } from "src/util/api";
 import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
+import { TimestampToMoment } from "src/util/convert";
 import { Duration } from "src/util/format";
+import { Pick } from "src/util/pick";
 import { summarize, StatementSummary } from "src/util/sql/summarize";
 
 import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
@@ -223,14 +225,15 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
       </section>
     );
   }
-
 }
+
+type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
-const selectStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.queries,
-  (_state: AdminUIState, props: RouteProps) => props,
+export const selectStatements = createSelector(
+  (state: QueriesState) => state.cachedData.queries,
+  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
   (state: CachedDataReducerState<QueriesResponseMessage>, props: RouteProps) => {
     if (!state.data) {
       return null;
@@ -266,8 +269,8 @@ const selectStatements = createSelector(
 
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
-const selectApps = createSelector(
-  (state: AdminUIState) => state.cachedData.queries,
+export const selectApps = createSelector(
+  (state: QueriesState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
     if (!state.data) {
       return [];
@@ -290,8 +293,8 @@ const selectApps = createSelector(
 
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.
-const selectTotalFingerprints = createSelector(
-  (state: AdminUIState) => state.cachedData.queries,
+export const selectTotalFingerprints = createSelector(
+  (state: QueriesState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
     if (!state.data) {
       return 0;
@@ -303,20 +306,20 @@ const selectTotalFingerprints = createSelector(
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
-const selectLastReset = createSelector(
-  (state: AdminUIState) => state.cachedData.queries,
+export const selectLastReset = createSelector(
+  (state: QueriesState) => state.cachedData.queries,
   (state: CachedDataReducerState<QueriesResponseMessage>) => {
     if (!state.data) {
       return "unknown";
     }
 
-    return Print.Timestamp(state.data.last_reset);
+    return PrintTime(TimestampToMoment(state.data.last_reset));
   },
 );
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
-  (state: AdminUIState, props: RouteProps) => ({
+  (state: QueriesState, props: RouteProps) => ({
     statements: selectStatements(state, props),
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
