@@ -1662,6 +1662,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			log.Error(ctx, err)
 		}
 	}
+	// Warm up table leases.
+	s.leaseMgr.PreLeaseTables(ctx, s.db)
 
 	log.Event(ctx, "server ready")
 
