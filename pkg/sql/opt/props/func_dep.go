@@ -924,7 +924,15 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 // expected to operate on disjoint columns, so the FDs from each are simply
 // concatenated, rather than simplified via calls to addDependency.
 func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
-	f.deps = append(f.deps, fdset.deps...)
+	for i := range fdset.deps {
+		fd := &fdset.deps[i]
+		if fd.from.Empty() {
+			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+		} else {
+			f.deps = append(f.deps, *fd)
+		}
+	}
+
 	f.removed = f.removed.Union(fdset.removed)
 	if f.hasKey && fdset.hasKey {
 		f.setKey(f.key.Union(fdset.key))
