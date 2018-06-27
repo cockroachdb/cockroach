@@ -1871,12 +1871,10 @@ func TestImportMysql(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	simpleTestRows, simpleFile := getSimpleMysqlDumpTestdata(t)
-	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(simpleFile, baseDir))}
-	secondTableRowCount, secondFile := getSecondMysqlDumpTestdata(t)
-	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(secondFile, baseDir))}
-	multitableFile := getMultiTableMysqlDumpTestdata(t)
-	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(multitableFile, baseDir))}
+	files := getMysqldumpTestdata(t)
+	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.simple, baseDir))}
+	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.second, baseDir))}
+	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB, baseDir))}
 
 	const expectAll, expectSimple, expectSecond = 1, 2, 3
 
@@ -1923,7 +1921,7 @@ func TestImportMysql(t *testing.T) {
 
 			if c.expected == expectSecond || c.expected == expectAll {
 				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
-				if expected, actual := secondTableRowCount, len(res); expected != actual {
+				if expected, actual := secondTableRows, len(res); expected != actual {
 					t.Fatalf("expected %d, got %d", expected, actual)
 				}
 				for _, row := range res {
@@ -2097,7 +2095,7 @@ func TestImportPgDump(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	simpleTestRows, simpleFile := getSimplePostgresDumpTestdata(t)
+	simplePgTestRows, simpleFile := getSimplePostgresDumpTestdata(t)
 	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(simpleFile, baseDir))}
 	secondTableRowCount, secondFile := getSecondPostgresDumpTestdata(t)
 	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(secondFile, baseDir))}
@@ -2166,7 +2164,7 @@ func TestImportPgDump(t *testing.T) {
 					}
 
 					{
-						expected, actual := simpleTestRows[idx].b, row[2]
+						expected, actual := simplePgTestRows[idx].b, row[2]
 						if expected == nil {
 							expected = []byte("NULL")
 						}

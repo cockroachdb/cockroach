@@ -52,7 +52,7 @@ func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.T
 func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testRows, dest := getSimpleMysqlDumpTestdata(t)
+	files := getMysqldumpTestdata(t)
 
 	ctx := context.TODO()
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
@@ -68,7 +68,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 		res = append(res, append(tree.Datums{}, row...))
 	}
 
-	in, err := os.Open(dest)
+	in, err := os.Open(files.simple)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,10 +81,10 @@ func TestMysqldumpDataReader(t *testing.T) {
 	}
 	converter.inputFinished(ctx)
 
-	if expected, actual := len(testRows), len(res); expected != actual {
+	if expected, actual := len(simpleTestRows), len(res); expected != actual {
 		t.Fatalf("expected %d rows, got %d: %v", expected, actual, res)
 	}
-	for i, expected := range testRows {
+	for i, expected := range simpleTestRows {
 		row := res[i]
 		if actual := *row[0].(*tree.DInt); expected.i != int(actual) {
 			t.Fatalf("row %d: expected i = %d, got %d", i, expected.i, actual)
@@ -135,25 +135,23 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 
 	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 53)
 
+	files := getMysqldumpTestdata(t)
+
 	t.Run("simple", func(t *testing.T) {
 		expected := simpleTable
-		_, testdata := getSimpleMysqlDumpTestdata(t)
-		got := readMysqlCreateFrom(t, testdata, "")
+		got := readMysqlCreateFrom(t, files.simple, "")
 		compareTables(t, expected, got)
 	})
 
 	t.Run("everything", func(t *testing.T) {
 		expected := descForTable(t, readFile(t, `everything.cockroach-schema.sql`), expectedParent, 53)
-
-		testdata := getEverythingMysqlDumpTestdata(t)
-		got := readMysqlCreateFrom(t, testdata, "")
+		got := readMysqlCreateFrom(t, files.everything, "")
 		compareTables(t, expected, got)
 	})
 
 	t.Run("simple-in-multi", func(t *testing.T) {
 		expected := simpleTable
-		testdata := getMultiTableMysqlDumpTestdata(t)
-		got := readMysqlCreateFrom(t, testdata, "simple")
+		got := readMysqlCreateFrom(t, files.wholeDB, "simple")
 		compareTables(t, expected, got)
 	})
 }
