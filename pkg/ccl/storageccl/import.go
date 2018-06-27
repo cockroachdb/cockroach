@@ -204,8 +204,8 @@ func addSplitSSTable(
 			}
 
 			split = true
-			first = first[:0]
-			last = last[:0]
+			first = nil
+			last = nil
 		}
 
 		if len(first) == 0 {
