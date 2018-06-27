@@ -535,6 +535,32 @@ func (p *planner) prepareForDistSQLSupportCheck(
 	return true, nil
 }
 
+// optionallyUseOptimizer will attempt to make an optimizer plan based on the
+// optimizerMode setting. If it is run, it will return true. If it returns false
+// and no error is returned, it is safe to fallback to a non-optimizer plan.
+func (p *planner) optionallyUseOptimizer(
+	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
+) (bool, error) {
+	if sd.OptimizerMode == sessiondata.OptimizerOff {
+		return false, nil
+	}
+	// TODO(radu): for now, the experimental force lookup join flag does not work
+	// with the optimizer. Turn the optimizer off for the query so the flag can
+	// still function.
+	if sd.OptimizerMode != sessiondata.OptimizerAlways && sd.LookupJoinEnabled {
+		return false, nil
+	}
+
+	err := p.makeOptimizerPlan(ctx, stmt)
+	if err == nil {
+		return true, nil
+	}
+	if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
+		return false, nil
+	}
+	return false, err
+}
+
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
 type txnModesSetter interface {
