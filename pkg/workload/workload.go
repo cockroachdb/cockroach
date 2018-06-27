@@ -279,7 +279,7 @@ func Setup(
 
 	if hooks.PreLoad != nil {
 		if err := hooks.PreLoad(db); err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "Could not preload")
 		}
 	}
 
@@ -351,7 +351,7 @@ func Setup(
 
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "Could not postload")
 		}
 	}
 
