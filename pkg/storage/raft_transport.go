@@ -556,7 +556,6 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
 func (t *RaftTransport) startProcessNewQueue(
 	ctx context.Context, toNodeID roachpb.NodeID, stats *raftTransportStats,
 ) bool {
-	log.Warningf(ctx, "process new queue to n%d", toNodeID)
 	conn, err := t.dialer.DialNode(ctx, toNodeID)
 	if err != nil {
 		// DialNode already logs sufficiently, so just return after deleting the
@@ -576,18 +575,15 @@ func (t *RaftTransport) startProcessNewQueue(
 			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
 		}
 
-		stream, err := client.RaftMessageBatch(batchCtx)
-		defer func() {
-			// Don't need to check the error as an error implies that grpc will
-			// close the stream.
-			_ = stream.CloseSend()
-		}()
+		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
 		if err != nil {
 			log.Warningf(ctx, "creating batch client for node %d failed: %s", toNodeID, err)
+			return
 		}
 
 		if err := t.processQueue(toNodeID, ch, stats, stream); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
+			// Intentionally does not return.
 		}
 		// Account for the remainder of `ch` which was never sent.
 		// NB: we deleted the queue above, so within a short amount
