@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -47,6 +48,9 @@ func TrackRaftProtos() func() []reflect.Type {
 		// Replica destroyed errors are written to disk, but they are
 		// deliberately per-replica values.
 		funcName((stateloader.StateLoader).SetReplicaDestroyedError),
+		// Compactions are suggested below Raft, but they are local to a store and
+		// thus not subject to Raft consistency requirements.
+		funcName((*compactor.Compactor).Suggest),
 	}
 
 	belowRaftProtos := struct {
