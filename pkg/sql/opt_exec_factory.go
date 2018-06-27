@@ -482,7 +482,8 @@ func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery,
 ) (exec.Plan, error) {
 	res := &planTop{
-		plan: root.(planNode),
+		plan:        root.(planNode),
+		auditEvents: ef.planner.curPlan.auditEvents,
 	}
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
