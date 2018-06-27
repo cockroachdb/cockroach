@@ -145,6 +145,11 @@ func (f *Factory) Metadata() *opt.Metadata {
 	return f.mem.Metadata()
 }
 
+// CustomFuncs returns the set of custom functions used by normalization rules.
+func (f *Factory) CustomFuncs() *CustomFuncs {
+	return &f.funcs
+}
+
 // InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.

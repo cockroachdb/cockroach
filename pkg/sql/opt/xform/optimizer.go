@@ -144,8 +144,11 @@ func (o *Optimizer) Memo() *memo.Memo {
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) memo.ExprView {
-	required := o.mem.InternPhysicalProps(requiredProps)
-	state := o.optimizeGroup(root, required)
+	// Optimize the root node according to the properties required of it.
+	root, requiredProps = o.optimizeRootWithProps(root, requiredProps)
+
+	// Now optimize the entire expression tree.
+	state := o.optimizeGroup(root, o.mem.InternPhysicalProps(requiredProps))
 
 	// Validate the resulting operator.
 	ev := memo.MakeExprView(o.mem, state.best)
@@ -374,8 +377,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	physPropsFactory := &physicalPropsBuilder{mem: o.mem}
-	if physPropsFactory.canProvide(eid, required) {
+	if o.canProvidePhysicalProps(eid, required) {
 		e := o.mem.Expr(eid)
 		candidateBest := memo.MakeBestExpr(e.Operator(), eid, required)
 		for child := 0; child < e.ChildCount(); child++ {
@@ -383,7 +385,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 
 			// Given required parent properties, get the properties required from
 			// the nth child.
-			childRequired := physPropsFactory.buildChildProps(eid, required, child)
+			childRequired := o.buildChildPhysicalProps(eid, required, child)
 
 			// Recursively optimize the child group with respect to that set of
 			// properties.
@@ -431,8 +433,8 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 func (o *Optimizer) enforceProps(
 	eid memo.ExprID, required memo.PhysicalPropsID,
 ) (fullyOptimized bool) {
-	props := o.mem.LookupPhysicalProps(required)
-	innerProps := *props
+	requiredProps := o.mem.LookupPhysicalProps(required)
+	innerProps := *requiredProps
 
 	// Ignore the Presentation property, since any relational or enforcer
 	// operator can provide it.
@@ -443,9 +445,9 @@ func (o *Optimizer) enforceProps(
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
 	var enforcerOp opt.Operator
-	if !props.Ordering.Empty() {
+	if !requiredProps.Ordering.Any() {
 		enforcerOp = opt.SortOp
-		innerProps.Ordering = nil
+		innerProps.Ordering = props.OrderingChoice{}
 	} else {
 		// No remaining properties, so no more enforcers.
 		if innerProps.Defined() {
@@ -503,6 +505,54 @@ func (o *Optimizer) ensureOptState(group memo.GroupID, required memo.PhysicalPro
 		o.stateMap[key] = state
 	}
 	return state
+}
+
+// optimizeRootWithProps tries to simplify the root operator based on the
+// properties required of it. This may trigger the creation of a new root and
+// new properties.
+func (o *Optimizer) optimizeRootWithProps(
+	root memo.GroupID, rootProps *props.Physical,
+) (memo.GroupID, *props.Physical) {
+	relational := o.mem.GroupProperties(root).Relational
+	if relational == nil {
+		// Only need to optimize relational root operators.
+		return root, rootProps
+	}
+
+	// [SimplifyRootOrdering]
+	// SimplifyRootOrdering removes redundant columns from the root properties,
+	// based on the operator's functional dependencies.
+	if rootProps.Ordering.CanSimplify(&relational.FuncDeps) {
+		if o.matchedRule == nil || o.matchedRule(opt.SimplifyRootOrdering) {
+			var simplified props.Physical
+			simplified.Presentation = rootProps.Presentation
+			simplified.Ordering = rootProps.Ordering.Copy()
+			simplified.Ordering.Simplify(&relational.FuncDeps)
+			rootProps = &simplified
+
+			if o.appliedRule != nil {
+				o.appliedRule(opt.SimplifyRootOrdering, root, 0)
+			}
+		}
+	}
+
+	// [PruneRootCols]
+	// PruneRootCols discards columns that are not needed by the root's ordering
+	// or presentation properties.
+	neededCols := rootProps.ColSet()
+	if !neededCols.SubsetOf(relational.OutputCols) {
+		panic("columns required of root must be subset of output columns")
+	}
+	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
+		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
+			root = o.f.CustomFuncs().PruneCols(root, neededCols)
+			if o.appliedRule != nil {
+				o.appliedRule(opt.PruneRootCols, root, 0)
+			}
+		}
+	}
+
+	return root, rootProps
 }
 
 // optStateKey associates optState with a group that is being optimized with

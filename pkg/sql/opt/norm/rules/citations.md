@@ -25,3 +25,8 @@ further information, and in some cases proofs, can be found.
     Execution strategies for SQL subqueries.
     993-1004. 10.1145/1247480.1247598.
     https://www.researchgate.net/profile/Mostafa_Elhemali/publication/221213885_Execution_strategies_for_SQL_subqueries/links/584f631308aecb6bd8d02aa4/Execution-strategies-for-SQL-subqueries.pdf
+
+[6] Simmen, David & Shekita, Eugene & Malkemus, Timothy. (1996).
+    Fundamental Techniques for Order Optimization.
+    Sigmod Record. Volume 25 Issue 2, June 1996. Pages 57-67.
+    https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf

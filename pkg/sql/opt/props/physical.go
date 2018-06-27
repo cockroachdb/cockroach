@@ -47,19 +47,28 @@ type Physical struct {
 	// one or more columns, each of which can be sorted in either ascending or
 	// descending order. If Ordering is not defined, then no particular ordering
 	// is required or provided.
-	Ordering opt.Ordering
+	Ordering OrderingChoice
 }
 
 // Defined returns true if any physical property is defined. If none is
 // defined, then this is an instance of MinPhysProps.
 func (p *Physical) Defined() bool {
-	return p.Presentation.Defined() || !p.Ordering.Empty()
+	return !p.Presentation.Any() || !p.Ordering.Any()
+}
+
+// ColSet returns the set of columns used by any of the physical properties.
+func (p *Physical) ColSet() opt.ColSet {
+	colSet := p.Ordering.ColSet()
+	for _, col := range p.Presentation {
+		colSet.Add(int(col.ID))
+	}
+	return colSet
 }
 
 // FormatString writes physical properties to a human-readable format.
 func (p *Physical) FormatString(verbose bool) string {
-	hasProjection := p.Presentation.Defined()
-	hasOrdering := !p.Ordering.Empty()
+	hasProjection := !p.Presentation.Any()
+	hasOrdering := !p.Ordering.Any()
 
 	// Handle empty properties case.
 	if !hasProjection && !hasOrdering {
@@ -109,7 +118,7 @@ func (p *Physical) String() string {
 
 // Equals returns true if the two physical properties are identical.
 func (p *Physical) Equals(rhs *Physical) bool {
-	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(rhs.Ordering)
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering)
 }
 
 // Presentation specifies the naming, membership (including duplicates), and
@@ -120,9 +129,9 @@ func (p *Physical) Equals(rhs *Physical) bool {
 //   a.y:2 a.x:1 a.y:2 column1:3
 type Presentation []opt.LabeledColumn
 
-// Defined is true if a particular column presentation is required or provided.
-func (p Presentation) Defined() bool {
-	return p != nil
+// Any is true if any column presentation is allowed or can be provided.
+func (p Presentation) Any() bool {
+	return p == nil
 }
 
 // Equals returns true iff this presentation exactly matches the given

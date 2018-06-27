@@ -18,6 +18,29 @@ TABLE xy
  └── INDEX primary
       └── x int not null
 
+exec-ddl
+CREATE TABLE abcde (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    UNIQUE INDEX bc (b, c)
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null (storing)
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -170,13 +193,13 @@ SELECT k, i FROM a WHERE k=1 AND i<5
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null)
- ├── key: (1)
- ├── fd: (1)-->(2)
+ ├── key: ()
+ ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── constraint: /1: [/1 - /1]
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
@@ -221,15 +244,21 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 ----
 project
  ├── columns: i:2(int)
+ ├── key: ()
+ ├── fd: ()-->(2)
  └── select
       ├── columns: i:2(int) f:5(float!null)
+      ├── key: ()
+      ├── fd: ()-->(2,5)
       ├── project
       │    ├── columns: f:5(float) i:2(int)
+      │    ├── key: ()
+      │    ├── fd: ()-->(2,5)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) a.f:3(float)
       │    │    ├── constraint: /1: [/5 - /5]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,3)
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(1-3)
       │    └── projections [outer=(2,3)]
       │         └── a.f / 2.0 [type=float, outer=(3)]
       └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
@@ -245,7 +274,7 @@ project
  ├── select
  │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
  │    ├── key: (1)
- │    ├── fd: (1)-->(3,5)
+ │    ├── fd: ()-->(5), (1)-->(3,5)
  │    ├── group-by
  │    │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal)
  │    │    ├── grouping columns: k:1(int!null) f:3(float)
@@ -293,31 +322,51 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- └── scan a
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
+      ├── cardinality: [0 - 10]
       ├── key: (1)
-      └── fd: (1)-->(2,4)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── scan a
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
+      ├── cardinality: [0 - 10]
       ├── key: (1)
-      └── fd: (1)-->(2,4)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # Project uses subset of Limit columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down to Scan.
@@ -369,7 +418,7 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -377,16 +426,20 @@ project
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── scan a
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    └── ordering: +1,+2
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
@@ -396,11 +449,15 @@ project
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── scan a
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    └── ordering: +1,+2
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # Project uses subset of Offset columns, but no additional Project should be
@@ -465,7 +522,7 @@ project
 
 # We should scan k, i, s.
 opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -479,18 +536,22 @@ project
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
-      │    │    └── ordering: +1,+2
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
@@ -506,12 +567,16 @@ project
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
-      │    │    └── ordering: +1,+2
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
@@ -1252,3 +1317,23 @@ project
            ├── ordering: +3
            └── scan a
                 └── columns: i:2(int) f:3(float) s:4(string)
+
+# --------------------------------------------------
+# PruneExplainCols
+# --------------------------------------------------
+opt
+EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
+----
+explain
+ ├── columns: Tree:6(string) Field:7(string) Description:8(string)
+ └── project
+      ├── columns: a:1(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1) [removed: (2)]
+      ├── ordering: +3 opt(2)
+      └── scan abcde@bc
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+           ├── constraint: /2/3: (/1/NULL - /1]
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(2,3), (2,3)-->(1)
+           └── ordering: +3 opt(2)

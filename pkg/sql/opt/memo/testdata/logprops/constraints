@@ -80,6 +80,7 @@ SELECT * FROM a WHERE x = 1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=1.42857143, distinct(1)=1]
+ ├── fd: ()-->(1)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700]
@@ -111,6 +112,7 @@ SELECT * FROM a WHERE x = 1 AND y = 5
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=0.00204081633, distinct(1)=0.00204081633, distinct(2)=0.00204081633]
+ ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
@@ -549,6 +551,7 @@ SELECT * FROM abc WHERE b
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=1.42857143, distinct(2)=1]
+ ├── fd: ()-->(2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
@@ -561,6 +564,7 @@ SELECT * FROM abc WHERE NOT b
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=1.42857143, distinct(2)=1]
+ ├── fd: ()-->(2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]
@@ -574,6 +578,7 @@ SELECT * FROM abc WHERE a > 5 AND b
 select
  ├── columns: a:1(int!null) b:2(bool!null) c:3(string)
  ├── stats: [rows=0.476190476, distinct(2)=0.476190476]
+ ├── fd: ()-->(2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700]

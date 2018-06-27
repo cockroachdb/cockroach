@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -152,10 +153,10 @@ func TestInternGroupByDef(t *testing.T) {
 		}
 	}
 
-	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), opt.Ordering{1, -1}}
-	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), opt.Ordering{1, -1}}
-	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), opt.Ordering{1, 1}}
-	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), opt.Ordering{1, 1, 1}}
+	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), props.ParseOrderingChoice("+1,-2")}
+	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), props.ParseOrderingChoice("+1,-2")}
+	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), props.ParseOrderingChoice("+1,+2")}
+	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), props.ParseOrderingChoice("+1,+2,+3")}
 
 	test(groupByDef1, groupByDef2, true)
 	test(groupByDef1, groupByDef3, false)
@@ -245,6 +246,29 @@ func TestInternOrdering(t *testing.T) {
 	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 1, 0}, false)
 	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 0, 1}, false)
 	test(opt.Ordering{1, 2}, opt.Ordering{1, 2, 3}, false)
+}
+
+func TestInternOrderingChoice(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right string, expected bool) {
+		t.Helper()
+		leftOrd := props.ParseOrderingChoice(left)
+		rightOrd := props.ParseOrderingChoice(right)
+		if (ps.internOrderingChoice(&leftOrd) == ps.internOrderingChoice(&rightOrd)) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	test("", "", true)
+	test("+1", "+1", true)
+	test("+(1|2)", "+(2|1)", true)
+	test("+1 opt(2)", "+1 opt(2)", true)
+	test("+1", "-1", false)
+	test("+1,+2", "+1", false)
+	test("+(1|2)", "+1", false)
+	test("+1 opt(2)", "+1", false)
 }
 
 func TestInternDatum(t *testing.T) {
@@ -426,6 +450,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
 	ordering := opt.Ordering{1, -2, 3}
+	orderingChoice := props.ParseOrderingChoice("+1,-2 opt(3)")
 	op := opt.PlusOp
 	concatProps, concatOvls := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
@@ -439,8 +464,11 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		PassthroughCols: colSet,
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
-	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
-	mergeOnDef := &MergeOnDef{LeftEq: opt.Ordering{1, 2, 3}, RightEq: opt.Ordering{4, 5, 6}}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
+	mergeOnDef := &MergeOnDef{
+		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
+	}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -451,6 +479,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
+		ps.internOrderingChoice(&orderingChoice)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
@@ -472,12 +501,13 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
 	ordering := opt.Ordering{1, -2, 3}
+	orderingChoice := props.ParseOrderingChoice("+1,-2 opt(3)")
 	op := opt.PlusOp
-	props, overloads := builtins.GetBuiltinProperties("concat")
+	funcProps, overloads := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
 		Name:       "concat",
 		Type:       types.String,
-		Properties: props,
+		Properties: funcProps,
 		Overload:   &overloads[0],
 	}
 	projectionsOpDef := &ProjectionsOpDef{
@@ -485,7 +515,11 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		PassthroughCols: colSet,
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
-	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
+	mergeOnDef := &MergeOnDef{
+		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
+	}
 	indexJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
@@ -498,11 +532,13 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
+		ps.internOrderingChoice(&orderingChoice)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
+		ps.internMergeOnDef(mergeOnDef)
 		ps.internLookupJoinDef(indexJoinDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)

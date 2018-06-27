@@ -55,8 +55,9 @@ func (b *Builder) buildDistinct(
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// TODO(rytaft): This is not valid syntax in Postgres, but it works in
 	// CockroachDB, so we may need to support it eventually.
-	for _, col := range outScope.physicalProps.Ordering {
-		if !outScope.hasColumn(col.ID()) {
+	for _, col := range outScope.physicalProps.Ordering.Columns {
+		id, _ := col.Group.Next(0)
+		if !outScope.hasColumn(opt.ColumnID(id)) {
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",

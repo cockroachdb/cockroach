@@ -54,6 +54,8 @@ func mapPrivateType(typ string) string {
 		return "opt.Operator"
 	case "Ordering":
 		return "opt.Ordering"
+	case "OrderingChoice":
+		return "*props.OrderingChoice"
 	case "FuncOpDef":
 		return "*memo.FuncOpDef"
 	case "ProjectionsOpDef":

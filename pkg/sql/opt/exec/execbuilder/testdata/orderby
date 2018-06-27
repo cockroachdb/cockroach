@@ -80,7 +80,7 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 render          ·      ·
  └── sort       ·      ·
-      │         order  -a,+b
+      │         order  -a
       └── scan  ·      ·
 ·               table  t@primary
 ·               spans  ALL
@@ -90,7 +90,7 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 render          ·      ·
  └── sort       ·      ·
-      │         order  -a,-b
+      │         order  -a
       └── scan  ·      ·
 ·               table  t@primary
 ·               spans  ALL
@@ -98,8 +98,8 @@ render          ·      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
-sort       ·      ·          (a, b, c)  +b,+a,+c
- │         order  +b,+a,+c   ·          ·
+sort       ·      ·          (a, b, c)  +b,+a
+ │         order  +b,+a      ·          ·
  └── scan  ·      ·          (a, b, c)  ·
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
@@ -107,8 +107,8 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
-sort       ·      ·          (a, b, c)  +b,+a,+c
- │         order  +b,+a,+c   ·          ·
+sort       ·      ·          (a, b, c)  +b,+a
+ │         order  +b,+a      ·          ·
  └── scan  ·      ·          (a, b, c)  ·
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
@@ -116,8 +116,8 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
-sort       ·      ·          (a, b, c)  +b,+a,+c
- │         order  +b,+a,+c   ·          ·
+sort       ·      ·          (a, b, c)  +b,+a
+ │         order  +b,+a      ·          ·
  └── scan  ·      ·          (a, b, c)  ·
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
@@ -125,45 +125,34 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
-sort       ·      ·          (a, b, c)  +b,+a,+c
- │         order  +b,+a,+c   ·          ·
+sort       ·      ·          (a, b, c)  +b,+a
+ │         order  +b,+a      ·          ·
  └── scan  ·      ·          (a, b, c)  ·
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
 # Check that sort is skipped if the ORDER BY clause is constant.
-# TODO(radu): need to add this optimization
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-render               ·      ·
- └── sort            ·      ·
-      │              order  +column4
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
-sort            ·      ·
- │              order  +"?column?"
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@primary
+·          spans  ALL
 
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-render               ·      ·
- └── sort            ·      ·
-      │              order  +column4
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
+scan  ·      ·
+·     table  t@primary
+·     spans  ALL
 
 # Check that the sort key reuses the existing render.
 query TTTTT
@@ -271,12 +260,11 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-# TODO(radu): Need to trim sort key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-sort       ·       ·            (a, b, c, d)  +b,+a,+c,+d
- │         order   +b,+a,+c,+d  ·             ·
+sort       ·       ·            (a, b, c, d)  +b,+a,+c
+ │         order   +b,+a,+c     ·             ·
  └── scan  ·       ·            (a, b, c, d)  ·
 ·          table   abc@primary  ·             ·
 ·          spans   ALL          ·             ·
@@ -308,16 +296,13 @@ render     ·      ·
 ·          table  abc@bc
 ·          spans  ALL
 
-# TODO(radu): sort isn't necessary.
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  +b,+c,-a
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@bc
+·          spans  ALL
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
@@ -356,18 +341,15 @@ sort       ·      ·
 ·          table  abc@bc
 ·          spans  ALL
 
-# TODO(radu): sort is unnecessary here, because bc is unique
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-sort            ·      ·
- │              order  +c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  /2-/3
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@bc
+·          spans  /2-/3
 
-# TODO(radu): sort is unnecessary here, because bc is unique
+# TODO(radu): sort is unnecessary here, because bc is unique (need revscan)
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
@@ -379,18 +361,15 @@ sort            ·      ·
 ·               spans  /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-# TODO(radu): sort is not needed, because a is constant, and abc is ordered on bc
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render          ·         ·            (b, c)     ·
- │              render 0  b            ·          ·
- │              render 1  c            ·          ·
- └── sort       ·         ·            (a, b, c)  +b,+c
-      │         order     +b,+c        ·          ·
-      └── scan  ·         ·            (a, b, c)  ·
-·               table     abc@primary  ·          ·
-·               spans     /1-/2        ·          ·
+render     ·         ·            (b, c)     ·
+ │         render 0  b            ·          ·
+ │         render 1  c            ·          ·
+ └── scan  ·         ·            (a, b, c)  +b,+c
+·          table     abc@primary  ·          ·
+·          spans     /1-/2        ·          ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -583,6 +562,10 @@ CREATE TABLE blocks (
 
 # Test that ordering goes "through" a renderNode that has a duplicate render of
 # an order-by column (#13696).
+# Note that if we have a hard limit of 1, the scanNode won't necessarily have an
+# ordering; if we ever plan multiple tablereaders in this case, we must make
+# sure to set the merge ordering below to the natural order of the index we are
+# scanning.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
@@ -591,7 +574,7 @@ render     ·         ·               (block_id, writer_id, block_num, block_id
  │         render 1  writer_id       ·                                           ·
  │         render 2  block_num       ·                                           ·
  │         render 3  block_id        ·                                           ·
- └── scan  ·         ·               (block_id, writer_id, block_num)            +block_id,+writer_id,+block_num
+ └── scan  ·         ·               (block_id, writer_id, block_num)            ·
 ·          table     blocks@primary  ·                                           ·
 ·          spans     ALL             ·                                           ·
 ·          limit     1               ·                                           ·

@@ -63,6 +63,13 @@ func (c *CustomFuncs) NeededColsRowNumber(projections memo.GroupID, def memo.Pri
 	return c.OuterCols(projections).Union(rowNumberDef.Ordering.ColSet())
 }
 
+// NeededColsExplain returns the columns needed by Explain's required physical
+// properties.
+func (c *CustomFuncs) NeededColsExplain(def memo.PrivateID) opt.ColSet {
+	explainDef := c.f.mem.LookupPrivate(def).(*memo.ExplainOpDef)
+	return explainDef.Props.ColSet()
+}
+
 // CanPruneCols returns true if the target group has extra columns that are not
 // needed at this level of the tree, and can be eliminated by one of the
 // PruneCols rules. CanPruneCols uses the PruneCols property to determine the
