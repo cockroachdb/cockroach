@@ -699,6 +699,16 @@ DELETE FROM t.test3;
 								// will never be seen unless the txn record is actually aborted, so
 								// this isn't a concern. We are simply trying to mirror that behavior
 								// here.
+								//
+								// One might think that this is not necessary even if the error
+								// is injected because, upon seeing TransactionAbortedError, the
+								// client sends an async EndTransaction. However, with
+								// concurrent uses of the txn, it's possible for that cleanup to
+								// race with the BeginTransaction. If the cleanup wins the race,
+								// it gets a "transaction not found" error, and then the
+								// BeginTransaction succeeds and nobody cleans it up. Again, if
+								// the txn had actually been aborted, the transaction record
+								// would already be in place.
 								if _, ok := err.(*roachpb.TransactionAbortedError); ok {
 									// We use a WaitGroup to make sure this async abort cleans up
 									// before the subtest.
