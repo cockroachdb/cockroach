@@ -18,21 +18,19 @@
     (LimitScanDef $def $limit)
 )
 
-# PushLimitIntoLookupJoin pushes a limit through a lookup join, if we know that
-# the lookup join produces exactly one row per input row (most importantly,
-# index join).
+# PushLimitIntoIndexJoin pushes a limit through an index join.
 # TODO(radu): we can similarly push Offset too.
-[PushLimitIntoLookupJoin, Explore]
+[PushLimitIntoIndexJoin, Explore]
 (Limit
-    (LookupJoin
+    (IndexJoin
       $input:*
-      $def:* & (OneResultPerInput $def)
+      $def:*
     )
     $limit:*
     $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
-(LookupJoin
+(IndexJoin
   (Limit $input $limit $ordering)
   $def
 )

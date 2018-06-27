@@ -469,6 +469,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
 		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
 	}
+	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -485,6 +487,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
 		ps.internMergeOnDef(mergeOnDef)
+		ps.internIndexJoinDef(indexJoinDef)
+		ps.internLookupJoinDef(lookupJoinDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
@@ -520,7 +524,8 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
 		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
 	}
-	indexJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -539,7 +544,8 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
 		ps.internMergeOnDef(mergeOnDef)
-		ps.internLookupJoinDef(indexJoinDef)
+		ps.internIndexJoinDef(indexJoinDef)
+		ps.internLookupJoinDef(lookupJoinDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)

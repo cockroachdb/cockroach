@@ -139,8 +139,8 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *props.Colum
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return sb.colStatJoin(colSet)
 
-	case opt.LookupJoinOp:
-		return sb.colStatLookupJoin(colSet)
+	case opt.IndexJoinOp:
+		return sb.colStatIndexJoin(colSet)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
@@ -701,11 +701,11 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet) *props.ColumnStatist
 	}
 }
 
-func (sb *statisticsBuilder) buildLookupJoin(inputStats *props.Statistics) {
+func (sb *statisticsBuilder) buildIndexJoin(inputStats *props.Statistics) {
 	sb.s.RowCount = inputStats.RowCount
 }
 
-func (sb *statisticsBuilder) colStatLookupJoin(colSet opt.ColSet) *props.ColumnStatistic {
+func (sb *statisticsBuilder) colStatIndexJoin(colSet opt.ColSet) *props.ColumnStatistic {
 	inputCols := sb.ev.Child(0).Logical().Relational.OutputCols
 	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
 
@@ -723,7 +723,7 @@ func (sb *statisticsBuilder) colStatLookupJoin(colSet opt.ColSet) *props.ColumnS
 	// Other requested columns may be from the joined table.
 	reqJoinedCols := colSet.Difference(inputCols)
 	if !reqJoinedCols.Empty() {
-		def := sb.ev.Private().(*LookupJoinDef)
+		def := sb.ev.Private().(*IndexJoinDef)
 		joinedTableStatsBuilder := statisticsBuilder{
 			s:      sb.makeTableStatistics(def.Table),
 			props:  sb.props,
