@@ -351,3 +351,11 @@ func runProcessorTest(
 			"invalid results: %s, expected %s'", result, expected.String(outputTypes))
 	}
 }
+
+type rowsAccessor interface {
+	getRows() *diskBackedRowContainer
+}
+
+func (s *sorterBase) getRows() *diskBackedRowContainer {
+	return s.rows.(*diskBackedRowContainer)
+}
