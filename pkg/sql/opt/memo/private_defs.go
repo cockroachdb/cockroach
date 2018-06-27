@@ -170,9 +170,8 @@ type LookupJoinDef struct {
 	// index columns (or a prefix of them).
 	KeyCols opt.ColList
 
-	// LookupCols is the set of columns retrieved from the index. This set does
-	// not include the key columns. The LookupJoin operator produces the columns
-	// in its input plus these columns.
+	// LookupCols is the set of columns retrieved from the index. The LookupJoin
+	// operator produces the columns in its input plus these columns.
 	LookupCols opt.ColSet
 }
 
