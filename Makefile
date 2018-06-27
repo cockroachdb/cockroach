@@ -330,15 +330,16 @@ $(GITHOOKSDIR)/%: githooks/%
 endif
 
 .SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock
-	$(NODE_RUN) -C pkg/ui yarn install
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock
+	$(NODE_RUN) -C pkg/ui yarn install --offline
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
-	# Additionally pin a known-good version of jsdoc.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
+	# We pin the ProtobufJS dependencies by linking in a lock file, which notably
+	# avoids depending on a buggy version of jsdoc.
 	cp pkg/ui/node_modules/protobufjs/cli/{package.standalone.json,package.json}
-	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn add jsdoc@3.4.3
-	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn install
+	ln -sf ../../../yarn.protobufjs-cli.lock pkg/ui/node_modules/protobufjs/cli/yarn.lock
+	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn install --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
