@@ -17,7 +17,6 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -105,7 +104,7 @@ func (e *explorer) init(o *Optimizer) {
 	e.f = o.f
 	e.evalCtx = o.evalCtx
 	e.funcs.e = e
-	e.funcs.CustomFuncs = xfunc.MakeCustomFuncs(e.mem, e.evalCtx)
+	e.funcs.CustomFuncs = norm.MakeCustomFuncs(e.f)
 }
 
 // exploreGroup generates alternate expressions that are logically equivalent
