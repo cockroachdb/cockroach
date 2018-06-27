@@ -1321,21 +1321,17 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
-	// Migrate legacy tombstones away if we can. We want to do this when the node boots with a
-	// cluster version as below or higher, i.e. not when the upgrade happens for a running node.
-	// In fact, we do it on *every* such boot (i.e. not only once); this is because we want the
-	// migration to run when the v2.1 binary is started (the next release at the time of writing
-	// is v2.0) so that that version doesn't have to know about legacy tombstones (outside of
-	// this migration).
+	// Migrate legacy tombstones away. This is safe to do unconditionally: this is
+	// a post-v2.0 binary, so we're guaranteed that every node in the cluster is
+	// running a version that understands the non-legacy tombstones (v2.0 or
+	// later).
 	//
-	// NB: we could defer this migration until we actually release v2.1, but that would open the
-	// code up to rot and requires more tracking of this migration than it seems worth it.
-	// However, should this be found to impact startup times too much, it can be removed and
-	// later reintroduced (in a way that runs it only once, in v2.1).
-	//
-	// Note that `Settings.Version` is the persisted cluster version and has not been updated
-	// via Gossip (see `(*Node).start`).
-	if s.cfg.Settings.Version.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
+	// We want to run this migration the first time the node boots with this
+	// binary version so that we can assume local data never contains legacy range
+	// tombstones. For simplicity, we do it on *every* boot. Should this be found
+	// to impact startup times too much, we can make it only run the first time
+	// this binary version is booted.
+	{
 		tBegin := timeutil.Now()
 		if err := migrateLegacyTombstones(ctx, s.engine); err != nil {
 			return errors.Wrapf(err, "migrating legacy tombstones for %v", s.engine)
@@ -3907,25 +3903,15 @@ func (s *Store) tryGetOrCreateReplica(
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this is
 	// a stale message.
-	tombstoneKeys := []roachpb.Key{
-		keys.RaftTombstoneKey(rangeID),
-		keys.RaftTombstoneIncorrectLegacyKey(rangeID),
-	}
-
-	var minReplicaID roachpb.ReplicaID
-	for _, tombstoneKey := range tombstoneKeys {
-		var tombstone roachpb.RaftTombstone
-		if ok, err := engine.MVCCGetProto(
-			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
-		); err != nil {
-			return nil, false, err
-		} else if ok {
-			if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-				return nil, false, &roachpb.RaftGroupDeletedError{}
-			}
-			if minReplicaID < tombstone.NextReplicaID {
-				minReplicaID = tombstone.NextReplicaID
-			}
+	tombstoneKey := keys.RaftTombstoneKey(rangeID)
+	var tombstone roachpb.RaftTombstone
+	if ok, err := engine.MVCCGetProto(
+		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
+	); err != nil {
+		return nil, false, err
+	} else if ok {
+		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
+			return nil, false, &roachpb.RaftGroupDeletedError{}
 		}
 	}
 
@@ -3942,7 +3928,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.minReplicaID = minReplicaID
+	repl.mu.minReplicaID = tombstone.NextReplicaID
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
