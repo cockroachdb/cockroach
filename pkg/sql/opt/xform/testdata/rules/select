@@ -301,9 +301,8 @@ select
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-lookup-join b
+index-join b
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
- ├── key columns: [1]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
  └── scan b@v
@@ -316,11 +315,11 @@ memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
 memo (optimized)
- ├── G1: (select G2 G7) (lookup-join G3 b,keyCols=[1],lookupCols=(2)) (lookup-join G4 b,keyCols=[1],lookupCols=(2))
+ ├── G1: (select G2 G7) (index-join G3 b,cols=(1-3)) (index-join G4 b,cols=(1-3))
  │    └── "[presentation: k:1,u:2,v:3]"
- │         ├── best: (lookup-join G3 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 50.90
- ├── G2: (scan b) (lookup-join G5 b,keyCols=[1],lookupCols=(3)) (lookup-join G6 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G3 b,cols=(1-3))
+ │         └── cost: 51.10
+ ├── G2: (scan b) (index-join G5 b,cols=(1-3)) (index-join G6 b,cols=(1-3))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1060.00
@@ -365,9 +364,8 @@ select
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-lookup-join b
+index-join b
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
- ├── key columns: [1]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
  └── select
@@ -386,11 +384,11 @@ memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
 memo (optimized)
- ├── G1: (select G2 G10) (select G3 G6) (lookup-join G4 b,keyCols=[1],lookupCols=(2)) (select G5 G6) (select G7 G17) (lookup-join G8 b,keyCols=[1],lookupCols=(2))
+ ├── G1: (select G2 G10) (select G3 G6) (index-join G4 b,cols=(1-3)) (select G5 G6) (select G7 G17) (index-join G8 b,cols=(1-3))
  │    └── "[presentation: k:1,u:2,v:3]"
- │         ├── best: (lookup-join G4 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 24.00
- ├── G2: (scan b) (lookup-join G16 b,keyCols=[1],lookupCols=(3)) (lookup-join G9 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G4 b,cols=(1-3))
+ │         └── cost: 24.07
+ ├── G2: (scan b) (index-join G16 b,cols=(1-3)) (index-join G9 b,cols=(1-3))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1060.00
@@ -402,15 +400,15 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G11 G17)
  │         └── cost: 10.50
- ├── G5: (lookup-join G12 b,keyCols=[1],lookupCols=(3))
+ ├── G5: (index-join G12 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G12 b,keyCols=[1],lookupCols=(3))
- │         └── cost: 2400.00
+ │         ├── best: (index-join G12 b,cols=(1-3))
+ │         └── cost: 2406.67
  ├── G6: (filters G14 G15)
- ├── G7: (lookup-join G13 b,keyCols=[1],lookupCols=(2))
+ ├── G7: (index-join G13 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G13 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 50.90
+ │         ├── best: (index-join G13 b,cols=(1-3))
+ │         └── cost: 51.10
  ├── G8: (select G13 G17)
  │    └── ""
  │         ├── best: (select G13 G17)
@@ -459,9 +457,8 @@ select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
- ├── lookup-join b
+ ├── index-join b
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
- │    ├── key columns: [1]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)-->(1), (3)~~>(1,2)
  │    └── scan b@v
@@ -479,24 +476,24 @@ memo (optimized)
  ├── G1: (select G2 G3) (select G4 G13) (select G5 G11) (select G6 G11)
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (select G5 G11)
- │         └── cost: 51.00
- ├── G2: (scan b) (lookup-join G10 b,keyCols=[1],lookupCols=(3)) (lookup-join G12 b,keyCols=[1],lookupCols=(2))
+ │         └── cost: 51.20
+ ├── G2: (scan b) (index-join G10 b,cols=(1-3)) (index-join G12 b,cols=(1-3))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1060.00
  ├── G3: (filters G15 G16 G14)
- ├── G4: (lookup-join G7 b,keyCols=[1],lookupCols=(3))
+ ├── G4: (index-join G7 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G7 b,keyCols=[1],lookupCols=(3))
- │         └── cost: 2400.00
- ├── G5: (lookup-join G8 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G7 b,cols=(1-3))
+ │         └── cost: 2406.67
+ ├── G5: (index-join G8 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G8 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 50.90
- ├── G6: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G8 b,cols=(1-3))
+ │         └── cost: 51.10
+ ├── G6: (index-join G9 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G9 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 50.90
+ │         ├── best: (index-join G9 b,cols=(1-3))
+ │         └── cost: 51.10
  ├── G7: (select G10 G11)
  │    └── ""
  │         ├── best: (select G10 G11)
@@ -536,9 +533,8 @@ select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
- ├── lookup-join b
+ ├── index-join b
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
- │    ├── key columns: [1]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)-->(1), (3)~~>(1,2)
  │    └── select
@@ -562,8 +558,8 @@ memo (optimized)
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G11) (select G9 G16) (select G10 G11)
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (select G8 G11)
- │         └── cost: 24.03
- ├── G2: (scan b) (lookup-join G15 b,keyCols=[1],lookupCols=(3)) (lookup-join G17 b,keyCols=[1],lookupCols=(2))
+ │         └── cost: 24.10
+ ├── G2: (scan b) (index-join G15 b,cols=(1-3)) (index-join G17 b,cols=(1-3))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1060.00
@@ -573,23 +569,23 @@ memo (optimized)
  │         ├── best: (scan b,constrained)
  │         └── cost: 353.33
  ├── G5: (filters G23 G24 G22)
- ├── G6: (lookup-join G12 b,keyCols=[1],lookupCols=(3))
+ ├── G6: (index-join G12 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G12 b,keyCols=[1],lookupCols=(3))
- │         └── cost: 1500.00
+ │         ├── best: (index-join G12 b,cols=(1-3))
+ │         └── cost: 1502.22
  ├── G7: (filters G23 G24)
- ├── G8: (lookup-join G13 b,keyCols=[1],lookupCols=(2))
+ ├── G8: (index-join G13 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G13 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 24.00
- ├── G9: (lookup-join G20 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G13 b,cols=(1-3))
+ │         └── cost: 24.07
+ ├── G9: (index-join G20 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G20 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 50.90
- ├── G10: (lookup-join G14 b,keyCols=[1],lookupCols=(2))
+ │         ├── best: (index-join G20 b,cols=(1-3))
+ │         └── cost: 51.10
+ ├── G10: (index-join G14 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G14 b,keyCols=[1],lookupCols=(2))
- │         └── cost: 24.00
+ │         ├── best: (index-join G14 b,cols=(1-3))
+ │         └── cost: 24.07
  ├── G11: (filters G22)
  ├── G12: (select G15 G16)
  │    └── ""
@@ -645,9 +641,8 @@ select
  ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)~~>(1,2)
- ├── lookup-join b
+ ├── index-join b
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
- │    ├── key columns: [1]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)~~>(1,2)
  │    └── scan b@u
@@ -666,15 +661,15 @@ memo (optimized)
  ├── G1: (select G2 G4) (select G3 G4)
  │    └── "[presentation: k:1,u:2,v:3]"
  │         ├── best: (select G3 G4)
- │         └── cost: 58.29
- ├── G2: (scan b) (lookup-join G5 b,keyCols=[1],lookupCols=(3)) (lookup-join G6 b,keyCols=[1],lookupCols=(2))
+ │         └── cost: 58.51
+ ├── G2: (scan b) (index-join G5 b,cols=(1-3)) (index-join G6 b,cols=(1-3))
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1060.00
- ├── G3: (lookup-join G7 b,keyCols=[1],lookupCols=(3))
+ ├── G3: (index-join G7 b,cols=(1-3))
  │    └── ""
- │         ├── best: (lookup-join G7 b,keyCols=[1],lookupCols=(3))
- │         └── cost: 58.17
+ │         ├── best: (index-join G7 b,cols=(1-3))
+ │         └── cost: 58.40
  ├── G4: (filters G8 G9)
  ├── G5: (scan b@u,cols=(1,2))
  │    └── ""
