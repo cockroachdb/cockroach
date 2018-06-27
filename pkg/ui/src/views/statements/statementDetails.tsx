@@ -10,11 +10,12 @@ import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { refreshQueries } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
+import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { statementAttr, appAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
-import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
+import { Pick } from "src/util/pick";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
@@ -259,9 +260,11 @@ function renderBools(bools: boolean[]) {
   return "(both included)";
 }
 
-const selectStatement = createSelector(
-  (state: AdminUIState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
-  (_state: AdminUIState, props: RouterState) => props,
+type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+
+export const selectStatement = createSelector(
+  (state: QueriesState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
+  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
   (queries, props) => {
     if (!queries) {
       return null;

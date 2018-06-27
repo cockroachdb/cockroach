@@ -5,8 +5,9 @@ import moment from "moment";
 import "src/protobufInit";
 import * as protos from "src/js/protos";
 import { CollectedStatementStatistics } from "src/util/appStats";
-import { appAttr } from "src/util/constants";
+import { appAttr, statementAttr } from "src/util/constants";
 import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset } from "./statementsPage";
+import { selectStatement } from "./statementDetails";
 
 describe("selectStatements", () => {
   it("returns null if the queries data is invalid", () => {
@@ -181,6 +182,108 @@ describe("selectLastReset", () => {
   });
 });
 
+describe("selectStatement", () => {
+  it("returns null if the queries data is invalid", () => {
+    const state = makeInvalidState();
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatement(state, props);
+
+    assert.isNull(result);
+  });
+
+  it("returns the statement currently loaded", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, "foobar");
+    const stmtC = makeFingerprint(3, "another");
+    const state = makeStateWithQueries([stmtA, stmtB, stmtC]);
+    const props = makeRoutePropsWithStatement(stmtA.key.query);
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.query);
+    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    assert.deepEqual(result.app, [stmtA.key.app]);
+    assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.failed, [stmtA.key.failed]);
+  });
+
+  it("coalesces statements from different apps", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(1, "foobar");
+    const stmtC = makeFingerprint(1, "another");
+    const sumCount = stmtA.stats.count.add(stmtB.stats.count.add(stmtC.stats.count)).toNumber();
+    const state = makeStateWithQueries([stmtA, stmtB, stmtC]);
+    const props = makeRoutePropsWithStatement(stmtA.key.query);
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.query);
+    assert.equal(result.stats.count.toNumber(), sumCount);
+    assert.deepEqual(result.app, [stmtA.key.app, stmtB.key.app, stmtC.key.app]);
+    assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.failed, [stmtA.key.failed]);
+  });
+
+  it("coalesces statements with differing distSQL and failed values", () => {
+    const stmtA = makeFingerprint(1, "", false, false);
+    const stmtB = makeFingerprint(1, "", false, true);
+    const stmtC = makeFingerprint(1, "", true, false);
+    const stmtD = makeFingerprint(1, "", true, true);
+    const sumCount = stmtA.stats.count
+      .add(stmtB.stats.count)
+      .add(stmtC.stats.count)
+      .add(stmtD.stats.count)
+      .toNumber();
+    const state = makeStateWithQueries([stmtA, stmtB, stmtC, stmtD]);
+    const props = makeRoutePropsWithStatement(stmtA.key.query);
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.query);
+    assert.equal(result.stats.count.toNumber(), sumCount);
+    assert.deepEqual(result.app, [stmtA.key.app]);
+    assert.deepEqual(result.distSQL, [false, true]);
+    assert.deepEqual(result.failed, [false, true]);
+  });
+
+  it("filters out statements when app param is set", () => {
+    const stmtA = makeFingerprint(1, "foo");
+    const state = makeStateWithQueries([
+      stmtA,
+      makeFingerprint(2, "bar"),
+      makeFingerprint(3, "baz"),
+    ]);
+    const props = makeRoutePropsWithStatementAndApp(stmtA.key.query, "foo");
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.query);
+    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    assert.deepEqual(result.app, [stmtA.key.app]);
+    assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.failed, [stmtA.key.failed]);
+  });
+
+  it("filters out statements with app set when app param is \"(unset)\"", () => {
+    const stmtA = makeFingerprint(1, "");
+    const state = makeStateWithQueries([
+      stmtA,
+      makeFingerprint(2, "bar"),
+      makeFingerprint(3, "baz"),
+    ]);
+    const props = makeRoutePropsWithStatementAndApp(stmtA.key.query, "(unset)");
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.query);
+    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    assert.deepEqual(result.app, [stmtA.key.app]);
+    assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.failed, [stmtA.key.failed]);
+  });
+});
+
 function makeFingerprint(id: number, app: string = "", distSQL: boolean = false, failed: boolean = false) {
   return {
     key: {
@@ -193,9 +296,10 @@ function makeFingerprint(id: number, app: string = "", distSQL: boolean = false,
   };
 }
 
+let makeStatsIndex = 1;
 function makeStats() {
   return {
-    count: Long.fromNumber(1),
+    count: Long.fromNumber(makeStatsIndex++),
     first_attempt_count: Long.fromNumber(1),
     max_retries: Long.fromNumber(0),
     num_rows: makeStat(),
@@ -264,5 +368,18 @@ function makeEmptyRouteProps() {
 function makeRoutePropsWithApp(app: string) {
   return makeRoutePropsWithParams({
     [appAttr]: app,
+  });
+}
+
+function makeRoutePropsWithStatement(stmt: string) {
+  return makeRoutePropsWithParams({
+    [statementAttr]: stmt,
+  });
+}
+
+function makeRoutePropsWithStatementAndApp(stmt: string, app: string) {
+  return makeRoutePropsWithParams({
+    [appAttr]: app,
+    [statementAttr]: stmt,
   });
 }
