@@ -101,15 +101,12 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 
 			input := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDef))
 
-			// We scan whatever needed columns are left from the primary index.
-			def := memo.LookupJoinDef{
-				Table:      scanOpDef.Table,
-				Index:      opt.PrimaryIndex,
-				KeyCols:    pkCols,
-				LookupCols: scanOpDef.Cols.Difference(indexScanOpDef.Cols),
+			def := memo.IndexJoinDef{
+				Table: scanOpDef.Table,
+				Cols:  scanOpDef.Cols,
 			}
 
-			join := memo.MakeLookupJoinExpr(input, c.e.mem.InternLookupJoinDef(&def))
+			join := memo.MakeIndexJoinExpr(input, c.e.mem.InternIndexJoinDef(&def))
 
 			c.e.exprs = append(c.e.exprs, memo.Expr(join))
 		}
@@ -213,8 +210,8 @@ func (c *CustomFuncs) ConstrainScan(filterGroup memo.GroupID, scanDef memo.Priva
 	return c.e.exprs
 }
 
-// ConstrainLookupJoinIndexScan tries to push filters into Lookup Join index
-// scan operations as constraints. It is applied on a Select -> LookupJoin ->
+// ConstrainIndexJoinScan tries to push filters into Index Join index
+// scan operations as constraints. It is applied on a Select -> IndexJoin ->
 // Scan pattern. The scan operation is assumed to have no constraints.
 //
 // There are three cases, similar to ConstrainScan:
@@ -231,8 +228,8 @@ func (c *CustomFuncs) ConstrainScan(filterGroup memo.GroupID, scanDef memo.Priva
 //  - if the filter cannot be converted to constraints, does and returns
 //    nothing.
 //
-func (c *CustomFuncs) ConstrainLookupJoinIndexScan(
-	filterGroup memo.GroupID, scanDef, lookupJoinDef memo.PrivateID,
+func (c *CustomFuncs) ConstrainIndexJoinScan(
+	filterGroup memo.GroupID, scanDef, indexJoinDef memo.PrivateID,
 ) []memo.Expr {
 	c.e.exprs = c.e.exprs[:0]
 
@@ -245,13 +242,13 @@ func (c *CustomFuncs) ConstrainLookupJoinIndexScan(
 	if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
 		// No remaining filter. Add the constrained lookup join index scan node to
 		// select's group.
-		lookupJoin := memo.MakeLookupJoinExpr(constrainedScan, lookupJoinDef)
+		lookupJoin := memo.MakeIndexJoinExpr(constrainedScan, indexJoinDef)
 		c.e.exprs = append(c.e.exprs, memo.Expr(lookupJoin))
 	} else {
 		// We have a remaining filter. We create the constrained lookup join index
 		// scan in a new group and create a select node in the same group with the
 		// original select.
-		lookupJoin := c.e.f.ConstructLookupJoin(constrainedScan, lookupJoinDef)
+		lookupJoin := c.e.f.ConstructIndexJoin(constrainedScan, indexJoinDef)
 		newSelect := memo.MakeSelectExpr(lookupJoin, remainingFilter)
 		c.e.exprs = append(c.e.exprs, memo.Expr(newSelect))
 	}
@@ -296,21 +293,6 @@ func (c *CustomFuncs) LimitScanDef(def, limit memo.PrivateID) memo.PrivateID {
 	defCopy := *c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	defCopy.HardLimit = int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
 	return c.e.mem.InternScanOpDef(&defCopy)
-}
-
-// OneResultPerInput returns true if the given LookupJoinOp always produces
-// exactly one row for each input row.
-func (c *CustomFuncs) OneResultPerInput(def memo.PrivateID) bool {
-	lookupJoinDef := c.e.mem.LookupPrivate(def).(*memo.LookupJoinDef)
-
-	// We always have exactly one result per input when this is an index join.
-	//
-	// TODO(radu): in general, we need to check if the keyCols are associated with
-	// a foreign key constraint.
-	//
-	// TODO(radu): we also know to have exactly one result per input if we have a
-	// left lookup join and the KeyCols form a key in the table.
-	return lookupJoinDef.IsIndexJoin(c.e.mem.Metadata())
 }
 
 // ----------------------------------------------------------------------
