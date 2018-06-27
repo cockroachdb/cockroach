@@ -35,11 +35,13 @@ eexpect root@
 system "grep -q 'helloworld.*:READWRITE.*INSERT.*OK' $logfile"
 end_test
 
-start_test "Check that errors get logged too"
-send "SELECT nonexistent FROM helloworld;\r"
-eexpect root@
-system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
-end_test
+# TODO(justin): re-enable this once we properly do privilege checks on
+# observing schemas.
+# start_test "Check that errors get logged too"
+# send "SELECT nonexistent FROM helloworld;\r"
+# eexpect root@
+# system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
+# end_test
 
 # Flush and truncate the logs. The test below must not see the log entries that
 # were already generated above.
@@ -69,14 +71,13 @@ set logfile logs/db/audit-new/cockroach-sql-audit.log
 # Start a client and make a simple audit test.
 spawn $argv sql
 eexpect root@
-send "create database d; create table d.t(x INT);\r"
+send "create database d; create table d.helloworld(x INT);\r"
 eexpect CREATE
 eexpect root@
-send "alter table d.t EXPERIMENTAL_AUDIT SET READ WRITE;\r"
+send "alter table d.helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
 eexpect "ALTER TABLE"
 eexpect root@
-send "select helloworld from d.t;\r"
-eexpect "does not exist"
+send "select x from d.helloworld;\r"
 eexpect root@
 interrupt
 eexpect eof
