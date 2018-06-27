@@ -1297,20 +1297,26 @@ func (s *adminServer) DecommissionStatus(
 	// Compute the replica counts for the target nodes only. This map doubles as
 	// a lookup table to check whether we care about a given node.
 	replicaCounts := make(map[roachpb.NodeID]int64)
-	for _, nodeID := range nodeIDs {
-		replicaCounts[nodeID] = math.MaxInt64
+	// TODO (neeral) make this paginated
+	rows, err := s.server.db.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "scanning meta2 keys")
 	}
-
-	for _, nodeStatus := range ns.Nodes {
-		nodeID := nodeStatus.Desc.NodeID
+	rangeDesc := roachpb.RangeDescriptor{}
+	for _, row := range rows {
+		if err := row.ValueProto(&rangeDesc); err != nil {
+			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+		}
+		for _, r := range rangeDesc.Replicas {
+			if _, ok := replicaCounts[r.NodeID]; ok {
+				replicaCounts[r.NodeID]++
+			}
+		}
+	}
+	for _, nodeID := range nodeIDs {
 		if _, ok := replicaCounts[nodeID]; !ok {
-			continue // not interested in this node
+			replicaCounts[nodeID] = math.MaxInt64
 		}
-		var replicas float64
-		for _, storeStatus := range nodeStatus.StoreStatuses {
-			replicas += storeStatus.Metrics["replicas"]
-		}
-		replicaCounts[nodeID] = int64(replicas)
 	}
 
 	var res serverpb.DecommissionStatusResponse
