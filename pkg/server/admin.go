@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -1298,19 +1297,35 @@ func (s *adminServer) DecommissionStatus(
 	// a lookup table to check whether we care about a given node.
 	replicaCounts := make(map[roachpb.NodeID]int64)
 	for _, nodeID := range nodeIDs {
-		replicaCounts[nodeID] = math.MaxInt64
+		replicaCounts[nodeID] = 0
 	}
-
-	for _, nodeStatus := range ns.Nodes {
-		nodeID := nodeStatus.Desc.NodeID
-		if _, ok := replicaCounts[nodeID]; !ok {
-			continue // not interested in this node
+	const pageSize = 10000
+	if err = s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		begin := keys.Meta2Prefix
+		for {
+			rows, err := s.server.db.Scan(ctx, begin, keys.MetaMax, pageSize)
+			if err != nil {
+				return errors.Wrap(err, "scanning meta2 keys")
+			}
+			rangeDesc := roachpb.RangeDescriptor{}
+			for _, row := range rows {
+				if err := row.ValueProto(&rangeDesc); err != nil {
+					return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+				}
+				for _, r := range rangeDesc.Replicas {
+					if _, ok := replicaCounts[r.NodeID]; ok {
+						replicaCounts[r.NodeID]++
+					}
+				}
+			}
+			if len(rows) < pageSize {
+				return nil
+			}
+			begin = rows[len(rows)-1].Key.Next()
+			time.Sleep(time.Second)
 		}
-		var replicas float64
-		for _, storeStatus := range nodeStatus.StoreStatuses {
-			replicas += storeStatus.Metrics["replicas"]
-		}
-		replicaCounts[nodeID] = int64(replicas)
+	}); err != nil {
+		return nil, err
 	}
 
 	var res serverpb.DecommissionStatusResponse
