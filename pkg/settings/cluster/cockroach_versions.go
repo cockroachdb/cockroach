@@ -48,8 +48,8 @@ const (
 	VersionRPCVersionCheck
 	VersionClearRange
 	VersionPartitioning
-	VersionLeaseSequence // unused
-	VersionUnreplicatedTombstoneKey
+	VersionLeaseSequence            // unused
+	VersionUnreplicatedTombstoneKey // unused
 	VersionRecomputeStats
 	VersionNoRaftProposalKeys
 	VersionTxnSpanRefresh

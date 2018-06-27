@@ -23,9 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// clearLegacyTombstone removes the legacy tombstone for the given rangeID, taking
-// care to do this without reading from the engine (as is required by one of the
-// callers).
+// clearLegacyTombstone removes the legacy tombstone for the given rangeID.
 func clearLegacyTombstone(eng engine.Writer, rangeID roachpb.RangeID) error {
 	return eng.Clear(engine.MakeMVCCMetadataKey(keys.RaftTombstoneIncorrectLegacyKey(rangeID)))
 }
