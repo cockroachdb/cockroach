@@ -99,7 +99,10 @@ function makeBarChart(
 
       let titleText = title + ": " + formatter(sum);
       if (stdDevAccessor) {
-        titleText += " Std. Dev.: " + formatter(stdDevAccessor.value(d));
+        const sd = stdDevAccessor.value(d);
+        if (sd) {
+          titleText += " Std. Dev.: " + formatter(sd);
+        }
       }
 
       return (
