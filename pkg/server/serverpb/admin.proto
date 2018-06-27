@@ -375,6 +375,7 @@ message DecommissionStatusResponse {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     bool is_live = 2;
+    // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
     bool decommissioning = 4;
     bool draining = 5;
