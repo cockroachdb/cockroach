@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -1810,4 +1811,77 @@ func TestSystemZoneConfigs(t *testing.T) {
 	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
+}
+
+func TestClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
+
+	clearRange := func(start, end roachpb.Key) {
+		t.Helper()
+		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    start,
+				EndKey: end,
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	verifyKeysWithPrefix := func(prefix roachpb.Key, expectedKeys []roachpb.Key) {
+		t.Helper()
+		start := engine.MakeMVCCMetadataKey(prefix)
+		end := engine.MakeMVCCMetadataKey(prefix.PrefixEnd())
+		kvs, err := engine.Scan(store.Engine(), start, end, 0 /* maxRows */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var actualKeys []roachpb.Key
+		for _, kv := range kvs {
+			actualKeys = append(actualKeys, kv.Key.Key)
+		}
+		if !reflect.DeepEqual(expectedKeys, actualKeys) {
+			t.Fatalf("expected %v, but got %v", expectedKeys, actualKeys)
+		}
+	}
+
+	rng, _ := randutil.NewPseudoRand()
+
+	// Write four keys with values small enough to use individual deletions
+	// (sm1-sm4) and four keys with values large enough to require a range
+	// deletion tombstone (lg1-lg4).
+	sm, sm1, sm2, sm3 := roachpb.Key("sm"), roachpb.Key("sm1"), roachpb.Key("sm2"), roachpb.Key("sm3")
+	lg, lg1, lg2, lg3 := roachpb.Key("lg"), roachpb.Key("lg1"), roachpb.Key("lg2"), roachpb.Key("lg3")
+	for _, key := range []roachpb.Key{sm1, sm2, sm3} {
+		if err := store.DB().Put(ctx, key, "sm-val"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, key := range []roachpb.Key{lg1, lg2, lg3} {
+		if err := store.DB().Put(
+			ctx, key, randutil.RandBytes(rng, batcheval.ClearRangeBytesThreshold),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	verifyKeysWithPrefix(sm, []roachpb.Key{sm1, sm2, sm3})
+	verifyKeysWithPrefix(lg, []roachpb.Key{lg1, lg2, lg3})
+
+	// Verify that a ClearRange request from [sm1, sm3) removes sm1 and sm2.
+	clearRange(sm1, sm3)
+	verifyKeysWithPrefix(sm, []roachpb.Key{sm3})
+
+	// Verify that a ClearRange request from [lg1, lg3) removes lg1 and lg2.
+	clearRange(lg1, lg3)
+	verifyKeysWithPrefix(lg, []roachpb.Key{lg3})
+
+	// Verify that only the large ClearRange request used a range deletion
+	// tombstone by checking for the presence of a suggested compaction.
+	verifyKeysWithPrefix(keys.LocalStoreSuggestedCompactionsMin,
+		[]roachpb.Key{keys.StoreSuggestedCompactionKey(lg1, lg3)})
 }

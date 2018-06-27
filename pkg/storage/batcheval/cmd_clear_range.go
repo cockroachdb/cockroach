@@ -30,11 +30,11 @@ import (
 	"github.com/kr/pretty"
 )
 
-// clearRangeBytesThreshold is the threshold over which the ClearRange
+// ClearRangeBytesThreshold is the threshold over which the ClearRange
 // command will use engine.ClearRange to efficiently perform a range
 // deletion. Otherwise, will revert to iterating through the values
 // and clearing them individually with engine.Clear.
-const clearRangeBytesThreshold = 512 << 10 // 512KiB
+const ClearRangeBytesThreshold = 512 << 10 // 512KiB
 
 func init() {
 	RegisterCommand(roachpb.ClearRange, declareKeysClearRange, ClearRange)
@@ -79,8 +79,8 @@ func ClearRange(
 	// If the total size of data to be cleared is less than
 	// clearRangeBytesThreshold, clear the individual values manually,
 	// instead of using a range tombstone (inefficient for small ranges).
-	if total := statsDelta.Total(); total < clearRangeBytesThreshold {
-		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, clearRangeBytesThreshold)
+	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
+		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := batch.Iterate(
 			from, to,
 			func(kv engine.MVCCKeyValue) (bool, error) {
