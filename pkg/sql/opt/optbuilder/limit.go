@@ -26,8 +26,8 @@ import (
 //   SELECT k FROM kv LIMIT k
 // are not valid.
 func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
-	ordering := inScope.physicalProps.Ordering
-	orderingPrivID := b.factory.InternOrdering(ordering)
+	ordering := &inScope.physicalProps.Ordering
+	orderingPrivID := b.factory.InternOrderingChoice(ordering)
 
 	if limit.Offset != nil {
 		op := "OFFSET"

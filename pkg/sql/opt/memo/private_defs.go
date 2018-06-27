@@ -97,41 +97,23 @@ type ScanOpDef struct {
 
 // CanProvideOrdering returns true if the scan operator returns rows that
 // satisfy the given required ordering.
-func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required opt.Ordering) bool {
-	// Scan naturally orders according to the order of the scanned index.
+func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.OrderingChoice) bool {
+	// Scan naturally orders according to scanned index's key columns.
+	var ordering props.OrderingChoice
 	index := md.Table(s.Table).Index(s.Index)
-
-	// The index can provide the required ordering in either of these cases:
-	// 1. The ordering columns are a prefix of the index columns.
-	// 2. The index columns are a prefix of the ordering columns (this
-	//    works because the columns are always a key, so any additional
-	//    columns are unnecessary).
-	// TODO(andyk): Use LaxKeyColumnCount when issues with nulls are solved,
-	//              since unique index can still have duplicate nulls.
-	cnt := index.ColumnCount()
-	if s.Index == opt.PrimaryIndex {
-		cnt = index.KeyColumnCount()
-	}
-	if len(required) < cnt {
-		cnt = len(required)
-	}
-
-	for i := 0; i < cnt; i++ {
+	for i := 0; i < index.KeyColumnCount(); i++ {
 		indexCol := index.Column(i)
 		colID := md.TableColumn(s.Table, indexCol.Ordinal)
-		orderingCol := opt.MakeOrderingColumn(colID, indexCol.Descending)
-		if orderingCol != required[i] {
-			return false
-		}
+		ordering.AppendCol(colID, indexCol.Descending)
 	}
-	return true
+	return ordering.SubsetOf(required)
 }
 
 // GroupByDef defines the value of the Def private field of the GroupBy
 // operator.
 type GroupByDef struct {
 	GroupingCols opt.ColSet
-	Ordering     opt.Ordering
+	Ordering     props.OrderingChoice
 }
 
 // LookupJoinDef defines the value of the Def private field of the LookupJoin
@@ -220,7 +202,7 @@ type ShowTraceOpDef struct {
 // operator.
 type RowNumberDef struct {
 	// Ordering denotes the required ordering of the input.
-	Ordering opt.Ordering
+	Ordering props.OrderingChoice
 
 	// ColID holds the id of the column introduced by this operator.
 	ColID opt.ColumnID
@@ -228,25 +210,38 @@ type RowNumberDef struct {
 
 // CanProvideOrdering returns true if the row number operator returns rows that
 // can satisfy the given required ordering.
-func (w *RowNumberDef) CanProvideOrdering(required opt.Ordering) bool {
-	// RowNumber can provide the same ordering it requires from its input.
-
-	// By construction, the ordinality is a key, and the output is always ordered
-	// ascending by it, so any ordering columns after an ascending ordinality are
-	// irrelevant.
-	// TODO(justin): This could probably be generalized to some helper - when we
-	// are checking if an ordering can be satisfied in this way, we can return
-	// true early if the set of columns we have iterated over are a key.
+func (w *RowNumberDef) CanProvideOrdering(required *props.OrderingChoice) bool {
+	// By construction, any prefix of the ordering required of the input is also
+	// ordered by the ordinality column. For example, if the required input
+	// ordering is +a,+b, then any of these orderings can be provided:
+	//
+	//   +ord
+	//   +a,+ord
+	//   +a,+b,+ord
+	//
+	// As long as the optimizer is enabled, it will have already reduced the
+	// ordering required of this operator to take into account that the ordinality
+	// column is a key, so there will never be ordering columns after the
+	// ordinality column in that case.
 	ordCol := opt.MakeOrderingColumn(w.ColID, false)
-	for i, col := range required {
-		if col == ordCol {
-			return true
-		}
-		if i >= len(w.Ordering) || col != w.Ordering[i] {
-			return false
+	prefix := len(required.Columns)
+	for i := range required.Columns {
+		if required.MatchesAt(i, ordCol) {
+			if i == 0 {
+				return true
+			}
+			prefix = i
+			break
 		}
 	}
-	return true
+
+	if prefix < len(required.Columns) {
+		truncated := required.Copy()
+		truncated.Truncate(prefix)
+		return w.Ordering.SubsetOf(&truncated)
+	}
+
+	return w.Ordering.SubsetOf(required)
 }
 
 // SetOpColMap defines the value of the ColMap private field of the set
@@ -295,6 +290,6 @@ type MergeOnDef struct {
 	// equality columns (to guarantee a certain output ordering). In the example
 	// above, if we can get ordering a+,b+,c+ on the left side and ordering d+,e+
 	// on the right side, we can guarantee a+,b+,c+ on the merge join results.
-	LeftEq  opt.Ordering
-	RightEq opt.Ordering
+	LeftEq  props.OrderingChoice
+	RightEq props.OrderingChoice
 }

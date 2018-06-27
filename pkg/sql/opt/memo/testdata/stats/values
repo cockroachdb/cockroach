@@ -5,6 +5,7 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── cardinality: [0 - 4]
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1,2)
  ├── values
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [4 - 4]
@@ -79,6 +80,7 @@ select
  ├── columns: x:1(int!null)
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2, distinct(1)=1]
+ ├── fd: ()-->(1)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [4 - 4]

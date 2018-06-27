@@ -17,6 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // GetInterestingOrderings calculates and returns the
@@ -99,10 +100,11 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 	}
 
 	res := GetInterestingOrderings(ev.Child(0)).Copy()
-	if def.Ordering != nil {
-		res.RestrictToPrefix(def.Ordering)
+	if !def.Ordering.Any() {
+		ordering := def.Ordering.Ordering()
+		res.RestrictToPrefix(ordering)
 		if len(res) == 0 {
-			res.Add(def.Ordering)
+			res.Add(ordering)
 		}
 	}
 
@@ -113,7 +115,7 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 
 func interestingOrderingsForLimit(ev memo.ExprView) opt.OrderingSet {
 	res := GetInterestingOrderings(ev.Child(0))
-	ord := ev.Private().(opt.Ordering)
+	ord := ev.Private().(*props.OrderingChoice).Ordering()
 	if ord.Empty() {
 		return res
 	}

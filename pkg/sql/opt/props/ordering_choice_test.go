@@ -15,116 +15,26 @@
 package props_test
 
 import (
-	"fmt"
 	"testing"
-
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-const (
-	colChoiceRegexStr = `(?:\((\d+(?:\|\d+)*)\))`
-	ordColRegexStr    = `^(?:(?:\+|\-)(?:(\d+)|` + colChoiceRegexStr + `))$`
-	colListRegexStr   = `(\d+(?:,\d+)*)`
-	optRegexStr       = `^\s*([\+\-\d,\|\(\)]*)\s*(?:opt\(` + colListRegexStr + `\))?\s*$`
-)
-
-var optRegex = regexp.MustCompile(optRegexStr)
-var ordColRegex = regexp.MustCompile(ordColRegexStr)
-
-// ParseOrderingChoice parses the string representation of an OrderingChoice for
-// testing purposes. Here are some examples of the string format:
-//
-//   +1
-//   -(1|2),+3
-//   +(1|2),+3 opt(5,6)
-//
-// The input string is expected to be valid; ParseOrderingChoice will panic if
-// it is not.
-func ParseOrderingChoice(s string) props.OrderingChoice {
-	var ordering props.OrderingChoice
-
-	// Separate string into column sequence and optional column parts:
-	//   +(1|2),+3 opt(5,6)
-	//     matches[1]: +(1|2),+3
-	//     matches[2]: opt(5,6)
-	matches := optRegex.FindStringSubmatch(s)
-	if matches == nil {
-		panic(fmt.Sprintf("could not match ordering choice: %s", s))
-	}
-
-	if len(matches[1]) != 0 {
-		// Split column sequence by comma:
-		//   +(1|2),+3:
-		//     +(1|2)
-		//     +3
-		for _, ordColStr := range strings.Split(matches[1], ",") {
-			// Parse one item in the column sequence:
-			//   +(1|2):
-			//     matches[1]: <empty>
-			//     matches[2]: 1|2
-			//
-			//   +3:
-			//     matches[1]: 3
-			//     matches[2]: <empty>
-			ordColMatches := ordColRegex.FindStringSubmatch(ordColStr)
-
-			// First character is the direction indicator.
-			var colChoice props.OrderingColumnChoice
-			colChoice.Descending = strings.HasPrefix(ordColStr, "-")
-
-			if len(ordColMatches[1]) != 0 {
-				// Single column in equivalence group.
-				id, _ := strconv.Atoi(ordColMatches[1])
-				colChoice.Group.Add(id)
-			} else {
-				// Split multiple columns in equivalence group by pipe:
-				//   1|2:
-				//     1
-				//     2
-				for _, idStr := range strings.Split(ordColMatches[2], "|") {
-					id, _ := strconv.Atoi(idStr)
-					colChoice.Group.Add(id)
-				}
-			}
-
-			ordering.Columns = append(ordering.Columns, colChoice)
-		}
-	}
-
-	// Parse any optional columns by splitting by comma:
-	//   opt(5,6):
-	//     5
-	//     6
-	if len(matches[2]) != 0 {
-		for _, idStr := range strings.Split(matches[2], ",") {
-			id, _ := strconv.Atoi(idStr)
-			ordering.Optional.Add(id)
-		}
-	}
-
-	return ordering
-}
-
 func TestOrderingChoice_Ordering(t *testing.T) {
 	testcases := []struct {
 		s string
 		o opt.Ordering
 	}{
-		{s: "", o: opt.Ordering{}},
-		{s: "opt(1,2)", o: opt.Ordering{}},
+		{s: " ", o: opt.Ordering{}},
 		{s: "+1", o: opt.Ordering{1}},
 		{s: "-1,+(2|3) opt(4,5)", o: opt.Ordering{-1, 2}},
 		{s: "+(1|2),-(3|4),+5", o: opt.Ordering{1, -3, 5}},
 	}
 
 	for _, tc := range testcases {
-		choice := ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		ordering := choice.Ordering()
 		if len(ordering) != len(tc.o) {
 			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.o, ordering)
@@ -135,10 +45,6 @@ func TestOrderingChoice_Ordering(t *testing.T) {
 				}
 			}
 		}
-
-		if choice.Any() != (len(ordering) == 0) {
-			t.Errorf("%s: Any returns wrong value: %v", tc.s, choice.Any())
-		}
 	}
 }
 
@@ -148,14 +54,13 @@ func TestOrderingChoice_ColSet(t *testing.T) {
 		cs opt.ColSet
 	}{
 		{s: "", cs: util.MakeFastIntSet()},
-		{s: "opt(1,2)", cs: util.MakeFastIntSet()},
 		{s: "+1", cs: util.MakeFastIntSet(1)},
 		{s: "-1,+(2|3) opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3)},
 		{s: "+(1|2),-(3|4),+5", cs: util.MakeFastIntSet(1, 2, 3, 4, 5)},
 	}
 
 	for _, tc := range testcases {
-		choice := ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		colSet := choice.ColSet()
 		if !colSet.Equals(tc.cs) {
 			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.cs, colSet)
@@ -169,29 +74,34 @@ func TestOrderingChoice_SubsetOf(t *testing.T) {
 		right    string
 		expected bool
 	}{
+		{left: "", right: "", expected: true},
+		{left: "+1", right: "", expected: true},
 		{left: "+1", right: "+1", expected: true},
 		{left: "+1,-2", right: "+1", expected: true},
 		{left: "+1,-2", right: "+1,-2", expected: true},
 		{left: "+1", right: "+1 opt(2)", expected: true},
 		{left: "-2,+1", right: "+1 opt(2)", expected: true},
-		{left: "-2 opt(1)", right: "-2 opt(1,3)", expected: true},
-		{left: "+1,-2", right: "opt(1)", expected: true},
 		{left: "+1", right: "+(1|2)", expected: true},
 		{left: "+(1|2)", right: "+(1|2|3)", expected: true},
-		{left: "+(1|2)", right: "+1 opt(2)", expected: true},
-		{left: "+(1|2),-(3|4),-(5|6)", right: "+(1|2|10),-(3|4)", expected: true},
-		{left: "+(1|2),-(3|4),-(5|6)", right: "+(1|2),-(5|6|7) opt(3,4)", expected: true},
+		{left: "+(1|2),-4", right: "+(1|2|3),-(4|5)", expected: true},
+		{left: "+(1|2) opt(4)", right: "+(1|2|3) opt(4)", expected: true},
 
-		{left: "+1", right: "+1,-2", expected: false},
+		{left: "", right: "+1", expected: false},
+		{left: "+1", right: "-1", expected: false},
+		{left: "+1", right: "-1,-2", expected: false},
 		{left: "+1 opt(2)", right: "+1", expected: false},
-		{left: "+1 opt(2,3,4)", right: "+1 opt(3,4)", expected: false},
+		{left: "+1 opt(2)", right: "+1 opt(3)", expected: false},
+		{left: "+(1|2)", right: "-(1|2)", expected: false},
+		{left: "+(1|2)", right: "+(3|4)", expected: false},
+		{left: "+(1|2)", right: "+(2|3)", expected: false},
 		{left: "+(1|2|3)", right: "+(1|2)", expected: false},
+		{left: "+(1|2)", right: "+1 opt(2)", expected: false},
 		{left: "+(1|2),-(3|4)", right: "+(1|2),-(3|4),+5", expected: false},
 	}
 
 	for _, tc := range testcases {
-		left := ParseOrderingChoice(tc.left)
-		right := ParseOrderingChoice(tc.right)
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
 		if left.SubsetOf(&right) != tc.expected {
 			if tc.expected {
 				t.Errorf("expected %s to be subset of %s", tc.left, tc.right)
@@ -223,7 +133,7 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		if choice.SubsetOfCols(tc.cs) != tc.expected {
 			if tc.expected {
 				t.Errorf("%s: expected cols to be subset of %s", tc.s, tc.cs)
@@ -269,7 +179,7 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		ordering := ParseOrderingChoice(tc.s)
+		ordering := props.ParseOrderingChoice(tc.s)
 		ordCol := opt.MakeOrderingColumn(tc.col, tc.desc)
 		if ordering.MatchesAt(tc.idx, ordCol) != tc.expected {
 			if tc.expected {
@@ -282,9 +192,10 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 }
 
 func TestOrderingChoice_Copy(t *testing.T) {
-	ordering := ParseOrderingChoice("+1,-(2|3) opt(4,5)")
+	ordering := props.ParseOrderingChoice("+1,-(2|3) opt(4,5)")
 	copied := ordering.Copy()
-	copied.AppendCol(&props.OrderingColumnChoice{Group: util.MakeFastIntSet(6, 7), Descending: true})
+	col := props.OrderingColumnChoice{Group: util.MakeFastIntSet(6, 7), Descending: true}
+	copied.Columns = append(copied.Columns, col)
 
 	// ()-->(8)
 	// (3)==(9)
@@ -329,28 +240,42 @@ func TestOrderingChoice_Simplify(t *testing.T) {
 		s        string
 		expected string
 	}{
+		{fdset: &props.FuncDepSet{}, s: "", expected: ""},
+
 		// Constants and equivalencies.
+		{fdset: &fd1, s: "", expected: ""},
 		{fdset: &fd1, s: "+1,+4", expected: "+(1|2|3) opt(4,5)"},
 		{fdset: &fd1, s: "+2,+4", expected: "+(1|2|3) opt(4,5)"},
 		{fdset: &fd1, s: "+1,+2 opt(4)", expected: "+(1|2|3) opt(4,5)"},
 		{fdset: &fd1, s: "+1,+2 opt(4)", expected: "+(1|2|3) opt(4,5)"},
-		{fdset: &fd1, s: "+(4|5)", expected: "opt(4,5)"},
+		{fdset: &fd1, s: "+(4|5)", expected: ""},
+		{fdset: &fd1, s: "+(4|5) opt(3)", expected: ""},
 		{fdset: &fd1, s: "+(4|5|6)", expected: "+6 opt(4,5)"},
 		{fdset: &fd1, s: "+(4|6)", expected: "+6 opt(4,5)"},
 
 		// Columns functionally determine one another.
+		{fdset: &fd2, s: "", expected: ""},
 		{fdset: &fd2, s: "+1,+2,+4", expected: "+1"},
 		{fdset: &fd2, s: "+2,+4,+5", expected: "+(2|3)"},
 		{fdset: &fd2, s: "+3,+5", expected: "+(2|3)"},
-		{fdset: &fd2, s: "-(2|3),+1", expected: "-(2|3),+1"},
+		{fdset: &fd2, s: "-(2|3),+1,+5", expected: "-(2|3),+1"},
 		{fdset: &fd2, s: "-(2|4),+5,+1", expected: "-(2|3|4),+1"},
 	}
 
 	for _, tc := range testcases {
-		ordering := ParseOrderingChoice(tc.s)
+		ordering := props.ParseOrderingChoice(tc.s)
+
+		if ordering.String() != tc.expected && !ordering.CanSimplify(tc.fdset) {
+			t.Errorf("%s: expected CanSimplify to be true", tc.s)
+		}
+
 		ordering.Simplify(tc.fdset)
 		if ordering.String() != tc.expected {
 			t.Errorf("%s: expected %s, actual %s", tc.s, tc.expected, ordering.String())
+		}
+
+		if ordering.CanSimplify(tc.fdset) {
+			t.Errorf("%s: expected CanSimplify to be false", ordering.String())
 		}
 	}
 }
@@ -363,7 +288,7 @@ func TestOrderingChoice_Truncate(t *testing.T) {
 	}{
 		{s: "", n: 0, expected: ""},
 		{s: "", n: 1, expected: ""},
-		{s: "+1,+(2|3),-4 opt(5,6)", n: 0, expected: "opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", n: 0, expected: ""},
 		{s: "+1,+(2|3),-4 opt(5,6)", n: 1, expected: "+1 opt(5,6)"},
 		{s: "+1,+(2|3),-4 opt(5,6)", n: 2, expected: "+1,+(2|3) opt(5,6)"},
 		{s: "+1,+(2|3),-4 opt(5,6)", n: 3, expected: "+1,+(2|3),-4 opt(5,6)"},
@@ -371,7 +296,7 @@ func TestOrderingChoice_Truncate(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		choice.Truncate(tc.n)
 		if choice.String() != tc.expected {
 			t.Errorf("%s: n=%d, expected: %s, actual: %s", tc.s, tc.n, tc.expected, choice.String())
@@ -388,7 +313,6 @@ func TestOrderingChoice_Equals(t *testing.T) {
 		{left: "", right: "", expected: true},
 		{left: "+1", right: "+1", expected: true},
 		{left: "+1,+2", right: "+1,+2", expected: true},
-		{left: "opt(1,2)", right: "opt(2,1)", expected: true},
 		{left: "+(1|2)", right: "+(2|1)", expected: true},
 		{left: "+(1|2),+3", right: "+(2|1),+3", expected: true},
 		{left: "+(1|2),-(3|4) opt(5,6)", right: "+(2|1),-(4|3) opt(6,5)", expected: true},
@@ -397,12 +321,12 @@ func TestOrderingChoice_Equals(t *testing.T) {
 		{left: "+1", right: "-1", expected: false},
 		{left: "+1", right: "+2", expected: false},
 		{left: "+1,+2", right: "+2,+1", expected: false},
-		{left: "opt(1,2)", right: "opt(1,2,3)", expected: false},
+		{left: "+1 opt(2)", right: "+1 opt(2,3)", expected: false},
 	}
 
 	for _, tc := range testcases {
-		left := ParseOrderingChoice(tc.left)
-		right := ParseOrderingChoice(tc.right)
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
 		if left.Equals(&right) != tc.expected {
 			if tc.expected {
 				t.Errorf("expected %s to equal %s", tc.left, tc.right)

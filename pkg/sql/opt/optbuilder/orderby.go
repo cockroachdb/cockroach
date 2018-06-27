@@ -15,7 +15,7 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -43,7 +43,7 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 	}
 
 	orderByScope := inScope.push()
-	orderByScope.physicalProps.Ordering = make(opt.Ordering, 0, len(orderBy))
+	orderByScope.physicalProps.Ordering.Columns = make([]props.OrderingColumnChoice, 0, len(orderBy))
 
 	// TODO(rytaft): rewrite ORDER BY if it uses ORDER BY INDEX tbl@idx or
 	// ORDER BY PRIMARY KEY syntax.
@@ -139,11 +139,8 @@ func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, or
 
 	// Add the new columns to the ordering.
 	for i := start; i < len(orderByScope.cols); i++ {
-		col := opt.MakeOrderingColumn(
-			orderByScope.cols[i].id,
-			order.Direction == tree.Descending,
-		)
-		orderByScope.physicalProps.Ordering = append(orderByScope.physicalProps.Ordering, col)
+		desc := order.Direction == tree.Descending
+		orderByScope.physicalProps.Ordering.AppendCol(orderByScope.cols[i].id, desc)
 	}
 }
 

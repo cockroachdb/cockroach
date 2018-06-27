@@ -19,10 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 )
 
-func TestCanProvideOrdering(t *testing.T) {
+func TestScanCanProvideOrdering(t *testing.T) {
 	cat := testcat.New()
 	_, err := cat.ExecuteDDL(
 		"CREATE TABLE a (" +
@@ -30,8 +31,8 @@ func TestCanProvideOrdering(t *testing.T) {
 			"i INT, " +
 			"s STRING, " +
 			"f FLOAT, " +
-			"INDEX (i, k), " +
-			"INDEX (s DESC) STORING(f))",
+			"INDEX (i, k) STORING(f), " +
+			"UNIQUE INDEX (s DESC, f))",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -40,38 +41,35 @@ func TestCanProvideOrdering(t *testing.T) {
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))
 
-	// INDEX (i, k)
+	// PRIMARY KEY (k)
+	primary := 0
+	// INDEX (i, k) STORING(f)
 	altIndex1 := 1
-	// INDEX (s DESC) STORING(f)
+	// INDEX (s DESC, f)
 	altIndex2 := 2
 
-	k := opt.OrderingColumn(md.TableColumn(a, 0))
-	i := opt.OrderingColumn(md.TableColumn(a, 1))
-	s := opt.OrderingColumn(md.TableColumn(a, 2))
-	f := opt.OrderingColumn(md.TableColumn(a, 3))
-
-	test := func(def *memo.ScanOpDef, ordering opt.Ordering, expected bool) {
-		t.Helper()
-		if def.CanProvideOrdering(md, ordering) != expected {
-			t.Errorf("expected %v, got %v", expected, !expected)
-		}
+	testcases := []struct {
+		index    int
+		ordering string
+		expected bool
+	}{
+		{index: primary, ordering: "", expected: true},
+		{index: primary, ordering: "+1", expected: true},
+		{index: primary, ordering: "+1,+2", expected: false},
+		{index: altIndex1, ordering: "", expected: true},
+		{index: altIndex1, ordering: "+1 opt(2)", expected: true},
+		{index: altIndex1, ordering: "-2,+1", expected: false},
+		{index: altIndex2, ordering: "", expected: true},
+		{index: altIndex2, ordering: "-3,+(4|1)", expected: true},
+		{index: altIndex2, ordering: "-3,+4,+1", expected: true},
 	}
 
-	// Ordering is longer than index.
-	def := &memo.ScanOpDef{Table: a, Index: altIndex1}
-	test(def, opt.Ordering{i, k, s}, true)
-	test(def, opt.Ordering{k, i, s}, false)
-
-	// Index is longer than ordering.
-	test(def, opt.Ordering{i}, true)
-	test(def, opt.Ordering{k}, false)
-
-	// Index contains descending column.
-	def = &memo.ScanOpDef{Table: a, Index: altIndex2}
-	test(def, opt.Ordering{-s}, true)
-	test(def, opt.Ordering{s}, false)
-
-	// Index contains storing column.
-	test(def, opt.Ordering{-s, k, f}, true)
-	test(def, opt.Ordering{-s, k, i}, false)
+	for _, tc := range testcases {
+		def := &memo.ScanOpDef{Table: a, Index: tc.index}
+		required := props.ParseOrderingChoice(tc.ordering)
+		actual := def.CanProvideOrdering(md, &required)
+		if actual != tc.expected {
+			t.Errorf("index: %d, required: %s, expected %v", tc.index, tc.ordering, tc.expected)
+		}
+	}
 }

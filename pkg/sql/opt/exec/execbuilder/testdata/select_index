@@ -519,7 +519,7 @@ abz    abz_c_b_key  true      3  a       ASC        false    true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-scan  ·      ·            (a)  -a
+scan  ·      ·            (a)  ·
 ·     table  abz@primary  ·    ·
 ·     spans  ALL          ·    ·
 ·     limit  1            ·    ·
@@ -527,7 +527,7 @@ scan  ·      ·            (a)  -a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-scan  ·      ·                (c)  -c
+scan  ·      ·                (c)  ·
 ·     table  abz@abz_c_b_key  ·    ·
 ·     spans  ALL              ·    ·
 ·     limit  1                ·    ·
@@ -890,8 +890,8 @@ EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
 render           ·         ·            (x)                    ·
  │               render 0  x            ·                      ·
- └── index-join  ·         ·            (x, y, rowid[hidden])  +y
-      ├── scan   ·         ·            (y, rowid[hidden])     +y
+ └── index-join  ·         ·            (x, y, rowid[hidden])  ·
+      ├── scan   ·         ·            (y, rowid[hidden])     ·
       │          table     xy@xy_y_idx  ·                      ·
       │          spans     /1-/2        ·                      ·
       └── scan   ·         ·            (x, y, rowid[hidden])  ·
@@ -1060,7 +1060,7 @@ limit           ·       ·
 ·               table   noncover@primary
 ·               spans   ALL
 
-# TODO(radu): need to prefer the order-matching index
+# TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5

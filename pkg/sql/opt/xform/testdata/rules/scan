@@ -41,14 +41,14 @@ scan a@s_idx
  ├── columns: s:4(string) i:2(int) f:3(float)
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── ordering: +4,+1,+2
+ └── ordering: +4,+1
 
 memo
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 memo (optimized)
  ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]"
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1]"
  │    │    ├── best: (scan a@s_idx,cols=(1-4))
  │    │    └── cost: 1080.00
  │    └── ""
@@ -58,7 +58,7 @@ memo (optimized)
       ├── ""
       │    ├── best: (scan a@si_idx,cols=(1,2,4))
       │    └── cost: 1070.00
-      └── "[ordering: +4,+1,+2]"
+      └── "[ordering: +4,+1]"
            ├── best: (sort G2)
            └── cost: 1169.66
 
@@ -197,14 +197,14 @@ scan a
  ├── columns: s:4(string) i:2(int) f:3(float)
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── ordering: +1,+2,+4
+ └── ordering: +1
 
 memo
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 memo (optimized)
  ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,keyCols=[1],lookupCols=(3))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]"
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1]"
  │    │    ├── best: (scan a,cols=(1-4))
  │    │    └── cost: 1090.00
  │    └── ""
@@ -214,7 +214,7 @@ memo (optimized)
       ├── ""
       │    ├── best: (scan a@si_idx,cols=(1,2,4))
       │    └── cost: 1070.00
-      └── "[ordering: +1,+2,+4]"
+      └── "[ordering: +1]"
            ├── best: (sort G2)
            └── cost: 1169.66
 

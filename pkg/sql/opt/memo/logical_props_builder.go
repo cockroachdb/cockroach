@@ -129,6 +129,9 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Initialize key FD's from the table schema, minus any columns that are not
 	// projected by the Scan operator.
 	relational.FuncDeps.CopyFrom(b.makeTableFuncDep(md, def.Table))
+	if def.Constraint != nil {
+		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
+	}
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -184,6 +187,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// Start with copy of FuncDepSet from input and modify with any additional
 	// not-null columns, then possibly simplify by calling ProjectCols.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	b.applyConstantConstraint(relational, filterProps.Constraints)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -866,11 +870,11 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 	// Inherit functional dependencies from input, and add strict key FD for the
 	// additional key column.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(def.ColID)), relational.OutputCols)
 	if key, ok := relational.FuncDeps.Key(); ok {
 		// Any existing keys are still keys.
 		relational.FuncDeps.AddStrictKey(key, relational.OutputCols)
 	}
+	relational.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(def.ColID)), relational.OutputCols)
 
 	// Cardinality
 	// -----------
@@ -1072,5 +1076,14 @@ func (b *logicalPropsBuilder) applyNotNullConstraint(
 			notNullCols.IntersectionWith(relational.OutputCols)
 			relational.NotNullCols = notNullCols
 		}
+	}
+}
+
+func (b *logicalPropsBuilder) applyConstantConstraint(
+	relational *props.Relational, constraints *constraint.Set,
+) {
+	if constraints != nil {
+		constCols := constraints.ExtractConstCols(b.evalCtx)
+		relational.FuncDeps.AddConstants(constCols)
 	}
 }

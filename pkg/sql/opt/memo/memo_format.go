@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -290,13 +291,13 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		}
 
 	case *RowNumberDef:
-		if !t.Ordering.Empty() {
+		if !t.Ordering.Any() {
 			fmt.Fprintf(f.buf, " ordering=%s", t.Ordering)
 		}
 
 	case *GroupByDef:
 		fmt.Fprintf(f.buf, " cols=%s", t.GroupingCols.String())
-		if !t.Ordering.Empty() {
+		if !t.Ordering.Any() {
 			fmt.Fprintf(f.buf, ",ordering=%s", t.Ordering)
 		}
 
@@ -355,8 +356,8 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			})
 		}
 
-	case opt.Ordering:
-		if !t.Empty() {
+	case *props.OrderingChoice:
+		if !t.Any() {
 			fmt.Fprintf(f.buf, " ordering=%s", t)
 		}
 
