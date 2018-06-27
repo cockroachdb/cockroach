@@ -209,9 +209,6 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-statement error cannot change the isolation level of a running transaction
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
-
 statement ok
 ROLLBACK
 
@@ -220,9 +217,6 @@ BEGIN TRANSACTION
 
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
-
-statement error cannot change the isolation level of a running transaction
-SET transaction_isolation = 'snapshot'
 
 statement ok
 ROLLBACK
@@ -242,18 +236,19 @@ SHOW transaction_isolation
 ----
 serializable
 
+# SNAPSHOT is now mapped to serializable
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW transaction_isolation
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
@@ -263,7 +258,8 @@ COMMIT
 statement error unsupported isolation level "read committed"
 SET transaction_isolation = 'read committed'
 
-# We can explicitly start a transaction in snapshot isolation.
+# We can explicitly start a transaction with isolation level
+# specified.
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -271,7 +267,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -383,7 +379,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW; COMMIT
 statement ok
 BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL SNAPSHOT; COMMIT
 
-# We can explicitly start a transaction in snapshot isolation level and low user priority.
+# We can explicitly start a transaction with specified isolation level and low user priority.
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
@@ -391,7 +387,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -417,7 +413,7 @@ SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -433,13 +429,13 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+serializable
 
 # SHOW without a transaction should create an auto-transaction with the default level
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -455,7 +451,7 @@ SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+serializable
 
 # Without the isolation level specified, BEGIN should use the default
 
@@ -465,7 +461,7 @@ BEGIN
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
@@ -481,7 +477,7 @@ SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET TRANSACTION PRIORITY HIGH
@@ -489,7 +485,7 @@ SET TRANSACTION PRIORITY HIGH
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
@@ -611,7 +607,7 @@ SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
