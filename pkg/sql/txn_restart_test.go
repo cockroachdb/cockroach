@@ -672,15 +672,15 @@ DELETE FROM t.test3;
 						t.Fatal(err)
 					}
 
-					magicVals := createFilterVals(nil, nil)
+					magicVals := createFilterVals(make(map[string]int), make(map[string]int))
 					for key, retry := range map[string]bool{
 						"boulanger": firstRetry,
 						"dromedary": secondRetry,
 						"josephine": thirdRetry,
 					} {
 						if retry {
-							magicVals.restartCounts = map[string]int{key: 2}
-							magicVals.abortCounts = map[string]int{key: 2}
+							magicVals.restartCounts[key] = 2
+							magicVals.abortCounts[key] = 2
 						}
 					}
 					var wg sync.WaitGroup
