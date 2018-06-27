@@ -514,6 +514,15 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (4)==(5), (5)==(4), (10,11)-->(12,13), (12)==(13), (13)==(12) [removed: (4,5,12,13)]")
 
+	// Constants on both sides.
+	//   SELECT * FROM (SELECT * FROM abcde b=1), (SELECT * FROM mnpq WHERE p=1)
+	product = makeAbcdeFD(t)
+	product.AddConstants(util.MakeFastIntSet(2))
+	mnpq = makeMnpqFD(t)
+	mnpq.AddConstants(util.MakeFastIntSet(12))
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "(1,10,11): ()-->(2,12), (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(13)")
+
 	// Key only on left side:
 	//   SELECT * FROM abcde, (SELECT p, q FROM mnpq)
 	product = makeAbcdeFD(t)
