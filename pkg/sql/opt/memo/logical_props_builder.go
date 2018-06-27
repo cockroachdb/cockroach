@@ -67,8 +67,8 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return b.buildJoinProps(ev)
 
-	case opt.LookupJoinOp:
-		return b.buildLookupJoinProps(ev)
+	case opt.IndexJoinOp:
+		return b.buildIndexJoinProps(ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
@@ -402,32 +402,23 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	return logical
 }
 
-func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
+func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: &props.Relational{}}
 	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
 	md := ev.Metadata()
-	def := ev.Private().(*LookupJoinDef)
-
-	// TODO(andyk): props derivation assumes this is an index join, will need
-	//              work to support general lookup joins
-	if !def.IsIndexJoin(md) {
-		panic("lookup join properties only implemented for index join case")
-	}
+	def := ev.Private().(*IndexJoinDef)
 
 	// Output Columns
 	// --------------
-	// Lookup join output columns are the union between the input columns and the
-	// retrieved columns.
-	logical.Relational.OutputCols = inputProps.OutputCols.Union(def.LookupCols)
+	logical.Relational.OutputCols = def.Cols
 
 	// Not Null Columns
 	// ----------------
 	// Add not-NULL columns from the table schema, and filter out any not-NULL
-	// columns from the input that are not projected by the lookup join.
+	// columns from the input that are not projected by the index join.
 	relational.NotNullCols = b.tableNotNullCols(md, def.Table)
-	relational.NotNullCols.IntersectionWith(inputProps.NotNullCols)
 	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
 	// Outer Columns
@@ -451,7 +442,7 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	// Statistics
 	// ----------
 	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildLookupJoin(&inputProps.Stats)
+	b.sb.buildIndexJoin(&inputProps.Stats)
 
 	return logical
 }

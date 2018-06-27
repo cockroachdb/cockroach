@@ -33,7 +33,7 @@ func GetInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 	case opt.ScanOp:
 		res = interestingOrderingsForScan(ev)
 
-	case opt.SelectOp, opt.LookupJoinOp:
+	case opt.SelectOp, opt.IndexJoinOp, opt.LookupInnerJoinOp, opt.LookupLeftJoinOp:
 		// Pass through child orderings.
 		res = GetInterestingOrderings(ev.Child(0))
 

@@ -92,8 +92,8 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 	case opt.MergeJoinOp:
 		return c.computeMergeJoinCost(candidate, logical)
 
-	case opt.LookupJoinOp:
-		return c.computeLookupJoinCost(candidate, logical)
+	case opt.IndexJoinOp:
+		return c.computeIndexJoinCost(candidate, logical)
 
 	// TODO(rytaft): Add linear cost functions for GROUP BY, set ops, etc.
 
@@ -189,16 +189,16 @@ func (c *coster) computeMergeJoinCost(candidate *memo.BestExpr, logical *props.L
 	return cost + c.computeChildrenCost(candidate)
 }
 
-func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+func (c *coster) computeIndexJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	leftCost := c.mem.BestExprCost(candidate.Child(0))
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
-	def := candidate.Private(c.mem).(*memo.LookupJoinDef)
+	def := candidate.Private(c.mem).(*memo.IndexJoinDef)
 
-	// The rows in the left table are used to probe into an index on the right
-	// table. Since the matching rows in the right table may not all be in the
-	// same range, this counts as random I/O.
+	// The rows in the (left) input are used to probe into the (right) table.
+	// Since the matching rows in the table may not all be in the same range, this
+	// counts as random I/O.
 	perRowCost := cpuCostFactor + randIOCostFactor +
-		c.rowScanCost(def.Table, def.Index, def.LookupCols.Len())
+		c.rowScanCost(def.Table, opt.PrimaryIndex, def.Cols.Len())
 	return leftCost + memo.Cost(leftRowCount)*perRowCost
 }
 
