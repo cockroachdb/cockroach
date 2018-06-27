@@ -255,9 +255,9 @@ func TestFuncDeps_MakeNotNull(t *testing.T) {
 	loj.AddConstants(util.MakeFastIntSet(1, 2, 10, 12))
 	verifyFD(t, loj, "(11): ()-->(1-5,10,12), (11)-->(13)")
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 10, 11, 12))
-	verifyFD(t, loj, "(11): ()-->(1-5), ()~~>(10,12), (11)-->(10,12,13)")
+	verifyFD(t, loj, "(11): ()-->(1-5), (11)-->(10,12,13), ()~~>(10,12)")
 	loj.MakeNotNull(util.MakeFastIntSet(1, 2, 12))
-	verifyFD(t, loj, "(11): ()-->(1-5,12), ()~~>(10), (11)-->(10,13)")
+	verifyFD(t, loj, "(11): ()-->(1-5,12), (11)-->(10,13), ()~~>(10)")
 
 	// Test MakeNotNull triggering key reduction.
 	//   SELECT * FROM (SELECT DISTINCT b, c, d, e FROM abcde) WHERE b IS NOT NULL AND c IS NOT NULL
@@ -570,26 +570,47 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	// Add constants on both sides of outer join.
 	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON b=1 AND c=1 AND p=1
 	nullExtendedCols = util.MakeFastIntSet(1, 2, 3, 4, 5)
-	loj = makeAbcdeFD(t)
-	loj.MakeProduct(makeMnpqFD(t))
-	loj.AddConstants(util.MakeFastIntSet(2, 3, 12))
-	loj.MakeNotNull(util.MakeFastIntSet(2, 3, 12))
-	verifyFD(t, loj, "(10,11): ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
-	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 12))
-	verifyFD(t, loj, "(10,11): ()-->(12), ()~~>(2,3), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(2,3,13)")
+	roj := makeAbcdeFD(t)
+	roj.MakeProduct(makeMnpqFD(t))
+	roj.AddConstants(util.MakeFastIntSet(2, 3, 12))
+	roj.MakeNotNull(util.MakeFastIntSet(2, 3, 12))
+	verifyFD(t, roj, "(10,11): ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
+	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 12))
+	verifyFD(t, roj, "(10,11): ()-->(12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(1-5,13), ()~~>(2,3)")
 
 	// Test equivalency on both sides of outer join.
 	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON b=c AND c=d AND m=p AND m=q
 	nullExtendedCols = util.MakeFastIntSet(1, 2, 3, 4, 5)
-	loj = makeAbcdeFD(t)
-	loj.MakeProduct(makeMnpqFD(t))
-	loj.AddEquivalency(2, 3)
-	loj.AddEquivalency(3, 4)
-	loj.AddEquivalency(10, 12)
-	loj.AddEquivalency(10, 13)
-	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
-	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 13))
-	verifyFD(t, loj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
+	roj = makeAbcdeFD(t)
+	roj.MakeProduct(makeMnpqFD(t))
+	roj.AddEquivalency(2, 3)
+	roj.AddEquivalency(3, 4)
+	roj.AddEquivalency(10, 12)
+	roj.AddEquivalency(10, 13)
+	verifyFD(t, roj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
+	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 13))
+	verifyFD(t, roj, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,5), (10,11)-->(12,13), (2)==(3,4), (3)==(2,4), (4)==(2,3), (10)==(12,13), (12)==(10,13), (13)==(10,12)")
+
+	// Test equivalency that crosses join boundary.
+	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON a=m
+	nullExtendedCols = util.MakeFastIntSet(1, 2, 3, 4, 5)
+	roj = makeAbcdeFD(t)
+	roj.MakeProduct(makeMnpqFD(t))
+	roj.AddEquivalency(1, 10)
+	verifyFD(t, roj, "(10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1)")
+	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 10, 11))
+	verifyFD(t, roj, "(10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(1-5,12,13), (1)~~>(10)")
+
+	// Test equivalency that includes columns from both sides of join boundary.
+	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON a=m AND a=b
+	nullExtendedCols = util.MakeFastIntSet(1, 2, 3, 4, 5)
+	roj = makeAbcdeFD(t)
+	roj.MakeProduct(makeMnpqFD(t))
+	roj.AddEquivalency(1, 10)
+	roj.AddEquivalency(1, 2)
+	verifyFD(t, roj, "(10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(2,10), (10)==(1,2), (2)==(1,10)")
+	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 10, 11))
+	verifyFD(t, roj, "(10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(1-5,12,13), (1)==(2), (2)==(1), (1)~~>(10), (2)~~>(10)")
 
 	// Join keyless relations with nullable columns.
 	//   SELECT * FROM (SELECT d, e, d+e FROM abcde) LEFT JOIN (SELECT p, q, p+q FROM mnpq) ON True

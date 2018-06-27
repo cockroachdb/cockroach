@@ -957,57 +957,100 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 // the impact of outer joins on FDs.
 func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	var newFDs []funcDep
-	var laxCols opt.ColSet
+	var allCols opt.ColSet
+
+	n := 0
 	for i := range f.deps {
 		fd := &f.deps[i]
+		allCols.UnionWith(fd.from)
+		allCols.UnionWith(fd.to)
 
-		// Null-extended constant dependency becomes lax (i.e. it may be either
-		// its previous constant value or NULL after extension).
 		if fd.from.Empty() {
-			if fd.to.Intersects(nullExtendedCols) {
-				laxCols.UnionWith(fd.to.Intersection(nullExtendedCols))
-				if newFD, created := fd.splitOnStrict(fd.to.Difference(nullExtendedCols)); created {
-					newFDs = append(newFDs, newFD)
+			// Null-extended constant dependency becomes lax (i.e. it may be either
+			// its previous constant value or NULL after extension).
+			if fd.strict && fd.to.Intersects(nullExtendedCols) {
+				laxConstCols := fd.to.Intersection(nullExtendedCols)
+				newFDs = append(newFDs, funcDep{from: fd.from, to: laxConstCols})
+				if fd.to.SubsetOf(nullExtendedCols) {
+					continue
 				}
+				fd.to = fd.to.Difference(laxConstCols)
 			}
-			continue
-		}
-
-		if fd.from.Intersects(nullExtendedCols) {
-			if !fd.from.SubsetOf(nullExtendedCols) || !fd.to.SubsetOf(nullExtendedCols) {
-				allCols := fd.from.Union(fd.to).Difference(nullExtendedCols).Difference(f.removed)
-				if !allCols.Empty() {
-					panic(fmt.Sprintf("outer join dependencies cannot cross join boundary: %s", f))
-				}
-			}
-
-			// Strict dependency on null-supplying side of join becomes lax if all
-			// determinant columns are nullable. For example, given this join and
-			// set of result rows:
+		} else {
+			// The next several rules depend on whether the dependency's determinant
+			// and dependants are on the null-supplying or row-supplying sides of
+			// the join (or both). The rules will use the following join and set of
+			// result rows to give examples:
 			//
-			//   SELECT * FROM ab LEFT OUTER JOIN cde ON a=c AND b=4
+			//   CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b))
+			//   SELECT * FROM ab LEFT OUTER JOIN cde ON a=c AND b=1
 			//
 			//   a  b  c     d     e
 			//   ----------------------
-			//   1  4  1     NULL  2
-			//   2  5  NULL  NULL  NULL
-			//   3  6  NULL  NULL  NULL
+			//   1  1  1     NULL  1
+			//   1  2  NULL  NULL  NULL
+			//   2  1  NULL  NULL  NULL
 			//
-			// Null-extending the (c,d,e) columns violates a strict (d)-->(e)
-			// dependency, because the NULL "d" value now maps to both 2 and NULL. So
-			// it must be weakened to a lax dependency. But if at least one non-NULL
-			// column is part of the determinant, such as (c,d)-->(e), then the
-			// (NULL,NULL) determinant will be unique, thus preserving a strict FD.
-			if fd.strict && !fd.equiv && !fd.from.Intersects(notNullCols) {
-				laxCols.UnionWith(fd.to)
-				fd.makeLax()
-			}
-		} else {
-			if fd.to.Intersects(nullExtendedCols) && !fd.from.SubsetOf(f.removed) {
-				panic(fmt.Sprintf("outer join dependencies cannot cross join boundary: %s", f))
+			// Here are the rules:
+			//
+			// 1. A strict dependency with determinant on the null-supplying side of
+			//    the join becomes lax for any dependants on the row-supplying side
+			//    of the join. In the example above, null-extending the (c) column
+			//    violates the (a)==(c) equivalence dependency. Even the strict
+			//    (a)-->(c) and (c)-->(a) dependencies no longer hold. The only
+			//    dependency that still holds is (c)~~>(a), and even that is only
+			//    one way, since (a)~~>(c) is not valid.
+			//
+			// 2. A strict dependency with both determinant and dependants on the
+			//    null-supplying side of join becomes lax if all determinant columns
+			//    are nullable. In the example above, null-extending the (c,d,e)
+			//    columns violates a strict (d)-->(e) dependency, because the NULL
+			//    "d" value now maps to both 1 and NULL. So it must be weakened to
+			//    a lax dependency. But if at least one non-NULL column is part of
+			//    the determinant, such as (c,d)-->(e), then the (NULL,NULL)
+			//    determinant will be unique, thus preserving a strict FD.
+			//
+			if fd.from.Intersects(nullExtendedCols) {
+				if !fd.from.SubsetOf(nullExtendedCols) {
+					panic(fmt.Sprintf("determinant cannot contain columns from both sides of join: %s", f))
+				}
+
+				// Rule #1, described above.
+				if !fd.to.SubsetOf(nullExtendedCols) {
+					// Split the dependants by which side of the join they're on.
+					laxCols := fd.to.Difference(nullExtendedCols)
+					newFDs = append(newFDs, funcDep{from: fd.from, to: laxCols})
+					fd.to = fd.to.Difference(laxCols)
+					if fd.to.Empty() {
+						continue
+					}
+				}
+
+				// Rule #2, described above (where determinant is on null-supplying
+				// side). Note that this rule does not apply to equivalence FDs, which
+				// remain valid.
+				if fd.strict && !fd.equiv && !fd.from.Intersects(notNullCols) {
+					newFDs = append(newFDs, funcDep{from: fd.from, to: fd.to})
+					continue
+				}
+			} else {
+				// Rule 2, described above (where determinant is on row-supplying side).
+				if fd.to.Intersects(nullExtendedCols) {
+					// Drop all dependants on null-supplying side.
+					if fd.to.SubsetOf(nullExtendedCols) {
+						continue
+					}
+					fd.to = fd.to.Difference(nullExtendedCols)
+				}
 			}
 		}
+
+		if n != i {
+			f.deps[n] = f.deps[i]
+		}
+		n++
 	}
+	f.deps = f.deps[:n]
 
 	for i := range newFDs {
 		fd := &newFDs[i]
@@ -1018,9 +1061,15 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	// relation. If there is a key, then that means the row-providing side of
 	// the join had its own key, and any added rows will therefore be unique.
 	// However, the key's closure may no longer include all columns in the
-	// relation, due to making FDs lax, so add a new strict FD now.
-	if f.hasKey && !laxCols.Empty() {
-		f.addDependency(f.key, laxCols, true /* strict */, false /* equiv */)
+	// relation, due to removing FDs and/or making them lax, so if necessary,
+	// add a new strict FD that ensures the key's closure is maintained.
+	if f.hasKey {
+		allCols.UnionWith(f.key)
+		closure := f.ComputeClosure(f.key)
+		if !allCols.SubsetOf(closure) {
+			allCols.DifferenceWith(closure)
+			f.addDependency(f.key, allCols, true /* strict */, false /* equiv */)
+		}
 	}
 }
 
@@ -1285,14 +1334,6 @@ func (f *funcDep) hasStrictConstants() bool {
 	return f.strict && f.from.Empty()
 }
 
-// makeLax sets the strict flag to false, indicating a lax dependency. In
-// addition, this library does not currently support lax equivalencies, so
-// that's just mapped into a regular lax dependency.
-func (f *funcDep) makeLax() {
-	f.strict = false
-	f.equiv = false
-}
-
 // implies returns true if this FD is at least as strong as the given FD. This
 // is true when:
 //   - the determinant is a subset of the given FD's determinant
@@ -1305,30 +1346,4 @@ func (f *funcDep) implies(fd *funcDep) bool {
 		}
 	}
 	return false
-}
-
-// splitOnStrict splits this FD into two: one FD contains all the columns that
-// are in the given strictCols set, and one contains all the columns that are
-// not in that set. If one of the two sets is empty, then this FD is simply
-// updated to include the non-empty set, and created is false. Otherwise, this
-// FD is updated to include the lax set, a new FD containing the strict columns
-// is returned, and created is true.
-func (f *funcDep) splitOnStrict(strictCols opt.ColSet) (strictFD funcDep, created bool) {
-	// If all dependant columns are strict, then just set the strict flag.
-	if f.to.SubsetOf(strictCols) {
-		f.strict = true
-		return funcDep{}, false
-	}
-
-	// If none of the dependant columns are strict, then modify existing FD.
-	if !f.to.Intersects(strictCols) {
-		f.makeLax()
-		return funcDep{}, false
-	}
-
-	// Some dependant columns are strict and some are not, so need new FD.
-	strictCols = f.to.Intersection(strictCols)
-	f.to = f.to.Difference(strictCols)
-	f.strict = false
-	return funcDep{from: f.from, to: strictCols, strict: true, equiv: false}, true
 }
