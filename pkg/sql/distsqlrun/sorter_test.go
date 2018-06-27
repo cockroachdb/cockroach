@@ -277,10 +277,6 @@ func TestSorter(t *testing.T) {
 		{bytes: 0, expSpill: false},
 		// Immediately switch to disk.
 		{bytes: 1, expSpill: true},
-		// This is the memory used after we store a couple of rows in
-		// memory. Tests the transfer of rows from memory to disk on
-		// initialization.
-		{bytes: 1150, expSpill: true},
 		// A memory limit that should not be hit; the processor will
 		// not use disk.
 		{bytes: 1 << 20, expSpill: false},
@@ -364,12 +360,16 @@ func TestSorter(t *testing.T) {
 								expStr, retStr)
 						}
 
-						// If the sorter is a sortAllProcessor, check whether the
-						// diskBackedRowContainer spilled to disk.
-						if sAll, ok := s.(*sortAllProcessor); ok {
-							spilled := sAll.rows.(*diskBackedRowContainer).Spilled()
-							if memLimit.expSpill != spilled {
-								t.Errorf("expected spill to disk=%t, found %t", memLimit.expSpill, spilled)
+						// Check whether the diskBackedRowContainer spilled to disk.
+						spilled := s.(rowsAccessor).getRows().Spilled()
+						if memLimit.expSpill != spilled {
+							t.Errorf("expected spill to disk=%t, found %t", memLimit.expSpill, spilled)
+						}
+						if spilled {
+							if scp, ok := s.(*sortChunksProcessor); ok {
+								if scp.rows.(*diskBackedRowContainer).UsingDisk() {
+									t.Errorf("expected chunks processor to reset to use memory")
+								}
 							}
 						}
 					})
