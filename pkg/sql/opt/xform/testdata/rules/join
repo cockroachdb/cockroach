@@ -87,9 +87,9 @@ memo
 SELECT * FROM abc JOIN xyz ON a=z
 ----
 memo (optimized)
- ├── G1: (inner-join G2 G3 G5) (inner-join G3 G2 G5) (merge-join G2 G3 G4)
+ ├── G1: (inner-join G2 G4 G5) (inner-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
- │         ├── best: (inner-join G2 G3 G5)
+ │         ├── best: (inner-join G2 G4 G5)
  │         └── cost: 3170.00
  ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
  │    ├── ""
@@ -98,14 +98,14 @@ memo (optimized)
  │    └── "[ordering: +1]"
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
- ├── G3: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G3: (merge-on G5 inner-join,+1,+7)
+ ├── G4: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
- │         ├── best: (sort G3)
+ │         ├── best: (sort G4)
  │         └── cost: 1169.66
- ├── G4: (merge-on G5 inner-join,+1,+7)
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable abc.a)
@@ -229,9 +229,9 @@ memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
 memo (optimized)
- ├── G1: (right-join G2 G3 G5) (left-join G3 G2 G5) (merge-join G2 G3 G4)
+ ├── G1: (right-join G2 G4 G5) (left-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
- │         ├── best: (right-join G2 G3 G5)
+ │         ├── best: (right-join G2 G4 G5)
  │         └── cost: 3170.00
  ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
  │    ├── ""
@@ -240,14 +240,14 @@ memo (optimized)
  │    └── "[ordering: +1]"
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
- ├── G3: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G3: (merge-on G5 right-join,+1,+7)
+ ├── G4: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
- │         ├── best: (sort G3)
+ │         ├── best: (sort G4)
  │         └── cost: 1169.66
- ├── G4: (merge-on G5 right-join,+1,+7)
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable abc.a)
@@ -294,26 +294,26 @@ memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
 memo (optimized)
- ├── G1: (inner-join G4 G3 G6) (inner-join G3 G4 G6) (merge-join G4 G3 G2) (merge-join G3 G4 G5)
+ ├── G1: (inner-join G3 G5 G6) (inner-join G5 G3 G6) (merge-join G3 G5 G2) (lookup-join G3 G6 xyz@xy,keyCols=[1],lookupCols=(5-7)) (merge-join G5 G3 G4) (lookup-join G5 G6 abc@ab,keyCols=[5],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
- │         ├── best: (merge-join G4="[ordering: +1]" G3="[ordering: +5]" G2)
+ │         ├── best: (merge-join G3="[ordering: +1]" G5="[ordering: +5]" G2)
  │         └── cost: 3160.00
  ├── G2: (merge-on G6 inner-join,+1,+5)
- ├── G3: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
- │    ├── ""
- │    │    ├── best: (scan xyz,cols=(5-7))
- │    │    └── cost: 1070.00
- │    └── "[ordering: +5]"
- │         ├── best: (scan xyz@xy,cols=(5-7))
- │         └── cost: 1070.00
- ├── G4: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G3: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
  │    └── "[ordering: +1]"
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
- ├── G5: (merge-on G6 inner-join,+5,+1)
+ ├── G4: (merge-on G6 inner-join,+5,+1)
+ ├── G5: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ │    ├── ""
+ │    │    ├── best: (scan xyz,cols=(5-7))
+ │    │    └── cost: 1070.00
+ │    └── "[ordering: +5]"
+ │         ├── best: (scan xyz@xy,cols=(5-7))
+ │         └── cost: 1070.00
  ├── G6: (filters G7)
  ├── G7: (eq G8 G9)
  ├── G8: (variable abc.a)
@@ -382,24 +382,14 @@ memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 memo (optimized)
- ├── G1: (inner-join G6 G5 G8) (inner-join G5 G6 G8) (merge-join G6 G5 G2) (merge-join G6 G5 G3) (merge-join G5 G6 G4) (merge-join G5 G6 G7)
+ ├── G1: (inner-join G5 G7 G8) (inner-join G7 G5 G8) (merge-join G5 G7 G2) (merge-join G5 G7 G3) (lookup-join G5 G8 stu,keyCols=[1 2 3],lookupCols=(4-6)) (lookup-join G5 G8 stu@uts,keyCols=[3 2 1],lookupCols=(4-6)) (merge-join G7 G5 G4) (merge-join G7 G5 G6) (lookup-join G7 G8 stu,keyCols=[4 5 6],lookupCols=(1-3)) (lookup-join G7 G8 stu@uts,keyCols=[6 5 4],lookupCols=(1-3))
  │    └── "[presentation: s:1,t:2,u:3,s:4,t:5,u:6]"
- │         ├── best: (merge-join G6="[ordering: +1,+2,+3]" G5="[ordering: +4,+5,+6]" G2)
+ │         ├── best: (merge-join G5="[ordering: +1,+2,+3]" G7="[ordering: +4,+5,+6]" G2)
  │         └── cost: 3140.00
  ├── G2: (merge-on G8 inner-join,+1,+2,+3,+4,+5,+6)
  ├── G3: (merge-on G8 inner-join,+3,+2,+1,+6,+5,+4)
  ├── G4: (merge-on G8 inner-join,+4,+5,+6,+1,+2,+3)
  ├── G5: (scan stu) (scan stu,rev) (scan stu@uts) (scan stu@uts,rev)
- │    ├── ""
- │    │    ├── best: (scan stu)
- │    │    └── cost: 1060.00
- │    ├── "[ordering: +4,+5,+6]"
- │    │    ├── best: (scan stu)
- │    │    └── cost: 1060.00
- │    └── "[ordering: +6,+5,+4]"
- │         ├── best: (scan stu@uts)
- │         └── cost: 1060.00
- ├── G6: (scan stu) (scan stu,rev) (scan stu@uts) (scan stu@uts,rev)
  │    ├── ""
  │    │    ├── best: (scan stu)
  │    │    └── cost: 1060.00
@@ -409,7 +399,17 @@ memo (optimized)
  │    └── "[ordering: +3,+2,+1]"
  │         ├── best: (scan stu@uts)
  │         └── cost: 1060.00
- ├── G7: (merge-on G8 inner-join,+6,+5,+4,+3,+2,+1)
+ ├── G6: (merge-on G8 inner-join,+6,+5,+4,+3,+2,+1)
+ ├── G7: (scan stu) (scan stu,rev) (scan stu@uts) (scan stu@uts,rev)
+ │    ├── ""
+ │    │    ├── best: (scan stu)
+ │    │    └── cost: 1060.00
+ │    ├── "[ordering: +4,+5,+6]"
+ │    │    ├── best: (scan stu)
+ │    │    └── cost: 1060.00
+ │    └── "[ordering: +6,+5,+4]"
+ │         ├── best: (scan stu@uts)
+ │         └── cost: 1060.00
  ├── G8: (filters G9 G10 G11)
  ├── G9: (eq G12 G13)
  ├── G10: (eq G14 G15)
@@ -700,3 +700,398 @@ inner-join (merge)
       └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
            ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+# --------------------------------------------------
+# GenerateLookupJoin
+# --------------------------------------------------
+
+# Verify rule application when we can do a lookup join on both sides.
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc JOIN xyz ON a=x AND a=y
+----
+----
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [1] = [5]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [5] = [1]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+----
+----
+
+# Verify rule application when we can do a lookup join on the left side.
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc JOIN xyz ON a=z
+----
+----
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── abc.a = xyz.z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── key columns: [7] = [1]
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── abc.a = xyz.z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+----
+----
+
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc RIGHT JOIN xyz ON a=z
+----
+----
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── abc.a = xyz.z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+
+New expression 1 of 1:
+  left-join (lookup abc@ab)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [7] = [1]
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── abc.a = xyz.z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+----
+----
+
+# Verify we don't generate a lookup join.
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc LEFT JOIN xyz ON a=z
+----
+
+
+# Verify rule application when we can do a lookup join on the right side.
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc JOIN xyz ON c=x
+----
+----
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── abc.c = xyz.x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── key columns: [3] = [5]
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── abc.c = xyz.x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+----
+----
+
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc LEFT JOIN xyz ON c=x
+----
+----
+================================================================================
+GenerateLookupJoin
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── abc.c = xyz.x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+New expression 1 of 1:
+  left-join (lookup xyz@xy)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [3] = [5]
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── abc.c = xyz.x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+----
+----
+
+# Verify we don't generate a lookup join.
+exploretrace rule=GenerateLookupJoin
+SELECT * FROM abc RIGHT JOIN xyz ON c=x
+----
+
+# --------------------------------------------------
+# GenerateLookupJoinWithFilter
+# --------------------------------------------------
+
+# Verify rule application when we can do a lookup join on both sides.
+exploretrace rule=GenerateLookupJoinWithFilter
+SELECT * FROM abc JOIN xyz ON a=x AND a=y AND a > 1
+----
+----
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [1] = [5]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── xyz.x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [5] = [1]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── abc.a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+----
+----
+
+# Verify rule application when we can do a lookup join on both sides.
+exploretrace rule=GenerateLookupJoinWithFilter
+SELECT * FROM abc JOIN xyz ON a=x AND a=y AND a > 1
+----
+----
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup xyz@xy)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [1] = [5]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── xyz.x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup abc@ab)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+   ├── key columns: [5] = [1]
+   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── abc.a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+----
+----
+
+# Verify rule application when we can do a lookup join on one side.
+exploretrace rule=GenerateLookupJoinWithFilter
+SELECT * FROM abc LEFT JOIN xyz ON a=x AND a=y AND a > 1
+----
+----
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz@xy
+   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+   │    └── constraint: /5/6/8: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  left-join (lookup xyz@xy)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [1] = [5]
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── xyz.x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+----
+----
+
+exploretrace rule=GenerateLookupJoinWithFilter
+SELECT * FROM abc RIGHT JOIN xyz ON a=x AND a=y AND a > 1
+----
+----
+================================================================================
+GenerateLookupJoinWithFilter
+================================================================================
+Source expression:
+  left-join
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc@ab
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+   │    └── constraint: /1/2/4: [/2 - ]
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 1:
+  left-join (lookup abc@ab)
+   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
+   ├── key columns: [5] = [1]
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
+        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        ├── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── abc.a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+----
+----

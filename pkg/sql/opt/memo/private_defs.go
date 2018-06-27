@@ -70,9 +70,6 @@ func (p ProjectionsOpDef) AllCols() opt.ColSet {
 
 // ScanOpDef defines the value of the Def private field of the Scan operator.
 type ScanOpDef struct {
-	// Reverse defines if the Scan is a reverse scan.
-	Reverse bool
-
 	// Table identifies the table to scan. It is an id that can be passed to
 	// the Metadata.Table method in order to fetch opt.Table metadata.
 	Table opt.TableID
@@ -81,6 +78,9 @@ type ScanOpDef struct {
 	// can be passed to the opt.Table.Index(i int) method in order to fetch the
 	// opt.Index metadata.
 	Index int
+
+	// Reverse indicates if the Scan is a reverse scan.
+	Reverse bool
 
 	// Cols specifies the set of columns that the scan operator projects. This
 	// may be a subset of the columns that the table/index contains.
@@ -177,9 +177,8 @@ type LookupJoinDef struct {
 	// index columns (or a prefix of them).
 	KeyCols opt.ColList
 
-	// LookupCols is the set of columns retrieved from the index. This set does
-	// not include the key columns. The LookupJoin operator produces the columns
-	// in its input plus these columns.
+	// LookupCols is the set of columns retrieved from the index. The LookupJoin
+	// operator produces the columns in its input plus these columns.
 	LookupCols opt.ColSet
 }
 
