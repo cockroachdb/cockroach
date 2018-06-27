@@ -746,25 +746,6 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	// Before clearing out the range, grab any existing legacy Raft tombstone
-	// since we have to write it back later.
-	var existingLegacyTombstone *roachpb.RaftTombstone
-	{
-		legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(r.RangeID)
-		var tomb roachpb.RaftTombstone
-		// Intentionally read from the engine to avoid the write-only batch (this is
-		// allowed since raftMu is held).
-		ok, err := engine.MVCCGetProto(
-			ctx, r.store.Engine(), legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-			&tomb)
-		if err != nil {
-			return err
-		}
-		if ok {
-			existingLegacyTombstone = &tomb
-		}
-	}
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
@@ -780,33 +761,17 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
-	// Nodes before v2.0 may send an incorrect Raft tombstone (see #12154) that
-	// was supposed to be unreplicated. Simply remove it, but note how we go
-	// through some trouble to ensure that our potential own tombstone survives
-	// the snapshot application: we can't have a preemptive snapshot (which may
-	// not be followed by a corresponding replication change) wipe out our Raft
-	// tombstone.
+	// Nodes running v2.0 and earlier may send an incorrect Raft tombstone (see
+	// #12154) that was supposed to be unreplicated. Simply remove it.
 	//
-	// NB: this can be removed in v2.1. This is because when we are running a
-	// binary at v2.1, we know that peers are at least running v2.0, which will
-	// never send out these snapshots.
+	// NB: this can be removed post v2.1. This is because when we are running a
+	// binary at v2.2, we know that peers are at least running v2.1, which will
+	// never send out snapshots with incorrect tombstones. v2.0 nodes can send out
+	// these incorrect snapshots if they were upgraded from a v1.1 store with
+	// incorrect tombstones and never rebooted while
+	// VersionUnreplicatedTombstoneKey was active.
 	if err := clearLegacyTombstone(batch, r.RangeID); err != nil {
 		return errors.Wrap(err, "while clearing legacy tombstone key")
-	}
-
-	// If before this snapshot there was a legacy tombstone, it was removed and
-	// we must issue a replacement. Note that we *could* check the cluster version
-	// and write a new-style tombstone here, but that is more complicated as we'd
-	// need to incorporate any existing new-style tombstone in the update. It's
-	// more straightforward to propagate the legacy tombstone; there's no
-	// requirement that snapshots participate in the migration.
-	if existingLegacyTombstone != nil {
-		err := engine.MVCCPutProto(
-			ctx, batch, nil /* ms */, keys.RaftTombstoneIncorrectLegacyKey(r.RangeID), hlc.Timestamp{}, nil /* txn */, existingLegacyTombstone,
-		)
-		if err != nil {
-			return err
-		}
 	}
 
 	// The log entries are all written to distinct keys so we can use a
