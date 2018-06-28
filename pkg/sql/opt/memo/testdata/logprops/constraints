@@ -665,9 +665,87 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50] [/5/100 - /5/100]
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── stats: [rows=0.0183673469, distinct(2)=0.0183673469, distinct(3)=0.0183673469]
  ├── key: (1)
  └── fd: (1)-->(2,3)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/4]
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 0.00648979592
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 0.00648979592
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2]
+ ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── cost: 0.00216326531
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/4]
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 0.00648979592
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 0.00648979592
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=show-all
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2]
+ ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── cost: 0.00216326531
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
 
 # A tuple with NULL in it can't match anything, so it should be excluded from the constraints.
 opt
@@ -676,7 +754,7 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, NULL))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50]
- ├── stats: [rows=0.00408163265, distinct(2)=0.00408163265, distinct(3)=0.00408163265]
+ ├── stats: [rows=0.00816326531, distinct(2)=0.00816326531, distinct(3)=0.00816326531]
  ├── key: (1)
  └── fd: (1)-->(2,3)
 
@@ -775,3 +853,88 @@ select
                 └── tuple [type=tuple{int, int}]
                      ├── const: 5 [type=int]
                      └── const: 100 [type=int]
+
+exec-ddl
+CREATE TABLE d
+(
+    k INT PRIMARY KEY,
+    p INT,
+    q INT
+)
+----
+TABLE d
+ ├── k int not null
+ ├── p int
+ ├── q int
+ └── INDEX primary
+      └── k int not null
+
+opt format=show-all
+SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
+----
+select
+ ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 1070
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(2,3)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ ├── scan d
+ │    ├── columns: d.k:1(int!null) d.p:2(int) d.q:3(int)
+ │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
+ │    ├── cost: 1060
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
+      └── in [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: d.p [type=int, outer=(2)]
+           │    └── variable: d.q [type=int, outer=(3)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 2 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 3 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 4 [type=int]
+
+opt format=show-all
+SELECT * FROM d WHERE (p, q) IN ((2, 1), (3, 1), (4, 1))
+----
+select
+ ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
+ ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── cost: 1070
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,3)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ ├── scan d
+ │    ├── columns: d.k:1(int!null) d.p:2(int) d.q:3(int)
+ │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
+ │    ├── cost: 1060
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight)]
+      └── in [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: d.p [type=int, outer=(2)]
+           │    └── variable: d.q [type=int, outer=(3)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 2 [type=int]
+                │    └── const: 1 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 3 [type=int]
+                │    └── const: 1 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 4 [type=int]
+                     └── const: 1 [type=int]
