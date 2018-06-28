@@ -166,6 +166,7 @@
 		CSVOptions
 		MySQLOutfileOptions
 		PgCopyOptions
+		PgDumpOptions
 		Attributes
 		ReplicationTarget
 		ReplicaDescriptor
