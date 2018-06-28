@@ -859,8 +859,8 @@ func TestStatusAPIQueries(t *testing.T) {
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServer := testCluster.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	firstServerProto := testCluster.Server(0)
+	thirdServerSql := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
 		stmt          string
@@ -887,12 +887,12 @@ func TestStatusAPIQueries(t *testing.T) {
 	}
 
 	for _, stmt := range statements {
-		sqlDB.Exec(t, stmt.stmt)
+		thirdServerSql.Exec(t, stmt.stmt)
 	}
 
 	// Hit query endpoint.
 	var resp serverpb.QueriesResponse
-	if err := getStatusJSONProto(firstServer, "queries", &resp); err != nil {
+	if err := getStatusJSONProto(firstServerProto, "queries", &resp); err != nil {
 		t.Fatal(err)
 	}
 
