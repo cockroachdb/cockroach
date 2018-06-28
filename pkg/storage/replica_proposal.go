@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ProposalData is data about a command which allows it to be
@@ -47,6 +49,10 @@ import (
 type ProposalData struct {
 	// The caller's context, used for logging proposals and reproposals.
 	ctx context.Context
+
+	// An optional tracing span bound to the proposal. Will be cleaned
+	// up when the proposal finishes.
+	sp opentracing.Span
 
 	// idKey uniquely identifies this proposal.
 	// TODO(andreimatei): idKey is legacy at this point: We could easily key
@@ -113,8 +119,21 @@ func (proposal *ProposalData) finishApplication(pr proposalResult) {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
 	}
-	proposal.doneCh <- pr
-	close(proposal.doneCh)
+	if proposal.sp != nil {
+		tracing.FinishSpan(proposal.sp)
+	}
+	proposal.signalProposalResult(pr)
+}
+
+// returnProposalResult signals proposal.doneCh with the proposal result if it
+// has not already been signaled. The method can be called even before the
+// proposal has finished replication and command application, and does not
+// release the command from the command queue.
+func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
+	if proposal.doneCh != nil {
+		proposal.doneCh <- pr
+		proposal.doneCh = nil
+	}
 }
 
 // TODO(tschottdorf): we should find new homes for the checksum, lease

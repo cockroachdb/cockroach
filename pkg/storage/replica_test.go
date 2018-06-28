@@ -9256,6 +9256,58 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 }
 
+// TestProposeWithAsyncConsensus tests that the proposal of a batch with
+// AsyncConsensus set to true will return its evaluation result before Raft
+// command has completed consensus and applied.
+func TestProposeWithAsyncConsensus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+
+	var filterActive int32
+	blockRaftApplication := make(chan struct{})
+	tsc.TestingKnobs.TestingApplyFilter =
+		func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+			if atomic.LoadInt32(&filterActive) == 1 {
+				<-blockRaftApplication
+			}
+			return nil
+		}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	repl := tc.repl
+
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("a")
+	put := putArgs(key, []byte("val"))
+	ba.Add(&put)
+	ba.Timestamp = tc.Clock().Now()
+	ba.AsyncConsensus = true
+
+	atomic.StoreInt32(&filterActive, 1)
+	exLease, _ := repl.GetLease()
+	ch, _, pErr := repl.propose(
+		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+	)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// The result should be signaled before consensus.
+	propRes := <-ch
+	if propRes.Err != nil {
+		t.Fatalf("unexpected proposal result error: %v", propRes.Err)
+	}
+	if propRes.Reply == nil || len(propRes.Reply.Responses) != 1 {
+		t.Fatalf("expected proposal result with 1 response, found: %v", propRes.Reply)
+	}
+
+	// Stop blocking Raft application to allow everything to shut down cleanly.
+	close(blockRaftApplication)
+}
+
 func TestSplitMsgApps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
