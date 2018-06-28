@@ -439,7 +439,7 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.AddFrom(b.makeTableFuncDep(md, def.Table), relational.OutputCols)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 

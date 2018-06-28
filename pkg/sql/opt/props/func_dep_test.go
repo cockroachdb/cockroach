@@ -265,9 +265,9 @@ func TestFuncDeps_MakeNotNull(t *testing.T) {
 	abcde = makeAbcdeFD(t)
 	abcde.ProjectCols(allCols)
 	abcde.AddStrictKey(allCols, allCols)
-	verifyFD(t, abcde, "(2-5): (1)-->(2-5), (2,3)~~>(1,4,5) [removed: (1)]")
+	verifyFD(t, abcde, "(2-5): (2,3)~~>(4,5)")
 	abcde.MakeNotNull(util.MakeFastIntSet(2, 3))
-	verifyFD(t, abcde, "(2,3): (1)-->(2-5), (2,3)-->(1,4,5) [removed: (1)]")
+	verifyFD(t, abcde, "(2,3): (2,3)-->(4,5)")
 }
 
 func TestFuncDeps_AddEquivalency(t *testing.T) {
@@ -365,6 +365,7 @@ func TestFuncDeps_AddConstants(t *testing.T) {
 	var am props.FuncDepSet
 	am.CopyFrom(makeJoinFD(t))
 	am.AddConstants(util.MakeFastIntSet(11))
+	verifyFD(t, &am, "(10): ()-->(11), (1)-->(2-5), (2,3)~~>(1,4,5), (10)-->(12,13), (1)==(10), (10)==(1)")
 	am.ProjectCols(util.MakeFastIntSet(1, 10, 11))
 	verifyFD(t, &am, "(10): ()-->(11), (1)==(10), (10)==(1)")
 	testColsAreStrictKey(t, &am, util.MakeFastIntSet(1), true)
@@ -396,16 +397,16 @@ func TestFuncDeps_AddSynthesizedCol(t *testing.T) {
 	abdef.AddSynthesizedCol(util.MakeFastIntSet(2, 3), 6)
 	verifyFD(t, &abdef, "(1): (1)-->(2-5), (2,3)~~>(1,4,5), (2,3)-->(6)")
 	abdef.ProjectCols(util.MakeFastIntSet(1, 2, 4, 5, 6))
-	verifyFD(t, &abdef, "(1): (1)-->(2-5), (2,3)-->(6) [removed: (3)]")
+	verifyFD(t, &abdef, "(1): (1)-->(2,4-6)")
 
 	// Add another synthesized column, based on the first synthesized column.
 	abdef.AddSynthesizedCol(util.MakeFastIntSet(6), 7)
-	verifyFD(t, &abdef, "(1): (1)-->(2-5), (2,3)-->(6), (6)-->(7) [removed: (3)]")
+	verifyFD(t, &abdef, "(1): (1)-->(2,4-6), (6)-->(7)")
 	testColsAreStrictKey(t, &abdef, util.MakeFastIntSet(2, 3), false)
 
 	// Add a constant synthesized column, not based on any other column.
 	abdef.AddSynthesizedCol(opt.ColSet{}, 8)
-	verifyFD(t, &abdef, "(1): ()-->(8), (1)-->(2-5), (2,3)-->(6), (6)-->(7) [removed: (3)]")
+	verifyFD(t, &abdef, "(1): ()-->(8), (1)-->(2,4-6), (6)-->(7)")
 	testColsAreStrictKey(t, &abdef, util.MakeFastIntSet(2, 3, 4, 5, 6, 7, 8), false)
 
 	// Remove columns and add computed column.
@@ -417,7 +418,7 @@ func TestFuncDeps_AddSynthesizedCol(t *testing.T) {
 	anb1.AddSynthesizedCol(util.MakeFastIntSet(2), 100)
 	verifyFD(t, &anb1, "(10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1), (2)-->(100)")
 	anb1.ProjectCols(util.MakeFastIntSet(1, 11, 100))
-	verifyFD(t, &anb1, "(1,11): (1)-->(2), (1)==(10), (10)==(1), (2)-->(100) [removed: (2,10)]")
+	verifyFD(t, &anb1, "(1,11): (1)-->(100)")
 	testColsAreStrictKey(t, &anb1, util.MakeFastIntSet(1, 11, 100), true)
 }
 
@@ -437,9 +438,18 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	var abcmn props.FuncDepSet
 	abcmn.CopyFrom(makeJoinFD(t))
 	abcmn.ProjectCols(util.MakeFastIntSet(1, 2, 3, 10, 11))
-	verifyFD(t, &abcmn, "(10,11): (1)-->(2,3), (2,3)~~>(1), (1)==(10), (10)==(1)")
+	verifyFD(t, &abcmn, "(10,11): (1)-->(2,3), (2,3)~~>(1,10), (1)==(10), (10)==(1)")
 	testColsAreStrictKey(t, &abcmn, util.MakeFastIntSet(1, 11), true)
 	testColsAreStrictKey(t, &abcmn, util.MakeFastIntSet(2, 3), false)
+
+	// Remove column that is constant and part of multi-column determinant.
+	//   SELECT a, c, d, e FROM abcde WHERE b=1
+	abcde := makeAbcdeFD(t)
+	abcde.AddConstants(util.MakeFastIntSet(2))
+	abcde.MakeNotNull(util.MakeFastIntSet(2, 3))
+	verifyFD(t, abcde, "(1): ()-->(2), (1)-->(3-5), (2,3)-->(1,4,5)")
+	abcde.ProjectCols(util.MakeFastIntSet(1, 3, 4, 5))
+	verifyFD(t, abcde, "(1): (1)-->(3-5), (3)-->(1,4,5)")
 
 	// Remove key columns, but expect another key to be found.
 	//   SELECT b, c, n FROM abcde, mnpq WHERE a=m AND b IS NOT NULL AND c IS NOT NULL
@@ -447,7 +457,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	switchKey.MakeNotNull(util.MakeFastIntSet(2, 3))
 	verifyFD(t, switchKey, "(10,11): (1)-->(2-5), (2,3)-->(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1)")
 	switchKey.ProjectCols(util.MakeFastIntSet(2, 3, 11))
-	verifyFD(t, switchKey, "(2,3,11): (1)-->(2,3), (2,3)-->(1), (1)==(10), (10)==(1) [removed: (1,10)]")
+	verifyFD(t, switchKey, "(2,3,11): ")
 
 	// Remove column from every determinant and ensure that all FDs go away.
 	//   SELECT d FROM abcde, mnpq WHERE a=m AND 1=1 AND n=2
@@ -462,7 +472,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	var bcden props.FuncDepSet
 	bcden.CopyFrom(makeJoinFD(t))
 	bcden.ProjectCols(util.MakeFastIntSet(2, 3, 4, 5, 11, 12, 13))
-	verifyFD(t, &bcden, "(1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1) [removed: (1,10)]")
+	verifyFD(t, &bcden, "(2,3)~~>(4,5)")
 	testColsAreStrictKey(t, &bcden, util.MakeFastIntSet(2, 3, 4, 5, 11, 12, 13), false)
 
 	// Remove remainder of columns (N rows, 0 cols projected).
@@ -485,7 +495,7 @@ func TestFuncDeps_AddFrom(t *testing.T) {
 	abcde := makeAbcdeFD(t)
 	abcde.ProjectCols(util.MakeFastIntSet(1, 2, 4))
 	verifyFD(t, abcde, "(1): (1)-->(2,4)")
-	abcde.AddFrom(makeAbcdeFD(t))
+	abcde.AddFrom(makeAbcdeFD(t), util.MakeFastIntSet(1, 2, 3, 4, 5))
 	verifyFD(t, abcde, "(1): (1)-->(2-5), (2,3)~~>(1,4,5)")
 	testColsAreStrictKey(t, abcde, util.MakeFastIntSet(1), true)
 
@@ -493,9 +503,9 @@ func TestFuncDeps_AddFrom(t *testing.T) {
 	abcde = makeAbcdeFD(t)
 	abcde.MakeNotNull(util.MakeFastIntSet(2, 3))
 	abcde.ProjectCols(util.MakeFastIntSet(2, 3))
-	verifyFD(t, abcde, "(2,3): (1)-->(2,3), (2,3)-->(1) [removed: (1)]")
-	abcde.AddFrom(makeAbcdeFD(t))
-	verifyFD(t, abcde, "(2,3): (1)-->(2-5), (2,3)-->(1), (2,3)~~>(1,4,5) [removed: (1)]")
+	verifyFD(t, abcde, "(2,3): ")
+	abcde.AddFrom(makeAbcdeFD(t), util.MakeFastIntSet(1, 2, 3, 4, 5))
+	verifyFD(t, abcde, "(2,3): (1)-->(2-5), (2,3)-->(1,4,5)")
 	testColsAreStrictKey(t, abcde, util.MakeFastIntSet(1), true)
 }
 
@@ -512,7 +522,7 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	mnpq.AddEquivalency(12, 13)
 	mnpq.ProjectCols(util.MakeFastIntSet(10, 11))
 	product.MakeProduct(mnpq)
-	verifyFD(t, product, "(1,10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (4)==(5), (5)==(4), (10,11)-->(12,13), (12)==(13), (13)==(12) [removed: (4,5,12,13)]")
+	verifyFD(t, product, "(1,10,11): (1)-->(2,3), (2,3)~~>(1)")
 
 	// Constants on both sides.
 	//   SELECT * FROM (SELECT * FROM abcde b=1), (SELECT * FROM mnpq WHERE p=1)
@@ -576,7 +586,7 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	loj.MakeNotNull(util.MakeFastIntSet(2, 3, 12))
 	verifyFD(t, loj, "(10,11): ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 3, 10, 11, 12))
-	verifyFD(t, loj, "(10,11): ()-->(12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(1-5,13), ()~~>(2,3)")
+	verifyFD(t, loj, "(10,11): ()-->(12), (1)-->(2-5), (2,3)-->(1,4,5), (10,11)-->(2,3,13), ()~~>(2,3)")
 
 	// Test equivalency on both sides of outer join.
 	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON b=c AND c=d AND m=p AND m=q
