@@ -216,6 +216,10 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 		}
 	}
 
+	if len(constrainedCols) == 0 {
+		return unconstrained, false
+	}
+
 	// If any of the LHS entries are not constrained then our constraints are not
 	// tight.
 	tight = (len(constrainedCols) == lhs.ChildCount())
