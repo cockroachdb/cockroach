@@ -586,6 +586,35 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	testColsAreStrictKey(t, product, util.MakeFastIntSet(4, 5, 10, 11, 12, 13), false)
 }
 
+func TestFuncDeps_MakeApply(t *testing.T) {
+	// CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
+	// CREATE UNIQUE INDEX ON abcde (b, c)
+	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
+	// SELECT *
+	// FROM abcde
+	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a LIMIT 1)
+	// ON True
+	abcde := makeAbcdeFD(t)
+	mnpq := makeMnpqFD(t)
+	mnpq.MakeMax1Row(util.MakeFastIntSet(10, 11, 12, 13))
+	verifyFD(t, mnpq, "(): ()-->(10-13)")
+	abcde.MakeApply(mnpq)
+	verifyFD(t, abcde, "(1): (1)-->(2-5,10-13), (2,3)~~>(1,4,5)")
+
+	// No key in outer relation.
+	//   SELECT *
+	//   FROM (SELECT b, c, d, e FROM abcde)
+	//   INNER JOIN LATERAL (SELECT * FROM mnpq LIMIT 1)
+	//   ON True
+	abcde = makeAbcdeFD(t)
+	abcde.ProjectCols(util.MakeFastIntSet(2, 3, 4, 5))
+	mnpq = makeMnpqFD(t)
+	mnpq.MakeMax1Row(util.MakeFastIntSet(10, 11, 12, 13))
+	verifyFD(t, mnpq, "(): ()-->(10-13)")
+	abcde.MakeApply(mnpq)
+	verifyFD(t, abcde, "(2,3)~~>(4,5)")
+}
+
 func TestFuncDeps_MakeOuter(t *testing.T) {
 	// All determinant columns in null-supplying side are nullable.
 	//   CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)

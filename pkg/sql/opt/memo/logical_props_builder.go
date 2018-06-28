@@ -364,7 +364,11 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		//   2. Apply ON predicate filter on resulting rows.
 		//   3. For outer joins, add non-matching rows, extended with NULL values
 		//      for the null-supplying side of the join.
-		relational.FuncDeps.MakeProduct(&rightProps.FuncDeps)
+		if ev.IsJoinApply() {
+			relational.FuncDeps.MakeApply(&rightProps.FuncDeps)
+		} else {
+			relational.FuncDeps.MakeProduct(&rightProps.FuncDeps)
+		}
 
 		notNullCols := leftProps.NotNullCols.Union(rightProps.NotNullCols)
 
