@@ -36,6 +36,7 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 			panic(fmt.Sprintf("outer cols %s intersect output cols %s",
 				relational.OuterCols, relational.OutputCols))
 		}
+		relational.FuncDeps.Verify()
 	}
 
 	switch ev.Operator() {
