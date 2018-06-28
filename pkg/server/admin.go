@@ -1516,18 +1516,6 @@ func (s *adminServer) DataDistribution(
 	return resp, nil
 }
 
-func (s *adminServer) Queries(
-	ctx context.Context, req *serverpb.QueriesRequest,
-) (*serverpb.QueriesResponse, error) {
-	stmtStats := s.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
-	lastReset := s.server.pgServer.SQLServer.GetStmtStatsLastReset()
-
-	return &serverpb.QueriesResponse{
-		Queries:   stmtStats,
-		LastReset: lastReset,
-	}, nil
-}
-
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.

@@ -337,7 +337,7 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
 
 // getQueries returns queries the cluster has recently executed, and some stats about them.
 export function getQueries(timeout?: moment.Duration): Promise<QueriesResponseMessage> {
-  return timeoutFetch(serverpb.QueriesResponse, `${API_PREFIX}/queries`, null, timeout);
+  return timeoutFetch(serverpb.QueriesResponse, `${STATUS_PREFIX}/queries`, null, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
