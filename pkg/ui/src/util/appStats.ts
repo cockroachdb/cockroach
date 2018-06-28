@@ -7,7 +7,7 @@ import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
 export type StatementStatistics = protos.cockroach.sql.StatementStatistics$Properties;
-export type CollectedStatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+export type CollectedStatementStatistics = protos.cockroach.server.serverpb.QueriesResponse.CollectedStatementStatistics$Properties;
 
 export interface NumericStat {
   mean?: number;
