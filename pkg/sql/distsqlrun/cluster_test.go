@@ -93,6 +93,7 @@ func TestClusterFlow(t *testing.T) {
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
+	txnMeta := roachpb.TxnCoordMeta{Txn: txnProto, RefreshValid: true}
 
 	tr1 := TableReaderSpec{
 		Table:    *desc,
@@ -116,7 +117,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req1 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     &txnProto,
+		TxnMeta: &txnMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -137,7 +138,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req2 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     &txnProto,
+		TxnMeta: &txnMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -158,7 +159,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req3 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     &txnProto,
+		TxnMeta: &txnMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{
@@ -395,10 +396,11 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
+	txnMeta := roachpb.TxnCoordMeta{Txn: txnProto, RefreshValid: true}
 
 	req := SetupFlowRequest{
 		Version: Version,
-		Txn:     &txnProto,
+		TxnMeta: &txnMeta,
 		Flow: FlowSpec{
 			FlowID: FlowID{UUID: uuid.MakeV4()},
 			// The left-hand Values processor in the diagram above.
@@ -649,10 +651,11 @@ func BenchmarkInfrastructure(b *testing.B) {
 						tc.Server(0).Clock().Now(),
 						0, // maxOffset
 					)
+					txnMeta := roachpb.TxnCoordMeta{Txn: txnProto, RefreshValid: true}
 					for i := range reqs {
 						reqs[i] = SetupFlowRequest{
 							Version: Version,
-							Txn:     &txnProto,
+							TxnMeta: &txnMeta,
 							Flow: FlowSpec{
 								Processors: []ProcessorSpec{{
 									Core: ProcessorCoreUnion{Values: &valSpecs[i]},

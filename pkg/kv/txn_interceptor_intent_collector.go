@@ -127,6 +127,10 @@ func (ic *txnIntentCollector) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 
 // augmentMetaLocked implements the txnInterceptor interface.
 func (ic *txnIntentCollector) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+	if len(meta.Intents) == 0 {
+		return
+	}
+
 	// Do not modify existing intent slices when copying.
 	ic.intents, _ = roachpb.MergeSpans(
 		append(append([]roachpb.Span(nil), ic.intents...), meta.Intents...),
