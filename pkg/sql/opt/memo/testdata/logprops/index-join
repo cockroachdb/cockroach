@@ -24,9 +24,31 @@ TABLE a
       ├── s string
       └── x int not null (storing)
 
-# In order to actually create new logical props for the lookup join, we
-# need to call ConstructLookupJoin, which only happens when where is a
-# remaining filter.
+exec-ddl
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b),
+  INDEX (c)
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int
+ ├── d int
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── b int not null
+ └── INDEX secondary
+      ├── c int
+      ├── a int not null
+      └── b int not null
+
+# In order to actually create new logical props for the index join, we need to
+# call ConstructLookupJoin, which only happens when where is a remaining filter.
 opt
 SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
@@ -81,3 +103,27 @@ project
                 │    ├── variable: a.x [type=int, outer=(1)]
                 │    └── variable: a.y [type=int, outer=(2)]
                 └── const: 10 [type=int]
+
+# Use secondary index to join to multi-valued primary index, but project only
+# a subset of the primary columns.
+opt
+SELECT b, c, d FROM abc WHERE c=1 AND d=2
+----
+select
+ ├── columns: b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── stats: [rows=0.00204081633, distinct(3)=0.00204081633, distinct(4)=0.00204081633]
+ ├── fd: ()-->(3,4)
+ ├── index-join abc
+ │    ├── columns: b:2(int!null) c:3(int) d:4(int)
+ │    ├── stats: [rows=1.42857143]
+ │    ├── fd: ()-->(3)
+ │    └── scan abc@secondary
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │         ├── constraint: /3/1/2: [/1 - /1]
+ │         ├── stats: [rows=1.42857143, distinct(3)=1]
+ │         ├── key: (1,2)
+ │         └── fd: ()-->(3)
+ └── filters [type=bool, outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+      └── eq [type=bool, outer=(4), constraints=(/4: [/2 - /2]; tight)]
+           ├── variable: abc.d [type=int, outer=(4)]
+           └── const: 2 [type=int]
