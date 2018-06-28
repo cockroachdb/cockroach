@@ -2240,7 +2240,9 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
-				if err := store0.RemoveReplica(context.Background(), replica2, *replica2.Desc(), true); err != nil {
+				if err := store0.RemoveReplica(context.Background(), replica2, *replica2.Desc(), storage.RemoveOptions{
+					DestroyData: true,
+				}); err != nil {
 					t.Fatal(err)
 				}
 			}

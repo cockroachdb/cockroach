@@ -132,6 +132,10 @@ message MergeTrigger {
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+
+  // A snapshot of the replicated data from the right-hand side of the merge
+  // as a serialized RocksDB write batch.
+  bytes right_data = 3;
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

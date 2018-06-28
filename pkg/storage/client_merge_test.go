@@ -95,17 +95,26 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
-	scan := func(f func(roachpb.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.Timestamp{}, true, false, nil, false, f); err != nil {
+	scan := func() map[string]struct{} {
+		t.Helper()
+		kvs, err := engine.Scan(store.Engine(), engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
+		if err != nil {
 			t.Fatal(err)
 		}
+		out := map[string]struct{}{}
+		for _, kv := range kvs {
+			out[string(kv.Key.Key)] = struct{}{}
+		}
+		return out
 	}
+
 	content := roachpb.Key("testing!")
 
 	// Write some values left of the proposed split key.
@@ -115,11 +124,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys.
-	preKeys := make(map[string]struct{})
-	scan(func(kv roachpb.KeyValue) (bool, error) {
-		preKeys[string(kv.Key)] = struct{}{}
-		return false, nil
-	})
+	preKeys := scan()
 
 	// Split the range.
 	_, bDesc, err := createSplitRanges(store)
@@ -142,16 +147,18 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys again.
-	postKeys := make(map[string]struct{})
-	scan(func(kv roachpb.KeyValue) (bool, error) {
-		postKeys[string(kv.Key)] = struct{}{}
-		return false, nil
-	})
+	postKeys := scan()
 
 	// Compute the new keys.
 	for k := range preKeys {
 		delete(postKeys, k)
 	}
+
+	tombstoneKey := string(keys.RaftTombstoneKey(bDesc.RangeID))
+	if _, ok := postKeys[tombstoneKey]; !ok {
+		t.Errorf("tombstone key (%s) missing after merge", roachpb.Key(tombstoneKey))
+	}
+	delete(postKeys, tombstoneKey)
 
 	// Keep only the subsumed range's local keys.
 	localRangeKeyPrefix := string(keys.MakeRangeIDPrefix(bDesc.RangeID))
@@ -165,7 +172,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "%d keys were not cleaned up:\n", numKeys)
 		for k := range postKeys {
-			fmt.Fprintf(&buf, "%q\n", k)
+			fmt.Fprintf(&buf, "%s (%q)\n", roachpb.Key(k), k)
 		}
 		t.Fatal(buf.String())
 	}
@@ -175,26 +182,45 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	testutils.RunTrueAndFalse(t, "colocate", mergeWithData)
+}
+
+func mergeWithData(t *testing.T, colocate bool) {
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+
+	var store1, store2 *storage.Store
+	if colocate {
+		mtc.Start(t, 1)
+		store1, store2 = mtc.stores[0], mtc.stores[0]
+	} else {
+		mtc.Start(t, 2)
+		store1, store2 = mtc.stores[0], mtc.stores[1]
+	}
+	defer mtc.Stop()
+
+	aDesc, bDesc, pErr := createSplitRanges(store1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !colocate {
+		mtc.replicateRange(bDesc.RangeID, 1)
+		mtc.transferLease(ctx, bDesc.RangeID, 0, 1)
+		mtc.unreplicateRange(bDesc.RangeID, 0)
+	}
 
 	content := roachpb.Key("testing!")
 
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Write some values left and right of the proposed split key.
 	pArgs := putArgs([]byte("aaa"), content)
-	if _, err := client.SendWrapped(context.Background(), store.TestSender(), pArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, store1.TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("ccc"), content)
-	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+	if _, err := client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, pArgs); err != nil {
 		t.Fatal(err)
@@ -202,7 +228,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Confirm the values are there.
 	gArgs := getArgs([]byte("aaa"))
-	if reply, err := client.SendWrapped(context.Background(), store.TestSender(), gArgs); err != nil {
+	if reply, err := client.SendWrapped(ctx, store1.TestSender(), gArgs); err != nil {
 		t.Fatal(err)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -210,7 +236,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"))
-	if reply, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+	if reply, err := client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
 		RangeID: bDesc.RangeID,
 	}, gArgs); err != nil {
 		t.Fatal(err)
@@ -222,20 +248,20 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(context.Background(), store.TestSender(), args); err != nil {
+	if _, err := client.SendWrapped(ctx, store1.TestSender(), args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
-		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(ctx, store1.Engine(), key, store1.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeB := store.LookupReplica([]byte("c"), nil)
+	rangeA := store1.LookupReplica([]byte("a"), nil)
+	rangeB := store1.LookupReplica([]byte("c"), nil)
 	rangeADesc := rangeA.Desc()
 	rangeBDesc := rangeB.Desc()
 
@@ -251,7 +277,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Try to get values from after the merge.
 	gArgs = getArgs([]byte("aaa"))
-	if reply, err := client.SendWrapped(context.Background(), store.TestSender(), gArgs); err != nil {
+	if reply, err := client.SendWrapped(ctx, store1.TestSender(), gArgs); err != nil {
 		t.Fatal(err)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -259,7 +285,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"))
-	if reply, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+	if reply, err := client.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
 		RangeID: rangeB.RangeID,
 	}, gArgs); err != nil {
 		t.Fatal(err)
@@ -271,11 +297,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Put new values after the merge on both sides.
 	pArgs = putArgs([]byte("aaaa"), content)
-	if _, err := client.SendWrapped(context.Background(), store.TestSender(), pArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, store1.TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("cccc"), content)
-	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+	if _, err := client.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
 		RangeID: rangeB.RangeID,
 	}, pArgs); err != nil {
 		t.Fatal(err)
@@ -283,7 +309,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Try to get the newly placed values.
 	gArgs = getArgs([]byte("aaaa"))
-	if reply, err := client.SendWrapped(context.Background(), store.TestSender(), gArgs); err != nil {
+	if reply, err := client.SendWrapped(ctx, store1.TestSender(), gArgs); err != nil {
 		t.Fatal(err)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -291,12 +317,21 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs([]byte("cccc"))
-	if reply, err := client.SendWrapped(context.Background(), store.TestSender(), gArgs); err != nil {
+	if reply, err := client.SendWrapped(ctx, store1.TestSender(), gArgs); err != nil {
 		t.Fatal(err)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Equal(replyBytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
+	}
+
+	gArgs = getArgs([]byte("cccc"))
+	if _, err := client.SendWrappedWith(ctx, store2, roachpb.Header{
+		RangeID: bDesc.RangeID,
+	}, gArgs); !testutils.IsPError(
+		err, `r2 was not found`,
+	) {
+		t.Fatalf("expected get on rhs to fail after merge, but got err=%v", err)
 	}
 }
 
@@ -314,56 +349,6 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	args := adminMergeArgs(roachpb.KeyMin)
 	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), args); !testutils.IsPError(pErr, "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", pErr)
-	}
-}
-
-// TestStoreRangeMergeNonCollocated attempts to merge two ranges
-// that are not on the same stores.
-func TestStoreRangeMergeNonCollocated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
-	defer mtc.Stop()
-	mtc.Start(t, 4)
-
-	store := mtc.stores[0]
-
-	// Split into 3 ranges
-	argsSplit := adminSplitArgs(roachpb.Key("d"))
-	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), argsSplit); pErr != nil {
-		t.Fatalf("Can't split range %s", pErr)
-	}
-	argsSplit = adminSplitArgs(roachpb.Key("b"))
-	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), argsSplit); pErr != nil {
-		t.Fatalf("Can't split range %s", pErr)
-	}
-
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeADesc := rangeA.Desc()
-	rangeB := store.LookupReplica([]byte("c"), nil)
-	rangeBDesc := rangeB.Desc()
-	rangeC := store.LookupReplica([]byte("e"), nil)
-	rangeCDesc := rangeC.Desc()
-
-	if bytes.Equal(rangeADesc.StartKey, rangeBDesc.StartKey) {
-		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
-	}
-	if bytes.Equal(rangeBDesc.StartKey, rangeCDesc.StartKey) {
-		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeBDesc.StartKey, rangeCDesc.StartKey)
-	}
-	if bytes.Equal(rangeADesc.StartKey, rangeCDesc.StartKey) {
-		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeCDesc.StartKey)
-	}
-
-	// Replicate the ranges to different sets of stores. Ranges A and C
-	// are collocated, but B is different.
-	mtc.replicateRange(rangeA.RangeID, 1, 2)
-	mtc.replicateRange(rangeB.RangeID, 1, 3)
-	mtc.replicateRange(rangeC.RangeID, 1, 2)
-
-	// Attempt to merge.
-	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
-	if _, pErr := rangeA.AdminMerge(context.Background(), *argsMerge); !testutils.IsPError(pErr, "ranges not collocated") {
-		t.Fatalf("did not got expected error; got %s", pErr)
 	}
 }
 
@@ -430,6 +415,72 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Merged stats should agree with recomputation.
 	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
+	}
+}
+
+func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	// A GetSnapshotForMerge request that succeeds when it shouldn't will wedge a
+	// store because it waits for a merge that is not actually in progress. Set a
+	// short timeout to limit the damage.
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
+
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	getSnapArgs := roachpb.GetSnapshotForMergeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: bDesc.StartKey.AsRawKey()},
+		LeftRange:     *aDesc,
+	}
+
+	// GetSnapshotForMerge from a non-neighboring LHS should fail.
+	{
+		badArgs := getSnapArgs
+		badArgs.LeftRange.EndKey = append(roachpb.RKey{}, badArgs.LeftRange.EndKey...).Next()
+		_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			RangeID: bDesc.RangeID,
+		}, &badArgs)
+		if exp := "ranges are not adjacent"; !testutils.IsPError(pErr, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, pErr)
+		}
+	}
+
+	// GetSnapshotForMerge without an intent on the local range descriptor should fail.
+	_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+		RangeID: bDesc.RangeID,
+	}, &getSnapArgs)
+	if exp := "range missing intent on its local descriptor"; !testutils.IsPError(pErr, exp) {
+		t.Fatalf("expected %q error, but got %v", exp, pErr)
+	}
+
+	// GetSnapshotForMerge when a non-deletion intent is present on the
+	// local range descriptor should fail.
+	err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, keys.RangeDescriptorKey(bDesc.StartKey), "garbage"); err != nil {
+			return err
+		}
+		// NB: GetSnapshotForMerge intentionally takes place outside of the txn so
+		// that it sees an intent rather than the value the txn just wrote.
+		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			RangeID: bDesc.RangeID,
+		}, &getSnapArgs)
+		if exp := "non-deletion intent on local range descriptor"; !testutils.IsPError(pErr, exp) {
+			return fmt.Errorf("expected %q error, but got %v", exp, pErr)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

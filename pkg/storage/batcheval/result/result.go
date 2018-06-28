@@ -66,11 +66,26 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
+	// Indicate that all traffic must be blocked until the merge transaction
+	// between this range and its left neighbor completes.
+	SetMerging bool
 
 	// Set when transaction record(s) are updated, after calls to
 	// EndTransaction or PushTxn. This is a pointer to allow the zero
 	// (and as an unwelcome side effect, all) values to be compared.
 	UpdatedTxns *[]*roachpb.Transaction
+}
+
+// DetachSetMerging returns and falsifies the SetMerging flag from the local
+// result.
+func (lResult *LocalResult) DetachSetMerging() bool {
+	if lResult == nil {
+		return false
+	} else if lResult.SetMerging {
+		lResult.SetMerging = false
+		return true
+	}
+	return false
 }
 
 // DetachIntents returns (and removes) those intents from the
@@ -308,6 +323,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
+	coalesceBool(&p.Local.SetMerging, &q.Local.SetMerging)
 
 	if q.Local.UpdatedTxns != nil {
 		if p.Local.UpdatedTxns == nil {
