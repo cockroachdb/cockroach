@@ -13,7 +13,7 @@ import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 import "./statements.styl";
 
 export interface AggregateStatistics {
-  statement: string;
+  label: string;
   stats: StatementStatistics;
 }
 
@@ -25,9 +25,9 @@ function StatementLink(props: { statement: string, app: string }) {
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="__tooltip">
+      <div className="statement__tooltip">
         <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
-          <div className="last-cleared-tooltip__tooltip-hover-area">
+          <div className="statement__tooltip-hover-area">
             { shortStatement(summary, props.statement) }
           </div>
         </ToolTipWrapper>
@@ -56,17 +56,52 @@ function calculateCumulativeTime(stats: StatementStatistics) {
 
 export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
     : ColumnDescriptor<AggregateStatistics>[] {
+  const original: ColumnDescriptor<AggregateStatistics>[] = [
+    {
+      title: "Statement",
+      className: "statements-table__col-query-text",
+      cell: (stmt) => <StatementLink statement={ stmt.label } app={ selectedApp } />,
+      sort: (stmt) => stmt.label,
+    },
+  ];
+
+  return original.concat(makeCommonColumns(statements));
+}
+
+function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
+  return (
+    <Link to={ `/node/${props.nodeId}` }>
+      <div className="node-name__tooltip">
+        <ToolTipWrapper text={props.nodeNames[props.nodeId]}>
+          <div className="node-name-tooltip__tooltip-hover-area">
+            <div className="node-name-tooltip__info-icon">n{props.nodeId}</div>
+          </div>
+        </ToolTipWrapper>
+      </div>
+    </Link>
+  );
+}
+
+export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: { [nodeId: string]: string })
+    : ColumnDescriptor<AggregateStatistics>[] {
+  const original: ColumnDescriptor<AggregateStatistics>[] = [
+    {
+      title: "Node",
+      cell: (stmt) => <NodeLink nodeId={ stmt.label } nodeNames={ nodeNames } />,
+      sort: (stmt) => stmt.label,
+    },
+  ];
+
+  return original.concat(makeCommonColumns(statements));
+}
+
+function makeCommonColumns(statements: AggregateStatistics[])
+    : ColumnDescriptor<AggregateStatistics>[] {
   const countBar = countBarChart(statements);
   const rowsBar = rowsBarChart(statements);
   const latencyBar = latencyBarChart(statements);
 
   return [
-    {
-      title: "Statement",
-      className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.statement } app={ selectedApp } />,
-      sort: (stmt) => stmt.statement,
-    },
     {
       title: "Time",
       cell: (stmt) => Duration(calculateCumulativeTime(stmt.stats) * 1e9),

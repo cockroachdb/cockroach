@@ -184,7 +184,7 @@ export const selectStatements = createSelector(
     return Object.keys(statementsMap).map(stmt => {
       const stats = statementsMap[stmt];
       return {
-        statement: stmt,
+        label: stmt,
         stats: combineStatementStats(stats),
       };
     });
