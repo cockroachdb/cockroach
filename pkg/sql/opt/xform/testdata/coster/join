@@ -86,7 +86,7 @@ index-join abc
  ├── stats: [rows=1.42857143, distinct(3)=1]
  ├── cost: 7.3
  ├── key: (1)
- ├── fd: (1)-->(2,3), ()-->(3)
+ ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]

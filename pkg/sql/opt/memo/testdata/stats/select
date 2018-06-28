@@ -258,37 +258,36 @@ project
  ├── columns: pk:1(int!null)
  ├── stats: [rows=0]
  ├── key: (1)
- ├── fd: (1)-->(2,26) [removed: (2,26)]
  └── select
       ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:27(bool)
       ├── stats: [rows=0]
       ├── key: (1)
-      ├── fd: (1)-->(2,26), (2,26)-->(27) [removed: (26)]
+      ├── fd: (1)-->(2,27)
       ├── project
       │    ├── columns: case:27(bool) tab0.pk:1(int!null) tab0.col0:2(int)
       │    ├── stats: [rows=0]
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,26), (2,26)-->(27) [removed: (26)]
+      │    ├── fd: (1)-->(2,27)
       │    ├── group-by
       │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:26(bool)
       │    │    ├── grouping columns: tab0.pk:1(int!null)
       │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,23,26) [removed: (23)]
+      │    │    ├── fd: (1)-->(2,26)
       │    │    ├── left-join
       │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:19(int) case:24(bool) notnull:25(bool)
       │    │    │    ├── stats: [rows=0, distinct(1)=0]
-      │    │    │    ├── fd: (1)-->(2,23), (2,23)-->(24), (19)~~>(25) [removed: (23)]
+      │    │    │    ├── fd: (1)-->(2,24), (19)~~>(25)
       │    │    │    ├── select
       │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:24(bool)
       │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2,23), (2,23)-->(24) [removed: (23)]
+      │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: case:24(bool) tab0.pk:1(int!null) tab0.col0:2(int)
       │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    ├── fd: (1)-->(2,23), (2,23)-->(24) [removed: (23)]
+      │    │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    │    ├── group-by
       │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:23(bool)
       │    │    │    │    │    │    ├── grouping columns: tab0.pk:1(int!null)

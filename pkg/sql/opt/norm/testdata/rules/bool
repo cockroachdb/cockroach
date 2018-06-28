@@ -464,7 +464,7 @@ SELECT * FROM a WHERE NOT(NOT(j = '{}'))
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb!null)
  ├── key: (1)
- ├── fd: (1)-->(2-5), ()-->(5)
+ ├── fd: ()-->(5), (1)-->(2-4)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
