@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -61,8 +62,9 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	txnMeta := roachpb.TxnCoordMeta{Txn: *txn.Proto(), RefreshValid: true}
 
-	req := &SetupFlowRequest{Version: Version, Txn: txn.Proto()}
+	req := &SetupFlowRequest{Version: Version, TxnMeta: &txnMeta}
 	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},

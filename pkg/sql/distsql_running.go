@@ -115,9 +115,19 @@ func (dsp *DistSQLPlanner) Run(
 ) {
 	ctx := planCtx.ctx
 
-	var txnProto *roachpb.Transaction
+	var txnMeta *roachpb.TxnCoordMeta
 	if txn != nil {
-		txnProto = txn.Proto()
+		meta := txn.GetTxnCoordMeta()
+		// WIP: ... yeah
+		meta.Txn = *txn.Proto()
+		// Strip unnecessary fields that don't need to be sent to the Leaf txn.
+		// TODO(nvanbenschoten): This indicates that we should consider having
+		// two separate type instead of a single TxnCoordMeta.
+		meta.Intents = nil
+		meta.CommandCount = 0
+		meta.RefreshReads = nil
+		meta.RefreshWrites = nil
+		txnMeta = &meta
 	}
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
@@ -162,7 +172,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		req := &distsqlrun.SetupFlowRequest{
 			Version:     distsqlrun.Version,
-			Txn:         txnProto,
+			TxnMeta:     txnMeta,
 			Flow:        flowSpec,
 			EvalContext: evalCtxProto,
 		}
@@ -202,7 +212,7 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
 		Version:     distsqlrun.Version,
-		Txn:         txnProto,
+		TxnMeta:     txnMeta,
 		Flow:        flows[thisNodeID],
 		EvalContext: evalCtxProto,
 	}
