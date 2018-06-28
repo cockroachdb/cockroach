@@ -5176,33 +5176,52 @@ func (r *Replica) acquireMergeLock(
 	ctx context.Context, merge *roachpb.MergeTrigger,
 ) (func(storagebase.ReplicatedEvalResult), error) {
 	// The merge lock is the right-hand replica's raftMu. If the right-hand
-	// replica does not exist, we create an uninitialized replica. This is
-	// required for correctness: without the uninitialized replica, an incoming
-	// snapshot could create the right-hand replica before the merge trigger has a
-	// chance to widen the left-hand replica's end key. The merge trigger would
-	// then fatal the node upon realizing the right-hand replica already exists.
-	// With an uninitialized and locked right-hand replica in place, any snapshots
-	// for the right-hand range will block on raftMu, waiting for the merge to
-	// complete, after which the replica will realize it has been destroyed and
-	// reject the snapshot.
-	//
-	// TODO(benesch): if the right-hand replica splits, we could probably see a
-	// snapshot for the right-hand side of the right-hand side. The uninitialized
-	// replica this method installs will not block this snapshot from applying as
-	// the snapshot's range ID will be different. Add a placeholder to the
-	// replicasByKey map as well to be safe.
-	//
-	// TODO(benesch): make terminology for uninitialized replicas, which protect a
-	// range ID, and placeholder replicas, which protect a key range, consistent.
-	// Several code comments refer to "uninitialized placeholders," which is
-	// downright confusing.
-	rightRng, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
+	// replica does not exist, we create one. This is required for correctness.
+	// Without a right-hand replica on this store, an incoming snapshot could
+	// create the right-hand replica before the merge trigger has a chance to
+	// widen the left-hand replica's end key. The merge trigger would then fatal
+	// the node upon realizing the right-hand replica already exists. With a
+	// right-hand replica in place, any snapshots for the right-hand range will
+	// block on raftMu, waiting for the merge to complete, after which the replica
+	// will realize it has been destroyed and reject the snapshot.
+	rightRepl, created, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil, err
 	}
+	var placeholder *ReplicaPlaceholder
+	if created {
+		// rightRepl does not know its start and end keys. It can only block
+		// incoming snapshots with the same range ID. This is an insufficient lock:
+		// it's possible for this store to receive a snapshot with a different range
+		// ID that overlaps the right-hand keyspace while the merge is in progress.
+		// Consider the case where this replica is behind and the merged range
+		// resplits before this replica processes the merge. An up-to-date member of
+		// the new right-hand range could send this store a snapshot that would
+		// incorrectly sneak past rightRepl.
+		//
+		// So install a placeholder for the right range's keyspace in the
+		// replicasByKey map to block any intersecting snapshots.
+		placeholder = &ReplicaPlaceholder{rangeDesc: merge.RightDesc}
+		if err := r.store.addPlaceholder(placeholder); err != nil {
+			return nil, err
+		}
+	}
 
 	return func(storagebase.ReplicatedEvalResult) {
-		rightRng.raftMu.Unlock()
+		if created {
+			// Sanity check that the merge cleaned up the placeholder created above.
+			r.store.mu.Lock()
+			if _, ok := r.store.mu.replicasByKey.Get(placeholder).(*ReplicaPlaceholder); ok {
+				r.store.mu.Unlock()
+				log.Fatalf(ctx, "merge did not remove placeholder %+v from replicasByKey", placeholder)
+			}
+			if _, ok := r.store.mu.replicaPlaceholders[rightRepl.RangeID]; ok {
+				r.store.mu.Unlock()
+				log.Fatalf(ctx, "merge did not remove placeholder %+v from replicaPlaceholders", placeholder)
+			}
+			r.store.mu.Unlock()
+		}
+		rightRepl.raftMu.Unlock()
 	}, nil
 }
 
