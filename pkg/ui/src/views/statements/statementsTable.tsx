@@ -13,7 +13,7 @@ import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 import "./statements.styl";
 
 export interface AggregateStatistics {
-  statement: string;
+  label: string;
   stats: StatementStatistics;
 }
 
@@ -56,17 +56,38 @@ function calculateCumulativeTime(stats: StatementStatistics) {
 
 export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
     : ColumnDescriptor<AggregateStatistics>[] {
+  const original: ColumnDescriptor<AggregateStatistics>[] = [
+    {
+      title: "Statement",
+      className: "statements-table__col-query-text",
+      cell: (stmt) => <StatementLink statement={ stmt.label } app={ selectedApp } />,
+      sort: (stmt) => stmt.label,
+    },
+  ];
+
+  return original.concat(makeCommonColumns(statements));
+}
+
+export function makeNodesColumns(statements: AggregateStatistics[])
+    : ColumnDescriptor<AggregateStatistics>[] {
+  const original: ColumnDescriptor<AggregateStatistics>[] = [
+    {
+      title: "Node",
+      cell: (stmt) => stmt.label,
+      sort: (stmt) => stmt.label,
+    },
+  ];
+
+  return original.concat(makeCommonColumns(statements));
+}
+
+function makeCommonColumns(statements: AggregateStatistics[])
+    : ColumnDescriptor<AggregateStatistics>[] {
   const countBar = countBarChart(statements);
   const rowsBar = rowsBarChart(statements);
   const latencyBar = latencyBarChart(statements);
 
   return [
-    {
-      title: "Statement",
-      className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.statement } app={ selectedApp } />,
-      sort: (stmt) => stmt.statement,
-    },
     {
       title: "Time",
       cell: (stmt) => Duration(calculateCumulativeTime(stmt.stats) * 1e9),

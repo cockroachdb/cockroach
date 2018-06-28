@@ -32,7 +32,7 @@ describe("selectStatements", () => {
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(stmt => stmt.key.statement);
     expectedFingerprints.sort();
-    const actualFingerprints = result.map(stmt => stmt.statement);
+    const actualFingerprints = result.map(stmt => stmt.label);
     actualFingerprints.sort();
     assert.deepEqual(actualFingerprints, expectedFingerprints);
   });
@@ -48,7 +48,7 @@ describe("selectStatements", () => {
     const result = selectStatements(state, props);
 
     assert.equal(result.length, 1);
-    assert.equal(result[0].statement, stmtA.key.statement);
+    assert.equal(result[0].label, stmtA.key.statement);
     assert.equal(result[0].stats.count.toNumber(), sumCount);
   });
 
