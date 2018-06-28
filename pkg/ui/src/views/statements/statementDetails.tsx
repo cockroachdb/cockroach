@@ -26,6 +26,7 @@ interface AggregateStatistics {
   app: string[];
   distSQL: boolean[];
   failed: boolean[];
+  node_id: number[];
   stats: StatementStatistics;
 }
 
@@ -290,6 +291,7 @@ export const selectStatement = createSelector(
       app: _.uniq(results.map(s => s.app)),
       distSQL: _.uniq(results.map(s => s.distSQL)),
       failed: _.uniq(results.map(s => s.failed)),
+      node_id: _.uniq(results.map(s => s.node_id)),
     };
   },
 );
