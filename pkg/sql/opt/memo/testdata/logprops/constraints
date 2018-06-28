@@ -645,7 +645,7 @@ CREATE TABLE c
     k INT PRIMARY KEY,
     u INT,
     v INT,
-     INDEX v (v, u)
+    INDEX v (v, u)
 )
 ----
 TABLE c
@@ -938,3 +938,26 @@ select
                 └── tuple [type=tuple{int, int}]
                      ├── const: 4 [type=int]
                      └── const: 1 [type=int]
+
+opt
+SELECT * FROM c WHERE (1, 2) IN ((1, 2))
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters [type=bool]
+      └── in [type=bool]
+           ├── tuple [type=tuple{int, int}]
+           │    ├── const: 1 [type=int]
+           │    └── const: 2 [type=int]
+           └── tuple [type=tuple{tuple{int, int}}]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 2 [type=int]
