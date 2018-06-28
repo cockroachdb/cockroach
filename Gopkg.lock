@@ -244,13 +244,14 @@
   revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
 
 [[projects]]
-  branch = "master"
+  branch = "crdb-release-2.0"
   name = "github.com/coreos/etcd"
   packages = [
     "raft",
     "raft/raftpb",
   ]
-  revision = "ce0ad377d21819592c3d8c29417d9d7a5ac53f2f"
+  revision = "d6888f56de7436287397d8ac2ff448dae0091ddc"
+  source = "https://github.com/cockroachdb/etcd"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
@@ -1234,6 +1235,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "793eed0fb2d929f9ba2aba348e7c4d0e2a16afd109503ffe0c09a603d060477c"
+  inputs-digest = "3f17f79398b9d0ebd6aaaaf0f901bc5b0f8818abe58f95211356691e746ff3ff"
   solver-name = "gps-cdcl"
   solver-version = 1

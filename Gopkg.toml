@@ -32,7 +32,8 @@ ignored = [
 # https://github.com/coreos/etcd/commit/ce0ad377
 [[constraint]]
   name = "github.com/coreos/etcd"
-  branch = "master"
+  source = "https://github.com/cockroachdb/etcd"
+  branch = "crdb-release-2.0"
 
 # Used for the API client; we want the latest.
 [[constraint]]
