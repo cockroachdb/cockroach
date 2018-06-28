@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -78,9 +79,15 @@ func (p *postgreStream) Next() (interface{}, error) {
 	}
 
 	for p.s.Scan() {
-		stmts, err := parser.Parse(p.s.Text())
+		t := p.s.Text()
+		stmts, err := parser.Parse(t)
 		if err != nil {
-			return nil, err
+			// Something non-parseable may be something we don't yet parse but still
+			// want to ignore.
+			if isIgnoredStatement(t) {
+				continue
+			}
+			return nil, errors.Errorf("%v: (%s)", err, t)
 		}
 		switch len(stmts) {
 		case 0:
@@ -117,6 +124,31 @@ func (p *postgreStream) Next() (interface{}, error) {
 		return nil, err
 	}
 	return nil, io.EOF
+}
+
+var (
+	ignoreComments   = regexp.MustCompile(`^\s*(--.*)`)
+	ignoreStatements = []*regexp.Regexp{
+		regexp.MustCompile("(?i)^alter table .* owner to"),
+	}
+)
+
+func isIgnoredStatement(s string) bool {
+	// Look for the first line with no whitespace or comments.
+	for {
+		m := ignoreComments.FindStringIndex(s)
+		if m == nil {
+			break
+		}
+		s = s[m[1]:]
+	}
+	s = strings.TrimSpace(s)
+	for _, re := range ignoreStatements {
+		if re.MatchString(s) {
+			return true
+		}
+	}
+	return false
 }
 
 // readPostgresCreateTable returns table descriptors for all tables or the

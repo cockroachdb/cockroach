@@ -239,7 +239,7 @@ func pgdump(t *testing.T, dest string, tables ...string) {
 		t.Fatal(err)
 	}
 
-	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`, `--no-owner`, `--no-privileges`}
+	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`, `--no-privileges`}
 	for _, table := range tables {
 		args = append(args, `-t`, table)
 	}
