@@ -73,6 +73,7 @@ export interface ExecutionStatistics {
   app: string;
   distSQL: boolean;
   failed: boolean;
+  node_id: number;
   stats: StatementStatistics;
 }
 
@@ -82,6 +83,7 @@ export function flattenStatementStats(statementStats: CollectedStatementStatisti
     app: stmt.key.app,
     distSQL: stmt.key.distSQL,
     failed: stmt.key.failed,
+    node_id: stmt.key.node_id,
     stats: stmt.stats,
   }));
 }

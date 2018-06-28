@@ -80,6 +80,7 @@ describe("flattenStatementStats", () => {
           app: "foobar",
           distSQL: true,
           failed: false,
+          node_id: 1,
         },
         stats: {},
       },
@@ -89,6 +90,7 @@ describe("flattenStatementStats", () => {
           app: "bazzer",
           distSQL: false,
           failed: true,
+          node_id: 2,
         },
         stats: {},
       },
@@ -103,6 +105,7 @@ describe("flattenStatementStats", () => {
       assert.equal(flattened[i].app, stats[i].key.app);
       assert.equal(flattened[i].distSQL, stats[i].key.distSQL);
       assert.equal(flattened[i].failed, stats[i].key.failed);
+      assert.equal(flattened[i].node_id, stats[i].key.node_id);
 
       assert.equal(flattened[i].stats, stats[i].stats);
     }
