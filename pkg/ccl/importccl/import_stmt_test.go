@@ -441,6 +441,9 @@ func bzipFile(t *testing.T, dir, in string) string {
 
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short")
+	}
 
 	const (
 		nodes       = 3
