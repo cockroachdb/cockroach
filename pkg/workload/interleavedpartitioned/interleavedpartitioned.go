@@ -18,6 +18,7 @@ package interleavedpartitioned
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -101,6 +102,7 @@ type interleavedPartitioned struct {
 	variantsPerSession   int
 	parametersPerSession int
 	queriesPerSession    int
+	eastPercent          int
 
 	sessionIDs []string
 }
@@ -121,6 +123,7 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.variantsPerSession, `variants-per-session`, 1, `Number of variants associated with each session`)
 		g.flags.IntVar(&g.parametersPerSession, `parameters-per-session`, 1, `Number of parameters associated with each session`)
 		g.flags.IntVar(&g.queriesPerSession, `queries-per-session`, 1, `Number of queries associated with each session`)
+		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage of sessions that are in us-east`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -146,7 +149,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Name:   `customers`,
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: w.sessions - 1,
+			NumBatches: w.sessions,
 			Batch:      w.childInitialRowBatchFunc(2, w.customersPerSession),
 		},
 	}
@@ -154,7 +157,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Name:   `devices`,
 		Schema: deviceSchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: w.sessions - 1,
+			NumBatches: w.sessions,
 			Batch:      w.deviceInitialRowBatch,
 		},
 	}
@@ -162,7 +165,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Name:   `variants`,
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: w.sessions - 1,
+			NumBatches: w.sessions,
 			Batch:      w.childInitialRowBatchFunc(3, w.variantsPerSession),
 		},
 	}
@@ -170,7 +173,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Name:   `parameters`,
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: w.sessions - 1,
+			NumBatches: w.sessions,
 			Batch:      w.childInitialRowBatchFunc(4, w.parametersPerSession),
 		},
 	}
@@ -178,7 +181,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Name:   `queries`,
 		Schema: querySchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: w.sessions - 1,
+			NumBatches: w.sessions,
 			Batch:      w.queryInitialRowBatch,
 		},
 	}
@@ -199,7 +202,6 @@ func (w *interleavedPartitioned) Ops(urls []string, reg *workload.HistogramRegis
 	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
 
-	statement, err := db.Prepare(`DELETE FROM sessions`)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -208,6 +210,7 @@ func (w *interleavedPartitioned) Ops(urls []string, reg *workload.HistogramRegis
 		SQLDatabase: sqlDatabase,
 	}
 
+	statement, err := db.Prepare(`DELETE from sessions`)
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
 		args := make([]interface{}, 0)
 		rows, err := statement.Query(args...)
@@ -223,7 +226,7 @@ func (w *interleavedPartitioned) Ops(urls []string, reg *workload.HistogramRegis
 func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(int64(rowIdx)))
 	nowString := time.Now().UTC().Format(time.RFC3339)
-	sessionID := randString(rng, 100)
+	sessionID := w.generateSessionID(rng, rowIdx)
 	w.sessionIDs = append(w.sessionIDs, sessionID)
 	log.Warningf(context.TODO(), "inserting into parent row %d, len of sessionIDs is now %d", rowIdx, len(w.sessionIDs))
 	return []interface{}{
@@ -307,6 +310,14 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 		})
 	}
 	return rows
+}
+
+func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) string {
+	sessionIDBase := randString(rng, 98)
+	if (rowIdx % 100) >= w.eastPercent {
+		return fmt.Sprintf("E-%s", sessionIDBase)
+	}
+	return fmt.Sprintf("W-%s", sessionIDBase)
 }
 
 func randString(rng *rand.Rand, length int) string {
