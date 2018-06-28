@@ -354,7 +354,9 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		if row == nil {
 			break
 		}
-		jr.inputRows = append(jr.inputRows, jr.rowAlloc.CopyRow(row))
+		if !jr.hasNullLookupColumn(row) {
+			jr.inputRows = append(jr.inputRows, jr.rowAlloc.CopyRow(row))
+		}
 	}
 
 	if len(jr.inputRows) == 0 {
@@ -508,6 +510,15 @@ func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow, *Producer
 	row := jr.toEmit[0]
 	jr.toEmit = jr.toEmit[1:]
 	return jrEmittingRows, row, nil
+}
+
+func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
+	for _, colIdx := range jr.lookupCols {
+		if row[colIdx].IsNull() {
+			return true
+		}
+	}
+	return false
 }
 
 // primaryLookup looks up the corresponding primary index rows, given a batch of
