@@ -296,11 +296,12 @@ CREATE TABLE abc (
 query TTTTT
 EXPLAIN (TYPES) SELECT min(a) FROM abc
 ----
-group      ·            ·            (min string)  ·
- │         aggregate 0  min(a)       ·             ·
- └── scan  ·            ·            (a string)    ·
-·          table        abc@primary  ·             ·
-·          spans        ALL          ·             ·
+group      ·            ·                (min string)  ·
+ │         aggregate 0  any_not_null(a)  ·             ·
+ └── scan  ·            ·                (a string)    ·
+·          table        abc@primary      ·             ·
+·          spans        ALL              ·             ·
+·          limit        1                ·             ·
 
 statement ok
 CREATE TABLE xyz (
@@ -320,23 +321,23 @@ INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz
 ----
-group      ·            ·       (min int)  ·
- │         aggregate 0  min(x)  ·          ·
- └── scan  ·            ·       (x int)    ·
-·          table        xyz@xy  ·          ·
-·          spans        ALL     ·          ·
+group      ·            ·                (min int)  ·
+ │         aggregate 0  any_not_null(x)  ·          ·
+ └── scan  ·            ·                (x int)    ·
+·          table        xyz@xy           ·          ·
+·          spans        ALL              ·          ·
+·          limit        1                ·          ·
 
-# TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group      ·            ·                  (min int)  ·
- │         aggregate 0  min(x)             ·          ·
+ │         aggregate 0  any_not_null(x)    ·          ·
  └── scan  ·            ·                  (x int)    ·
 ·          table        xyz@xy             ·          ·
 ·          spans        /0-/1 /4-/5 /7-/8  ·          ·
+·          limit        1                  ·          ·
 
-# TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 query TTTTT
 EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
@@ -349,11 +350,13 @@ group      ·            ·       (max int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·       (min int)       ·
- │         aggregate 0  min(y)  ·               ·
- └── scan  ·            ·       (x int, y int)  ·
-·          table        xyz@xy  ·               ·
-·          spans        /1-/2   ·               ·
+group           ·            ·                (min int)       ·
+ │              aggregate 0  any_not_null(y)  ·               ·
+ └── limit      ·            ·                (x int, y int)  ·
+      │         count        (1)[int]         ·               ·
+      └── scan  ·            ·                (x int, y int)  ·
+·               table        xyz@xy           ·               ·
+·               spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
@@ -367,11 +370,13 @@ group      ·            ·       (max int)       ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 7
 ----
-group      ·            ·       (min int)       ·
- │         aggregate 0  min(y)  ·               ·
- └── scan  ·            ·       (x int, y int)  ·
-·          table        xyz@xy  ·               ·
-·          spans        /7-/8   ·               ·
+group           ·            ·                (min int)       ·
+ │              aggregate 0  any_not_null(y)  ·               ·
+ └── limit      ·            ·                (x int, y int)  ·
+      │         count        (1)[int]         ·               ·
+      └── scan  ·            ·                (x int, y int)  ·
+·               table        xyz@xy           ·               ·
+·               spans        /7/!NULL-/8      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 7
@@ -449,7 +454,6 @@ INSERT INTO ab VALUES
   (4, 40),
   (5, 50)
 
-# TODO(radu): we don't support the single-row optimization yet.
 #exec nodist
 #EXPLAIN (EXPRS) SELECT min(a) FROM abc
 #----

@@ -666,20 +666,32 @@ CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
   z FLOAT,
+  w INT,
   INDEX xy (x, y),
   INDEX zyx (z, y, x),
+  INDEX w (w),
   FAMILY (x),
   FAMILY (y),
   FAMILY (z)
 )
 
 statement ok
-INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
+INSERT INTO xyz VALUES (1, 2, 3.0, NULL), (4, 5, 6.0, 2), (7, NULL, 8.0, 3)
 
 query I
 SELECT min(x) FROM xyz
 ----
 1
+
+query I
+SELECT min(y) FROM xyz
+----
+2
+
+query I
+SELECT min(w) FROM xyz
+----
+2
 
 query I
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
