@@ -20,7 +20,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: second; Type: TABLE; Schema: public; Owner: -
+-- Name: second; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.second (
@@ -29,8 +29,10 @@ CREATE TABLE public.second (
 );
 
 
+ALTER TABLE public.second OWNER TO postgres;
+
 --
--- Data for Name: second; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: second; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.second (i, s) FROM stdin;
@@ -45,7 +47,7 @@ COPY public.second (i, s) FROM stdin;
 
 
 --
--- Name: second second_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: second second_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.second
