@@ -52,12 +52,25 @@ describe("selectStatements", () => {
     assert.equal(result[0].stats.count.toNumber(), sumCount);
   });
 
+  it("coalesces statements with differing node ids", () => {
+    const state = makeStateWithStatements([
+      makeFingerprint(1, "", 1),
+      makeFingerprint(1, "", 2),
+      makeFingerprint(1, "", 3),
+    ]);
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+
+    assert.equal(result.length, 1);
+  });
+
   it("coalesces statements with differing distSQL and failed values", () => {
     const state = makeStateWithStatements([
-      makeFingerprint(1, "", false, false),
-      makeFingerprint(1, "", false, true),
-      makeFingerprint(1, "", true, false),
-      makeFingerprint(1, "", true, true),
+      makeFingerprint(1, "", 1, false, false),
+      makeFingerprint(1, "", 1, false, true),
+      makeFingerprint(1, "", 1, true, false),
+      makeFingerprint(1, "", 1, true, true),
     ]);
     const props = makeEmptyRouteProps();
 
@@ -149,12 +162,24 @@ describe("selectTotalFingerprints", () => {
     assert.equal(result, 1);
   });
 
+  it("coalesces statements with differing node ids", () => {
+    const state = makeStateWithStatements([
+      makeFingerprint(1, "", 1),
+      makeFingerprint(1, "", 2),
+      makeFingerprint(1, "", 3),
+    ]);
+
+    const result = selectTotalFingerprints(state);
+
+    assert.equal(result, 1);
+  });
+
   it("coalesces statements with differing distSQL and failed keys", () => {
     const state = makeStateWithStatements([
-      makeFingerprint(1, "", false, false),
-      makeFingerprint(1, "", false, true),
-      makeFingerprint(1, "", true, false),
-      makeFingerprint(1, "", true, true),
+      makeFingerprint(1, "", 1, false, false),
+      makeFingerprint(1, "", 1, false, true),
+      makeFingerprint(1, "", 1, true, false),
+      makeFingerprint(1, "", 1, true, true),
     ]);
 
     const result = selectTotalFingerprints(state);
@@ -206,6 +231,7 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
   it("coalesces statements from different apps", () => {
@@ -223,13 +249,35 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.app, stmtB.key.app, stmtC.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+  });
+
+  it("coalesces statements with differing node ids", () => {
+    const stmtA = makeFingerprint(1, "", 1);
+    const stmtB = makeFingerprint(1, "", 2);
+    const stmtC = makeFingerprint(1, "", 3);
+    const sumCount = stmtA.stats.count
+      .add(stmtB.stats.count)
+      .add(stmtC.stats.count)
+      .toNumber();
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
+    const props = makeRoutePropsWithStatement(stmtA.key.statement);
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.statement);
+    assert.equal(result.stats.count.toNumber(), sumCount);
+    assert.deepEqual(result.app, [stmtA.key.app]);
+    assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.failed, [stmtA.key.failed]);
+    assert.deepEqual(result.node_id, [1, 2, 3]);
   });
 
   it("coalesces statements with differing distSQL and failed values", () => {
-    const stmtA = makeFingerprint(1, "", false, false);
-    const stmtB = makeFingerprint(1, "", false, true);
-    const stmtC = makeFingerprint(1, "", true, false);
-    const stmtD = makeFingerprint(1, "", true, true);
+    const stmtA = makeFingerprint(1, "", 1, false, false);
+    const stmtB = makeFingerprint(1, "", 1, false, true);
+    const stmtC = makeFingerprint(1, "", 1, true, false);
+    const stmtD = makeFingerprint(1, "", 1, true, true);
     const sumCount = stmtA.stats.count
       .add(stmtB.stats.count)
       .add(stmtC.stats.count)
@@ -245,6 +293,7 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [false, true]);
     assert.deepEqual(result.failed, [false, true]);
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
   it("filters out statements when app param is set", () => {
@@ -263,6 +312,7 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
   it("filters out statements with app set when app param is \"(unset)\"", () => {
@@ -281,16 +331,18 @@ describe("selectStatement", () => {
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 });
 
-function makeFingerprint(id: number, app: string = "", distSQL: boolean = false, failed: boolean = false) {
+function makeFingerprint(id: number, app: string = "", nodeId: number = 1, distSQL: boolean = false, failed: boolean = false) {
   return {
     key: {
       statement: "SELECT * FROM table_" + id + " WHERE true",
       app,
       distSQL,
       failed,
+      node_id: nodeId,
     },
     stats: makeStats(),
   };
