@@ -296,30 +296,6 @@ import (
 // possible, the library currently maps them into regular lax dependencies to
 // simplify implementation.
 //
-// Removing Columns
-//
-// Some SQL operators can remove columns from their input (e.g. GroupBy and
-// Project). The library discards FDs that include these removed columns when
-// possible. However, in the general case this is a difficult task, as
-// illustrated in this example:
-//
-//   (a)~~>(b,d)
-//   (b,c)-->(d)
-//   (b)==(e)
-//   (e)==(b)
-//
-// Removing "b" from these FDs would require reducing, augmenting, splitting,
-// discarding, and creating FDs. In addition, the impact of strict vs. lax
-// dependencies and equivalent vs. non-equivalent dependencies would need to be
-// carefully considered. It can be expensive to try and maintain the minimal set
-// of FDs.
-//
-// Instead of attempting to do that, this library maintains a "removed" set that
-// tracks which columns are no longer part of the relation. The removed set is
-// not necessary for correctness, but is used for aesthetics when formatting the
-// FD set for output. All operations still behave correctly whether or not
-// columns have been removed, retained, or marked as removed.
-//
 // Theory to Practice
 //
 // For a more rigorous examination of functional dependencies and their
@@ -355,14 +331,12 @@ import (
 //
 //   3. The paper deliberately avoids all simplifications when a SQL operator
 //      adds new FDs to an existing FD set, in order to avoid unneeded work and
-//      expensive reductions. This library does perform some simplifications
-//      that are possible with a limited number of passes over the FD set.
+//      expensive reductions. This library performs quite a few simplifications
+//      in order to keep the FD set more manageable and understandable.
 //
 //   4. The paper "colors" columns black when they are no longer part of a
-//      derived relation. This library maintains a "removed" set which serves
-//      the same purpose. However, as with #2, sometimes it will physically
-//      remove removed columns from the FDs when that can be done with a limited
-//      number of passes over the FD set.
+//      derived relation. Rather than marking removed columns, this library
+//      actually removes them from the FD set.
 //
 //   5. In order to ensure a unique key for every relation, the paper uses a
 //      special "tuple identifier" that acts like a virtual column and can be
@@ -386,14 +360,6 @@ type FuncDepSet struct {
 	// This slice is owned by this FuncDepSet and shouldn't be shared unless
 	// all referencing sets are treated as immutable.
 	deps []funcDep
-
-	// removed is the set of columns that are no longer part of the relation,
-	// but are retained in lieu of more expensive FD set simplifications. See
-	// the "Removing Columns" section above for more details.
-	//
-	// This set is  immutable; to update it, replace it with a different set
-	// containing the desired columns.
-	removed opt.ColSet
 
 	// hasKey is true if the relation has no duplicate rows, which means at least
 	// one subset of its columns form a key (all columns, if no other subset).
@@ -451,7 +417,7 @@ func (f *FuncDepSet) Key() (_ opt.ColSet, ok bool) {
 
 // Empty is true if the set contains no FDs and no key.
 func (f *FuncDepSet) Empty() bool {
-	return len(f.deps) == 0 && f.removed.Empty() && !f.hasKey && f.key.Empty()
+	return len(f.deps) == 0 && !f.hasKey && f.key.Empty()
 }
 
 // ClearKey marks the FD set as having no key.
@@ -465,7 +431,6 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 	// Make certain to copy FDs to the slice owned by this set.
 	f.deps = f.deps[:0]
 	f.deps = append(f.deps, fdset.deps...)
-	f.removed = fdset.removed
 	f.key = fdset.key
 	f.hasKey = fdset.hasKey
 }
@@ -646,7 +611,6 @@ func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
 	if !cols.Empty() {
 		f.deps = append(f.deps, funcDep{to: cols, strict: true})
 	}
-	f.removed = opt.ColSet{}
 	f.setKey(opt.ColSet{})
 }
 
@@ -801,15 +765,11 @@ func (f *FuncDepSet) AddSynthesizedCol(from opt.ColSet, col opt.ColumnID) {
 	f.addDependency(from, colSet, true /* strict */, false /* equiv */)
 }
 
-// ProjectCols removes all columns that are not in the given set. It makes a
-// best effort to discard any FDs that include these columns, but as explained
-// in the Removing Columns section of the FuncDepSet comment, this is not always
-// easy to do. If a column is not fully removed from all FDs in the set, then
-// it's instead added to the removed column list in order to mark it as removed.
-//
-// ProjectCols does the most extensive FD simplifications, so many operators
-// call this at the end of constructing their FD as a way to trigger any
-// simplifications enabled by calls to other FD set methods.
+// ProjectCols removes all columns that are not in the given set. It does this
+// by replacing any un-projected dependants by their closures, and then removing
+// all FDs containing un-projected columns. While this algorithm may cause some
+// loss of information in edge cases, it does a good job of preserving the most
+// important dependency information.
 func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	if f.hasKey && !f.key.SubsetOf(cols) {
 		// Need to construct new candidate key based only on projected columns,
@@ -824,7 +784,6 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	// Special case of no columns.
 	if cols.Empty() {
 		f.deps = f.deps[:0]
-		f.removed = opt.ColSet{}
 		return
 	}
 
@@ -834,72 +793,62 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		return
 	}
 
-	// Check for special cases, in which columns to remove only appear on one
-	// side of FD's, or if every determinant contains a removed column.
-	var onlyFrom, onlyTo opt.ColSet
-	removeAll := true
+	// During first pass, add closures of un-projected columns in dependants.
+	// This will ensure that transitive relationships between remaining columns
+	// won't be lost.
+	var constCols opt.ColSet
 	for i := range f.deps {
 		fd := &f.deps[i]
 
-		// Skip lax dependencies with removed columns in the determinant, as
-		// they will always be removed below.
-		if !fd.strict && !fd.from.SubsetOf(cols) {
-			continue
+		// Remember strict constant columns.
+		if fd.strict && fd.from.Empty() {
+			constCols = fd.to
 		}
 
-		onlyFrom.UnionWith(fd.from)
-		onlyTo.UnionWith(fd.to)
-		if fd.from.SubsetOf(cols) {
-			removeAll = false
+		// Add closures to dependants containing un-projected columns.
+		if !fd.to.SubsetOf(cols) {
+			// Equivalence dependencies already maintain closure.
+			if !fd.equiv {
+				fd.to = f.ComputeClosure(fd.to)
+			}
 		}
 	}
 
-	if removeAll {
-		// Every determinant contains a removed column, so no matches are possible.
-		f.deps = f.deps[:0]
-		f.removed = opt.ColSet{}
-		return
+	// If constants were found, then normalize constants to preserve FDs in a
+	// case like this where (2) is removed:
+	//
+	//   ()-->(2), (2,3)-->(4)
+	//
+	// Rather than removing both FDs, the second FD should be preserved in this
+	// form:
+	//
+	//   (3)-->(4)
+	//
+	if !constCols.Empty() {
+		f.AddConstants(constCols)
 	}
 
-	// onlyFrom now contains all determinants, and onlyTo contains all dependants.
-	// Subtract onlyFrom and onlyTo from each other in order to find columns to
-	// remove that appear on only one side.
-	tempFrom := onlyFrom.Copy()
-	onlyFrom.DifferenceWith(onlyTo)
-	onlyFrom.DifferenceWith(cols)
-	onlyTo.DifferenceWith(tempFrom)
-	onlyTo.DifferenceWith(cols)
-
-	// Accumulate all columns used by the FD set.
-	f.removed = f.key.Copy()
+	// During second pass, remove all dependencies with un-projected columns.
 	n := 0
 	for i := range f.deps {
 		fd := &f.deps[i]
 
-		// Remove onlyTo columns from dependants, since they never determine
-		// other columns, and therefore aren't needed for transitivity.
-		if fd.to.Intersects(onlyTo) {
-			fd.to = fd.to.Difference(onlyTo)
-			if fd.to.SubsetOf(fd.from) {
-				// Discard FD entirely, as it's now a no-op.
+		if !fd.from.SubsetOf(cols) {
+			continue
+		}
+
+		if !fd.to.SubsetOf(cols) {
+			// Subtract out un-projected columns and determinant. Also subtract
+			// strict constant columns for nicer presentation.
+			fd.to = fd.to.Intersection(cols)
+			fd.to.DifferenceWith(fd.from)
+			if !fd.from.Empty() {
+				fd.to.DifferenceWith(constCols)
+			}
+			if fd.to.Empty() {
 				continue
 			}
 		}
-
-		// Remove all dependencies containing onlyFrom columns, as they can
-		// never be satisfied again.
-		if fd.from.Intersects(onlyFrom) {
-			continue
-		}
-
-		// Remove all lax dependencies with removed columns in the determinant,
-		// as they can never be satisfied, and can't be used for transitivity.
-		if !fd.strict && !fd.from.SubsetOf(cols) {
-			continue
-		}
-
-		f.removed.UnionWith(fd.from)
-		f.removed.UnionWith(fd.to)
 
 		if n != i {
 			f.deps[n] = f.deps[i]
@@ -907,18 +856,21 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		n++
 	}
 	f.deps = f.deps[:n]
-
-	// Removed columns are all columns in use minus projected columns.
-	f.removed.DifferenceWith(cols)
 }
 
 // AddFrom merges two FD sets by adding each FD from the given set to this set.
 // While this requires O(N**2) time, it's useful when the two FD sets may
-// overlap one another and substantial simplifications are possible.
-func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
+// overlap one another and substantial simplifications are possible (as with
+// LookupJoin).
+func (f *FuncDepSet) AddFrom(fdset *FuncDepSet, cols opt.ColSet) {
 	for i := range fdset.deps {
 		fd := &fdset.deps[i]
 		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+	}
+
+	// Ensure that this FD set's key determines all columns in the combined set.
+	if f.hasKey {
+		f.addDependency(f.key, cols, true /* strict */, false /* equiv */)
 	}
 }
 
@@ -937,7 +889,6 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 		}
 	}
 
-	f.removed = f.removed.Union(fdset.removed)
 	if f.hasKey && fdset.hasKey {
 		f.setKey(f.key.Union(fdset.key))
 	} else {
@@ -1095,9 +1046,6 @@ func (f FuncDepSet) String() string {
 				fmt.Fprintf(&buf, "%s~~>%s", fd.from, fd.to)
 			}
 		}
-	}
-	if !f.removed.Empty() {
-		fmt.Fprintf(&buf, " [removed: %s]", f.removed)
 	}
 	return buf.String()
 }
