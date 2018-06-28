@@ -16,8 +16,8 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { refreshQueries } from "src/redux/apiReducers";
-import { QueriesResponseMessage } from "src/util/api";
+import { refreshStatements } from "src/redux/apiReducers";
+import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
@@ -30,7 +30,7 @@ import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 import * as protos from "src/js/protos";
 import "./statements.styl";
 
-type CollectedStatementStatistics$Properties = protos.cockroach.server.serverpb.QueriesResponse.CollectedStatementStatistics$Properties;
+type CollectedStatementStatistics$Properties = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
 type RouteProps = RouteComponentProps<any, any>;
 
 interface AggregateStatistics {
@@ -46,7 +46,7 @@ interface StatementsPageProps {
   apps: string[];
   totalFingerprints: number;
   lastReset: string;
-  refreshQueries: typeof refreshQueries;
+  refreshStatements: typeof refreshStatements;
 }
 
 interface StatementsPageState {
@@ -147,11 +147,11 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 
   componentWillMount() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   componentWillReceiveProps() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   renderStatements() {
@@ -233,19 +233,19 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 }
 
-type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
-  (state: CachedDataReducerState<QueriesResponseMessage>, props: RouteProps) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
+  (state: CachedDataReducerState<StatementsResponseMessage>, props: RouteProps) => {
     if (!state.data) {
       return null;
     }
 
-    let statements = flattenStatementStats(state.data.queries);
+    let statements = flattenStatementStats(state.data.statements);
     if (props.params[appAttr]) {
       let criteria = props.params[appAttr];
       if (criteria === "(unset)") {
@@ -276,15 +276,15 @@ export const selectStatements = createSelector(
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
 export const selectApps = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return [];
     }
 
     let sawBlank = false;
     const apps: { [app: string]: boolean } = {};
-    state.data.queries.forEach(
+    state.data.statements.forEach(
       (statement: CollectedStatementStatistics$Properties) => {
         if (statement.key.app) {
           apps[statement.key.app] = true;
@@ -300,12 +300,12 @@ export const selectApps = createSelector(
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.
 export const selectTotalFingerprints = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return 0;
     }
-    const aggregated = aggregateStatementStats(state.data.queries);
+    const aggregated = aggregateStatementStats(state.data.statements);
     return aggregated.length;
   },
 );
@@ -313,8 +313,8 @@ export const selectTotalFingerprints = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return "unknown";
     }
@@ -325,15 +325,15 @@ export const selectLastReset = createSelector(
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
-  (state: QueriesState, props: RouteProps) => ({
+  (state: StatementsState, props: RouteProps) => ({
     statements: selectStatements(state, props),
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
-    valid: state.cachedData.queries.valid,
+    valid: state.cachedData.statements.valid,
   }),
   {
-    refreshQueries,
+    refreshStatements,
   },
 )(StatementsPage);
 
