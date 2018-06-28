@@ -775,7 +775,7 @@ go-targets-ccl := \
 go-targets := $(go-targets-ccl) buildoss
 
 .DEFAULT_GOAL := all
-all: $(COCKROACH)
+all: build
 
 .PHONY: c-deps
 c-deps: $(C_LIBS_CCL)
@@ -815,15 +815,26 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: build buildoss buildshort install
+.PHONY: build buildoss buildshort go-install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss buildshort go-install: $(DOCGEN_TARGETS)
+$(COCKROACH) go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
-ifndef XHOST_TRIPLE
-	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
-	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
-endif
+
+# The build targets, in addition to producing a Cockroach binary, silently
+# regenerate SQL diagram BNFs and some other doc pages. Generating these docs
+# doesn't really belong in the build target, but when they were only part of the
+# generate target it was too easy to forget to regenerate them when necessary
+# and burn a CI cycle.
+#
+# We check these docs into version control in the first place in the hope that
+# the diff of the generated docs that shows up in Reviewable, 'git diff', etc.
+# makes it obvious when a commit has broken the docs. For example, it's very
+# easy for changes to the SQL parser to result in unintelligible railroad
+# diagrams. When the generated files are not checked in, the breakage goes
+# unnoticed until the docs team comes along, potentially months later. Much
+# better to make the developer who introduces the breakage fix the breakage.
+build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(XHOST_TRIPLE),,$(SETTINGS_DOC_PAGE))
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
@@ -934,7 +945,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) bin/langgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
@@ -1312,6 +1323,10 @@ bin/.docgen_bnfs: bin/docgen
 bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
+
+$(SETTINGS_DOC_PAGE): $(COCKROACH)
+	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
+	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
