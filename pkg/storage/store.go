@@ -2370,8 +2370,14 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	return nil
 }
 
+func (s *Store) addPlaceholder(placeholder *ReplicaPlaceholder) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addPlaceholderLocked(placeholder)
+}
+
 // addPlaceholderLocked adds the specified placeholder. Requires that Store.mu
-// and Replica.raftMu are held.
+// is held.
 func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	rangeID := placeholder.Desc().RangeID
 	if exRng := s.mu.replicasByKey.ReplaceOrInsert(placeholder); exRng != nil {
@@ -2386,7 +2392,7 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 
 // removePlaceholder removes a placeholder for the specified range if it
 // exists, returning true if a placeholder was present and removed and false
-// otherwise. Requires that Replica.raftMu is held.
+// otherwise.
 func (s *Store) removePlaceholder(ctx context.Context, rngID roachpb.RangeID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2394,7 +2400,7 @@ func (s *Store) removePlaceholder(ctx context.Context, rngID roachpb.RangeID) bo
 }
 
 // removePlaceholderLocked removes the specified placeholder. Requires that
-// Store.mu and Replica.raftMu are held.
+// Store.mu is held.
 func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.RangeID) bool {
 	placeholder, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
@@ -2527,8 +2533,12 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
-	if err := rep.destroyRaftMuLocked(ctx, consistentDesc, opts.DestroyData); err != nil {
-		return err
+	// Uninitialized replicas don't know their start and keys. It is both
+	// incorrect and unnecessary to destroy their data.
+	if rep.IsInitialized() {
+		if err := rep.destroyRaftMuLocked(ctx, consistentDesc, opts.DestroyData); err != nil {
+			return err
+		}
 	}
 
 	s.mu.Lock()
