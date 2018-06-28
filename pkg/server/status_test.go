@@ -882,7 +882,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	}
 }
 
-func TestStatusAPIQueries(t *testing.T) {
+func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
@@ -920,8 +920,8 @@ func TestStatusAPIQueries(t *testing.T) {
 	}
 
 	// Hit query endpoint.
-	var resp serverpb.QueriesResponse
-	if err := getStatusJSONProto(firstServerProto, "queries", &resp); err != nil {
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -939,8 +939,8 @@ func TestStatusAPIQueries(t *testing.T) {
 	}
 
 	var statementsInResponse []string
-	for _, respQuery := range resp.Queries {
-		statementsInResponse = append(statementsInResponse, respQuery.Key.Query)
+	for _, respStatement := range resp.Statements {
+		statementsInResponse = append(statementsInResponse, respStatement.Key.Statement)
 	}
 
 	sort.Strings(expectedStatements)

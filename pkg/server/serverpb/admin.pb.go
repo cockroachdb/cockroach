@@ -118,8 +118,8 @@
 		StoresRequest
 		StoreDetails
 		StoresResponse
-		QueriesRequest
-		QueriesResponse
+		StatementsRequest
+		StatementsResponse
 */
 package serverpb
 
