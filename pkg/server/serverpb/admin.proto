@@ -17,7 +17,6 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
-import "roachpb/app_stats.proto";
 import "sql/jobs/jobspb/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -548,15 +547,6 @@ message DataDistributionResponse {
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
-message QueriesRequest {
-}
-
-message QueriesResponse {
-  repeated cockroach.sql.CollectedStatementStatistics queries = 1 [(gogoproto.nullable) = false];
-   // Timestamp of the last stats reset.
-   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-}
-
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -734,12 +724,6 @@ service Admin {
   rpc DataDistribution(DataDistributionRequest) returns (DataDistributionResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/data_distribution"
-    };
-  }
-
-  rpc Queries(QueriesRequest) returns (QueriesResponse) {
-    option (google.api.http) = {
-      get: "/_admin/v1/queries"
     };
   }
 }
