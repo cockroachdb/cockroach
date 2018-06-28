@@ -1,6 +1,6 @@
 import d3 from "d3";
 import _ from "lodash";
-import React from "react";
+import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
@@ -10,15 +10,24 @@ import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
 import { refreshQueries } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { statementAttr } from "src/util/constants";
+import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
+import { statementAttr, appAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
-import { NumericStat, stdDev } from "src/util/appStats";
+import { intersperse } from "src/util/intersperse";
+import { Pick } from "src/util/pick";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
-import * as protos from "src/js/protos";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
+
+interface AggregateStatistics {
+  statement: string;
+  app: string[];
+  distSQL: boolean[];
+  failed: boolean[];
+  stats: StatementStatistics;
+}
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
@@ -32,10 +41,8 @@ function AppLink(props: { app: string }) {
   );
 }
 
-type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
-
 interface StatementDetailsOwnProps {
-  statement: StatementStatistics;
+  statement: AggregateStatistics;
   refreshQueries: typeof refreshQueries;
 }
 
@@ -101,7 +108,9 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     return (
       <div>
         <Helmet>
-          <title>Details | Statements</title>
+          <title>
+            { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
+          </title>
         </Helmet>
         <section className="section">
           <h2>Statement Details</h2>
@@ -122,20 +131,20 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
       return null;
     }
 
-    const { stats, key } = this.props.statement;
+    const { stats, statement, app, distSQL, failed } = this.props.statement;
 
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
 
     const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart } = countBreakdown(this.props.statement);
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
-    const { parseBarChart, planBarChart, runBarChart, overheadBarChart } = latencyBreakdown(this.props.statement);
+    const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
     return (
       <div className="content l-columns">
         <div className="l-columns__left">
           <section className="section">
-            <SqlBox value={ this.props.statement.key.query } />
+            <SqlBox value={ statement } />
           </section>
           <section className="section">
             <h3>Execution Count</h3>
@@ -174,7 +183,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
                 { name: "Plan", value: stats.plan_lat, bar: planBarChart },
                 { name: "Run", value: stats.run_lat, bar: runBarChart },
                 { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
-                { name: "Overall", value: stats.service_lat },
+                { name: "Overall", value: stats.service_lat, bar: overallBarChart },
               ]}
             />
           </section>
@@ -182,7 +191,7 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <h3>Row Count</h3>
             <NumericStatTable
               count={ count }
-              format={ (v: number) => "" + Math.round(v) }
+              format={ (v: number) => "" + (Math.round(v * 100) / 100) }
               rows={[
                 { name: "Rows", value: stats.num_rows, bar: rowsBarChart },
               ]}
@@ -221,15 +230,17 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
             <tbody>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>App</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}><AppLink app={ key.app } /></td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>
+                  { intersperse<ReactNode>(app.map(a => <AppLink app={ a } key={ a } />), ", ") }
+                </td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used DistSQL?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.distSQL ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(distSQL) }</td>
               </tr>
               <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed?</th>
-                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ key.failed ? "Yes" : "No" }</td>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(failed) }</td>
               </tr>
             </tbody>
           </table>
@@ -239,10 +250,48 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
   }
 }
 
-const selectStatement = createSelector(
-  (state: AdminUIState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
-  (_state: AdminUIState, props: RouterState) => props.params[statementAttr],
-  (haystack, needle) => haystack && _.find(haystack, hay => hay.key.query === needle),
+function renderBools(bools: boolean[]) {
+  if (bools.length === 0) {
+    return "(unknown)";
+  }
+  if (bools.length === 1) {
+    return bools[0] ? "Yes" : "No";
+  }
+  return "(both included)";
+}
+
+type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+
+export const selectStatement = createSelector(
+  (state: QueriesState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
+  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
+  (queries, props) => {
+    if (!queries) {
+      return null;
+    }
+
+    const statement = props.params[statementAttr];
+    let app = props.params[appAttr];
+    let predicate = (stmt: ExecutionStatistics) => stmt.statement === statement;
+
+    if (app) {
+        if (app === "(unset)") {
+            app = "";
+        }
+        predicate = (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.app === app;
+    }
+
+    const statements = flattenStatementStats(queries);
+    const results = _.filter(statements, predicate);
+
+    return {
+      statement,
+      stats: combineStatementStats(results.map(s => s.stats)),
+      app: _.uniq(results.map(s => s.app)),
+      distSQL: _.uniq(results.map(s => s.distSQL)),
+      failed: _.uniq(results.map(s => s.failed)),
+    };
+  },
 );
 
 // tslint:disable-next-line:variable-name
