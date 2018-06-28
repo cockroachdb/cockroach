@@ -59,7 +59,13 @@ function StatementLink(props: { statement: string, app: string }) {
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div title={ props.statement }>{ shortStatement(summary, props.statement) }</div>
+      <div className="__tooltip">
+        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
+          <div className="last-cleared-tooltip__tooltip-hover-area">
+            { shortStatement(summary, props.statement) }
+          </div>
+        </ToolTipWrapper>
+      </div>
     </Link>
   );
 }
