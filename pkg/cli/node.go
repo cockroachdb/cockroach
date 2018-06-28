@@ -80,8 +80,8 @@ var baseNodeColumnHeaders = []string{
 	"id",
 	"address",
 	"build",
-	"updated_at",
 	"started_at",
+	"updated_at",
 	"is_live",
 }
 
