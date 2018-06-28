@@ -170,6 +170,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
+	log.Infof(ctx, "shouldQueue %s %s", repl, zone)
 	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, false)
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")

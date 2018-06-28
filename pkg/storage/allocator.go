@@ -228,7 +228,7 @@ func (a *Allocator) ComputeAction(
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-
+	//zone.
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
 	have := len(rangeInfo.Desc.Replicas)
