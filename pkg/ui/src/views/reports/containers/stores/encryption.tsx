@@ -8,7 +8,7 @@ export interface EncryptionStatusProps {
 
 export default class EncryptionStatus extends React.Component<EncryptionStatusProps, {}> {
 
-  render(): React.ReactElement<any> {
+  getEncryptionRows(): React.ReactElement<any> {
     return null;
   }
 }

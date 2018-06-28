@@ -61,7 +61,7 @@ class Stores extends React.Component<StoresProps, {}> {
       <table key={store.store_id} className="stores-table">
         <tbody>
           { this.renderSimpleRow("Store ID", store.store_id.toString()) }
-          <EncryptionStatus store={store} />
+          { new EncryptionStatus({store: store}).getEncryptionRows() }
         </tbody>
       </table>
     );
