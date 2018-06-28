@@ -2,18 +2,16 @@ import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouteComponentProps } from "react-router";
+import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 
 import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { FixLong } from "src/util/fixLong";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { refreshStatements } from "src/redux/apiReducers";
@@ -21,24 +19,15 @@ import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
-import { Duration } from "src/util/format";
 import { Pick } from "src/util/pick";
-import { summarize, StatementSummary } from "src/util/sql/summarize";
 
-import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
+import { AggregateStatistics, StatementsSortedTable, makeStatementsColumns } from "./statementsTable";
 
 import * as protos from "src/js/protos";
 import "./statements.styl";
 
 type CollectedStatementStatistics$Properties = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
 type RouteProps = RouteComponentProps<any, any>;
-
-interface AggregateStatistics {
-  statement: string;
-  stats: StatementStatistics;
-}
-
-class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 interface StatementsPageProps {
   valid: boolean;
@@ -51,77 +40,6 @@ interface StatementsPageProps {
 
 interface StatementsPageState {
   sortSetting: SortSetting;
-}
-
-function StatementLink(props: { statement: string, app: string }) {
-  const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}` : "/statement";
-
-  return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="__tooltip">
-        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
-          <div className="last-cleared-tooltip__tooltip-hover-area">
-            { shortStatement(summary, props.statement) }
-          </div>
-        </ToolTipWrapper>
-      </div>
-    </Link>
-  );
-}
-
-function shortStatement(summary: StatementSummary, original: string) {
-  switch (summary.statement) {
-    case "update": return "UPDATE " + summary.table;
-    case "insert": return "INSERT INTO " + summary.table;
-    case "select": return "SELECT FROM " + summary.table;
-    case "delete": return "DELETE FROM " + summary.table;
-    case "create": return "CREATE TABLE " + summary.table;
-    default: return original;
-  }
-}
-
-function calculateCumulativeTime(stats: StatementStatistics) {
-  const count = FixLong(stats.count).toInt();
-  const latency = stats.service_lat.mean;
-
-  return count * latency;
-}
-
-function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements);
-  const rowsBar = rowsBarChart(statements);
-  const latencyBar = latencyBarChart(statements);
-
-  return [
-    {
-      title: "Statement",
-      className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.statement } app={ selectedApp } />,
-      sort: (stmt) => stmt.statement,
-    },
-    {
-      title: "Time",
-      cell: (stmt) => Duration(calculateCumulativeTime(stmt.stats) * 1e9),
-      sort: (stmt) => calculateCumulativeTime(stmt.stats),
-    },
-    {
-      title: "Count",
-      cell: countBar,
-      sort: (stmt) => FixLong(stmt.stats.count).toInt(),
-    },
-    {
-      title: "Mean Rows",
-      cell: rowsBar,
-      sort: (stmt) => stmt.stats.num_rows.mean,
-    },
-    {
-      title: "Mean Latency",
-      cell: latencyBar,
-      sort: (stmt) => stmt.stats.service_lat.mean,
-    },
-  ];
 }
 
 class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
