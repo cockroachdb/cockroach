@@ -9,14 +9,20 @@
 
 Follower reads are consistent reads at historical timestamps from follower
 replicas. They make the non-leader replicas in a range suitable sources for
-historical reads.
+historical reads. Historical reads include both `AS OF SYSTEM TIME` queries
+as well as transactions with a read timestamp sufficiently in the past (for
+example long-running analytics queries).
 
-The key enabling technology is the propagation of **closed timestamp
-heartbeats** from the range leaseholder to followers. The closed timestamp
-heartbeat (CT heartbeat) is more than just a timestamp. It is a set of
-conditions, that if met, guarantee that a follower replica has all state
-necessary to satisfy reads at or before the CT.
+The key enabling technology is the exchange of **closed timestamp updates**
+between stores. A closed timestamp update (*CT update*) is a store-wide
+timestamp together with (sparse) per-range information on the Raft progress.
+Follower replicas use local state built up from successive received CT updates
+to ascertain that they have all the state necessary to serve consistent reads
+at and below the leaseholder store's closed timestamp.
 
+Follower reads are only possible for epoch-based leases, which includes all user
+ranges but excludes some system ranges (such as the addressing metadata ranges).
+In what follows all mentioned leases are epoch-based.
 
 # Motivation
 
@@ -30,250 +36,342 @@ they help recover a reasonably recent consistent snapshot of a cluster after a
 loss of quorum; and they are one of the ingredients for [Change Data
 Capture](https://github.com/cockroachdb/cockroach/pull/25229).
 
-
 # Guide-level explanation
 
-The closed timestamp mechanism provides to each non-leaseholder replica a
-regular stream of information originating at the lease holder about which
-requests it is allowed to serve.
+Fundamentally, the idea is that we already keep multiple consistent copies of
+all data via replication, and that we want to utilize all of the copies to
+serve reads. Morally speaking, a read which only cares to access data that was
+written at some timestamp well in the past *should* be servable from all
+replicas (assuming normal operation), as replication typically catches up all
+the followers quickly, and most writes happen at "newer" timestamps. Clearly
+neither of these two properties are guaranteed though, so replicas have to be
+provided with a a way of deciding whether a given read request can be served
+consistently.
 
-At a high level, the "stream of information" contains what one might intuitively
-expect: If a leaseholder accepts a write at timestamp T into its Raft log at
-position P, then a follower can't serve a historical read at timestamps `S >= T`
-until it has applied log position `P`, or it will fail to see the write.
-Similarly, it can't serve any read at timestamp `S` at all unless it is promised
-that future writes at or below timestamp `S` are impossible.
+The closed timestamp mechanism provides between each pair of stores a regular
+(on the order of seconds) exchange of information to that end. At a high level,
+the these updates contain what one might intuitively expect:
 
-In the proposal, we're thus going to deal with "log positions" and timestamps.
+A follower trying to serve a read needs to know that a given timestamp is "safe"
+(in parlance of this RFC, "closed") to serve reads for; there must not be some
+in-flight or future write that would invalidate a follower read retroactively.
+Each store maintains a data structure, the **min proposal tracker** (*MPT*)
+described later, to establish this timestamp.
+
+Similarly, if a range's leaseholder commits a write into its Raft log at index
+`P` before announcing a *closed timestamp*, then the follower must wait until it
+has caught up to that index `P` before serving reads at the closed timestamp. To
+provide this information, each store also includes with each closed timestamp an
+updated minimum log index that the follower must reach before "activating" the
+associated closed timestamp on that replica.
+
+Providing the information when there has been write activity on a given range
+since the last closed timestamp is key to performance, as a store can house
+upwards of 50000 replicas, and including information about every single one of
+them in each update is prohibitive due to the overhead of visiting them.
+
+This is similar to *range quiescence*, which avoids Raft heartbeats between
+inactive ranges. It's worth pointing out that quiescent ranges are able to serve
+follower reads, and that there is no architectural connection between follower
+reads in quiescence, though a range that is quiescent is typically one that
+requires no per-range CT update.
+
+As we've seen above, this RFC deals in "log positions" (and closed timestamps).
 For technical reasons, the "log position" is not the Raft log position but the
-Lease Applied Index, a concept introduced by us on top of Raft to handle
+**Lease Applied Index**, a concept introduced by us on top of Raft to handle
 Raft-internal reproposals and reorderings. Ultimately, what we're after is a
-promise of the form "no more proposals writing to timestamps below T are going
-to apply after log index I". This guarantee is tricky to extract from the Raft
-log index since proposing a command at log index I does not restrict it from
-showing up at higher log indices later, especially in leader-not-leaseholder
-situations. The Lease Applied Index was introduced precisely to have better
-control, and allows us to make the above promise.
+promise of the form
 
-Now let's talk about timestamps. As we've seen above, a follower needs to know
-that a given timestamp is "safe" (in parlance of this RFC, "closed") to serve
-reads for; there must not be some in-flight write that would invalidate a
-follower read retroactively. Hence, the lease holder must maintain a mechanism
-that prevents proposals at non- recent timestamps, and regularly communicates a
-safe timestamp to the followers.
+> no more proposals writing to timestamps below `T` are going to apply after log
+index `I`.
 
-Since a node can house on the order of 50000 replicas, it's untenable to
-establish direct communication between all leaseholders and followers. Instead,
-communication is *coalesced* between stores, very similar to Raft heartbeats.
-However, this is not enough: we expect that a significant fraction of ranges is
-idle at any given point in time, and considerable work has been put into making
-these ranges "quiet" (or, as we call it in code, quiescent) at the Raft level. A
-key element of this proposal (and one of its ingredients that is tricky to get
-right) is making sure that quiescent ranges too can serve reads from followers,
-without requiring individual communication.
-
-Fundamentally this is achieved is by notifying the followers as a range goes
-quiescent, after which they can serve reads at non-recent timestamps. The tricky
-part is making sure that ranges cannot unquiesce without the followers noticing
-on time. To understand exactly how that is achieved, we refer to the reference
-section below.
+This guarantee is tricky to extract from the Raft log index since proposing a
+command at log index `I` does not restrict it from showing up at higher log
+indices later, especially in leader-not-leaseholder situations. The *Lease
+Applied Index* was introduced precisely to have better control, and allows us to
+make the above promise.
 
 # Reference-level explanation
 
-A more extended description of CT (closed timestamps) follows, but let's start
-with how CT can be used to implement follower reads, which is conceptually
-straightforward. At the distributed sender, if a read is for a historical
-timestamp earlier than the current time less a target duration (which adds
-comfortable padding to when followers are ideally able to serve these reads), it
-is sent to the nearest replica (as measured by health, latency, locality, and
-perhaps a jitter), instead of to the leaseholder.
+This section will focus on the technical details of the closed timestamp
+mechanism, with an emphasis on correctness.
 
-When a read is handled by a replica, and it is not the leaseholder, it
-is checked against the CT conditions and serviced locally if they are
-met. This avoids forwarding to the leaseholder and avoids updating the
-timestamp cache. Note that closed timestamps and follower reads are
-supported only on ranges with epoch-based leases, and that follower reads
-do not check for clock uncertainty restarts.
+A closed timestamp update contains the following information (sent by an origin `Store`):
 
-If the replica cannot serve the follower read or intents needed to be resolved,
-it returns a suitable error and the request (for the given range) is retried at
-the leaseholder. This makes sure that a lagging follower does not add repeated
-failed attempts to a request.
+- the **liveness epoch** (of the origin `Store`)
+- a **closed timestamp** (`hlc.Timestamp`, typically trails "real time" by at least a constant target duration)
+- a **sequence number** (to allow discarding built-up state on missed updates)
+- a map from `RangeID` to **minimum lease applied index** (*MLAI*) that specifies
+  the updates to the recipient's map accumulated from all previous updates.
 
-## Closed Timestamp Heartbeats: overview
+The accumulated per-range state together with the closed timestamp serve as a
+guarantee of the form
 
-A closed timestamp heartbeat (CT heartbeat) is sent along with
-coalesced Raft heartbeats to allow replicas to serve consistent
-historical reads. The following information is added to coalesced
-heartbeats, which are exchanged between stores located on different
-nodes:
+> Every Raft command proposed after the min lease applied index (MLAI)
+will be ahead of the closed timestamp (CT).
 
-- **Closed timestamp (CT)**: the timestamp at or before which replicas
-  can serve reads if the other conditions below hold. This value
-  typically trails the clock of the originating store by at least a
-  constant target duration. Each closed timestamp heartbeat contains
-  one such timestamp on behalf of all ranges for which the originating
-  store believes it holds the lease.
-- **Ranges map**: map from range ID to information about non-quiesced
-  ranges active during the period between this and the prior coalesced
-  heartbeat. For each range, the following information is provided:
-  - **Min lease applied index (MLAI)**: if the follower's
-    `LeaseAppliedIndex` is greater than or equal to the MLAI, the
-    follower may serve reads at timestamps less than or equal to the CT.
-  - **Quiesced**: a boolean that, if true, announces that the range is
-    now quiesced and should be treated as such by the recipient in
-    future coalesced heartbeats until notified otherwise. (If false,
-    the range is treated as non-quiesced).
-    TODO(tschottdorf): can we untangle this from the Raft notion of quiescence?
+Each store starts out with an empty state for each peer store and epoch, and
+merges the *MLAI* updates into the state (overwriting existing *MLAI*s).
+Whenever the sequence number received in an update from a peer store displays a
+gap, the state for that peer store is reset, and the current update merged into
+the empty state: this means that all information regarding ranges not explicitly
+mentioned in the current update is lost. Similarly, if the epoch changes, the
+state for any prior epoch is discarded and the update applied to an empty state
+for the new epoch.
 
-  **Note**: for quiesced ranges, there is no per-range information in
-  the heartbeat (the point of quiescence is to avoid unnecessary
-  communication). Instead, the origin store:
-  - promises that no leaseholder replica will propose a command
-    between any two heartbeats without also including the range ID in
-    the ranges map, and
-  - allows the follower to verify whether the origin store's CT
-    heartbeat remains valid for a still-quiescent range using the
-    heartbeat **sequence** and **liveness epoch**. See below for details.
-- **Sequence**: a sequence number incremented and sent with successive
-  coalesced heartbeats. This is used to guarantee that the leaseholder
-  includes any active replica in the next outgoing CT heartbeat. This
-  sequence number allows the recipient to detect a missed heartbeat,
-  and on so doing, it must assume that all formerly quiesced ranges
-  have become active again. (TODO: insert footnote about mitigations)
-- **Liveness epoch**: the origin store's reported liveness epoch, used
-  by the recipient to verify that information from previous CT
-  heartbeats about range quiescence remains valid. Followers must
-  check whether the lease for the replica is that of the originating
-  store at the given epoch and confirm that it is live. If the
-  liveness epoch advances, the recipient must assume that all quiescent
-  ranges have unquiesced, perhaps under a new lease holder.
-  heartbeats is discarded.
+At a high level, the design splits into three parts:
 
-Note that Raft plays no fundamental role in this mechanism and thus,
-it is irrelevant whether the Raft leader and the leaseholder are
-colocated (though in the common case they are). Coalesced heartbeats
-are employed for CT heartbeat transport because they are convenient,
-and for easy access to the quiescent state (which in itself is not a
-Raft concept but an auxiliary mechanism added by us), and similarly
-the lease applied index is not a Raft term: in fact, it is our
-stand-in for reasoning about Raft log positions, which are notoriously
-difficult to work with. For example, if a command gets initially
-proposed at a log index N, it could theoretically still apply at a
-higher log index if the proposing leader steps down and another leader
-takes over but puts the command in a higher slot. The leadership could
-even be won back by the original node after. The lease applied index
-prevents these scenarios.
+1. How are the outgoing updates assembled? This will mainly live in the Replica write
+path: whenever something is proposed to Raft, action needs to be taken to
+reflect this proposal in the next CT update.
+2. How are the received updates used and which reads can be served? This lives
+mostly in the read path.
+3. How are reads routed to eligible follower replicas? This lives both in
+`DistSender` and the DistSQL physical planner.
 
-Quiesced replicas which do not serve any reads before the liveness
-epoch is incremented cannot forward their CTs to the last known closed
-timestamp from the leaseholder. This is because we can't assume ranges
-that we previously believed were quiescent actually had valid leases
-(and actually were quiescent) at the time of the previous heartbeat.
-We can't use that value after the fact.
+We will talk about how they are used first, as that is the most natural
+starting point for correctness.
 
-## Constructing the CT heartbeat
+To serve a read request at timestamp `T` via follower reads, a replica
 
-In the interests of building the explanation in pieces, let's first
-not consider how CTs work when ranges are quiesced. Instead, let's
-simplify by allowing CTs to be valid only when explicitly received on
-a heartbeat for a range.
+1. looks up the lease, noting the store (and thus node) and epoch it belongs to.
+1. looks up the CT state known for this node and epoch.
+1. checks whether the read timestamp `T` is less than or equal to the closed timestamp.
+1. checks whether its *Lease Applied Index* matches or exceeds the *MLAI* for the range (in the absence of an *MLAI*, this check fails by default).
 
-### Unquiesced ranges
+If the checks succeed, the follower serves the read (without an update to the
+timestamp cache necessary). If they don't, a `NotLeaseholderError` is returned.
 
-In a CT heartbeat, the origin store makes the following guarantee
-for a given range it holds the lease for:
+Note that if the read fails because no *MLAI* is known for that range, there
+needs to be some proactive action to prompt re-sending of the *MLAI*. This is
+because without write activity on the range (which is not necessarily going to
+happen any time soon) the origin store will not send an update. Strategies to
+mitigate this are discussed in a dedicated section below.
 
-*Every Raft command proposed after the min lease applied index (MLAI)
-will be at a later timestamp than the closed timestamp (CT).*
+## Implied guarantees
 
-The MLAI which is reported with CT heartbeats is constructed for each
-range by reporting `Replica.mu.lastAssignedLeaseIndex`, which is
-guaranteed to be greater than or equal to any lease index which was
-assigned as the `MaxLeaseIndex` on Raft commands proposed by the
-leaseholder before the prior heartbeat was sent. More on this below.
+Implicitly, a received update represents the following essential promises:
 
-The leaseholder wants to
-- maintain an answer to the question: What's the largest timestamp for
-  which there's no command in flight and never again will be?
-- have that answer increase over time, roughly staying within the
-  target duration of the node's clock.
+- the origin node was, at any point in time, live for the given epoch and closed
+  timestamp. Concretely, this means that the origin node had a liveness update (for
+  the epoch) with the closed timestamp falling *before* the stasis period.
 
-The object in charge of this is the per-`Store` **min proposal timestamp** (MPT)
-which is linked to command proposals in order to provide successively higher
-closed timestamps to send with CT heartbeats. The min proposal timestamp, as the
-name suggests, maintains a low water timestamp for command proposals
-(initialized to the start of the lease). Similar to the timestamp cache, when
-commands are evaluated on the write path, their timestamps are forwarded to be
-at least the MPT.
+  This guarantees that no other node could forcibly take over the lease at a
+  timestamp less than or equal to the closed timestamp, and consequently for any
+  lease (as seen on a follower) for that origin store and epoch the origin store
+  knows about all relevant Raft proposals that need to be applied before serving
+  follower reads.
 
-The MPT is a slightly tricky object. It consists of two timestamps
-`last` and `cur` with associated ref counts (and a reader/writer mutex
-we'll ignore here and for which care is taken that it is not held over
-long operations such as command evaluation or proposal).
+  In other words, **the ranges map in the update is authoritative** as long as:
+- the *MLAI map* contains an update for any range for which a command has been
+  proposed since the last update.
 
-`last` is the value of the min proposal timestamp sent as the
-store-wide closed timestamp in the most recent coalesced heartbeat,
-and `cur` is the timestamp below which new proposals are not accepted;
-both are updated for each constructed coalesced heartbeat.
+  This guarantee is hopefully not a surprise, but implicit in this is the
+  requirement that any relevant write actually increments the lease applied
+  index. Luckily, all commands do, except for lease requests (not transfers --
+  see below for those), which don't mutate user-visible state.
+- the origin store won't (ever) initiate a lease transfer that would allow
+  another node to write at or below the closed timestamp. In other words, in the
+  case of a lease transfer the next lease would start at a timestamp greater than
+  the closed timestamp.
 
-The ref count for `last` counts the commands which are in process for
-timestamps forwarded to at least `last`, while that for `cur` covers
-commands forwarded to at least `cur`. Note that the MPT guarantees
-that the set of commands with timestamps within the interval `[0,
-last)` is always empty.
+  If this rule were broken, another lease holder could propose commands that
+  violate the closed timestamp sent by the original node (and a lagging follower
+  would continue seeing the old lease and convince itself that it was fine to
+  serve reads).
 
-Note that a command is "in process" while it is being evaluated (into
-a proposal) and proposed. Once it is proposed" (as in "handed to
-Raft"), it's not "in process" any more for the purposes of the MPT
-(though, of course, it will first have to clear Raft until it actually
-applies and becomes visible).
+  Lease transfers also require an update in the *MLAI map*; they need to
+  essentially force the follower to see the new lease before they serve further
+  follower reads (at which point they will turn to the new leaseholder's store
+  for guidance). Nothing special is required to get this behavior; a lease
+  transfer requires a valid *Lease Applied Index*, so the same mechanism that
+  forces followers to catch up on the Raft log for writes also makes them
+  observe the new lease.
 
-Let's walk through an example of how the MPT works. Initially, `last`
-and `cur` demarcate some time interval. Three commands arrive; `cur`
-picks up a refcount of three (new commands are forced above `cur`, though
-in this case they were there to begin with):
+## Recovering from missed updates
+
+To regain a fully populated *MLAI* map when first receiving updates (or after
+resetting the state for a peer node), there are two strategies:
+
+1. special case sequence number zero so that it includes an *MLAI* for all
+   ranges for which the lease is held. When an update is missed, the recipient
+   notifies the sender and it resets its sequence number to zero (thus sending
+   a full update next).
+2. ask for updates on individual ranges whenever a follower read request fails
+   because of a missing *MLAI*.
+
+We opt for the first mechanism because
+
+1. the payload is essentially a varint for each range, which takes no more than
+   10 bytes on the wire, adding up to a 500kb payload at 50000 leaseholders.
+   Even with 10x as many, an occasional 5mb payload seems unproblematic, especially
+   since they can be streamed.
+2. without an eager catch-up, followers will have to warm up "on demand" but the
+   routing layer has no insight into this process and will blindly route reads
+   to followers, which makes for a poor experience after a node restart.
+
+Note that relying on an initial catch-up somewhat ups the stakes around making
+sure that an *MLAI* is always sent for ranges that are not seeing write activity.
+
+If a range is not included in the initial update, it is because of one of the
+following:
+
+## Constructing outgoing updates
+
+To get in the right mindset of this, consider the simplified situation of a
+`Store without any pending or (near) future write activity, that is, there are
+(and will be ) no in-flight Raft proposals. Now, we want to send an initial CT
+update to another store. This means two things:
+
+1. the need to "close" a timestamp, i.e. preventing any future write activity visible
+   at this timestamp, for any write proposed by this store as a leaseholder (for the
+   current epoch).
+2. Tracking an *MLAI* for each replica (for which the lease for the epoch is held).
+
+The first requirement is roughly equivalent to bumping the high water mark of
+the timestamp cache to one logical tick above the desired closed timestamp.
+
+The second one is also straightforward: simply read the *Lease Applied Index* for
+each replica; since nothing is in-flight, that's all the followers need to know
+about.
+
+In reality, there will sometimes be ongoing writes on a replica for which we want
+to obtain an *MLAI*, and so 1) and 2) get more complicated.
+
+Instead of adjusting the timestamp cache, we introduce a dedicated data
+structure, the **minimum proposal tracker** (*MPT*), which tracks (at coarse
+granularity) the timestamps for which proposals are still ongoing. In
+particular, it can decide when it is safe to close out a higher timestamp than
+before. This replaces 1), but retrieving an *MLAI* is also less straightforward
+than before.
+
+Assume the replica shows a *Lease Applied Index* of 12, but three proposals are
+in-flight whereas another two have cleared the command queue but are still
+evaluating. Presumably the in-flight proposals were assigned to *Lease Applied
+Indexes* 13 through 16, and the ones being evaluated will receive 14 and 15
+(depending on the order in which they enter Raft). This is where the *MPT*'s
+second function comes in: it tracks writes until they are assigned a
+(provisional) *Lease Applied Index*, and makes sure that an authoritative *MLAI*
+delta is returned with each closed timestamp. This delta is *authoritative* in
+the sense that it will reflect the largest **proposed** *MLAI* seen relevant
+to the newly closed timestamp (relative to the previous one).
+
+Consequently when we say that a proposal is tracked, we're talking about the
+interval between determining the request timestamp (which is after clearing the
+command queue) and determining the proposal's *Lease Applied Index*.
+
+It's natural to ask whether there may be "false positives", i.e. whether a
+command proposed for some *Lease Applied Index* may never actually return from
+Raft with a corresponding update to the range state. The response is that this
+isn't possible: a command proposed to Raft is either retried until's clear that
+the desired *Lease Applied Index* has already been surpassed (in which case
+there is no problem) or the leaseholder process exits (in which case there will
+be a new leaseholder and previous in-flight commands that never made it into the
+log are irrelevant).
+
+The naive approach of tracking the maximum assigned lease applied index is
+problematic. To see this, consider the relevant example of a store that wants to
+close out a timestamp around five seconds in the past, but which has high write
+throughput on some range. Tracking the maximum proposed lease applied index
+until we close out the timestamp `now()-5s` means that a follower won't be able
+to serve reads until it has caught up on the last five seconds as well, even
+though they are likely not relevant to the reads it wants to serve. This
+motivates the precise form of the *MPT*, which has two adjacent "buckets" that
+it moves forward in time: one tracking proposals relevant to the next closed
+timestamp, and one with proposals relevant for the one after that.
+
+The MPT consists of the previously emitted closed timestamp (zero initially) and
+a prospective next closed timestamp aptly named `next` (always strictly larger
+than `closed`) below which new writes are not accepted. It also contains two ref
+counts and *MLAI* maps associated to below and above `next`, respectively.
+
+Its API is roughly the following:
+
+```go
+// t := NewTracker()
+
+// In Replica write path:
+waitCmdQueue(ba)
+applyTimestampCache(ba)
+ts, done:= t.Track(ba.Timestamp)
+ba.ForwardTimestamp(ts)
+proposal := evaluate(ba)
+proposal.LeaseAppliedIndex = <X>
+done(proposal.LeaseAppliedIndex)
+propose(proposal)
+
+// In periodic store-level loop:
+closedTS, mlaiMap := t.CloseWithNext(clock.Now()-TargetDuration)
+sendUpdateToPeers(closedTS, mlaiMap)
+```
+
+In what follows we'll to through an example, which for simplicity assumes that
+all writes relate to the same range (thus reducing the *MLAI* maps to scalars).
+The state of the *MPT* is laid out as in the diagram below. You see a previously
+closed timestamp as well as a prospective next closed timestamp. There are three
+proposals tracked at timestamps strictly less than `next`, and one proposal at
+`next` or higher. Additionally, for proposals strictly less than `next`, the
+*MLAI* `8` was recorded while that for the other side is `17`.
 
 ```
-             0        3
-           last      cur    commands
-             |        |        /\   \_______
-             |        |       /  \          |
+   closed           next
+      |            @8 | @17
+      |            #3 | #1
+      |               |
+      v               v
+---------------------------------------------------------> time
+```
+
+Let's walk through an example of how the MPT works. For ease of illustration, we
+restrict to activity on a single replica (which avoids having a *map* of
+*MLAI*s; now it's just one). Initially, `closed` and `next` demarcate some time
+interval. Three commands arrive; `next`'s right side picks up a refcount of three
+(new commands are forced above `next`, though in this case they were there to begin
+with):
+
+```
+          closed    next    commands
+             |     @0 | @0     /\   \_______
+             |     #0 | #3    /  \          |
              v        v       v  v          v
 ------------------------------x--x----------x------------> time
 ```
 
-Next, it's time to construct a coalesced heartbeat. Since `last` has a
-refcount of zero, we know that nothing is in progress for timestamps
-`[last, cur)` and we can advance `last` to `cur`, and move `cur` to
-`now-target duration`. Note that `cur` now has a new refcount of zero,
-while `last` picked up `cur`s previous refcount, three. This
-demonstrates the "morally" in the intervals assigned to `cur` and
-`last`: one of the commands is in `[cur, ∞)` and yet `last` is now in
-charge of tracking it. This is common in practice since `cur`
-typically trails the node's clock by seconds.
+Next, it's time to construct a CT update. Since `next`'s left has a refcount of
+zero, we know that nothing is in progress for timestamps below `next`, which
+will now officially become a closed timestamp. To do so, `next` is returned to
+the client along with the *MLAI* for its left (there is none this time around).
+Additionally, the data structure is set up for the next iteration: `closed` is
+forwarded to `next`, and `next` forwarded to a suitable timestamp some constant
+target duration away from the current time. The commands previously tracked
+ahead of `next` are now on its left. Note that even though one of the commands
+has a timestamp ahead of `next`, it is now tracked to its left. This is fine; it
+just means that we're taking a command into account earlier than required for
+correctness.
 
 ```
-                      3                   0
-                     last    commands    cur
+                                         next
+                                       @0 | @0
+                    closed   commands  #3 | #0
                       |        /\   \_____|__
                       |       /  \        | |
                       v       v  v        v v
 ------------------------------x--x----------x------------> time
 ```
 
-Two of the commands get proposed, decrementing `last`s
-refcount. Additionally, two new commands arrive at timestamps below
-`cur`. As before, `cur` picks up a refcount of two, but additionally
-the commands' timestamps are forwarded to `cur`. These new commands
-get proposed quickly (so they don't show up again) and `cur`s refcount
-will drop back to zero.
+Two of the commands get proposed (at *LAI*s, say, 10 and 11), decrementing
+the left refcount and adding an *MLAI* entry of 11 (the max of the two) to it.
+Additionally, two new commands arrive, this time at timestamps below `next`.
+ These commands are forced above `next` first, so the refcount goes to the right.
+These new commands get proposed quickly (so they don't show
+up again) and the right refcount will drop back to zero (though it will retain the
+max *MLAI* seen, likely 13).
 
 ```
-                      1     in-flight      2
-                    last     command      cur
-                      |         \          |
-                      |          \         |
+                            in-flight
+                   closed    command     next
+                      |         \       @11| @0
+                      |          \      #1 | #2
                       v          v         v
 ---------------------------------x-----------------------> time
                                            ʌ
@@ -282,78 +380,50 @@ will drop back to zero.
            |   forwarding    |
            |                 |
        new command         new command
-     (finishes quickly) (finishes quickly)
+   (finishes quickly @13) (finishes quickly @12)
 ```
 
-The remaining command sticks around. This is unfortunate; it's time
-for another coalesced heartbeat, but we can't send a higher `last`
-than before and must stick to the same one.
+The remaining command sticks around in the evaluation phase. This is
+unfortunate; it's time for another CT update, but we can't send a higher closed
+timestamp than before (and must stick to the same one with an empty *MLAI* map)
 
 ```
                   (blocked)             (blocked)
-                      1     in-flight      0
-                    last     command      cur
-                      |         \          |
-                      |          \         |
+                            in-flight
+                   closed    command     next
+                      |         \       @11| @13
+                      |          \      #1 | #0
                       v          v         v
 ---------------------------------x-----------------------> time
 ```
 
-Finally the command gets proposed. A new command comes in at some
-reasonable timestamp and `cur` picks up a ref, but that doesn't bother
-us.
+Finally the command gets proposed at LAI 14. A new command comes in at some
+reasonable timestamp and the right side picks up a ref. Note the resulting
+odd-looking situation in which the left is @14 and the right @13 (this is fine;
+the client tracks the maximum seen):
+
 ```
-                      0                    1
-                    last                  cur     in-flight
-                      |                    |      proposal
-                      |                    |        |
+                   closed                next     in-flight
+                      |                 @14| @13  proposal
+                      |                 #0 | #1     |
                       v                    v        v
 ----------------------------------------------------x----> time
 ```
 
-Time for the next coalesced heartbeat. We can finally move `last` to
-`cur` (picking up its refcount) and `cur` to `now-target duration`
-with a zero refcount, concluding the example.
+Time for the next CT update. We can finally close `next` (emitting @14) and move
+it to `now-target duration`, moving the right side refcount and *MLAI* to the
+left in the process.
+
 ```
-                                           1               0
-                                         last             cur ---···
-                                           |
-                                           |
-                                           v
+                                         closed   in-flight  @13| @0
+                                           |      proposal   #1 | #0
+                                           |        |     _____/
+                                           |        |    /
+                                           v        v   v
 ----------------------------------------------------x----> time
 ```
 
-When the MPT is accessed in `Replica.tryExecuteWriteBatch`, the `cur`
-timestamp is returned and its ref count is incremented. After command
-proposal, a cleanup function is invoked which decrements either the
-`cur` or `last` ref count, depending on which timestamp was originally
-returned (note that if you start with `cur=t1`, the MPT may move to
-`cur=t2, last=t1` while you are proposing your command). The MPT is
-also accessed when sending CTs with Raft heartbeats. This happens just
-once every time heartbeats are sent from a node to peer nodes in the
-`Store.coalescedHeartbeatsLoop`.
-
-As long as the `last` ref count is non-zero, the `last` timestamp is
-returned for use with CTs. This ensures that while any commands may
-still be being proposed to Raft using the `last` timestamp as the low
-water mark, no CTs will be sent with a higher closed timestamp. If the
-`last` ref count is zero, then the `last` timestamp is returned for
-the current round of heartbeats, while the `cur` timestamp and ref
-count are transferred to `last`. A new `cur` timestamp is set to
-`hlc.Clock.Now() - ClosedTimestampInterval` with ref count 0.
-
-The MPT specifies timestamps `cur=C` and `last=L`, where `C > L`.  On
-each successive heartbeat `1, 2, 3, ..., N`, a node sends CTs with
-timestamp equal to `L(1) <= L(2) <= L(3) <= ... <= L(N)`, and enforces
-that all commands proposed between heartbeats have command timestamps
-forwarded to at least `C(1) <= C(2) <= C(3) <= ... <= C(N)`. Because
-all commands proposed between heartbeats `K` and `K+1` will have at
-least timestamp `C(K)`, and `C(K) > L(K)`, then a CT heartbeat for any
-range will report a MLAI at which that command and all subsequent
-commands must have a timestamp greater than `L(k)`, which proves the
-stated guarantee.
-
-#### Timestamp forwarding and intents
+## Timestamp forwarding and intents
 
 We forward commands' timestamps in order to guarantee that they don't
 produce visible data at timestamps below the CT. A case in which that
@@ -374,15 +444,17 @@ the intent has to be resolved first, which implies that it will move at least to
 `Timestamp` in the progress, restoring the guarantee required.
 
 Similarly, this does not impede the usefulness of the CT mechanism for
-recovery: the restored consistent state may contain intents that belong
-to transactions that started after the CT; however, they will simply be
-aborted.
+recovery: the restored consistent state may contain intents. But the
+restored consistent state also allows resolving all of the intents in
+the same way, since what matters is the transaction record. The result
+will be that the intents are simply dropped, unless there is a committed
+transaction record, in which case they will commit.
 
 Note that for the CDC use case, this closed timestamp mechanism is a necessary,
 but not sufficient, solution. In particular, a CDC consumer must find (or track)
 and resolve all intents at timestamps below a given closed timestamp first.
 
-#### What about leaseholdership changes and node restarts?
+## What about leaseholdership changes and node restarts?
 
 When a node restarts, it waits out the clock offset and is forced to request a
 new lease. Thus, to guarantee correctness of the MPT mechanism, it is sufficient
@@ -396,150 +468,54 @@ monotonically increase. It's easy to see how this alone maintains the
 critical guarantee that *every Raft command proposed after the MLAI
 will be at a later timestamp than the closed timestamp*.
 
-### Quiescence
+## Splits/Merges
 
-Quiescence is a concept we bolted on top of Raft. Briefly put, whenever the
-lease holder (and simultaneously Raft leader) finds that there are no in-flight
-proposals and that everything is fully replicated, it instructs its followers
-(and itself) to quiesce, that is, go dormant without expecting to be heartbeat.
+No action is necessary for splits, but for convenience an update for the RHS
+is added to the next round of outgoing updates.
 
-This is an important performance optimization that the CT mechanism would
-partially undo if it didn't correspondingly optimize for this case.
+For merges, no action is necessary as the right hand side cases to exist while
+the left hand side applies a write. We just need to ensure that replicas blocked
+by the ongoing merge never serve follower reads. They don't today and this is
+unlikely to change, but it should be future proofed.
 
-Ideally, we want to make it such that the most recent *store-wide* CT timestamp
-supplied in coalesced heartbeats is valid for all quiescent ranges, so long as
-the liveness epoch (which continues to be reported with heartbeats) remains
-stable.
+## Routing layer
 
-In order to do this, a node must guarantee the following contract: once a MLAI
-is sent for a range, the sender (while the liveness epoch remains the same) must
-on subsequent heartbeats either:
-- Return a new MLAI for a range if unquiesced and was active since the
-  last heartbeat.
-- Return a new MLAI for a range if it has quiesced since last heartbeat.
-- Return nothing, if the range was and remains quiesced, or is
-  unquiesced but inactive. If quiesced, the store-wide CT can be used
-  for the range in conjunction with the last known MLAI. If unquiesced,
-  only the last reported CT & MLAI can be used.
+This RFC proposes a somewhat simplistic implementation at the routing layer: At
+`DistSender` and its DistSQL counterpart, if a read is for a timestamp earlier
+than the current time less a target duration (which adds comfortable padding to
+when followers are ideally able to serve these reads), it is sent to the nearest
+replica (as measured by health, latency, locality, and perhaps a jitter),
+instead of to the leaseholder.
 
-Before a command is proposed, the range is unquiesced if necessary.
-If unquiesced, the range ID is added to the ranges map with the
-quiesced bool set to false and the MLAI for the range set to the last
-assigned lease index. The ranges map is sent with the next coalesced
-heartbeat. This guarantees that the next heartbeat received by
-followers will specify the IDs of any unquiesced ranges, preventing
-the use of an advanced store-wide closed timestamp, unless the range
-has met the requirements of the advanced MLAI.
+When a read is handled by a replica not equipped to serve it via a regular or
+follower read, a `NotLeaseHolderError` is returned and future requests for that
+same (chunk of) batch will make no attempt to use follower reads; this avoids
+getting stuck in an endless loop when followers lag significantly. Similarly,
+follower reads are never attempted for ranges known not to use epoch based
+leases.
 
-### Details
+## Behavior under chaos
 
-Nodes maintain a map from node ID/store ID to the store-wide closed
-timestamp, liveness epoch, and a set of quiesced range IDs. This is
-updated on receipt of coalesced heartbeats. If the liveness epoch
-changes or the sequence number skips an increment on successive
-heartbeats, the CT struct is reset. Each range in the CT heartbeat for
-which an updated MLAI is specified, updates the associated replica's
-`r.mu.closed` struct, which keeps track of the closed timestamp and
-MLAI pair. It also contains a `confTS` confirmed timestamp, which is
-set to the closed timestamp once the replica's `LeaseAppliedIndex` is
-at least equal to the MLAI.
-
-When a read is serviced by a follower, that replica first checks if
-the read timestamp is at or before the confirmed timestamp. If so, it
-can service the read and proceeds with no further checks. If not, it
-checks whether the read is at or before the last-received closed
-timestamp. If so, and the `LeaseAppliedIndex >= MLAI`, the read is
-serviced. If not, then **if the range is quiesced** and the range
-lease is valid and matches the leaseholder's last reported liveness
-epoch, the *store-wide* CT can be used as long as `LeaseAppliedIndex >= MLAI`.
-
-This mechanism requires that once a range is quiesced (learned via CT
-heartbeats for this case, not via Raft heartbeats), the next heartbeat
-after unquiescing must inform the follower. A sequence number is sent
-with heartbeats to prevent a missed heartbeat from allowing a follower
-to use the store-wide CT when it is in fact not quiesced. If the
-leaseholder restarts or loses its lease, its liveness epoch will be
-incremented, preventing the use of stale MLAIs with newer instances of
-the same leaseholder store.
-
-Note that an important property of the implementation for closed
-timestamps is that **all** information about them is transmitted via
-coalesced heartbeats. If a heartbeat is missed or mis-ordered, then
-the use of store-wide advancing closed timestamps is halted. If
-heartbeats are delayed by arbitrary amounts of time, the followers
-will still be able to use the last store-wide closed timestamp for
-quiesced ranges and any per-range closed timestamps which were
-previously transmitted. That information will simply become
-increasingly stale, not incorrect.
-
-On splits, a node's closed timestamp information is kept current for
-the LHS, and copied to the RHS of the split. The confirmed closed
-timestamp and closed timestamp are simply copied, while the MLAI is
-set to 0. Splits guarantee exclusion on commands to the range, and the
-RHS will have an empty Raft log when the split is finalized.
-
-### State transitions
-
-| Scenario | Range State | Explanation |
-| -------- | ----------- | ----------- |
-| Transfer lease | Range unquiesced | On transfer of lease, the range must be unquiesced, and the leader must be the leaseholder. Heartbeats will cease from the original leaseholder and start from the new leaseholder. |
-| Transfer lease | Range quiesced | Quiesced ranges must unquiesce in order to propose a lease transfer. See above. |
-| Lose leaseholdership | Range unquiesced | On loss of leaseholdership, heartbeats cease, so the CT is no longer advanced. |
-| Lose leaseholdership | Range quiesced | If the lease was transferred away, that would have required the range to be unquiesced. Instead, loss of leaseholdership requires that the liveness epoch of the prior leaseholder was incremented and the lease captured. The incremented epoch will clear the CT map entry, preventing further use of the store-wide CT. |
-| Lose / regain leaseholdership | Range quiesced | If the leaseholder loses the lease, the liveness epoch will have been incremented, preventing the use of new store-wide CT with old MLAI. Note that follower replicas check the lease is valid before using a putative leaseholder's advancing store-wide closed timestamp. |
-| Missed unquiesce | Range quiesced | Range replica is partitioned and misses unquiesce, leaseholder proposes new commands and re-quiesces. Replica becomes unpartitioned and receives its first heartbeat from leaseholder from the period of the second quiescence. This later heartbeat will have a sequence number with a gap, which will clear the quiesced set and prevent the advanced store-wide CT from being used. |
-| Lost heartbeat | Range unquiesced | The MLAI will not be advanced. When the next heartbeat arrives, it will specify the same or greater MLAI and a new closed timestamp. |
-| Lost heartbeat | Range quiesced | Whether or not a range has unquiesced, the follower will assume it has if it notices from the heartbeat sequence number that a heartbeat was missed. This causes the quiesced map to be discarded on the follower, which prevents the follower from using the advancing store-wide closed timestamp of the leaseholder until the follower receives a new per-range heartbeat that re-quiesces it. A follower which doesn't have enough information to service a follower read will unquiesce and wake the leader to make sure this happens. |
-| Leaseholder restart | Range unquiesced | The lease will have to be renewed with a new liveness epoch, successive heartbeats will convey updated MLAI. |
-| Leaseholder restart | Range quiesced | On lease renewal, the range will unquiesce, and successive heartbeats will convey updated MLAI. |
-
+TODO
 
 ## Rationale and Alternatives
 
-What's special about this design is that it preserves quiescent ranges. This is
-deemed necessary and was not the case for the alternative discussion, in which
-Raft proposals were used to advance the safe timestamp. At the time of writing,
-this design appears to be the sane solution with the given boundary conditions.
+This design appears to be the sane solution given boundary conditions.
 
 ## Unresolved questions
 
-### Disentangling CT from coalesced heartbeats
-
-Ben points out that not piggybacking on coalesced heartbeats may add clarity to
-the design.
-
-See [here on Reviewable](https://reviewable.io/reviews/cockroachdb/cockroach/21056#-L896rgu0RpL-o19TmT9)
-
-### Clarifying quiescence
-
-The interaction between quiescence and automatic extension of the follower read
-timestamp is difficult to encapsulate in code, and may result in tricky
-correctness bugs.
-
-If this were to be disentangled, even if only in the explanation, much would be
-gained. The follower reads version of "quiesced" and its Raft predecessor are
-not the same.
-
-### Protecting against missed heartbeats
-
-After a missed heartbeat, the recipient node must currently assume that all
-quiesced ranges have unquiesced. This often means that a significant number of
-ranges will refuse follower reads for the duration of a heartbeat, and that all
-of the quiescent ranges will wake up when they receive a request. We don't
-expect heartbeats to be missed in regular operations, but we do need to limit
-the impact this would have somewhat. The most straightforward way to achieve
-this is to be able to "recover" the missed heartbeat. For instance, nodes could
-re-send failed heartbeats a given number of times; or they could merge a missed
-heartbeat into the next one to the same node (so that receiving the next
-heartbeat establishes information parity despite having missed the previous
-one). This is not implemented in the initial (experimental) version of follower
-reads.
+Can we just send the full heartbeat every time? Per the computation above, we don't expect more than
+500kb of payload. The store locally can maintain the full set by basically heartbeating itself. This
+approach might make sense if we find that iterating over ~50k replicas during chaotic cluster behavior
+significantly worsens the situation.
 
 ### Configurability
 
 For now, the min proposal timestamp roughly trails real time by five seconds.
 This can be made configurable, for example via a cluster setting or, if more
-granularity is required, via zone configs.
+granularity is required, via zone configs (which in turn requires being able to
+retrieve the history of the settings value or a mechanism that smears out the
+change over some period of time, to avoid failed follower reads).
 
 Transactions which exceed the lag are usually forced to restart, though this
 will often happen through a refresh (which is comparatively cheap, though it
