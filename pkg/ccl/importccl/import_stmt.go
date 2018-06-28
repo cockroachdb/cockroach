@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,6 +59,8 @@ const (
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
+
+	pgMaxRowSize = "max_row_size"
 )
 
 var importOptionExpectValues = map[string]bool{
@@ -74,6 +77,8 @@ var importOptionExpectValues = map[string]bool{
 	importOptionTransform:  true,
 	importOptionSSTSize:    true,
 	importOptionDecompress: true,
+
+	pgMaxRowSize: true,
 }
 
 const (
@@ -435,8 +440,32 @@ func importPlanHook(
 			if override, ok := opts[pgCopyNull]; ok {
 				format.PgCopy.Null = override
 			}
+			maxRowSize := int32(defaultScanBuffer)
+			if override, ok := opts[pgMaxRowSize]; ok {
+				sz, err := humanizeutil.ParseBytes(override)
+				if err != nil {
+					return err
+				}
+				if sz < 1 || sz > math.MaxInt32 {
+					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+				}
+				maxRowSize = int32(sz)
+			}
+			format.PgCopy.MaxRowSize = maxRowSize
 		case "PGDUMP":
 			format.Format = roachpb.IOFileFormat_PgDump
+			maxRowSize := int32(defaultScanBuffer)
+			if override, ok := opts[pgMaxRowSize]; ok {
+				sz, err := humanizeutil.ParseBytes(override)
+				if err != nil {
+					return err
+				}
+				if sz < 1 || sz > math.MaxInt32 {
+					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+				}
+				maxRowSize = int32(sz)
+			}
+			format.PgDump.MaxRowSize = maxRowSize
 		default:
 			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 		}
@@ -497,7 +526,7 @@ func importPlanHook(
 			case roachpb.IOFileFormat_Mysqldump:
 			case roachpb.IOFileFormat_PgDump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime)
+				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, int(format.PgDump.MaxRowSize))
 			default:
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 			}

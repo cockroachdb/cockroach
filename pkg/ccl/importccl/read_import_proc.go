@@ -439,7 +439,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 	case roachpb.IOFileFormat_PgCopy:
 		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
-		conv, err = newPgDumpReader(kvCh, cp.spec.Tables, evalCtx)
+		conv, err = newPgDumpReader(kvCh, cp.spec.Format.PgDump, cp.spec.Tables, evalCtx)
 	default:
 		err = errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
 	}

@@ -290,6 +290,21 @@ d
 				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
 			},
 		},
+		{
+			name:   "size out of range",
+			create: `i int`,
+			typ:    "PGCOPY",
+			with:   `WITH max_row_size = '10GB'`,
+			err:    "max_row_size out of range",
+		},
+		{
+			name:   "line too long",
+			create: `i int`,
+			typ:    "PGCOPY",
+			data:   "123456",
+			with:   `WITH max_row_size = '5B'`,
+			err:    "line too long",
+		},
 
 		// Postgres DUMP
 		{
@@ -326,6 +341,19 @@ d
 			query: map[string][][]string{
 				`SELECT * from t`: {},
 			},
+		},
+		{
+			name: "size out of range",
+			typ:  "PGDUMP",
+			with: `WITH max_row_size = '10GB'`,
+			err:  "max_row_size out of range",
+		},
+		{
+			name: "line too long",
+			typ:  "PGDUMP",
+			data: "CREATE TABLE t (i INT);",
+			with: `WITH max_row_size = '5B'`,
+			err:  "line too long",
 		},
 
 		// Error
