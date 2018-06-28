@@ -45,29 +45,53 @@ const (
 
 var (
 	metaDistSenderBatchCount = metric.Metadata{
-		Name: "distsender.batches",
-		Help: "Number of batches processed"}
+		Name:        "distsender.batches",
+		Help:        "Number of batches processed",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
-		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed after being divided on range boundaries"}
+		Name:        "distsender.batches.partial",
+		Help:        "Number of partial batches processed after being divided on range boundaries",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncSentCount = metric.Metadata{
-		Name: "distsender.batches.async.sent",
-		Help: "Number of partial batches sent asynchronously"}
+		Name:        "distsender.batches.async.sent",
+		Help:        "Number of partial batches sent asynchronously",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncThrottledCount = metric.Metadata{
-		Name: "distsender.batches.async.throttled",
-		Help: "Number of partial batches not sent asynchronously due to throttling"}
+		Name:        "distsender.batches.async.throttled",
+		Help:        "Number of partial batches not sent asynchronously due to throttling",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent",
-		Help: "Number of RPCs sent"}
+		Name:        "distsender.rpc.sent",
+		Help:        "Number of RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportLocalSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent.local",
-		Help: "Number of local RPCs sent"}
+		Name:        "distsender.rpc.sent.local",
+		Help:        "Number of local RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportSenderNextReplicaErrCount = metric.Metadata{
-		Name: "distsender.rpc.sent.nextreplicaerror",
-		Help: "Number of RPCs sent due to per-replica errors"}
+		Name:        "distsender.rpc.sent.nextreplicaerror",
+		Help:        "Number of RPCs sent due to per-replica errors",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
-		Name: "distsender.errors.notleaseholder",
-		Help: "Number of NotLeaseHolderErrors encountered"}
+		Name:        "distsender.errors.notleaseholder",
+		Help:        "Number of NotLeaseHolderErrors encountered",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(

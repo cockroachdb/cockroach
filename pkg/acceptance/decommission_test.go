@@ -138,7 +138,7 @@ func testDecommissionInner(
 	decommissionFooter := []string{"All target nodes report that they hold no more data. Please verify cluster health before removing the nodes."}
 	decommissionFooterLive := []string{"Decommissioning finished. Please verify cluster health before removing the nodes."}
 
-	statusHeader := []string{"id", "address", "build", "updated_at", "started_at", "is_live"}
+	statusHeader := []string{"id", "address", "build", "started_at", "updated_at", "is_live"}
 
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
 	retryOpts := retry.Options{

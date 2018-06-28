@@ -102,6 +102,10 @@ ignored = [
     name = "github.com/grpc-ecosystem/grpc-gateway"
     unused-packages = false
 
+  [[prune.project]]
+    name = "github.com/prometheus/client_model"
+    unused-packages = false
+
   # Contains packages with used C files.
   [[prune.project]]
     name = "github.com/knz/go-libedit"

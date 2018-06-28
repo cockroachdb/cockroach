@@ -1,16 +1,9 @@
-/// <reference path="../node_modules/protobufjs/stub-node.d.ts" />
-
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "styl/app.styl";
 
 import "src/polyfills";
-
-import * as protobuf from "protobufjs/minimal";
-import Long from "long";
-
-protobuf.util.Long = Long as any;
-protobuf.configure();
+import "src/protobufInit";
 
 import React from "react";
 import * as ReactDOM from "react-dom";
@@ -131,6 +124,7 @@ ReactDOM.render(
         <Route path="statements">
           <IndexRoute component={ StatementsPage } />
           <Route path={ `:${appAttr}` } component={ StatementsPage } />
+          <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
         </Route>
         <Route path="statement">
           <IndexRedirect to="/statements" />
