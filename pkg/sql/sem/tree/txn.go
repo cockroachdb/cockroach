@@ -40,7 +40,7 @@ var isolationLevelNames = [...]string{
 // IsolationLevelMap is a map from string isolation level name to isolation
 // level, in the lowercase format that set isolation_level supports.
 var IsolationLevelMap = map[string]IsolationLevel{
-	"serializable": SnapshotIsolation,
+	"serializable": SerializableIsolation,
 	"snapshot":     SnapshotIsolation,
 }
 

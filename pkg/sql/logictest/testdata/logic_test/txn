@@ -255,6 +255,16 @@ SHOW transaction_isolation
 ----
 snapshot
 
+# Set it back and check it's kept properly.
+
+statement ok
+SET transaction_isolation = 'serializable'
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
 statement ok
 COMMIT
 
