@@ -420,6 +420,11 @@ func (f *FuncDepSet) Empty() bool {
 	return len(f.deps) == 0 && !f.hasKey && f.key.Empty()
 }
 
+// HasMax1Row returns true if the relation has zero or one rows.
+func (f *FuncDepSet) HasMax1Row() bool {
+	return f.hasKey && f.key.Empty()
+}
+
 // ClearKey marks the FD set as having no key.
 func (f *FuncDepSet) ClearKey() {
 	f.hasKey = false
@@ -892,6 +897,31 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 		f.setKey(f.key.Union(fdset.key))
 	} else {
 		f.ClearKey()
+	}
+}
+
+// MakeApply modifies the FD set to reflect the impact of an apply join. This
+// FD set reflects the properties of the outer query, and the given FD set
+// reflects the properties of the inner query. The logic is similar to
+// MakeProduct, except that constant dependencies introduced by MakeMax1Row
+// must be handled differently. For example:
+//
+//   SELECT *
+//   FROM a
+//   INNER JOIN LATERAL (SELECT COUNT(*) FROM b WHERE b.x=a.x)
+//   ON True
+//
+// Although the right input to the join produces one row, it can have a
+// different value for each row of the outer relation. This invalidates its
+// constant dependencies.
+func (f *FuncDepSet) MakeApply(fdset *FuncDepSet) {
+	if fdset.HasMax1Row() {
+		if f.hasKey {
+			cols := fdset.ComputeClosure(fdset.key)
+			f.addDependency(f.key, cols, true /* strict */, false /* equiv */)
+		}
+	} else {
+		f.MakeProduct(fdset)
 	}
 }
 
