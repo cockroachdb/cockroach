@@ -568,7 +568,7 @@
   branch = "master"
   name = "github.com/google/btree"
   packages = ["."]
-  revision = "316fb6d3f031ae8f4d457c6c5186b9e3ded70435"
+  revision = "e89373fe6b4a7413d7acd6da1725b83ef713e6e4"
 
 [[projects]]
   name = "github.com/google/go-github"
