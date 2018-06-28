@@ -318,10 +318,16 @@ func (ds *ServerImpl) setupFlow(
 	acc := monitor.MakeBoundAccount()
 
 	var txn *client.Txn
-	if req.Txn != nil {
+	if req.DeprecatedTxn != nil {
+		if req.TxnMeta != nil {
+			return nil, nil, errors.Errorf("provided both Txn and TxnMeta")
+		}
+		req.TxnMeta = &roachpb.TxnCoordMeta{Txn: *req.DeprecatedTxn, RefreshValid: true}
+	}
+	if req.TxnMeta != nil {
 		// The flow will run in a Txn that specifies child=true because we
 		// do not want each distributed Txn to heartbeat the transaction.
-		txn = client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *req.Txn)
+		txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *req.TxnMeta)
 	}
 
 	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
