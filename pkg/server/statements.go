@@ -26,18 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
-func (s *statusServer) Queries(
-	ctx context.Context, req *serverpb.QueriesRequest,
-) (*serverpb.QueriesResponse, error) {
+func (s *statusServer) Statements(
+	ctx context.Context, req *serverpb.StatementsRequest,
+) (*serverpb.StatementsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	response := &serverpb.QueriesResponse{
-		Queries:   []serverpb.QueriesResponse_CollectedStatementStatistics{},
-		LastReset: time.Now(),
+	response := &serverpb.StatementsResponse{
+		Statements: []serverpb.StatementsResponse_CollectedStatementStatistics{},
+		LastReset:  time.Now(),
 	}
 
-	localReq := &serverpb.QueriesRequest{
+	localReq := &serverpb.StatementsRequest{
 		NodeID: "local",
 	}
 
@@ -47,26 +47,26 @@ func (s *statusServer) Queries(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return s.QueriesLocal(ctx)
+			return s.StatementsLocal(ctx)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
 			return nil, err
 		}
-		return status.Queries(ctx, localReq)
+		return status.Statements(ctx, localReq)
 	}
 
-	nodeQuery := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
-		return status.Queries(ctx, localReq)
+	nodeStatement := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
+		return status.Statements(ctx, localReq)
 	}
 
 	if err := s.iterateNodes(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
-		nodeQuery,
+		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
-			queriesResp := resp.(*serverpb.QueriesResponse)
-			response.Queries = append(response.Queries, queriesResp.Queries...)
-			if response.LastReset.After(queriesResp.LastReset) {
-				response.LastReset = queriesResp.LastReset
+			statementsResp := resp.(*serverpb.StatementsResponse)
+			response.Statements = append(response.Statements, statementsResp.Statements...)
+			if response.LastReset.After(statementsResp.LastReset) {
+				response.LastReset = statementsResp.LastReset
 			}
 		},
 		func(nodeID roachpb.NodeID, err error) {
@@ -79,25 +79,25 @@ func (s *statusServer) Queries(
 	return response, nil
 }
 
-func (s *statusServer) QueriesLocal(
+func (s *statusServer) StatementsLocal(
 	ctx context.Context,
-) (*serverpb.QueriesResponse, error) {
+) (*serverpb.StatementsResponse, error) {
 	stmtStats := s.admin.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
 	lastReset := s.admin.server.pgServer.SQLServer.GetStmtStatsLastReset()
 
-	resp := &serverpb.QueriesResponse{
-		Queries:   make([]serverpb.QueriesResponse_CollectedStatementStatistics, len(stmtStats)),
-		LastReset: lastReset,
+	resp := &serverpb.StatementsResponse{
+		Statements: make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
+		LastReset:  lastReset,
 	}
 
 	for i, stmt := range stmtStats {
-		resp.Queries[i] = serverpb.QueriesResponse_CollectedStatementStatistics{
-			Key: serverpb.QueriesResponse_StatementStatisticsKey{
-				Query:   stmt.Key.Query,
-				App:     stmt.Key.App,
-				NodeID:  s.gossip.NodeID.Get(),
-				DistSQL: stmt.Key.DistSQL,
-				Failed:  stmt.Key.Failed,
+		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
+			Key: serverpb.StatementsResponse_StatementStatisticsKey{
+				Statement: stmt.Key.Query,
+				App:       stmt.Key.App,
+				NodeID:    s.gossip.NodeID.Get(),
+				DistSQL:   stmt.Key.DistSQL,
+				Failed:    stmt.Key.Failed,
 			},
 			Stats: stmt.Stats,
 		}

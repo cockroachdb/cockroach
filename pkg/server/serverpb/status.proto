@@ -607,13 +607,13 @@ message StoresResponse {
   repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
 }
 
-message QueriesRequest {
+message StatementsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
-message QueriesResponse {
+message StatementsResponse {
   message StatementStatisticsKey {
-    string query = 1;
+    string statement = 1;
     string app = 2;
     bool distSQL = 3;
     bool failed = 4;
@@ -626,7 +626,7 @@ message QueriesResponse {
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 
-  repeated CollectedStatementStatistics queries = 1 [(gogoproto.nullable) = false];
+  repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
   // Timestamp of the last stats reset.
   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
@@ -767,9 +767,9 @@ service Status {
     };
   }
 
-  rpc Queries(QueriesRequest) returns (QueriesResponse) {
+  rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
-      get: "/_status/queries"
+      get: "/_status/statements"
     };
   }
 }

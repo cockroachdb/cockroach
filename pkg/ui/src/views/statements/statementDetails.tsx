@@ -8,7 +8,7 @@ import { createSelector } from "reselect";
 
 import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
-import { refreshQueries } from "src/redux/apiReducers";
+import { refreshStatements } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { statementAttr, appAttr } from "src/util/constants";
@@ -43,7 +43,7 @@ function AppLink(props: { app: string }) {
 
 interface StatementDetailsOwnProps {
   statement: AggregateStatistics;
-  refreshQueries: typeof refreshQueries;
+  refreshStatements: typeof refreshStatements;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
@@ -97,11 +97,11 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
 
 class StatementDetails extends React.Component<StatementDetailsProps> {
   componentWillMount() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   componentWillReceiveProps() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   render() {
@@ -260,13 +260,13 @@ function renderBools(bools: boolean[]) {
   return "(both included)";
 }
 
-type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
 
 export const selectStatement = createSelector(
-  (state: QueriesState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
-  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
-  (queries, props) => {
-    if (!queries) {
+  (state: StatementsState) => state.cachedData.statements.data && state.cachedData.statements.data.statements,
+  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
+  (statements, props) => {
+    if (!statements) {
       return null;
     }
 
@@ -281,8 +281,8 @@ export const selectStatement = createSelector(
         predicate = (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.app === app;
     }
 
-    const statements = flattenStatementStats(queries);
-    const results = _.filter(statements, predicate);
+    const flattened = flattenStatementStats(statements);
+    const results = _.filter(flattened, predicate);
 
     return {
       statement,
@@ -300,7 +300,7 @@ const StatementDetailsConnected = connect(
     statement: selectStatement(state, props),
   }),
   {
-    refreshQueries,
+    refreshStatements,
   },
 )(StatementDetails);
 
