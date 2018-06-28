@@ -9252,6 +9252,65 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 }
 
+// TestProposeWithAsyncConsensus tests that the proposal of a batch with
+// AsyncConsens set to true will return its evaluation result before
+// Raft command has completed consensus and applied.
+func TestProposeWithAsyncConsensus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	blockRaftApplication := make(chan struct{})
+	var filterActive int32
+	var storeKnobs StoreTestingKnobs
+	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+		if atomic.LoadInt32(&filterActive) == 1 {
+			<-blockRaftApplication
+		}
+		return nil
+	}
+	storeKnobs.DisableSplitQueue = true
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}}
+	s, _, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(context.TODO())
+
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("a")
+	put := putArgs(key, []byte("val"))
+	ba.Add(&put)
+	ba.Timestamp = s.Clock().Now()
+	ba.AsyncConsensus = true
+
+	stores := s.GetStores().(*Stores)
+	store, err := stores.GetStore(s.GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repl := store.LookupReplica(roachpb.RKey(key), nil /* end */)
+	if repl == nil {
+		t.Fatalf("replica for key %s not found", key)
+	}
+
+	atomic.StoreInt32(&filterActive, 1)
+	exLease, _ := repl.GetLease()
+	ch, _, pErr := repl.propose(
+		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+	)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// The result should be signaled before consensus.
+	propRes := <-ch
+	if propRes.Err != nil {
+		t.Fatalf("unexpected proposal result error: %v", propRes.Err)
+	}
+	if propRes.Reply == nil || len(propRes.Reply.Responses) != 1 {
+		t.Fatalf("unexpected proposal result with 1 response, found: %v", propRes.Reply)
+	}
+
+	// Stop blocking Raft application to allow everything to shut down cleanly.
+	close(blockRaftApplication)
+}
+
 func TestSplitMsgApps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
