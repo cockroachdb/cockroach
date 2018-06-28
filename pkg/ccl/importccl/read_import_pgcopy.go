@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// defaultScanBuffer is the default max row size of the PGCOPY and PGDUMP
+// scanner.
 const defaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
@@ -154,6 +156,9 @@ func (p *postgreStreamCopy) Next() (copyData, error) {
 	// Attempt to read an entire line.
 	scanned := p.s.Scan()
 	if err := p.s.Err(); err != nil {
+		if err == bufio.ErrTooLong {
+			err = errors.New("line too long")
+		}
 		return nil, err
 	}
 	if !scanned {
@@ -244,7 +249,7 @@ func (d *pgCopyReader) readFile(
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)
-	s.Buffer(nil, defaultScanBuffer)
+	s.Buffer(nil, int(d.opts.MaxRowSize))
 	c := newPostgreStreamCopy(
 		s,
 		d.opts.Delimiter,

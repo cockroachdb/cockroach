@@ -14,6 +14,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +26,6 @@ import (
 
 type postgreStream struct {
 	s    *bufio.Scanner
-	max  int
 	copy *postgreStreamCopy
 }
 
@@ -34,9 +34,7 @@ type postgreStream struct {
 func newPostgreStream(r io.Reader, max int) *postgreStream {
 	s := bufio.NewScanner(r)
 	s.Buffer(nil, max)
-	p := &postgreStream{
-		s: s,
-	}
+	p := &postgreStream{s: s}
 	s.Split(p.split)
 	return p
 }
@@ -113,6 +111,9 @@ func (p *postgreStream) Next() (interface{}, error) {
 		}
 	}
 	if err := p.s.Err(); err != nil {
+		if err == bufio.ErrTooLong {
+			err = errors.New("line too long")
+		}
 		return nil, err
 	}
 	return nil, io.EOF
@@ -127,6 +128,7 @@ func readPostgresCreateTable(
 	match string,
 	parentID sqlbase.ID,
 	walltime int64,
+	max int,
 ) ([]*sqlbase.TableDescriptor, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -135,7 +137,7 @@ func readPostgresCreateTable(
 	// we'd have to delete the index and row and modify the column family. This
 	// is much easier and probably safer too.
 	createTbl := make(map[string]*tree.CreateTable)
-	ps := newPostgreStream(input, defaultScanBuffer)
+	ps := newPostgreStream(input, max)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -230,13 +232,17 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 type pgDumpReader struct {
 	tables map[string]*rowConverter
 	kvCh   chan kvBatch
+	opts   roachpb.PgDumpOptions
 }
 
 var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
-	kvCh chan kvBatch, tables map[string]*sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan kvBatch,
+	opts roachpb.PgDumpOptions,
+	tables map[string]*sqlbase.TableDescriptor,
+	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*rowConverter, len(tables))
 	for name, table := range tables {
@@ -246,7 +252,11 @@ func newPgDumpReader(
 		}
 		converters[name] = conv
 	}
-	return &pgDumpReader{kvCh: kvCh, tables: converters}, nil
+	return &pgDumpReader{
+		kvCh:   kvCh,
+		tables: converters,
+		opts:   opts,
+	}, nil
 }
 
 func (m *pgDumpReader) start(ctx ctxgroup.Group) {
@@ -260,7 +270,7 @@ func (m *pgDumpReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
-	ps := newPostgreStream(input, defaultScanBuffer)
+	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
 	semaCtx := &tree.SemaContext{}
 	for {
 		stmt, err := ps.Next()
