@@ -1055,6 +1055,66 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 	}
 }
 
+// Verify runs consistency checks against the FD set, in order to ensure that it
+// conforms to several invariants:
+//
+//   1. An FD determinant should not intersect its dependants.
+//   2. If a strict constant FD is present, it's the first FD in the set.
+//   3. Lax equivalencies should be reduced to lax dependencies.
+//   4. Equivalence determinant should be exactly one column.
+//   5. The dependants of an equivalence is always its closure.
+//   6. If FD set has a key, it should be a candidate key (already reduced).
+//   7. Closure of key should include all known columns in the FD set.
+//   8. If FD set has no key then key columns should be empty.
+//
+func (f *FuncDepSet) Verify() {
+	var allCols opt.ColSet
+	for i := range f.deps {
+		fd := &f.deps[i]
+		allCols.UnionWith(fd.from)
+		allCols.UnionWith(fd.to)
+
+		if fd.from.Intersects(fd.to) {
+			panic(fmt.Sprintf("expected FD determinant and dependants to be disjoint: %s (%d)", f, i))
+		}
+
+		if fd.strict && fd.from.Empty() {
+			if i != 0 {
+				panic(fmt.Sprintf("expected strict constant FD to be first FD in set: %s (%d)", f, i))
+			}
+		}
+
+		if fd.equiv {
+			if !fd.strict {
+				panic(fmt.Sprintf("unexpected lax equivalency: %s (%d)", f, i))
+			}
+
+			if fd.from.Len() != 1 {
+				panic(fmt.Sprintf("expected equivalence determinant to be single col: %s (%d)", f, i))
+			}
+
+			if !f.ComputeEquivClosure(fd.from).Equals(fd.from.Union(fd.to)) {
+				panic(fmt.Sprintf("expected equivalence dependants to be its closure: %s (%d)", f, i))
+			}
+		}
+	}
+
+	if f.hasKey {
+		if reduced := f.ReduceCols(f.key); !reduced.Equals(f.key) {
+			panic(fmt.Sprintf("expected FD to have candidate key: %s", f))
+		}
+
+		allCols.UnionWith(f.key)
+		if !f.ComputeClosure(f.key).Equals(allCols) {
+			panic(fmt.Sprintf("expected closure of FD key to include all known cols: %s", f))
+		}
+	} else {
+		if !f.key.Empty() {
+			panic(fmt.Sprintf("expected empty key columns since no key: %s", f))
+		}
+	}
+}
+
 func (f FuncDepSet) String() string {
 	var buf bytes.Buffer
 	if f.hasKey {

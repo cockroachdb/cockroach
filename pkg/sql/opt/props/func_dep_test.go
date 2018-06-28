@@ -792,16 +792,13 @@ func verifyFD(t *testing.T, f *props.FuncDepSet, expected string) {
 		t.Errorf("\nexpected: %s\nactual  : %s", expected, actual)
 	}
 
+	f.Verify()
+
 	if key, ok := f.Key(); ok {
 		testColsAreStrictKey(t, f, key, true)
 		if !key.Empty() {
 			testColsAreStrictKey(t, f, opt.ColSet{}, false)
 		}
-
-		if reduced := f.ReduceCols(key); !reduced.Equals(key) {
-			t.Errorf("expected FD to have candidate key, but had %s: %s", key, f)
-		}
-
 		closure := f.ComputeClosure(key)
 		testColsAreStrictKey(t, f, closure, true)
 	} else {
