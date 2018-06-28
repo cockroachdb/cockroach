@@ -54,12 +54,11 @@ SELECT (SELECT (VALUES (x), (y))) FROM xysd
 project
  ├── columns: column1:7(int)
  ├── stats: [rows=1000]
- ├── fd: ()-->(5), (5)-->(7) [removed: (5)]
  ├── inner-join-apply
  │    ├── columns: x:1(int!null) y:2(int) column1:5(int)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2), ()-->(5)
+ │    ├── fd: (1)-->(2,5)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
@@ -122,7 +121,7 @@ project
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
       ├── stats: [rows=1000]
       ├── key: (1)
-      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), ()-->(5)
+      ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
@@ -146,11 +145,10 @@ project
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
       │    │         ├── stats: [rows=111.111111]
-      │    │         ├── fd: (5)==(1), (1)==(5) [removed: (1)]
       │    │         ├── scan uv
       │    │         │    ├── columns: u:5(int)
       │    │         │    └── stats: [rows=1000]
-      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(5)==(1), (1)==(5)]
+      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │                   ├── variable: uv.u [type=int, outer=(5)]
       │    │                   └── variable: xysd.x [type=int, outer=(1)]
@@ -201,12 +199,12 @@ right-join
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         ├── stats: [rows=1000, distinct(8)=1]
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2), ()-->(8)
+ │         ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── left-join-apply
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         │    ├── stats: [rows=1000, distinct(8)=1]
  │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2), ()~~>(8)
+ │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
  │         │    ├── scan xysd
  │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │         │    │    ├── stats: [rows=1000]
@@ -223,16 +221,14 @@ right-join
  │         │    │         ├── columns: uv.u:8(int!null)
  │         │    │         ├── outer: (1)
  │         │    │         ├── stats: [rows=110.111111]
- │         │    │         ├── fd: (8)==(1), (1)==(8) [removed: (1)]
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
  │         │    │         │    ├── stats: [rows=111.111111]
- │         │    │         │    ├── fd: (8)==(1), (1)==(8) [removed: (1)]
  │         │    │         │    ├── scan uv
  │         │    │         │    │    ├── columns: uv.u:8(int)
  │         │    │         │    │    └── stats: [rows=1000]
- │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(1), (1)==(8)]
+ │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
  │         │    │         │              ├── variable: uv.u [type=int, outer=(8)]
  │         │    │         │              └── variable: xysd.x [type=int, outer=(1)]
@@ -307,16 +303,14 @@ project
       │    │         ├── columns: uv.u:8(int!null)
       │    │         ├── outer: (1)
       │    │         ├── stats: [rows=110.111111]
-      │    │         ├── fd: (8)==(1), (1)==(8) [removed: (1)]
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
       │    │         │    ├── stats: [rows=111.111111]
-      │    │         │    ├── fd: (8)==(1), (1)==(8) [removed: (1)]
       │    │         │    ├── scan uv
       │    │         │    │    ├── columns: uv.u:8(int)
       │    │         │    │    └── stats: [rows=1000]
-      │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(1), (1)==(8)]
+      │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       │    │         │              ├── variable: uv.u [type=int, outer=(8)]
       │    │         │              └── variable: xysd.x [type=int, outer=(1)]
@@ -335,7 +329,7 @@ semi-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=100000]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1) [removed: (5)]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
@@ -367,16 +361,14 @@ semi-join-apply
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110.111111]
- │    ├── fd: (6)==(1), (1)==(6) [removed: (1)]
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
- │    │    ├── fd: (6)==(1), (1)==(6) [removed: (1)]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
- │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
+ │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              ├── variable: uv.v [type=int, outer=(6)]
  │    │              └── variable: xysd.x [type=int, outer=(1)]
@@ -423,16 +415,14 @@ anti-join-apply
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110.111111]
- │    ├── fd: (6)==(1), (1)==(6) [removed: (1)]
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
- │    │    ├── fd: (6)==(1), (1)==(6) [removed: (1)]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
- │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
+ │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              ├── variable: uv.v [type=int, outer=(6)]
  │    │              └── variable: xysd.x [type=int, outer=(1)]
@@ -598,12 +588,10 @@ semi-join-apply
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
- │    ├── fd: (1)==(5), (5)==(1) [removed: (1)]
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
- │    │    ├── fd: (1)==(5), (5)==(1) [removed: (1)]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -635,7 +623,7 @@ anti-join
  ├── scan uv
  │    ├── columns: u:2(int) v:3(int!null)
  │    └── stats: [rows=1000]
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(2)==(1), (1)==(2)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            ├── variable: uv.u [type=int, outer=(2)]
            └── variable: column1 [type=int, outer=(1)]
@@ -661,12 +649,10 @@ anti-join-apply
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
- │    ├── fd: (1)==(5), (5)==(1) [removed: (1)]
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
- │    │    ├── fd: (1)==(5), (5)==(1) [removed: (1)]
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -979,7 +965,7 @@ right-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── stats: [rows=70000]
  ├── key: (1,5)
- ├── fd: (1)~~>(4), (5)-->(6-8), (7,8)~~>(5,6), (1,5)-->(4)
+ ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
  ├── group-by
  │    ├── columns: u:1(int) sum:4(decimal)
  │    ├── grouping columns: u:1(int)
@@ -1094,7 +1080,7 @@ full-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── stats: [rows=70000]
  ├── key: (1,5)
- ├── fd: (1)~~>(4), (5)-->(6-8), (7,8)~~>(5,6), (1,5)-->(4)
+ ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
  ├── group-by
  │    ├── columns: u:1(int) sum:4(decimal)
  │    ├── grouping columns: u:1(int)

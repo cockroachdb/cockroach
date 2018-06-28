@@ -91,11 +91,9 @@ project
       ├── grouping columns: z:3(float!null) s:4(string)
       ├── stats: [rows=1000, distinct(3,4)=1000]
       ├── key: (3,4)
-      ├── fd: (1)-->(3,4), (3,4)~~>(1) [removed: (1)]
       └── project
            ├── columns: z:3(float!null) s:4(string)
            ├── stats: [rows=1000, distinct(3,4)=1000]
-           ├── fd: (1)-->(3,4), (3,4)~~>(1) [removed: (1)]
            └── scan xyzs
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
                 ├── stats: [rows=1000, distinct(3,4)=1000]
@@ -140,7 +138,6 @@ group-by
  ├── project
  │    ├── columns: z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000, distinct(3)=700]
- │    ├── fd: (1)-->(3,4), (3,4)~~>(1) [removed: (1)]
  │    └── scan xyzs
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │         ├── stats: [rows=1000, distinct(3)=700]

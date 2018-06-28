@@ -774,20 +774,16 @@ func (f *FuncDepSet) AddSynthesizedCol(from opt.ColSet, col opt.ColumnID) {
 // loss of information in edge cases, it does a good job of preserving the most
 // important dependency information.
 func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
+	// Ensure that any existing key contains only projected columns. Do this
+	// before removing any FDs from the set, in order to take advantage of all
+	// existing transitive relationships.
 	if f.hasKey && !f.key.SubsetOf(cols) {
-		// Need to construct new candidate key based only on projected columns,
-		// if that's possible.
+		// Derive new candidate key (or key is no longer possible).
 		if f.ColsAreStrictKey(cols) {
 			f.setKey(f.ReduceCols(cols))
 		} else {
 			f.ClearKey()
 		}
-	}
-
-	// Special case of no columns.
-	if cols.Empty() {
-		f.deps = f.deps[:0]
-		return
 	}
 
 	// Special case of <= 1 row.

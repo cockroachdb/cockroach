@@ -24,7 +24,7 @@ SELECT * FROM abc
 ----
 scan abc
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ ├── fd: (3)~~>(1,2)
  ├── prune: (1-3)
  └── interesting orderings: (+1,+2) (+3)
 
@@ -33,7 +33,7 @@ SELECT a, c FROM abc
 ----
 scan abc
  ├── columns: a:1(int) c:3(int)
- ├── fd: (4)-->(1,3), (3)~~>(1,4) [removed: (4)]
+ ├── fd: (3)~~>(1)
  ├── prune: (1,3)
  └── interesting orderings: (+1) (+3)
 
@@ -42,7 +42,7 @@ SELECT b, c FROM abc
 ----
 scan abc
  ├── columns: b:2(int) c:3(int)
- ├── fd: (4)-->(2,3), (3)~~>(2,4) [removed: (4)]
+ ├── fd: (3)~~>(2)
  ├── prune: (2,3)
  └── interesting orderings: (+3)
 
@@ -53,7 +53,7 @@ SELECT a, c FROM abc
 ----
 project
  ├── columns: a:1(int) c:3(int)
- ├── fd: (4)-->(1,3), (3)~~>(1,4) [removed: (4)]
+ ├── fd: (3)~~>(1)
  ├── prune: (1,3)
  ├── interesting orderings: (+1) (+3)
  └── scan abc
@@ -68,7 +68,7 @@ SELECT b, c FROM abc
 ----
 project
  ├── columns: b:2(int) c:3(int)
- ├── fd: (4)-->(2,3), (3)~~>(2,4) [removed: (4)]
+ ├── fd: (3)~~>(2)
  ├── prune: (2,3)
  ├── interesting orderings: (+3)
  └── scan abc
@@ -104,12 +104,12 @@ group-by
  ├── columns: min:5(int) c:3(int)
  ├── grouping columns: c:3(int)
  ├── key: (3)
- ├── fd: (4)-->(3), (3)~~>(4), (3)-->(5) [removed: (4)]
+ ├── fd: (3)-->(5)
  ├── prune: (5)
  ├── interesting orderings: (+3)
  ├── scan abc
  │    ├── columns: b:2(int) c:3(int)
- │    ├── fd: (4)-->(2,3), (3)~~>(2,4) [removed: (4)]
+ │    ├── fd: (3)~~>(2)
  │    ├── prune: (2,3)
  │    └── interesting orderings: (+3)
  └── aggregations [outer=(2)]
@@ -125,17 +125,17 @@ group-by
  ├── grouping columns: b:2(int) c:3(int)
  ├── ordering: +2,+1
  ├── key: (2,3)
- ├── fd: (4)-->(2,3), (3)~~>(2,4), (2,3)-->(5) [removed: (4)]
+ ├── fd: (3)~~>(2), (2,3)-->(5)
  ├── prune: (5)
  ├── interesting orderings: (+2)
  ├── sort
  │    ├── columns: a:1(int) b:2(int) c:3(int)
- │    ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +2,+1
  │    ├── prune: (1-3)
  │    └── scan abc
  │         ├── columns: a:1(int) b:2(int) c:3(int)
- │         ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │         ├── fd: (3)~~>(1,2)
  │         └── prune: (1-3)
  └── aggregations [outer=(1)]
       └── array-agg [type=int[], outer=(1)]
@@ -147,14 +147,14 @@ SELECT * FROM abc WHERE a = 1
 ----
 index-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int)
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4), ()-->(1) [removed: (4)]
+ ├── fd: ()-->(1), (3)~~>(2)
  ├── prune: (2,3)
  ├── interesting orderings: (+4) (+1,+2,+4)
  └── scan abc@secondary
       ├── columns: a:1(int!null) b:2(int) rowid:4(int!null)
       ├── constraint: /1/2/4: [/1 - /1]
       ├── key: (4)
-      ├── fd: (4)-->(1,2), ()-->(1)
+      ├── fd: ()-->(1), (4)-->(2)
       ├── prune: (2,4)
       └── interesting orderings: (+4) (+1,+2,+4)
 
@@ -165,7 +165,7 @@ SELECT * FROM abc ORDER BY a LIMIT 10
 index-join abc
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── cardinality: [0 - 10]
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ ├── fd: (3)~~>(1,2)
  ├── ordering: +1
  ├── prune: (2,3)
  ├── interesting orderings: (+4) (+1,+2,+4)
@@ -184,18 +184,18 @@ SELECT * FROM abc ORDER BY b LIMIT 10
 limit
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── cardinality: [0 - 10]
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ ├── fd: (3)~~>(1,2)
  ├── ordering: +2
  ├── prune: (1,3)
  ├── interesting orderings: (+2)
  ├── sort
  │    ├── columns: a:1(int) b:2(int) c:3(int)
- │    ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +2
  │    ├── prune: (1-3)
  │    └── scan abc
  │         ├── columns: a:1(int) b:2(int) c:3(int)
- │         ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │         ├── fd: (3)~~>(1,2)
  │         └── prune: (1-3)
  └── const: 10 [type=int]
 
@@ -204,18 +204,18 @@ SELECT * FROM abc ORDER BY a OFFSET 10
 ----
 offset
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ ├── fd: (3)~~>(1,2)
  ├── ordering: +1
  ├── prune: (2,3)
  ├── interesting orderings: (+1)
  ├── sort
  │    ├── columns: a:1(int) b:2(int) c:3(int)
- │    ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +1
  │    ├── prune: (1-3)
  │    └── scan abc
  │         ├── columns: a:1(int) b:2(int) c:3(int)
- │         ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │         ├── fd: (3)~~>(1,2)
  │         └── prune: (1-3)
  └── const: 10 [type=int]
 
@@ -243,17 +243,17 @@ SELECT * FROM abc JOIN xyz ON a=x
 ----
 inner-join
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
- ├── fd: (4)-->(1-3), (3)~~>(1,2,4), (8)-->(5-7), (5,6)~~>(7,8), (1)==(5), (5)==(1) [removed: (4,8)]
+ ├── fd: (3)~~>(1,2), (5,6)~~>(7), (1)==(5), (5)==(1)
  ├── prune: (2,3,6,7)
  ├── interesting orderings: (+1,+2) (+3) (+7) (+5,+6)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(int) c:3(int)
- │    ├── fd: (4)-->(1-3), (3)~~>(1,2,4) [removed: (4)]
+ │    ├── fd: (3)~~>(1,2)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2) (+3)
  ├── scan xyz
  │    ├── columns: x:5(int) y:6(int) z:7(int)
- │    ├── fd: (8)-->(5-7), (5,6)~~>(7,8) [removed: (8)]
+ │    ├── fd: (5,6)~~>(7)
  │    ├── prune: (5-7)
  │    └── interesting orderings: (+7) (+5,+6)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
