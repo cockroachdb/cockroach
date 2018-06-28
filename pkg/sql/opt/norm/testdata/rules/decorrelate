@@ -213,7 +213,7 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-6), ()-->(6)
+      ├── fd: ()-->(6), (1)-->(2-5)
       ├── left-join (merge)
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int)
       │    ├── key: (1)
@@ -293,7 +293,7 @@ project
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
  │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    ├── fd: (6)-->(9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
  │    │    │    ├── key: (1)
@@ -301,7 +301,7 @@ project
  │    │    ├── project
  │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    │    ├── fd: (6)-->(9)
  │    │    │    ├── ordering: +6
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
@@ -339,7 +339,7 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) r:8(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-6,8), ()~~>(6), ()-->(8)
+      ├── fd: ()-->(8), (1)-->(2-6), ()~~>(6)
       ├── left-join (merge)
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) r:8(int)
       │    ├── key: (1)
@@ -384,7 +384,7 @@ project
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
  │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    ├── fd: (6)-->(9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
  │    │    │    ├── key: (1)
@@ -392,7 +392,7 @@ project
  │    │    ├── project
  │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    │    ├── fd: (6)-->(9)
  │    │    │    ├── ordering: +6
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
@@ -475,15 +475,15 @@ project
  │    ├── columns: k:1(int!null) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,9,11), (2)-->(9) [removed: (2)]
+ │    ├── fd: (1)-->(9,11)
  │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) y:7(int) scalar:9(decimal) notnull:10(bool)
  │    │    ├── key: (1,6)
- │    │    ├── fd: (1)-->(2), (2)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10) [removed: (2)]
+ │    │    ├── fd: (1)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9(decimal) k:1(int!null)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(2), (2)-->(9) [removed: (2)]
+ │    │    │    ├── fd: (1)-->(9)
  │    │    │    ├── ordering: +1
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null) i:2(int)
@@ -675,7 +675,7 @@ project
  ├── select
  │    ├── columns: i:2(int) max:9(int!null) rownum:10(int!null)
  │    ├── key: (10)
- │    ├── fd: ()-->(9), (10)-->(2,9)
+ │    ├── fd: ()-->(9), (10)-->(2)
  │    ├── group-by
  │    │    ├── columns: i:2(int) max:9(int) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
@@ -718,7 +718,7 @@ project
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) concat_agg:9(string!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5), ()-->(9)
+      ├── fd: (1)-->(2-5,9)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
@@ -769,7 +769,7 @@ project
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:9(string!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5), ()-->(9)
+      ├── fd: (1)-->(2-5,9)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
@@ -848,11 +848,11 @@ SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-5)
+ │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -988,11 +988,11 @@ SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-5)
+ │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -1108,11 +1108,11 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,7), ()-->(7)
+      ├── fd: (1)-->(2-5,7)
       ├── left-join-apply
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,7), ()~~>(7)
+      │    ├── fd: (1)-->(2-5,7)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    ├── key: (1)
@@ -1201,11 +1201,11 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,8,10), ()-->(10)
+      ├── fd: (1)-->(2-5,8,10)
       ├── left-join-apply
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,8,10), ()~~>(10)
+      │    ├── fd: (1)-->(2-5,8,10)
       │    ├── select
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
       │    │    ├── key: (1)
@@ -1361,15 +1361,15 @@ SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5,9) [removed: (9)]
+ ├── fd: (1)-->(2-5)
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) case:10(bool)
       ├── key: (1)
-      ├── fd: ()-->(10), (1)-->(2-5,9), (2,9)-->(10) [removed: (9)]
+      ├── fd: ()-->(10), (1)-->(2-5)
       ├── project
       │    ├── columns: case:10(bool) k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,9), (2,9)-->(10) [removed: (9)]
+      │    ├── fd: (1)-->(2-5,10)
       │    ├── group-by
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) bool_or:9(bool)
       │    │    ├── grouping columns: k:1(int!null)
@@ -1458,11 +1458,10 @@ SELECT (SELECT x FROM xy WHERE x=k) FROM a
 ----
 project
  ├── columns: x:8(int)
- ├── fd: ()~~>(6), (6)-->(8) [removed: (6)]
  ├── left-join-apply
  │    ├── columns: k:1(int!null) xy.x:6(int)
  │    ├── key: (1)
- │    ├── fd: ()~~>(6), (1)-->(6)
+ │    ├── fd: (1)-->(6)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
@@ -1498,19 +1497,19 @@ FROM a
 ----
 project
  ├── columns: a:6(int!null) x:9(int) y:12(int) b:15(bool) exists:18(bool) count:22(int)
- ├── fd: ()-->(6,12,15,18), ()~~>(7), (7)-->(9), (21)-->(22) [removed: (7,21)]
+ ├── fd: ()-->(6,12,15,18)
  ├── group-by
  │    ├── columns: k:1(int!null) xy.x:7(int) count:21(int)
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
- │    ├── fd: ()~~>(7), (1)-->(7,21)
+ │    ├── fd: (1)-->(7,21)
  │    ├── left-join
  │    │    ├── columns: k:1(int!null) xy.x:7(int) xy.y:20(int)
- │    │    ├── fd: ()~~>(7), (1)-->(7)
+ │    │    ├── fd: (1)-->(7)
  │    │    ├── left-join-apply
  │    │    │    ├── columns: k:1(int!null) xy.x:7(int)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()~~>(7), (1)-->(7)
+ │    │    │    ├── fd: (1)-->(7)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null)
  │    │    │    │    └── key: (1)
@@ -1570,10 +1569,8 @@ group-by
  ├── fd: ()-->(9)
  ├── project
  │    ├── columns: column8:8(int)
- │    ├── fd: ()~~>(7), (7)-->(8) [removed: (7)]
  │    ├── left-join-apply
  │    │    ├── columns: i:2(int) y:7(int)
- │    │    ├── fd: ()~~>(7)
  │    │    ├── scan a
  │    │    │    └── columns: i:2(int)
  │    │    ├── max1-row
@@ -1726,11 +1723,10 @@ SELECT s, x FROM a FULL JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 ----
 project
  ├── columns: s:4(string) x:6(int)
- ├── fd: (6)-->(11) [removed: (11)]
  └── full-join
       ├── columns: k:1(int) s:4(string) x:6(int) exists:12(bool)
       ├── key: (1,6)
-      ├── fd: (1)-->(4), (6)-->(11), (11)-->(12) [removed: (11)]
+      ├── fd: (1)-->(4), (6)-->(12)
       ├── scan a
       │    ├── columns: k:1(int!null) s:4(string)
       │    ├── key: (1)
@@ -1738,7 +1734,7 @@ project
       ├── project
       │    ├── columns: exists:12(bool) x:6(int!null)
       │    ├── key: (6)
-      │    ├── fd: (6)-->(11), (11)-->(12) [removed: (11)]
+      │    ├── fd: (6)-->(12)
       │    ├── group-by
       │    │    ├── columns: x:6(int!null) any_not_null:11(bool)
       │    │    ├── grouping columns: x:6(int!null)
@@ -1784,11 +1780,11 @@ inner-join
  │    └── select
  │         ├── columns: x:6(int!null) y:7(int) case:12(bool)
  │         ├── key: (6)
- │         ├── fd: (6)-->(7,11), (6,11)-->(12) [removed: (11)]
+ │         ├── fd: (6)-->(7)
  │         ├── project
  │         │    ├── columns: case:12(bool) x:6(int!null) y:7(int)
  │         │    ├── key: (6)
- │         │    ├── fd: (6)-->(7,11), (6,11)-->(12) [removed: (11)]
+ │         │    ├── fd: (6)-->(7)
  │         │    ├── group-by
  │         │    │    ├── columns: x:6(int!null) y:7(int) bool_or:11(bool)
  │         │    │    ├── grouping columns: x:6(int!null)
@@ -1834,11 +1830,10 @@ SELECT (VALUES ((SELECT i+1 AS r)), (10), ((SELECT k+1 AS s))) FROM a
 ----
 project
  ├── columns: column1:9(int)
- ├── fd: ()-->(8), (8)-->(9) [removed: (8)]
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) i:2(int) column1:8(int)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2), ()-->(8)
+ │    ├── fd: (1)-->(2,8)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    ├── key: (1)
@@ -1889,11 +1884,10 @@ SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── fd: ()-->(8), (8)-->(12) [removed: (8)]
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool) exists:11(bool)
  │    ├── key: (1)
- │    ├── fd: ()-->(8,11)
+ │    ├── fd: (1)-->(8,11)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
@@ -1958,11 +1952,10 @@ SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── fd: ()-->(8), (8)-->(12) [removed: (8)]
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool) case:11(bool)
  │    ├── key: (1)
- │    ├── fd: ()-->(8,11)
+ │    ├── fd: (1)-->(8,11)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
@@ -1988,7 +1981,7 @@ project
  │    │    │    │    │    ├── columns: x:6(int) notnull:9(bool)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    │    │    │    ├── fd: (6)-->(9)
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    │    ├── key: ()
@@ -1996,7 +1989,7 @@ project
  │    │    │    │    │    ├── project
  │    │    │    │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
  │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: (6)-->(7), (7)-->(9) [removed: (7)]
+ │    │    │    │    │    │    ├── fd: (6)-->(9)
  │    │    │    │    │    │    ├── select
  │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    │    │    ├── key: (6)

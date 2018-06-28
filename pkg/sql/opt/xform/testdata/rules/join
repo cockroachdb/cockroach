@@ -170,7 +170,7 @@ SELECT * FROM abc JOIN xyz ON a=x AND b=y WHERE b=1 AND y=1
 ----
 inner-join
  ├── columns: a:1(int) b:2(int!null) c:3(int) x:5(int) y:6(int!null) z:7(int)
- ├── fd: ()-->(2), ()-->(6)
+ ├── fd: ()-->(2,6)
  ├── scan abc@bc
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
  │    ├── constraint: /2/3/4: [/1 - /1]

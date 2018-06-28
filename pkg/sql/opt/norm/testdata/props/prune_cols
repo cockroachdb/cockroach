@@ -149,13 +149,13 @@ project
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
       ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(2-4,7), ()-->(7)
+      ├── fd: ()-->(7), (1)-->(2-4)
       ├── prune: (2-4)
       ├── interesting orderings: (+1)
       ├── left-join-apply
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4,7), ()~~>(7)
+      │    ├── fd: (1)-->(2-4,7)
       │    ├── prune: (2-4)
       │    ├── interesting orderings: (+1)
       │    ├── scan a
@@ -367,7 +367,7 @@ union-all
  └── select
       ├── columns: x:5(int!null) y:6(int!null)
       ├── key: (5)
-      ├── fd: ()-->(6), (5)-->(6)
+      ├── fd: ()-->(6)
       ├── prune: (5)
       ├── interesting orderings: (+5)
       ├── scan xy
