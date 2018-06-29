@@ -43,11 +43,11 @@ message Span {
 // can be used portably between our Go and C code. The tags are used by the
 // RocksDB Merge Operator to perform specialized merges.
 enum ValueType {
+  reserved 7;
   // This is a subset of the SQL column type values, representing the underlying
   // storage for various types. The DELIMITED_foo entries each represent a foo
   // variant that self-delimits length.
   UNKNOWN = 0;
-  NULL = 7;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;

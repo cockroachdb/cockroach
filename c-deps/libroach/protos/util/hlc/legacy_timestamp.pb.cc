@@ -7,7 +7,6 @@
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/port.h>
-#include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -16,6 +15,7 @@
 #include "third_party/protobuf/version.h"
 #endif
 // @@protoc_insertion_point(includes)
+
 namespace cockroach {
 namespace util {
 namespace hlc {
@@ -28,14 +28,9 @@ class LegacyTimestampDefaultTypeInternal {
 }  // namespace util
 }  // namespace cockroach
 namespace protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto {
-void InitDefaultsLegacyTimestampImpl() {
+static void InitDefaultsLegacyTimestamp() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
   {
     void* ptr = &::cockroach::util::hlc::_LegacyTimestamp_default_instance_;
     new (ptr) ::cockroach::util::hlc::LegacyTimestamp();
@@ -44,9 +39,11 @@ void InitDefaultsLegacyTimestampImpl() {
   ::cockroach::util::hlc::LegacyTimestamp::InitAsDefaultInstance();
 }
 
-void InitDefaultsLegacyTimestamp() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsLegacyTimestampImpl);
+::google::protobuf::internal::SCCInfo<0> scc_info_LegacyTimestamp =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsLegacyTimestamp}, {}};
+
+void InitDefaults() {
+  ::google::protobuf::internal::InitSCC(&scc_info_LegacyTimestamp.base);
 }
 
 }  // namespace protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto
@@ -65,17 +62,15 @@ const int LegacyTimestamp::kLogicalFieldNumber;
 
 LegacyTimestamp::LegacyTimestamp()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
-    ::protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::InitDefaultsLegacyTimestamp();
-  }
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::scc_info_LegacyTimestamp.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.util.hlc.LegacyTimestamp)
 }
 LegacyTimestamp::LegacyTimestamp(const LegacyTimestamp& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_),
-      _cached_size_(0) {
+      _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::memcpy(&wall_time_, &from.wall_time_,
     static_cast<size_t>(reinterpret_cast<char*>(&logical_) -
@@ -84,7 +79,6 @@ LegacyTimestamp::LegacyTimestamp(const LegacyTimestamp& from)
 }
 
 void LegacyTimestamp::SharedCtor() {
-  _cached_size_ = 0;
   ::memset(&wall_time_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&logical_) -
       reinterpret_cast<char*>(&wall_time_)) + sizeof(logical_));
@@ -99,22 +93,13 @@ void LegacyTimestamp::SharedDtor() {
 }
 
 void LegacyTimestamp::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  _cached_size_.Set(size);
 }
 const LegacyTimestamp& LegacyTimestamp::default_instance() {
-  ::protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::InitDefaultsLegacyTimestamp();
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::scc_info_LegacyTimestamp.base);
   return *internal_default_instance();
 }
 
-LegacyTimestamp* LegacyTimestamp::New(::google::protobuf::Arena* arena) const {
-  LegacyTimestamp* n = new LegacyTimestamp;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
 
 void LegacyTimestamp::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.util.hlc.LegacyTimestamp)
@@ -144,7 +129,7 @@ bool LegacyTimestamp::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.util.hlc.LegacyTimestamp)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -235,9 +220,7 @@ size_t LegacyTimestamp::ByteSizeLong() const {
 
   }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = cached_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  SetCachedSize(cached_size);
   return total_size;
 }
 
@@ -286,7 +269,6 @@ void LegacyTimestamp::InternalSwap(LegacyTimestamp* other) {
   swap(logical_, other->logical_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string LegacyTimestamp::GetTypeName() const {
@@ -298,5 +280,12 @@ void LegacyTimestamp::InternalSwap(LegacyTimestamp* other) {
 }  // namespace hlc
 }  // namespace util
 }  // namespace cockroach
+namespace google {
+namespace protobuf {
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::hlc::LegacyTimestamp* Arena::CreateMaybeMessage< ::cockroach::util::hlc::LegacyTimestamp >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::hlc::LegacyTimestamp >(arena);
+}
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
