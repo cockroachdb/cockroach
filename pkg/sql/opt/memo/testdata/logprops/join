@@ -552,6 +552,9 @@ semi-join
  ├── stats: [rows=1000]
  ├── key: ()
  ├── fd: ()-->(5)
+ ├── scan uv
+ │    ├── columns: u:6(int) v:7(int!null)
+ │    └── stats: [rows=1000, distinct(5)=700]
  ├── select
  │    ├── columns: cnt:5(int!null)
  │    ├── cardinality: [0 - 1]
@@ -572,9 +575,6 @@ semi-join
  │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
  │              ├── variable: cnt [type=int, outer=(5)]
  │              └── const: 1 [type=int]
- ├── scan uv
- │    ├── columns: u:6(int) v:7(int!null)
- │    └── stats: [rows=1000, distinct(5)=700]
  └── true [type=bool]
 
 # Calculate semi-join-apply cardinality.
@@ -624,6 +624,9 @@ anti-join
  ├── stats: [rows=100]
  ├── key: ()
  ├── fd: ()-->(1)
+ ├── scan uv
+ │    ├── columns: u:2(int) v:3(int!null)
+ │    └── stats: [rows=1000]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [1 - 1]
@@ -632,9 +635,6 @@ anti-join
  │    ├── fd: ()-->(1)
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
- ├── scan uv
- │    ├── columns: u:2(int) v:3(int!null)
- │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(2)==(1), (1)==(2)]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            ├── variable: uv.u [type=int, outer=(2)]
