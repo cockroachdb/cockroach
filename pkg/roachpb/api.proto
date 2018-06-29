@@ -413,6 +413,19 @@ message ReverseScanResponse {
   bytes batch_response = 4;
 }
 
+// A CheckExistsRequest is the argument for the CheckExists() method.
+message CheckExistsRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A CheckExistsResponse is the return value from the CheckExists() method.
+message CheckExistsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool exists = 2;
+}
+
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
 // It specifies the start and end keys for a span of ranges to which a
 // consistency check should be applied. A consistency check on a range involves
@@ -1357,6 +1370,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
     RangeStatsRequest range_stats = 44;
+    CheckExistsRequest check_exists = 45;
   }
   reserved 15, 23, 25, 27;
 }
@@ -1404,6 +1418,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
     RangeStatsResponse range_stats = 44;
+    CheckExistsResponse check_exists = 45;
   }
   reserved 15, 23, 25, 27, 28;
 }

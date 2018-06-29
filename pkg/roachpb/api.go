@@ -578,6 +578,9 @@ func (*GetSnapshotForMergeRequest) Method() Method { return GetSnapshotForMerge 
 // Method implements the Request interface.
 func (*RangeStatsRequest) Method() Method { return RangeStats }
 
+// Method implements the Request interface.
+func (*CheckExistsRequest) Method() Method { return CheckExists }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -818,6 +821,12 @@ func (r *RangeStatsRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (r *CheckExistsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
 	return &GetRequest{
@@ -1016,6 +1025,9 @@ func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
 func (*ScanRequest) flags() int       { return isRead | isRange | isTxn | updatesReadTSCache | needsRefresh }
 func (*ReverseScanRequest) flags() int {
 	return isRead | isRange | isReverse | isTxn | updatesReadTSCache | needsRefresh
+}
+func (*CheckExistsRequest) flags() int {
+	return isRead | isRange | isTxn | updatesReadTSCache | needsRefresh
 }
 func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }
 

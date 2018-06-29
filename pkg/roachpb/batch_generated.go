@@ -160,6 +160,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.GetSnapshotForMerge
 	case *RequestUnion_RangeStats:
 		return t.RangeStats
+	case *RequestUnion_CheckExists:
+		return t.CheckExists
 	default:
 		return nil
 	}
@@ -246,6 +248,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.GetSnapshotForMerge
 	case *ResponseUnion_RangeStats:
 		return t.RangeStats
+	case *ResponseUnion_CheckExists:
+		return t.CheckExists
 	default:
 		return nil
 	}
@@ -406,6 +410,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_GetSnapshotForMerge{t}
 	case *RangeStatsRequest:
 		union = &RequestUnion_RangeStats{t}
+	case *CheckExistsRequest:
+		union = &RequestUnion_CheckExists{t}
 	default:
 		return false
 	}
@@ -495,6 +501,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_GetSnapshotForMerge{t}
 	case *RangeStatsResponse:
 		union = &ResponseUnion_RangeStats{t}
+	case *CheckExistsResponse:
+		union = &ResponseUnion_CheckExists{t}
 	default:
 		return false
 	}
@@ -502,7 +510,7 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 	return true
 }
 
-type reqCounts [40]int32
+type reqCounts [41]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -590,6 +598,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[38]++
 		case *RequestUnion_RangeStats:
 			counts[39]++
+		case *RequestUnion_CheckExists:
+			counts[40]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -638,6 +648,7 @@ var requestNames = []string{
 	"RefreshRng",
 	"GetSnapshotForMerge",
 	"RngStats",
+	"ChkExists",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -821,6 +832,10 @@ type rangeStatsResponseAlloc struct {
 	union ResponseUnion_RangeStats
 	resp  RangeStatsResponse
 }
+type checkExistsResponseAlloc struct {
+	union ResponseUnion_CheckExists
+	resp  CheckExistsResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -871,6 +886,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf37 []refreshRangeResponseAlloc
 	var buf38 []getSnapshotForMergeResponseAlloc
 	var buf39 []rangeStatsResponseAlloc
+	var buf40 []checkExistsResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1154,6 +1170,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf39[0].union.RangeStats = &buf39[0].resp
 			br.Responses[i].Value = &buf39[0].union
 			buf39 = buf39[1:]
+		case *RequestUnion_CheckExists:
+			if buf40 == nil {
+				buf40 = make([]checkExistsResponseAlloc, counts[40])
+			}
+			buf40[0].union.CheckExists = &buf40[0].resp
+			br.Responses[i].Value = &buf40[0].union
+			buf40 = buf40[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
