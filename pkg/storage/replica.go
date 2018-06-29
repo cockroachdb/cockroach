@@ -3369,8 +3369,10 @@ func (r *Replica) propose(
 		proposal.ctx, proposal.sp = tracing.ForkCtxSpan(ctx, "async consensus")
 
 		// Signal the proposal's response channel immediately.
+		reply := *proposal.Local.Reply
+		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
 		pr := proposalResult{
-			Reply:   proposal.Local.Reply,
+			Reply:   &reply,
 			Intents: proposal.Local.DetachIntents(),
 		}
 		proposal.signalProposalResult(pr)
