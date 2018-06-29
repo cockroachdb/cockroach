@@ -425,8 +425,8 @@ SELECT * FROM abc JOIN xyz ON a=b
 memo (optimized)
  ├── G1: (inner-join G3 G2 G4) (inner-join G2 G3 G4)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
- │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 2557.78
+ │         ├── best: (inner-join G2 G3 G4)
+ │         └── cost: 2555.56
  ├── G2: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    └── ""
  │         ├── best: (scan xyz,cols=(5-7))

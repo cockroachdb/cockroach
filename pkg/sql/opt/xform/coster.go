@@ -161,13 +161,16 @@ func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Lo
 	rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
 
 	// A hash join must process every row from both tables once.
+	//
+	// We add some factors to account for the hashtable build and lookups.  The
+	// right side is the one stored in the hashtable, so we use a larger factor
+	// for that side. This ensures that a join with the smaller right side is
+	// preferred to the symmetric join.
+	//
 	// TODO(rytaft): This is the cost of an in-memory hash join. When a certain
 	// amount of memory is used, distsql switches to a disk-based hash join with
 	// a temp RocksDB store.
-	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
-
-	// Add an extra cost for creating the hash table and doing lookups.
-	cost *= 1.5
+	cost := memo.Cost(1.25*leftRowCount+1.75*rightRowCount) * cpuCostFactor
 
 	// Add the CPU cost of emitting the rows.
 	// TODO(radu): ideally we would have an estimate of how many rows we actually
