@@ -120,7 +120,6 @@ namespace roachpb {
 
 enum ValueType {
   UNKNOWN = 0,
-  NULL_ = 7,
   INT = 1,
   FLOAT = 2,
   BYTES = 3,
