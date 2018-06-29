@@ -4,9 +4,9 @@ package roachpb
 
 import "strconv"
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeScanReverseScanBeginTransactionEndTransactionAdminSplitAdminMergeAdminTransferLeaseAdminChangeReplicasHeartbeatTxnGCPushTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeNoopMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeGetSnapshotForMerge"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeScanReverseScanCheckExistsBeginTransactionEndTransactionAdminSplitAdminMergeAdminTransferLeaseAdminChangeReplicasHeartbeatTxnGCPushTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeNoopMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeGetSnapshotForMerge"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 60, 71, 87, 101, 111, 121, 139, 158, 170, 172, 179, 187, 198, 211, 229, 233, 238, 249, 261, 274, 283, 298, 314, 321, 331, 337, 343, 355, 365, 379, 386, 398, 417}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 60, 71, 82, 98, 112, 122, 132, 150, 169, 181, 183, 190, 198, 209, 222, 240, 244, 249, 260, 272, 285, 294, 309, 325, 332, 342, 348, 354, 366, 376, 390, 397, 409, 428}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {

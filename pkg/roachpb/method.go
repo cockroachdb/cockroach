@@ -54,6 +54,8 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	ReverseScan
+	// CheckExists determines whether any keys exist in a specified key range.
+	CheckExists
 	// BeginTransaction writes a new transaction record, marking the
 	// beginning of the write-portion of a transaction. It is sent
 	// exclusively by the coordinating node along with the first

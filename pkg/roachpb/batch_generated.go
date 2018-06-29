@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [40]int32
+type reqCounts [41]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -97,6 +97,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[38]++
 		case r.GetSnapshotForMerge != nil:
 			counts[39]++
+		case r.CheckExists != nil:
+			counts[40]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -145,6 +147,7 @@ var requestNames = []string{
 	"Refresh",
 	"RefreshRng",
 	"GetSnapshotForMerge",
+	"ChkExists",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -219,6 +222,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf37 []RefreshResponse
 	var buf38 []RefreshRangeResponse
 	var buf39 []GetSnapshotForMergeResponse
+	var buf40 []CheckExistsResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -462,6 +466,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].GetSnapshotForMerge = &buf39[0]
 			buf39 = buf39[1:]
+		case r.CheckExists != nil:
+			if buf40 == nil {
+				buf40 = make([]CheckExistsResponse, counts[40])
+			}
+			br.Responses[i].CheckExists = &buf40[0]
+			buf40 = buf40[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

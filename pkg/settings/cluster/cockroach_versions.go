@@ -65,6 +65,7 @@ const (
 	VersionClientSideWritingFlag
 	VersionColumnarTimeSeries
 	VersionAsyncConsensus
+	// WIP
 
 	// Add new versions here (step one of two).
 
