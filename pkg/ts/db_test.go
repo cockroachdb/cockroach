@@ -230,6 +230,7 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 // This is used to ensure that data is actually being generated in the test
 // model.
 func (tm *testModelRunner) assertKeyCount(expected int) {
+	tm.t.Helper()
 	if a, e := len(tm.getModelDiskLayout()), expected; a != e {
 		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
 	}
@@ -326,6 +327,12 @@ func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolut
 		tm.model.VisitSeries(
 			resolutionModelKey(ts.Name, ts.Resolution),
 			func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
+				// In columnar mode, resolutions with a rollup are not pruned.
+				if tm.DB.WriteColumnar() {
+					if _, hasRollup := ts.Resolution.TargetRollupResolution(); hasRollup {
+						return data, false
+					}
+				}
 				pruned := data.TimeSlice(thresholds[ts.Resolution], math.MaxInt64)
 				if len(pruned) != len(data) {
 					return pruned, true
@@ -406,6 +413,79 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 				data.data,
 			)
 		}
+	}
+}
+
+// maintain calls the same operation called by the TS maintenance queue,
+// simulating the effects in the model at the same time.
+func (tm *testModelRunner) maintain(nowNanos int64) {
+	snap := tm.Store.Engine().NewSnapshot()
+	defer snap.Close()
+	if err := tm.DB.MaintainTimeSeries(
+		context.TODO(),
+		snap,
+		roachpb.RKey(keys.TimeseriesPrefix),
+		roachpb.RKey(keys.TimeseriesKeyMax),
+		tm.LocalTestCluster.DB,
+		tm.workerMemMonitor,
+		math.MaxInt64,
+		hlc.Timestamp{
+			WallTime: nowNanos,
+			Logical:  0,
+		},
+	); err != nil {
+		tm.t.Fatalf("error maintaining time series data: %s", err)
+	}
+
+	// Prune the appropriate resolution-specific series from the test model using
+	// VisitSeries.
+	thresholds := tm.DB.computeThresholds(nowNanos)
+
+	// Track any data series which has been marked for rollup, and record it into
+	// the correct target resolution.
+	type rollupRecordingData struct {
+		name   string
+		source string
+		res    Resolution
+		data   testmodel.DataSeries
+	}
+	var toRecord []rollupRecordingData
+
+	// Visit each data series in the model. Perform either rollups or pruning, depending on the resolution
+	// of the key.
+	tm.model.VisitAllSeries(
+		func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
+			res, seriesName, ok := getResolutionFromKey(name)
+			if !ok {
+				return data, false
+			}
+			targetResolution, hasRollup := res.TargetRollupResolution()
+			if hasRollup && tm.DB.WriteColumnar() {
+				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
+				if len(pruned) != len(data) {
+					toRecord = append(toRecord, rollupRecordingData{
+						name:   seriesName,
+						source: source,
+						res:    targetResolution,
+						data:   data.TimeSlice(0, thresholds[res]),
+					})
+					return pruned, true
+				}
+			} else if !hasRollup || !tm.DB.WriteColumnar() {
+				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
+				if len(pruned) != len(data) {
+					return pruned, true
+				}
+			}
+			return data, false
+		},
+	)
+	for _, data := range toRecord {
+		tm.model.Record(
+			resolutionModelKey(data.name, data.res),
+			data.source,
+			data.data,
+		)
 	}
 }
 

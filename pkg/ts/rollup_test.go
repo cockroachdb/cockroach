@@ -178,7 +178,7 @@ func TestRollupBasic(t *testing.T) {
 	tm.assertKeyCount(150)
 	tm.assertModelCorrect()
 
-	tm.rollup(250+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+	tm.rollup(250+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 		Name:       "test.metric",
 		Resolution: resolution1ns,
 	})
@@ -203,7 +203,7 @@ func TestRollupBasic(t *testing.T) {
 			},
 		},
 		hlc.Timestamp{
-			WallTime: 500 + resolution1nsDefaultPruneThreshold.Nanoseconds(),
+			WallTime: 500 + resolution1nsDefaultRollupThreshold.Nanoseconds(),
 			Logical:  0,
 		},
 		MakeQueryMemoryContext(tm.workerMemMonitor, tm.resultMemMonitor, memOpts),
@@ -257,7 +257,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		EstimatedSources: 1, // Not needed for rollups
 		Columnar:         tm.DB.WriteColumnar(),
 	})
-	tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+	tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 		Name:       "test.othermetric",
 		Resolution: resolution1ns,
 	})
@@ -296,7 +296,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 			EstimatedSources: 1, // Not needed for rollups
 			Columnar:         tm.DB.WriteColumnar(),
 		})
-		tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+		tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 			Name:       seriesName,
 			Resolution: resolution1ns,
 		})

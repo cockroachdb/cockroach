@@ -147,8 +147,8 @@ func (db *DB) rollupTimeSeries(
 	thresholds := db.computeThresholds(now.WallTime)
 	for _, timeSeries := range timeSeriesList {
 		// Only process rollup if this resolution has a target rollup resolution.
-		targetResolution, ok := timeSeries.Resolution.TargetRollupResolution()
-		if !ok {
+		targetResolution, hasRollup := timeSeries.Resolution.TargetRollupResolution()
+		if !hasRollup {
 			continue
 		}
 
