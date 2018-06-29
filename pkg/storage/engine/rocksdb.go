@@ -2713,6 +2713,20 @@ func (r *RocksDB) DeleteDirAndFiles(dir string) error {
 	return nil
 }
 
+// LinkFile creates 'newname' as a hard link to 'oldname'. This use the Env responsible for the file
+// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
+func (r *RocksDB) LinkFile(oldname, newname string) error {
+	if err := statusToError(C.DBEnvLinkFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname)))); err != nil {
+		return &os.LinkError{
+			Op:  "link",
+			Old: oldname,
+			New: newname,
+			Err: err,
+		}
+	}
+	return nil
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key

@@ -477,6 +477,8 @@ DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) { return db->EnvDeleteFile(
 
 DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir) { return db->EnvDeleteDirAndFiles(dir); }
 
+DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) { return db->EnvLinkFile(oldname, newname); }
+
 DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
   rocksdb::ReadOptions opts;
   opts.prefix_same_as_start = prefix;

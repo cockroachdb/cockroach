@@ -290,6 +290,10 @@ type Engine interface {
 	// not subdirectories from this RocksDB's env. If dir does not exist,
 	// DeleteDirAndFiles returns nil (no error).
 	DeleteDirAndFiles(dir string) error
+	// LinkFile creates 'newname' as a hard link to 'oldname'. This is done using
+	// the engine implementation. For RocksDB, this means using the Env responsible for the file
+	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
+	LinkFile(oldname, newname string) error
 }
 
 // WithSSTables extends the Engine interface with a method to get info
