@@ -1146,6 +1146,10 @@ func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
 	}
 
 	return &EnvStats{
+		TotalFiles:       uint64(s.total_files),
+		TotalBytes:       uint64(s.total_bytes),
+		ActiveKeyFiles:   uint64(s.active_key_files),
+		ActiveKeyBytes:   uint64(s.active_key_bytes),
 		EncryptionStatus: cStringToGoBytes(s.encryption_status),
 	}, nil
 }
