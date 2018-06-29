@@ -157,23 +157,23 @@ memo (optimized)
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
  │         └── cost: 7441.56
  ├── G3: (projections G6 a.y b.x)
- ├── G4: (inner-join G7 G8 G9)
+ ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
  │    ├── ""
- │    │    ├── best: (inner-join G7 G8 G9)
+ │    │    ├── best: (inner-join G8 G7 G9)
  │    │    └── cost: 2433.33
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
  │         └── cost: 7441.56
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
- ├── G7: (select G10 G11)
- │    └── ""
- │         ├── best: (select G10 G11)
- │         └── cost: 1050.00
- ├── G8: (scan b,cols=(3))
+ ├── G7: (scan b,cols=(3))
  │    └── ""
  │         ├── best: (scan b,cols=(3))
  │         └── cost: 1030.00
+ ├── G8: (select G10 G11)
+ │    └── ""
+ │         ├── best: (select G10 G11)
+ │         └── cost: 1050.00
  ├── G9: (filters G12)
  ├── G10: (scan a)
  │    └── ""
