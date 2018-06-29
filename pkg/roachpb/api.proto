@@ -466,6 +466,18 @@ message ReverseScanResponse {
   repeated bytes batch_responses = 4;
 }
 
+// A CheckExistsRequest is the argument for the CheckExists() method.
+message CheckExistsRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A CheckExistsResponse is the return value from the CheckExists() method.
+message CheckExistsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool exists = 2;
+}
 
 enum ChecksumMode {
     // CHECK_VIA_QUEUE is set for requests made from the consistency queue. In
@@ -1782,6 +1794,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    CheckExistsRequest check_exists = 50;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1833,6 +1846,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    CheckExistsResponse check_exists = 50;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }

@@ -164,6 +164,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.RangeStats
 	case *RequestUnion_AdminVerifyProtectedTimestamp:
 		return t.AdminVerifyProtectedTimestamp
+	case *RequestUnion_CheckExists:
+		return t.CheckExists
 	default:
 		return nil
 	}
@@ -258,6 +260,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.RangeStats
 	case *ResponseUnion_AdminVerifyProtectedTimestamp:
 		return t.AdminVerifyProtectedTimestamp
+	case *ResponseUnion_CheckExists:
+		return t.CheckExists
 	default:
 		return nil
 	}
@@ -422,6 +426,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_RangeStats{t}
 	case *AdminVerifyProtectedTimestampRequest:
 		union = &RequestUnion_AdminVerifyProtectedTimestamp{t}
+	case *CheckExistsRequest:
+		union = &RequestUnion_CheckExists{t}
 	default:
 		return false
 	}
@@ -519,6 +525,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_RangeStats{t}
 	case *AdminVerifyProtectedTimestampResponse:
 		union = &ResponseUnion_AdminVerifyProtectedTimestamp{t}
+	case *CheckExistsResponse:
+		union = &ResponseUnion_CheckExists{t}
 	default:
 		return false
 	}
@@ -526,7 +534,7 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 	return true
 }
 
-type reqCounts [44]int32
+type reqCounts [45]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -622,6 +630,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[42]++
 		case *RequestUnion_AdminVerifyProtectedTimestamp:
 			counts[43]++
+		case *RequestUnion_CheckExists:
+			counts[44]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -674,6 +684,7 @@ var requestNames = []string{
 	"Subsume",
 	"RngStats",
 	"AdmVerifyProtectedTimestamp",
+	"ChkExists",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -881,6 +892,10 @@ type adminVerifyProtectedTimestampResponseAlloc struct {
 	union ResponseUnion_AdminVerifyProtectedTimestamp
 	resp  AdminVerifyProtectedTimestampResponse
 }
+type checkExistsResponseAlloc struct {
+	union ResponseUnion_CheckExists
+	resp  CheckExistsResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -935,6 +950,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf41 []subsumeResponseAlloc
 	var buf42 []rangeStatsResponseAlloc
 	var buf43 []adminVerifyProtectedTimestampResponseAlloc
+	var buf44 []checkExistsResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1246,6 +1262,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf43[0].union.AdminVerifyProtectedTimestamp = &buf43[0].resp
 			br.Responses[i].Value = &buf43[0].union
 			buf43 = buf43[1:]
+		case *RequestUnion_CheckExists:
+			if buf44 == nil {
+				buf44 = make([]checkExistsResponseAlloc, counts[44])
+			}
+			buf44[0].union.CheckExists = &buf44[0].resp
+			br.Responses[i].Value = &buf44[0].union
+			buf44 = buf44[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

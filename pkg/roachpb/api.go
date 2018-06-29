@@ -554,6 +554,9 @@ func (*ScanRequest) Method() Method { return Scan }
 func (*ReverseScanRequest) Method() Method { return ReverseScan }
 
 // Method implements the Request interface.
+func (*CheckExistsRequest) Method() Method { return CheckExists }
+
+// Method implements the Request interface.
 func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
 
 // Method implements the Request interface.
@@ -715,6 +718,12 @@ func (sr *ScanRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (rsr *ReverseScanRequest) ShallowCopy() Request {
 	shallowCopy := *rsr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *CheckExistsRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -1144,6 +1153,10 @@ func (rsr *ReverseScanRequest) flags() int {
 		maybeLocking = isLocking
 	}
 	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh
+}
+
+func (*CheckExistsRequest) flags() int {
+	return isRead | isRange | isTxn | updatesTSCache | needsRefresh
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
