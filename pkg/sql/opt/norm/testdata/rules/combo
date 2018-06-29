@@ -290,9 +290,8 @@ GenerateIndexScans (higher cost)
          │    ├── key: (1)
          │    ├── fd: (1)-->(2,4)
   -      │    ├── scan a
-  +      │    ├── lookup-join a
+  +      │    ├── index-join a
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-  +      │    │    ├── key columns: [1]
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
@@ -311,7 +310,7 @@ GenerateIndexScans (higher cost)
 ConstrainScan (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-ConstrainLookupJoinIndexScan (no changes)
+ConstrainIndexJoinScan (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
@@ -729,9 +728,8 @@ GenerateIndexScans (higher cost)
     ├── key: (1)
     ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - ├── scan a
-  + ├── lookup-join a
+  + ├── index-join a
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-  + │    ├── key columns: [1]
     │    ├── key: (1)
   - │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   + │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)

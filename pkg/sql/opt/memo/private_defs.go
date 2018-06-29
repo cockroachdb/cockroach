@@ -116,8 +116,20 @@ type GroupByDef struct {
 	Ordering     props.OrderingChoice
 }
 
-// LookupJoinDef defines the value of the Def private field of the LookupJoin
+// IndexJoinDef defines the value of the Def private field of the IndexJoin
 // operator.
+type IndexJoinDef struct {
+	// Table identifies the table to do lookups in. The primary index is
+	// currently the only index used.
+	Table opt.TableID
+
+	// Cols specifies the set of columns that the index join operator projects.
+	// This may be a subset of the columns that the table contains.
+	Cols opt.ColSet
+}
+
+// LookupJoinDef defines the value of the Def private field of the LookupJoin
+// operators.
 //
 // Example 1: join between two tables
 //
@@ -141,8 +153,11 @@ type GroupByDef struct {
 //    LookupCols: c
 //
 type LookupJoinDef struct {
-	// Table identifies the table do to lookups in. The primary index is
-	// currently the only index used.
+	// JoinType is InnerJoin or LeftJoin.
+	// TODO(radu): support SemiJoin, AntiJoin.
+	JoinType opt.Operator
+
+	// Table identifies the table do to lookups in.
 	Table opt.TableID
 
 	// Index identifies the index to do lookups in (whether primary or secondary).
@@ -152,24 +167,13 @@ type LookupJoinDef struct {
 
 	// KeyCols are the columns (produced by the input) used to create lookup keys.
 	// The key columns must be non-empty, and are listed in the same order as the
-	// index columns (or a prefix of them). If this is an index join, then the key
-	// column ids on both sides of the join will always be the same.
+	// index columns (or a prefix of them).
 	KeyCols opt.ColList
 
 	// LookupCols is the set of columns retrieved from the index. This set does
 	// not include the key columns. The LookupJoin operator produces the columns
 	// in its input plus these columns.
 	LookupCols opt.ColSet
-}
-
-// IsIndexJoin is true if the lookup join is an index join, meaning that the
-// input columns are from the same table as the lookup columns. In this special
-// case, there is always a 1:1 relationship between input and output rows.
-func (l *LookupJoinDef) IsIndexJoin(md *opt.Metadata) bool {
-	// The input and index key column sets will be the same if this is an index
-	// join, or always disjoint if not.
-	ord := md.Table(l.Table).Index(l.Index).Column(0).Ordinal
-	return md.TableColumn(l.Table, ord) == l.KeyCols[0]
 }
 
 // ExplainOpDef defines the value of the Def private field of the Explain operator.
