@@ -36,9 +36,8 @@ scan abcde
 opt
 SELECT * FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
-lookup-join abcde
+index-join abcde
  ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
- ├── key columns: [1]
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
@@ -75,9 +74,8 @@ sort
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
  ├── ordering: +3,+4 opt(2)
- └── lookup-join abcde
+ └── index-join abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
-      ├── key columns: [1]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
       └── scan abcde@bc
@@ -158,9 +156,8 @@ sort
       ├── columns: a:1(int!null) c:3(int) d:4(int)
       ├── key: (1)
       ├── fd: (1)-->(3,4)
-      └── lookup-join abcde
+      └── index-join abcde
            ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
-           ├── key columns: [1]
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(2-4), (2,3)~~>(1,4)
            └── scan abcde@bc

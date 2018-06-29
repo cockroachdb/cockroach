@@ -154,9 +154,8 @@ TABLE kuv
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5
 ----
-lookup-join kuv
+index-join kuv
  ├── columns: k:1(int!null) u:2(int) v:3(int)
- ├── key columns: [1]
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
@@ -184,9 +183,8 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── ordering: +2,+3
- │    └── lookup-join kuv
+ │    └── index-join kuv
  │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
- │         ├── key columns: [1]
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3)
  │         └── scan kuv@secondary
