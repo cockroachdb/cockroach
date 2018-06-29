@@ -30,7 +30,7 @@ import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 import * as protos from "src/js/protos";
 import "./statements.styl";
 
-type CollectedStatementStatistics$Properties = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+type CollectedStatementStatistics$Properties = protos.cockroach.sql.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
 
 interface AggregateStatistics {

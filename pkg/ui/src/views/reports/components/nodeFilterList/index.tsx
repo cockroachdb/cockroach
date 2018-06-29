@@ -38,7 +38,7 @@ export function getFilters(location: Location) {
   return filters;
 }
 
-export function localityToString(locality: protos.cockroach.roachpb.Locality$Properties) {
+export function localityToString(locality: protos.cockroach.roachpb.ILocality) {
   return _.join(_.map(locality.tiers, (tier) => tier.key + "=" + tier.value), ",");
 }
 

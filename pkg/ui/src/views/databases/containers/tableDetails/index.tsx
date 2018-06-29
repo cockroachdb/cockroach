@@ -16,7 +16,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 
-class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties> {}
+class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
 const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "tableDetails/sort_setting/grants", (s) => s.localSettings,

@@ -18,7 +18,7 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { CustomMetricState, CustomMetricRow } from "./customMetric";
 import "./customChart.styl";
 
-import { NodeStatus$Properties } from "../../../../util/proto";
+import { INodeStatus } from "src/util/proto";
 
 const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
@@ -290,6 +290,6 @@ const mapDispatchToProps = {
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
 
-function isStoreMetric(nodeStatus: NodeStatus$Properties, metricName: string) {
+function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
   return _.has(nodeStatus.store_statuses[0].metrics, metricName);
 }
