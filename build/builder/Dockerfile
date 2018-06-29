@@ -61,6 +61,8 @@ RUN mkdir src \
  && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
+ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-unknown-linux-musl/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
+
 # Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86 and arm).
 # (on BSD or BSD-derived like macOS it's already built-in; on windows we don't need it.)
 #
@@ -116,7 +118,7 @@ RUN apt-get purge -y gcc g++ && apt-get autoremove -y
 # clang - msan
 # cmake - msan / c-deps: libroach, protobuf, et al.
 # python - msan
-RUN apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     cmake \
     python
@@ -135,6 +137,8 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && OSX_VERSION_MIN=10.9 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
+
+ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
 
 # Compile Go from source so that CC defaults to clang instead of gcc. This
 # requires a Go toolchain to bootstrap.
@@ -212,3 +216,5 @@ RUN apt-get purge -y \
  && apt-get autoremove -y
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
+
+RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease
