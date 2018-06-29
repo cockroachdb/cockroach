@@ -24,7 +24,7 @@ run ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach  # For the tests that run w
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile acceptance tests"
-run build/builder.sh make -Otarget TYPE="$type" testbuild TAGS=acceptance PKG=./pkg/acceptance
+run build/builder.sh mkrelease linux-gnu -Otarget testbuild TAGS=acceptance PKG=./pkg/acceptance
 tc_end_block "Compile acceptance tests"
 
 tc_start_block "Run acceptance tests"
