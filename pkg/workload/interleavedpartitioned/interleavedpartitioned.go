@@ -188,7 +188,9 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 	return []workload.Table{sessionsTable, customerTable, devicesTable, variantsTable, parametersTable, queriesTable}
 }
 
-func (w *interleavedPartitioned) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *interleavedPartitioned) Ops(
+	urls []string, reg *workload.HistogramRegistry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, ``, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -242,7 +244,9 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
-func (w *interleavedPartitioned) childInitialRowBatchFunc(rngFactor int64, nPerBatch int) func(int) [][]interface{} {
+func (w *interleavedPartitioned) childInitialRowBatchFunc(
+	rngFactor int64, nPerBatch int,
+) func(int) [][]interface{} {
 	return func(sessionRowIdx int) [][]interface{} {
 		log.Warningf(context.TODO(), "inserting into child %d, sessionRowIdx %d. len(w.sessionIDs) = %d", rngFactor, sessionRowIdx, len(w.sessionIDs))
 		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
