@@ -1561,6 +1561,10 @@ func (s *statusServer) Stores(
 			if len(envStats.EncryptionStatus) > 0 {
 				storeDetails.EncryptionStatus = envStats.EncryptionStatus
 			}
+			storeDetails.TotalFiles = envStats.TotalFiles
+			storeDetails.TotalBytes = envStats.TotalBytes
+			storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
+			storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
 		}
 
 		resp.Stores = append(resp.Stores, storeDetails)
