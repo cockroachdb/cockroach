@@ -68,7 +68,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	td.batchSize++
-	td.fkHelper.AddChecks(ctx, values, nil)
+	td.fkHelper.AddChecks(ctx, *td.tableDesc(), td.rd.FetchColIDtoRowIndex, sqlbase.CheckDeletes, values, nil)
 	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.SkipFKs, traceKV)
 }
 
