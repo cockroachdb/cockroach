@@ -718,20 +718,14 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 				// can be removed, since this means that the dependant columns must
 				// also be constant (and were part of constant closure added to the
 				// constant FD above).
-				if fd.from.Intersects(cols) {
-					if fd.from.SubsetOf(cols) {
-						continue
-					}
-					fd.from = fd.from.Difference(cols)
+				if !fd.removeFromCols(cols) {
+					continue
 				}
 			}
 
-			if fd.to.Intersects(cols) {
-				// Dependant constants are redundant, so remove them.
-				if fd.to.SubsetOf(cols) {
-					continue
-				}
-				fd.to = fd.to.Difference(cols)
+			// Dependant constants are redundant, so remove them.
+			if !fd.removeToCols(cols) {
+				continue
 			}
 		}
 
@@ -794,8 +788,10 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 
 	// During first pass, add closures of un-projected columns in dependants.
 	// This will ensure that transitive relationships between remaining columns
-	// won't be lost.
-	var constCols opt.ColSet
+	// won't be lost. Also, track list of un-projected columns that are part of
+	// non-equivalent determinants. It's possible these can be mapped to
+	// equivalent columns.
+	var constCols, detCols, equivCols opt.ColSet
 	for i := range f.deps {
 		fd := &f.deps[i]
 
@@ -806,12 +802,30 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 
 		// Add closures to dependants containing un-projected columns.
 		if !fd.to.SubsetOf(cols) {
-			// Equivalence dependencies already maintain closure.
+			// Equivalence dependencies already maintain closure, so skip them.
 			if !fd.equiv {
 				fd.to = f.ComputeClosure(fd.to)
 			}
 		}
+
+		// Track list of un-projected columns that can possibly be mapped to
+		// equivalent columns.
+		if !fd.equiv && !fd.from.SubsetOf(cols) {
+			detCols.UnionWith(fd.from)
+			detCols.DifferenceWith(cols)
+		}
+
+		// Track all columns that have equivalent alternates that are part of the
+		// projection.
+		if fd.equiv && fd.to.Intersects(cols) {
+			equivCols.UnionWith(fd.from)
+		}
 	}
+
+	// Construct equivalence map that supports substitution of an equivalent
+	// column in place of a removed column.
+	detCols.IntersectionWith(equivCols)
+	equivMap := f.makeEquivMap(detCols, cols)
 
 	// If constants were found, then normalize constants to preserve FDs in a
 	// case like this where (2) is removed:
@@ -828,25 +842,50 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	}
 
 	// During second pass, remove all dependencies with un-projected columns.
+	var newFDs []funcDep
 	n := 0
 	for i := range f.deps {
 		fd := &f.deps[i]
 
-		if !fd.from.SubsetOf(cols) {
-			continue
-		}
-
+		// Subtract out un-projected columns from dependants. Also subtract strict
+		// constant columns from dependants for nicer presentation.
 		if !fd.to.SubsetOf(cols) {
-			// Subtract out un-projected columns and determinant. Also subtract
-			// strict constant columns for nicer presentation.
 			fd.to = fd.to.Intersection(cols)
-			fd.to.DifferenceWith(fd.from)
 			if !fd.from.Empty() {
 				fd.to.DifferenceWith(constCols)
 			}
-			if fd.to.Empty() {
+			if !fd.removeToCols(fd.from) {
 				continue
 			}
+		}
+
+		// Try to substitute equivalent columns for removed determinant columns.
+		if !fd.from.SubsetOf(cols) {
+			if fd.equiv {
+				// Always discard equivalency with removed determinant, since other
+				// equivalencies will already include this column.
+				continue
+			}
+
+			// Start with "before" list of columns that need to be mapped, and try
+			// to find an "after" list containing equivalent columns.
+			var afterCols opt.ColSet
+			beforeCols := fd.from.Difference(cols)
+			foundAll := true
+			for c, ok := beforeCols.Next(0); ok; c, ok = beforeCols.Next(c + 1) {
+				var id opt.ColumnID
+				if id, foundAll = equivMap[opt.ColumnID(c)]; !foundAll {
+					break
+				}
+				afterCols.Add(int(id))
+			}
+			if foundAll {
+				// Dependency can be remapped using equivalencies.
+				from := fd.from.Union(afterCols)
+				from.DifferenceWith(beforeCols)
+				newFDs = append(newFDs, funcDep{from: from, to: fd.to, strict: fd.strict, equiv: fd.equiv})
+			}
+			continue
 		}
 
 		if n != i {
@@ -855,6 +894,11 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		n++
 	}
 	f.deps = f.deps[:n]
+
+	for i := range newFDs {
+		fd := &newFDs[i]
+		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+	}
 
 	// Ensure that key still determines all other columns.
 	f.ensureKeyClosure(cols)
@@ -947,10 +991,9 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 			if fd.strict && fd.to.Intersects(nullExtendedCols) {
 				laxConstCols := fd.to.Intersection(nullExtendedCols)
 				newFDs = append(newFDs, funcDep{from: fd.from, to: laxConstCols})
-				if fd.to.SubsetOf(nullExtendedCols) {
+				if !fd.removeToCols(laxConstCols) {
 					continue
 				}
-				fd.to = fd.to.Difference(laxConstCols)
 			}
 		} else {
 			// The next several rules depend on whether the dependency's determinant
@@ -997,8 +1040,7 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 					// Split the dependants by which side of the join they're on.
 					laxCols := fd.to.Difference(nullExtendedCols)
 					newFDs = append(newFDs, funcDep{from: fd.from, to: laxCols})
-					fd.to = fd.to.Difference(laxCols)
-					if fd.to.Empty() {
+					if !fd.removeToCols(laxCols) {
 						continue
 					}
 				}
@@ -1011,12 +1053,8 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 				}
 			} else {
 				// Rule #1, described above (determinant is on row-supplying side).
-				if fd.to.Intersects(nullExtendedCols) {
-					// Drop all dependants on null-supplying side.
-					if fd.to.SubsetOf(nullExtendedCols) {
-						continue
-					}
-					fd.to = fd.to.Difference(nullExtendedCols)
+				if !fd.removeToCols(nullExtendedCols) {
+					continue
 				}
 			}
 		}
@@ -1320,13 +1358,12 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 				fd.to = fd.to.Union(equiv)
 				fd.to.DifferenceWith(fd.from)
 				found.UnionWith(fd.from)
-			} else if fd.to.Intersects(equiv) {
+			} else {
 				// Remove dependant columns that are equivalent, because equivalence
 				// is a stronger relationship than a strict or lax dependency.
-				if fd.to.SubsetOf(equiv) {
+				if !fd.removeToCols(equiv) {
 					continue
 				}
-				fd.to = fd.to.Difference(equiv)
 			}
 		}
 
@@ -1369,6 +1406,29 @@ func (f *FuncDepSet) setKey(key opt.ColSet) {
 	f.key = key
 }
 
+// makeEquivMap constructs a map with an entry for each column in the "from" set
+// that is equivalent to a column in the "to" set. When there are multiple
+// equivalent columns, then makeEquivMap arbitrarily chooses one of the
+// alternatives. Note that some from columns may not have a mapping. If none of
+// them do, then makeEquivMap returns nil.
+func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.ColumnID {
+	var equivMap map[opt.ColumnID]opt.ColumnID
+	for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
+		var oneCol opt.ColSet
+		oneCol.Add(i)
+		closure := f.ComputeEquivClosure(oneCol)
+		closure.IntersectionWith(to)
+		if !closure.Empty() {
+			if equivMap == nil {
+				equivMap = make(map[opt.ColumnID]opt.ColumnID)
+			}
+			id, _ := closure.Next(0)
+			equivMap[opt.ColumnID(i)] = opt.ColumnID(id)
+		}
+	}
+	return equivMap
+}
+
 func (f *funcDep) hasStrictConstants() bool {
 	return f.strict && f.from.Empty()
 }
@@ -1385,4 +1445,25 @@ func (f *funcDep) implies(fd *funcDep) bool {
 		}
 	}
 	return false
+}
+
+// removeFromCols removes columns in the given set from this FD's determinant.
+// If removing columns results in an empty determinant, then removeFromCols
+// returns false.
+func (f *funcDep) removeFromCols(remove opt.ColSet) bool {
+	if f.from.Intersects(remove) {
+		f.from = f.from.Difference(remove)
+	}
+	return !f.from.Empty()
+
+}
+
+// removeToCols removes columns in the given set from this FD's dependant set.
+// If removing columns results in an empty dependant set, then removeToCols
+// returns false.
+func (f *funcDep) removeToCols(remove opt.ColSet) bool {
+	if f.to.Intersects(remove) {
+		f.to = f.to.Difference(remove)
+	}
+	return !f.to.Empty()
 }

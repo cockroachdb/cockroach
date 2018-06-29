@@ -529,21 +529,22 @@ LIMIT 10;
 limit
  ├── columns: l_orderkey:18(int!null) revenue:35(float) o_orderdate:13(date!null) o_shippriority:16(int)
  ├── cardinality: [0 - 10]
- ├── key: (13,16,18)
- ├── fd: (13,16,18)-->(35)
+ ├── key: (18)
+ ├── fd: (18)-->(13,16,35)
  ├── ordering: -35,+13
  ├── sort
  │    ├── columns: o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null) revenue:35(float)
- │    ├── key: (13,16,18)
- │    ├── fd: (13,16,18)-->(35)
+ │    ├── key: (18)
+ │    ├── fd: (18)-->(13,16,35)
  │    ├── ordering: -35,+13
  │    └── group-by
  │         ├── columns: o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null) revenue:35(float)
  │         ├── grouping columns: o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null)
- │         ├── key: (13,16,18)
- │         ├── fd: (13,16,18)-->(35)
+ │         ├── key: (18)
+ │         ├── fd: (18)-->(13,16,35)
  │         ├── project
  │         │    ├── columns: column34:34(float) o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null)
+ │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join
  │         │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_shipdate:28(date!null)
  │         │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (1)==(10), (10)==(1), (9)==(18), (18)==(9)
