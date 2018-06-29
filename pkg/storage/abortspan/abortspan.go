@@ -21,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // An AbortSpan sets markers for aborted transactions to provide protection
@@ -139,4 +142,55 @@ func (sc *AbortSpan) Put(
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return engine.MVCCPutProto(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
+}
+
+// CopyTo copies the abort span entries to the abort span for the range
+// identified by newRangeID. Entries are read from r and written to w. It is
+// safe for r and w to be the same object.
+//
+// CopyTo takes care to only copy records that are required: certain workloads
+// create sizable abort spans, and repeated splitting can blow them up further.
+// Once it reaches approximately the Raft MaxCommandSize, splits become
+// impossible, which is pretty bad (see #25233).
+func (sc *AbortSpan) CopyTo(
+	ctx context.Context,
+	r engine.Reader,
+	w engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	ts hlc.Timestamp,
+	newRangeID roachpb.RangeID,
+) error {
+	var abortSpanCopyCount, abortSpanSkipCount int
+	// Abort span entries before this span are eligible for GC, so we don't
+	// copy them into the new range. We could try to delete them from the LHS
+	// as well, but that could create a large Raft command in itself. Plus,
+	// we'd have to adjust the stats computations.
+	threshold := ts.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
+	var scratch [64]byte
+	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
+		if entry.Timestamp.Less(threshold) {
+			// The entry would be garbage collected (if GC had run), so
+			// don't bother copying it. Note that we can't filter on the key,
+			// that is just where the txn record lives, but it doesn't tell
+			// us whether the intents that triggered the abort span record
+			// where on the LHS, RHS, or both.
+			abortSpanSkipCount++
+			return nil
+		}
+
+		abortSpanCopyCount++
+		var txnID uuid.UUID
+		txnID, err := keys.DecodeAbortSpanKey(k, scratch[:0])
+		if err != nil {
+			return err
+		}
+		return engine.MVCCPutProto(ctx, w, ms,
+			keys.AbortSpanKey(newRangeID, txnID),
+			hlc.Timestamp{}, nil, &entry,
+		)
+	}); err != nil {
+		return roachpb.NewReplicaCorruptionError(errors.Wrap(err, "AbortSpan.CopyTo"))
+	}
+	log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
+	return nil
 }
