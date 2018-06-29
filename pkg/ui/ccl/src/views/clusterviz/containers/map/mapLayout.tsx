@@ -33,7 +33,7 @@ interface MapLayoutProps {
 
 interface MapLayoutState {
   zoomTransform: ZoomTransformer;
-  prevLocations: protos.cockroach.server.serverpb.LocationsResponse.Location$Properties[];
+  prevLocations: protos.cockroach.server.serverpb.LocationsResponse.ILocation[];
 }
 
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {

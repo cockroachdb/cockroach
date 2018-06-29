@@ -13,7 +13,7 @@ import {
 import { nodeIDAttr } from "src/util/constants";
 import { AdminUIState } from "src/redux/state";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { NodeStatus$Properties, MetricConstants, StatusMetrics } from  "src/util/proto";
+import { INodeStatus, MetricConstants, StatusMetrics } from  "src/util/proto";
 import { Bytes, Percentage } from "src/util/format";
 import { LongToMoment } from "src/util/convert";
 import {
@@ -21,7 +21,7 @@ import {
 } from "src/views/shared/components/summaryBar";
 
 interface NodeOverviewProps extends RouterState {
-  node: NodeStatus$Properties;
+  node: INodeStatus;
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
@@ -159,7 +159,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
  * across the different stores on the node (along with a total value for the
  * node itself).
  */
-function TableRow(props: { data: NodeStatus$Properties, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
+function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
   return <tr className="table__row table__row--body">
     <td className="table__cell">{ props.title }</td>
     <td className="table__cell">{ props.valueFn(props.data.metrics) }</td>
@@ -173,7 +173,7 @@ function TableRow(props: { data: NodeStatus$Properties, title: string, valueFn: 
 }
 
 export const currentNode = createSelector(
-  (state: AdminUIState, _props: RouterState): NodeStatus$Properties[] => state.cachedData.nodes.data,
+  (state: AdminUIState, _props: RouterState): INodeStatus[] => state.cachedData.nodes.data,
   (_state: AdminUIState, props: RouterState): number => parseInt(props.params[nodeIDAttr], 10),
   (nodes, id) => {
     if (!nodes || !id) {

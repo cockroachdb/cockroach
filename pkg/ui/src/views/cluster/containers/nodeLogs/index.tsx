@@ -5,7 +5,7 @@ import { RouterState } from "react-router";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
-import { NodeStatus$Properties } from "src/util/proto";
+import { INodeStatus } from "src/util/proto";
 import { nodeIDAttr, REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import { LogEntriesResponseMessage } from "src/util/api";
 import { LongToMoment } from "src/util/convert";
@@ -21,7 +21,7 @@ import "./logs.styl";
 
 interface LogProps {
   logs: CachedDataReducerState<LogEntriesResponseMessage>;
-  currentNode: NodeStatus$Properties;
+  currentNode: INodeStatus;
   refreshLogs: typeof refreshLogs;
   refreshNodes: typeof refreshNodes;
 }

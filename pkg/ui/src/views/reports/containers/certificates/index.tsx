@@ -93,7 +93,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     return this.renderSimpleRow(header, timestamp, title);
   }
 
-  renderFields(fields: protos.cockroach.server.serverpb.CertificateDetails.Fields$Properties, id: number) {
+  renderFields(fields: protos.cockroach.server.serverpb.CertificateDetails.IFields, id: number) {
     return [
       this.renderSimpleRow("Cert ID", id.toString()),
       this.renderSimpleRow("Issuer", fields.issuer),
@@ -108,7 +108,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     ];
   }
 
-  renderCert(cert: protos.cockroach.server.serverpb.CertificateDetails$Properties, key: number) {
+  renderCert(cert: protos.cockroach.server.serverpb.ICertificateDetails, key: number) {
     let certType: string;
     switch (cert.type) {
       case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CA:

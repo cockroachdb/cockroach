@@ -14,8 +14,8 @@ import Print from "src/views/reports/containers/range/print";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 
 interface RangeTableProps {
-  infos: protos.cockroach.server.serverpb.RangeInfo$Properties[];
-  replicas: protos.cockroach.roachpb.ReplicaDescriptor$Properties[];
+  infos: protos.cockroach.server.serverpb.IRangeInfo[];
+  replicas: protos.cockroach.roachpb.IReplicaDescriptor[];
 }
 
 interface RangeTableRow {
@@ -177,7 +177,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     );
   }
 
-  contentTimestamp(timestamp: protos.cockroach.util.hlc.Timestamp$Properties): RangeTableCellContent {
+  contentTimestamp(timestamp: protos.cockroach.util.hlc.ITimestamp): RangeTableCellContent {
     const humanized = Print.Timestamp(timestamp);
     return {
       value: [humanized],
@@ -186,7 +186,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentProblems(
-    problems: protos.cockroach.server.serverpb.RangeProblems$Properties,
+    problems: protos.cockroach.server.serverpb.IRangeProblems,
     awaitingGC: boolean,
   ): RangeTableCellContent {
     let results: string[] = [];
@@ -311,7 +311,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   renderRangeReplicaCell(
     leaderReplicaIDs: Set<number>,
     replicaID: number,
-    replica: protos.cockroach.roachpb.ReplicaDescriptor$Properties,
+    replica: protos.cockroach.roachpb.IReplicaDescriptor,
     rangeID: Long,
     localStoreID: number,
     dormant: boolean,
@@ -340,8 +340,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   renderRangeReplicaRow(
-    replicasByReplicaIDByStoreID: Map<number, Map<number, protos.cockroach.roachpb.ReplicaDescriptor$Properties>>,
-    referenceReplica: protos.cockroach.roachpb.ReplicaDescriptor$Properties,
+    replicasByReplicaIDByStoreID: Map<number, Map<number, protos.cockroach.roachpb.IReplicaDescriptor>>,
+    referenceReplica: protos.cockroach.roachpb.IReplicaDescriptor,
     leaderReplicaIDs: Set<number>,
     dormantStoreIDs: Set<number>,
     sortedStoreIDs: number[],
@@ -356,7 +356,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         </th>
         {
           _.map(sortedStoreIDs, storeID => {
-            let replica: protos.cockroach.roachpb.ReplicaDescriptor$Properties = null;
+            let replica: protos.cockroach.roachpb.IReplicaDescriptor = null;
             if (replicasByReplicaIDByStoreID.has(storeID) &&
               replicasByReplicaIDByStoreID.get(storeID).has(referenceReplica.replica_id)) {
               replica = replicasByReplicaIDByStoreID.get(storeID).get(referenceReplica.replica_id);
@@ -378,7 +378,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   renderCommandQueueVizRow(
     sortedStoreIDs: number[],
     rangeID: Long,
-    leader: protos.cockroach.server.serverpb.RangeInfo$Properties,
+    leader: protos.cockroach.server.serverpb.IRangeInfo,
   ) {
     const vizLink = (
       <Link
@@ -523,9 +523,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     const leaderReplicaIDs = new Set(_.map(leader.state.state.desc.replicas, rep => rep.replica_id));
 
     // Go through all the replicas and add them to map for easy printing.
-    const replicasByReplicaIDByStoreID: Map<number, Map<number, protos.cockroach.roachpb.ReplicaDescriptor$Properties>> = new Map();
+    const replicasByReplicaIDByStoreID: Map<number, Map<number, protos.cockroach.roachpb.IReplicaDescriptor>> = new Map();
     _.forEach(infos, info => {
-      const replicasByReplicaID: Map<number, protos.cockroach.roachpb.ReplicaDescriptor$Properties> = new Map();
+      const replicasByReplicaID: Map<number, protos.cockroach.roachpb.IReplicaDescriptor> = new Map();
       _.forEach(info.state.state.desc.replicas, rep => {
         replicasByReplicaID.set(rep.replica_id, rep);
       });

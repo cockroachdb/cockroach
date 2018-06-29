@@ -12,7 +12,7 @@ import {
   FlattenedNode,
 } from "./tree";
 import { cockroach } from "src/js/protos";
-import NodeDescriptor$Properties = cockroach.roachpb.NodeDescriptor$Properties;
+import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
 import "./replicaMatrix.styl";
 
 const DOWN_ARROW = "▼";

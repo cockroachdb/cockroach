@@ -1,7 +1,7 @@
 import _ from "lodash";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { Location, LocationTree } from "src/redux/locations";
+import { ILocation, LocationTree } from "src/redux/locations";
 import * as vector from "src/util/vector";
 
 /*
@@ -71,7 +71,7 @@ export function findOrCalculateLocation(locations: LocationTree, locality: Local
   }
 
   // Find (or calculate) the location of each child locality.
-  const childLocations: Location[] = [];
+  const childLocations: ILocation[] = [];
   _.values(locality.localities).forEach((tier) => {
     _.values(tier).forEach((child) => {
       childLocations.push(findOrCalculateLocation(locations, child));
