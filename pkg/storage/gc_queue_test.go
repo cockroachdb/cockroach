@@ -768,7 +768,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				spans = val.([]roachpb.Span)
 			}
 			if !reflect.DeepEqual(spans, expIntents) {
-				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
+				err := fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
+				if len(spans) > len(expIntents) {
+					t.Fatal(err)
+				}
+				return err
 			}
 			entry := &roachpb.AbortSpanEntry{}
 			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)

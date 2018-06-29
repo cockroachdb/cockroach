@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -59,7 +60,8 @@ const (
 	//
 	// TODO(tschottdorf): need to enforce at all times that this is much
 	// larger than the heartbeat interval used by the coordinator.
-	txnCleanupThreshold = time.Hour
+	txnCleanupThreshold           = time.Hour
+	txnCleanupAggressiveThreshold = time.Minute
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
@@ -70,6 +72,10 @@ const (
 	// GCRequests into multiple batches.
 	gcKeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
 )
+
+func shouldGCAggressively(st *cluster.Settings, sysBytes int64) bool {
+	return MaxCommandSize.Get(&st.SV)/6 < sysBytes
+}
 
 // gcQueue manages a queue of replicas slated to be scanned in their
 // entirety using the MVCC versions iterator. The gc queue manages the
@@ -134,6 +140,9 @@ type gcQueueScore struct {
 	GCBytes                  int64
 	GCByteAge                int64
 	ExpMinGCByteAgeReduction int64
+
+	// See (GCer).Aggressive.
+	Aggressive bool
 }
 
 func (r gcQueueScore) String() string {
@@ -162,6 +171,23 @@ func (gcq *gcQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (bool, float64) {
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	if r.Aggressive {
+		// Always process when being aggressive.
+		r.FinalScore += 1.0
+		r.ShouldQueue = true
+
+		// Send a crash report because we don't want to have to queue replicas
+		// aggressively, let alone in a tight loop.
+		_ = repl.store.stopper.RunAsyncTask(ctx, "report aggressive GC", func(ctx context.Context) {
+			log.SendCrashReport(
+				ctx,
+				&repl.store.cfg.Settings.SV,
+				0, // depth
+				"aggressive GC initiated for range %d: %v",
+				[]interface{}{log.Safe(repl.RangeID), log.Safe(repl.GetMVCCStats())},
+			)
+		})
+	}
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -525,12 +551,19 @@ func (NoopGCer) SetGCThreshold(context.Context, GCThreshold) error { return nil 
 // GC implements storage.GCer.
 func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
 
+// Aggressive implements storage.GCer. It always returns false.
+func (NoopGCer) Aggressive() bool { return false }
+
 type replicaGCer struct {
 	repl  *Replica
 	count int32 // update atomically
 }
 
 var _ GCer = &replicaGCer{}
+
+func (r *replicaGCer) Aggressive() bool {
+	return shouldGCAggressively(r.repl.ClusterSettings(), r.repl.GetMVCCStats().SysBytes)
+}
 
 func (r *replicaGCer) template() roachpb.GCRequest {
 	desc := r.repl.Desc()
@@ -689,6 +722,9 @@ type GCThreshold struct {
 type GCer interface {
 	SetGCThreshold(context.Context, GCThreshold) error
 	GC(context.Context, []roachpb.GCRequest_GCKey) error
+	// When this returns true, run GC aggressively. This is a last resort to clean
+	// up large local key ranges for which no good triggers exist.
+	Aggressive() bool
 }
 
 // RunGC runs garbage collection for the specified descriptor on the
@@ -717,15 +753,17 @@ func RunGC(
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-txnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold
-	infoMu.TxnSpanGCThreshold = txnExp
+	{
+		txnExp := now.Add(-txnCleanupThreshold.Nanoseconds(), 0)
+		infoMu.TxnSpanGCThreshold = txnExp
+	}
 
 	if err := gcer.SetGCThreshold(ctx, GCThreshold{
 		Key: gc.Threshold,
-		Txn: txnExp,
+		Txn: infoMu.TxnSpanGCThreshold,
 	}); err != nil {
 		return GCInfo{}, errors.Wrap(err, "failed to set GC thresholds")
 	}
@@ -871,10 +909,23 @@ func RunGC(
 		}
 	}
 
-	// From now on, all newly added keys are range-local.
+	infoMu.Lock()
+	localExp := infoMu.TxnSpanGCThreshold
+	infoMu.Unlock()
+
+	if gcer.Aggressive() {
+		localExp = now
+		localExp.Add(-txnCleanupAggressiveThreshold.Nanoseconds(), 0)
+
+		if err := gcer.SetGCThreshold(ctx, GCThreshold{
+			Txn: localExp,
+		}); err != nil {
+			return GCInfo{}, errors.Wrap(err, "failed to set GC thresholds")
+		}
+	}
 
 	// Process local range key entries (txn records, queue last processed times).
-	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &infoMu, cleanupTxnIntentsAsyncFn)
+	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, localExp, &infoMu, cleanupTxnIntentsAsyncFn)
 	if err != nil {
 		return GCInfo{}, err
 	}
@@ -885,7 +936,7 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
+	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, localExp, &infoMu)
 	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
 		return GCInfo{}, err
 	}

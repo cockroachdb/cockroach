@@ -539,6 +539,18 @@ func (*Lease) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{12
 // and must start fresh with an updated priority.
 type AbortSpanEntry struct {
 	// The key of the associated transaction.
+	//
+	// TODO(tschottdorf): when splitting ranges, we currently blindly copy the
+	// abort span of the pre-split range into the RHS of the post-split ranges.
+	// This is a bit silly since the records contain the key that anchors the
+	// transaction, and so in principle we can tell which records to copy (though
+	// that means we have to decode them). The extra copy isn't an issue since the
+	// span is usually small, but we've seen that in practice it can become large
+	// (#25233), at which point splitting either becomes impossible (due to the
+	// raft max command size) or a bad idea (as it duplicates the large span
+	// further). We should generally opt for the safer (albeit somewhat slower)
+	// option of copying only what's needed. In a similar spirit, we could remove
+	// those entries from the LHS.
 	Key Key `protobuf:"bytes,1,opt,name=key,proto3,casttype=Key" json:"key,omitempty"`
 	// The candidate commit timestamp the transaction record held at the time
 	// it was aborted.
