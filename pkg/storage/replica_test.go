@@ -467,7 +467,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
+	ch, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1236,7 +1236,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
+	ch, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -1968,7 +1968,7 @@ func TestLeaseConcurrent(t *testing.T) {
 					// When we complete the command, we have to remove it from the map;
 					// otherwise its context (and tracing span) may be used after the
 					// client cleaned up.
-					delete(tc.repl.mu.proposals, proposal.idKey)
+					tc.repl.cleanupFailedProposalLocked(proposal)
 					proposal.finishApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 					return
 				}
@@ -4450,7 +4450,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
 		lease, _ := tc.repl.GetLease()
-		ch, _, _, err := tc.repl.propose(context.Background(), lease, ba, nil, &allSpans)
+		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil, &allSpans)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -7685,7 +7685,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
-	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
+	_, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7910,7 +7910,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
-				delete(repl.mu.proposals, proposal.idKey)
+				repl.cleanupFailedProposalLocked(proposal)
 			} else if err := repl.submitProposalLocked(proposal); err != nil {
 				t.Error(err)
 			} else {
@@ -9219,7 +9219,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.propose(
+	ch, _, pErr := repl.propose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {

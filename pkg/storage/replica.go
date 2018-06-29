@@ -853,15 +853,32 @@ func (r *Replica) destroyRaftMuLocked(
 
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
-	for _, p := range r.mu.proposals {
-		resp := proposalResult{
-			Reply:         &roachpb.BatchResponse{},
-			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
-			ProposalRetry: proposalRangeNoLongerExists,
-		}
-		p.finishApplication(resp)
+	pr := proposalResult{
+		Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+		ProposalRetry: proposalRangeNoLongerExists,
 	}
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	for _, p := range r.mu.proposals {
+		r.cleanupFailedProposalLocked(p)
+		p.finishApplication(pr)
+	}
+}
+
+// cleanupFailedProposalLocked cleans up after a proposal that has failed. It
+// clears any references to the proposal and releases associated quota.
+func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
+	// Clear the proposal from the proposals map. May be a no-op if the
+	// proposal has not yet been inserted into the map.
+	delete(r.mu.proposals, p.idKey)
+	// Release associated quota pool resources if we have been tracking
+	// this command.
+	//
+	// NB: We may be double free-ing here in cases where proposals are
+	// duplicated. To counter this our quota pool is capped at the initial
+	// quota size.
+	if cmdSize, ok := r.mu.commandSizes[p.idKey]; ok {
+		r.mu.proposalQuota.add(int64(cmdSize))
+		delete(r.mu.commandSizes, p.idKey)
+	}
 }
 
 // setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
@@ -2931,17 +2948,7 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
-	defer func() {
-		// NB: We may be double free-ing here, consider the following cases:
-		//  - The request was evaluated and the command resulted in an error, but a
-		//    proposal is still sent.
-		//  - Proposals get duplicated.
-		// To counter this our quota pool is capped at the initial quota size.
-		if pErr != nil {
-			undoQuotaAcquisition()
-		}
-	}()
+	ch, tryAbandon, pErr := r.propose(ctx, lease, ba, endCmds, spans)
 	if pErr != nil {
 		return nil, pErr, proposalNoRetry
 	}
@@ -3242,27 +3249,25 @@ func (r *Replica) propose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
-) (chan proposalResult, func() bool, func(), *roachpb.Error) {
-	noop := func() {}
-
+) (_ chan proposalResult, _ func() bool, pErr *roachpb.Error) {
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
 		err := r.mu.destroyStatus.err
 		r.mu.Unlock()
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 	r.mu.Unlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// Only need to check that the request is in bounds at proposal time,
@@ -3270,7 +3275,7 @@ func (r *Replica) propose(
 	// all requests (notably EndTransaction with SplitTrigger) that may
 	// cause this condition to change.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	idKey := makeIDKey()
@@ -3295,7 +3300,7 @@ func (r *Replica) propose(
 			EndTxns: endTxns,
 		}
 		proposal.finishApplication(pr)
-		return proposal.doneCh, func() bool { return false }, noop, nil
+		return proposal.doneCh, func() bool { return false }, nil
 	}
 
 	// TODO(irfansharif): This int cast indicates that if someone configures a
@@ -3306,14 +3311,14 @@ func (r *Replica) propose(
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
-		return nil, nil, noop, roachpb.NewError(errors.Errorf(
+		return nil, nil, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)",
 			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
 		))
 	}
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposalSize)); err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// submitProposalLocked calls withRaftGroupLocked which requires that
@@ -3335,26 +3340,27 @@ func (r *Replica) propose(
 	if r.mu.commandSizes != nil {
 		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
-	undoQuotaAcquisition := func() {
-		r.mu.Lock()
-		if r.mu.commandSizes != nil && r.mu.proposalQuota != nil {
-			delete(r.mu.commandSizes, proposal.idKey)
-			r.mu.proposalQuota.add(int64(proposalSize))
+	// Make sure we clean up the proposal if we fail to submit it successfully.
+	// This is important both to ensure that that the proposals map doesn't
+	// grow without bound and to ensure that we always release any quota that
+	// we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposalLocked(proposal)
 		}
-		r.mu.Unlock()
-	}
+	}()
 
 	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
 	// been destroyed between the initial check at the beginning of this method
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
 	if !r.mu.destroyStatus.IsAlive() {
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(r.mu.destroyStatus.err)
+		return nil, nil, roachpb.NewError(r.mu.destroyStatus.err)
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 	r.insertProposalLocked(proposal, repDesc, lease)
 
@@ -3366,8 +3372,7 @@ func (r *Replica) propose(
 			Req:   ba,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
-			delete(r.mu.proposals, idKey)
-			return nil, nil, undoQuotaAcquisition, pErr
+			return nil, nil, pErr
 		}
 	}
 
@@ -3377,8 +3382,7 @@ func (r *Replica) propose(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 	} else if err != nil {
-		delete(r.mu.proposals, proposal.idKey)
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
@@ -3399,7 +3403,7 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return proposal.doneCh, tryAbandon, undoQuotaAcquisition, nil
+	return proposal.doneCh, tryAbandon, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
@@ -4342,12 +4346,12 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
-	for idKey, p := range r.mu.proposals {
+	for _, p := range r.mu.proposals {
 		if p.command.MaxLeaseIndex == 0 {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
-			delete(r.mu.proposals, idKey)
+			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
 			p.finishApplication(proposalResult{Err: roachpb.NewError(
@@ -4382,7 +4386,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// little ahead), because a pending command is removed only as it
 			// applies. Thus we'd risk reproposing a command that has been committed
 			// but not yet applied.
-			delete(r.mu.proposals, idKey)
+			r.cleanupFailedProposalLocked(p)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
 				p.finishApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
@@ -4437,7 +4441,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// TODO(bdarnell): Handle ErrProposalDropped better.
 			// https://github.com/cockroachdb/cockroach/issues/21849
 		} else if err != nil {
-			delete(r.mu.proposals, p.idKey)
+			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
