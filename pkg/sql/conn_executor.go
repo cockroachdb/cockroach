@@ -1658,8 +1658,6 @@ func (ex *connExecutor) isolationToProto(mode tree.IsolationLevel) (enginepb.Iso
 	switch mode {
 	case tree.UnspecifiedIsolation:
 		iso = ex.sessionData.DefaultIsolationLevel
-	case tree.SnapshotIsolation:
-		iso = enginepb.SNAPSHOT
 	case tree.SerializableIsolation:
 		iso = enginepb.SERIALIZABLE
 	default:

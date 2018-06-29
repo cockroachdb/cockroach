@@ -1618,17 +1618,8 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 
 	checkState := func(tx *gosql.Tx, ts time.Time) {
 		t.Helper()
-		r := tx.QueryRow("SHOW TRANSACTION ISOLATION LEVEL")
-		var iso string
 		var pri string
-		if err := r.Scan(&iso); err != nil {
-			t.Fatal(err)
-		} else {
-			if iso != "snapshot" {
-				t.Errorf("Expected snapshot, got: %s", iso)
-			}
-		}
-		r = tx.QueryRow("SHOW TRANSACTION PRIORITY")
+		r := tx.QueryRow("SHOW TRANSACTION PRIORITY")
 		if err := r.Scan(&pri); err != nil {
 			t.Fatal(err)
 		} else {
@@ -1646,9 +1637,6 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec("SET TRANSACTION PRIORITY HIGH"); err != nil {

@@ -201,9 +201,23 @@ func (ex *connExecutor) prepare(
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
 
-		if err := p.prepare(ctx, stmt.AST); err != nil {
+		// PREPARE has a limited subset of statements it can be run with. Postgres
+		// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
+		// prepared.
+		// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
+		// However, we allow a large number of additional statements.
+		// As of right now, the optimizer only works on SELECT statements and will
+		// fallback for all others, so this should be safe for the foreseeable
+		// future.
+		if optimizerPlanned, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
 			return err
+		} else if !optimizerPlanned {
+			// Fallback if the optimizer was not enabled or used.
+			if err := p.prepare(ctx, stmt.AST); err != nil {
+				return err
+			}
 		}
+
 		if p.curPlan.plan == nil {
 			// The statement cannot be prepared. Nothing to do.
 			return nil
