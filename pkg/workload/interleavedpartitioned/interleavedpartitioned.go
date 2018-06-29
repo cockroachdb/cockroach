@@ -210,7 +210,7 @@ func (w *interleavedPartitioned) Ops(urls []string, reg *workload.HistogramRegis
 		SQLDatabase: sqlDatabase,
 	}
 
-	statement, err := db.Prepare(`DELETE from sessions`)
+	statement, err := db.Prepare(`DELETE from sessions WHERE 1=1`)
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
 		args := make([]interface{}, 0)
 		rows, err := statement.Query(args...)
