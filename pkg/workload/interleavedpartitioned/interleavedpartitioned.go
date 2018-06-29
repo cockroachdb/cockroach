@@ -214,6 +214,9 @@ func (w *interleavedPartitioned) Ops(
 	}
 
 	statement, err := db.Prepare(`DELETE from sessions WHERE 1=1`)
+	if err != nil {
+		return err
+	}
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
 		args := make([]interface{}, 0)
 		rows, err := statement.Query(args...)
