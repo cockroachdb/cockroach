@@ -260,7 +260,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	switch ev.Operator() {
-	case opt.ScanOp, opt.LookupJoinOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ScanOp, opt.IndexJoinOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
 		formatter := ev.mem.makeExprFormatter(&buf)
 		formatter.formatPrivate(ev.Private(), formatNormal)
 	}
@@ -345,6 +345,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	case opt.LookupJoinOp:
 		def := ev.Private().(*LookupJoinDef)
+		tp.Childf("type: %v", def.JoinType)
 		tp.Childf("key columns: %v", def.KeyCols)
 	}
 

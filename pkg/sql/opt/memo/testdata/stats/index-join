@@ -62,9 +62,8 @@ project
       │    ├── stats: [rows=66.6666667, distinct(3)=1, distinct(2,3)=65.5555556]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(2,3)
-      │    ├── lookup-join a
+      │    ├── index-join a
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string)
-      │    │    ├── key columns: [1]
       │    │    ├── stats: [rows=200]
       │    │    ├── key: (1)
       │    │    ├── fd: ()-->(3), (1)-->(2,3)

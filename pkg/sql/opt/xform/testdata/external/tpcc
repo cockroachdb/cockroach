@@ -698,16 +698,15 @@ ORDER BY c_first ASC
 project
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
  ├── stats: [rows=6.80272109e-07]
- ├── cost: 3.63265306e-06
+ ├── cost: 3.66666667e-06
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  ├── prune: (1,4,5,17)
- └── lookup-join customer
+ └── index-join customer
       ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null) customer.c_balance:17(decimal)
-      ├── key columns: [3 2 1]
       ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(6)=6.80272109e-07]
-      ├── cost: 3.63265306e-06
+      ├── cost: 3.66666667e-06
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4-6,17)
       ├── ordering: +4 opt(2,3,6)
@@ -738,7 +737,7 @@ project
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=6.80272109e-07]
- ├── cost: 3.53741497e-06
+ ├── cost: 3.56462585e-06
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  ├── prune: (1,5,6)
@@ -747,7 +746,7 @@ project
       ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
       ├── cardinality: [0 - 1]
       ├── stats: [rows=6.80272109e-07]
-      ├── cost: 3.53741497e-06
+      ├── cost: 3.56462585e-06
       ├── key: ()
       ├── fd: ()-->(1-6)
       ├── prune: (5,6)
@@ -755,16 +754,15 @@ project
       ├── sort
       │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
       │    ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
-      │    ├── cost: 3.53741497e-06
+      │    ├── cost: 3.56462585e-06
       │    ├── key: (1)
       │    ├── fd: ()-->(2-4), (1)-->(4-6)
       │    ├── ordering: -1 opt(2-4)
       │    ├── prune: (1,5,6)
-      │    └── lookup-join order
+      │    └── index-join order
       │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
-      │         ├── key columns: [3 2 1]
       │         ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
-      │         ├── cost: 3.53061224e-06
+      │         ├── cost: 3.55782313e-06
       │         ├── key: (1)
       │         ├── fd: ()-->(2-4), (1)-->(4-6)
       │         ├── prune: (1,5,6)

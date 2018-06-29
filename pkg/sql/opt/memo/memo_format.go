@@ -304,6 +304,13 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 	case opt.ColumnID:
 		fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
+	case *IndexJoinDef:
+		tab := f.mem.metadata.Table(t.Table)
+		fmt.Fprintf(f.buf, " %s", tab.TabName())
+		if mode == formatMemo {
+			fmt.Fprintf(f.buf, ",cols=%s", t.Cols)
+		}
+
 	case *LookupJoinDef:
 		tab := f.mem.metadata.Table(t.Table)
 		if t.Index == opt.PrimaryIndex {
