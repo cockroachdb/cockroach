@@ -46,15 +46,20 @@ SELECT "Tree", "Field", "Description" FROM [
 EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ]
 ----
-join       ·       ·
- │         type    cross
- ├── scan  ·       ·
- │         table   twocolumn@primary
- │         spans   ALL
- │         filter  x = 44
- └── scan  ·       ·
-·          table   twocolumn@primary
-·          spans   ALL
+render          ·         ·
+ │              render 0  x
+ │              render 1  y
+ │              render 2  x
+ │              render 3  y
+ └── join       ·         ·
+      │         type      cross
+      ├── scan  ·         ·
+      │         table     twocolumn@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     twocolumn@primary
+·               spans     ALL
+·               filter    x = 44
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
