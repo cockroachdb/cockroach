@@ -50,6 +50,19 @@ type sortableRowContainer interface {
 	Close(context.Context)
 }
 
+// topKRowContainer is a sortableRowContainer that can enable optimizations in
+// cases where the caller cares only about the top k rows where k is the size
+// of the topKRowContainer when InitTopK is called. Once InitTopK is called,
+// callers should not call AddRow. Iterators created after calling InitTopK are
+// guaranteed to read the top k rows only.
+type topKRowContainer interface {
+	sortableRowContainer
+	InitTopK()
+	// MaybeReplaceMax checks whether the given row belongs in the top k rows,
+	// potentially evicting a row in favor of the given row.
+	MaybeReplaceMax(context.Context, sqlbase.EncDatumRow) error
+}
+
 // rowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
 // Example use:
 // 	var i rowIterator
@@ -101,7 +114,7 @@ type memRowContainer struct {
 }
 
 var _ heap.Interface = &memRowContainer{}
-var _ sortableRowContainer = &memRowContainer{}
+var _ topKRowContainer = &memRowContainer{}
 
 // init initializes the memRowContainer. The memRowContainer uses evalCtx.Mon
 // to track memory usage.
@@ -175,8 +188,8 @@ func (mc *memRowContainer) Push(_ interface{}) { panic("unimplemented") }
 // Pop is part of heap.Interface.
 func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
 
-// MaybeReplaceMax replaces the maximum element with the given row, if it is smaller.
-// Assumes InitMaxHeap was called.
+// MaybeReplaceMax replaces the maximum element with the given row, if it is
+// smaller. Assumes InitTopK was called.
 func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	max := mc.At(0)
 	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
@@ -199,8 +212,8 @@ func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncD
 	return nil
 }
 
-// InitMaxHeap rearranges the rows in the rowContainer into a Max-Heap.
-func (mc *memRowContainer) InitMaxHeap() {
+// InitTopK rearranges the rows in the memRowContainer into a Max-Heap.
+func (mc *memRowContainer) InitTopK() {
 	mc.invertSorting = true
 	heap.Init(mc)
 }
@@ -282,17 +295,17 @@ func (i memRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 // Close implements the rowIterator interface.
 func (i memRowFinalIterator) Close() {}
 
-// diskBackedRowContainer is a sortableRowContainer that uses a memRowContainer to
-// store rows and spills back to disk automatically if memory usage exceeds a
+// diskBackedRowContainer is a topKRowContainer that uses a memRowContainer
+// to store rows and spills back to disk automatically if memory usage exceeds a
 // given budget.
 type diskBackedRowContainer struct {
-	// src is the current sortableRowContainer that is being used to store rows.
-	// All the sortableRowContainer methods are redefined rather than delegating
+	// src is the current topKRowContainer that is being used to store rows.
+	// All the topKRowContainer methods are redefined rather than delegating
 	// to an embedded struct because of how defer works:
 	// 	rc.init(...)
 	//	defer rc.Close(ctx)
 	// The Close will call memRowContainer.Close(ctx) even after spilling to disk.
-	src sortableRowContainer
+	src topKRowContainer
 
 	mrc *memRowContainer
 	drc *diskRowContainer
@@ -303,7 +316,7 @@ type diskBackedRowContainer struct {
 	diskMonitor *mon.BytesMonitor
 }
 
-var _ sortableRowContainer = &diskBackedRowContainer{}
+var _ topKRowContainer = &diskBackedRowContainer{}
 
 // init initializes a diskBackedRowContainer.
 // Arguments:
@@ -339,14 +352,13 @@ func (f *diskBackedRowContainer) Len() int {
 
 func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if err := f.src.AddRow(ctx, row); err != nil {
-		// Return the error only if it is not an out of memory error.
-		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+		if spilled, spillErr := f.spillIfMemErr(ctx, err); !spilled && spillErr == nil {
+			// The error was not an out of memory error.
 			return err
-		}
-		if spillErr := f.spillToDisk(ctx); spillErr != nil {
+		} else if spillErr != nil {
+			// A disk spill was attempted but there was an error in doing so.
 			return spillErr
 		}
-		log.VEventf(ctx, 2, "spilled to disk: %v", err)
 		// Add the row that caused the memory error.
 		return f.src.AddRow(ctx, row)
 	}
@@ -355,6 +367,16 @@ func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatu
 
 func (f *diskBackedRowContainer) Sort(ctx context.Context) {
 	f.src.Sort(ctx)
+}
+
+func (f *diskBackedRowContainer) InitTopK() {
+	f.src.InitTopK()
+}
+
+func (f *diskBackedRowContainer) MaybeReplaceMax(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) error {
+	return f.src.MaybeReplaceMax(ctx, row)
 }
 
 func (f *diskBackedRowContainer) NewIterator(ctx context.Context) rowIterator {
@@ -388,6 +410,20 @@ func (f *diskBackedRowContainer) Close(ctx context.Context) {
 // disk.
 func (f *diskBackedRowContainer) Spilled() bool {
 	return f.drc != nil
+}
+
+// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// memory error. Returns whether the diskBackedRowContainer spilled to disk and
+// an error if one occurred while doing so.
+func (f *diskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
+	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+		return false, nil
+	}
+	if spillErr := f.spillToDisk(ctx); spillErr != nil {
+		return false, spillErr
+	}
+	log.VEventf(ctx, 2, "spilled to disk: %v", err)
+	return true, nil
 }
 
 func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
