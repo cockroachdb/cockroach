@@ -1561,6 +1561,7 @@ CockroachDB supports the following flags:
 		},
 	),
 
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html
 	"age": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
@@ -1568,10 +1569,10 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
-			Info: "Calculates the interval between the current time and `val`.",
+			Info: "Calculates the interval between `val` and the current time.",
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"begin", types.TimestampTZ}, {"end", types.TimestampTZ}},
+			Types:      tree.ArgTypes{{"end", types.TimestampTZ}, {"begin", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.TimestampDifference(ctx, args[0], args[1])
