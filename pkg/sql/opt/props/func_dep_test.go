@@ -486,6 +486,33 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	verifyFD(t, oneRow, "(): ()-->(1-5,10-13), (1)==(10), (10)==(1)")
 	oneRow.ProjectCols(util.MakeFastIntSet(4))
 	verifyFD(t, oneRow, "(): ()-->(4)")
+
+	// Remove column that has equivalent substitute.
+	//   SELECT e, one FROM (SELECT *, d+1 AS one FROM abcde) WHERE d=e
+	abcde = makeAbcdeFD(t)
+	abcde.AddSynthesizedCol(util.MakeFastIntSet(4), 6)
+	abcde.AddEquivalency(4, 5)
+	verifyFD(t, abcde, "(1): (1)-->(2-5), (2,3)~~>(1,4,5), (4)-->(6), (4)==(5), (5)==(4)")
+	abcde.ProjectCols(util.MakeFastIntSet(5, 6))
+	verifyFD(t, abcde, "(5)-->(6)")
+
+	// Remove column that has equivalent substitute and is part of composite
+	// determinant.
+	//   SELECT d, e FROM abcde WHERE b=d AND c=e
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(2, 4)
+	verifyFD(t, abcde, "(1): (1)-->(2-5), (2,3)~~>(1,4,5), (2)==(4), (4)==(2)")
+	abcde.ProjectCols(util.MakeFastIntSet(3, 4, 5))
+	verifyFD(t, abcde, "(3,4)~~>(5)")
+
+	// Equivalent substitution results in (4,5)~~>(4,5), which is eliminated.
+	//   SELECT d, e FROM abcde WHERE b=d AND c=e
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(2, 4)
+	abcde.AddEquivalency(3, 5)
+	verifyFD(t, abcde, "(1): (1)-->(2-5), (2,3)~~>(1,4,5), (2)==(4), (4)==(2), (3)==(5), (5)==(3)")
+	abcde.ProjectCols(util.MakeFastIntSet(4, 5))
+	verifyFD(t, abcde, "")
 }
 
 func TestFuncDeps_AddFrom(t *testing.T) {
