@@ -26,6 +26,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -227,7 +228,7 @@ func (w *interleavedPartitioned) Ops(
 
 func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(int64(rowIdx)))
-	nowString := time.Now().UTC().Format(time.RFC3339)
+	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	sessionID := w.generateSessionID(rng, rowIdx)
 	w.sessionIDs = append(w.sessionIDs, sessionID)
 	log.Warningf(context.TODO(), "inserting into parent row %d, len of sessionIDs is now %d", rowIdx, len(w.sessionIDs))
@@ -255,7 +256,7 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 			// log.Warningf(context.TODO(), "len(w.sessionIDs): %d, w.sessionIDs[len] = %s", len(w.sessionIDs), w.sessionIDs[sessionRowIdx])
 		}
 		sessionID := w.sessionIDs[sessionRowIdx]
-		nowString := time.Now().UTC().Format(time.RFC3339)
+		nowString := timeutil.Now().UTC().Format(time.RFC3339)
 		var rows [][]interface{}
 		for i := 0; i < nPerBatch; i++ {
 			rows = append(rows, []interface{}{
@@ -277,7 +278,7 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]in
 		sessionRowIdx = randInt(rng, 0, len(w.sessionIDs)-1)
 	}
 	sessionID := w.sessionIDs[sessionRowIdx]
-	nowString := time.Now().UTC().Format(time.RFC3339)
+	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	var rows [][]interface{}
 	for i := 0; i < w.devicesPerSession; i++ {
 		rows = append(rows, []interface{}{
@@ -304,7 +305,7 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 		sessionRowIdx = randInt(rng, 0, len(w.sessionIDs)-1)
 	}
 	sessionID := w.sessionIDs[sessionRowIdx]
-	nowString := time.Now().UTC().Format(time.RFC3339)
+	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	for i := 0; i < w.queriesPerSession; i++ {
 		rows = append(rows, []interface{}{
 			sessionID,
