@@ -182,3 +182,19 @@ query B
 SELECT (1, 2) IN (SELECT (1, 2))
 ----
 true
+
+statement ok
+CREATE TABLE t1 (a DATE)
+
+statement ok
+CREATE TABLE t2 (b TIMESTAMPTZ)
+
+statement ok
+INSERT INTO t1 VALUES (DATE '2018-01-01'); INSERT INTO t2 VALUES (TIMESTAMPTZ '2018-01-01');
+
+# Make sure that we do not create invalid filters due to substituting columns
+# with different types.
+query TT
+SELECT * FROM t1, t2 WHERE a = b AND age(b, TIMESTAMPTZ '2017-01-01') > INTERVAL '1 day'
+----
+2018-01-01 00:00:00 +0000 +0000  2018-01-01 00:00:00 +0000 +0000

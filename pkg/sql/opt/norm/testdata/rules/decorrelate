@@ -37,7 +37,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -51,7 +51,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
@@ -74,7 +74,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -86,7 +86,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 semi-join-apply
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -97,7 +97,7 @@ semi-join-apply
  │    ├── cardinality: [2 - 2]
  │    ├── (a.k) [type=tuple{int}, outer=(1)]
  │    └── (a.i) [type=tuple{int}, outer=(2)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
@@ -117,7 +117,7 @@ anti-join-apply
  │    ├── cardinality: [2 - 2]
  │    ├── (a.k) [type=tuple{int}, outer=(1)]
  │    └── (a.i) [type=tuple{int}, outer=(2)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Attempt to decorrelate query by pulling up outer select. But since limit query
@@ -150,15 +150,15 @@ semi-join-apply
  │    │    │    ├── columns: x:6(int!null) y:7(int!null)
  │    │    │    ├── outer: (1)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: (6)-->(7)
+ │    │    │    ├── fd: (6)-->(7), (7)==(1), (1)==(7) [removed: (1)]
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
- │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
  │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── const: 1 [type=int]
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
  │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  └── true [type=bool]
 
@@ -190,15 +190,15 @@ anti-join-apply
  │    │    │    ├── columns: x:6(int!null) y:7(int!null)
  │    │    │    ├── outer: (1)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: (6)-->(7)
+ │    │    │    ├── fd: (6)-->(7), (7)==(1), (1)==(7) [removed: (1)]
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
- │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
  │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── const: 1 [type=int]
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
  │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  └── true [type=bool]
 
@@ -208,34 +208,37 @@ SELECT * FROM a WHERE (SELECT x FROM (SELECT * FROM xy LIMIT 1) WHERE k=x) > 100
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── select
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-6), ()-->(6)
-      ├── left-join (merge)
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int)
+      ├── key: ()
+      ├── fd: ()-->(1-6)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── constraint: /1: [/101 - ]
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-6), ()~~>(6)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5)
-      │    │    └── ordering: +1
+      │    ├── fd: (1)-->(2-5)
+      │    └── ordering: +1
+      ├── select
+      │    ├── columns: x:6(int!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6)
+      │    ├── ordering: +6
       │    ├── scan xy
       │    │    ├── columns: x:6(int!null)
       │    │    ├── limit: 1
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6)
       │    │    └── ordering: +6
-      │    └── merge-on
-      │         ├── left ordering: +1
-      │         ├── right ordering: +6
-      │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── filters [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
-           └── xy.x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
+      │    └── filters [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
+      │         └── xy.x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +6
+           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
 opt
@@ -246,7 +249,7 @@ WHERE EXISTS(SELECT * FROM xy WHERE x=k AND EXISTS(SELECT * FROM uv WHERE u=10 A
 semi-join-apply
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -265,9 +268,9 @@ semi-join-apply
  │    │    ├── constraint: /8: [/10 - /10]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(8,9)
- │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -320,7 +323,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
@@ -334,41 +337,40 @@ SELECT * FROM a WHERE (SELECT y+1 AS r FROM (SELECT * FROM xy LIMIT 1) WHERE x=k
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) r:8(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-6,8), ()~~>(6), ()-->(8)
-      ├── left-join (merge)
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) r:8(int)
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (merge)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+      ├── key: ()
+      ├── fd: ()-->(1-6)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-6,8), ()~~>(6,8)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5)
-      │    │    └── ordering: +1
-      │    ├── project
-      │    │    ├── columns: r:8(int) x:6(int!null)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(6,8)
-      │    │    ├── ordering: +6
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    ├── limit: 1
-      │    │    │    ├── key: ()
-      │    │    │    └── fd: ()-->(6,7)
-      │    │    └── projections [outer=(6,7)]
-      │    │         └── xy.y + 1 [type=int, outer=(7)]
-      │    └── merge-on
-      │         ├── left ordering: +1
-      │         ├── right ordering: +6
-      │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── filters [type=bool, outer=(8), constraints=(/8: [/11 - ]; tight)]
-           └── r > 10 [type=bool, outer=(8), constraints=(/8: [/11 - ]; tight)]
+      │    ├── fd: (1)-->(2-5)
+      │    └── ordering: +1
+      ├── project
+      │    ├── columns: x:6(int!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6)
+      │    ├── ordering: +6
+      │    └── select
+      │         ├── columns: x:6(int!null) y:7(int)
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(6,7)
+      │         ├── scan xy
+      │         │    ├── columns: x:6(int!null) y:7(int)
+      │         │    ├── limit: 1
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(6,7)
+      │         └── filters [type=bool, outer=(7)]
+      │              └── (xy.y + 1) > 10 [type=bool, outer=(7)]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +6
+           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
+                └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Any clause with constant.
 opt
@@ -411,7 +413,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
@@ -454,7 +456,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │              ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              └── (a.i = xy.y) IS NOT false [type=bool, outer=(2,7)]
  │    └── aggregations [outer=(2,9)]
@@ -507,7 +509,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │              ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              └── (scalar = xy.y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(9,10)]
@@ -542,6 +544,7 @@ project
       ├── select
       │    ├── columns: x:6(int!null) div:10(decimal!null)
       │    ├── outer: (2)
+      │    ├── fd: (6)==(10), (10)==(6)
       │    ├── project
       │    │    ├── columns: div:10(decimal) x:6(int)
       │    │    ├── outer: (2)
@@ -559,12 +562,12 @@ project
       │    │    │    │    ├── scan uv
       │    │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    │    └── key: (8)
-      │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    │    │    └── true [type=bool]
       │    │    └── projections [outer=(6,8)]
       │    │         └── uv.u / 1.1 [type=decimal, outer=(8)]
-      │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+      │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       │         └── xy.x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       └── true [type=bool]
 
@@ -602,7 +605,7 @@ project
       │    │    │    └── key: (8)
       │    │    └── projections [outer=(8)]
       │    │         └── uv.u + 1 [type=int, outer=(8)]
-      │    └── filters [type=bool, outer=(2,6,10), constraints=(/2: [/5 - /5]; /6: (/NULL - ]; /10: (/NULL - ])]
+      │    └── filters [type=bool, outer=(2,6,10), constraints=(/2: [/5 - /5]; /6: (/NULL - ]; /10: (/NULL - ]), fd=()-->(2), (6)==(10), (10)==(6)]
       │         ├── xy.x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       └── true [type=bool]
@@ -630,7 +633,7 @@ semi-join-apply
  │    ├── columns: x:6(int!null) y:7(int) sum:10(decimal) cnt:11(int!null)
  │    ├── outer: (2)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7,10,11)
+ │    ├── fd: (6)-->(7,10,11), (6)==(11), (11)==(6)
  │    ├── group-by
  │    │    ├── columns: x:6(int!null) y:7(int) sum:10(decimal) cnt:11(int)
  │    │    ├── grouping columns: x:6(int!null)
@@ -652,7 +655,7 @@ semi-join-apply
  │    │    │    │    │    └── columns: v:9(int)
  │    │    │    │    └── projections [outer=(9)]
  │    │    │    │         └── true [type=bool]
- │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
  │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    └── aggregations [outer=(7,9,12)]
  │    │         ├── sum [type=decimal, outer=(9)]
@@ -661,7 +664,7 @@ semi-join-apply
  │    │         │    └── variable: notnull [type=bool, outer=(12)]
  │    │         └── any-not-null [type=int, outer=(7)]
  │    │              └── variable: xy.y [type=int, outer=(7)]
- │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
+ │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
  │         └── xy.x = cnt [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
  └── true [type=bool]
 
@@ -675,7 +678,7 @@ project
  ├── select
  │    ├── columns: i:2(int) max:9(int!null) rownum:10(int!null)
  │    ├── key: (10)
- │    ├── fd: ()-->(9), (10)-->(2,9)
+ │    ├── fd: (10)-->(2,9), ()-->(9)
  │    ├── group-by
  │    │    ├── columns: i:2(int) max:9(int) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
@@ -695,14 +698,14 @@ project
  │    │    │    │    ├── columns: x:7(int!null) y:8(int)
  │    │    │    │    ├── key: (7)
  │    │    │    │    └── fd: (7)-->(8)
- │    │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
  │    │    │         └── xy.x = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── aggregations [outer=(2,8)]
  │    │         ├── max [type=int, outer=(8)]
  │    │         │    └── variable: xy.y [type=int, outer=(8)]
  │    │         └── any-not-null [type=int, outer=(2)]
  │    │              └── variable: a.i [type=int, outer=(2)]
- │    └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
+ │    └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
  │         └── max = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
  └── projections [outer=(2)]
       └── const: 'foo' [type=string]
@@ -742,19 +745,19 @@ project
       │    │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    │    ├── outer: (1)
       │    │    │    │    ├── key: (6)
-      │    │    │    │    ├── fd: (6)-->(7)
+      │    │    │    │    ├── fd: (6)-->(7), (6)==(1), (1)==(6) [removed: (1)]
       │    │    │    │    ├── scan xy
       │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    │    │    ├── key: (6)
       │    │    │    │    │    └── fd: (6)-->(7)
-      │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    │    └── projections [outer=(7)]
       │    │    │         └── xy.y::STRING [type=string, outer=(7)]
       │    │    └── aggregations [outer=(8)]
       │    │         └── concat-agg [type=string, outer=(8)]
       │    │              └── variable: column8 [type=string, outer=(8)]
-      │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
+      │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
       │         └── concat_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
       └── true [type=bool]
 
@@ -798,19 +801,19 @@ project
       │    │    │         │    ├── columns: x:6(int!null) y:7(int)
       │    │    │         │    ├── outer: (1)
       │    │    │         │    ├── key: (6)
-      │    │    │         │    ├── fd: (6)-->(7)
+      │    │    │         │    ├── fd: (6)-->(7), (6)==(1), (1)==(6) [removed: (1)]
       │    │    │         │    ├── scan xy
       │    │    │         │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │         │    │    ├── key: (6)
       │    │    │         │    │    └── fd: (6)-->(7)
-      │    │    │         │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       │    │    │         │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    │         └── projections [outer=(7)]
       │    │    │              └── xy.y::STRING [type=string, outer=(7)]
       │    │    └── aggregations [outer=(8)]
       │    │         └── max [type=string, outer=(8)]
       │    │              └── variable: column8 [type=string, outer=(8)]
-      │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
+      │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
       │         └── max = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
       └── true [type=bool]
 
@@ -824,7 +827,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -838,7 +841,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that EXISTS is hoisted even when it is one of several conjuncts.
@@ -848,18 +851,18 @@ SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2-5)
+ ├── fd: (1)-->(2-5), ()-->(4), (6)==(1), (1)==(6) [removed: (6)]
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5), ()-->(4)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight)]
+ │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  ├── scan xy
@@ -870,7 +873,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Exists operators in same Select list.
@@ -880,11 +883,11 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND EXISTS(SELECT * FRO
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (8)==(2), (2)==(8), (6)==(1), (1)==(6) [removed: (6,8)]
  ├── semi-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5), (8)==(2), (2)==(8) [removed: (8)]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
@@ -893,13 +896,13 @@ semi-join
  │    │    ├── columns: xy.x:8(int!null) xy.y:9(int)
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
- │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(2), (2)==(8)]
  │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
@@ -928,7 +931,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE EXISTS (SELECT * FROM uv WHE
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -936,7 +939,7 @@ semi-join
  ├── semi-join (merge)
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
+ │    ├── fd: (6)-->(7), (6)==(8), (8)==(6) [removed: (8)]
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -950,9 +953,9 @@ semi-join
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -978,7 +981,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
@@ -988,18 +991,18 @@ SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2-5)
+ ├── fd: (1)-->(2-5), ()-->(4)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5), ()-->(4)
  │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight)]
+ │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  ├── scan xy
@@ -1010,7 +1013,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
            └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Not Exists operators in same Select list.
@@ -1035,13 +1038,13 @@ anti-join
  │    │    ├── columns: xy.x:8(int!null) xy.y:9(int)
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
- │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(2), (2)==(8)]
  │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
@@ -1073,7 +1076,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT *
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (6)==(1), (1)==(6) [removed: (6)]
  ├── anti-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -1086,13 +1089,13 @@ semi-join
  │    │    ├── columns: xy.x:8(int!null) xy.y:9(int)
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
- │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(2), (2)==(8)]
  │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -1102,37 +1105,33 @@ opt
 SELECT * FROM a WHERE (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
 project
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,7), ()-->(7)
-      ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
+      ├── fd: (1)-->(2-5), ()-->(7)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,7), ()~~>(7)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-5)
-      │    ├── limit
+      │    └── fd: (1)-->(2-5)
+      ├── limit
+      │    ├── columns: y:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── select
       │    │    ├── columns: y:7(int!null)
       │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(7)
-      │    │    ├── select
-      │    │    │    ├── columns: y:7(int!null)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── scan xy
-      │    │    │    │    └── columns: y:7(int)
-      │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    └── const: 1 [type=int]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │    ├── fd: (7)==(1), (1)==(7) [removed: (1)]
+      │    │    ├── scan xy
+      │    │    │    └── columns: y:7(int)
+      │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
+      │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    └── const: 1 [type=int]
+      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
            └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
@@ -1142,51 +1141,47 @@ FROM a
 WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LIMIT 1) = 100
 ----
 project
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int!null)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int!null)
       ├── key: ()
       ├── fd: ()-->(1-5,7)
-      ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: ()
-      │    ├── fd: ()-->(1-5,7)
-      │    ├── select
+      │    ├── fd: ()-->(1-5)
+      │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    ├── constraint: /1: [/10 - /10]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(1-5)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    │    ├── constraint: /1: [/10 - /10]
-      │    │    │    ├── key: ()
-      │    │    │    └── fd: ()-->(1-5)
-      │    │    └── filters [type=bool]
-      │    │         └── eq [type=bool]
-      │    │              ├── subquery [type=int]
-      │    │              │    └── scan xy
-      │    │              │         ├── columns: xy.x:8(int!null)
-      │    │              │         ├── limit: 1
-      │    │              │         ├── key: ()
-      │    │              │         └── fd: ()-->(8)
-      │    │              └── const: 100 [type=int]
-      │    ├── limit
+      │    │    └── fd: ()-->(1-5)
+      │    └── filters [type=bool]
+      │         └── eq [type=bool]
+      │              ├── subquery [type=int]
+      │              │    └── scan xy
+      │              │         ├── columns: xy.x:8(int!null)
+      │              │         ├── limit: 1
+      │              │         ├── key: ()
+      │              │         └── fd: ()-->(8)
+      │              └── const: 100 [type=int]
+      ├── limit
+      │    ├── columns: xy.y:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── select
       │    │    ├── columns: xy.y:7(int!null)
       │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(7)
-      │    │    ├── select
-      │    │    │    ├── columns: xy.y:7(int!null)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── scan xy
-      │    │    │    │    └── columns: xy.y:7(int)
-      │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    └── const: 1 [type=int]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │    ├── fd: (7)==(1), (1)==(7) [removed: (1)]
+      │    │    ├── scan xy
+      │    │    │    └── columns: xy.y:7(int)
+      │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
+      │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    └── const: 1 [type=int]
+      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
            └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple correlated subqueries.
@@ -1195,66 +1190,62 @@ SELECT * FROM a
 WHERE (SELECT count(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
 project
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int!null)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,8,10), ()-->(10)
-      ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int)
+      ├── fd: (1)-->(2-5,8), ()-->(10)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,8,10), ()~~>(10)
-      │    ├── select
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
+      │    ├── fd: (1)-->(2-5,8)
+      │    ├── group-by
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+      │    │    ├── grouping columns: k:1(int!null)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-5,8)
-      │    │    ├── group-by
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
-      │    │    │    ├── grouping columns: k:1(int!null)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,8)
-      │    │    │    ├── left-join
-      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int)
-      │    │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    └── columns: xy.y:7(int)
-      │    │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │    └── aggregations [outer=(2-5,7)]
-      │    │    │         ├── count [type=int, outer=(7)]
-      │    │    │         │    └── variable: xy.y [type=int, outer=(7)]
-      │    │    │         ├── any-not-null [type=int, outer=(2)]
-      │    │    │         │    └── variable: a.i [type=int, outer=(2)]
-      │    │    │         ├── any-not-null [type=float, outer=(3)]
-      │    │    │         │    └── variable: a.f [type=float, outer=(3)]
-      │    │    │         ├── any-not-null [type=string, outer=(4)]
-      │    │    │         │    └── variable: a.s [type=string, outer=(4)]
-      │    │    │         └── any-not-null [type=jsonb, outer=(5)]
-      │    │    │              └── variable: a.j [type=jsonb, outer=(5)]
-      │    │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
-      │    │         └── count > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
-      │    ├── limit
+      │    │    ├── left-join
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int)
+      │    │    │    ├── fd: (1)-->(2-5)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2-5)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: xy.y:7(int)
+      │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
+      │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │    └── aggregations [outer=(2-5,7)]
+      │    │         ├── count [type=int, outer=(7)]
+      │    │         │    └── variable: xy.y [type=int, outer=(7)]
+      │    │         ├── any-not-null [type=int, outer=(2)]
+      │    │         │    └── variable: a.i [type=int, outer=(2)]
+      │    │         ├── any-not-null [type=float, outer=(3)]
+      │    │         │    └── variable: a.f [type=float, outer=(3)]
+      │    │         ├── any-not-null [type=string, outer=(4)]
+      │    │         │    └── variable: a.s [type=string, outer=(4)]
+      │    │         └── any-not-null [type=jsonb, outer=(5)]
+      │    │              └── variable: a.j [type=jsonb, outer=(5)]
+      │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │         └── count > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
+      ├── limit
+      │    ├── columns: xy.y:10(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(10)
+      │    ├── select
       │    │    ├── columns: xy.y:10(int!null)
       │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(10)
-      │    │    ├── select
-      │    │    │    ├── columns: xy.y:10(int!null)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── scan xy
-      │    │    │    │    └── columns: xy.y:10(int)
-      │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
-      │    │    │         └── xy.y = a.k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
-      │    │    └── const: 1 [type=int]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
+      │    │    ├── fd: (10)==(1), (1)==(10) [removed: (1)]
+      │    │    ├── scan xy
+      │    │    │    └── columns: xy.y:10(int)
+      │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(10)==(1), (1)==(10)]
+      │    │         └── xy.y = a.k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    └── const: 1 [type=int]
+      └── filters [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
            └── a.i = xy.y [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
 
 # Subquery nested below interesting scalar operators like cast, function, tuple,
@@ -1291,7 +1282,7 @@ project
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +6
-      │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │    │              └── a.k = uv.u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    └── aggregations [outer=(2-6)]
       │         ├── count [type=int, outer=(6)]
@@ -1338,7 +1329,7 @@ project
       │    │    │    │    └── columns: y:7(int)
       │    │    │    └── projections [outer=(7)]
       │    │    │         └── true [type=bool]
-      │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
       │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,8)]
       │         ├── any-not-null [type=bool, outer=(8)]
@@ -1361,11 +1352,11 @@ SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5,9) [removed: (9)]
+ ├── fd: (1)-->(2-5)
  └── select
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) case:10(bool)
       ├── key: (1)
-      ├── fd: ()-->(10), (1)-->(2-5,9), (2,9)-->(10) [removed: (9)]
+      ├── fd: (1)-->(2-5), ()-->(10)
       ├── project
       │    ├── columns: case:10(bool) k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
@@ -1404,7 +1395,7 @@ project
       │    │              └── variable: a.j [type=jsonb, outer=(5)]
       │    └── projections [outer=(1-5,9)]
       │         └── CASE WHEN bool_or AND (a.i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,9)]
-      └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+      └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
            └── case IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
 
 # ALL with non-trivial expression on left.
@@ -1476,10 +1467,11 @@ project
  │    │         ├── columns: xy.x:6(int!null)
  │    │         ├── outer: (1)
  │    │         ├── key: (6)
+ │    │         ├── fd: (6)==(1), (1)==(6) [removed: (1)]
  │    │         ├── scan xy
  │    │         │    ├── columns: xy.x:6(int!null)
  │    │         │    └── key: (6)
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── true [type=bool]
  └── projections [outer=(6)]
@@ -1524,15 +1516,16 @@ project
  │    │    │    │         ├── columns: xy.x:7(int!null)
  │    │    │    │         ├── outer: (1)
  │    │    │    │         ├── key: (7)
+ │    │    │    │         ├── fd: (7)==(1), (1)==(7) [removed: (1)]
  │    │    │    │         ├── scan xy
  │    │    │    │         │    ├── columns: xy.x:7(int!null)
  │    │    │    │         │    └── key: (7)
- │    │    │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(1), (1)==(7)]
  │    │    │    │              └── xy.x = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    │    └── true [type=bool]
  │    │    ├── scan xy
  │    │    │    └── columns: xy.y:20(int)
- │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
+ │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(20)==(1), (1)==(20)]
  │    │         └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
  │    └── aggregations [outer=(7,20)]
  │         ├── count [type=int, outer=(20)]
@@ -1585,9 +1578,10 @@ group-by
  │    │    │    └── select
  │    │    │         ├── columns: y:7(int!null)
  │    │    │         ├── outer: (2)
+ │    │    │         ├── fd: (7)==(2), (2)==(7) [removed: (2)]
  │    │    │         ├── scan xy
  │    │    │         │    └── columns: y:7(int)
- │    │    │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
  │    │    │              └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── true [type=bool]
  │    └── projections [outer=(7)]
@@ -1623,7 +1617,7 @@ project
  │    │    │    │    └── columns: y:7(int)
  │    │    │    └── projections [outer=(7)]
  │    │    │         └── true [type=bool]
- │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
  │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── any-not-null [type=bool, outer=(9)]
@@ -1662,7 +1656,7 @@ project
  │    │    │    │         └── (xy.y > 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections [outer=(7)]
  │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
- │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
  │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
@@ -1761,7 +1755,7 @@ project
       │    │    │    │    │    └── key: (8)
       │    │    │    │    └── projections [outer=(8)]
       │    │    │    │         └── true [type=bool]
-      │    │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(7), (7)==(8)]
       │    │    │         └── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
       │    │    └── aggregations [outer=(10)]
       │    │         └── any-not-null [type=bool, outer=(10)]
@@ -1812,7 +1806,7 @@ inner-join
  │         │    │    │    │    │    └── fd: (8)-->(9)
  │         │    │    │    │    └── projections [outer=(8,9)]
  │         │    │    │    │         └── uv.v IS NOT NULL [type=bool, outer=(9)]
- │         │    │    │    └── filters [type=bool, outer=(6-9), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+ │         │    │    │    └── filters [type=bool, outer=(6-9), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(7), (7)==(8)]
  │         │    │    │         ├── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
  │         │    │    │         └── (xy.x = uv.v) IS NOT false [type=bool, outer=(6,9)]
  │         │    │    └── aggregations [outer=(7,10)]
@@ -1933,7 +1927,7 @@ project
  │    │    │    │    │    │    │    └── key: (6)
  │    │    │    │    │    │    └── projections [outer=(6)]
  │    │    │    │    │    │         └── true [type=bool]
- │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
  │    │    │    │         └── any-not-null [type=bool, outer=(9)]
@@ -2009,7 +2003,7 @@ project
  │    │    │    │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    │    │    │    └── projections [outer=(6,7)]
  │    │    │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
- │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6)]
  │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
  │    │    │    │         └── bool-or [type=bool, outer=(9)]
@@ -2037,14 +2031,14 @@ SELECT * FROM a WHERE i IN (SELECT y FROM xy)
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (2)==(7), (7)==(2) [removed: (7)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
  │    └── columns: y:7(int)
- └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
       └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Any is one of several conjuncts.
@@ -2064,7 +2058,7 @@ semi-join
  │    │    ├── constraint: /1: [/10 - /10]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(1-5)
- │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  ├── scan xy
  │    └── columns: y:7(int)
@@ -2078,11 +2072,11 @@ SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FRO
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (4)==(10), (10)==(4) [removed: (10)]
  ├── semi-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5), (4)==(10), (10)==(4) [removed: (10)]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
@@ -2093,7 +2087,7 @@ semi-join
  │    │    │    └── columns: xy.y:9(int)
  │    │    └── projections [outer=(9)]
  │    │         └── xy.y::STRING [type=string, outer=(9)]
- │    └── filters [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
+ │    └── filters [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
  │         └── a.s = y [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
  ├── scan xy
  │    └── columns: xy.y:7(int)
@@ -2119,7 +2113,7 @@ select
                 ├── fd: ()-->(7)
                 ├── scan xy
                 │    └── columns: y:7(int)
-                └── filters [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
+                └── filters [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
                      └── xy.y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
 
 # ANY in Join On condition.
@@ -2128,25 +2122,25 @@ SELECT * FROM a INNER JOIN xy ON i IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (6)
+ ├── fd: (1)-->(2-5), (2)==(9), (9)==(2), (6)-->(7), (1)==(6), (6)==(1) [removed: (9)]
  ├── semi-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5), (2)==(9), (9)==(2) [removed: (9)]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan uv
  │    │    └── columns: v:9(int)
- │    └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
+ │    └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │         └── a.i = uv.v [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -2244,8 +2238,8 @@ SELECT * FROM a INNER JOIN xy ON i NOT IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (6)
+ ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── anti-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -2262,7 +2256,7 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
@@ -2274,7 +2268,7 @@ SELECT * FROM a WHERE i = ANY(SELECT y FROM xy) AND s <> ALL(SELECT y::string FR
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5), (2)==(7), (7)==(2) [removed: (7)]
  ├── anti-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -2293,5 +2287,5 @@ semi-join
  │         └── (a.s = y) IS NOT false [type=bool, outer=(4,10)]
  ├── scan xy
  │    └── columns: xy.y:7(int)
- └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
       └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]

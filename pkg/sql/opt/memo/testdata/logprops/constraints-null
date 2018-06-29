@@ -35,7 +35,7 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(1)=700]
- └── filters [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
       └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
            ├── variable: t.a [type=int, outer=(1)]
            └── null [type=unknown]
@@ -64,7 +64,7 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
- └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight), fd=()-->(2,3)]
       ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
       │    ├── variable: t.b [type=bool, outer=(2)]
       │    └── null [type=unknown]
@@ -158,10 +158,11 @@ SELECT * FROM xy WHERE x = y
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=111.111111]
+ ├── fd: (1)==(2), (2)==(1)
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            ├── variable: xy.x [type=int, outer=(1)]
            └── variable: xy.y [type=int, outer=(2)]

@@ -584,6 +584,7 @@ func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 			i = -1
 		}
 	}
+	cols.DifferenceWith(f.removed)
 	return cols
 }
 
