@@ -318,11 +318,12 @@ func (c *CustomFuncs) ConstructMergeJoins(
 		return nil
 	}
 
+	// We generate MergeJoin expressions based on interesting orderings from the
+	// left side. The CommuteJoin rule will ensure that we actually try both
+	// sides.
 	leftOrders := GetInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
 	leftOrders.RestrictToCols(opt.ColListToSet(leftEq))
-	rightOrders := GetInterestingOrderings(memo.MakeNormExprView(c.e.mem, right)).Copy()
-	rightOrders.RestrictToCols(opt.ColListToSet(rightEq))
-	if len(leftOrders) == 0 && len(rightOrders) == 0 {
+	if len(leftOrders) == 0 {
 		return nil
 	}
 
@@ -332,13 +333,13 @@ func (c *CustomFuncs) ConstructMergeJoins(
 		colToEq.Set(int(rightEq[i]), i)
 	}
 
-	tryOrder := func(o opt.Ordering) {
+	for _, o := range leftOrders {
 		if len(o) < n {
 			// TODO(radu): we have a partial ordering on the equality columns. We
 			// should augment it with the other columns (in arbitrary order) in the
 			// hope that we can get the full ordering cheaply using a "streaming"
 			// sort. This would not useful now since we don't support streaming sorts.
-			return
+			break
 		}
 		def := memo.MergeOnDef{JoinType: originalOp}
 		def.LeftEq.Columns = make([]props.OrderingColumnChoice, 0, n)
@@ -354,15 +355,6 @@ func (c *CustomFuncs) ConstructMergeJoins(
 		// Create a merge join expression in the same group.
 		mergeJoin := memo.MakeMergeJoinExpr(left, right, mergeOn)
 		c.e.exprs = append(c.e.exprs, memo.Expr(mergeJoin))
-	}
-
-	for _, o := range leftOrders {
-		tryOrder(o)
-	}
-	// TODO(radu): when we have a rule to commute joins, we should only look at
-	// the left-side orderings.
-	for _, o := range rightOrders {
-		tryOrder(o)
 	}
 
 	return c.e.exprs
