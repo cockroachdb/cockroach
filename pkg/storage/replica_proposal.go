@@ -463,7 +463,7 @@ func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachp
 		//
 		// TODO(tschottdorf): this error is not handled any more
 		// at this level.
-		log.Fatal(ctx, NewReplicaCorruptionError(err))
+		log.Fatal(ctx, roachpb.NewReplicaCorruptionError(err))
 	}
 }
 

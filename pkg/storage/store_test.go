@@ -41,9 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1266,7 +1268,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(
+	if _, err := stateloader.WriteInitialState(
 		context.Background(), store.ClusterSettings(), store.engine, enginepb.MVCCStats{},
 		*desc, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {
@@ -1792,11 +1794,11 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 }
 
 func setTxnAutoGC(to bool) func() {
-	orig := txnAutoGC
+	orig := batcheval.TxnAutoGC
 	f := func() {
-		txnAutoGC = orig
+		batcheval.TxnAutoGC = orig
 	}
-	txnAutoGC = to
+	batcheval.TxnAutoGC = to
 	return f
 }
 
@@ -2747,7 +2749,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := writeInitialState(
+	if _, err := stateloader.WriteInitialState(
 		ctx, s.ClusterSettings(), s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
 		roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {

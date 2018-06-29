@@ -104,12 +104,6 @@ const (
 // log gets truncated, the followers do not need non-preemptive snapshots.
 var defaultProposalQuota = raftLogMaxSize / 4
 
-// This flag controls whether Transaction entries are automatically gc'ed
-// upon EndTransaction if they only have local intents (which can be
-// resolved synchronously with EndTransaction). Certain tests become
-// simpler with this being turned off.
-var txnAutoGC = true
-
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
 	"set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)",
@@ -131,15 +125,6 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 		}
 		return nil
 	},
-)
-
-// raftInitialLog{Index,Term} are the starting points for the raft log. We
-// bootstrap the raft membership by synthesizing a snapshot as if there were
-// some discarded prefix to the log, so we must begin the log at an arbitrary
-// index greater than 1.
-const (
-	raftInitialLogIndex = 10
-	raftInitialLogTerm  = 5
 )
 
 type proposalRetryReason int
@@ -1576,6 +1561,87 @@ func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
 }
 
+// ClusterSettings returns the node's ClusterSettings.
+func (r *Replica) ClusterSettings() *cluster.Settings {
+	return r.store.cfg.Settings
+}
+
+// StoreID returns the Replica's StoreID.
+func (r *Replica) StoreID() roachpb.StoreID {
+	return r.store.StoreID()
+}
+
+// EvalKnobs returns the EvalContext's Knobs.
+func (r *Replica) EvalKnobs() batcheval.TestingKnobs {
+	return r.store.cfg.TestingKnobs.EvalKnobs
+}
+
+// Tracer returns the Replica's Tracer.
+func (r *Replica) Tracer() opentracing.Tracer {
+	return r.store.Tracer()
+}
+
+// Clock returns the hlc clock shared by this replica.
+func (r *Replica) Clock() *hlc.Clock {
+	return r.store.Clock()
+}
+
+// DB returns the Replica's client DB.
+func (r *Replica) DB() *client.DB {
+	return r.store.DB()
+}
+
+// Engine returns the Replica's underlying Engine. In most cases the
+// evaluation Batch should be used instead.
+func (r *Replica) Engine() engine.Engine {
+	return r.store.Engine()
+}
+
+// AbortSpan returns the Replica's AbortSpan.
+func (r *Replica) AbortSpan() *abortspan.AbortSpan {
+	// Despite its name, the AbortSpan doesn't hold on-disk data in
+	// memory. It just provides methods that take a Batch, so SpanSet
+	// declarations are enforced there.
+	return r.abortSpan
+}
+
+// GetLimiters returns the Replica's limiters.
+func (r *Replica) GetLimiters() *batcheval.Limiters {
+	return &r.store.limiters
+}
+
+// GetTxnWaitQueue returns the Replica's txnwait.Queue.
+func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
+	return r.txnWaitQueue
+}
+
+// GetTerm returns the term of the given index in the raft log.
+func (r *Replica) GetTerm(i uint64) (uint64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftTermRLocked(i)
+}
+
+// GetRangeID returns the Range ID.
+func (r *Replica) GetRangeID() roachpb.RangeID {
+	return r.RangeID
+}
+
+// GetGCThreshold returns the GC threshold.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
+// GC.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.TxnSpanGCThreshold
+}
+
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the Store handle the descriptor
 // update. Requires raftMu to be locked.
@@ -1677,36 +1743,13 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return containsKey(*r.Desc(), key)
-}
-
-func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
-	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
-		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
-	}
-	keyAddr, err := keys.Addr(key)
-	if err != nil {
-		return false
-	}
-	return desc.ContainsKey(keyAddr)
+	return storagebase.ContainsKey(*r.Desc(), key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
-	return containsKeyRange(*r.Desc(), start, end)
-}
-
-func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
-	startKeyAddr, err := keys.Addr(start)
-	if err != nil {
-		return false
-	}
-	endKeyAddr, err := keys.Addr(end)
-	if err != nil {
-		return false
-	}
-	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
+	return storagebase.ContainsKeyRange(*r.Desc(), start, end)
 }
 
 // GetLastReplicaGCTimestamp reads the timestamp at which the replica was
@@ -5334,7 +5377,8 @@ func checkIfTxnAborted(
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from AbortSpan")))
+		return roachpb.NewError(roachpb.NewReplicaCorruptionError(
+			errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
@@ -5390,7 +5434,7 @@ func (r *Replica) evaluateWriteBatch(
 			ctx, idKey, rec, &ms, strippedBa, spans, retryLocally,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(retryLocally && !isEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
+			(retryLocally && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
@@ -5409,7 +5453,7 @@ func (r *Replica) evaluateWriteBatch(
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
-				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
+				innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
 				if err != nil {
 					return batch, ms, br, res, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 				}
@@ -5504,16 +5548,16 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	if isEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
+	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
 		return false
 	}
-	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
+	if retry, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
 		return false
 	}
 	if ba.Txn != nil && ba.Txn.OrigTimestamp != ba.Txn.Timestamp {
 		// Transactions that have been pushed are never eligible for the
 		// 1PC path. For serializable transactions this is covered by
-		// isEndTransactionTriggeringRetryError, but even snapshot
+		// batcheval.IsEndTransactionTriggeringRetryError, but even snapshot
 		// transactions must go through the slow path when their
 		// transaction has been pushed. See comments on
 		// Transaction.orig_timestamp for the reasons why this is necessary
@@ -6059,12 +6103,6 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 		}
 	}
 	return nil
-}
-
-// NewReplicaCorruptionError creates a new error indicating a corrupt replica,
-// with the supplied list of errors given as history.
-func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
-	return &roachpb.ReplicaCorruptionError{ErrorMsg: err.Error()}
 }
 
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
