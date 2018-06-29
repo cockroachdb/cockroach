@@ -46,6 +46,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
   virtual DBStatus EnvDeleteFile(DBSlice path);
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir);
+  virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname);
 };
 
 }  // namespace cockroach

@@ -384,14 +384,14 @@ func addSSTablePreApply(
 			// If the fs supports it, make a hard-link for rocks to ingest. We cannot
 			// pass it the path in the sideload store as it deletes the passed path on
 			// success.
-			if linkErr := os.Link(path, ingestPath); linkErr == nil {
+			if linkErr := eng.LinkFile(path, ingestPath); linkErr == nil {
 				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath}, noModify)
 				if ingestErr == nil {
 					// Adding without modification succeeded, no copy necessary.
 					log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
 					return false
 				}
-				if rmErr := os.Remove(ingestPath); rmErr != nil {
+				if rmErr := eng.DeleteFile(ingestPath); rmErr != nil {
 					log.Fatalf(ctx, "failed to move ingest sst: %v", rmErr)
 				}
 				const seqNoMsg = "Global seqno is required, but disabled"
