@@ -26,7 +26,7 @@ import { AggregateStatistics, StatementsSortedTable, makeStatementsColumns } fro
 import * as protos from "src/js/protos";
 import "./statements.styl";
 
-type CollectedStatementStatistics$Properties = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
+type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
 
 interface StatementsPageProps {
@@ -203,7 +203,7 @@ export const selectApps = createSelector(
     let sawBlank = false;
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
-      (statement: CollectedStatementStatistics$Properties) => {
+      (statement: ICollectedStatementStatistics) => {
         if (statement.key.app) {
           apps[statement.key.app] = true;
         } else {

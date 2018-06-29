@@ -15,7 +15,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { Bytes } from "src/util/format";
-import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
+import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -29,7 +29,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
   "nodes/decommissioned_sort_setting", (s) => s.localSettings,
 );
 
-class NodeSortedTable extends SortedTable<NodeStatus$Properties> {}
+class NodeSortedTable extends SortedTable<INodeStatus> {}
 
 /**
  * NodeCategoryListProps are the properties shared by both LiveNodeList and
@@ -38,7 +38,7 @@ class NodeSortedTable extends SortedTable<NodeStatus$Properties> {}
 interface NodeCategoryListProps {
   sortSetting: SortSetting;
   setSort: typeof liveNodesSortSetting.set;
-  statuses: NodeStatus$Properties[];
+  statuses: INodeStatus[];
   nodesSummary: NodesSummary;
 }
 

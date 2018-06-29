@@ -4,7 +4,7 @@ import { createSelector } from "reselect";
 import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
 import { Pick } from "src/util/pick";
-import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
+import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
 /**
@@ -108,12 +108,12 @@ const nodeIDsSelector = createSelector(
 );
 
 /**
- * nodeStatusByIDSelector returns a map from NodeID to a current NodeStatus$Properties.
+ * nodeStatusByIDSelector returns a map from NodeID to a current INodeStatus.
  */
 const nodeStatusByIDSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses) => {
-    const statuses: {[s: string]: NodeStatus$Properties} = {};
+    const statuses: {[s: string]: INodeStatus} = {};
     _.each(nodeStatuses, (ns) => {
       statuses[ns.desc.node_id.toString()] = ns;
     });
@@ -132,7 +132,7 @@ const nodeSumsSelector = createSelector(
 );
 
 export function sumNodeStats(
-  nodeStatuses: NodeStatus$Properties[],
+  nodeStatuses: INodeStatus[],
   livenessStatusByNodeID: { [id: string]: LivenessStatus },
 ) {
   const result = {
@@ -201,7 +201,7 @@ export interface CapacityStats {
   available: number;
 }
 
-export function nodeCapacityStats(n: NodeStatus$Properties): CapacityStats {
+export function nodeCapacityStats(n: INodeStatus): CapacityStats {
   const used = n.metrics[MetricConstants.usedCapacity];
   const available = n.metrics[MetricConstants.availableCapacity];
   return {
@@ -211,7 +211,7 @@ export function nodeCapacityStats(n: NodeStatus$Properties): CapacityStats {
   };
 }
 
-export function getDisplayName(node: NodeStatus$Properties, livenessStatus = LivenessStatus.LIVE) {
+export function getDisplayName(node: INodeStatus, livenessStatus = LivenessStatus.LIVE) {
   const decommissionedString = livenessStatus === LivenessStatus.DECOMMISSIONED
     ? "[decommissioned] "
     : "";

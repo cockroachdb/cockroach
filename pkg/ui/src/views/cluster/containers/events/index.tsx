@@ -18,7 +18,7 @@ import { getEventDescription } from "src/util/events";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 
-type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Properties;
+type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
 
 // Number of events to show in the sidebar.
 const EVENT_BOX_NUM_EVENTS = 10;

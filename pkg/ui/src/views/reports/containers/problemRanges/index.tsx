@@ -16,7 +16,7 @@ import Loading from "src/views/shared/components/loading";
 
 import spinner from "assets/spinner.gif";
 
-type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.NodeProblems$Properties;
+type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
 
 interface ProblemRangesOwnProps {
   problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;

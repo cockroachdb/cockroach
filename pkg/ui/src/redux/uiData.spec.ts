@@ -427,7 +427,7 @@ describe("UIData reducer", function() {
           assert.equal(state[uiKey1].status, uidata.UIDataStatus.LOADING);
           assert.equal(state[uiKey2].status, uidata.UIDataStatus.LOADING);
 
-          const response: protos.cockroach.server.serverpb.GetUIDataResponse$Properties = {
+          const response: protos.cockroach.server.serverpb.IGetUIDataResponse = {
             key_values: {},
           };
           const setValue = function(key: string, obj: Object) {

@@ -62,7 +62,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
   }
 
   renderLogInfo(
-    info: protos.cockroach.server.serverpb.RangeLogResponse.PrettyInfo$Properties,
+    info: protos.cockroach.server.serverpb.RangeLogResponse.IPrettyInfo,
   ) {
     return (
       <ul className="log-entries-list">

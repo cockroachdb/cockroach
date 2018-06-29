@@ -11,7 +11,7 @@ export const dateFormat = "Y-MM-DD HH:mm:ss";
 // it uses passed in store, node and replica IDs instead.
 export function PrintReplicaID(
   rangeID: Long,
-  rep: protos.cockroach.roachpb.ReplicaDescriptor$Properties,
+  rep: protos.cockroach.roachpb.IReplicaDescriptor,
   nodeID?: number,
   storeID?: number,
   replicaID?: Long,
@@ -32,14 +32,14 @@ export function PrintTime(time: moment.Moment) {
 }
 
 export function PrintTimestamp(
-  timestamp: protos.cockroach.util.hlc.Timestamp$Properties |
-    protos.google.protobuf.Timestamp$Properties,
+  timestamp: protos.cockroach.util.hlc.ITimestamp |
+    protos.google.protobuf.ITimestamp,
 ) {
   let time: moment.Moment = null;
   if (_.has(timestamp, "wall_time")) {
-    time = LongToMoment((timestamp as protos.cockroach.util.hlc.Timestamp$Properties).wall_time);
+    time = LongToMoment((timestamp as protos.cockroach.util.hlc.ITimestamp).wall_time);
   } else if (_.has(timestamp, "seconds") || _.has(timestamp, "nanos")) {
-    time = TimestampToMoment((timestamp as protos.google.protobuf.Timestamp$Properties));
+    time = TimestampToMoment((timestamp as protos.google.protobuf.ITimestamp));
   } else {
     return "";
   }
@@ -71,8 +71,8 @@ export function PrintDuration(duration: moment.Duration) {
 }
 
 export function PrintTimestampDelta(
-  newTimestamp: protos.cockroach.util.hlc.Timestamp$Properties,
-  oldTimestamp: protos.cockroach.util.hlc.Timestamp$Properties,
+  newTimestamp: protos.cockroach.util.hlc.ITimestamp,
+  oldTimestamp: protos.cockroach.util.hlc.ITimestamp,
 ) {
   if (_.isNil(oldTimestamp) || _.isNil(newTimestamp)) {
     return "";
