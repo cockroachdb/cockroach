@@ -94,19 +94,16 @@ func makeFKHelper(
 		batchToNRIdx: make([]int, 0),
 	}
 
-
 	for id, tableLookup := range otherTables {
 		colInfo, err := makeColTypeInfo(tableLookup.Table, colMap)
-			if err != nil {
-				return FKHelper{}, err
-			}
+		if err != nil {
+			return FKHelper{}, err
+		}
 
 		writeTableInfo := writeTableInfo{
-			table : tableLookup.Table,
-			oldRows :NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
-			newRows:NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
-
-
+			table:   tableLookup.Table,
+			oldRows: NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
+			newRows: NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
 		}
 
 		fkHelper.oldRows = NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns))
