@@ -80,11 +80,10 @@ ALTER TABLE abc INJECT STATISTICS '[
 opt
 SELECT * FROM abc WHERE c = 1
 ----
-lookup-join abc
+index-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- ├── key columns: [1]
  ├── stats: [rows=1.42857143, distinct(3)=1]
- ├── cost: 7.27142857
+ ├── cost: 7.3
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,3)
  └── scan abc@c_idx
