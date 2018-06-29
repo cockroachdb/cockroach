@@ -728,7 +728,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if _, _, _, pErr := repl1.propose(
+	if _, _, pErr := repl1.propose(
 		context.Background(), lease, roachpb.BatchRequest{}, nil, &allSpans,
 	); !pErr.Equal(expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, pErr)
