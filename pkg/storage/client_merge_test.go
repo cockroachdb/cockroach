@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -416,6 +417,169 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
+}
+
+func TestStoreRangeMergeInFlightTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store := mtc.stores[0]
+
+	// Verify that a transaction can span a merge.
+	t.Run("valid", func(t *testing.T) {
+		_, bDesc, err := createSplitRanges(store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mtc.replicateRange(bDesc.RangeID, 1)
+		mtc.transferLease(ctx, bDesc.RangeID, 0, 1)
+		mtc.unreplicateRange(bDesc.RangeID, 0)
+
+		lhsKey, rhsKey := roachpb.Key("aa"), roachpb.Key("cc")
+
+		txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		// Put the key on the RHS side first so the transaction record will need to
+		// be copied to the LHS range during the merge.
+		if err := txn.Put(ctx, rhsKey, t.Name()); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.Put(ctx, lhsKey, t.Name()); err != nil {
+			t.Fatal(err)
+		}
+		args := adminMergeArgs(roachpb.KeyMin)
+		if _, err = client.SendWrapped(ctx, store.TestSender(), args); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, key := range []roachpb.Key{lhsKey, rhsKey} {
+			kv, err := store.DB().Get(ctx, key)
+			if err != nil {
+				t.Fatal(err)
+			} else if string(kv.ValueBytes()) != t.Name() {
+				t.Fatalf("actual value %q did not match expected value %q", kv.ValueBytes(), t.Name())
+			}
+		}
+	})
+
+	// Verify that a transaction's abort span records are preserved when the
+	// transaction spans a merge.
+	t.Run("abort-span", func(t *testing.T) {
+		_, bDesc, err := createSplitRanges(store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mtc.replicateRange(bDesc.RangeID, 1)
+		mtc.transferLease(ctx, bDesc.RangeID, 0, 1)
+		mtc.unreplicateRange(bDesc.RangeID, 0)
+
+		rhsKey := roachpb.Key("cc")
+
+		// Create a transaction that will be aborted before the merge but won't
+		// realize until after the merge.
+		txn1 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		// Put the key on the RHS side so the transaction record and abort span
+		// will need to be copied to the left hand side during the merge.
+		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create and commit a txn that aborts txn1.
+		txn2 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn2.InternalSetPriority(roachpb.MaxTxnPriority)
+		if err := txn2.Put(ctx, rhsKey, "muhahahah"); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn2.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Complete the merge.
+		args := adminMergeArgs(roachpb.KeyMin)
+		if _, err = client.SendWrapped(ctx, store.TestSender(), args); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := txn1.Get(ctx, rhsKey); !testutils.IsError(err, "txn aborted") {
+			t.Fatalf("expected 'txn aborted' error but got %v", err)
+		}
+	})
+
+	// Verify that the transaction wait queue on the right-hand range in a merge
+	// is cleared if the merge commits.
+	t.Run("wait-queue", func(t *testing.T) {
+		_, bDesc, err := createSplitRanges(store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mtc.replicateRange(bDesc.RangeID, 1)
+		mtc.transferLease(ctx, bDesc.RangeID, 0, 1)
+		mtc.unreplicateRange(bDesc.RangeID, 0)
+
+		// Set a timeout, and set the the transaction liveness threshold to
+		// something much larger than our timeout. We want transactions to get stuck
+		// in the transaction wait queue and trigger the timeout if we forget to
+		// clear it.
+		ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+		defer cancel()
+		defer func(old time.Duration) { txnwait.TxnLivenessThreshold = old }(txnwait.TxnLivenessThreshold)
+		txnwait.TxnLivenessThreshold = testutils.DefaultSucceedsSoonDuration * 2
+
+		rhsKey := roachpb.Key("cc")
+
+		// Create a transaction that won't complete until after the merge.
+		txn1 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		// Put the key on the RHS side so the transaction record and abort span
+		// will need to be copied to the left hand side during the merge.
+		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create a txn that will conflict with txn1.
+		txn2 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn2ErrCh := make(chan error)
+		go func() {
+			txn2ErrCh <- txn2.Put(ctx, rhsKey, "muhahahah")
+		}()
+
+		// Complete the merge.
+		time.Sleep(50 * time.Millisecond)
+		args := adminMergeArgs(roachpb.KeyMin)
+		if _, err = client.SendWrapped(ctx, store.TestSender(), args); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txn1.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		kv, pErr := store.DB().Get(ctx, rhsKey)
+		if pErr != nil {
+			t.Fatal(pErr)
+		} else if string(kv.ValueBytes()) != t.Name() {
+			t.Fatalf("actual value %q did not match expected value %q", kv.ValueBytes(), t.Name())
+		}
+
+		// Now that txn1 has commited, txn2's put operation should complete.
+		select {
+		case err := <-txn2ErrCh:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for txn2 to complete put")
+		}
+
+		if err := txn2.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {

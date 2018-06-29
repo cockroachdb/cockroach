@@ -2719,7 +2719,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 				log.Fatalf(ctx, "unexpected error when removing merged replica: %s", err)
 			}
 
-			// TODO(benesch): drain the RHS txn wait queue.
+			r.txnWaitQueue.Clear(true /* disable */)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
