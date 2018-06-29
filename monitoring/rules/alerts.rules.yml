@@ -3,7 +3,7 @@ groups:
   rules:
   # Alert for any instance that is unreachable for >5 minutes.
   - alert: InstanceDown
-    expr: up{job="cockroach"} == 0
+    expr: up{job="cockroachdb"} == 0
     for: 5m
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
@@ -11,7 +11,7 @@ groups:
       summary: Instance {{ $labels.instance }} down
   # Alert for any instance that is unreachable for >15 minutes.
   - alert: InstanceDead
-    expr: up{job="cockroach"} == 0
+    expr: up{job="cockroachdb"} == 0
     for: 15m
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
@@ -19,7 +19,7 @@ groups:
       summary: Instance {{ $labels.instance }} dead
   # Alert on instance restarts.
   - alert: InstanceRestart
-    expr: resets(sys_uptime{job="cockroach"}[10m]) > 0 and resets(sys_uptime{job="cockroach"}[10m])
+    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 0 and resets(sys_uptime{job="cockroachdb"}[10m])
       < 5
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
@@ -27,7 +27,7 @@ groups:
       summary: Instance {{ $labels.instance }} restarted
   # Alert on flapping instances (frequent restarts).
   - alert: InstanceFlapping
-    expr: resets(sys_uptime{job="cockroach"}[10m]) > 5
+    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 5
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
         {{ $value }} time(s) in 10m'
@@ -35,8 +35,8 @@ groups:
   # Alert on mismatching "up" (from prometheus) vs "liveness" (from cockroach). We do this at the node level.
   # This compares per-instance "liveness_livenodes" against the per-cluster count(up == 1).
   - alert: LivenessMismatch
-    expr: (liveness_livenodes{job="cockroach"}) != ignoring(instance) group_left()
-      (count by(cluster, job) (up{job="cockroach"} == 1))
+    expr: (liveness_livenodes{job="cockroachdb"}) != ignoring(instance) group_left()
+      (count by(cluster, job) (up{job="cockroachdb"} == 1))
     for: 5m
     labels:
       severity: testing
@@ -47,7 +47,7 @@ groups:
   # This alert is intentionally loose (30 minutes) to allow for rolling upgrades.
   # This may need to be adjusted for large clusters.
   - alert: VersionMismatch
-    expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroach"}))
+    expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroachdb"}))
       > 1
     for: 30m
     annotations:
@@ -55,24 +55,24 @@ groups:
       summary: Binary version mismatch on {{ $labels.cluster }}
   # Available capacity alerts.
   - alert: StoreDiskLow
-    expr: capacity_available:ratio{job="cockroach"} < 0.15
+    expr: capacity_available:ratio{job="cockroachdb"} < 0.15
     annotations:
       summary: Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value
         }} available disk fraction
   - alert: ClusterDiskLow
-    expr: cluster:capacity_available:ratio{job="cockroach"} < 0.2
+    expr: cluster:capacity_available:ratio{job="cockroachdb"} < 0.2
     annotations:
       summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
   # Zero SQL qps.
   - alert: ZeroSQLQps
-    expr: sql_conns{job="cockroach"} > 0 and rate(sql_query_count{job="cockroach"}[5m])
+    expr: sql_conns{job="cockroachdb"} > 0 and rate(sql_query_count{job="cockroachdb"}[5m])
       == 0
     for: 10m
     annotations:
       summary: Instance {{ $labels.instance }} has SQL connections but no queries
   # Unavailable ranges.
   - alert: UnavailableRanges
-    expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroach"})) > 0
+    expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroachdb"})) > 0
     for: 10m
     labels:
       severity: testing
@@ -80,7 +80,7 @@ groups:
       summary: Instance {{ $labels.instance }} has {{ $value }} unavailable ranges
   # Leader-not-leaseholder ranges.
   - alert: NoLeaseRanges
-    expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroach"}))
+    expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroachdb"}))
       > 0
     for: 10m
     labels:
@@ -89,14 +89,14 @@ groups:
       summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
   # Certificate expiration. Alerts are per node.
   - alert: CACertificateExpiresSoon
-    expr: (security_certificate_expiration_ca{job="cockroach"} > 0) and (security_certificate_expiration_ca{job="cockroach"}
+    expr: (security_certificate_expiration_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ca{job="cockroachdb"}
       - time()) < 86400 * 366
     labels:
       frequency: daily
     annotations:
       summary: CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: NodeCertificateExpiresSoon
-    expr: (security_certificate_expiration_node{job="cockroach"} > 0) and (security_certificate_expiration_node{job="cockroach"}
+    expr: (security_certificate_expiration_node{job="cockroachdb"} > 0) and (security_certificate_expiration_node{job="cockroachdb"}
       - time()) < 86400 * 183
     labels:
       frequency: daily
@@ -105,7 +105,7 @@ groups:
         months
   # Getting close to open file descriptor limit.
   - alert: HighOpenFDCount
-    expr: sys_fd_open{job="cockroach"} / sys_fd_softlimit{job="cockroach"} > 0.8
+    expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} > 0.8
     for: 10m
     labels:
       severity: testing

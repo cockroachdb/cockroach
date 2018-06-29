@@ -1,0 +1,6 @@
+# This is a dummy rule that always triggers an alert
+groups:
+- name: rules/dummy.rules
+  rules:
+  - alert: TestAlertManager
+    expr: vector(1)
