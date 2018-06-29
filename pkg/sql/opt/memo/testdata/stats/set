@@ -266,18 +266,18 @@ intersect
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2, distinct(4,5,7)=2]
       ├── key: (7)
-      ├── fd: ()-->(4), (7)-->(4,5)
+      ├── fd: (7)-->(4,5), ()-->(4)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1, distinct(4,5,7)=2]
            ├── key: (7)
-           ├── fd: ()-->(4), (7)-->(4-6)
+           ├── fd: (7)-->(4-6), ()-->(4)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
-           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      ├── variable: b.x [type=int, outer=(4)]
                      └── const: 1 [type=int]
@@ -304,18 +304,18 @@ intersect-all
       ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2]
       ├── key: (7)
-      ├── fd: ()-->(4), (7)-->(4,5)
+      ├── fd: (7)-->(4,5), ()-->(4)
       └── select
            ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1]
            ├── key: (7)
-           ├── fd: ()-->(4), (7)-->(4-6)
+           ├── fd: (7)-->(4-6), ()-->(4)
            ├── scan b
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000]
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
-           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                      ├── variable: b.x [type=int, outer=(4)]
                      └── const: 1 [type=int]
@@ -428,13 +428,13 @@ except
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1, distinct(4,5)=2]
                 ├── key: (7)
-                ├── fd: ()-->(4), (7)-->(4-6)
+                ├── fd: (7)-->(4-6), ()-->(4)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
-                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
                      └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                           ├── variable: b.x [type=int, outer=(4)]
                           └── const: 1 [type=int]
@@ -469,13 +469,13 @@ except-all
                 ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1]
                 ├── key: (7)
-                ├── fd: ()-->(4), (7)-->(4-6)
+                ├── fd: (7)-->(4-6), ()-->(4)
                 ├── scan b
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000]
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
-                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
                      └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
                           ├── variable: b.x [type=int, outer=(4)]
                           └── const: 1 [type=int]
@@ -585,7 +585,7 @@ select
  │              ├── stats: [rows=10000, distinct(5)=100]
  │              ├── key: (7)
  │              └── fd: (7)-->(4-6)
- └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
            ├── variable: a.y [type=int, outer=(2)]
            └── const: 5 [type=int]

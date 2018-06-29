@@ -82,6 +82,88 @@
     (Filters (ExtractUnboundConditions $list $input))
 )
 
+# SimplifySelectLeftJoin reduces a LeftJoin operator to an InnerJoin operator
+# (or a FullJoin to a RightJoin) when there is a null-rejecting filter on any
+# column from the right side. The effect of the null-rejecting filter is that
+# output rows with all NULL values on the right side created by the left (or
+# full) join are eliminated, making the join equivalent to an inner (or right)
+# join. For example:
+#
+#   SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x WHERE b.y < 5
+#
+# can be reduced to:
+#
+#   SELECT * FROM a INNER JOIN b ON a.x = b.x WHERE b.y < 5
+#
+# since b.y < 5 is a null-rejecting filter on the right side.
+[SimplifySelectLeftJoin, Normalize]
+(Select
+    $input:(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters) & (HasNullRejectingFilter $filter $right)
+)
+=>
+(Select
+    (ConstructNonLeftJoin
+        (OpName $input)
+        $left
+        $right
+        $on
+    )
+    $filter
+)
+
+# SimplifySelectRightJoin is symmetric with SimplifySelectLeftJoin. It reduces
+# a RightJoin operator to an InnerJoin operator (or a FullJoin to a LeftJoin)
+# when there is a null-rejecting filter on any column from the left side.
+[SimplifySelectRightJoin, Normalize]
+(Select
+    $input:(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters) & (HasNullRejectingFilter $filter $left)
+)
+=>
+(Select
+    (ConstructNonRightJoin
+        (OpName $input)
+        $left
+        $right
+        $on
+    )
+    $filter
+)
+
+# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
+# AND'ing the filter conditions of each and creating a new InnerJoin with that
+# On condition. This is only safe to do with InnerJoin in the general case
+# where the conditions could filter either left or right rows. The special case
+# where a condition filters only one or the other is already taken care of by
+# the PushSelectIntoJoin rules.
+# NOTE: Keep this rule ordered before the PushSelectIntoJoin rules to avoid
+#       missing out on the potential for new filter inference based on
+#       equivalent columns.
+[MergeSelectInnerJoin, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:*
+)
+=>
+((OpName $input)
+    $left
+    $right
+    (ConcatFilters $on $filter)
+)
+
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
 # an input Join. This is possible in the case of InnerJoin, LeftJoin, SemiJoin,
 # and AntiJoin, as long as the condition has no dependencies on the right side
@@ -142,31 +224,6 @@
         $on
     )
     (Filters (ExtractUnboundConditions $list $right))
-)
-
-# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
-# AND'ing the filter conditions of each and creating a new InnerJoin with that
-# On condition. This is only safe to do with InnerJoin in the general case
-# where the conditions could filter either left or right rows. The special case
-# where a condition filters only one or the other is already taken care of by
-# the PushSelectIntoJoin rules.
-# NOTE: Keep this rule ordered after the PushSelectIntoJoin rules, for
-#       performance reasons. It's better to push down below the join in a
-#       single step, when possible.
-[MergeSelectInnerJoin, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply
-        $left:*
-        $right:*
-        $on:*
-    )
-    $filter:*
-)
-=>
-((OpName $input)
-    $left
-    $right
-    (ConcatFilters $on $filter)
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case

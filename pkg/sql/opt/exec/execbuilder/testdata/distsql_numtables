@@ -77,8 +77,7 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToSt
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc9q20AQh-99ijCnBLZYs5LiWFDQsekhKaG3ooNiTW2BrVV3V9AQ_O5FVsGV7M5KXayj_nw7M98PZt-hUgU95XsykHwHBAESBIQgIAIBMWQCaq3WZIzS7S8d8Fj8giQQUFZ1Y9vXmYC10gTJO9jS7ggS-Ja_7uiF8oL0IgABBdm83B3L1Lrc5_otrZq9VeZnk2uC7CBANfbPeadjXt9utrnZ9g9IJWSHTICx-YYgwYP4v76Q68vqiU1hryn5z6ZO5zSV0gVpKnonZS3p-uXCZJ9zs_2iyor04r7f2o5-2NtU3n3S5WZrb1O8AwHPjU1uUhRpNJjzNEPoMcOFBp_UR1UvEIfTXqwd9Wrj-FDlbKHivKEurxGqHC82nE2snFfswzXEhuPFRrOJDecVu7qG2Gi82Hg2sdG8YjG49oK_UP-FTK0qQ6PWd9BOQMWGOiNGNXpNX7VaH8t0j89H7rhHCzK2-yq7h8eq-9Q2OB6OfeClD7zygRF5GicYk9Pg2Ade-sArH3hg7IyWQzr4mw553SELY993MKQjn7B42BEWDzvC4mFHWDzsCiv2CeveRzcPO3TzsEM3Dzt087BL99JH94OPbh526OZhh24edujmYZfulY9unHJZnu_QKbflVNq1_Kfcl1Npl3M8uz1Y6dnhw-8AAAD__3ZSr0E=
 
-# TODO(radu): this should be a merge join, and we should be pushing the filter
-# to both sides.
+# TODO(radu): this should be a merge join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
@@ -97,11 +96,12 @@ render          ·               ·                    (x, str)     ·
       └── scan  ·               ·                    (y, str)     +y
 ·               table           numtostr@primary     ·            ·
 ·               spans           ALL                  ·            ·
+·               filter          (y % 2) = 0          ·            ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lVFr2zAQx9_3KcTBoKUasWSnaQQBPw0yWDpK34Yf3PiWGBIrk2RYKfnuw_FGZieT7Ar0Fsf6-e5-f9C9QSULXOV71CC-AwMKHCjEQCEBClPIKByUXKPWUjVHWmBZ_AIRUSirQ22avzMKa6kQxBuY0uwQBDznLzt8wrxANYmAQoEmL3enMgdV7nP1mlb13kj9s84VAoXP5c6gEuQmZeQj4UKI5er5lixI1P4ECo-1ESRlkB0pyNr8KX6u-fJKtrnedqudzmcUtMk3CIId6fuGYLYhjPJqiv-3qfN36kqqAhUWnS9lDfn3yLUDkLK7tlZ_uK-oNvhFlhWqyX2X2eEPc5Oyu9uFKjfb9mfjf0VSRhYk5ecwaBr3Rj-PFXuMdaXhlfwkDxPG-gKu1k46tdnwnHmwnFn4nGcBcubDXcfBXPPwrh8CuI6Hu06CuY7Du54HcJ0Mdz0N5joJ75pFgZfFlX6eUB9kpXHQKoiaibDYYCtJy1qt8ZuS61OZ9vHxxJ3u5AK1ad_y9mFZta-aBofDUx945gPPfWDG7DQbYYyPg6c-8MwHnvvAPWMXNO_T0b90bNcdW2HW9R316cQnLDvsCMsOO8Kyw46w7LArrKlPWPc-uu2wQ7cddui2ww7ddtile-aj-8FHtx126LbDDt122KHbDrt0z310szHL8vIOHbMtx9Kuy3_MvhxLu5yzi-1hlZ4dP_wOAAD__ylgyo0=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlUFr2zAUx-_7FOLBoKUasWSnaQQBnwYZLB2lt-GDG78lhsTKJBlWSr77sL2R2ckkuwKTWxzr56f3-wu9Nyhkhqt0jxrEd2BAgQOFEChEQGEKCYWDkmvUWqpqSQMss18gAgp5cShN9XdCYS0VgngDk5sdgoDn9GWHT5hmqCYBUMjQpPmuLnNQ-T5Vr3FR7o3UP8tUIVD4nO8MKkFuYkY-Ei6EWK6eb8mCBM1PoPBYGkFiBsmRgizNn-Knmi-vZJvqbbtavT6hoE26QRDsSN_XBLM1YVSfDnz2zf-779N3ykKqDBVmrS8lFfl3yaUFELO7pla3_6-oNvhF5gWqyX2b2eEPcxOzu9uFyjfb5mcV0YrEjCxIzE950TjstH5qK_Ro68KGV_KTPEwY6wq4WDtq1Wb9jwK_pqPAxj8KsxGOAu8fR3hNcfDx43gYIY6wfxzRNcURjh_HfIQ4ov5xTK8pjmj8OFgw8uC6sJ8n1AdZaOw1loKqI8w22EjSslRr_Kbkui7TPD7WXH35Z6hN85Y3D8uieVVtsD889YFnPvDcB2bMTrMBxvgweOoDz3zguQ_cMXZG8y4d_EuHdt2hFWZt30GXjnzCssOOsOywIyw77AjLDrvCmvqEde-j2w47dNthh2477NBth126Zz66H3x022GHbjvs0G2HHbrtsEv33Ec3GzIsz-_QIdNyKO26_IfMy6G0yzk7mx5W6cnxw-8AAAD__1z29JU=
 
 #
 # -- Aggregation tests --

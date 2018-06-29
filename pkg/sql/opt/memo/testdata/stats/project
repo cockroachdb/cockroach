@@ -113,7 +113,7 @@ select
  │              ├── variable: a.s [type=string, outer=(3)]
  │              └── cast: STRING [type=string, outer=(2)]
  │                   └── variable: a.y [type=int, outer=(2)]
- └── filters [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
       └── eq [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
            ├── variable: concat [type=string, outer=(5)]
            └── const: 'foo' [type=string]
