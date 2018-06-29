@@ -687,22 +687,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-	var err error
-	optMode := ex.sessionData.OptimizerMode
-	// TODO(radu): for now, the experimental force lookup join flag does not work
-	// with the optimizer. Turn the optimizer off for the query so the flag can
-	// still function.
-	if optMode != sessiondata.OptimizerAlways && ex.sessionData.LookupJoinEnabled {
-		optMode = sessiondata.OptimizerOff
-	}
-	if optMode != sessiondata.OptimizerOff {
-		err = planner.makeOptimizerPlan(ctx, stmt)
-		if canFallbackFromOpt(err, optMode, stmt) {
-			optMode = sessiondata.OptimizerOff
-		}
-	}
 
-	if optMode == sessiondata.OptimizerOff {
+	optimizerPlanned, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
+	if !optimizerPlanned && err == nil {
+		// Fallback if the optimizer was not enabled or used.
 		err = planner.makePlan(ctx, stmt)
 	}
 
@@ -727,7 +715,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	useDistSQL := false
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
-	if optMode != sessiondata.OptimizerLocal {
+	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
 		ok, err := planner.prepareForDistSQLSupportCheck(
 			ctx, ex.sessionData.DistSQLMode == sessiondata.DistSQLAlways,
 		)

@@ -227,9 +227,7 @@ var varGen = map[string]sessionVar{
 				return err
 			}
 			switch strings.ToUpper(s) {
-			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`:
-				m.SetDefaultIsolationLevel(enginepb.SNAPSHOT)
-			case `REPEATABLE READ`, `SERIALIZABLE`:
+			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `SERIALIZABLE`:
 				m.SetDefaultIsolationLevel(enginepb.SERIALIZABLE)
 			default:
 				return fmt.Errorf("set default_transaction_isolation: unknown isolation level: %q", s)
