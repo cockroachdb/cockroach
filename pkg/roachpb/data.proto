@@ -47,7 +47,10 @@ enum ValueType {
   // storage for various types. The DELIMITED_foo entries each represent a foo
   // variant that self-delimits length.
   UNKNOWN = 0;
-  NULL = 7;
+  // Protobuf 3.6 stopped rewriting NULL as NULL_, causing issues for C code.
+  // Since this is not currently used, making it reserved would be better,
+  // but protobufjs has trouble with reserved enum values.
+  NULL_ = 7;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;
