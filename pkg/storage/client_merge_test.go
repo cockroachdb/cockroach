@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -190,6 +191,22 @@ func mergeWithData(t *testing.T, colocate bool) {
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
+
+	// Maybe inject some retryable errors when the merge transaction commits.
+	rng, _ := randutil.NewPseudoRand()
+	tries := randutil.RandIntInRange(rng, 0, 3)
+	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if tries > 0 {
+			for _, req := range ba.Requests {
+				if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+					tries--
+					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+				}
+			}
+		}
+		return nil
+	}
+
 	mtc := &multiTestContext{storeConfig: &sc}
 
 	var store1, store2 *storage.Store
@@ -333,6 +350,10 @@ func mergeWithData(t *testing.T, colocate bool) {
 		err, `r2 was not found`,
 	) {
 		t.Fatalf("expected get on rhs to fail after merge, but got err=%v", err)
+	}
+
+	if tries != 0 {
+		t.Fatalf("%d tries remaining (expected zero)", tries)
 	}
 }
 
