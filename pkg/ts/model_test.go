@@ -244,16 +244,7 @@ func TestTimeSeriesRollupModelTest(t *testing.T) {
 		}
 	}
 
-	for _, metric := range modelTestMetricNames {
-		// Roll-up data points before the anchor time.
-		tm.rollup(
-			modelTestAnchorTime+resolution10sDefaultPruneThreshold.Nanoseconds(),
-			timeSeriesResolutionInfo{
-				Name:       metric,
-				Resolution: Resolution10s,
-			},
-		)
-	}
+	tm.maintain(modelTestAnchorTime + resolution10sDefaultRollupThreshold.Nanoseconds())
 
 	tm.assertModelCorrect()
 	{

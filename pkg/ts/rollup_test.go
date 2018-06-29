@@ -138,6 +138,10 @@ func TestComputeRollupFromData(t *testing.T) {
 				Name:       "test.metric",
 				Resolution: resolution1ns,
 			})
+			tm.prune(math.MaxInt64, timeSeriesResolutionInfo{
+				Name:       "test.metric",
+				Resolution: resolution1ns,
+			})
 
 			var modelActual []roachpb.InternalTimeSeriesData
 			layout := tm.getModelDiskLayout()
@@ -178,7 +182,15 @@ func TestRollupBasic(t *testing.T) {
 	tm.assertKeyCount(150)
 	tm.assertModelCorrect()
 
-	tm.rollup(250+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+	now := 250 + resolution1nsDefaultRollupThreshold.Nanoseconds()
+	tm.rollup(now, timeSeriesResolutionInfo{
+		Name:       "test.metric",
+		Resolution: resolution1ns,
+	})
+	tm.assertKeyCount(152)
+	tm.assertModelCorrect()
+
+	tm.prune(now, timeSeriesResolutionInfo{
 		Name:       "test.metric",
 		Resolution: resolution1ns,
 	})
@@ -186,7 +198,9 @@ func TestRollupBasic(t *testing.T) {
 	tm.assertModelCorrect()
 
 	// Specialty test - rollup only the real series, not the model, and ensure
-	// that the query remains the same.
+	// that the query remains the same.  This ensures that the same result is
+	// returned from rolled-up data as is returned from data downsampled during
+	// a query.
 	memOpts := QueryMemoryOptions{
 		// Large budget, but not maximum to avoid overflows.
 		BudgetBytes:             math.MaxInt64,
@@ -203,10 +217,27 @@ func TestRollupBasic(t *testing.T) {
 			},
 		},
 		hlc.Timestamp{
-			WallTime: 500 + resolution1nsDefaultPruneThreshold.Nanoseconds(),
+			WallTime: 500 + resolution1nsDefaultRollupThreshold.Nanoseconds(),
 			Logical:  0,
 		},
 		MakeQueryMemoryContext(tm.workerMemMonitor, tm.resultMemMonitor, memOpts),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tm.DB.pruneTimeSeries(
+		context.TODO(),
+		tm.DB.db,
+		[]timeSeriesResolutionInfo{
+			{
+				Name:       "test.othermetric",
+				Resolution: resolution1ns,
+			},
+		},
+		hlc.Timestamp{
+			WallTime: 500 + resolution1nsDefaultRollupThreshold.Nanoseconds(),
+			Logical:  0,
+		},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +288,11 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		EstimatedSources: 1, // Not needed for rollups
 		Columnar:         tm.DB.WriteColumnar(),
 	})
-	tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+	tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+		Name:       "test.othermetric",
+		Resolution: resolution1ns,
+	})
+	tm.prune(500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 		Name:       "test.othermetric",
 		Resolution: resolution1ns,
 	})
@@ -296,7 +331,11 @@ func TestRollupMemoryConstraint(t *testing.T) {
 			EstimatedSources: 1, // Not needed for rollups
 			Columnar:         tm.DB.WriteColumnar(),
 		})
-		tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultPruneThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+		tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
+			Name:       seriesName,
+			Resolution: resolution1ns,
+		})
+		tm.prune(500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 			Name:       seriesName,
 			Resolution: resolution1ns,
 		})
