@@ -12,10 +12,7 @@ tc_start_block "Prepare environment for acceptance tests"
 # that it exists before running the test.
 export TMPDIR=$PWD/artifacts/acceptance
 mkdir -p "$TMPDIR"
-type=release-$(go env GOOS)
-if [[ "$type" = *-linux ]]; then
-  type+=-gnu
-fi
+type=$(go env GOOS)
 tc_end_block "Prepare environment for acceptance tests"
 
 tc_start_block "Compile CockroachDB"
@@ -24,11 +21,11 @@ run ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach  # For the tests that run w
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile acceptance tests"
-run build/builder.sh make -Otarget TYPE="$type" testbuild TAGS=acceptance PKG=./pkg/acceptance
+run build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/acceptance
 tc_end_block "Compile acceptance tests"
 
 tc_start_block "Compile acceptanceccl tests"
-run build/builder.sh make -Otarget TYPE="$type" testbuild TAGS=acceptance PKG=./pkg/ccl/acceptanceccl
+run build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/ccl/acceptanceccl
 tc_end_block "Compile acceptanceccl tests"
 
 tc_start_block "Run acceptance tests"
