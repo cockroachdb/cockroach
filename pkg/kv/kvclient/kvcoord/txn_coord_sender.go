@@ -136,7 +136,8 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [6]txnInterceptor
+		arr [7]txnInterceptor
+		txnExistenceCache
 		txnHeartbeater
 		txnSeqNumAllocator
 		txnPipeliner
@@ -218,6 +219,7 @@ func newRootTxnCoordSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
+	tcs.interceptorAlloc.txnExistenceCache = makeTxnExistenceCache(tcf.st)
 	tcs.interceptorAlloc.txnHeartbeater.init(
 		tcf.AmbientContext,
 		tcs.stopper,
@@ -243,6 +245,8 @@ func newRootTxnCoordSender(
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.
 	tcs.interceptorAlloc.arr = [...]txnInterceptor{
+		// TODO(nvanbenschoten): justify this order.
+		&tcs.interceptorAlloc.txnExistenceCache,
 		&tcs.interceptorAlloc.txnHeartbeater,
 		// Various interceptors below rely on sequence number allocation,
 		// so the sequence number allocator is near the top of the stack.
