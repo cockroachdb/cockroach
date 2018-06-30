@@ -165,6 +165,14 @@ func (n newOrder) run(
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
+			// Select the warehouse tax rate.
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
+				wID),
+			).Scan(&d.wTax); err != nil {
+				return err
+			}
+
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
 			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
@@ -177,14 +185,6 @@ func (n newOrder) run(
 				return err
 			}
 			d.oID = dNextOID - 1
-
-			// Select the warehouse tax rate.
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
-				wID),
-			).Scan(&d.wTax); err != nil {
-				return err
-			}
 
 			// Select the customer's discount, last name and credit.
 			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`

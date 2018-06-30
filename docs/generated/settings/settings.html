@@ -30,6 +30,7 @@
 <tr><td><code>kv.range_descriptor_cache.size</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of entries in the range descriptor and leaseholder caches</td></tr>
 <tr><td><code>kv.snapshot_rebalance.max_rate</code></td><td>byte size</td><td><code>2.0 MiB</code></td><td>the rate limit (bytes/sec) to use for rebalance snapshots</td></tr>
 <tr><td><code>kv.snapshot_recovery.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for recovery snapshots</td></tr>
+<tr><td><code>kv.transaction.existence_cache_enabled</code></td><td>boolean</td><td><code>true</code></td><td>If enabled, ...</td></tr>
 <tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track write intents in transactions</td></tr>
 <tr><td><code>kv.transaction.max_refresh_spans_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track refresh spans in serializable transactions</td></tr>
 <tr><td><code>kv.transaction.write_pipelining_enabled</code></td><td>boolean</td><td><code>true</code></td><td>if enabled, transactional writes are pipelined through Raft consensus</td></tr>
