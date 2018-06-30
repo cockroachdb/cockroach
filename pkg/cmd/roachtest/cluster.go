@@ -699,6 +699,11 @@ func startArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
 }
 
+// startArgsDontEncrypt will pass '--encrypt=false' to roachprod regardless of the
+// --encrypt flag on roachtest. This is useful for tests that cannot pass with
+// encryption enabled.
+var startArgsDontEncrypt = startArgs("--encrypt=false")
+
 // stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
 func stopArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
