@@ -33,7 +33,9 @@ func registerCDC(r *registry) {
 
 		c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 		c.Put(ctx, workload, "./workload", workloadNode)
-		c.Start(ctx, crdbNodes)
+		// Force encryption off as we do not have a good way to detect whether it is enabled
+		// for the `debug compact` call below.
+		c.Start(ctx, crdbNodes, startArgsDontEncrypt)
 
 		t.Status("loading initial data")
 		c.Run(ctx, workloadNode, fmt.Sprintf(
@@ -44,7 +46,7 @@ func registerCDC(r *registry) {
 		// fixed. See #26870
 		c.Stop(ctx, crdbNodes)
 		c.Run(ctx, crdbNodes, `./cockroach debug compact /mnt/data1/cockroach/`)
-		c.Start(ctx, crdbNodes)
+		c.Start(ctx, crdbNodes, startArgsDontEncrypt)
 
 		t.Status("installing kafka")
 		c.Run(ctx, kafkaNode, `curl https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xzv`)
