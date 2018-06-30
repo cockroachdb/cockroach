@@ -318,10 +318,10 @@ func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 		return err
 	}
 	r := roachpb.RequestUnion{}
-	scan := roachpb.ScanRequest{
+	checkExists := roachpb.CheckExistsRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(span),
 	}
-	r.MustSetInner(&scan)
+	r.MustSetInner(&checkExists)
 	f.batch.Requests = append(f.batch.Requests, r)
 	f.batchIdxToFk = append(f.batchIdxToFk, source)
 	return nil
@@ -346,17 +346,13 @@ func (f *fkBatchChecker) runCheck(
 		return err.GoError()
 	}
 
-	fetcher := SpanKVFetcher{}
 	for i, resp := range br.Responses {
 		fk := f.batchIdxToFk[i]
-		fetcher.KVs = resp.GetInner().(*roachpb.ScanResponse).Rows
-		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
-			return err
-		}
+		exists := resp.GetInner().(*roachpb.CheckExistsResponse).Exists
 		switch fk.dir {
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
-			if fk.rf.kvEnd {
+			if !exists {
 				fkValues := make(tree.Datums, fk.prefixLen)
 
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -368,7 +364,7 @@ func (f *fkBatchChecker) runCheck(
 			}
 		case CheckDeletes:
 			// If we're deleting, then there's a violation if the scan found something.
-			if !fk.rf.kvEnd {
+			if exists {
 				if oldRow == nil {
 					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 						"foreign key violation: non-empty columns %s referenced in table %q",
