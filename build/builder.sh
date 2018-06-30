@@ -176,6 +176,7 @@ vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg${delegated_volume_mode}"
 docker run --privileged -i ${tty-} ${ccache} --rm \
   -u "${uid_gid}" \
   ${vols} \
+  --network host \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
