@@ -142,8 +142,9 @@ type TxnCoordSender struct {
 	// is embedded in the interceptorAlloc struct, so the entire stack is
 	// allocated together with TxnCoordSender without any additional heap
 	// allocations necessary.
-	interceptorStack [3]txnInterceptor
+	interceptorStack [4]txnInterceptor
 	interceptorAlloc struct {
+		txnExistenceCache
 		txnIntentCollector
 		txnPipeliner
 		txnSpanRefresher
@@ -403,6 +404,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		ri = NewRangeIterator(ds)
 	}
+	tcs.interceptorAlloc.txnExistenceCache = makeTxnExistenceCache(tcf.st)
 	tcs.interceptorAlloc.txnIntentCollector = txnIntentCollector{
 		st: tcf.st,
 		ri: ri,
@@ -426,6 +428,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		wrapped: tcs.wrapped,
 	}
 	tcs.interceptorStack = [...]txnInterceptor{
+		&tcs.interceptorAlloc.txnExistenceCache,
 		&tcs.interceptorAlloc.txnIntentCollector,
 		&tcs.interceptorAlloc.txnPipeliner,
 		&tcs.interceptorAlloc.txnSpanRefresher,
