@@ -71,6 +71,13 @@ deployment until node-local storage has been more rigorously hardened.
 
 Secure mode currently works by requesting node/client certificates from the kubernetes controller at pod initialization time.
 
+### Geographically distributed clusters
+
+The configuration files and instructions in this directory are limited to
+deployments that exist entirely within a single Kubernetes cluster. If you'd
+like to deploy CockroachDB across multiple geographically distributed Kubernetes
+clusters, see the [multiregion subdirectory](multiregion).
+
 ## Creating your kubernetes cluster
 
 ### Locally on minikube
