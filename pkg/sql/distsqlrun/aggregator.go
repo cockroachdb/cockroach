@@ -557,7 +557,7 @@ func (ag *aggregatorBase) getAggResults(
 // emitRow constructs an output row from an accumulated bucket and returns it.
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
-// ProcOutputHelper filtered a the current row out.
+// ProcOutputHelper filtered the current row out.
 func (ag *hashAggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	if len(ag.bucketsIter) == 0 {
 		// We've exhausted all of the aggregation buckets.

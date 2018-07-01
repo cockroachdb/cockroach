@@ -855,7 +855,7 @@ func (ex *connExecutor) execWithLocalEngine(
 	}
 }
 
-// exectWithDistSQLEngine converts a plan to a distributed SQL physical plan and
+// execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
 // Query execution errors are written to res; they are not returned.

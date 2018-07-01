@@ -101,8 +101,8 @@ func (dsp *DistSQLPlanner) initRunners() {
 // txn is the transaction in which the plan will run. If nil, the different
 // processors are expected to manage their own internal transactions.
 //
-// All errors encoutered are reported to the distSQLReceiver's resultWriter.
-// Additionally, if the error is a "communication error" (an error encoutered
+// All errors encountered are reported to the distSQLReceiver's resultWriter.
+// Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
 // distSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
