@@ -212,7 +212,7 @@ func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
 // each type of core. Column indices in a PostProcessSpec refers to these
 // internal columns. Some columns may be unused by the post-processing stage;
 // processor implementations are internally optimized to not produce values for
-// such unneded columns.
+// such unneeded columns.
 type ProcessorSpec struct {
 	// In most cases, there is one input.
 	Input []InputSyncSpec    `protobuf:"bytes,1,rep,name=input" json:"input"`
@@ -367,7 +367,7 @@ func (*TableReaderSpan) Descriptor() ([]byte, []int) { return fileDescriptorProc
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
 // columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are be populated. If is_check is set, the
+// the post-processing stage are to be populated. If is_check is set, the
 // TableReader will run additional data checking procedures and the
 // "internal columns" are:
 //  - Error type (string).

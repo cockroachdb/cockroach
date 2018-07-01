@@ -1135,7 +1135,7 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 //      - ONLY aggregation functions, with arguments pre-evaluated. So for
 //        COUNT(k + v), we assume a stream of evaluated 'k + v' values.
 //      - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
-//        This is evaluated the post aggregation evaluator attached after.
+//        This is evaluated in the post aggregation evaluator attached after.
 //      - Expressions that also appear verbatim in the GROUP BY expressions.
 //        For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
 //        therefore k just passes through unchanged.
