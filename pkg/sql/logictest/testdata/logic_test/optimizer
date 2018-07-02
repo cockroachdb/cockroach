@@ -88,7 +88,7 @@ SELECT * FROM tview
 4  40
 
 query I rowsort
-SELECT id FROM crdb_internal.jobs
+SELECT job_id FROM crdb_internal.jobs
 ----
 
 query I rowsort
@@ -118,7 +118,7 @@ query error pq: views and sequences are not supported
 SELECT * FROM tview
 
 query error pq: virtual tables are not supported
-SELECT id FROM crdb_internal.jobs
+SELECT job_id FROM crdb_internal.jobs
 
 query error pq: not yet implemented: table expr: \*tree\.RowsFromExpr
 SELECT * FROM generate_series(1, 3)

@@ -63,7 +63,7 @@ func registerCDC(r *registry) {
 			// Shut down any running feeds. Not neceesary for the nightly, but nice
 			// for development.
 			if _, err := db.Exec(`CANCEL JOBS (
-				SELECT id FROM [SHOW JOBS] WHERE status = 'running'
+				SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
 			)`); err != nil {
 				c.t.Fatal(err)
 			}

@@ -391,10 +391,10 @@ func tsOrNull(micros int64) tree.Datum {
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
-	id                 INT,
-	type               STRING,
+	job_id             INT,
+	job_type           STRING,
 	description        STRING,
-	username           STRING,
+	user_name          STRING,
 	descriptor_ids     INT[],
 	status             STRING,
 	created            TIMESTAMP,
