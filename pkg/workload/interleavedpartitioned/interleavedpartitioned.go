@@ -32,7 +32,6 @@ import (
 )
 
 const (
-	alphas        = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`
 	sessionSchema = `
 (
 	session_id STRING(100) PRIMARY KEY,
@@ -291,7 +290,7 @@ func (w *interleavedPartitioned) Ops(
 
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
 		hists := reg.GetHandle()
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		opRand := rng.Intn(100)
 		if opRand < w.insertPercent {
 			start := timeutil.Now()
@@ -365,20 +364,19 @@ func (w *interleavedPartitioned) Ops(
 			}
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return rows.Err()
-		} else { // delete
-			start := timeutil.Now()
-			deleteStatement, err := db.Prepare(deleteQuery)
-			if err != nil {
-				return err
-			}
-			rows, err := deleteStatement.Query(w.deleteBatchSize)
-			if err != nil {
-				return err
-			}
-			hists.Get(`delete`).Record(timeutil.Since(start))
-			return rows.Err()
 		}
-		return nil
+		// else case, delete
+		start := timeutil.Now()
+		deleteStatement, err := db.Prepare(deleteQuery)
+		if err != nil {
+			return err
+		}
+		rows, err := deleteStatement.Query(w.deleteBatchSize)
+		if err != nil {
+			return err
+		}
+		hists.Get(`delete`).Record(timeutil.Since(start))
+		return rows.Err()
 	})
 
 	return ql, nil
