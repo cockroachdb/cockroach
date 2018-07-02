@@ -109,7 +109,7 @@ func TestSplits(t *testing.T) {
 
 			var actual int
 			sqlDB.QueryRow(
-				t, `SELECT count(*) FROM [SHOW TESTING_RANGES FROM TABLE test.bank]`,
+				t, `SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.bank]`,
 			).Scan(&actual)
 			if ranges != actual {
 				t.Errorf(`expected %d got %d`, ranges, actual)

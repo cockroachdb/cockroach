@@ -103,7 +103,7 @@ range_max_bytes: %d
 		t.Status("checking for single range")
 		rangeCount := func() int {
 			var count int
-			const q = "SELECT count(*) FROM [SHOW TESTING_RANGES FROM TABLE bank.bank]"
+			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
 			if err := db.QueryRow(q).Scan(&count); err != nil {
 				t.Fatalf("failed to get range count: %v", err)
 			}
