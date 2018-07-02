@@ -252,7 +252,7 @@ query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
 sort                             ·         ·
- │                               order     +"table",+name
+ │                               order     +table_name,+constraint_name
  └── render                      ·         ·
       └── join                   ·         ·
            │                     type      inner
