@@ -82,7 +82,7 @@ func (p *planner) ShowFingerprints(
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index", Typ: types.String},
+	{Name: "index_name", Typ: types.String},
 	{Name: "fingerprint", Typ: types.String},
 }
 
