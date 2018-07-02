@@ -71,14 +71,12 @@ limit      ·       ·          (k, v)  +v
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-limit           ·       ·          (k, v)  -v
- │              count   5          ·       ·
- │              offset  1          ·       ·
- └── sort       ·       ·          (k, v)  -v
-      │         order   -v         ·       ·
-      └── scan  ·       ·          (k, v)  ·
-·               table   t@t_v_idx  ·       ·
-·               spans   ALL        ·       ·
+limit         ·       ·          (k, v)  -v
+ │            count   5          ·       ·
+ │            offset  1          ·       ·
+ └── revscan  ·       ·          (k, v)  -v
+·             table   t@t_v_idx  ·       ·
+·             spans   ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10

@@ -286,7 +286,7 @@ memo (optimized)
  │         └── cost: 1.05
  ├── G4: (aggregations G8)
  ├── G5: (min G9)
- ├── G6: (scan abc,cols=(1))
+ ├── G6: (scan abc,cols=(1)) (scan abc,rev,cols=(1))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1))
  │    │    └── cost: 1050.00
@@ -321,7 +321,7 @@ memo (optimized)
  │         └── cost: 1087.94
  ├── G7: (const 1)
  ├── G8: (any-not-null G12)
- ├── G9: (scan abc,cols=(2))
+ ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(2))
  │    │    └── cost: 1050.00
