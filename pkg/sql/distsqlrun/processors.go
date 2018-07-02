@@ -1047,6 +1047,12 @@ func newProcessor(
 		}
 		return newProjectSetProcessor(flowCtx, processorID, core.ProjectSet, inputs[0], post, outputs[0])
 	}
+	if core.Windower != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 

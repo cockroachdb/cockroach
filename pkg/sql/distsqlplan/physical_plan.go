@@ -705,6 +705,7 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 	// Note: instead of using p.Streams, we could fill in the input/output specs
 	// directly throughout the planning code, but this makes the rest of the code
 	// a bit simpler.
+
 	for sIdx, s := range p.Streams {
 		p1 := &p.Processors[s.SourceProcessor]
 		p2 := &p.Processors[s.DestProcessor]
@@ -1006,4 +1007,42 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+}
+
+// AddSingleWindowerStage adds a "single windower" stage (one that cannot be
+// parallelized) which consists of a single processor on the specified node. The
+// previous stage (ResultRouters) are all connected to this processor.
+func (p *PhysicalPlan) AddSingleWindowerStage(
+	nodeID roachpb.NodeID,
+	core distsqlrun.ProcessorCoreUnion,
+	post distsqlrun.PostProcessSpec,
+	outputTypes []sqlbase.ColumnType,
+) {
+	proc := Processor{
+		Node: nodeID,
+		Spec: distsqlrun.ProcessorSpec{
+			Input: []distsqlrun.InputSyncSpec{{
+				// The other fields will be filled in by mergeResultStreams.
+				ColumnTypes: p.ResultTypes,
+			}},
+			Core: core,
+			Post: post,
+			Output: []distsqlrun.OutputRouterSpec{{
+				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+			}},
+			StageID: p.NewStageID(),
+		},
+	}
+
+	pIdx := p.AddProcessor(proc)
+
+	// Connect the result routers to the processor.
+	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0)
+
+	// We now have a single result stream.
+	p.ResultRouters = p.ResultRouters[:1]
+	p.ResultRouters[0] = pIdx
+
+	p.ResultTypes = outputTypes
+	p.MergeOrdering = distsqlrun.Ordering{}
 }

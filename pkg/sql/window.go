@@ -44,8 +44,8 @@ type windowNode struct {
 	windowRender []tree.TypedExpr
 
 	// The window functions handled by this windowNode. computeWindows will populate
-	// an entire column in windowValues for each windowFuncHolder, in order.
-	funcs []*windowFuncHolder
+	// an entire column in windowValues for each WindowFuncHolder, in order.
+	funcs []*WindowFuncHolder
 
 	// colContainer and aggContainer are IndexedVarContainers that provide indirection
 	// to migrate IndexedVars and aggregate functions below the windowing level.
@@ -902,7 +902,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 				}
 			}
 
-			f := &windowFuncHolder{
+			f := &WindowFuncHolder{
 				expr:     t,
 				args:     t.Exprs,
 				argCount: len(t.Exprs),
@@ -954,16 +954,16 @@ func (v extractWindowFuncsVisitor) extract(typedExpr tree.TypedExpr) (tree.Typed
 	return expr.(tree.TypedExpr), v.windowFnCount, nil
 }
 
-var _ tree.TypedExpr = &windowFuncHolder{}
-var _ tree.VariableExpr = &windowFuncHolder{}
+var _ tree.TypedExpr = &WindowFuncHolder{}
+var _ tree.VariableExpr = &WindowFuncHolder{}
 
-type windowFuncHolder struct {
+type WindowFuncHolder struct {
 	window *windowNode
 
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx     int // index of the windowFuncHolder in window.funcs
+	funcIdx     int // index of the WindowFuncHolder in window.funcs
 	argIdxStart int // index of the window function's first arguments in window.wrappedValues
 	argCount    int // number of arguments taken by the window function
 
@@ -971,29 +971,29 @@ type windowFuncHolder struct {
 	columnOrdering sqlbase.ColumnOrdering
 }
 
-func (*windowFuncHolder) Variable() {}
+func (*WindowFuncHolder) Variable() {}
 
-func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
+func (w *WindowFuncHolder) Format(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
 	w.expr.Format(ctx)
 }
 
-func (w *windowFuncHolder) String() string { return tree.AsString(w) }
+func (w *WindowFuncHolder) String() string { return tree.AsString(w) }
 
-func (w *windowFuncHolder) Walk(v tree.Visitor) tree.Expr { return w }
+func (w *WindowFuncHolder) Walk(v tree.Visitor) tree.Expr { return w }
 
-func (w *windowFuncHolder) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (w *WindowFuncHolder) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	return w, nil
 }
 
-func (w *windowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
+func (w *WindowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
 	// Index into the windowValues computed in windowNode.computeWindows
 	// to determine the Datum value to return. Evaluating this datum
 	// is almost certainly the identity.
 	return w.window.run.windowValues[w.window.run.curRowIdx][w.funcIdx].Eval(ctx)
 }
 
-func (w *windowFuncHolder) ResolvedType() types.T {
+func (w *WindowFuncHolder) ResolvedType() types.T {
 	return w.expr.ResolvedType()
 }
 

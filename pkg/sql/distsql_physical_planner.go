@@ -419,6 +419,12 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *projectSetNode:
 		return dsp.checkSupportForNode(n.source)
 
+	case *windowNode:
+		fmt.Printf("\n=====windowNode found in DistSQL=====\nExpr: %v\n", n.funcs[0].expr)
+		fmt.Printf("Args: %v\nColumn ordering: %v\n\n", n.funcs[0].args, n.funcs[0].columnOrdering)
+		//return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
+		return shouldDistribute, nil
+
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2132,6 +2138,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *projectSetNode:
 		plan, err = dsp.createPlanForProjectSet(planCtx, n)
 
+	case *windowNode:
+		plan, err = dsp.createPlanForWindow(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
@@ -2640,6 +2649,92 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	return p, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForWindow(
+	planCtx *planningCtx, n *windowNode,
+) (physicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	partitionIdxs := make([]uint32, len(n.funcs[0].partitionIdxs))
+	for i, idx := range n.funcs[0].partitionIdxs {
+		partitionIdxs[i] = uint32(idx)
+	}
+
+	// Check if the previous stage is all on one node.
+	prevStageNode := plan.Processors[plan.ResultRouters[0]].Node
+	for i := 1; i < len(plan.ResultRouters); i++ {
+		if n := plan.Processors[plan.ResultRouters[i]].Node; n != prevStageNode {
+			prevStageNode = 0
+			break
+		}
+	}
+
+	if len(partitionIdxs) == 0 || len(plan.ResultRouters) == 1 {
+		// No PARTITION BY or we have a single stream. Use a single final aggregator.
+		// If the previous stage was all on a single node, put the final
+		// aggregator there. Otherwise, bring the results back on this node.
+		node := dsp.nodeDesc.NodeID
+		if prevStageNode != 0 {
+			node = prevStageNode
+		}
+
+		plan.AddSingleWindowerStage(
+			node,
+			distsqlrun.ProcessorCoreUnion{Windower: &distsqlrun.WindowerSpec{PartitionBy: partitionIdxs}},
+			distsqlrun.PostProcessSpec{}, // (TODO),
+			plan.ResultTypes,
+		)
+	} else {
+		// Set up the output routers from the previous stage.
+		for _, resultProc := range plan.ResultRouters {
+			plan.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
+				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
+				HashColumns: partitionIdxs,
+			}
+		}
+		stageID := plan.NewStageID()
+
+		nodes := findJoinProcessorNodes(plan.ResultRouters, nil, plan.Processors, false)
+		if len(nodes) != len(plan.ResultRouters) {
+			panic("unexpected line 2704")
+		}
+		//We have a window processor on each node.
+		plan.ResultRouters = plan.ResultRouters[:0]
+		for bucket, nodeID := range nodes {
+			proc := distsqlplan.Processor{
+				Node: nodeID,
+				Spec: distsqlrun.ProcessorSpec{
+					Input: []distsqlrun.InputSyncSpec{{
+						// Streams are updated below.
+						Type:        distsqlrun.InputSyncSpec_UNORDERED,
+						ColumnTypes: plan.ResultTypes,
+					}},
+					Core: distsqlrun.ProcessorCoreUnion{Windower: &distsqlrun.WindowerSpec{PartitionBy: partitionIdxs}},
+					Post: distsqlrun.PostProcessSpec{}, // (TODO)
+					Output: []distsqlrun.OutputRouterSpec{{
+						Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+					}},
+					StageID: stageID,
+				},
+			}
+			pIdx := plan.AddProcessor(proc)
+
+			for router := 0; router < len(nodes); router++ {
+				plan.Streams = append(plan.Streams, distsqlplan.Stream{
+					SourceProcessor:  distsqlplan.ProcessorIdx(router),
+					SourceRouterSlot: bucket,
+					DestProcessor:    pIdx,
+					DestInput:        0,
+				})
+			}
+			plan.ResultRouters = append(plan.ResultRouters, pIdx)
+		}
+	}
+	return plan, nil
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(
