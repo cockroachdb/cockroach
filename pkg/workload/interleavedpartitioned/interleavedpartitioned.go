@@ -88,10 +88,10 @@ const (
 	FAMILY "primary" (session_id, id, created, updated)
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
-	insertStatement = `INSERT into sessions VALUES (?, ?, ?, ?, now() now() ?, ?, ?)`
-	deleteStatement = `DELETE from sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
-	retrieveQuery0  = `SELECT session_id FROM sessions WHERE id > ? LIMIT 1`
-	retrieveQuery1  = `
+	insertQuery    = `INSERT into sessions VALUES (?, ?, ?, ?, now(), now(), ?, ?, ?)`
+	deleteQuery    = `DELETE from sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
+	retrieveQuery0 = `SELECT session_id FROM sessions WHERE id > ? LIMIT 1`
+	retrieveQuery1 = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
 FROM sessions
 WHERE session_id = ?
@@ -189,16 +189,16 @@ var interleavedPartitionedMeta = workload.Meta{
 			`batch`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.sessions, `sessions`, 1000, `Number of sessions (rows in the parent table)`)
-		g.flags.IntVar(&g.customersPerSession, `customers-per-session`, 1, `Number of customers associated with each session`)
-		g.flags.IntVar(&g.devicesPerSession, `devices-per-session`, 1, `Number of devices associated with each session`)
-		g.flags.IntVar(&g.variantsPerSession, `variants-per-session`, 1, `Number of variants associated with each session`)
+		g.flags.IntVar(&g.customersPerSession, `customers-per-session`, 2, `Number of customers associated with each session`)
+		g.flags.IntVar(&g.devicesPerSession, `devices-per-session`, 2, `Number of devices associated with each session`)
+		g.flags.IntVar(&g.variantsPerSession, `variants-per-session`, 5, `Number of variants associated with each session`)
 		g.flags.IntVar(&g.parametersPerSession, `parameters-per-session`, 1, `Number of parameters associated with each session`)
 		g.flags.IntVar(&g.queriesPerSession, `queries-per-session`, 1, `Number of queries associated with each session`)
 		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage of sessions that are in us-east`)
-		g.flags.IntVar(&g.insertPercent, `insert-percent`, 100, `Percentage of operations that are inserts`)
+		g.flags.IntVar(&g.insertPercent, `insert-percent`, 50, `Percentage of operations that are inserts`)
 		g.flags.IntVar(&g.queryPercent, `query-percent`, 0, `Percentage of operations that are retrieval queries`)
 		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage of operations that are update queries`)
-		g.flags.IntVar(&g.deletePercent, `delete-percent`, 0, `Percentage of operations that are delete queries`)
+		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage of operations that are delete queries`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -288,13 +288,15 @@ func (w *interleavedPartitioned) Ops(
 	}
 
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
-		if err != nil {
-			return err
-		}
+		hists := reg.GetHandle()
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		opRand := rng.Intn(100)
 		if opRand < w.insertPercent {
-			insertStatement, err := db.Prepare(insertStatement)
+			start := timeutil.Now()
+			insertStatement, err := db.Prepare(insertQuery)
+			if err != nil {
+				return err
+			}
 			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
 			args := []interface{}{
 				sessionID,            // session_id
@@ -309,14 +311,19 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
+			hists.Get(`insert`).Record(timeutil.Since(start))
 			return rows.Err()
 		} else if opRand < w.insertPercent+w.queryPercent { // query
 			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
 			args := []interface{}{
 				sessionID,
 			}
+			start := timeutil.Now()
 			for _, query := range retrieveQueries {
 				retrieveStatement, err := db.Prepare(query)
+				if err != nil {
+					return err
+				}
 				rows, err := retrieveStatement.Query(args...)
 				if err != nil {
 					return err
@@ -325,13 +332,18 @@ func (w *interleavedPartitioned) Ops(
 					return rows.Err()
 				}
 			}
+			hists.Get(`retrieve`).Record(timeutil.Since(start))
 		} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
 			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
 			args := []interface{}{
 				sessionID,
 			}
+			start := timeutil.Now()
 			for _, query := range updateQueries {
 				updateStatement, err := db.Prepare(query)
+				if err != nil {
+					return err
+				}
 				rows, err := updateStatement.Query(args...)
 				if err != nil {
 					return err
@@ -340,8 +352,10 @@ func (w *interleavedPartitioned) Ops(
 					return rows.Err()
 				}
 			}
+			hists.Get(`updates`).Record(timeutil.Since(start))
 		} else { // delete
-			deleteStatement, err := db.Prepare(deleteStatement)
+			start := timeutil.Now()
+			deleteStatement, err := db.Prepare(deleteQuery)
 			if err != nil {
 				return err
 			}
@@ -350,6 +364,7 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
+			hists.Get(`delete`).Record(timeutil.Since(start))
 			return rows.Err()
 		}
 		return nil
