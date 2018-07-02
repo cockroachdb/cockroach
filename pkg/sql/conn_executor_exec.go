@@ -609,7 +609,7 @@ func (ex *connExecutor) execStmtInParallel(
 	}
 
 	if err := planner.makePlan(ctx, stmt); err != nil {
-		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
+		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, stmt.AST, 0 /* rows */, err)
 		return nil, err
 	}
 
@@ -635,7 +635,7 @@ func (ex *connExecutor) execStmtInParallel(
 		defer queryDone(ctx, res)
 
 		defer func() {
-			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
+			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, stmt.AST, res.RowsAffected(), res.Err())
 		}()
 
 		if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
@@ -668,7 +668,7 @@ func (ex *connExecutor) execStmtInParallel(
 		}
 		return res.Err()
 	}); err != nil {
-		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, 0 /* rows */, err)
+		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, stmt.AST, 0 /* rows */, err)
 		return nil, err
 	}
 
@@ -694,7 +694,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		err = planner.makePlan(ctx, stmt)
 	}
 
-	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
+	defer func() { planner.maybeLogStatement(ctx, "exec", stmt.AST, res.RowsAffected(), res.Err()) }()
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {

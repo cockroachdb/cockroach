@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,13 +93,13 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 
 // maybeLogStatement conditionally records the current statement
 // (p.curPlan) to the exec / audit logs.
-func (p *planner) maybeLogStatement(ctx context.Context, lbl string, rows int, err error) {
+func (p *planner) maybeLogStatement(ctx context.Context, lbl string, ast tree.Statement, rows int, err error) {
 	p.maybeLogStatementInternal(
-		ctx, lbl, rows, err, p.statsCollector.PhaseTimes()[sessionQueryReceived])
+		ctx, lbl, ast, rows, err, p.statsCollector.PhaseTimes()[sessionQueryReceived])
 }
 
 func (p *planner) maybeLogStatementInternal(
-	ctx context.Context, lbl string, rows int, err error, startTime time.Time,
+	ctx context.Context, lbl string, ast tree.Statement, rows int, err error, startTime time.Time,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -138,7 +139,7 @@ func (p *planner) maybeLogStatementInternal(
 		logTrigger = buf.String()
 	}
 
-	stmtStr := p.curPlan.AST.String()
+	stmtStr := ast.String()
 
 	plStr := p.extendedEvalCtx.Placeholders.Values.String()
 
