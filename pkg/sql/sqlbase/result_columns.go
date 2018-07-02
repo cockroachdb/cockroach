@@ -125,7 +125,7 @@ var ShowTraceColumns = ResultColumns{
 	{Name: "age", Typ: types.Interval}, // Note GetTraceAgeColumnIdx below.
 	{Name: "message", Typ: types.String},
 	{Name: "tag", Typ: types.String},
-	{Name: "loc", Typ: types.String},
+	{Name: "location", Typ: types.String},
 	{Name: "operation", Typ: types.String},
 	{Name: "span", Typ: types.Int},
 }
