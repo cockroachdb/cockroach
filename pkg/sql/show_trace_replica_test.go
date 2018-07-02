@@ -37,6 +37,7 @@ func TestShowTraceReplica(t *testing.T) {
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = 1
 	defer config.TestingSetDefaultZoneConfig(cfg)()
+	defer config.TestingSetDefaultSystemZoneConfig(cfg)()
 
 	ctx := context.Background()
 	tsArgs := func(node string) base.TestServerArgs {
@@ -59,6 +60,7 @@ func TestShowTraceReplica(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `ALTER RANGE "default" CONFIGURE ZONE USING constraints = '[+n4]'`)
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING constraints = '[+n4]'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
