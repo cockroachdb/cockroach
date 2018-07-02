@@ -439,10 +439,33 @@ COPY t (a, b, c) FROM stdin;
 			cleanup: `DROP TABLE cities, weather`,
 		},
 		{
+			name: "fk-skip",
+			typ:  "PGDUMP",
+			data: testPgdumpFk,
+			with: `WITH skip_foreign_keys`,
+			query: map[string][][]string{
+				`SHOW TABLES`: {{"cities"}, {"weather"}},
+				// Verify the constraint is skipped.
+				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
+				`SHOW CONSTRAINTS FROM weather`:                                  {},
+			},
+			cleanup: `DROP TABLE cities, weather`,
+		},
+		{
 			name: "fk unreferenced",
 			typ:  "TABLE weather FROM PGDUMP",
 			data: testPgdumpFk,
 			err:  `table "cities" not found`,
+		},
+		{
+			name: "fk unreferenced skipped",
+			typ:  "TABLE weather FROM PGDUMP",
+			data: testPgdumpFk,
+			with: `WITH skip_foreign_keys`,
+			query: map[string][][]string{
+				`SHOW TABLES`: {{"weather"}},
+			},
+			cleanup: `DROP TABLE weather`,
 		},
 
 		// Error
@@ -1220,7 +1243,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	create := stmt.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), nil, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}

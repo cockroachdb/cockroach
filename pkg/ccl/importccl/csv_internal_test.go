@@ -40,11 +40,11 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 		},
 		{
 			stmt:  "create table a (i int references b (id))",
-			error: `table "b" not found`,
+			error: `this IMPORT format does not support foreign keys`,
 		},
 		{
-			stmt:  "create table a (i int, constraint a  foreign key (i) references c (id))",
-			error: `table "c" not found`,
+			stmt:  "create table a (i int, constraint a foreign key (i) references c (id))",
+			error: `this IMPORT format does not support foreign keys`,
 		},
 		{
 			stmt: `create table a (
@@ -71,7 +71,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = MakeSimpleTableDescriptor(ctx, st, create, defaultCSVParentID, defaultCSVTableID, nil, 0)
+			_, err = MakeSimpleTableDescriptor(ctx, st, create, defaultCSVParentID, defaultCSVTableID, NoFKs, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}

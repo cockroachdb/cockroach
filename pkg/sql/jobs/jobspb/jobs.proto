@@ -82,6 +82,7 @@ message ImportDetails {
 
   int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
   int64 oversample = 9;
+  bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",
