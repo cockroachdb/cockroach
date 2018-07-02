@@ -74,7 +74,6 @@ render     ·      ·
 ·          spans  ALL
 ·          limit  1
 
-# TODO(radu): Need to support revscan node
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
@@ -322,7 +321,6 @@ output row: [1 2 3]
 fetched: /abc/bc/5/6 -> /4
 output row: [4 5 6]
 
-# TODO(radu): this should change once we have revscan
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc ORDER BY a DESC]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
@@ -349,7 +347,6 @@ render     ·      ·
 ·          table  abc@bc
 ·          spans  /2-/3
 
-# TODO(radu): sort is unnecessary here, because bc is unique (need revscan)
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----

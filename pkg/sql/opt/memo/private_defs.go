@@ -70,6 +70,9 @@ func (p ProjectionsOpDef) AllCols() opt.ColSet {
 
 // ScanOpDef defines the value of the Def private field of the Scan operator.
 type ScanOpDef struct {
+	// Reverse defines if the Scan is a reverse scan.
+	Reverse bool
+
 	// Table identifies the table to scan. It is an id that can be passed to
 	// the Metadata.Table method in order to fetch opt.Table metadata.
 	Table opt.TableID
@@ -104,7 +107,11 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.Orderin
 	for i := 0; i < index.KeyColumnCount(); i++ {
 		indexCol := index.Column(i)
 		colID := md.TableColumn(s.Table, indexCol.Ordinal)
-		ordering.AppendCol(colID, indexCol.Descending)
+		if s.Reverse {
+			ordering.AppendCol(colID, !indexCol.Descending)
+		} else {
+			ordering.AppendCol(colID, indexCol.Descending)
+		}
 	}
 	return ordering.SubsetOf(required)
 }
