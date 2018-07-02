@@ -145,7 +145,7 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 query TTTTB colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
-table  name  type  details  validated
+table_name  constraint_name  constraint_type  details  validated
 
 query TTTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
