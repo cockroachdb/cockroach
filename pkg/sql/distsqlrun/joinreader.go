@@ -402,7 +402,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	}
 }
 
-// A joinReader performs a lookup join is lookup columns were specified,
+// A joinReader performs a lookup join if lookup columns were specified,
 // otherwise it performs an index join.
 func (jr *joinReader) isLookupJoin() bool {
 	return len(jr.lookupCols) > 0
