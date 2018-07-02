@@ -18,6 +18,7 @@ option go_package = "serverpb";
 
 import "build/info.proto";
 import "gossip/gossip.proto";
+import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/status.proto";
@@ -614,6 +615,30 @@ message StoresResponse {
   repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
 }
 
+message StatementsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message StatementsResponse {
+  message StatementStatisticsKey {
+    string statement = 1;
+    string app = 2;
+    bool distSQL = 3;
+    bool failed = 4;
+    int32 node_id = 5 [ (gogoproto.customname) = "NodeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  }
+
+  message CollectedStatementStatistics {
+    StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+    cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+  }
+
+  repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
+  // Timestamp of the last stats reset.
+  google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -747,6 +772,12 @@ service Status {
   rpc Stores(StoresRequest) returns (StoresResponse) {
     option (google.api.http) = {
       get : "/_status/stores/{node_id}"
+    };
+  }
+
+  rpc Statements(StatementsRequest) returns (StatementsResponse) {
+    option (google.api.http) = {
+      get: "/_status/statements"
     };
   }
 }

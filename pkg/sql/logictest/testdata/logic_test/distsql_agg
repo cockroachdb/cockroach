@@ -9,7 +9,7 @@ ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE data TESTING_RELOCATE
+ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate all combinations of values 1 to 10.
@@ -22,7 +22,7 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE data]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       /1       {1}       1
@@ -295,7 +295,7 @@ statement ok
 ALTER TABLE one SPLIT AT VALUES (0), (99)
 
 statement ok
-ALTER TABLE one TESTING_RELOCATE VALUES (ARRAY[1], 0)
+ALTER TABLE one EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)
 
 statement ok
 INSERT INTO one VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
@@ -307,13 +307,13 @@ statement ok
 ALTER TABLE two SPLIT AT VALUES (0), (99)
 
 statement ok
-ALTER TABLE two TESTING_RELOCATE VALUES (ARRAY[2], 0)
+ALTER TABLE two EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)
 
 statement ok
 INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE one]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE one]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       /0       {5}       5
@@ -321,7 +321,7 @@ NULL       /0       {5}       5
 /99        NULL     {5}       5
 
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE two]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE two]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       /0       {5}       5
@@ -464,7 +464,7 @@ ALTER TABLE sorted_data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE sorted_data TESTING_RELOCATE
+ALTER TABLE sorted_data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # The ordering is on all the GROUP BY columns, and isn't preserved after the

@@ -94,7 +94,7 @@ export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresRespo
 
 export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
 
-export type QueriesResponseMessage = protos.cockroach.server.serverpb.QueriesResponse;
+export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
@@ -335,9 +335,9 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
 
-// getQueries returns queries the cluster has recently executed, and some stats about them.
-export function getQueries(timeout?: moment.Duration): Promise<QueriesResponseMessage> {
-  return timeoutFetch(serverpb.QueriesResponse, `${API_PREFIX}/queries`, null, timeout);
+// getStatements returns statements the cluster has recently executed, and some stats about them.
+export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
+  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.

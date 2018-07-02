@@ -562,7 +562,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 
 	if _, err := db.Exec(`
 ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
 `); err != nil {
 		t.Fatal(err)
 	}

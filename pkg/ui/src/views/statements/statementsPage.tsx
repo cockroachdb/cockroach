@@ -2,43 +2,32 @@ import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouteComponentProps } from "react-router";
+import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 
 import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { FixLong } from "src/util/fixLong";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { refreshQueries } from "src/redux/apiReducers";
-import { QueriesResponseMessage } from "src/util/api";
+import { refreshStatements } from "src/redux/apiReducers";
+import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
-import { Duration } from "src/util/format";
 import { Pick } from "src/util/pick";
-import { summarize, StatementSummary } from "src/util/sql/summarize";
 
-import { countBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
+import { AggregateStatistics, StatementsSortedTable, makeStatementsColumns } from "./statementsTable";
 
 import * as protos from "src/js/protos";
 import "./statements.styl";
 
-type CollectedStatementStatistics$Properties = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+type CollectedStatementStatistics$Properties = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
 type RouteProps = RouteComponentProps<any, any>;
-
-interface AggregateStatistics {
-  statement: string;
-  stats: StatementStatistics;
-}
-
-class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 interface StatementsPageProps {
   valid: boolean;
@@ -46,82 +35,11 @@ interface StatementsPageProps {
   apps: string[];
   totalFingerprints: number;
   lastReset: string;
-  refreshQueries: typeof refreshQueries;
+  refreshStatements: typeof refreshStatements;
 }
 
 interface StatementsPageState {
   sortSetting: SortSetting;
-}
-
-function StatementLink(props: { statement: string, app: string }) {
-  const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}` : "/statement";
-
-  return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="__tooltip">
-        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
-          <div className="last-cleared-tooltip__tooltip-hover-area">
-            { shortStatement(summary, props.statement) }
-          </div>
-        </ToolTipWrapper>
-      </div>
-    </Link>
-  );
-}
-
-function shortStatement(summary: StatementSummary, original: string) {
-  switch (summary.statement) {
-    case "update": return "UPDATE " + summary.table;
-    case "insert": return "INSERT INTO " + summary.table;
-    case "select": return "SELECT FROM " + summary.table;
-    case "delete": return "DELETE FROM " + summary.table;
-    case "create": return "CREATE TABLE " + summary.table;
-    default: return original;
-  }
-}
-
-function calculateCumulativeTime(stats: StatementStatistics) {
-  const count = FixLong(stats.count).toInt();
-  const latency = stats.service_lat.mean;
-
-  return count * latency;
-}
-
-function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements);
-  const rowsBar = rowsBarChart(statements);
-  const latencyBar = latencyBarChart(statements);
-
-  return [
-    {
-      title: "Statement",
-      className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.statement } app={ selectedApp } />,
-      sort: (stmt) => stmt.statement,
-    },
-    {
-      title: "Time",
-      cell: (stmt) => Duration(calculateCumulativeTime(stmt.stats) * 1e9),
-      sort: (stmt) => calculateCumulativeTime(stmt.stats),
-    },
-    {
-      title: "Count",
-      cell: countBar,
-      sort: (stmt) => FixLong(stmt.stats.count).toInt(),
-    },
-    {
-      title: "Mean Rows",
-      cell: rowsBar,
-      sort: (stmt) => stmt.stats.num_rows.mean,
-    },
-    {
-      title: "Mean Latency",
-      cell: latencyBar,
-      sort: (stmt) => stmt.stats.service_lat.mean,
-    },
-  ];
 }
 
 class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
@@ -147,11 +65,11 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 
   componentWillMount() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   componentWillReceiveProps() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   renderStatements() {
@@ -233,19 +151,19 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 }
 
-type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
-  (state: CachedDataReducerState<QueriesResponseMessage>, props: RouteProps) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
+  (state: CachedDataReducerState<StatementsResponseMessage>, props: RouteProps) => {
     if (!state.data) {
       return null;
     }
 
-    let statements = flattenStatementStats(state.data.queries);
+    let statements = flattenStatementStats(state.data.statements);
     if (props.params[appAttr]) {
       let criteria = props.params[appAttr];
       if (criteria === "(unset)") {
@@ -266,7 +184,7 @@ export const selectStatements = createSelector(
     return Object.keys(statementsMap).map(stmt => {
       const stats = statementsMap[stmt];
       return {
-        statement: stmt,
+        label: stmt,
         stats: combineStatementStats(stats),
       };
     });
@@ -276,15 +194,15 @@ export const selectStatements = createSelector(
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
 export const selectApps = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return [];
     }
 
     let sawBlank = false;
     const apps: { [app: string]: boolean } = {};
-    state.data.queries.forEach(
+    state.data.statements.forEach(
       (statement: CollectedStatementStatistics$Properties) => {
         if (statement.key.app) {
           apps[statement.key.app] = true;
@@ -300,12 +218,12 @@ export const selectApps = createSelector(
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.
 export const selectTotalFingerprints = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return 0;
     }
-    const aggregated = aggregateStatementStats(state.data.queries);
+    const aggregated = aggregateStatementStats(state.data.statements);
     return aggregated.length;
   },
 );
@@ -313,8 +231,8 @@ export const selectTotalFingerprints = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
-  (state: QueriesState) => state.cachedData.queries,
-  (state: CachedDataReducerState<QueriesResponseMessage>) => {
+  (state: StatementsState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return "unknown";
     }
@@ -325,15 +243,15 @@ export const selectLastReset = createSelector(
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
-  (state: QueriesState, props: RouteProps) => ({
+  (state: StatementsState, props: RouteProps) => ({
     statements: selectStatements(state, props),
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
-    valid: state.cachedData.queries.valid,
+    valid: state.cachedData.statements.valid,
   }),
   {
-    refreshQueries,
+    refreshStatements,
   },
 )(StatementsPage);
 

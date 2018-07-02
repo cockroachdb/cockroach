@@ -1259,7 +1259,7 @@ alter_relocate_stmt:
   ALTER TABLE table_name relocate_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.TestingRelocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $5.slct()}
+    $$.val = &tree.Relocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $5.slct()}
   }
 
 relocate_kw:
@@ -1270,7 +1270,7 @@ alter_relocate_index_stmt:
   ALTER INDEX table_name_with_index relocate_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.TestingRelocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
+    $$.val = &tree.Relocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
   }
 
 alter_zone_range_stmt:

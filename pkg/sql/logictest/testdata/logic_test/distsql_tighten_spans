@@ -133,14 +133,14 @@ ALTER INDEX p2_id SPLIT AT VALUES(2)
 # (for seconary indexes) nodes.
 
 statement ok
-ALTER TABLE p1 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
+ALTER TABLE p1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
 
 statement ok
-ALTER INDEX b TESTING_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
+ALTER INDEX b EXPERIMENTAL_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
 
 # Interleaved index table
 statement ok
-ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
+ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
 
 #############################
 # Verify range distribution #
@@ -149,7 +149,7 @@ ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as 
 # p1 table (interleaved table)
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE p1
+SHOW EXPERIMENTAL_RANGES FROM TABLE p1
 ----
 Start Key    End Key      Range ID  Replicas  Lease Holder
 NULL         /2           1         {1}       1
@@ -159,7 +159,7 @@ NULL         /2           1         {1}       1
 # Indexes
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM INDEX b
+SHOW EXPERIMENTAL_RANGES FROM INDEX b
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       /0       3         {3}       3
@@ -169,7 +169,7 @@ NULL       /0       3         {3}       3
 # p2 table (interleaved index)
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE p2
+SHOW EXPERIMENTAL_RANGES FROM TABLE p2
 ----
 Start Key  End Key    Range ID  Replicas  Lease Holder
 NULL       /0         5         {5}       5

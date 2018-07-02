@@ -8,7 +8,8 @@ import { createSelector } from "reselect";
 
 import Loading from "src/views/shared/components/loading";
 import spinner from "assets/spinner.gif";
-import { refreshQueries } from "src/redux/apiReducers";
+import { refreshStatements } from "src/redux/apiReducers";
+import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
 import { statementAttr, appAttr } from "src/util/constants";
@@ -16,17 +17,21 @@ import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
+import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
+import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
 
-interface AggregateStatistics {
+interface SingleStatementStatistics {
   statement: string;
   app: string[];
   distSQL: boolean[];
   failed: boolean[];
+  node_id: number[];
   stats: StatementStatistics;
+  byNode: AggregateStatistics[];
 }
 
 function AppLink(props: { app: string }) {
@@ -42,11 +47,16 @@ function AppLink(props: { app: string }) {
 }
 
 interface StatementDetailsOwnProps {
-  statement: AggregateStatistics;
-  refreshQueries: typeof refreshQueries;
+  statement: SingleStatementStatistics;
+  nodeNames: { [nodeId: string]: string };
+  refreshStatements: typeof refreshStatements;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
+
+interface StatementDetailsState {
+  sortSetting: SortSetting;
+}
 
 interface NumericStatRow {
   name: string;
@@ -95,13 +105,30 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   }
 }
 
-class StatementDetails extends React.Component<StatementDetailsProps> {
+class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
+
+  constructor(props: StatementDetailsProps) {
+    super(props);
+    this.state = {
+      sortSetting: {
+        sortKey: 1,
+        ascending: false,
+      },
+    };
+  }
+
+  changeSortSetting = (ss: SortSetting) => {
+    this.setState({
+      sortSetting: ss,
+    });
+  }
+
   componentWillMount() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   componentWillReceiveProps() {
-    this.props.refreshQueries();
+    this.props.refreshStatements();
   }
 
   render() {
@@ -139,6 +166,8 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
     const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart } = countBreakdown(this.props.statement);
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
+
+    const statsByNode = this.props.statement.byNode;
 
     return (
       <div className="content l-columns">
@@ -195,6 +224,16 @@ class StatementDetails extends React.Component<StatementDetailsProps> {
               rows={[
                 { name: "Rows", value: stats.num_rows, bar: rowsBarChart },
               ]}
+            />
+          </section>
+          <section className="section">
+            <h3>By Gateway Node</h3>
+            <StatementsSortedTable
+              className="statements-table"
+              data={statsByNode}
+              columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
+              sortSetting={this.state.sortSetting}
+              onChangeSortSetting={this.changeSortSetting}
             />
           </section>
         </div>
@@ -260,13 +299,27 @@ function renderBools(bools: boolean[]) {
   return "(both included)";
 }
 
-type QueriesState = Pick<AdminUIState, "cachedData", "queries">;
+type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
+
+function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] {
+  const byNode: { [nodeId: string]: StatementStatistics[] } = {};
+
+  stats.forEach(stmt => {
+    const nodeStats = (byNode[stmt.node_id] = byNode[stmt.node_id] || []);
+    nodeStats.push(stmt.stats);
+  });
+
+  return Object.keys(byNode).map(nodeId => ({
+      label: nodeId,
+      stats: combineStatementStats(byNode[nodeId]),
+  }));
+}
 
 export const selectStatement = createSelector(
-  (state: QueriesState) => state.cachedData.queries.data && state.cachedData.queries.data.queries,
-  (_state: QueriesState, props: { params: { [key: string]: string } }) => props,
-  (queries, props) => {
-    if (!queries) {
+  (state: StatementsState) => state.cachedData.statements.data && state.cachedData.statements.data.statements,
+  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
+  (statements, props) => {
+    if (!statements) {
       return null;
     }
 
@@ -281,15 +334,17 @@ export const selectStatement = createSelector(
         predicate = (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.app === app;
     }
 
-    const statements = flattenStatementStats(queries);
-    const results = _.filter(statements, predicate);
+    const flattened = flattenStatementStats(statements);
+    const results = _.filter(flattened, predicate);
 
     return {
       statement,
       stats: combineStatementStats(results.map(s => s.stats)),
+      byNode: coalesceNodeStats(results),
       app: _.uniq(results.map(s => s.app)),
       distSQL: _.uniq(results.map(s => s.distSQL)),
       failed: _.uniq(results.map(s => s.failed)),
+      node_id: _.uniq(results.map(s => s.node_id)),
     };
   },
 );
@@ -298,9 +353,10 @@ export const selectStatement = createSelector(
 const StatementDetailsConnected = connect(
   (state: AdminUIState, props: RouterState) => ({
     statement: selectStatement(state, props),
+    nodeNames: nodeDisplayNameByIDSelector(state),
   }),
   {
-    refreshQueries,
+    refreshStatements,
   },
 )(StatementDetails);
 

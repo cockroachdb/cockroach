@@ -10,7 +10,7 @@ import { FixLong } from "src/util/fixLong";
 
 import * as protos from "src/js/protos";
 
-type StatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;

@@ -49,7 +49,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	getLeaseholders := func() (map[int]int, error) {
-		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE test.t]`)
+		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.t]`)
 		leaseholders := make(map[int]int)
 		numRows := 0
 		for ; rows.Next(); numRows++ {

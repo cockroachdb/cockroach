@@ -18,7 +18,7 @@ ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE data TESTING_RELOCATE
+ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 statement ok
@@ -158,7 +158,7 @@ ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE multiples TESTING_RELOCATE
+ALTER TABLE multiples EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Lookup join on covering secondary index

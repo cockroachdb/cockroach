@@ -31,20 +31,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-type testingRelocateNode struct {
+type relocateNode struct {
 	optColumnsSlot
 
 	tableDesc *sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
 	rows      planNode
 
-	run testingRelocateRun
+	run relocateRun
 }
 
-// TestingRelocate moves ranges to specific stores
-// (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
+// Relocate moves ranges to specific stores
+// (`ALTER TABLE/INDEX ... EXPERIMENTAL_RELOCATE ...` statement)
 // Privileges: INSERT on table.
-func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) (planNode, error) {
+func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
@@ -72,10 +72,10 @@ func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) 
 
 	cols := planColumns(rows)
 	if len(cols) < 2 {
-		return nil, errors.Errorf("less than two columns in TESTING_RELOCATE data")
+		return nil, errors.Errorf("less than two columns in EXPERIMENTAL_RELOCATE data")
 	}
 	if len(cols) > len(index.ColumnIDs)+1 {
-		return nil, errors.Errorf("too many columns in TESTING_RELOCATE data")
+		return nil, errors.Errorf("too many columns in EXPERIMENTAL_RELOCATE data")
 	}
 	for i := range cols {
 		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
@@ -84,17 +84,17 @@ func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) 
 				colName = index.ColumnNames[i-1]
 			}
 			return nil, errors.Errorf(
-				"TESTING_RELOCATE data column %d (%s) must be of type %s, not type %s",
+				"EXPERIMENTAL_RELOCATE data column %d (%s) must be of type %s, not type %s",
 				i+1, colName, desiredTypes[i], cols[i].Typ,
 			)
 		}
 	}
 
-	return &testingRelocateNode{
+	return &relocateNode{
 		tableDesc: tableDesc,
 		index:     index,
 		rows:      rows,
-		run: testingRelocateRun{
+		run: relocateRun{
 			storeMap: make(map[roachpb.StoreID]roachpb.NodeID),
 		},
 	}, nil
@@ -111,9 +111,9 @@ var relocateNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-// testingRelocateRun contains the run-time state of
-// testingRelocateNode during local execution.
-type testingRelocateRun struct {
+// relocateRun contains the run-time state of
+// relocateNode during local execution.
+type relocateRun struct {
 	lastRangeStartKey []byte
 
 	// storeMap caches information about stores seen in relocation strings (to
@@ -121,7 +121,7 @@ type testingRelocateRun struct {
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
-func (n *testingRelocateNode) Next(params runParams) (bool, error) {
+func (n *relocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
 
@@ -135,13 +135,13 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 
 	if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
 		return false, errors.Errorf(
-			"expected int array in the first TESTING_RELOCATE data column; got %s",
+			"expected int array in the first EXPERIMENTAL_RELOCATE data column; got %s",
 			data[0].ResolvedType(),
 		)
 	}
 	relocation := data[0].(*tree.DArray)
 	if len(relocation.Array) == 0 {
-		return false, errors.Errorf("empty relocation array for TESTING_RELOCATE")
+		return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 	}
 
 	// Create an array of the desired replication targets.
@@ -179,21 +179,21 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	if err := storage.TestingRelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, targets); err != nil {
+	if err := storage.RelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, targets); err != nil {
 		return false, err
 	}
 
 	return true, nil
 }
 
-func (n *testingRelocateNode) Values() tree.Datums {
+func (n *relocateNode) Values() tree.Datums {
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastRangeStartKey)),
 		tree.NewDString(keys.PrettyPrint(sqlbase.IndexKeyValDirs(n.index), n.run.lastRangeStartKey)),
 	}
 }
 
-func (n *testingRelocateNode) Close(ctx context.Context) {
+func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 

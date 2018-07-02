@@ -76,19 +76,21 @@ describe("flattenStatementStats", () => {
     const stats = [
       {
         key: {
-          query: "SELECT * FROM foobar",
+          statement: "SELECT * FROM foobar",
           app: "foobar",
           distSQL: true,
           failed: false,
+          node_id: 1,
         },
         stats: {},
       },
       {
         key: {
-          query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
+          statement: "UPDATE foobar SET name = 'baz' WHERE id = 42",
           app: "bazzer",
           distSQL: false,
           failed: true,
+          node_id: 2,
         },
         stats: {},
       },
@@ -99,10 +101,11 @@ describe("flattenStatementStats", () => {
     assert.equal(flattened.length, stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].statement, stats[i].key.query);
+      assert.equal(flattened[i].statement, stats[i].key.statement);
       assert.equal(flattened[i].app, stats[i].key.app);
       assert.equal(flattened[i].distSQL, stats[i].key.distSQL);
       assert.equal(flattened[i].failed, stats[i].key.failed);
+      assert.equal(flattened[i].node_id, stats[i].key.node_id);
 
       assert.equal(flattened[i].stats, stats[i].stats);
     }
