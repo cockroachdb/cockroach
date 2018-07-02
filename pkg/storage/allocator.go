@@ -239,6 +239,33 @@ func MakeAllocator(
 	}
 }
 
+// GetNeededReplicas calculates the number of replicas a range should have given its zone config and
+// dynamic up and down replication.
+func GetNeededReplicas(
+	zoneConfigReplicaCount int32, aliveReplicas int, decommissioningReplicas int,
+) int {
+	numZoneReplicas := int(zoneConfigReplicaCount)
+	need := numZoneReplicas
+
+	// We're adjusting the replication factor all ranges so that if there are less nodes than
+	// replicas specified in the zone config, the cluster can still function.
+	need = int(math.Min(float64(aliveReplicas-decommissioningReplicas), float64(need)))
+
+	// Ensure that we don't up- or down-replicate to an even number of replicas.
+	// Note that in the case of 5 desired replicas and a decommissioning store, this prefers
+	// down-replicating from 5 to 3 rather than sticking with 4 desired stores or blocking
+	// the decommissioning from completing.
+	if need%2 == 0 {
+		need = need - 1
+	}
+	need = int(math.Max(3.0, float64(need)))
+	if need > numZoneReplicas {
+		need = numZoneReplicas
+	}
+
+	return need
+}
+
 // ComputeAction determines the exact operation needed to repair the
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
@@ -249,12 +276,15 @@ func (a *Allocator) ComputeAction(
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
-	need := int(zone.NumReplicas)
+
 	have := len(rangeInfo.Desc.Replicas)
+	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
+	need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, len(decommissioningReplicas))
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
+
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
@@ -264,7 +294,6 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	if have == need && len(decommissioningReplicas) > 0 {
 		// Range has decommissioning replica(s). We should up-replicate to add
 		// another replica. The decommissioning replica(s) will be down-replicated

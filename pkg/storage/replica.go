@@ -6831,6 +6831,7 @@ func (r *Replica) Metrics(
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
 		raftLogSize,
+		r.store.allocator.storePool,
 	)
 }
 
@@ -6857,6 +6858,7 @@ func calcReplicaMetrics(
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
 	raftLogSize int64,
+	storePool *StorePool,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -6898,8 +6900,13 @@ func calcReplicaMetrics(
 		}
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
-		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
-			m.Underreplicated = true
+		} else {
+			decommissioningReplicas := len(storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
+			_, aliveStoreCount, _ := storePool.getStoreList(desc.RangeID, storeFilterNone)
+
+			if GetNeededReplicas(zoneConfig.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
+				m.Underreplicated = true
+			}
 		}
 	}
 
