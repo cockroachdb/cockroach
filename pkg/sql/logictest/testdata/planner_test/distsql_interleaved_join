@@ -104,7 +104,7 @@ ALTER TABLE grandchild2 TESTING_RELOCATE
 
 # Verify data placement.
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE parent1
+SHOW EXPERIMENTAL_RANGES FROM TABLE parent1
 ----
 Start Key                   End Key                     Range ID  Replicas  Lease Holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
@@ -129,7 +129,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        20        {5}       5
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE child1
+SHOW EXPERIMENTAL_RANGES FROM TABLE child1
 ----
 Start Key                   End Key                     Range ID  Replicas  Lease Holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
@@ -154,7 +154,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        20        {5}       5
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE grandchild1
+SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1
 ----
 Start Key                   End Key                     Range ID  Replicas  Lease Holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     1         {1}       1
@@ -360,7 +360,7 @@ ALTER TABLE outer_p1 TESTING_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE outer_p1
+SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       /0       20        {5}       5

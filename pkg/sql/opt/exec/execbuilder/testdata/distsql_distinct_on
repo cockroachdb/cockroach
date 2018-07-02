@@ -46,7 +46,7 @@
 #   (ARRAY[5], '3', '4', '5')
 # 
 # query TTITI colnames
-# SELECT * FROM [SHOW TESTING_RANGES FROM TABLE xyz]
+# SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
 # ----
 # Start Key  End Key  Range ID  Replicas  Lease Holder
 # NULL       /2       1         {1}       1
@@ -56,7 +56,7 @@
 # /7         NULL     5         {5}       5
 # 
 # query TTITI colnames
-# SELECT * FROM [SHOW TESTING_RANGES FROM TABLE abc]
+# SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
 # ----
 # Start Key        End Key          Range ID  Replicas  Lease Holder
 # NULL             /NULL/NULL/NULL  5         {5}       5

@@ -1235,7 +1235,7 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 //  - For non-table keys, we never have NotNull.
 //  - For table keys, we always explicitly pass in Ascending and Descending for
 //    all key values, including NotNulls. The only case we do not pass in
-//    direction is during a SHOW TESTING_RANGE ON TABLE parent and there exists
+//    direction is during a SHOW EXPERIMENTAL_RANGES ON TABLE parent and there exists
 //    an interleaved split key. Note that interleaved keys cannot have NotNull
 //    values except for the interleaved sentinel.
 //
@@ -1243,7 +1243,7 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 // non-table keys encode values with Ascending.
 //
 // The only case where we end up defaulting direction for table keys is for
-// interleaved split keys in SHOW TESTING_RANGE ON TABLE parent. Since
+// interleaved split keys in SHOW EXPERIMENTAL_RANGES ON TABLE parent. Since
 // interleaved prefixes are defined on the primary key (and primary key values
 // are always encoded Ascending), this will always print out the correct key
 // even if we don't have directions for the child index's columns.

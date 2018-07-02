@@ -61,7 +61,7 @@ func TestBank(t *testing.T) {
 
 			var rangeCount int
 			sqlDB.QueryRow(t,
-				fmt.Sprintf(`SELECT count(*) FROM [SHOW TESTING_RANGES FROM TABLE %s]`, bankTable.Name),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE %s]`, bankTable.Name),
 			).Scan(&rangeCount)
 			if rangeCount != test.expectedRanges {
 				t.Errorf("got %d ranges expected %d", rangeCount, test.expectedRanges)

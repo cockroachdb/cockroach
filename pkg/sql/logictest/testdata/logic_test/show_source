@@ -233,13 +233,13 @@ testuser
 
 
 query TTITI colnames
-SELECT * FROM [SHOW TESTING_RANGES FROM TABLE system.descriptor]
+SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       NULL     1         {1}       1
 
 query TTITI colnames
-CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW TESTING_RANGES FROM INDEX foo@ix]
+CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       NULL     1         {1}       1
