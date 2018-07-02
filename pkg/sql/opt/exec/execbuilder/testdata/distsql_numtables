@@ -143,7 +143,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFLBEEMhXt_xfHqgLuFzV
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyskTFr8zAQhvfvV4SbFRI58aLJa-AjKWm34kG1jiCwfeZ0hpbg_15sFVK3sZNCRp30vM_L6Qw1OdzbCgOYV9CgIIVcQcNUYAjE_Tg-2rl3MGsFvm5a6ce5goIYwZxBvJQIBl7sW4lHtA55tQYFDsX6cohu2FeWP7K6rYSCMCg4tGIWmYa8U0CtXGKD2BOC0Z26X_1MLMirZGzN9BIU_PeVl0U6KUomRZd8YoeM7nd83l1ps6clNavt-PWtGptRDX3_qvWDV31D_bXqzWNXfUV0xNBQHXAkmkpe9_-A7oTx3wK1XOATUzFo4vEwcMPAYZB4q-NhV8ervuB3WM_CyQjWP-FkFk7nzZtZeDsPb_9UO-_-fQYAAP__GoVT2w==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkDFrwzAQhff-ivBmldiBLJqyBkpSQrfiQbWOILB9QneCluD_XmQNTQpNM967-57e0wUTezq4kQT2HS0MtugMYuKeRDgVuR7t_SdsYxCmmLXInUHPiWAv0KADweLAzxzXxcWTujAsZ7MBZ_2BRN2ZYDezuTJu7xu_uY-BTuQ8pXVzY4-YwujS127Ko7JogsExq13tSoyXMAZdbfFXiPYmxD_tTiSRJ6GH6jVzZ0D-TPUHhXPq6TVxvzxTx-PCLYIn0brd1GE_1VUJeA23d-HmF9zNT98BAAD___cAnxU=
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
