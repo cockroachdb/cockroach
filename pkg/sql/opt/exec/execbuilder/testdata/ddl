@@ -91,7 +91,7 @@ CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 query TTTTT colnames
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-Tree                 Field     Description       Columns               Ordering
+tree                 field     description       columns               ordering
 split                ·         ·                 (key, pretty)         ·
  └── limit           ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
       │              count     3                 ·                     ·
@@ -238,7 +238,7 @@ COMMIT
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM v
 ----
-Tree                      Field     Description       Columns                Ordering
+tree                      field     description       columns                ordering
 render                    ·         ·                 (k)                    ·
  │                        render 0  test.public.kv.k  ·                      ·
  └── run                  ·         ·                 (k, v, z)              ·

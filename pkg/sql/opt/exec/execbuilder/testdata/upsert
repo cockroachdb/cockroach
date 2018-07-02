@@ -7,7 +7,7 @@ CREATE TABLE kv (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC
 ]
 ----

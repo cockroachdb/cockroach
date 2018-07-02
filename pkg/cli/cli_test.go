@@ -1624,7 +1624,7 @@ func Example_misc_pretty() {
 	// (1 row)
 	// sql --format=pretty -e explain select s, 'foo' from t.t
 	// +-----------+-------+-------------+
-	// |   Tree    | Field | Description |
+	// |   tree    | field | description |
 	// +-----------+-------+-------------+
 	// | render    |       |             |
 	// |  └── scan |       |             |

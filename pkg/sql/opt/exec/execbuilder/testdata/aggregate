@@ -185,7 +185,7 @@ group                ·            ·                                           
 ·                    spans        ALL                                           ·                                                             ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
@@ -208,7 +208,7 @@ render               ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
@@ -240,7 +240,7 @@ render                    ·            ·
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
@@ -264,7 +264,7 @@ render               ·            ·
 
 # Show reuse of renders expression inside an expansion.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
 ]
 ----

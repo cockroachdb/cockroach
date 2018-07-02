@@ -42,7 +42,7 @@ render               ·            ·                 (count, r)                
 ·                    spans        ALL               ·                               ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT count(k) FROM kv
 ]
 ----
@@ -55,7 +55,7 @@ group           ·            ·
 ·               spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT count(k), sum(k), max(k) FROM kv
 ]
 ----
@@ -86,7 +86,7 @@ group                ·            ·                                           
 ·                    spans        ALL                                           ·                                                             ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
@@ -109,7 +109,7 @@ group                ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
@@ -134,7 +134,7 @@ group                ·            ·
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
@@ -158,7 +158,7 @@ group                ·            ·
 
 # Show reuse of renders expression inside an expansion.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
 ]
 ----
@@ -188,7 +188,7 @@ CREATE TABLE abc (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
@@ -220,7 +220,7 @@ CREATE TABLE xyz (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(x) FROM xyz
 ]
 ----
@@ -234,7 +234,7 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ]
 ----
@@ -248,7 +248,7 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(x) FROM xyz
 ]
 ----
@@ -262,7 +262,7 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 1
 ]
 ----
@@ -276,7 +276,7 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 1
 ]
 ----
@@ -290,7 +290,7 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 7
 ]
 ----
@@ -304,7 +304,7 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 7
 ]
 ----
@@ -318,7 +318,7 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ]
 ----
@@ -345,7 +345,7 @@ fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ]
 ----
@@ -378,7 +378,7 @@ fetched: /xyz/primary/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT variance(x) FROM xyz WHERE x = 1
 ]
 ----
@@ -411,7 +411,7 @@ CREATE TABLE ab (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
@@ -445,7 +445,7 @@ fetched: /ab/primary/1/b -> 10
 output row: [1]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(a) FROM abc
 ]
 ----
@@ -471,7 +471,7 @@ fetched: /ab/primary/5 -> NULL
 output row: [5]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ]
 ----
@@ -489,7 +489,7 @@ sort                 ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ]
 ----
@@ -506,7 +506,7 @@ sort                 ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ]
 ----
@@ -525,7 +525,7 @@ sort                 ·            ·
 
 # Check that filters propagate through no-op aggregation.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
 ]
 ----
@@ -552,7 +552,7 @@ CREATE TABLE filter_test (
 
 # Check that filter expressions are only rendered once.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ]
 ----
@@ -582,7 +582,7 @@ group           ·            ·                                     (count int)
 
 # Tests with * inside GROUP BY.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*
 ]
 ----
@@ -595,7 +595,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ]
 ----
@@ -675,7 +675,7 @@ group      ·            ·                 (min)   ·
 ·          spans        ALL               ·       ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
 ]
 ----
@@ -696,7 +696,7 @@ statement ok
 CREATE TABLE xy(x STRING, y STRING);
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE)
    SELECT min(y), (b, a)
      FROM ab, xy GROUP BY (x, (a, b))

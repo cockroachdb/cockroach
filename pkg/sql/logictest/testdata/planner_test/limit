@@ -7,7 +7,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
 ----
-Tree             Field   Description  Columns                      Ordering
+tree             field   description  columns                      ordering
 limit            ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
  │               count   2            ·                            ·
  └── index-join  ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
@@ -24,7 +24,7 @@ limit            ·       ·            (k, v, w)                    k!=NULL; v!
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
-Tree                           Field      Description      Columns                      Ordering
+tree                           field      description      columns                      ordering
 limit                          ·          ·                (w)                          weak-key(w); +w
  │                             count      25               ·                            ·
  └── distinct                  ·          ·                (w)                          weak-key(w); +w
