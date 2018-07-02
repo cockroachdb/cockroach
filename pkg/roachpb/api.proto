@@ -1258,101 +1258,96 @@ message GetSnapshotForMergeResponse {
 // Be cautious about deprecating fields as doing so can lead to inconsistencies
 // between replicas.
 message RequestUnion {
-  option (gogoproto.onlyone) = true;
-
-  GetRequest get = 1;
-  PutRequest put = 2;
-  ConditionalPutRequest conditional_put = 3;
-  IncrementRequest increment = 4;
-  DeleteRequest delete = 5;
-  DeleteRangeRequest delete_range = 6;
-  ClearRangeRequest clear_range = 38;
-  ScanRequest scan = 7;
-  BeginTransactionRequest begin_transaction = 8;
-  EndTransactionRequest end_transaction = 9;
-  AdminSplitRequest admin_split = 10;
-  AdminMergeRequest admin_merge = 11;
-  AdminTransferLeaseRequest admin_transfer_lease = 29;
-  AdminChangeReplicasRequest admin_change_replicas = 35;
-  HeartbeatTxnRequest heartbeat_txn = 12;
-  GCRequest gc = 13;
-  PushTxnRequest push_txn = 14;
-  reserved 15;
-  ResolveIntentRequest resolve_intent = 16;
-  ResolveIntentRangeRequest resolve_intent_range = 17;
-  MergeRequest merge = 18;
-  TruncateLogRequest truncate_log = 19;
-  RequestLeaseRequest request_lease = 20;
-  ReverseScanRequest reverse_scan = 21;
-  ComputeChecksumRequest compute_checksum = 22;
-  reserved 23;
-  CheckConsistencyRequest check_consistency = 24;
-  NoopRequest noop = 25;
-  InitPutRequest init_put = 26;
-  reserved 27;
-  TransferLeaseRequest transfer_lease = 28;
-  LeaseInfoRequest lease_info = 30;
-  WriteBatchRequest write_batch = 31;
-  ExportRequest export = 32;
-  ImportRequest import = 34;
-  QueryTxnRequest query_txn = 33;
-  QueryIntentRequest query_intent = 42;
-  AdminScatterRequest admin_scatter = 36;
-  AddSSTableRequest add_sstable = 37;
-  RecomputeStatsRequest recompute_stats = 39;
-  RefreshRequest refresh = 40;
-  RefreshRangeRequest refresh_range = 41;
-  GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
+  oneof value {
+    GetRequest get = 1;
+    PutRequest put = 2;
+    ConditionalPutRequest conditional_put = 3;
+    IncrementRequest increment = 4;
+    DeleteRequest delete = 5;
+    DeleteRangeRequest delete_range = 6;
+    ClearRangeRequest clear_range = 38;
+    ScanRequest scan = 7;
+    BeginTransactionRequest begin_transaction = 8;
+    EndTransactionRequest end_transaction = 9;
+    AdminSplitRequest admin_split = 10;
+    AdminMergeRequest admin_merge = 11;
+    AdminTransferLeaseRequest admin_transfer_lease = 29;
+    AdminChangeReplicasRequest admin_change_replicas = 35;
+    HeartbeatTxnRequest heartbeat_txn = 12;
+    GCRequest gc = 13;
+    PushTxnRequest push_txn = 14;
+    ResolveIntentRequest resolve_intent = 16;
+    ResolveIntentRangeRequest resolve_intent_range = 17;
+    MergeRequest merge = 18;
+    TruncateLogRequest truncate_log = 19;
+    RequestLeaseRequest request_lease = 20;
+    ReverseScanRequest reverse_scan = 21;
+    ComputeChecksumRequest compute_checksum = 22;
+    CheckConsistencyRequest check_consistency = 24;
+    NoopRequest noop = 25;
+    InitPutRequest init_put = 26;
+    TransferLeaseRequest transfer_lease = 28;
+    LeaseInfoRequest lease_info = 30;
+    WriteBatchRequest write_batch = 31;
+    ExportRequest export = 32;
+    ImportRequest import = 34;
+    QueryTxnRequest query_txn = 33;
+    QueryIntentRequest query_intent = 42;
+    AdminScatterRequest admin_scatter = 36;
+    AddSSTableRequest add_sstable = 37;
+    RecomputeStatsRequest recompute_stats = 39;
+    RefreshRequest refresh = 40;
+    RefreshRangeRequest refresh_range = 41;
+    GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
+  }
+  reserved 15, 23, 27;
 }
 
 // A ResponseUnion contains exactly one of the responses.
 // The values added here must match those in RequestUnion.
 message ResponseUnion {
-  option (gogoproto.onlyone) = true;
-
-  GetResponse get = 1;
-  PutResponse put = 2;
-  ConditionalPutResponse conditional_put = 3;
-  IncrementResponse increment = 4;
-  DeleteResponse delete = 5;
-  DeleteRangeResponse delete_range = 6;
-  ClearRangeResponse clear_range = 38;
-  ScanResponse scan = 7;
-  BeginTransactionResponse begin_transaction = 8;
-  EndTransactionResponse end_transaction = 9;
-  AdminSplitResponse admin_split = 10;
-  AdminMergeResponse admin_merge = 11;
-  AdminTransferLeaseResponse admin_transfer_lease = 29;
-  AdminChangeReplicasResponse admin_change_replicas = 35;
-  HeartbeatTxnResponse heartbeat_txn = 12;
-  GCResponse gc = 13;
-  PushTxnResponse push_txn = 14;
-  reserved 15;
-  ResolveIntentResponse resolve_intent = 16;
-  ResolveIntentRangeResponse resolve_intent_range = 17;
-  MergeResponse merge = 18;
-  TruncateLogResponse truncate_log = 19;
-  RequestLeaseResponse request_lease = 20;
-  ReverseScanResponse reverse_scan = 21;
-  ComputeChecksumResponse compute_checksum = 22;
-  reserved 23;
-  CheckConsistencyResponse check_consistency = 24;
-  NoopResponse noop = 25;
-  InitPutResponse init_put = 26;
-  reserved 27;
-  reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
-  LeaseInfoResponse lease_info = 30;
-  WriteBatchResponse write_batch = 31;
-  ExportResponse export = 32;
-  ImportResponse import = 34;
-  QueryTxnResponse query_txn = 33;
-  QueryIntentResponse query_intent = 42;
-  AdminScatterResponse admin_scatter = 36;
-  AddSSTableResponse add_sstable = 37;
-  RecomputeStatsResponse recompute_stats = 39;
-  RefreshResponse refresh = 40;
-  RefreshRangeResponse refresh_range = 41;
-  GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
+  oneof value {
+    GetResponse get = 1;
+    PutResponse put = 2;
+    ConditionalPutResponse conditional_put = 3;
+    IncrementResponse increment = 4;
+    DeleteResponse delete = 5;
+    DeleteRangeResponse delete_range = 6;
+    ClearRangeResponse clear_range = 38;
+    ScanResponse scan = 7;
+    BeginTransactionResponse begin_transaction = 8;
+    EndTransactionResponse end_transaction = 9;
+    AdminSplitResponse admin_split = 10;
+    AdminMergeResponse admin_merge = 11;
+    AdminTransferLeaseResponse admin_transfer_lease = 29;
+    AdminChangeReplicasResponse admin_change_replicas = 35;
+    HeartbeatTxnResponse heartbeat_txn = 12;
+    GCResponse gc = 13;
+    PushTxnResponse push_txn = 14;
+    ResolveIntentResponse resolve_intent = 16;
+    ResolveIntentRangeResponse resolve_intent_range = 17;
+    MergeResponse merge = 18;
+    TruncateLogResponse truncate_log = 19;
+    RequestLeaseResponse request_lease = 20;
+    ReverseScanResponse reverse_scan = 21;
+    ComputeChecksumResponse compute_checksum = 22;
+    CheckConsistencyResponse check_consistency = 24;
+    NoopResponse noop = 25;
+    InitPutResponse init_put = 26;
+    LeaseInfoResponse lease_info = 30;
+    WriteBatchResponse write_batch = 31;
+    ExportResponse export = 32;
+    ImportResponse import = 34;
+    QueryTxnResponse query_txn = 33;
+    QueryIntentResponse query_intent = 42;
+    AdminScatterResponse admin_scatter = 36;
+    AddSSTableResponse add_sstable = 37;
+    RecomputeStatsResponse recompute_stats = 39;
+    RefreshResponse refresh = 40;
+    RefreshRangeResponse refresh_range = 41;
+    GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
+  }
+  reserved 15, 23, 27, 28;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
