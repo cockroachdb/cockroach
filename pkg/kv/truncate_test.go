@@ -148,7 +148,7 @@ func TestTruncate(t *testing.T) {
 
 		original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
 		for i, request := range goldenOriginal.Requests {
-			original.Requests[i].SetValue(request.GetInner().ShallowCopy())
+			original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
 		}
 
 		desc := &roachpb.RangeDescriptor{

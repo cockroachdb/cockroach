@@ -5416,8 +5416,11 @@ func (r *Replica) evaluateWriteBatch(
 
 			br.Txn = &clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
-			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
-			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+			resps := make([]roachpb.ResponseUnion, len(br.Responses)+2)
+			resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
+			copy(resps[1:], br.Responses)
+			resps[len(resps)-1].MustSetInner(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
+			br.Responses = resps
 			return batch, ms, br, res, nil
 		}
 
