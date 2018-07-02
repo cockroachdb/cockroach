@@ -288,96 +288,98 @@ func (w *interleavedPartitioned) Ops(
 		SQLDatabase: sqlDatabase,
 	}
 
-	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
-		hists := reg.GetHandle()
-		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		opRand := rng.Intn(100)
-		if opRand < w.insertPercent {
-			start := timeutil.Now()
-			insertStatement, err := db.Prepare(insertQuery)
-			if err != nil {
-				return err
-			}
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
-			args := []interface{}{
-				sessionID,            // session_id
-				randString(rng, 100), // affiliate
-				randString(rng, 50),  // channel
-				randString(rng, 20),  // language
-				randString(rng, 20),  // status
-				randString(rng, 50),  // platform
-				randString(rng, 100), // query_id
-			}
-			rows, err := insertStatement.Query(args...)
-			if err != nil {
-				return err
-			}
-			hists.Get(`insert`).Record(timeutil.Since(start))
-			return rows.Err()
-		} else if opRand < w.insertPercent+w.queryPercent { // query
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
-			args := []interface{}{
-				sessionID,
-			}
-			start := timeutil.Now()
-			for _, query := range retrieveQueries {
-				retrieveStatement, err := db.Prepare(query)
+	for i := 0; i < w.connFlags.Concurrency; i++ {
+		ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
+			hists := reg.GetHandle()
+			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+			opRand := rng.Intn(100)
+			if opRand < w.insertPercent {
+				start := timeutil.Now()
+				insertStatement, err := db.Prepare(insertQuery)
 				if err != nil {
 					return err
 				}
-				rows, err := retrieveStatement.Query(args...)
+				sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+				args := []interface{}{
+					sessionID,            // session_id
+					randString(rng, 100), // affiliate
+					randString(rng, 50),  // channel
+					randString(rng, 20),  // language
+					randString(rng, 20),  // status
+					randString(rng, 50),  // platform
+					randString(rng, 100), // query_id
+				}
+				rows, err := insertStatement.Query(args...)
 				if err != nil {
 					return err
 				}
-				if rows.Err() != nil {
-					return rows.Err()
+				hists.Get(`insert`).Record(timeutil.Since(start))
+				return rows.Err()
+			} else if opRand < w.insertPercent+w.queryPercent { // query
+				sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+				args := []interface{}{
+					sessionID,
 				}
-			}
-			hists.Get(`retrieve`).Record(timeutil.Since(start))
-		} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
-			args := []interface{}{
-				sessionID,
-			}
-			start := timeutil.Now()
-			for _, query := range retrieveQueries {
-				retrieveStatement, err := db.Prepare(query)
-				if err != nil {
-					return err
+				start := timeutil.Now()
+				for _, query := range retrieveQueries {
+					retrieveStatement, err := db.Prepare(query)
+					if err != nil {
+						return err
+					}
+					rows, err := retrieveStatement.Query(args...)
+					if err != nil {
+						return err
+					}
+					if rows.Err() != nil {
+						return rows.Err()
+					}
 				}
-				rows, err := retrieveStatement.Query(args...)
-				if err != nil {
-					return err
+				hists.Get(`retrieve`).Record(timeutil.Since(start))
+			} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
+				sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+				args := []interface{}{
+					sessionID,
 				}
-				if rows.Err() != nil {
-					return rows.Err()
+				start := timeutil.Now()
+				for _, query := range retrieveQueries {
+					retrieveStatement, err := db.Prepare(query)
+					if err != nil {
+						return err
+					}
+					rows, err := retrieveStatement.Query(args...)
+					if err != nil {
+						return err
+					}
+					if rows.Err() != nil {
+						return rows.Err()
+					}
 				}
-			}
 
-			updateStatement, err := db.Prepare(updateQuery)
+				updateStatement, err := db.Prepare(updateQuery)
+				if err != nil {
+					return err
+				}
+				rows, err := updateStatement.Query(randString(rng, 20), sessionID)
+				if err != nil {
+					return err
+				}
+				hists.Get(`updates`).Record(timeutil.Since(start))
+				return rows.Err()
+			}
+			// else case, delete
+			start := timeutil.Now()
+			deleteStatement, err := db.Prepare(deleteQuery)
 			if err != nil {
 				return err
 			}
-			rows, err := updateStatement.Query(randString(rng, 20), sessionID)
+			rows, err := deleteStatement.Query(w.deleteBatchSize)
 			if err != nil {
 				return err
 			}
-			hists.Get(`updates`).Record(timeutil.Since(start))
+			hists.Get(`delete`).Record(timeutil.Since(start))
 			return rows.Err()
-		}
-		// else case, delete
-		start := timeutil.Now()
-		deleteStatement, err := db.Prepare(deleteQuery)
-		if err != nil {
-			return err
-		}
-		rows, err := deleteStatement.Query(w.deleteBatchSize)
-		if err != nil {
-			return err
-		}
-		hists.Get(`delete`).Record(timeutil.Since(start))
-		return rows.Err()
-	})
+		})
+	}
 
 	return ql, nil
 }
