@@ -398,7 +398,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 	}
 
 	t.Run("SHOW TRACE", func(t *testing.T) {
-		rows, err := sqlDB.Query(`SELECT message, tag, loc FROM [SHOW TRACE FOR SESSION]`)
+		rows, err := sqlDB.Query(`SELECT message, tag, location FROM [SHOW TRACE FOR SESSION]`)
 		if err != nil {
 			t.Fatal(err)
 		}
