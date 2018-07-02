@@ -19,8 +19,11 @@ import (
 	"errors"
 	"sync"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
@@ -84,10 +87,16 @@ func newMergeJoiner(
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{leftSource, rightSource},
+			trailingMetaCallback: func() []ProducerMetadata {
+				m.close()
+				return nil
+			},
 		},
 	); err != nil {
 		return nil, err
 	}
+
+	m.memMonitor = newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
@@ -96,6 +105,7 @@ func newMergeJoiner(
 		m.rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
+		m.memMonitor,
 	)
 	if err != nil {
 		return nil, err
@@ -248,10 +258,18 @@ func (m *mergeJoiner) ConsumerDone() {
 	m.moveToDraining(nil /* err */)
 }
 
+func (m *mergeJoiner) close() {
+	if m.internalClose() {
+		ctx := m.evalCtx.Ctx()
+		m.streamMerger.close(ctx)
+		m.memMonitor.Stop(ctx)
+	}
+}
+
 // ConsumerClosed is part of the RowSource interface.
 func (m *mergeJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	m.internalClose()
+	m.close()
 }
 
 var _ DistSQLSpanStats = &MergeJoinerStats{}
@@ -267,15 +285,17 @@ func (mjs *MergeJoinerStats) Stats() map[string]string {
 	for k, v := range rightInputStatsMap {
 		statsMap[k] = v
 	}
+	statsMap[mergeJoinerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
 	return statsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
-	return append(
+	stats := append(
 		mjs.LeftInputStats.StatsForQueryPlan("left "),
 		mjs.RightInputStats.StatsForQueryPlan("right ")...,
 	)
+	return append(stats, fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
 }
 
 // outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
@@ -295,6 +315,7 @@ func (m *mergeJoiner) outputStatsToTrace() {
 			&MergeJoinerStats{
 				LeftInputStats:  lis,
 				RightInputStats: ris,
+				MaxAllocatedMem: m.memMonitor.MaximumBytes(),
 			},
 		)
 	}
