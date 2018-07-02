@@ -2508,6 +2508,12 @@ func TestUnsplittableRange(t *testing.T) {
 			TTLSeconds: int32(ttl.Seconds()),
 		},
 	})()
+	defer config.TestingSetDefaultSystemZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+		GC: config.GCPolicy{
+			TTLSeconds: int32(ttl.Seconds()),
+		},
+	})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())

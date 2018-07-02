@@ -34,7 +34,7 @@ func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const keysPerDesc = 2
-	const nonDescKeys = 5
+	const nonDescKeys = 7
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
