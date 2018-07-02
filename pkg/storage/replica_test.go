@@ -8976,6 +8976,12 @@ func TestReplicaMetrics(t *testing.T) {
 		return m
 	}
 
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	cfg := TestStoreConfig(nil)
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	testCases := []struct {
 		replicas    int32
 		storeID     roachpb.StoreID
@@ -9164,6 +9170,7 @@ func TestReplicaMetrics(t *testing.T) {
 				RaftLogTooLarge: true,
 			}},
 	}
+
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			zoneConfig := config.ZoneConfig{NumReplicas: c.replicas}
@@ -9176,7 +9183,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
+				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize, tc.store.allocator.storePool)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
