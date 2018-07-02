@@ -1230,7 +1230,7 @@ func (s *adminServer) QueryPlan(
 	}
 
 	explain := fmt.Sprintf(
-		"SELECT \"JSON\" FROM [EXPLAIN (distsql) %s]",
+		"SELECT json FROM [EXPLAIN (DISTSQL) %s]",
 		strings.Trim(req.Query, ";"))
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-query-plan", nil /* txn */, args, explain,

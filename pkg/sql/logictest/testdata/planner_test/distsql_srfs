@@ -17,30 +17,30 @@ INSERT INTO data SELECT generate_series(0, 9)
 
 # Correlated SRF
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJysk0Frq0AQx-_vU8j_9B5ZiKsmD_bkNZc0JLkVKVt3SC3GldkNtAS_e4keUtsYLPa4M_7m94cZz6isobU-koN6hIRABIEYAgkEFsgEarY5OWf58kkHrMwbVChQVPXJX8qZQG6ZoM7whS8JCnv9XNKWtCGehxAw5HVRtpqai6Pm99Ror5E1Avbkr4Oc1weCko0YkF0dlg0xmf70VM6QNTcSbdi-Uu535OeLPnKgilh7enLEBbm_qRRBKoNZIJVSq_X-32DKaDDljQA7y554vvyWV6TRDAJH7fOXoKRKBXLQGPeMcvwS5OQlRONl0WRZPF4WT5Yl42XJr97yDdmWXG0rRz3P0OTwcuhkDtT9GM6eOKcN27zVdM-HlmsLhpzvurJ7rKq21Qb8DMu7cNSDw69wdBf-fx-Op8ROpsCLKfDyR3DW_PkIAAD__-HKznM=
 
 # Order by primary key
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyskjFrwzAQhff-ivCmlghi2U4HTV6zpCHNVkxRrUdwSSwjKdAS_N9L7CF1iYuLO-pO332P486orOFaH-mhXiAhEEMggUAKgSVygdrZgt5bd_nSASvzARUJlFV9CpdyLlBYR6gzQhkOhMJOvx24pTZ0iwgChkGXh1ZTu_Ko3WdmdNDIGwF7CtdBPug9oWQjBmRXh3WGjqY_PZNz5M2NRBtn31mEZ4bFso_sWdHpwFdPV9LfZ1LMMjmbz6RSarXePQymjHsp5fiVyMkricfL4smyZLwsmSxLx8vSf72sG7ItfW0rz55naHJ0OTuaPbsz9fbkCm6cLVpN93xqubZg6EPXld1jVbWtNuB3WP4KP_bg6CccTzEnU-B0Crz8E5w3d18BAAD__6OTljs=
 
 # Order by SRF
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 2]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 2]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJysk8Fqs0AUhff_U4S7-ksG4qhJYVZus0lDkl2RMnUOwZI4cmeEluC7l-giNWiw2OXM-J3vcLleqLAGG32GI_VKkgSFJCgiQTEJWlIqqGSbwTnL109aYG0-SQWC8qKs_PU6FZRZBqkL-dyfQIoO-v2EHbQBLwISZOB1fmo0JednzV-J0V5TWguylb8FOa-PICVrMSC7OarCsgHDdPLTuqfOlu0HMr-HXyy7bY4owNrjzYFzuP-JFLNEzuYzqZRabw5PgxXDwYo9BfaWPXix6sqTcD4YH3Xi5fhxy8njDsfLwsmyaLwsmiyLx8viP93aHtkOrrSFw9329icH162GOaL9BZytOMOWbdZo2uNLwzUXBs63r7I9rIvmqSn4E5YP4bADB_dw-BB-fgxHU2rHU-DlFHj1Kzit_30HAAD__6EbyUc=
 
 # Filter on ProjectSet node
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, b FROM (SELECT a, generate_series(1, 3) AS b FROM data) WHERE a < 4 AND b = 3]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a, b FROM (SELECT a, generate_series(1, 3) AS b FROM data) WHERE a < 4 AND b = 3]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJysksFKw0AQhu8-RfhPFRaaTVIPC0IFEXqppfamQdbsUCJpNsxuQCl5d2ki1JRWIvGW3ck33-zw71FaQ0u9Iwf1DAmBCAIxBBIIzJAKVGwzcs7y4ZcOWJgPqFAgL6vaH65TgcwyQe3hc18QFDb6raA1aUM8DSFgyOu8aDUV5zvNn3OjvUbaCNjaHxs5r7cEJRtxQXZ01KVlQ0ym1z9tzoyzYvtOmX8iP531p9lSSaw9vTrinNxEKqUWy40I4u7jGgIPeeGJVTCZy-ClDsM4C5LvanC3vA8m8yi4PQKX3hT13iSHL1COXmA0XBaNlsXDZfFoWTJclvxrDs_I1uQqWzo6yeP5zuEhp2S21IXa2ZozWrHNWk13fGy59sKQ811VdodF2ZbaAX_C8lf4pgeHp3A0xhyPgZMx8OxPcNpcfQUAAP__VAWiog==
 
 # Multiple SRFs with different lengths
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(1, 2), generate_series(1, 4) FROM data WHERE a < 2 ORDER BY 1, 2, 3]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a, generate_series(1, 2), generate_series(1, 4) FROM data WHERE a < 2 ORDER BY 1, 2, 3]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyskcFq8zAQhO__U4Q9_SWCWHJOOvmaSxqS3IopqjWkLo5lVhtoCX73EpuSuo1NC71Ju_vtzDJnqoPH2h0RyT6QJkWGckUNhwIxBr6U-6GVfyWbKCrr5iSXcq6oCAyyZ5JSKpClvXuqsIXz4EVCijzElVW3uuHy6Pgt804c5a2icJLroijuALK6VSNiV43AHgw_3J7pOeXtDUcbDi8oZAdZmCFyQA12gscILhH_a2vtar1XM9M_7kiNzyw_ZsYuMaOX3DC5CyzgRfrtJpWZucrSOSk6OimeZxVqO9OjqulAVf88LP2nYd0Q2yI2oY4Y6IxtTi5Jwh_QJx_DiQtsOBSdTP-977iu4BGl7-r-s6q7VmfwM6wnYTOAk6-wmYSX03D6K9t5--89AAD___UXLZk=

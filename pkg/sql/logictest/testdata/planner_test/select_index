@@ -962,7 +962,7 @@ limit            ·      ·
 ·                table  noncover@primary
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ]
 ----
@@ -975,7 +975,7 @@ limit           ·       ·
 ·               spans   ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ]
 ----
@@ -991,7 +991,7 @@ limit            ·       ·
 ·                table   noncover@primary
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
@@ -1035,7 +1035,7 @@ INSERT INTO t2 VALUES
   (9, 3, 3, '33')
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
@@ -1062,7 +1062,7 @@ fetched: /t2/primary/5/s -> '22'
 output row: [5 2 2 '22']
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----

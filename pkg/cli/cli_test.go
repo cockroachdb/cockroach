@@ -1622,7 +1622,7 @@ func Example_misc_pretty() {
 	// (1 row)
 	// sql --format=pretty -e explain select s from t.t union all select s from t.t
 	// +----------------+-------+-------------+
-	// |      Tree      | Field | Description |
+	// |      tree      | field | description |
 	// +----------------+-------+-------------+
 	// | append         |       |             |
 	// |  ├── render    |       |             |
