@@ -129,7 +129,11 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
 	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
-	return rowCount * (seqIOCostFactor + c.rowScanCost(def.Table, def.Index, def.Cols.Len()))
+	reverseMultiplier := memo.Cost(1)
+	if def.Reverse {
+		reverseMultiplier++
+	}
+	return rowCount * (seqIOCostFactor + reverseMultiplier*c.rowScanCost(def.Table, def.Index, def.Cols.Len()))
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of

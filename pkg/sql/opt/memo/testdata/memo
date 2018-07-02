@@ -166,7 +166,7 @@ memo (optimized)
  │         └── cost: 7439.89
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
- ├── G7: (scan b,cols=(3))
+ ├── G7: (scan b,cols=(3)) (scan b,rev,cols=(3))
  │    └── ""
  │         ├── best: (scan b,cols=(3))
  │         └── cost: 1030.00
@@ -175,7 +175,7 @@ memo (optimized)
  │         ├── best: (select G10 G11)
  │         └── cost: 1050.00
  ├── G9: (filters G12)
- ├── G10: (scan a)
+ ├── G10: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
@@ -204,7 +204,7 @@ memo (optimized)
  │         ├── best: (select G4 G5)
  │         └── cost: 1050.00
  ├── G3: (projections G6 G7 G8 G9)
- ├── G4: (scan b)
+ ├── G4: (scan b) (scan b,rev)
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1040.00
@@ -232,34 +232,38 @@ memo (optimized)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G2 G3)
  │         └── cost: 1.05
- ├── G2: (select G4 G5) (select G6 G7)
+ ├── G2: (select G4 G5) (select G6 G8) (select G7 G8)
  │    └── ""
- │         ├── best: (select G6 G7)
+ │         ├── best: (select G6 G8)
  │         └── cost: 1.05
  ├── G3: (projections a.x)
- ├── G4: (scan a)
+ ├── G4: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
- ├── G5: (filters G8 G9)
+ ├── G5: (filters G9 G10)
  ├── G6: (scan a,constrained)
  │    └── ""
  │         ├── best: (scan a,constrained)
  │         └── cost: 1.04
- ├── G7: (filters G9)
- ├── G8: (eq G12 G11)
- ├── G9: (eq G10 G11)
- ├── G10: (plus G12 G13)
- ├── G11: (const 1)
- ├── G12: (variable a.x)
- └── G13: (variable a.y)
+ ├── G7: (scan a,rev,constrained)
+ │    └── ""
+ │         ├── best: (scan a,rev,constrained)
+ │         └── cost: 1.08
+ ├── G8: (filters G10)
+ ├── G9: (eq G13 G12)
+ ├── G10: (eq G11 G12)
+ ├── G11: (plus G13 G14)
+ ├── G12: (const 1)
+ ├── G13: (variable a.x)
+ └── G14: (variable a.y)
 
 memo raw-memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
 root: G12, [presentation: x:1]
 memo (optimized)
- ├── G1: (scan a)
+ ├── G1: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
@@ -271,7 +275,7 @@ memo (optimized)
  ├── G7: (eq G6 G3)
  ├── G8: (and G4 G7)
  ├── G9: (filters G4 G7)
- ├── G10: (select G1 G9) (select G15 G14)
+ ├── G10: (select G1 G9) (select G15 G14) (select G16 G14)
  │    └── ""
  │         ├── best: (select G15 G14)
  │         └── cost: 1.05
@@ -282,10 +286,14 @@ memo (optimized)
  │         └── cost: 1.05
  ├── G13: (true)
  ├── G14: (filters G7)
- └── G15: (scan a,constrained)
+ ├── G15: (scan a,constrained)
+ │    └── ""
+ │         ├── best: (scan a,constrained)
+ │         └── cost: 1.04
+ └── G16: (scan a,rev,constrained)
       └── ""
-           ├── best: (scan a,constrained)
-           └── cost: 1.04
+           ├── best: (scan a,rev,constrained)
+           └── cost: 1.08
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
@@ -295,7 +303,7 @@ memo (optimized)
  │    └── "[presentation: x:7,y:8]"
  │         ├── best: (union G2 G3)
  │         └── cost: 2080.00
- ├── G2: (scan a)
+ ├── G2: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
@@ -303,7 +311,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (project G4 G5)
  │         └── cost: 1040.00
- ├── G4: (scan a)
+ ├── G4: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
@@ -322,7 +330,7 @@ memo (optimized)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (group-by G2 G3 cols=())
  │         └── cost: 1030.00
- ├── G2: (scan a,cols=(1))
+ ├── G2: (scan a,cols=(1)) (scan a,rev,cols=(1))
  │    └── ""
  │         ├── best: (scan a,cols=(1))
  │         └── cost: 1030.00
@@ -343,7 +351,7 @@ memo (optimized)
  │         ├── best: (group-by G4 G5 cols=(2))
  │         └── cost: 1040.00
  ├── G3: (projections array_agg)
- ├── G4: (scan a)
+ ├── G4: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1040.00
@@ -359,7 +367,7 @@ memo (optimized)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
  │         └── cost: 1129.66
- ├── G2: (scan a,cols=(1))
+ ├── G2: (scan a,cols=(1)) (scan a,rev,cols=(1))
  │    ├── ""
  │    │    ├── best: (scan a,cols=(1))
  │    │    └── cost: 1030.00
