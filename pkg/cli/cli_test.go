@@ -832,7 +832,7 @@ func Example_sql() {
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// > SHOW USERS
-	// username
+	// user_name
 	// root
 	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// pq: column "nonexistent" does not exist
@@ -1670,17 +1670,17 @@ func Example_user() {
 
 	// Output:
 	// user ls
-	// username
+	// user_name
 	// root
 	// user ls --format=pretty
-	// +----------+
-	// | username |
-	// +----------+
-	// | root     |
-	// +----------+
+	// +-----------+
+	// | user_name |
+	// +-----------+
+	// | root      |
+	// +-----------+
 	// (1 row)
 	// user ls --format=tsv
-	// username
+	// user_name
 	// root
 	// user set FOO
 	// CREATE USER 1
@@ -1724,7 +1724,7 @@ func Example_user() {
 	// CREATE USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
-	// |                            username                             |
+	// |                            user_name                            |
 	// +-----------------------------------------------------------------+
 	// | _foo                                                            |
 	// | and                                                             |
@@ -1743,7 +1743,7 @@ func Example_user() {
 	// DROP USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
-	// |                            username                             |
+	// |                            user_name                            |
 	// +-----------------------------------------------------------------+
 	// | _foo                                                            |
 	// | and                                                             |
