@@ -29,7 +29,8 @@ func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error
 	name := strings.ToLower(n.Name)
 
 	if name == "all" {
-		return p.delegateQuery(ctx, "SHOW SESSION ALL", "TABLE crdb_internal.session_variables",
+		return p.delegateQuery(ctx, "SHOW SESSION ALL",
+			"SELECT variable, value FROM crdb_internal.session_variables",
 			nil, nil)
 	}
 
