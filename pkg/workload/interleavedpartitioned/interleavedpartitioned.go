@@ -87,10 +87,15 @@ const (
 	FAMILY "primary" (session_id, id, created, updated)
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
-	insertQuery    = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
-	deleteQuery    = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT $1)`
-	retrieveQuery0 = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
-	retrieveQuery1 = `
+	insertQuery           = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
+	insertQueryCustomers  = `INSERT INTO customers(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
+	insertQueryVariants   = `INSERT INTO variants(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
+	insertQueryParameters = `INSERT INTO parameters(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
+	insertQueryDevices    = `INSERT INTO devices(id, session_id, device_id, name, make, macaddress, model, serialno, created, updated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`
+	insertQueryQuery      = `INSERT INTO queries(session_id, id, created, updated) VALUES ($1, $2, now(), now())`
+	deleteQuery           = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT $1)`
+	retrieveQuery0        = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
+	retrieveQuery1        = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
 FROM sessions
 WHERE session_id = $1
@@ -313,6 +318,85 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
+			for i := 0; i < w.customersPerSession; i++ {
+				insertCustomerStatement, err := db.Prepare(insertQueryCustomers)
+				if err != nil {
+					return err
+				}
+				args := []interface{}{
+					sessionID,
+					randString(rng, 50),
+					randString(rng, 50),
+				}
+				_, err = insertCustomerStatement.ExecContext(ctx, args...)
+				if err != nil {
+					return err
+				}
+			}
+			for i := 0; i < w.devicesPerSession; i++ {
+				insertDeviceStatement, err := db.Prepare(insertQueryDevices)
+				if err != nil {
+					return err
+				}
+				args := []interface{}{
+					randString(rng, 100),
+					sessionID,
+					randString(rng, 50), // device_id
+					randString(rng, 50), // name
+					randString(rng, 50), // make
+					randString(rng, 50), // macaddress
+					randString(rng, 50), // model
+					randString(rng, 50), // serialno
+				}
+				_, err = insertDeviceStatement.ExecContext(ctx, args...)
+				if err != nil {
+					return err
+				}
+			}
+			for i := 0; i < w.variantsPerSession; i++ {
+				insertVariantStatement, err := db.Prepare(insertQueryVariants)
+				if err != nil {
+					return err
+				}
+				args := []interface{}{
+					sessionID,
+					randString(rng, 50),
+					randString(rng, 50),
+				}
+				_, err = insertVariantStatement.ExecContext(ctx, args...)
+				if err != nil {
+					return err
+				}
+			}
+			for i := 0; i < w.customersPerSession; i++ {
+				insertParameterStatement, err := db.Prepare(insertQueryParameters)
+				if err != nil {
+					return err
+				}
+				args := []interface{}{
+					sessionID,
+					randString(rng, 50),
+					randString(rng, 50),
+				}
+				_, err = insertParameterStatement.ExecContext(ctx, args...)
+				if err != nil {
+					return err
+				}
+			}
+			for i := 0; i < w.customersPerSession; i++ {
+				insertQueryStatement, err := db.Prepare(insertQueryQuery)
+				if err != nil {
+					return err
+				}
+				args := []interface{}{
+					sessionID,
+					randString(rng, 50),
+				}
+				_, err = insertQueryStatement.ExecContext(ctx, args...)
+				if err != nil {
+					return err
+				}
+			}
 			hists.Get(`insert`).Record(timeutil.Since(start))
 			return nil
 		} else if opRand < w.insertPercent+w.queryPercent { // query
@@ -346,15 +430,11 @@ func (w *interleavedPartitioned) Ops(
 				if err != nil {
 					return err
 				}
-				rows, err := retrieveStatement.Query(args...)
+				_, err = retrieveStatement.ExecContext(ctx, args...)
 				if err != nil {
 					return err
 				}
-				if rows.Err() != nil {
-					return rows.Err()
-				}
 			}
-
 			updateStatement, err := db.Prepare(updateQuery)
 			if err != nil {
 				return err
