@@ -58,6 +58,7 @@ const (
 	importOptionSSTSize    = "sstsize"
 	importOptionDecompress = "decompress"
 	importOptionOversample = "oversample"
+	importOptionSkipFKs    = "skip_foreign_keys"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -80,6 +81,8 @@ var importOptionExpectValues = map[string]bool{
 	importOptionSSTSize:    true,
 	importOptionDecompress: true,
 	importOptionOversample: true,
+
+	importOptionSkipFKs: false,
 
 	pgMaxRowSize: true,
 }
@@ -120,6 +123,15 @@ func readCreateTableFromStore(
 	return create, nil
 }
 
+type fkHandler struct {
+	allowed  bool
+	skip     bool
+	resolver fkResolver
+}
+
+// NoFKs is used by formats that do not support FKs.
+var NoFKs = fkHandler{}
+
 // MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
@@ -130,9 +142,10 @@ func MakeSimpleTableDescriptor(
 	create *tree.CreateTable,
 	parentID,
 	tableID sqlbase.ID,
-	otherTables fkResolver,
+	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
+
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
 		return nil, errors.New("unsupported IF NOT EXISTS")
@@ -143,8 +156,8 @@ func MakeSimpleTableDescriptor(
 	if create.AsSource != nil {
 		return nil, errors.New("CREATE AS not supported")
 	}
-	for _, def := range create.Defs {
-		switch def := def.(type) {
+	for i := range create.Defs {
+		switch def := create.Defs[i].(type) {
 		case *tree.CheckConstraintTableDef,
 			*tree.FamilyTableDef,
 			*tree.IndexTableDef,
@@ -155,12 +168,20 @@ func MakeSimpleTableDescriptor(
 				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
 			}
 		case *tree.ForeignKeyConstraintTableDef:
+			if !fks.allowed {
+				return nil, errors.Errorf("this IMPORT format does not support foreign keys")
+			}
+			if fks.skip {
+				create.Defs = append(create.Defs[:i], create.Defs[i+1:]...)
+				continue
+			}
 			n := tree.MakeTableName("", tree.Name(def.Table.TableNameReference.String()))
 			def.Table.TableNameReference = &n
 		default:
 			return nil, errors.Errorf("unsupported table definition: %s", tree.AsString(def))
 		}
 	}
+
 	semaCtx := tree.SemaContext{}
 	evalCtx := tree.EvalContext{
 		CtxProvider: ctxProvider{ctx},
@@ -170,7 +191,7 @@ func MakeSimpleTableDescriptor(
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		otherTables,
+		fks.resolver,
 		st,
 		create,
 		parentID,
@@ -289,7 +310,12 @@ func (r fkResolver) LookupObject(
 	if ok {
 		return true, tbl, nil
 	}
-	return false, nil, errors.Errorf("table %q not found in tables previously defined in the same IMPORT", obName)
+	names := make([]string, 0, len(r))
+	for k := range r {
+		names = append(names, k)
+	}
+	suggestions := strings.Join(names, ",")
+	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)", obName, suggestions)
 }
 
 // Implements the tree.TableNameTargetResolver interface.
@@ -617,6 +643,11 @@ func importPlanHook(
 			sstSize = os
 		}
 
+		var skipFKs bool
+		if _, ok := opts[importOptionSkipFKs]; ok {
+			skipFKs = true
+		}
+
 		if override, ok := opts[importOptionDecompress]; ok {
 			found := false
 			for name, value := range roachpb.IOFileFormat_Compression_value {
@@ -650,11 +681,12 @@ func importPlanHook(
 			if table != nil {
 				match = table.TableName.String()
 			}
+			fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
 			switch format.Format {
 			case roachpb.IOFileFormat_Mysqldump:
 			case roachpb.IOFileFormat_PgDump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, int(format.PgDump.MaxRowSize))
+				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
 			default:
 				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 			}
@@ -695,7 +727,7 @@ func importPlanHook(
 			}
 
 			tbl, err := MakeSimpleTableDescriptor(
-				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, nil, walltime)
+				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
 			if err != nil {
 				return err
 			}
@@ -772,6 +804,7 @@ func importPlanHook(
 				SSTSize:    sstSize,
 				Oversample: oversample,
 				Walltime:   walltime,
+				SkipFKs:    skipFKs,
 			},
 			Progress: jobspb.ImportProgress{},
 		})
@@ -983,6 +1016,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 	}
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
+		if tbl.Desc == nil {
+			continue
+		}
 		tableDesc := tbl.Desc
 		tableDesc.State = sqlbase.TableDescriptor_DROP
 		// If the DropTime if set, a table uses RangeClear for fast data removal. This

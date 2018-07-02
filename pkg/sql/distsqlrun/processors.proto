@@ -582,6 +582,8 @@ message ReadImportDataSpec {
 
   reserved 4;
   reserved 5;
+
+  optional bool skip_missing_foreign_keys = 10 [(gogoproto.nullable) = false];
 }
 
 // SSTWriterSpec is the specification for a processor that consumes rows, uses
