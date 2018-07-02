@@ -790,8 +790,8 @@ func TestShowJobs(t *testing.T) {
 
 	var out row
 	sqlDB.QueryRow(t, `
-      SELECT id, type, status, created, description, started, finished, modified,
-             fraction_completed, username, error, coordinator_id
+      SELECT job_id, job_type, status, created, description, started, finished, modified,
+             fraction_completed, user_name, error, coordinator_id
         FROM crdb_internal.jobs`).Scan(
 		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
 		&out.finished, &out.modified, &out.fractionCompleted, &out.username,

@@ -106,7 +106,7 @@ Channel
 query ITTTTTTTTTRTI colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -129,9 +129,9 @@ SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
 query TTTT colnames
-SELECT * FROM crdb_internal.cluster_settings WHERE name = ''
+SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
-name  current_value  type  description
+variable  value  type  description
 
 query TT colnames
 SELECT * FROM crdb_internal.session_variables WHERE variable = ''
