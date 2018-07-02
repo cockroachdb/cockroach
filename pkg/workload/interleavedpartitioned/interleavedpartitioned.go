@@ -88,13 +88,13 @@ const (
 	FAMILY "primary" (session_id, id, created, updated)
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
-	insertQuery    = `INSERT into sessions VALUES (?, ?, ?, ?, now(), now(), ?, ?, ?)`
-	deleteQuery    = `DELETE from sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
-	retrieveQuery0 = `SELECT session_id FROM sessions WHERE id > ? LIMIT 1`
+	insertQuery    = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
+	deleteQuery    = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
+	retrieveQuery0 = `SELECT session_id FROM sessions WHERE id > $1 LIMIT 1`
 	retrieveQuery1 = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
 FROM sessions
-WHERE session_id = ?
+WHERE session_id = $1
 `
 	retrieveQuery2 = `
 SELECT
@@ -119,38 +119,37 @@ SELECT
 	FROM sessions as session
 	LEFT OUTER JOIN devices AS device
 	ON session.session_id = device.session_id
-	WHERE session_id = ?
+	WHERE session_id = $1
 `
 	retrieveQuery3 = `
 	UPDATE sessions
 	SET updated = now()
-	WHERE id = ?
+	WHERE id = $1
 `
 	retrieveQuery4 = `
 	SELECT session_id, key, key, session_id, created, value, updated
 	FROM customers
-	WHERE session_id = ?
+	WHERE session_id = $1
 `
 	retrieveQuery5 = `
 	SELECT session_id, key, key, session_id, created, value, updated
 	FROM parameters
-	WHERE session_id = ?
+	WHERE session_id = $1
 `
 	retrieveQuery6 = `
 	SELECT session_id, key, key, session_id, created, value, updated
 	FROM variants
-	WHERE session_id = ?
+	WHERE session_id = $1
 `
 	updateQuery = `
 UPDATE sessions
-SET affiliate = ?, updated = now()
-WHERE id = ?
+SET affiliate = $1, updated = now()
+WHERE id = $2
 `
 )
 
 var (
 	retrieveQueries = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery3, retrieveQuery4, retrieveQuery5, retrieveQuery6}
-	updateQueries   = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery4, retrieveQuery5, retrieveQuery6, updateQuery}
 )
 
 func init() {
@@ -339,12 +338,12 @@ func (w *interleavedPartitioned) Ops(
 				sessionID,
 			}
 			start := timeutil.Now()
-			for _, query := range updateQueries {
-				updateStatement, err := db.Prepare(query)
+			for _, query := range retrieveQueries {
+				retrieveStatement, err := db.Prepare(query)
 				if err != nil {
 					return err
 				}
-				rows, err := updateStatement.Query(args...)
+				rows, err := retrieveStatement.Query(args...)
 				if err != nil {
 					return err
 				}
@@ -352,7 +351,17 @@ func (w *interleavedPartitioned) Ops(
 					return rows.Err()
 				}
 			}
+
+			updateStatement, err := db.Prepare(updateQuery)
+			if err != nil {
+				return err
+			}
+			rows, err := updateStatement.Query(randString(rng, 20), sessionID)
+			if err != nil {
+				return err
+			}
 			hists.Get(`updates`).Record(timeutil.Since(start))
+			return rows.Err()
 		} else { // delete
 			start := timeutil.Now()
 			deleteStatement, err := db.Prepare(deleteQuery)
