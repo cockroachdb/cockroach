@@ -164,7 +164,7 @@ func (p *planner) Delete(
 
 	// Create the table deleter, which does the bulk of the work.
 	rd, err := sqlbase.MakeRowDeleter(
-		p.txn, desc, fkHelper.Tables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+		p.txn, desc, fkHelper.Tables, fkHelper, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
 	)
 	if err != nil {
 		return nil, err

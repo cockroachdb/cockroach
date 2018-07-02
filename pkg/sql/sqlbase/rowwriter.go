@@ -642,7 +642,7 @@ func makeRowUpdaterWithoutCascader(
 		// them, so request them all.
 		var err error
 		if ru.rd, err = makeRowDeleterWithoutCascader(
-			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
+			txn, tableDesc, fkTables, FKHelper{}, tableCols, SkipFKs, alloc,
 		); err != nil {
 			return RowUpdater{}, err
 		}
@@ -953,6 +953,7 @@ type RowDeleter struct {
 	FetchCols            []ColumnDescriptor
 	FetchColIDtoRowIndex map[ColumnID]int
 	Fks                  fkDeleteHelper
+	FKHelper             FKHelper
 	cascader             *cascader
 	// For allocation avoidance.
 	key roachpb.Key
@@ -967,13 +968,14 @@ func MakeRowDeleter(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
+	fkHelper FKHelper,
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	evalCtx *tree.EvalContext,
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	rowDeleter, err := makeRowDeleterWithoutCascader(
-		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
+		txn, tableDesc, fkTables, fkHelper, requestedCols, checkFKs, alloc,
 	)
 	if err != nil {
 		return RowDeleter{}, err
@@ -994,6 +996,7 @@ func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
+	fkHelper FKHelper,
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
@@ -1040,6 +1043,7 @@ func makeRowDeleterWithoutCascader(
 
 	rd := RowDeleter{
 		Helper:               newRowHelper(tableDesc, indexes),
+		FKHelper:             fkHelper,
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
