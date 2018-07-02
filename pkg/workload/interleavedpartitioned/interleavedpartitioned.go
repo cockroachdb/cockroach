@@ -88,7 +88,7 @@ const (
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
 	insertQuery    = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
-	deleteQuery    = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
+	deleteQuery    = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT $1)`
 	retrieveQuery0 = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
 	retrieveQuery1 = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
@@ -293,7 +293,9 @@ func (w *interleavedPartitioned) Ops(
 			hists := reg.GetHandle()
 			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 			opRand := rng.Intn(100)
+			log.Warningf(context.TODO(), "opRand = %d", opRand)
 			if opRand < w.insertPercent {
+				log.Warning(context.TODO(), "inserting")
 				start := timeutil.Now()
 				insertStatement, err := db.Prepare(insertQuery)
 				if err != nil {
@@ -316,6 +318,7 @@ func (w *interleavedPartitioned) Ops(
 				hists.Get(`insert`).Record(timeutil.Since(start))
 				return rows.Err()
 			} else if opRand < w.insertPercent+w.queryPercent { // query
+				log.Warning(context.TODO(), "querying")
 				sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
 				args := []interface{}{
 					sessionID,
@@ -336,6 +339,7 @@ func (w *interleavedPartitioned) Ops(
 				}
 				hists.Get(`retrieve`).Record(timeutil.Since(start))
 			} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
+				log.Warning(context.TODO(), "updating")
 				sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
 				args := []interface{}{
 					sessionID,
@@ -367,6 +371,7 @@ func (w *interleavedPartitioned) Ops(
 				return rows.Err()
 			}
 			// else case, delete
+			log.Warning(context.TODO(), "deleting")
 			start := timeutil.Now()
 			deleteStatement, err := db.Prepare(deleteQuery)
 			if err != nil {
