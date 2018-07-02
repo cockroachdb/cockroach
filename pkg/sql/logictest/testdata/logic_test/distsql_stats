@@ -51,14 +51,17 @@ SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE name = 's1'
 query TII colnames
 SHOW HISTOGRAM $hist_id_1
 ----
-upper_bound  num_range  num_eq
-1            0          1000
-2            0          1000
-3            0          1000 4            0          1000 5            0          1000 6            0          1000
-7            0          1000
-8            0          1000
-9            0          1000
-10           0          1000
+upper_bound  range_rows  equal_rows
+1            0           1000
+2            0           1000
+3            0           1000
+4            0           1000
+5            0           1000
+6            0           1000
+7            0           1000
+8            0           1000
+9            0           1000
+10           0           1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
