@@ -646,8 +646,8 @@ CREATE TABLE crdb_internal.session_trace (
 var crdbInternalClusterSettingsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_settings (
-  name          STRING NOT NULL,
-  current_value STRING NOT NULL,
+  variable      STRING NOT NULL,
+  value         STRING NOT NULL,
   type          STRING NOT NULL,
   description   STRING NOT NULL
 );
