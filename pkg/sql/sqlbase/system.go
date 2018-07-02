@@ -846,17 +846,28 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	zoneConf := config.DefaultZoneConfig()
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
 
-	// .meta zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
-
-	// Liveness zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
-
 	// Jobs zone config entry with a shorter GC time.
 	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	zoneConf.NumReplicas = 3
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
+
+	systemRangeZoneConf := config.DefaultZoneConfig()
+
+	// .meta zone config entry with a shorter GC time.
+	systemRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	systemRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, systemRangeZoneConf))
+
+	// System zone config entry with a shorter GC time.
+	systemRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	systemRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, systemRangeZoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	systemRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	systemRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, systemRangeZoneConf))
+
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
