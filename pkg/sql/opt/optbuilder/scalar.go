@@ -62,6 +62,18 @@ var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
 	tree.JSONSomeExists: (*norm.Factory).ConstructJsonSomeExists,
 }
 
+// TODO(justin): remove this when we can plan inverted index queries.  It's not
+// sufficient to just remove them from the above map, since the heuristic
+// planner uses the same constraint generation code.
+// Not all of these generate inverted index scans today.
+var comparisonOpBlacklist = [tree.NumComparisonOperators]bool{
+	tree.Contains:       true,
+	tree.ContainedBy:    true,
+	tree.JSONExists:     true,
+	tree.JSONAllExists:  true,
+	tree.JSONSomeExists: true,
+}
+
 // Map from tree.BinaryOperator to Factory constructor function.
 var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
 	tree.Bitand:            (*norm.Factory).ConstructBitand,
@@ -81,6 +93,17 @@ var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
 	tree.JSONFetchVal:      (*norm.Factory).ConstructFetchVal,
 	tree.JSONFetchValPath:  (*norm.Factory).ConstructFetchValPath,
 	tree.JSONFetchTextPath: (*norm.Factory).ConstructFetchTextPath,
+}
+
+// TODO(justin): remove this when we can plan inverted index queries.  It's not
+// sufficient to just remove them from the above map, since the heuristic
+// planner uses the same constraint generation code.
+// Not all of these generate inverted index scans today.
+var binaryOpBlacklist = [tree.NumBinaryOperators]bool{
+	tree.JSONFetchVal:      true,
+	tree.JSONFetchText:     true,
+	tree.JSONFetchValPath:  true,
+	tree.JSONFetchTextPath: true,
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
@@ -174,6 +197,14 @@ func (b *Builder) buildScalarHelper(
 		// issues for the execbuilder, which doesn't have enough information to
 		// select the right overload. The solution is to wrap any mismatched
 		// arguments with a CastExpr that preserves the static type.
+
+		// This check is so that the heuristic planner can plan inverted index
+		// queries, which the optimizer doesn't support.
+		blacklisted := binaryOpBlacklist[t.Operator] && !b.AllowBlacklistOps
+		if blacklisted {
+			panic(unimplementedf("operator '%s' not supported", t.Operator))
+		}
+
 		fn := binaryOpMap[t.Operator]
 		left, _ := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
 		right, _ := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
@@ -235,7 +266,12 @@ func (b *Builder) buildScalarHelper(
 			// and All to various formulations of the opt Exists operator.
 
 			fn := comparisonOpMap[t.Operator]
-			if fn != nil {
+
+			// This check is so that the heuristic planner can plan inverted index
+			// queries, which the optimizer doesn't support.
+			include := !comparisonOpBlacklist[t.Operator] || b.AllowBlacklistOps
+
+			if fn != nil && include {
 				// Most comparison ops map directly to a factory method.
 				out = fn(b.factory, left, right)
 			} else if b.AllowUnsupportedExpr {
