@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -876,5 +879,74 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {
 			t.Errorf("unexpected key value found in rangelog event info: %+v", event.PrettyInfo)
 		}
+	}
+}
+
+func TestStatusAPIStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+		notInStats    bool
+	}{
+		{
+			stmt: `CREATE DATABASE roachblog`,
+		},
+		{
+			stmt:       `USE roachblog`,
+			notInStats: true,
+		},
+		{
+			stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`,
+		},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+		},
+		{
+			stmt: `SELECT * FROM posts`,
+		},
+	}
+
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// See if the statements returned are what we executed.
+	var expectedStatements []string
+	for _, stmt := range statements {
+		if stmt.notInStats {
+			continue
+		}
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	var statementsInResponse []string
+	for _, respStatement := range resp.Statements {
+		statementsInResponse = append(statementsInResponse, respStatement.Key.Statement)
+	}
+
+	sort.Strings(expectedStatements)
+	sort.Strings(statementsInResponse)
+
+	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
 	}
 }

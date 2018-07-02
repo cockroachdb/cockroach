@@ -12,9 +12,9 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// This file implements the SHOW TESTING_RANGES statement:
-//   SHOW TESTING_RANGES FROM TABLE t
-//   SHOW TESTING_RANGES FROM INDEX t@idx
+// This file implements the SHOW EXPERIMENTAL_RANGES statement:
+//   SHOW EXPERIMENTAL_RANGES FROM TABLE t
+//   SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx
 //
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
@@ -118,14 +118,14 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	// We do not attempt to identify the encoding directions for pretty
 	// printing a split key since it's possible for a key from an arbitrary
 	// table in the same interleaved hierarchy to appear in SHOW
-	// TESTING_RANGE. Consider the interleaved hierarchy
+	// EXPERIMENTAL_RANGES. Consider the interleaved hierarchy
 	//    parent1		      (pid1)
 	//	  child1	      (pid1, cid1)
 	//	      grandchild1     (pid1, cid1, gcid1)
 	//	  child2	      (pid1, cid2, cid3)
 	//	      grandchild2     (pid1, cid2, cid3, gcid2)
 	// and the result of
-	//    SHOW TESTING_RANGES FROM TABLE grandchild1
+	//    SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1
 	// It is possible for a split key for grandchild2 to show up.
 	// Traversing up the InterleaveDescriptor is futile since we do not
 	// know the SharedPrefixLen in between each interleaved sentinel of a

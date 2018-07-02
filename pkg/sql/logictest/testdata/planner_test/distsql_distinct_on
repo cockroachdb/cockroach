@@ -20,7 +20,7 @@ statement ok
 ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
 
 statement ok
-ALTER TABLE xyz TESTING_RELOCATE VALUES
+ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[1], 0),
   (ARRAY[2], 2),
   (ARRAY[3], 4),
@@ -36,7 +36,7 @@ ALTER TABLE abc SPLIT AT VALUES
   ('3', '4', '5')
 
 statement ok
-ALTER TABLE abc TESTING_RELOCATE VALUES
+ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[1], NULL, NULL, NULL),
   (ARRAY[2], '1', '1', '2'),
   (ARRAY[3], '1', '2', '2'),
@@ -44,7 +44,7 @@ ALTER TABLE abc TESTING_RELOCATE VALUES
   (ARRAY[5], '3', '4', '5')
 
 query TTITI colnames
-SELECT * FROM [SHOW TESTING_RANGES FROM TABLE xyz]
+SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       /2       1         {1}       1
@@ -54,7 +54,7 @@ NULL       /2       1         {1}       1
 /7         NULL     5         {5}       5
 
 query TTITI colnames
-SELECT * FROM [SHOW TESTING_RANGES FROM TABLE abc]
+SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
 ----
 Start Key        End Key          Range ID  Replicas  Lease Holder
 NULL             /NULL/NULL/NULL  5         {5}       5

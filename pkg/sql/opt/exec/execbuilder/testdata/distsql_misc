@@ -65,12 +65,12 @@ ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE data TESTING_RELOCATE
+ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE data]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       /1       {1}       1

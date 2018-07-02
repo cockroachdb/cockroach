@@ -936,12 +936,12 @@ func updateRangeDescriptor(
 	return nil
 }
 
-// TestingRelocateRange relocates a given range to a given set of stores. The first
+// RelocateRange relocates a given range to a given set of stores. The first
 // store in the slice becomes the new leaseholder.
 //
 // This is best-effort; if replication queues are enabled and a change in
 // membership happens at the same time, there will be errors.
-func TestingRelocateRange(
+func RelocateRange(
 	ctx context.Context,
 	db *client.DB,
 	rangeDesc roachpb.RangeDescriptor,

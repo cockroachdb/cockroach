@@ -36,7 +36,7 @@ statement ok
 SET database = ""
 
 query T colnames
-SHOW DATABASE
+SHOW database
 ----
 database
 ·

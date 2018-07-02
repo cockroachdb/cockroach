@@ -535,7 +535,7 @@ func TestTraceFromErrorReplica(t *testing.T) {
 
 	// Replicate foo on n1,n2,n3 with the lease on n2.
 	if _, err := clusterDB.Exec(`
-		ALTER TABLE test.foo TESTING_RELOCATE VALUES (ARRAY[2,1,3], 1);
+		ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[2,1,3], 1);
 	`); err != nil {
 		t.Fatal(err)
 	}

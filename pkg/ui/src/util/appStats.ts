@@ -7,7 +7,7 @@ import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
 export type StatementStatistics = protos.cockroach.sql.StatementStatistics$Properties;
-export type CollectedStatementStatistics = protos.cockroach.sql.CollectedStatementStatistics$Properties;
+export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
 
 export interface NumericStat {
   mean?: number;
@@ -53,10 +53,10 @@ export function addStatementStats(a: StatementStatistics, b: StatementStatistics
 }
 
 export function aggregateStatementStats(statementStats: CollectedStatementStatistics[]) {
-  const statementsMap: { [query: string]: CollectedStatementStatistics[] } = {};
+  const statementsMap: { [statement: string]: CollectedStatementStatistics[] } = {};
   statementStats.forEach(
     (statement: CollectedStatementStatistics) => {
-      const matches = statementsMap[statement.key.query] || (statementsMap[statement.key.query] = []);
+      const matches = statementsMap[statement.key.statement] || (statementsMap[statement.key.statement] = []);
       matches.push(statement);
   });
 
@@ -73,15 +73,17 @@ export interface ExecutionStatistics {
   app: string;
   distSQL: boolean;
   failed: boolean;
+  node_id: number;
   stats: StatementStatistics;
 }
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    statement: stmt.key.query,
+    statement: stmt.key.statement,
     app: stmt.key.app,
     distSQL: stmt.key.distSQL,
     failed: stmt.key.failed,
+    node_id: stmt.key.node_id,
     stats: stmt.stats,
   }));
 }

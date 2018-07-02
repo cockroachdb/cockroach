@@ -111,7 +111,7 @@ func CanWriteData(stmt Statement) bool {
 	case *CopyFrom, *Import, *Restore:
 		return true
 	// CockroachDB extensions.
-	case *Split, *TestingRelocate, *Scatter:
+	case *Split, *Relocate, *Scatter:
 		return true
 	}
 	return false
@@ -498,10 +498,10 @@ func (n *RenameTable) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
-func (*TestingRelocate) StatementType() StatementType { return Rows }
+func (*Relocate) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*TestingRelocate) StatementTag() string { return "EXPERIMENTAL_RELOCATE" }
+func (*Relocate) StatementTag() string { return "EXPERIMENTAL_RELOCATE" }
 
 // StatementType implements the Statement interface.
 func (*Restore) StatementType() StatementType { return Rows }
@@ -919,7 +919,7 @@ func (n *Import) String() string                    { return AsString(n) }
 func (n *ParenSelect) String() string               { return AsString(n) }
 func (n *Prepare) String() string                   { return AsString(n) }
 func (n *ReleaseSavepoint) String() string          { return AsString(n) }
-func (n *TestingRelocate) String() string           { return AsString(n) }
+func (n *Relocate) String() string                  { return AsString(n) }
 func (n *RenameColumn) String() string              { return AsString(n) }
 func (n *RenameDatabase) String() string            { return AsString(n) }
 func (n *RenameIndex) String() string               { return AsString(n) }

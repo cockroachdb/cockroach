@@ -19,18 +19,18 @@ ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_seri
 
 # Relocate the five parts to the five nodes.
 statement ok
-ALTER TABLE NumToStr TESTING_RELOCATE
+ALTER TABLE NumToStr EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE NumToSquare]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToSquare]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       NULL     {1}       1
 
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE NumToStr]
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToStr]
 ----
 Start Key  End Key  Replicas  Lease Holder
 NULL       /2000    {1}       1
