@@ -174,6 +174,8 @@ type interleavedPartitioned struct {
 	updatePercent int
 	deletePercent int
 
+	deleteBatchSize int
+
 	sessionIDs []string
 }
 
@@ -198,6 +200,7 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.queryPercent, `query-percent`, 0, `Percentage of operations that are retrieval queries`)
 		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage of operations that are update queries`)
 		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage of operations that are delete queries`)
+		g.flags.IntVar(&g.deleteBatchSize, `delete-batch-size`, 100, `Number of rows per delete operation`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -368,8 +371,7 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
-			args := make([]interface{}, 0)
-			rows, err := deleteStatement.Query(args...)
+			rows, err := deleteStatement.Query(w.deleteBatchSize)
 			if err != nil {
 				return err
 			}
