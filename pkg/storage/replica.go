@@ -6870,7 +6870,7 @@ func calcReplicaMetrics(
 		}
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
-		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
+		} else if (liveReplicas >= 5 || liveReplicas < 3) && (int32(liveReplicas) < zoneConfig.NumReplicas) {
 			m.Underreplicated = true
 		}
 	}
