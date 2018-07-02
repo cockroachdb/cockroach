@@ -57,12 +57,10 @@ render                    ·            ·          (c, b)  ·
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  -a
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render        ·      ·
+ └── revscan  ·      ·
+·             table  t@primary
+·             spans  ALL
 
 # Check that LIMIT propagates past nosort nodes.
 query TTT
@@ -74,26 +72,21 @@ render     ·      ·
 ·          spans  ALL
 ·          limit  1
 
-# TODO(radu): Need to support revscan node
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  -a
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render        ·      ·
+ └── revscan  ·      ·
+·             table  t@primary
+·             spans  ALL
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  -a
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render        ·      ·
+ └── revscan  ·      ·
+·             table  t@primary
+·             spans  ALL
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
@@ -334,7 +327,6 @@ output row: [1 2 3]
 fetched: /abc/bc/5/6 -> /4
 output row: [4 5 6]
 
-# TODO(radu): this should change once we have revscan
 statement ok
 SET tracing = on,kv,results; SELECT a FROM abc ORDER BY a DESC; SET tracing = off
 
@@ -342,19 +334,19 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /abc/bc/2/3 -> /1
-fetched: /abc/bc/5/6 -> /4
+fetched: /abc/primary/4/5/6 -> NULL
+fetched: /abc/primary/4/5/6 -> NULL
 output row: [4]
+fetched: /abc/primary/1/2/3 -> NULL
+fetched: /abc/primary/1/2/3 -> NULL
 output row: [1]
 
 query TTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-sort       ·      ·
- │         order  -a
- └── scan  ·      ·
-·          table  abc@bc
-·          spans  ALL
+revscan  ·      ·
+·        table  abc@primary
+·        spans  ALL
 
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
@@ -364,7 +356,6 @@ render     ·      ·
 ·          table  abc@bc
 ·          spans  /2-/3
 
-# TODO(radu): sort is unnecessary here, because bc is unique (need revscan)
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
