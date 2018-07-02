@@ -30,7 +30,7 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -69,7 +69,7 @@ ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
 query TTTTRT
-SELECT type, description, username, status, fraction_completed::decimal(10,2), error
+SELECT job_type, description, user_name, status, fraction_completed::decimal(10,2), error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
@@ -179,7 +179,7 @@ statement ok
 DROP INDEX foo CASCADE
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -262,7 +262,7 @@ statement ok
 DROP INDEX t@t_f_idx
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1

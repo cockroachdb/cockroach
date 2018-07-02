@@ -1065,7 +1065,7 @@ func TestHealthAPI(t *testing.T) {
 
 // getSystemJobIDs queries the jobs table for all jobs IDs. Sorted by decreasing creation time.
 func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner) []int64 {
-	rows := db.Query(t, `SELECT id FROM crdb_internal.jobs ORDER BY created DESC;`)
+	rows := db.Query(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC;`)
 	defer rows.Close()
 
 	res := []int64{}

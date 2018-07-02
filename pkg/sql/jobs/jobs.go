@@ -645,7 +645,7 @@ func RunAndWaitForTerminalState(
 		err := sqlDB.QueryRow(`
        SELECT status, error, fraction_completed
          FROM [SHOW JOBS]
-        WHERE id = $1`, jobID).Scan(
+        WHERE job_id = $1`, jobID).Scan(
 			&status, &jobErr, &fractionCompleted,
 		)
 		if err != nil {

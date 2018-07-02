@@ -1123,7 +1123,7 @@ func (s *adminServer) Jobs(
 
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT id, type, description, username, descriptor_ids, status,
+      SELECT job_id, job_type, description, user_name, descriptor_ids, status,
              created, started, finished, modified, fraction_completed, error
         FROM crdb_internal.jobs
        WHERE true
@@ -1132,7 +1132,7 @@ func (s *adminServer) Jobs(
 		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobspb.TypeUnspecified {
-		q.Append(" AND type = $", req.Type.String())
+		q.Append(" AND job_type = $", req.Type.String())
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {
