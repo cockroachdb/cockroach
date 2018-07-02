@@ -78,7 +78,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -140,7 +140,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -164,8 +164,14 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				// The optimizer elides some renders that the heuristic planner does
+				// not which makes the results different.
+				if _, err := sqlDB.Exec("SET EXPERIMENTAL_OPT = OFF"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -183,8 +189,14 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
 					t.Fatal(err)
 				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				// The optimizer elides some renders that the heuristic planner does
+				// not which makes the results different.
+				if _, err := sqlDB.Exec("SET EXPERIMENTAL_OPT = OFF"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -215,7 +227,7 @@ func TestTrace(t *testing.T) {
 				// and will split the underlying BatchRequest/BatchResponse. Tracing
 				// in the presence of multi-part batches is what we want to test here.
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
