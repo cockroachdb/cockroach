@@ -39,6 +39,9 @@ import (
 // distribution of values in x is what determines the selectivity of the
 // predicate. As a result, column statistics will be derived for column x but
 // not for column y.
+//
+// See memo/statistics_builder.go for more information about how statistics are
+// calculated.
 type Statistics struct {
 	// RowCount is the estimated number of rows returned by the expression.
 	// Note that - especially when there are no stats available - the scaling of
