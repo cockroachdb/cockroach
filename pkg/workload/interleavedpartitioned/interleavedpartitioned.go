@@ -26,6 +26,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
@@ -87,6 +88,69 @@ const (
 	FAMILY "primary" (session_id, id, created, updated)
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
+	insertStatement = `INSERT into sessions VALUES (?, ?, ?, ?, now() now() ?, ?, ?)`
+	deleteStatement = `DELETE from sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
+	retrieveQuery0  = `SELECT session_id FROM sessions WHERE id > ? LIMIT 1`
+	retrieveQuery1  = `
+SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
+FROM sessions
+WHERE session_id = ?
+`
+	retrieveQuery2 = `
+SELECT
+	device.id,
+	device.session_id,
+	device.created,
+	device.name,
+	device.model,
+	device.macaddress,
+	device.serialno,
+	device.make,
+	device.updated,
+	session.session_id,
+	session.affiliate,
+	session.created,
+	session.channel,
+	session.language,
+	session.status,
+	session.platform,
+	session.query_id,
+	session.updated
+	FROM sessions as session
+	LEFT OUTER JOIN devices AS device
+	ON session.session_id = device.session_id
+	WHERE session_id = ?
+`
+	retrieveQuery3 = `
+	UPDATE sessions
+	SET updated = now()
+	WHERE id = ?
+`
+	retrieveQuery4 = `
+	SELECT session_id, key, key, session_id, created, value, updated
+	FROM customers
+	WHERE session_id = ?
+`
+	retrieveQuery5 = `
+	SELECT session_id, key, key, session_id, created, value, updated
+	FROM parameters
+	WHERE session_id = ?
+`
+	retrieveQuery6 = `
+	SELECT session_id, key, key, session_id, created, value, updated
+	FROM variants
+	WHERE session_id = ?
+`
+	updateQuery = `
+UPDATE sessions
+SET affiliate = ?, updated = now()
+WHERE id = ?
+`
+)
+
+var (
+	retrieveQueries = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery3, retrieveQuery4, retrieveQuery5, retrieveQuery6}
+	updateQueries   = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery4, retrieveQuery5, retrieveQuery6, updateQuery}
 )
 
 func init() {
@@ -105,6 +169,12 @@ type interleavedPartitioned struct {
 	queriesPerSession    int
 	eastPercent          int
 
+	// flags for setting operations
+	insertPercent int
+	queryPercent  int
+	updatePercent int
+	deletePercent int
+
 	sessionIDs []string
 }
 
@@ -118,13 +188,17 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch`: {RuntimeOnly: true},
 		}
-		g.flags.IntVar(&g.sessions, `sessions`, 1, `Number of sessions (rows in the parent table)`)
+		g.flags.IntVar(&g.sessions, `sessions`, 1000, `Number of sessions (rows in the parent table)`)
 		g.flags.IntVar(&g.customersPerSession, `customers-per-session`, 1, `Number of customers associated with each session`)
 		g.flags.IntVar(&g.devicesPerSession, `devices-per-session`, 1, `Number of devices associated with each session`)
 		g.flags.IntVar(&g.variantsPerSession, `variants-per-session`, 1, `Number of variants associated with each session`)
 		g.flags.IntVar(&g.parametersPerSession, `parameters-per-session`, 1, `Number of parameters associated with each session`)
 		g.flags.IntVar(&g.queriesPerSession, `queries-per-session`, 1, `Number of queries associated with each session`)
 		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage of sessions that are in us-east`)
+		g.flags.IntVar(&g.insertPercent, `insert-percent`, 100, `Percentage of operations that are inserts`)
+		g.flags.IntVar(&g.queryPercent, `query-percent`, 0, `Percentage of operations that are retrieval queries`)
+		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage of operations that are update queries`)
+		g.flags.IntVar(&g.deletePercent, `delete-percent`, 0, `Percentage of operations that are delete queries`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -213,17 +287,72 @@ func (w *interleavedPartitioned) Ops(
 		SQLDatabase: sqlDatabase,
 	}
 
-	statement, err := db.Prepare(`DELETE from sessions WHERE 1=1`)
-	if err != nil {
-		return ql, err
-	}
 	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
-		args := make([]interface{}, 0)
-		rows, err := statement.Query(args...)
 		if err != nil {
 			return err
 		}
-		return rows.Err()
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		opRand := rng.Intn(100)
+		if opRand < w.insertPercent {
+			insertStatement, err := db.Prepare(insertStatement)
+			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			args := []interface{}{
+				sessionID,            // session_id
+				randString(rng, 100), // affiliate
+				randString(rng, 50),  // channel
+				randString(rng, 20),  // language
+				randString(rng, 20),  // status
+				randString(rng, 50),  // platform
+				randString(rng, 100), // query_id
+			}
+			rows, err := insertStatement.Query(args...)
+			if err != nil {
+				return err
+			}
+			return rows.Err()
+		} else if opRand < w.insertPercent+w.queryPercent { // query
+			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			args := []interface{}{
+				sessionID,
+			}
+			for _, query := range retrieveQueries {
+				retrieveStatement, err := db.Prepare(query)
+				rows, err := retrieveStatement.Query(args...)
+				if err != nil {
+					return err
+				}
+				if rows.Err() != nil {
+					return rows.Err()
+				}
+			}
+		} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
+			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			args := []interface{}{
+				sessionID,
+			}
+			for _, query := range updateQueries {
+				updateStatement, err := db.Prepare(query)
+				rows, err := updateStatement.Query(args...)
+				if err != nil {
+					return err
+				}
+				if rows.Err() != nil {
+					return rows.Err()
+				}
+			}
+		} else { // delete
+			deleteStatement, err := db.Prepare(deleteStatement)
+			if err != nil {
+				return err
+			}
+			args := make([]interface{}, 0)
+			rows, err := deleteStatement.Query(args...)
+			if err != nil {
+				return err
+			}
+			return rows.Err()
+		}
+		return nil
 	})
 
 	return ql, nil
@@ -329,14 +458,8 @@ func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) s
 }
 
 func randString(rng *rand.Rand, length int) string {
-	var s string
-	for i := 0; i < length; i++ {
-		idx := randInt(rng, 0, len(alphas)-1)
-		s = s + string(alphas[idx])
-	}
-	return s
+	return string(randutil.RandBytes(rng, length))
 }
-
 func randInt(rng *rand.Rand, min, max int) int {
 	return rng.Intn(max-min+1) + min
 }
