@@ -40,7 +40,7 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
             Activate the trial license with two simple SQL commands.
           </Step>
           <Step num={3} img={step3Img}>
-            Refer this <a href={NODE_MAP_DOCS_URL}>configuration guide</a> to configure the Node Map.
+            Follow <a href={NODE_MAP_DOCS_URL}>this guide</a> to configure localities and locations.
           </Step>
         </div>
       </section>
