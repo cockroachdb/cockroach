@@ -89,7 +89,7 @@ const (
 `
 	insertQuery    = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
 	deleteQuery    = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT 10)`
-	retrieveQuery0 = `SELECT session_id FROM sessions WHERE id > $1 LIMIT 1`
+	retrieveQuery0 = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
 	retrieveQuery1 = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
 FROM sessions
@@ -118,32 +118,32 @@ SELECT
 	FROM sessions as session
 	LEFT OUTER JOIN devices AS device
 	ON session.session_id = device.session_id
-	WHERE session_id = $1
+	WHERE session.session_id = $1
 `
 	retrieveQuery3 = `
-	UPDATE sessions
-	SET updated = now()
-	WHERE id = $1
+UPDATE sessions
+SET updated = now()
+WHERE session_id = $1
 `
 	retrieveQuery4 = `
-	SELECT session_id, key, key, session_id, created, value, updated
-	FROM customers
-	WHERE session_id = $1
+SELECT session_id, key, key, session_id, created, value, updated
+FROM customers
+WHERE session_id = $1
 `
 	retrieveQuery5 = `
-	SELECT session_id, key, key, session_id, created, value, updated
-	FROM parameters
-	WHERE session_id = $1
+SELECT session_id, key, key, session_id, created, value, updated
+FROM parameters
+WHERE session_id = $1
 `
 	retrieveQuery6 = `
-	SELECT session_id, key, key, session_id, created, value, updated
-	FROM variants
-	WHERE session_id = $1
+SELECT session_id, key, key, session_id, created, value, updated
+FROM variants
+WHERE session_id = $1
 `
 	updateQuery = `
 UPDATE sessions
 SET affiliate = $1, updated = now()
-WHERE id = $2
+WHERE session_id = $2
 `
 )
 
