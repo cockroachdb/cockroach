@@ -60,10 +60,10 @@ sql.defaults.distsql
 0
 
 query TTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name LIKE '%organization'
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
-name                                               current_value  type  description
-cluster.organization                               ·              s     organization name
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
