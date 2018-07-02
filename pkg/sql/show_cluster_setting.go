@@ -108,8 +108,12 @@ func (p *planner) ShowClusterSetting(
 	name := strings.ToLower(n.Name)
 
 	if name == "all" {
-		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS",
-			"TABLE crdb_internal.cluster_settings", nil, nil)
+		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS", `
+SELECT variable,
+       value,
+       type AS setting_type,
+       description
+  FROM crdb_internal.cluster_settings`, nil, nil)
 	}
 
 	st := p.ExecCfg().Settings
