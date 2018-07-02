@@ -50,12 +50,12 @@ limit
  ├── cardinality: [0 - 5]
  ├── stats: [rows=5]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3,4)-->(1,2), ()-->(3)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  │    ├── stats: [rows=200, distinct(3)=1]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)-->(1,2), ()-->(3)
+ │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── stats: [rows=2000, distinct(3)=10]
@@ -74,12 +74,12 @@ limit
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── stats: [rows=200]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3,4)-->(1,2), ()-->(3)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  │    ├── stats: [rows=200, distinct(3)=1]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)-->(1,2), ()-->(3)
+ │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── stats: [rows=2000, distinct(3)=10]
@@ -118,7 +118,7 @@ select
  ├── cardinality: [0 - 5]
  ├── stats: [rows=1.26952228, distinct(3)=1]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3,4)-->(1,2), ()-->(3)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── limit
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── cardinality: [0 - 5]
