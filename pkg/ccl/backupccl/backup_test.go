@@ -534,8 +534,9 @@ func checkInProgressBackupRestore(
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, res := range br.Responses {
-				if res.Export != nil || res.Import != nil {
+			for _, ru := range br.Responses {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportResponse, *roachpb.ImportResponse:
 					<-allowResponse
 				}
 			}

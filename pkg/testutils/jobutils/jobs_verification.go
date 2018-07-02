@@ -112,8 +112,9 @@ func RunJob(
 // discussion on RunJob for where this might be useful.
 func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaResponseFilter {
 	return func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-		for _, res := range br.Responses {
-			if res.Export != nil || res.Import != nil || res.AddSstable != nil {
+		for _, ru := range br.Responses {
+			switch ru.GetInner().(type) {
+			case *roachpb.ExportResponse, *roachpb.ImportResponse, *roachpb.AddSSTableResponse:
 				<-*allowProgressIota
 			}
 		}

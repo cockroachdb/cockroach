@@ -446,22 +446,12 @@ func (*NoopResponse) Verify(_ Request) error {
 	return nil
 }
 
-// GetInner returns the Request contained in the union.
-func (ru RequestUnion) GetInner() Request {
-	return ru.GetValue().(Request)
-}
-
-// GetInner returns the Response contained in the union.
-func (ru ResponseUnion) GetInner() Response {
-	return ru.GetValue().(Response)
-}
-
 // MustSetInner sets the Request contained in the union. It panics if the
 // request is not recognized by the union type. The RequestUnion is reset
 // before being repopulated.
 func (ru *RequestUnion) MustSetInner(args Request) {
 	ru.Reset()
-	if !ru.SetValue(args) {
+	if !ru.SetInner(args) {
 		panic(fmt.Sprintf("%T excludes %T", ru, args))
 	}
 }
@@ -471,7 +461,7 @@ func (ru *RequestUnion) MustSetInner(args Request) {
 // before being repopulated.
 func (ru *ResponseUnion) MustSetInner(reply Response) {
 	ru.Reset()
-	if !ru.SetValue(reply) {
+	if !ru.SetInner(reply) {
 		panic(fmt.Sprintf("%T excludes %T", ru, reply))
 	}
 }
