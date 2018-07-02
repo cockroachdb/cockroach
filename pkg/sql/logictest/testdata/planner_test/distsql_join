@@ -14,7 +14,7 @@ ALTER TABLE data TESTING_RELOCATE
 
 # Verify data placement.
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE data
+SHOW EXPERIMENTAL_RANGES FROM TABLE data
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       /1       1         {1}       1
