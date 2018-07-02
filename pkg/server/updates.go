@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -288,6 +289,9 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		schema = nil
 	}
 	info.Schema = schema
+
+	info.FeatureUsage = telemetry.GetAndResetFeatureCounts()
+
 	info.ErrorCounts = make(map[string]int64)
 	info.UnimplementedErrors = make(map[string]int64)
 
