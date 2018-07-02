@@ -36,7 +36,8 @@ type showZoneConfigNode struct {
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS", "TABLE crdb_internal.zones", nil, nil)
+		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
+			"SELECT zone_id, cli_specifier, config_yaml, config_protobuf FROM crdb_internal.zones", nil, nil)
 	}
 	return &showZoneConfigNode{
 		zoneSpecifier: n.ZoneSpecifier,
@@ -46,7 +47,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 // These should match crdb_internal.zones.
 var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 	{
-		Name: "id",
+		Name: "zone_id",
 		Typ:  types.Int,
 	},
 	{
@@ -58,7 +59,7 @@ var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 		Typ:  types.Bytes,
 	},
 	{
-		Name: "config_proto",
+		Name: "config_protobuf",
 		Typ:  types.Bytes,
 	},
 }

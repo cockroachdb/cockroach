@@ -1389,7 +1389,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	expectedNewZoneConfigID := int64(51)
 	sqlDB.CheckQueryResults(
 		t,
-		`SELECT id
+		`SELECT zone_id
 		FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS]
 		WHERE cli_specifier = 'roachblog.posts'`,
 		[][]string{

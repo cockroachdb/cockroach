@@ -196,17 +196,17 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 query ITTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-id  cli_specifier  config_yaml  config_proto
+zone_id  cli_specifier  config_yaml  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (53, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (54, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0))
+  (17, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (53, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
-SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
+SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 ----
 0   .default
 15  system.jobs

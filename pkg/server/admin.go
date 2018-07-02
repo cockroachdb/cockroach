@@ -1436,7 +1436,7 @@ func (s *adminServer) DataDistribution(
 
 		// Get zone config for table.
 		zoneConfigQuery := fmt.Sprintf(
-			`SELECT id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+			`SELECT zone_id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 			(*tree.Name)(dbName), (*tree.Name)(tableName),
 		)
 		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(

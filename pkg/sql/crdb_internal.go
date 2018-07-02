@@ -1627,10 +1627,10 @@ CREATE TABLE crdb_internal.ranges (
 var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
-  id            INT NOT NULL,
-  cli_specifier STRING,
-  config_yaml   BYTES NOT NULL,
-  config_proto  BYTES NOT NULL
+  zone_id          INT NOT NULL,
+  cli_specifier    STRING,
+  config_yaml      BYTES NOT NULL,
+  config_protobuf  BYTES NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
