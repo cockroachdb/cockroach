@@ -397,11 +397,11 @@ Initial expression
   project
    ├── columns: s:4(string!null) k:1(int!null)
    ├── key: (1)
-   ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+   ├── fd: ()-->(4)
    └── select
         ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
         ├── key: (1)
-        ├── fd: (1)-->(2-5), (3,4)-->(1,2,5), ()-->(4)
+        ├── fd: ()-->(4), (1)-->(2,3,5), (3)-->(1,2,5)
         ├── scan a
         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
         │    ├── key: (1)
@@ -415,11 +415,11 @@ SimplifyFilters
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+    ├── fd: ()-->(4)
     └── select
          ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
          ├── key: (1)
-         ├── fd: (1)-->(2-5), (3,4)-->(1,2,5), ()-->(4)
+         ├── fd: ()-->(4), (1)-->(2,3,5), (3)-->(1,2,5)
          ├── scan a
          │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
          │    ├── key: (1)
@@ -435,13 +435,13 @@ PruneSelectCols
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+    ├── fd: ()-->(4)
     └── select
   -      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
   +      ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-  -      ├── fd: (1)-->(2-5), (3,4)-->(1,2,5), ()-->(4)
-  +      ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+  -      ├── fd: ()-->(4), (1)-->(2,3,5), (3)-->(1,2,5)
+  +      ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
          ├── scan a
   -      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   +      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
@@ -458,11 +458,11 @@ GenerateIndexScans
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+    ├── fd: ()-->(4)
     └── select
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-         ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+         ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
   -      ├── scan a
   +      ├── scan a@secondary
          │    ├── columns: k:1(int!null) f:3(float) s:4(string)
@@ -481,11 +481,11 @@ ConstrainScan
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+    ├── fd: ()-->(4)
     └── select
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
          ├── key: (1)
-         ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+         ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
          ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float) s:4(string)
   +      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
@@ -495,7 +495,7 @@ ConstrainScan
   -      └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
   -           ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
   -           └── a.f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
-  +      │    └── fd: ()-->(4), (1)-->(3,4), (3,4)-->(1)
+  +      │    └── fd: ()-->(4), (1)-->(3), (3)-->(1)
   +      └── filters [type=bool]
   +           ├── true [type=bool]
   +           └── true [type=bool]
@@ -506,22 +506,22 @@ SimplifyFilters
    project
     ├── columns: s:4(string!null) k:1(int!null)
     ├── key: (1)
-    ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+    ├── fd: ()-->(4)
   - └── select
   + └── scan a@secondary
          ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   +      ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
          ├── key: (1)
-  -      ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+  -      ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
   -      ├── scan a@secondary
   -      │    ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
   -      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
   -      │    ├── key: (1)
-  -      │    └── fd: ()-->(4), (1)-->(3,4), (3,4)-->(1)
+  -      │    └── fd: ()-->(4), (1)-->(3), (3)-->(1)
   -      └── filters [type=bool]
   -           ├── true [type=bool]
   -           └── true [type=bool]
-  +      └── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+  +      └── fd: ()-->(4), (1)-->(3), (3)-->(1)
 ================================================================================
 Final best expression
   Cost: 0.51
@@ -529,12 +529,12 @@ Final best expression
   project
    ├── columns: s:4(string!null) k:1(int!null)
    ├── key: (1)
-   ├── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4) [removed: (3)]
+   ├── fd: ()-->(4)
    └── scan a@secondary
         ├── columns: k:1(int!null) f:3(float!null) s:4(string!null)
         ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
         ├── key: (1)
-        └── fd: (1)-->(3,4), (3,4)-->(1), ()-->(4)
+        └── fd: ()-->(4), (1)-->(3), (3)-->(1)
 
 # Decorrelation pattern.
 optsteps
@@ -558,12 +558,12 @@ Initial expression
                   ├── columns: x:6(int!null) y:7(int!null)
                   ├── outer: (2)
                   ├── key: (6)
-                  ├── fd: (6)-->(7), (7)==(2), (2)==(7) [removed: (2)]
+                  ├── fd: (6)-->(7)
                   ├── scan xy
                   │    ├── columns: x:6(int!null) y:7(int)
                   │    ├── key: (6)
                   │    └── fd: (6)-->(7)
-                  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+                  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
                        └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 ================================================================================
 HoistSelectExists
@@ -584,12 +584,12 @@ HoistSelectExists
   -                ├── columns: x:6(int!null) y:7(int!null)
   -                ├── outer: (2)
   -                ├── key: (6)
-  -                ├── fd: (6)-->(7), (7)==(2), (2)==(7) [removed: (2)]
+  -                ├── fd: (6)-->(7)
   -                ├── scan xy
   -                │    ├── columns: x:6(int!null) y:7(int)
   -                │    ├── key: (6)
   -                │    └── fd: (6)-->(7)
-  -                └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  -                └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   -                     └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   + │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   + │    ├── scan a
@@ -600,12 +600,12 @@ HoistSelectExists
   + │    │    ├── columns: x:6(int!null) y:7(int!null)
   + │    │    ├── outer: (2)
   + │    │    ├── key: (6)
-  + │    │    ├── fd: (6)-->(7), (7)==(2), (2)==(7) [removed: (2)]
+  + │    │    ├── fd: (6)-->(7)
   + │    │    ├── scan xy
   + │    │    │    ├── columns: x:6(int!null) y:7(int)
   + │    │    │    ├── key: (6)
   + │    │    │    └── fd: (6)-->(7)
-  + │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  + │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   + │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   + │    └── true [type=bool]
   + └── filters [type=bool]
@@ -617,14 +617,12 @@ TryDecorrelateSelect
   - ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   + ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
     ├── key: (1)
-  - ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  + ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
     ├── semi-join-apply
   - │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   + │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
     │    ├── key: (1)
-  - │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  + │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
     │    ├── scan a
     │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    │    ├── key: (1)
@@ -635,16 +633,16 @@ TryDecorrelateSelect
   + │    ├── scan xy
   + │    │    ├── columns: x:6(int!null) y:7(int)
     │    │    ├── key: (6)
-  - │    │    ├── fd: (6)-->(7), (7)==(2), (2)==(7) [removed: (2)]
+  - │    │    ├── fd: (6)-->(7)
   - │    │    ├── scan xy
   - │    │    │    ├── columns: x:6(int!null) y:7(int)
   - │    │    │    ├── key: (6)
   - │    │    │    └── fd: (6)-->(7)
-  - │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  - │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   - │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   - │    └── true [type=bool]
   + │    │    └── fd: (6)-->(7)
-  + │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  + │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   + │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
     └── filters [type=bool]
 ================================================================================
@@ -655,13 +653,13 @@ DecorrelateJoin
   - ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
   + ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── key: (1)
-    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - ├── semi-join-apply
   - │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
   + ├── semi-join
   + │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
     │    ├── scan a
     │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    │    ├── key: (1)
@@ -670,7 +668,7 @@ DecorrelateJoin
     │    │    ├── columns: x:6(int!null) y:7(int)
     │    │    ├── key: (6)
     │    │    └── fd: (6)-->(7)
-    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
     │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
     └── filters [type=bool]
 ================================================================================
@@ -680,11 +678,11 @@ EliminateEmptyAnd
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── key: (1)
-    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
     ├── semi-join
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
     │    ├── scan a
     │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    │    ├── key: (1)
@@ -693,7 +691,7 @@ EliminateEmptyAnd
     │    │    ├── columns: x:6(int!null) y:7(int)
     │    │    ├── key: (6)
     │    │    └── fd: (6)-->(7)
-    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
     │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   - └── filters [type=bool]
   + └── true [type=bool]
@@ -705,12 +703,12 @@ EliminateSelect
   +semi-join
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── key: (1)
-    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - ├── semi-join
   + ├── scan a
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    ├── key: (1)
-  - │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+  - │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - │    ├── scan a
   - │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   - │    │    ├── key: (1)
@@ -719,7 +717,7 @@ EliminateSelect
   - │    │    ├── columns: x:6(int!null) y:7(int)
   - │    │    ├── key: (6)
   - │    │    └── fd: (6)-->(7)
-  - │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  - │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   - │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   - └── true [type=bool]
   + │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
@@ -727,7 +725,7 @@ EliminateSelect
   + │    ├── columns: x:6(int!null) y:7(int)
   + │    ├── key: (6)
   + │    └── fd: (6)-->(7)
-  + └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+  + └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   +      └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 --------------------------------------------------------------------------------
 GenerateIndexScans (higher cost)
@@ -735,7 +733,7 @@ GenerateIndexScans (higher cost)
    semi-join
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── key: (1)
-    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - ├── scan a
   + ├── index-join a
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -750,7 +748,7 @@ GenerateIndexScans (higher cost)
     │    ├── columns: x:6(int!null) y:7(int)
     │    ├── key: (6)
     │    └── fd: (6)-->(7)
-    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
          └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
@@ -765,7 +763,7 @@ Final best expression
   semi-join
    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
    ├── key: (1)
-   ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (7)==(2), (2)==(7) [removed: (7)]
+   ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
    ├── scan a
    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
    │    ├── key: (1)
@@ -774,7 +772,7 @@ Final best expression
    │    ├── columns: x:6(int!null) y:7(int)
    │    ├── key: (6)
    │    └── fd: (6)-->(7)
-   └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(7)==(2), (2)==(7)]
+   └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Decorrelation pattern using ANY function.
@@ -877,11 +875,10 @@ HoistProjectSubquery
   -           │    ├── columns: k:3(int!null)
   -           │    └── key: (3)
   -           └── variable: xy.x [type=int, outer=(1)]
-  + ├── fd: ()-->(11), (11)-->(8) [removed: (11)]
   + ├── inner-join-apply
   + │    ├── columns: x:1(int!null) case:11(bool)
   + │    ├── key: (1)
-  + │    ├── fd: ()-->(11)
+  + │    ├── fd: (1)-->(11)
   + │    ├── scan xy
   + │    │    ├── columns: x:1(int!null)
   + │    │    └── key: (1)
@@ -924,11 +921,10 @@ EnsureSelectFilters
 ================================================================================
    project
     ├── columns: r:8(bool)
-    ├── fd: ()-->(11), (11)-->(8) [removed: (11)]
     ├── inner-join-apply
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-    │    ├── fd: ()-->(11)
+    │    ├── fd: (1)-->(11)
     │    ├── scan xy
     │    │    ├── columns: x:1(int!null)
     │    │    └── key: (1)
@@ -973,17 +969,14 @@ TryDecorrelateProject
 ================================================================================
    project
     ├── columns: r:8(bool)
-  - ├── fd: ()-->(11), (11)-->(8) [removed: (11)]
   - ├── inner-join-apply
-  + ├── fd: ()-->(10), (11)-->(8) [removed: (10,11)]
   + ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-  - │    ├── fd: ()-->(11)
+    │    ├── fd: (1)-->(11)
   - │    ├── scan xy
   - │    │    ├── columns: x:1(int!null)
   - │    │    └── key: (1)
-  + │    ├── fd: ()-->(10), (1,10)-->(11) [removed: (10)]
     │    ├── project
   - │    │    ├── columns: case:11(bool)
   - │    │    ├── outer: (1)
@@ -995,15 +988,16 @@ TryDecorrelateProject
   - │    │    │    ├── outer: (1)
   - │    │    │    ├── cardinality: [1 - 1]
   - │    │    │    ├── key: ()
+  - │    │    │    ├── fd: ()-->(10)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:9(bool)
   + │    │    ├── columns: case:11(bool) x:1(int!null)
   + │    │    ├── key: (1)
-  + │    │    ├── fd: ()-->(10), (1,10)-->(11) [removed: (10)]
+  + │    │    ├── fd: (1)-->(11)
   + │    │    ├── inner-join-apply
   + │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
   + │    │    │    ├── key: (1)
-    │    │    │    ├── fd: ()-->(10)
-  - │    │    │    ├── project
-  - │    │    │    │    ├── columns: notnull:9(bool)
+  + │    │    │    ├── fd: (1)-->(10)
   + │    │    │    ├── scan xy
   + │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    └── key: (1)
@@ -1054,26 +1048,22 @@ TryDecorrelateScalarGroupBy
 ================================================================================
    project
     ├── columns: r:8(bool)
-  - ├── fd: ()-->(10), (11)-->(8) [removed: (10,11)]
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-  - │    ├── fd: ()-->(10), (1,10)-->(11) [removed: (10)]
-  + │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
     │    ├── project
     │    │    ├── columns: case:11(bool) x:1(int!null)
     │    │    ├── key: (1)
-  - │    │    ├── fd: ()-->(10), (1,10)-->(11) [removed: (10)]
+    │    │    ├── fd: (1)-->(11)
   - │    │    ├── inner-join-apply
-  + │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
   + │    │    ├── select
     │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
     │    │    │    ├── key: (1)
-  - │    │    │    ├── fd: ()-->(10)
+    │    │    │    ├── fd: (1)-->(10)
   - │    │    │    ├── scan xy
   - │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    └── key: (1)
-  + │    │    │    ├── fd: (1)-->(10)
     │    │    │    ├── group-by
   - │    │    │    │    ├── columns: bool_or:10(bool)
   - │    │    │    │    ├── outer: (1)
@@ -1134,11 +1124,11 @@ TryDecorrelateProjectSelect
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
     │    ├── project
     │    │    ├── columns: case:11(bool) x:1(int!null)
     │    │    ├── key: (1)
-    │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    │    ├── fd: (1)-->(11)
     │    │    ├── select
     │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
     │    │    │    ├── key: (1)
@@ -1205,11 +1195,11 @@ DecorrelateJoin
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
     │    ├── project
     │    │    ├── columns: case:11(bool) x:1(int!null)
     │    │    ├── key: (1)
-    │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    │    ├── fd: (1)-->(11)
     │    │    ├── select
     │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
     │    │    │    ├── key: (1)
@@ -1258,11 +1248,11 @@ EliminateGroupByProject
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
     │    ├── project
     │    │    ├── columns: case:11(bool) x:1(int!null)
     │    │    ├── key: (1)
-    │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    │    ├── fd: (1)-->(11)
     │    │    ├── select
     │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
     │    │    │    ├── key: (1)
@@ -1328,11 +1318,11 @@ EliminateSelect
     ├── select
     │    ├── columns: x:1(int!null) case:11(bool)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
     │    ├── project
     │    │    ├── columns: case:11(bool) x:1(int!null)
     │    │    ├── key: (1)
-    │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    │    ├── fd: (1)-->(11)
   - │    │    ├── select
   + │    │    ├── group-by
     │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
@@ -1402,14 +1392,14 @@ EliminateSelect
   + ├── project
   + │    ├── columns: case:11(bool) x:1(int!null)
     │    ├── key: (1)
-    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+    │    ├── fd: (1)-->(11)
   - │    ├── project
   - │    │    ├── columns: case:11(bool) x:1(int!null)
   + │    ├── group-by
   + │    │    ├── columns: x:1(int!null) bool_or:10(bool)
   + │    │    ├── grouping columns: x:1(int!null)
     │    │    ├── key: (1)
-  - │    │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+  - │    │    ├── fd: (1)-->(11)
   - │    │    ├── group-by
   - │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
   - │    │    │    ├── grouping columns: x:1(int!null)
@@ -1473,7 +1463,7 @@ PruneProjectCols
     ├── project
   - │    ├── columns: case:11(bool) x:1(int!null)
   - │    ├── key: (1)
-  - │    ├── fd: (1)-->(10), (1,10)-->(11) [removed: (10)]
+  - │    ├── fd: (1)-->(11)
   + │    ├── columns: case:11(bool)
     │    ├── group-by
     │    │    ├── columns: x:1(int!null) bool_or:10(bool)

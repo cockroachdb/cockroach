@@ -191,7 +191,7 @@ SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb)
  ├── key: (1)
- ├── fd: (1)-->(2-5), ()-->(2-4)
+ ├── fd: ()-->(2-4), (1)-->(5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -326,7 +326,7 @@ SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
  ├── columns: r:6(bool!null) s:7(bool) t:8(bool)
- ├── fd: ()-->(6), (2)-->(8) [removed: (2)]
+ ├── fd: ()-->(6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)

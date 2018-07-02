@@ -133,7 +133,7 @@ SELECT * FROM abc JOIN xyz ON x=a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
- ├── fd: (5)==(1), (1)==(5)
+ ├── fd: (1)==(5), (5)==(1)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    └── ordering: +1
@@ -143,7 +143,7 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(5)==(1), (1)==(5)]
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            └── xyz.x = abc.a [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 opt
@@ -173,7 +173,7 @@ SELECT * FROM abc JOIN xyz ON a=x AND b=y WHERE b=1 AND y=1
 ----
 inner-join
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
- ├── fd: ()-->(2), ()-->(6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── fd: ()-->(2,6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── scan abc@bc
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
  │    ├── constraint: /2/3/4: [/1 - /1]
@@ -246,7 +246,7 @@ SELECT * FROM stu, abc WHERE (c,b,a) = (s,t,u)
 ----
 inner-join (merge)
  ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
- ├── fd: (6)==(1), (1)==(6), (5)==(2), (2)==(5), (4)==(3), (3)==(4)
+ ├── fd: (1)==(6), (6)==(1), (2)==(5), (5)==(2), (3)==(4), (4)==(3)
  ├── scan stu
  │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
  │    ├── key: (1-3)
@@ -259,7 +259,7 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1,+2,+3
       ├── right ordering: +6,+5,+4
-      └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(6)==(1), (1)==(6), (5)==(2), (2)==(5), (4)==(3), (3)==(4)]
+      └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(5), (5)==(2), (3)==(4), (4)==(3)]
            ├── abc.c = stu.s [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
            ├── abc.b = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
            └── abc.a = stu.u [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
@@ -358,7 +358,7 @@ SELECT * FROM abc JOIN xyz ON a=x AND a=y
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
- ├── fd: (1)==(5,6), (5)==(1), (6)==(1)
+ ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    └── ordering: +1
@@ -368,6 +368,6 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1), (6)==(1)]
+      └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
            ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            └── abc.a = xyz.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]

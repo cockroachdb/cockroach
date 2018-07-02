@@ -82,19 +82,19 @@ select
            │              ├── columns: y:9(int)
            │              ├── outer: (1,2)
            │              ├── stats: [rows=111.111111]
-           │              ├── fd: ()-->(9), (5)==(1), (1)==(5) [removed: (1,5)]
+           │              ├── fd: ()-->(9)
            │              ├── select
            │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    ├── outer: (1)
            │              │    ├── stats: [rows=111.111111]
            │              │    ├── key: (5)
-           │              │    ├── fd: (5)-->(6,7), (5)==(1), (1)==(5) [removed: (1)]
+           │              │    ├── fd: (5)-->(6,7)
            │              │    ├── scan kuv
            │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    │    ├── stats: [rows=1000]
            │              │    │    ├── key: (5)
            │              │    │    └── fd: (5)-->(6,7)
-           │              │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(5)==(1), (1)==(5)]
+           │              │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            │              │              ├── variable: kuv.k [type=int, outer=(5)]
            │              │              └── variable: xysd.x [type=int, outer=(1)]
@@ -212,13 +212,13 @@ project
                           ├── outer: (1)
                           ├── stats: [rows=111.111111]
                           ├── key: (4)
-                          ├── fd: (4)-->(5-7), (6,7)~~>(4,5), (4)==(1), (1)==(4) [removed: (1)]
+                          ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                           ├── scan xysd
                           │    ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
                           │    ├── stats: [rows=1000]
                           │    ├── key: (4)
                           │    └── fd: (4)-->(5-7), (6,7)~~>(4,5)
-                          └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(4)==(1), (1)==(4)]
+                          └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
                                └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
                                     ├── variable: xysd.x [type=int, outer=(4)]
                                     └── variable: kuv.k [type=int, outer=(1)]
@@ -260,13 +260,13 @@ project
                                     ├── outer: (1)
                                     ├── stats: [rows=111.111111]
                                     ├── key: (8)
-                                    ├── fd: (8)-->(9-11), (10,11)~~>(8,9), (8)==(1), (1)==(8) [removed: (1)]
+                                    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
                                     ├── scan xysd
                                     │    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
                                     │    ├── stats: [rows=1000]
                                     │    ├── key: (8)
                                     │    └── fd: (8)-->(9-11), (10,11)~~>(8,9)
-                                    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(8)==(1), (1)==(8)]
+                                    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
                                          └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
                                               ├── variable: xysd.x [type=int, outer=(8)]
                                               └── variable: kuv.k [type=int, outer=(1)]

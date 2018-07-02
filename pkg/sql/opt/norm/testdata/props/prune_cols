@@ -149,7 +149,7 @@ project
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) r:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-4), ()-->(7)
+      ├── fd: (1)-->(2-4,7)
       ├── prune: (2-4)
       ├── interesting orderings: (+1)
       ├── scan a
@@ -173,20 +173,19 @@ project
       │    │    └── project
       │    │         ├── columns: r:7(int)
       │    │         ├── outer: (1)
-      │    │         ├── fd: ()-->(7), (5)==(1), (1)==(5) [removed: (1,5)]
+      │    │         ├── fd: ()-->(7)
       │    │         ├── prune: (7)
       │    │         ├── select
       │    │         │    ├── columns: x:5(int!null)
       │    │         │    ├── outer: (1)
       │    │         │    ├── key: (5)
-      │    │         │    ├── fd: (5)==(1), (1)==(5) [removed: (1)]
       │    │         │    ├── interesting orderings: (+5)
       │    │         │    ├── scan xy
       │    │         │    │    ├── columns: x:5(int!null)
       │    │         │    │    ├── key: (5)
       │    │         │    │    ├── prune: (5)
       │    │         │    │    └── interesting orderings: (+5)
-      │    │         │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(5)==(1), (1)==(5)]
+      │    │         │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │         │         └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │         └── projections [outer=(1)]
       │    │              └── a.k + 1 [type=int, outer=(1)]
@@ -208,13 +207,13 @@ project
  └── semi-join
       ├── columns: k:1(int!null) i:2(int)
       ├── key: (1)
-      ├── fd: (1)-->(2), (1)==(5,7), (7)==(1), (5)==(1) [removed: (5,7)]
+      ├── fd: (1)-->(2)
       ├── prune: (2)
       ├── interesting orderings: (+1)
       ├── semi-join (merge)
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2), (1)==(7), (7)==(1) [removed: (7)]
+      │    ├── fd: (1)-->(2)
       │    ├── prune: (2)
       │    ├── interesting orderings: (+1)
       │    ├── scan a

@@ -127,7 +127,7 @@ project
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=600, distinct(2-4)=600]
       ├── key: (2-4)
-      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (2-4)-->(5) [removed: (1)]
+      ├── fd: (3,4)~~>(2), (2-4)-->(5)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=2000, distinct(2-4)=600]
@@ -178,13 +178,13 @@ project
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
       ├── stats: [rows=120, distinct(4)=2]
       ├── key: (3,4)
-      ├── fd: (1)-->(2-4), (3,4)-->(1,2), (2-4)-->(5) [removed: (1)]
+      ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
       │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
       │    ├── key: (2-4)
-      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (2-4)-->(5) [removed: (1)]
+      │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
       │    ├── project
       │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
