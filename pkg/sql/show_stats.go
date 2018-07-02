@@ -27,9 +27,9 @@ import (
 )
 
 var showTableStatsColumns = sqlbase.ResultColumns{
-	{Name: "name", Typ: types.String},
-	{Name: "columns", Typ: types.TArray{Typ: types.String}},
-	{Name: "created_at", Typ: types.Timestamp},
+	{Name: "table_name", Typ: types.String},
+	{Name: "column_names", Typ: types.TArray{Typ: types.String}},
+	{Name: "created", Typ: types.Timestamp},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
