@@ -152,7 +152,7 @@ opt
 EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain
- ├── columns: Tree:7(string) Field:8(string) Description:9(string)
+ ├── columns: tree:7(string) field:8(string) description:9(string)
  └── project
       ├── columns: b:2(int) plus:6(int) c:3(int)
       ├── fd: (2)-->(6)
@@ -165,12 +165,12 @@ explain
 
 # Regression: Explain a statement having constant column, but with no ordering.
 opt
-SELECT "Field" FROM [EXPLAIN SELECT 123 AS k]
+SELECT field FROM [EXPLAIN SELECT 123 AS k]
 ----
 project
- ├── columns: Field:3(string)
+ ├── columns: field:3(string)
  └── explain
-      ├── columns: Tree:2(string) Field:3(string) Description:4(string)
+      ├── columns: tree:2(string) field:3(string) description:4(string)
       └── project
            ├── columns: k:1(int!null)
            ├── cardinality: [1 - 1]

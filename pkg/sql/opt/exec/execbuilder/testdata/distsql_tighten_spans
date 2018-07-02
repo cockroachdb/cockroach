@@ -284,7 +284,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  /"a"-/"a"/#
@@ -294,7 +294,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  -/"aa"
@@ -302,7 +302,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  /1-/1/#
@@ -312,7 +312,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  -/2

@@ -625,7 +625,7 @@ statement ok
 CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ]
 ----
@@ -639,7 +639,7 @@ sort            ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ]
 ----

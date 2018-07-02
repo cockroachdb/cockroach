@@ -379,11 +379,11 @@ memo (optimized)
  └── G5: (variable a.x)
 
 memo
-SELECT DISTINCT "Field" FROM [EXPLAIN SELECT 123 AS k]
+SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
 memo (optimized)
  ├── G1: (group-by G2 G3 cols=(3))
- │    └── "[presentation: Field:3]"
+ │    └── "[presentation: field:3]"
  │         ├── best: (group-by G2 G3 cols=(3))
  │         └── cost: 0.01
  ├── G2: (explain G4 [presentation: k:1])

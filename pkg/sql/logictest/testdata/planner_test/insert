@@ -294,7 +294,7 @@ CREATE TABLE select_t (x INT, v INT)
 
 # Check that INSERT supports ORDER BY (MySQL extension)
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
 ]
 ----
@@ -315,7 +315,7 @@ count                     ·          ·
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
