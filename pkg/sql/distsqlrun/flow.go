@@ -65,7 +65,7 @@ type FlowCtx struct {
 	// directly (since some processor mutate the EvalContext they use).
 	//
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
-	// ctors of the processors that need it.
+	// cores of the processors that need it.
 	EvalCtx tree.EvalContext
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
