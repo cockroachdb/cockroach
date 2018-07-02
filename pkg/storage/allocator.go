@@ -25,7 +25,9 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 
+	"bytes"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -228,9 +230,23 @@ func (a *Allocator) ComputeAction(
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
+	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+
+	// We're adjusting the replication factor all ranges so that if there are less nodes than
+	// replicas specified in the zone config, the cluster can still function.
+
+	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
+
+	need = int(math.Min(float64(aliveStoreCount-len(decommissioningReplicas)), float64(need)))
+
+	// We ensuring that we don't up-replicate to an even number of replicas.
+	if need%2 == 0 {
+		need = need - 1
+	}
+	need = int(math.Max(3.0, float64(need)))
+
 	have := len(rangeInfo.Desc.Replicas)
 	quorum := computeQuorum(need)
 	if have < need {
@@ -242,7 +258,6 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	if have == need && len(decommissioningReplicas) > 0 {
 		// Range has decommissioning replica(s). We should up-replicate to add
 		// another replica. The decommissioning replica(s) will be down-replicated

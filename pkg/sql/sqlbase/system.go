@@ -846,17 +846,41 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	zoneConf := config.DefaultZoneConfig()
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
 
+	metaRangeZoneConf := config.DefaultZoneConfig()
+
 	// .meta zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
+	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	metaRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, metaRangeZoneConf))
+
+	livenessRangeZoneConf := config.DefaultZoneConfig()
 
 	// Liveness zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+	livenessRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	livenessRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, livenessRangeZoneConf))
 
-	// Jobs zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
+	systemRangeZoneConf := config.DefaultZoneConfig()
+
+	// System zone config entry with a shorter GC time.
+	systemRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	systemRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, systemRangeZoneConf))
+
+	jobsRangeZoneConf := config.DefaultZoneConfig()
+
+	// Jobs table zone config entry with a shorter GC time.
+	jobsRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	jobsRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsRangeZoneConf))
+
+	leaseRangeZoneConf := config.DefaultZoneConfig()
+
+	// Lease zone config entry with a shorter GC time.
+	leaseRangeZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	leaseRangeZoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LeaseTableID, leaseRangeZoneConf))
+
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
