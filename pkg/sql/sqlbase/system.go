@@ -852,10 +852,17 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Liveness zone config entry with a shorter GC time.
 	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	zoneConf.NumReplicas = 5
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	zoneConf.NumReplicas = 5
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, zoneConf))
 
 	// Jobs zone config entry with a shorter GC time.
 	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	zoneConf.NumReplicas = 3
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
 }
 
