@@ -212,8 +212,8 @@ func fillInLazyProps(ev memo.ExprView) {
 	}
 }
 
-// Set parses an argument that refers to a flag. See OptTester.Handle for
-// supported flags.
+// Set parses an argument that refers to a flag.
+// See OptTester.RunCommand for supported flags.
 func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
 	case "format":
@@ -309,11 +309,54 @@ func (ot *OptTester) Memo() (string, error) {
 func (ot *OptTester) OptSteps() (string, error) {
 	var buf bytes.Buffer
 	var prevBest, prev, next string
-	if ot.Flags.Verbose {
-		fmt.Print("------ optsteps verbose output starts ------\n")
+
+	os := newOptSteps(ot)
+	for {
+		err := os.next()
+		if err != nil {
+			return "", err
+		}
+
+		next = os.exprView().FormatString(ot.Flags.ExprFormat)
+
+		// This call comes after setting "next", because we want to output the
+		// final expression, even though there were no diffs from the previous
+		// iteration.
+		if os.done() {
+			break
+		}
+
+		if prev == "" {
+			// Output starting tree.
+			ot.optStepsDisplay(&buf, "", next, os)
+			prevBest = next
+		} else if next == prev || next == prevBest {
+			ot.optStepsDisplay(&buf, next, next, os)
+		} else if os.isBetter() {
+			// New expression is better than the previous expression. Diff
+			// it against the previous *best* expression (might not be the
+			// previous expression).
+			ot.optStepsDisplay(&buf, prevBest, next, os)
+			prevBest = next
+		} else {
+			// New expression is not better than the previous expression, but
+			// still show the change. Diff it against the previous expression,
+			// regardless if it was a "best" expression or not.
+			ot.optStepsDisplay(&buf, prev, next, os)
+		}
+
+		prev = next
 	}
+
+	// Output ending tree.
+	ot.optStepsDisplay(&buf, next, "", os)
+
+	return buf.String(), nil
+}
+
+func (ot *OptTester) optStepsDisplay(buf *bytes.Buffer, before string, after string, os *optSteps) {
 	output := func(format string, args ...interface{}) {
-		fmt.Fprintf(&buf, format, args...)
+		fmt.Fprintf(buf, format, args...)
 		if ot.Flags.Verbose {
 			fmt.Printf(format, args...)
 		}
@@ -343,76 +386,49 @@ func (ot *OptTester) OptSteps() (string, error) {
 		output("%s\n", strings.Repeat("-", 80))
 	}
 
-	os := newOptSteps(ot)
-	for {
-		err := os.next()
-		if err != nil {
-			return "", err
+	if before == "" {
+		if ot.Flags.Verbose {
+			fmt.Print("------ optsteps verbose output starts ------\n")
 		}
-
-		next = os.exprView().FormatString(ot.Flags.ExprFormat)
-
-		// This call comes after setting "next", because we want to output the
-		// final expression, even though there were no diffs from the previous
-		// iteration.
-		if os.done() {
-			break
-		}
-
-		if prev == "" {
-			// Output starting tree.
-			bestHeader(os.exprView(), "Initial expression\n")
-			indent(next)
-			prevBest = next
-		} else if next == prev || next == prevBest {
-			altHeader("%s (no changes)\n", os.lastRuleName())
-		} else {
-			var diff difflib.UnifiedDiff
-			if os.isBetter() {
-				// New expression is better than the previous expression. Diff
-				// it against the previous *best* expression (might not be the
-				// previous expression).
-				bestHeader(os.exprView(), "%s\n", os.lastRuleName())
-
-				diff = difflib.UnifiedDiff{
-					A:       difflib.SplitLines(prevBest),
-					B:       difflib.SplitLines(next),
-					Context: 100,
-				}
-
-				prevBest = next
-			} else {
-				// New expression is not better than the previous expression, but
-				// still show the change. Diff it against the previous expression,
-				// regardless if it was a "best" expression or not.
-				altHeader("%s (higher cost)\n", os.lastRuleName())
-
-				next = os.exprView().FormatString(ot.Flags.ExprFormat)
-				diff = difflib.UnifiedDiff{
-					A:       difflib.SplitLines(prev),
-					B:       difflib.SplitLines(next),
-					Context: 100,
-				}
-			}
-
-			text, _ := difflib.GetUnifiedDiffString(diff)
-			// Skip the "@@ ... @@" header (first line).
-			text = strings.SplitN(text, "\n", 2)[1]
-			indent(text)
-		}
-
-		prev = next
+		bestHeader(os.exprView(), "Initial expression\n")
+		indent(after)
+		return
 	}
 
-	// Output ending tree.
-	bestHeader(os.exprView(), "Final best expression\n")
-	indent(next)
-
-	if ot.Flags.Verbose {
-		fmt.Print("------ optsteps verbose output ends ------\n")
+	if before == after {
+		altHeader("%s (no changes)\n", os.lastRuleName())
+		return
 	}
 
-	return buf.String(), nil
+	if after == "" {
+		bestHeader(os.exprView(), "Final best expression\n")
+		indent(before)
+
+		if ot.Flags.Verbose {
+			fmt.Print("------ optsteps verbose output ends ------\n")
+		}
+		return
+	}
+
+	var diff difflib.UnifiedDiff
+	if os.isBetter() {
+		// New expression is better than the previous expression. Diff
+		// it against the previous *best* expression (might not be the
+		// previous expression).
+		bestHeader(os.exprView(), "%s\n", os.lastRuleName())
+	} else {
+		altHeader("%s (higher cost)\n", os.lastRuleName())
+	}
+
+	diff = difflib.UnifiedDiff{
+		A:       difflib.SplitLines(before),
+		B:       difflib.SplitLines(after),
+		Context: 100,
+	}
+	text, _ := difflib.GetUnifiedDiffString(diff)
+	// Skip the "@@ ... @@" header (first line).
+	text = strings.SplitN(text, "\n", 2)[1]
+	indent(text)
 }
 
 func (ot *OptTester) buildExpr(
