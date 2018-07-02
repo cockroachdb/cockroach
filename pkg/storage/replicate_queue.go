@@ -320,7 +320,7 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
-		need := int(zone.NumReplicas)
+		need := GetNeededReplicas(zone.NumReplicas, rq.allocator.storePool, desc)
 		willHave := len(desc.Replicas) + 1
 
 		// Only up-replicate if there are suitable allocation targets such

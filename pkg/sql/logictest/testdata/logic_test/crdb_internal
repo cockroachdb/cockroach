@@ -201,7 +201,6 @@ zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (17, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   (53, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
@@ -210,6 +209,7 @@ query IT
 SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 ----
 0   .default
+1   system
 15  system.jobs
 16  .meta
 17  .system

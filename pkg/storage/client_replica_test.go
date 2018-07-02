@@ -1751,7 +1751,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		t.Skip()
 	}
 
-	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
@@ -1761,13 +1761,19 @@ func TestSystemZoneConfigs(t *testing.T) {
 	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
-
-	expectedRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.DefaultZoneConfig()
-	expectedReplicas := expectedRanges * int(config.DefaultZoneConfig().NumReplicas)
+
+	expectedUserRanges, err := tc.Servers[0].ExpectedInitialUserRangeCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedSystemRanges -= expectedUserRanges
+	expectedReplicas := expectedSystemRanges*int(config.DefaultSystemZoneConfig().NumReplicas) +
+		expectedUserRanges*int(config.DefaultZoneConfig().NumReplicas)
 
 	waitForReplicas := func() error {
 		var conflictingID roachpb.RangeID
@@ -1808,7 +1814,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// of replicas to go up accordingly after running all replicas through the
 	// replicate queue.
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 5")
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 7")
 	expectedReplicas += 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
@@ -1821,7 +1827,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 5")
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
 	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")

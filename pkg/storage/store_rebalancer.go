@@ -514,7 +514,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			log.Error(ctx, err)
 			return replicaWithStats{}, nil
 		}
-		desiredReplicas := int(zone.NumReplicas)
+		desiredReplicas := GetNeededReplicas(zone.NumReplicas, sr.rq.allocator.storePool, desc)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 
