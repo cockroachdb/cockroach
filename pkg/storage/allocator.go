@@ -256,9 +256,24 @@ func (a *Allocator) ComputeAction(
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
-	need := int(zone.NumReplicas)
+	numZoneReplicas := int(zone.NumReplicas)
+	need := numZoneReplicas
+	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+
+	// We're adjusting the replication factor all ranges so that if there are less nodes than
+	// replicas specified in the zone config, the cluster can still function.
+	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
+	need = int(math.Min(float64(aliveStoreCount-len(decommissioningReplicas)), float64(need)))
+
+	// Ensure that we don't up-replicate to an even number of replicas.
+	if need%2 == 0 {
+		need = need - 1
+	}
+	need = int(math.Max(3.0, float64(need)))
+	if need > numZoneReplicas {
+		need = numZoneReplicas
+	}
 	have := len(rangeInfo.Desc.Replicas)
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
@@ -271,7 +286,6 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	if have == need && len(decommissioningReplicas) > 0 {
 		// Range has decommissioning replica(s). We should up-replicate to add
 		// another replica. The decommissioning replica(s) will be down-replicated

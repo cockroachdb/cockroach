@@ -517,6 +517,8 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
+	// system
 	// system.jobs
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
@@ -529,6 +531,7 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// system
 	// system.jobs
 	// zone get .liveness
@@ -536,8 +539,8 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 600
-	// num_replicas: 1
+	//   ttlseconds: 90000
+	// num_replicas: 5
 	// constraints: []
 	// zone get .meta
 	// .meta
@@ -545,7 +548,7 @@ func Example_zone() {
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 3600
-	// num_replicas: 1
+	// num_replicas: 5
 	// constraints: []
 	// zone get system.nonexistent
 	// pq: relation "system.public.nonexistent" does not exist
@@ -584,6 +587,7 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// system.jobs
 	// zone rm .default
 	// pq: cannot remove default zone
@@ -591,7 +595,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 600
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
