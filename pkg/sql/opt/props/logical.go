@@ -104,7 +104,7 @@ type Relational struct {
 	Cardinality Cardinality
 
 	// Stats is the set of statistics that apply to this relational expression.
-	// See opt/statistics.go and statistics_builder.go for more details.
+	// See statistics.go and memo/statistics_builder.go for more details.
 	Stats Statistics
 
 	// Rule encapsulates the set of properties that are maintained to assist
