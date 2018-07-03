@@ -37,6 +37,18 @@ const (
 	NumManualRuleNames
 )
 
+// IsNormalize returns true if r is a normalization rule.
+func (r RuleName) IsNormalize() bool {
+	return r < startExploreRule
+}
+
+// IsExplore returns true if r is an exploration rule.
+func (r RuleName) IsExplore() bool {
+	return r > startExploreRule
+}
+
 // Make linter happy.
 var _ = InvalidRuleName
 var _ = NumManualRuleNames
+var _ = RuleName.IsNormalize
+var _ = RuleName.IsExplore
