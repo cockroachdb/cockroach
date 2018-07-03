@@ -51,11 +51,11 @@ func TestDecommission(t *testing.T) {
 
 func decommission(
 	ctx context.Context, c cluster.Cluster, runNode int, targetNode roachpb.NodeID, verbs ...string,
-) (string, error) {
+) (string, string, error) {
 	for {
 		args := append([]string{"node", verbs[0], strconv.Itoa(int(targetNode))}, verbs[1:]...)
-		o, _, err := c.ExecCLI(ctx, runNode, args)
-		return o, err
+		o, e, err := c.ExecCLI(ctx, runNode, args)
+		return o, e, err
 	}
 }
 
@@ -134,9 +134,9 @@ func testDecommissionInner(
 		idMap[i] = details.NodeID
 	}
 
-	decommissionHeader := []string{"id", "is_live", "gossiped_replicas", "is_decommissioning", "is_draining"}
-	decommissionFooter := []string{"All target nodes report that they hold no more data. Please verify cluster health before removing the nodes."}
-	decommissionFooterLive := []string{"Decommissioning finished. Please verify cluster health before removing the nodes."}
+	decommissionHeader := []string{"id", "is_live", "replicas", "is_decommissioning", "is_draining"}
+	decommissionFooter := []string{"No more data reported on target nodes. Please verify cluster health before removing the nodes."}
+	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
 	statusHeader := []string{"id", "address", "build", "started_at", "updated_at", "is_live"}
 
@@ -148,7 +148,7 @@ func testDecommissionInner(
 		MaxRetries:     20,
 	}
 	for r := retry.Start(retryOpts); r.Next(); {
-		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none", "--format", "csv")
+		o, _, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
-			decommissionFooterLive,
+			decommissionFooter,
 		}
 		log.Infof(ctx, o)
 
@@ -204,7 +204,7 @@ func testDecommissionInner(
 
 	log.Info(ctx, "recommissioning first node (from third node)")
 	{
-		o, err := decommission(ctx, c, 2, idMap[0], "recommission")
+		o, _, err := decommission(ctx, c, 2, idMap[0], "recommission")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,7 +219,7 @@ func testDecommissionInner(
 	log.Info(ctx, "decommissioning second node from third, using --wait=all")
 	{
 		target := idMap[1]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
+		o, _, err := decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func testDecommissionInner(
 
 	log.Info(ctx, "recommissioning second node from itself and restarting")
 	{
-		o, err := decommission(ctx, c, 1, idMap[1], "recommission")
+		o, _, err := decommission(ctx, c, 1, idMap[1], "recommission")
 		if err != nil {
 			t.Fatalf("could no recommission: %s\n%s", err, o)
 		}
@@ -277,7 +277,7 @@ func testDecommissionInner(
 	log.Info(ctx, "checking that other nodes see node three as successfully decommissioned")
 	{
 		target := idMap[2]
-		o, err := decommission(ctx, c, 1, target, "decommission", "--format", "csv") // wait=all is implied
+		o, _, err := decommission(ctx, c, 1, target, "decommission", "--format", "csv") // wait=all is implied
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -294,7 +294,7 @@ func testDecommissionInner(
 		}
 
 		// Recommission. Welcome back!
-		o, err = decommission(ctx, c, 1, target, "recommission")
+		o, _, err = decommission(ctx, c, 1, target, "recommission")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,18 +313,21 @@ func testDecommissionInner(
 	log.Info(ctx, "decommission first node, starting with it down but restarting it for verification")
 	{
 		target := idMap[0]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		o, e, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live")
 		if err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, o)
+		if strings.Split(e, "\n")[1] != waitLiveDeprecated {
+			t.Fatal("missing deprecate message for --wait=live")
+		}
 		if err := c.Restart(ctx, 0); err != nil {
 			t.Fatal(err)
 		}
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.
-		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
+		o, _, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +362,7 @@ func testDecommissionInner(
 	log.Info(ctx, "decommission first node in absentia using --wait=live")
 	{
 		target := idMap[0]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live", "--format", "csv")
+		o, e, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,11 +378,14 @@ func testDecommissionInner(
 		// liveness times out.
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
-			decommissionFooterLive,
+			{strconv.Itoa(int(target)), `true|false`, "0", `true`, `true|false`},
+			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
+		}
+		if strings.Split(e, "\n")[1] != waitLiveDeprecated {
+			t.Fatal("missing deprecate message for --wait=live")
 		}
 	}
 
