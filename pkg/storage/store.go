@@ -3944,12 +3944,7 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
-		s.unquiescedReplicas.Lock()
-		delete(s.unquiescedReplicas.m, rangeID)
-		s.unquiescedReplicas.Unlock()
-		s.mu.replicas.Delete(int64(rangeID))
-		delete(s.mu.uninitReplicas, rangeID)
-		s.replicaQueues.Delete(int64(rangeID))
+		s.unlinkReplicaByRangeIDLocked(rangeID)
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
