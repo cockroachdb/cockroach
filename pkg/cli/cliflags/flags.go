@@ -720,4 +720,24 @@ in the history of the cluster.`,
 When no node ID is specified, also lists all nodes that have been decommissioned
 in the history of the cluster.`,
 	}
+
+	SQLFmtLen = FlagInfo{
+		Name:        "print-width",
+		Description: `The line length where sqlfmt will try to wrap.`,
+	}
+
+	SQLFmtSpaces = FlagInfo{
+		Name:        "use-spaces",
+		Description: `Indent with spaces instead of tabs.`,
+	}
+
+	SQLFmtTabWidth = FlagInfo{
+		Name:        "tab-width",
+		Description: `Number of spaces per indentation level.`,
+	}
+
+	SQLFmtNoSimplify = FlagInfo{
+		Name:        "no-simplify",
+		Description: `Don't simplify output.`,
+	}
 )
