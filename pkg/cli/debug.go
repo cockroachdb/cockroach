@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -1143,6 +1144,59 @@ func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	return synctest.Run(syncTestOpts)
 }
 
+var debugRangefeedCmd = &cobra.Command{
+	Use:   "rangefeed [<range id>]",
+	Short: "Attach a rangefeed to the specified Range",
+	Long: `
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(runRangeFeed),
+}
+
+func runRangeFeed(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, _, finish, err := getClientGRPCConn(ctx)
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to the node")
+	}
+	c := roachpb.NewInternalClient(conn)
+	defer finish()
+
+	// Connects to the first table created in a fresh cluster.
+	req := &roachpb.RangeFeedRequest{
+		Header: roachpb.Header{
+			Timestamp: hlc.Timestamp{WallTime: int64(timeutil.Now().Nanosecond())},
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+			RangeID: 23,
+		},
+		Span: roachpb.Span{
+			Key:    roachpb.Key(keys.MakeTablePrefix(52)),
+			EndKey: roachpb.Key(keys.MakeTablePrefix(53)),
+		},
+	}
+	stream, err := c.RangeFeed(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create stream")
+	}
+	for {
+		event, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return errors.Wrap(err, "Error from stream")
+		}
+		inner := event.GetValue()
+		fmt.Printf("EVENT: %T %+v\n", inner, inner)
+	}
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 
@@ -1173,6 +1227,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugDecodeKeyCmd,
 	debugRocksDBCmd,
 	debugGossipValuesCmd,
+	debugRangefeedCmd,
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
