@@ -1008,8 +1008,9 @@ func (c *cluster) isLocal() bool {
 	return c.name == "local"
 }
 
-func getDiskUsageInByte(ctx context.Context, c *cluster, nodeIdx int) (int, error) {
-	out, err := c.RunWithBuffer(ctx, c.l, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+// getDiskUsageInByte does what's on the tin. nodeIdx starts at one.
+func getDiskUsageInByte(ctx context.Context, c *cluster, logger *logger, nodeIdx int) (int, error) {
+	out, err := c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 	if err != nil {
 		return 0, err
 	}

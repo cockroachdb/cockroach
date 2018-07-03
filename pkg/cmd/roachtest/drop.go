@@ -72,7 +72,7 @@ func registerDrop(r *registry) {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInByte(ctx, c, j)
+				size, err := getDiskUsageInByte(ctx, c, c.l, j)
 				if err != nil {
 					return err
 				}
@@ -112,7 +112,7 @@ gc:
 				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInByte(ctx, c, j)
+					size, err := getDiskUsageInByte(ctx, c, c.l, j)
 					if err != nil {
 						return err
 					}

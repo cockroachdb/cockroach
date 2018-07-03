@@ -129,7 +129,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	clusterDiskUsage := func() int {
 		totalDiskUsage := 0
 		for i := 1; i <= numNodes; i++ {
-			diskUsageOnNodeI, err := getDiskUsageInByte(ctx, c, i)
+			diskUsageOnNodeI, err := getDiskUsageInByte(ctx, c, c.l, i)
 			if err != nil {
 				t.Fatalf("Failed to get disk usage on node %d, error: %v", i, err)
 			}
