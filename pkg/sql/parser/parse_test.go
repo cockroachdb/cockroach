@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package parser_test
 
 import (
 	"go/constant"
@@ -21,10 +21,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
@@ -1023,7 +1025,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -1031,6 +1033,7 @@ func TestParse(t *testing.T) {
 		if d.sql != s {
 			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
 		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
@@ -1568,7 +1571,7 @@ func TestParse2(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
@@ -1577,9 +1580,10 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
 	}
 }
 
@@ -1599,7 +1603,7 @@ func TestParseTree(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
@@ -1608,9 +1612,10 @@ func TestParseTree(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
 	}
 }
 
@@ -1627,9 +1632,10 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := Parse(d.sql); err != nil {
+		if _, err := parser.Parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
@@ -2093,7 +2099,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
 		},
 	}
 	for _, d := range testData {
-		_, err := Parse(d.sql)
+		_, err := parser.Parse(d.sql)
 		if err == nil {
 			t.Errorf("expected error, got nil for:\n%s", d.sql)
 			continue
@@ -2129,7 +2135,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := Parse(s)
+	_, err := parser.Parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -2312,7 +2318,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.sql)
+		expr, err := parser.ParseExpr(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
@@ -2324,7 +2330,7 @@ func TestParsePrecedence(t *testing.T) {
 
 func BenchmarkParse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		st, err := Parse(`
+		st, err := parser.Parse(`
 			BEGIN;
 			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
 			SELECT abalance FROM pgbench_accounts WHERE aid = 5;

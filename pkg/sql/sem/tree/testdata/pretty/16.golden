@@ -1,0 +1,125 @@
+1:
+-
+DELETE
+FROM
+	unindexed
+WHERE
+	(
+		k
+		>
+		1
+	)
+	AND
+	(
+		v
+		<
+		7
+	)
+ORDER BY
+	v
+		DESC
+RETURNING
+	v,
+	k
+
+8:
+--------
+DELETE
+FROM
+	unindexed
+WHERE
+	(
+		k
+		>
+		1
+	)
+	AND
+	(
+		v
+		<
+		7
+	)
+ORDER BY
+	v
+		DESC
+RETURNING
+	v, k
+
+10:
+----------
+DELETE
+FROM
+	unindexed
+WHERE
+	(
+		k
+		>
+		1
+	)
+	AND
+	(
+		v
+		<
+		7
+	)
+ORDER BY
+	v DESC
+RETURNING
+	v, k
+
+11:
+-----------
+DELETE
+FROM
+	unindexed
+WHERE
+	(k > 1)
+	AND
+	(v < 7)
+ORDER BY
+	v DESC
+RETURNING
+	v, k
+
+14:
+--------------
+DELETE
+FROM unindexed
+WHERE
+	(k > 1)
+	AND
+	(v < 7)
+ORDER BY
+	v DESC
+RETURNING v, k
+
+15:
+---------------
+DELETE
+FROM unindexed
+WHERE
+	(k > 1)
+	AND (v < 7)
+ORDER BY v DESC
+RETURNING v, k
+
+23:
+-----------------------
+DELETE
+FROM unindexed
+WHERE
+	(k > 1) AND (v < 7)
+ORDER BY v DESC
+RETURNING v, k
+
+25:
+-------------------------
+DELETE
+FROM unindexed
+WHERE (k > 1) AND (v < 7)
+ORDER BY v DESC
+RETURNING v, k
+
+78:
+------------------------------------------------------------------------------
+DELETE FROM unindexed WHERE (k > 1) AND (v < 7) ORDER BY v DESC RETURNING v, k
