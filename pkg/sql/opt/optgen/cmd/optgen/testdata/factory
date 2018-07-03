@@ -146,7 +146,7 @@ func (_f *Factory) ConstructInnerJoin(
 			)
 			_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.CommuteJoin, _group, 0)
+				_f.appliedRule(opt.CommuteJoin, _group, 0, 0)
 			}
 			return _group
 		}
@@ -273,7 +273,7 @@ func (_f *Factory) ConstructEq(
 								)
 								_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 								if _f.appliedRule != nil {
-									_f.appliedRule(opt.NormalizeVarPlus, _group, 0)
+									_f.appliedRule(opt.NormalizeVarPlus, _group, 0, 0)
 								}
 								return _group
 							}
@@ -318,7 +318,7 @@ func (_f *Factory) ConstructLt(
 								)
 								_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 								if _f.appliedRule != nil {
-									_f.appliedRule(opt.NormalizeVarPlus, _group, 0)
+									_f.appliedRule(opt.NormalizeVarPlus, _group, 0, 0)
 								}
 								return _group
 							}
@@ -491,7 +491,7 @@ func (_f *Factory) ConstructFunc(
 							)
 							_f.mem.AddAltFingerprint(_funcExpr.Fingerprint(), _group)
 							if _f.appliedRule != nil {
-								_f.appliedRule(opt.Concat, _group, 0)
+								_f.appliedRule(opt.Concat, _group, 0, 0)
 							}
 							return _group
 						}
@@ -642,7 +642,7 @@ func (_f *Factory) ConstructSelect(
 						)
 						_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 						if _f.appliedRule != nil {
-							_f.appliedRule(opt.Test, _group, 0)
+							_f.appliedRule(opt.Test, _group, 0, 0)
 						}
 						return _group
 					}
@@ -829,7 +829,7 @@ func (_f *Factory) ConstructList(
 												_group = _f.funcs.Construct(any, first, last, single, empty)
 												_f.mem.AddAltFingerprint(_listExpr.Fingerprint(), _group)
 												if _f.appliedRule != nil {
-													_f.appliedRule(opt.List, _group, 0)
+													_f.appliedRule(opt.List, _group, 0, 0)
 												}
 												return _group
 											}
@@ -917,7 +917,7 @@ func (_f *Factory) ConstructJoin(
 			_group = _f.funcs.Construct(_f.mem.InternList([]memo.GroupID{}), _f.mem.InternList([]memo.GroupID{left}), _f.mem.InternList([]memo.GroupID{left, right}), _f.mem.InternList([]memo.GroupID{_f.mem.InternList([]memo.GroupID{on})}))
 			_f.mem.AddAltFingerprint(_joinExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.ConstructList, _group, 0)
+				_f.appliedRule(opt.ConstructList, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1022,7 +1022,7 @@ func (_f *Factory) ConstructOp(
 							)
 							_f.mem.AddAltFingerprint(_opExpr.Fingerprint(), _group)
 							if _f.appliedRule != nil {
-								_f.appliedRule(opt.ListNot, _group, 0)
+								_f.appliedRule(opt.ListNot, _group, 0, 0)
 							}
 							return _group
 						}
@@ -1144,7 +1144,7 @@ func (_f *Factory) ConstructEq(
 							_group = m.mem.InternPrivate(tree.NewDString("foo"))
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							if _f.appliedRule != nil {
-								_f.appliedRule(opt.Constant, _group, 0)
+								_f.appliedRule(opt.Constant, _group, 0, 0)
 							}
 							return _group
 						}
@@ -1193,7 +1193,7 @@ func (_f *Factory) ConstructNe(
 							_group = m.mem.InternPrivate(tree.NewDString("foo"))
 							_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
 							if _f.appliedRule != nil {
-								_f.appliedRule(opt.Dynamic, _group, 0)
+								_f.appliedRule(opt.Dynamic, _group, 0, 0)
 							}
 							return _group
 						}
@@ -1294,7 +1294,7 @@ func (_f *Factory) ConstructPlus(
 					_group = _f.ConstructNull()
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
 					if _f.appliedRule != nil {
-						_f.appliedRule(opt.Fold, _group, 0)
+						_f.appliedRule(opt.Fold, _group, 0, 0)
 					}
 					return _group
 				}
@@ -1325,7 +1325,7 @@ func (_f *Factory) ConstructMinus(
 					_group = _f.ConstructNull()
 					_f.mem.AddAltFingerprint(_minusExpr.Fingerprint(), _group)
 					if _f.appliedRule != nil {
-						_f.appliedRule(opt.Fold, _group, 0)
+						_f.appliedRule(opt.Fold, _group, 0, 0)
 					}
 					return _group
 				}
@@ -1490,7 +1490,7 @@ func (_f *Factory) ConstructNot(
 						_group = _f.funcs.Invert(_f.mem.NormExpr(input).Operator(), left, right)
 						_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
 						if _f.appliedRule != nil {
-							_f.appliedRule(opt.Invert, _group, 0)
+							_f.appliedRule(opt.Invert, _group, 0, 0)
 						}
 						return _group
 					}
@@ -1597,7 +1597,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject1, _group, 0)
+				_f.appliedRule(opt.EliminateProject1, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1609,7 +1609,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject2, _group, 0)
+				_f.appliedRule(opt.EliminateProject2, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1621,7 +1621,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject3, _group, 0)
+				_f.appliedRule(opt.EliminateProject3, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1633,7 +1633,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject4, _group, 0)
+				_f.appliedRule(opt.EliminateProject4, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1645,7 +1645,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject5, _group, 0)
+				_f.appliedRule(opt.EliminateProject5, _group, 0, 0)
 			}
 			return _group
 		}
@@ -1657,7 +1657,7 @@ func (_f *Factory) ConstructProject(
 			_group = input
 			_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 			if _f.appliedRule != nil {
-				_f.appliedRule(opt.EliminateProject6, _group, 0)
+				_f.appliedRule(opt.EliminateProject6, _group, 0, 0)
 			}
 			return _group
 		}
