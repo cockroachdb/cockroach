@@ -412,7 +412,6 @@ project
       │         │    │         │    │    │    ├── fd: (17,18)-->(20), (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30), (41)-->(43), (37)==(41), (41)==(37), (43)==(45), (45)==(43), ()~~>(46), (17,18,29,34)-->(46)
       │         │    │         │    │    │    ├── inner-join
       │         │    │         │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
-      │         │    │         │    │    │    │    ├── outer: (1)
       │         │    │         │    │    │    │    ├── key: (29,34)
       │         │    │         │    │    │    │    ├── fd: ()-->(46), (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30), (41)-->(43), (37)==(41), (41)==(37), (43)==(45), (45)==(43)
       │         │    │         │    │    │    │    ├── inner-join
@@ -449,14 +448,14 @@ project
       │         │    │         │    │    │    │    │    │    └── fd: (45)-->(46)
       │         │    │         │    │    │    │    │    └── filters [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(46)]
       │         │    │         │    │    │    │    │         └── region.r_name = 'EUROPE' [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight)]
-      │         │    │         │    │    │    │    └── filters [type=bool, outer=(1,29,43,45), constraints=(/1: (/NULL - ]; /29: (/NULL - ]; /43: (/NULL - ]; /45: (/NULL - ]), fd=(1)==(29), (29)==(1), (43)==(45), (45)==(43)]
-      │         │    │         │    │    │    │         ├── part.p_partkey = partsupp.ps_partkey [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ])]
+      │         │    │         │    │    │    │    └── filters [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
       │         │    │         │    │    │    │         └── nation.n_regionkey = region.r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ])]
       │         │    │         │    │    │    ├── scan partsupp
       │         │    │         │    │    │    │    ├── columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float)
       │         │    │         │    │    │    │    ├── key: (17,18)
       │         │    │         │    │    │    │    └── fd: (17,18)-->(20)
-      │         │    │         │    │    │    └── true [type=bool]
+      │         │    │         │    │    │    └── filters [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ]), fd=(1)==(29), (29)==(1)]
+      │         │    │         │    │    │         └── part.p_partkey = partsupp.ps_partkey [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ])]
       │         │    │         │    │    └── aggregations [outer=(20,32)]
       │         │    │         │    │         ├── min [type=float, outer=(32)]
       │         │    │         │    │         │    └── variable: partsupp.ps_supplycost [type=float, outer=(32)]
