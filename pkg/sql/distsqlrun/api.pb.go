@@ -67,6 +67,7 @@
 		MergeJoinerStats
 		SorterStats
 		JoinReaderStats
+		OutboxStats
 */
 package distsqlrun
 
