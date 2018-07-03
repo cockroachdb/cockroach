@@ -274,10 +274,21 @@ project
       │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,26)
-      │    │    ├── left-join
+      │    │    ├── right-join
       │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:19(int) case:24(bool) notnull:25(bool)
       │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    ├── fd: (1)-->(2,24), (19)~~>(25)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: notnull:25(bool) tab0.col3:19(int)
+      │    │    │    │    ├── stats: [rows=1000]
+      │    │    │    │    ├── fd: (19)-->(25)
+      │    │    │    │    ├── scan tab0
+      │    │    │    │    │    ├── columns: tab0.col3:19(int)
+      │    │    │    │    │    └── stats: [rows=1000]
+      │    │    │    │    └── projections [outer=(19)]
+      │    │    │    │         └── is-not [type=bool, outer=(19)]
+      │    │    │    │              ├── variable: tab0.col3 [type=int, outer=(19)]
+      │    │    │    │              └── null [type=unknown]
       │    │    │    ├── select
       │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:24(bool)
       │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
@@ -294,10 +305,21 @@ project
       │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    ├── fd: (1)-->(2,23)
-      │    │    │    │    │    │    ├── left-join
+      │    │    │    │    │    │    ├── right-join
       │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:12(int) notnull:22(bool)
       │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    │    │    ├── fd: (1)-->(2), (12)~~>(22)
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: notnull:22(bool) tab0.col3:12(int)
+      │    │    │    │    │    │    │    │    ├── stats: [rows=1000]
+      │    │    │    │    │    │    │    │    ├── fd: (12)-->(22)
+      │    │    │    │    │    │    │    │    ├── scan tab0
+      │    │    │    │    │    │    │    │    │    ├── columns: tab0.col3:12(int)
+      │    │    │    │    │    │    │    │    │    └── stats: [rows=1000]
+      │    │    │    │    │    │    │    │    └── projections [outer=(12)]
+      │    │    │    │    │    │    │    │         └── is-not [type=bool, outer=(12)]
+      │    │    │    │    │    │    │    │              ├── variable: tab0.col3 [type=int, outer=(12)]
+      │    │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
       │    │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
@@ -315,17 +337,6 @@ project
       │    │    │    │    │    │    │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
       │    │    │    │    │    │    │    │              ├── variable: tab0.col0 [type=int, outer=(2)]
       │    │    │    │    │    │    │    │              └── const: 2 [type=int]
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: notnull:22(bool) tab0.col3:12(int)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=1000]
-      │    │    │    │    │    │    │    │    ├── fd: (12)-->(22)
-      │    │    │    │    │    │    │    │    ├── scan tab0
-      │    │    │    │    │    │    │    │    │    ├── columns: tab0.col3:12(int)
-      │    │    │    │    │    │    │    │    │    └── stats: [rows=1000]
-      │    │    │    │    │    │    │    │    └── projections [outer=(12)]
-      │    │    │    │    │    │    │    │         └── is-not [type=bool, outer=(12)]
-      │    │    │    │    │    │    │    │              ├── variable: tab0.col3 [type=int, outer=(12)]
-      │    │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    │    └── filters [type=bool, outer=(2,12)]
       │    │    │    │    │    │    │         └── is-not [type=bool, outer=(2,12)]
       │    │    │    │    │    │    │              ├── eq [type=bool, outer=(2,12)]
@@ -359,17 +370,6 @@ project
       │    │    │    │              │    ├── variable: tab0.col0 [type=int, outer=(2)]
       │    │    │    │              │    └── const: 1 [type=int]
       │    │    │    │              └── variable: case [type=bool, outer=(24)]
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: notnull:25(bool) tab0.col3:19(int)
-      │    │    │    │    ├── stats: [rows=1000]
-      │    │    │    │    ├── fd: (19)-->(25)
-      │    │    │    │    ├── scan tab0
-      │    │    │    │    │    ├── columns: tab0.col3:19(int)
-      │    │    │    │    │    └── stats: [rows=1000]
-      │    │    │    │    └── projections [outer=(19)]
-      │    │    │    │         └── is-not [type=bool, outer=(19)]
-      │    │    │    │              ├── variable: tab0.col3 [type=int, outer=(19)]
-      │    │    │    │              └── null [type=unknown]
       │    │    │    └── filters [type=bool, outer=(2,19)]
       │    │    │         └── is-not [type=bool, outer=(2,19)]
       │    │    │              ├── eq [type=bool, outer=(2,19)]
