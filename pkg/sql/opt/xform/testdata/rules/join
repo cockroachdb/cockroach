@@ -421,6 +421,134 @@ memo (optimized)
  ├── G16: (variable stu.u)
  └── G17: (variable stu.u)
 
+exploretrace rule=GenerateMergeJoins
+SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
+----
+----
+================================================================================
+GenerateMergeJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    └── key: (1-3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    └── key: (4-6)
+   └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +1,+2,+3
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +4,+5,+6
+   └── merge-on
+        ├── left ordering: +1,+2,+3
+        ├── right ordering: +4,+5,+6
+        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 2 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu@uts
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +3,+2,+1
+   ├── scan stu@uts
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +6,+5,+4
+   └── merge-on
+        ├── left ordering: +3,+2,+1
+        ├── right ordering: +6,+5,+4
+        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+================================================================================
+GenerateMergeJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    └── key: (4-6)
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    └── key: (1-3)
+   └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 1 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +4,+5,+6
+   ├── scan stu
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +1,+2,+3
+   └── merge-on
+        ├── left ordering: +4,+5,+6
+        ├── right ordering: +1,+2,+3
+        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+New expression 2 of 2:
+  inner-join (merge)
+   ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── key: (4-6)
+   ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
+   ├── scan stu@uts
+   │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
+   │    ├── key: (4-6)
+   │    └── ordering: +6,+5,+4
+   ├── scan stu@uts
+   │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
+   │    ├── key: (1-3)
+   │    └── ordering: +3,+2,+1
+   └── merge-on
+        ├── left ordering: +6,+5,+4
+        ├── right ordering: +3,+2,+1
+        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
+             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+----
+----
+
 # Add statistics to make table stu large (so that sorting abc is relatively cheap).
 exec-ddl
 ALTER TABLE stu INJECT STATISTICS '[
