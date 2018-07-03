@@ -14,19 +14,20 @@ import "./statements.styl";
 
 export interface AggregateStatistics {
   label: string;
+  narrow: string;
   stats: StatementStatistics;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-function StatementLink(props: { statement: string, app: string }) {
+function StatementLink(props: { statement: string, statementNarrow: string, app: string }) {
   const summary = summarize(props.statement);
   const base = props.app ? `/statements/${props.app}` : "/statement";
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
-        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
+        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statementNarrow }</pre> }>
           <div className="statement__tooltip-hover-area">
             { shortStatement(summary, props.statement) }
           </div>
@@ -60,7 +61,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
     {
       title: "Statement",
       className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.label } app={ selectedApp } />,
+      cell: (stmt) => <StatementLink statement={ stmt.label } statementNarrow={ stmt.narrow } app={ selectedApp } />,
       sort: (stmt) => stmt.label,
     },
   ];

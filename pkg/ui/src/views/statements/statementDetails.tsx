@@ -311,6 +311,7 @@ function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] 
 
   return Object.keys(byNode).map(nodeId => ({
       label: nodeId,
+      narrow: "",
       stats: combineStatementStats(byNode[nodeId]),
   }));
 }

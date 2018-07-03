@@ -96,14 +96,16 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 			return nil, err
 		}
 		pretty := tree.PrettyWithOpts(stmts[0], 80, false, 4)
+		prettyNarrow := tree.PrettyWithOpts(stmts[0], 40, false, 2)
 
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_StatementStatisticsKey{
-				Statement: pretty,
-				App:       stmt.Key.App,
-				NodeID:    s.gossip.NodeID.Get(),
-				DistSQL:   stmt.Key.DistSQL,
-				Failed:    stmt.Key.Failed,
+				Statement:       pretty,
+				App:             stmt.Key.App,
+				NodeID:          s.gossip.NodeID.Get(),
+				DistSQL:         stmt.Key.DistSQL,
+				Failed:          stmt.Key.Failed,
+				StatementNarrow: prettyNarrow,
 			},
 			Stats: stmt.Stats,
 		}

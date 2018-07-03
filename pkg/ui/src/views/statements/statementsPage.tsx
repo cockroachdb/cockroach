@@ -176,15 +176,18 @@ export const selectStatements = createSelector(
     }
 
     const statementsMap: { [statement: string]: StatementStatistics[] } = {};
+    const narrowMap: { [statement: string]: string } = {};
     statements.forEach(stmt => {
       const matches = statementsMap[stmt.statement] || (statementsMap[stmt.statement] = []);
       matches.push(stmt.stats);
+      narrowMap[stmt.statement] = stmt.statement_narrow;
     });
 
     return Object.keys(statementsMap).map(stmt => {
       const stats = statementsMap[stmt];
       return {
         label: stmt,
+        narrow: narrowMap[stmt],
         stats: combineStatementStats(stats),
       };
     });
