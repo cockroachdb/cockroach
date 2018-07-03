@@ -231,6 +231,30 @@ func (c *cmd) ResolvePendingPrereq() {
 	(*c.prereqs) = (*c.prereqs)[1:]
 }
 
+// OptimisticallyResolvePrereqs removes all prerequisite in the cmd's prereq
+// slice that have already finished without blocking on pending commands.
+// Prerequisite commands that are still pending or that were canceled are left
+// in the prereq slice.
+func (c *cmd) OptimisticallyResolvePrereqs() {
+	j := 0
+	for i, pre := range *c.prereqs {
+		select {
+		case <-pre.pending:
+			if len(*pre.prereqs) == 0 {
+				// Nil to allow GC.
+				(*c.prereqs)[i] = nil
+				continue
+			}
+			// Command canceled. Don't expand.
+		default:
+			// Command still pending.
+		}
+		(*c.prereqs)[j] = pre
+		j++
+	}
+	(*c.prereqs) = (*c.prereqs)[:j]
+}
+
 // NewCommandQueue returns a new command queue. The boolean specifies whether
 // to enable the covering span optimization. With this optimization, whenever
 // a command consisting of multiple spans is added, a covering span is computed
