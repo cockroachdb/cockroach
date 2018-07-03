@@ -383,9 +383,9 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	txnReqs := []roachpb.RequestUnion{
-		{BeginTransaction: &roachpb.BeginTransactionRequest{}},
-		{Put: &roachpb.PutRequest{}},
-		{EndTransaction: &roachpb.EndTransactionRequest{}},
+		{Value: &roachpb.RequestUnion_BeginTransaction{BeginTransaction: &roachpb.BeginTransactionRequest{}}},
+		{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}},
+		{Value: &roachpb.RequestUnion_EndTransaction{EndTransaction: &roachpb.EndTransactionRequest{}}},
 	}
 	testCases := []struct {
 		bu      []roachpb.RequestUnion
@@ -397,8 +397,8 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	}{
 		{[]roachpb.RequestUnion{}, false, false, false, enginepb.SERIALIZABLE, false},
 		{[]roachpb.RequestUnion{}, true, false, false, enginepb.SERIALIZABLE, false},
-		{[]roachpb.RequestUnion{{Get: &roachpb.GetRequest{}}}, true, false, false, enginepb.SERIALIZABLE, false},
-		{[]roachpb.RequestUnion{{Put: &roachpb.PutRequest{}}}, true, false, false, enginepb.SERIALIZABLE, false},
+		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{Get: &roachpb.GetRequest{}}}}, true, false, false, enginepb.SERIALIZABLE, false},
+		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}}}, true, false, false, enginepb.SERIALIZABLE, false},
 		{txnReqs[0 : len(txnReqs)-1], true, false, false, enginepb.SERIALIZABLE, false},
 		{txnReqs[1:], true, false, false, enginepb.SERIALIZABLE, false},
 		{txnReqs, true, false, false, enginepb.SERIALIZABLE, true},

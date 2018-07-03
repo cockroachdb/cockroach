@@ -2236,12 +2236,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 		if exRng != newRng {
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
 		}
-		delete(s.mu.uninitReplicas, newDesc.RangeID)
-		s.unquiescedReplicas.Lock()
-		delete(s.unquiescedReplicas.m, newDesc.RangeID)
-		s.unquiescedReplicas.Unlock()
-		s.mu.replicas.Delete(int64(newDesc.RangeID))
-		s.replicaQueues.Delete(int64(newDesc.RangeID))
+		s.unlinkReplicaByRangeIDLocked(newDesc.RangeID)
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -2533,12 +2528,7 @@ func (s *Store) removeReplicaImpl(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.unquiescedReplicas.Lock()
-	delete(s.unquiescedReplicas.m, rep.RangeID)
-	s.unquiescedReplicas.Unlock()
-	s.mu.replicas.Delete(int64(rep.RangeID))
-	delete(s.mu.uninitReplicas, rep.RangeID)
-	s.replicaQueues.Delete(int64(rep.RangeID))
+	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
 	if !opts.AllowPlaceholders {
 		if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
 			// We already checked that our replica was present in replicasByKey
@@ -2552,6 +2542,21 @@ func (s *Store) removeReplicaImpl(
 	s.scanner.RemoveReplica(rep)
 
 	return nil
+}
+
+// unlinkReplicaByRangeIDLocked removes all of the store's references to the
+// provided replica that are keyed by its range ID. The replica may also need
+// to be removed from the replicasByKey map.
+//
+// store.mu must be held.
+func (s *Store) unlinkReplicaByRangeIDLocked(rangeID roachpb.RangeID) {
+	s.mu.AssertHeld()
+	s.unquiescedReplicas.Lock()
+	delete(s.unquiescedReplicas.m, rangeID)
+	s.unquiescedReplicas.Unlock()
+	delete(s.mu.uninitReplicas, rangeID)
+	s.replicaQueues.Delete(int64(rangeID))
+	s.mu.replicas.Delete(int64(rangeID))
 }
 
 // processRangeDescriptorUpdate should be called whenever a replica's range

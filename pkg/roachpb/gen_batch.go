@@ -21,6 +21,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -28,46 +29,107 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// reqFieldInfo contains information for each field in RequestUnion.
-type reqFieldInfo struct {
-	name string
-
-	// responseField is the field in ResponseUnion that corresponds to this
-	// request.
-	responseField string
-
-	// responseType is the type of the responseField.
-	responseType string
+type variantInfo struct {
+	// variantType is the name of the variant type that implements
+	// the union interface (isRequestUnion_Value,isResponseUnion_Value).
+	variantType string
+	// variantName is the unique suffix of variantType. It is also
+	// the name of the single field in this type.
+	variantName string
+	// msgType is the name of the variant's corresponding Request/Response
+	// type.
+	msgType string
 }
 
-var fields []reqFieldInfo
+var reqVariants []variantInfo
+var resVariants []variantInfo
+var reqResVariantMapping map[variantInfo]variantInfo
 
-func initFields() {
-	t := reflect.TypeOf(roachpb.RequestUnion{})
-
-	for i := 0; i < t.NumField(); i++ {
-		var info reqFieldInfo
-		field := t.Field(i).Name
-		info.name = field
-		// The ResponseUnion fields match those in RequestUnion, with the
-		// following exceptions:
-		switch field {
-		case "TransferLease":
-			field = "RequestLease"
-		}
-		info.responseField = field
-		respField, ok := reflect.TypeOf(roachpb.ResponseUnion{}).FieldByName(field)
-		if !ok {
-			panic(fmt.Sprintf("invalid response field %s", field))
-		}
-		info.responseType = respField.Type.Elem().Name()
-		fields = append(fields, info)
+func initVariant(varInstance interface{}) variantInfo {
+	t := reflect.TypeOf(varInstance)
+	f := t.Elem().Field(0) // variants always have 1 field
+	return variantInfo{
+		variantType: t.Elem().Name(),
+		variantName: f.Name,
+		msgType:     f.Type.Elem().Name(),
 	}
 }
 
+func initVariants() {
+	_, _, _, resVars := (&roachpb.ResponseUnion{}).XXX_OneofFuncs()
+	resVarInfos := make(map[string]variantInfo, len(resVars))
+	for _, v := range resVars {
+		resInfo := initVariant(v)
+		resVariants = append(resVariants, resInfo)
+		resVarInfos[resInfo.variantName] = resInfo
+	}
+
+	_, _, _, reqVars := (&roachpb.RequestUnion{}).XXX_OneofFuncs()
+	reqResVariantMapping = make(map[variantInfo]variantInfo, len(reqVars))
+	for _, v := range reqVars {
+		reqInfo := initVariant(v)
+		reqVariants = append(reqVariants, reqInfo)
+
+		// The ResponseUnion variants match those in RequestUnion, with the
+		// following exceptions:
+		resName := reqInfo.variantName
+		switch resName {
+		case "TransferLease":
+			resName = "RequestLease"
+		}
+		resInfo, ok := resVarInfos[resName]
+		if !ok {
+			panic(fmt.Sprintf("unknown response variant %q", resName))
+		}
+		reqResVariantMapping[reqInfo] = resInfo
+	}
+}
+
+func genGetInner(w io.Writer, unionName string, variants []variantInfo) {
+	fmt.Fprintf(w, `
+// GetInner returns the %[1]s contained in the union.
+func (ru %[1]sUnion) GetInner() %[1]s {
+	switch t := ru.GetValue().(type) {
+`, unionName)
+
+	for _, v := range variants {
+		fmt.Fprintf(w, `	case *%s:
+		return t.%s
+`, v.variantType, v.variantName)
+	}
+
+	fmt.Fprint(w, `	default:
+		return nil
+	}
+}
+`)
+}
+
+func genSetInner(w io.Writer, unionName string, variants []variantInfo) {
+	fmt.Fprintf(w, `
+// SetInner sets the %[1]s in the union.
+func (ru *%[1]sUnion) SetInner(r %[1]s) bool {
+	var union is%[1]sUnion_Value
+	switch t := r.(type) {
+`, unionName)
+
+	for _, v := range variants {
+		fmt.Fprintf(w, `	case *%s:
+		union = &%s{t}
+`, v.msgType, v.variantType)
+	}
+
+	fmt.Fprint(w, `	default:
+		return false
+	}
+	ru.Value = union
+	return true
+}
+`)
+}
+
 func main() {
-	initFields()
-	n := len(fields)
+	initVariants()
 
 	f, err := os.Create("batch_generated.go")
 	if err != nil {
@@ -90,36 +152,41 @@ import (
 )
 `)
 
-	// Generate getReqCounts function.
+	// Generate GetInner methods.
+	genGetInner(f, "Request", reqVariants)
+	genGetInner(f, "Response", resVariants)
+
+	// Generate SetInner methods.
+	genSetInner(f, "Request", reqVariants)
+	genSetInner(f, "Response", resVariants)
 
 	fmt.Fprintf(f, `
 type reqCounts [%d]int32
-`, n)
+`, len(reqVariants))
 
+	// Generate getReqCounts function.
 	fmt.Fprint(f, `
 // getReqCounts returns the number of times each
 // request type appears in the batch.
 func (ba *BatchRequest) getReqCounts() reqCounts {
 	var counts reqCounts
-	for _, r := range ba.Requests {
-		switch {
+	for _, ru := range ba.Requests {
+		switch ru.GetValue().(type) {
 `)
 
-	for i := 0; i < n; i++ {
-		fmt.Fprintf(f, `		case r.%s != nil:
+	for i, v := range reqVariants {
+		fmt.Fprintf(f, `		case *%s:
 			counts[%d]++
-`, fields[i].name, i)
+`, v.variantType, i)
 	}
 
-	fmt.Fprintf(f, "%s", `		default:
-			panic(fmt.Sprintf("unsupported request: %+v", r))
+	fmt.Fprint(f, `		default:
+			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
 	}
 	return counts
 }
 `)
-
-	// Generate Summary function.
 
 	// A few shorthands to help make the names more terse.
 	shorthands := map[string]string{
@@ -134,10 +201,11 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 		"Truncate":    "Trunc",
 	}
 
+	// Generate Summary function.
 	fmt.Fprintf(f, `
 var requestNames = []string{`)
-	for i := 0; i < n; i++ {
-		name := fields[i].name
+	for _, v := range reqVariants {
+		name := v.variantName
 		for str, short := range shorthands {
 			name = strings.Replace(name, str, short, -1)
 		}
@@ -150,7 +218,7 @@ var requestNames = []string{`)
 
 	// We don't use Fprint to avoid go vet warnings about
 	// formatting directives in string.
-	fmt.Fprintf(f, "%s", `
+	fmt.Fprint(f, `
 // Summary prints a short summary of the requests in a batch.
 func (ba *BatchRequest) Summary() string {
 	if len(ba.Requests) == 0 {
@@ -176,6 +244,20 @@ func (ba *BatchRequest) Summary() string {
 `)
 
 	// Generate CreateReply function.
+	fmt.Fprint(f, `
+// The following types are used to group the allocations of Responses
+// and their corresponding isResponseUnion_Value union wrappers together.
+`)
+	allocTypes := make(map[string]string)
+	for _, resV := range resVariants {
+		allocName := strings.ToLower(resV.msgType[:1]) + resV.msgType[1:] + "Alloc"
+		fmt.Fprintf(f, `type %s struct {
+	union %s
+	resp  %s
+}
+`, allocName, resV.variantType, resV.msgType)
+		allocTypes[resV.variantName] = allocName
+	}
 
 	fmt.Fprint(f, `
 // CreateReply creates replies for each of the contained requests, wrapped in a
@@ -189,23 +271,33 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 
 `)
 
-	for i := 0; i < n; i++ {
-		fmt.Fprintf(f, "	var buf%d []%s\n", i, fields[i].responseType)
+	for i, v := range reqVariants {
+		resV, ok := reqResVariantMapping[v]
+		if !ok {
+			panic(fmt.Sprintf("unknown response variant for %v", v))
+		}
+		fmt.Fprintf(f, "	var buf%d []%s\n", i, allocTypes[resV.variantName])
 	}
 
 	fmt.Fprint(f, `
 	for i, r := range ba.Requests {
-		switch {
+		switch r.GetValue().(type) {
 `)
 
-	for i := 0; i < n; i++ {
-		fmt.Fprintf(f, `		case r.%[2]s != nil:
+	for i, v := range reqVariants {
+		resV, ok := reqResVariantMapping[v]
+		if !ok {
+			panic(fmt.Sprintf("unknown response variant for %v", v))
+		}
+
+		fmt.Fprintf(f, `		case *%[2]s:
 			if buf%[1]d == nil {
 				buf%[1]d = make([]%[3]s, counts[%[1]d])
 			}
-			br.Responses[i].%[4]s = &buf%[1]d[0]
+			buf%[1]d[0].union.%[4]s = &buf%[1]d[0].resp
+			br.Responses[i].Value = &buf%[1]d[0].union
 			buf%[1]d = buf%[1]d[1:]
-`, i, fields[i].name, fields[i].responseType, fields[i].responseField)
+`, i, v.variantType, allocTypes[resV.variantName], resV.variantName)
 	}
 
 	fmt.Fprintf(f, "%s", `		default:

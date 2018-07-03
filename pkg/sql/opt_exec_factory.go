@@ -514,14 +514,22 @@ func (ef *execFactory) ConstructExplain(
 ) (exec.Node, error) {
 	p := plan.(*planTop)
 
+	analyzeSet := options.Flags.Contains(tree.ExplainFlagAnalyze)
+
 	switch options.Mode {
 	case tree.ExplainDistSQL:
 		if len(p.subqueryPlans) > 0 {
 			return nil, fmt.Errorf("subqueries not supported yet")
 		}
-		return &explainDistSQLNode{plan: p.plan}, nil
+		return &explainDistSQLNode{
+			plan:    p.plan,
+			analyze: analyzeSet,
+		}, nil
 
 	case tree.ExplainPlan:
+		if analyzeSet {
+			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
+		}
 		// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
 		// prevent the plans from being modified.
 		opts := *options

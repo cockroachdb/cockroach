@@ -85,10 +85,10 @@ func TestBatchRequestGetArg(t *testing.T) {
 		expB, expG bool
 	}{
 		{[]RequestUnion{}, false, false},
-		{[]RequestUnion{{Get: &GetRequest{}}}, false, true},
-		{[]RequestUnion{{EndTransaction: &EndTransactionRequest{}}, {Get: &GetRequest{}}}, false, true},
-		{[]RequestUnion{{EndTransaction: &EndTransactionRequest{}}}, true, false},
-		{[]RequestUnion{{Get: &GetRequest{}}, {EndTransaction: &EndTransactionRequest{}}}, true, true},
+		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
+		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}, {&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
+		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, false},
+		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}, {&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, true},
 	}
 
 	for i, c := range testCases {
@@ -107,37 +107,37 @@ func TestBatchRequestSummary(t *testing.T) {
 	// The Summary function is generated automatically, so the tests don't need to
 	// be exhaustive.
 	testCases := []struct {
-		reqs     []interface{}
+		reqs     []Request
 		expected string
 	}{
 		{
-			reqs:     []interface{}{},
+			reqs:     []Request{},
 			expected: "empty batch",
 		},
 		{
-			reqs:     []interface{}{&GetRequest{}},
+			reqs:     []Request{&GetRequest{}},
 			expected: "1 Get",
 		},
 		{
-			reqs:     []interface{}{&PutRequest{}},
+			reqs:     []Request{&PutRequest{}},
 			expected: "1 Put",
 		},
 		{
-			reqs:     []interface{}{&ConditionalPutRequest{}},
+			reqs:     []Request{&ConditionalPutRequest{}},
 			expected: "1 CPut",
 		},
 		{
-			reqs:     []interface{}{&ReverseScanRequest{}},
+			reqs:     []Request{&ReverseScanRequest{}},
 			expected: "1 RevScan",
 		},
 		{
-			reqs: []interface{}{
+			reqs: []Request{
 				&GetRequest{}, &GetRequest{}, &PutRequest{}, &ScanRequest{}, &ScanRequest{},
 			},
 			expected: "2 Get, 1 Put, 2 Scan",
 		},
 		{
-			reqs: []interface{}{
+			reqs: []Request{
 				&CheckConsistencyRequest{}, &InitPutRequest{}, &TruncateLogRequest{},
 			},
 			expected: "1 TruncLog, 1 ChkConsistency, 1 InitPut",
@@ -147,7 +147,7 @@ func TestBatchRequestSummary(t *testing.T) {
 		var br BatchRequest
 		for _, v := range tc.reqs {
 			var ru RequestUnion
-			ru.SetValue(v)
+			ru.MustSetInner(v)
 			br.Requests = append(br.Requests, ru)
 		}
 		if str := br.Summary(); str != tc.expected {

@@ -5165,12 +5165,7 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
-			r.store.unquiescedReplicas.Lock()
-			delete(r.store.unquiescedReplicas.m, rightRng.RangeID)
-			r.store.unquiescedReplicas.Unlock()
-			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
-			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
-			r.store.replicaQueues.Delete(int64(rightRng.RangeID))
+			r.store.unlinkReplicaByRangeIDLocked(rightRng.RangeID)
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
@@ -5464,8 +5459,11 @@ func (r *Replica) evaluateWriteBatch(
 
 			br.Txn = &clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
-			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
-			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+			resps := make([]roachpb.ResponseUnion, len(br.Responses)+2)
+			resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
+			copy(resps[1:], br.Responses)
+			resps[len(resps)-1].MustSetInner(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
+			br.Responses = resps
 			return batch, ms, br, res, nil
 		}
 
