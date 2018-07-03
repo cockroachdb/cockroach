@@ -238,6 +238,8 @@ history.listen((location) => {
   }
   lastPageLocation = location;
   analytics.page(location);
+  // Identify the cluster.
+  analytics.identify();
 });
 
 // Record the initial page that was accessed; listen won't fire for the first
