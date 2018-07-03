@@ -144,10 +144,19 @@ func (c *cmd) String() string {
 	return buf.String()
 }
 
+// PrereqLen returns the number of immediate prerequisite command that the
+// command is waiting on.
+func (c *cmd) PrereqLen() int {
+	if c == nil {
+		return 0
+	}
+	return len(*c.prereqs)
+}
+
 // PendingPrereq returns the prerequisite command that should be waited on next,
 // or nil if the receiver has no more prerequisites to wait on.
 func (c *cmd) PendingPrereq() *cmd {
-	if len(*c.prereqs) == 0 {
+	if c.PrereqLen() == 0 {
 		return nil
 	}
 	return (*c.prereqs)[0]
@@ -229,6 +238,30 @@ func (c *cmd) ResolvePendingPrereq() {
 	// especially during cascade command cancellation.
 	(*c.prereqs)[0] = nil
 	(*c.prereqs) = (*c.prereqs)[1:]
+}
+
+// OptimisticallyResolvePrereqs removes all prerequisite in the cmd's prereq
+// slice that have already finished without blocking on pending commands.
+// Prerequisite commands that are still pending or that were canceled are left
+// in the prereq slice.
+func (c *cmd) OptimisticallyResolvePrereqs() {
+	j := 0
+	for i, pre := range *c.prereqs {
+		select {
+		case <-pre.pending:
+			if len(*pre.prereqs) == 0 {
+				// Nil to allow GC.
+				(*c.prereqs)[i] = nil
+				continue
+			}
+			// Command canceled. Don't expand.
+		default:
+			// Command still pending.
+		}
+		(*c.prereqs)[j] = pre
+		j++
+	}
+	(*c.prereqs) = (*c.prereqs)[:j]
 }
 
 // NewCommandQueue returns a new command queue. The boolean specifies whether
