@@ -15,7 +15,6 @@
 package pretty
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 )
@@ -55,7 +54,6 @@ type beExec struct {
 	w int
 	// cache is a memoized cache used during better calculation.
 	cache map[string]Doc
-	buf   bytes.Buffer
 }
 
 func (b beExec) be(k int, x ...iDoc) Doc {
@@ -92,11 +90,11 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 		// function to an iterative style, but this current implementation is almost
 		// identical to the paper (as this in done automatically in Haskell) and is
 		// fast enough.
+		var sb strings.Builder
 		for _, xd := range x {
-			b.buf.WriteString(xd.String())
+			sb.WriteString(xd.String())
 		}
-		s := b.buf.String()
-		b.buf.Reset()
+		s := sb.String()
 		cached, ok := b.cache[s]
 		if ok {
 			return cached
