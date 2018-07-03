@@ -855,7 +855,7 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	if flowCtx.testingKnobs.OverrideStallTime {
+	if flowCtx.testingKnobs.DeterministicStats {
 		isc.InputStats.StallTime = 0
 	}
 	return isc.InputStats, true
