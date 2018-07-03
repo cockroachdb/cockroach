@@ -163,6 +163,33 @@ var (
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
 
+// Get pg_get_indexdef function when single argument OID is passed.
+func getPGGetIndexDefByOID(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	r, err := ctx.InternalExecutor.QueryRow(
+		ctx.Ctx(), "pg_get_indexdef",
+		ctx.Txn,
+		"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(r) == 0 {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown index (OID=%s)", args[0])
+	}
+	return r[0], nil
+}
+
+// Make a pg_get_indexdef function with the given arguments.
+func makePGGetIndexDef(
+	argTypes tree.ArgTypes, fn func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error),
+) tree.Overload {
+	return tree.Overload{
+		Types:      argTypes,
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn:         fn,
+		Info:       notUsableInfo,
+	}
+}
+
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 	return tree.Overload{
@@ -532,29 +559,29 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"index_oid", types.Oid},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				r, err := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "pg_get_indexdef",
-					ctx.Txn,
-					"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown index (OID=%s)", args[0])
-				}
-				return r[0], nil
-			},
-			Info: notUsableInfo,
-		},
-		// The other overload for this function, pg_get_indexdef(index_oid,
-		// column_no, pretty_bool), is unimplemented, because it isn't used by
-		// supported ORMs.
+		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}},
+			getPGGetIndexDefByOID),
+		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}, {"column_no", types.Int},
+			{"pretty_bool", types.Bool}}, func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			colNumber := *args[1].(*tree.DInt)
+			if colNumber == 0 {
+				return getPGGetIndexDefByOID(ctx, args)
+			}
+			r, err := ctx.InternalExecutor.QueryRow(
+				ctx.Ctx(), "pg_get_indexdef",
+				ctx.Txn,
+				`SELECT ischema.column_name as pg_get_indexdef FROM information_schema.statistics AS ischema 
+					INNER JOIN pg_catalog.pg_indexes AS pgindex ON ischema.table_schema=pgindex.schemaname 
+					AND ischema.table_name=pgindex.tablename AND ischema.index_name = pgindex.indexname 
+					AND pgindex.crdb_oid=$1 AND ischema.seq_in_index=$2;`, args[0], args[1])
+			if err != nil {
+				return nil, err
+			}
+			if len(r) == 0 {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown index (OID=%s)", args[0])
+			}
+			return r[0], nil
+		}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
