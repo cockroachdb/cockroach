@@ -35,7 +35,8 @@ func (m memoryResource) NewBudgetExceededError(
 ) error {
 	return pgerror.NewErrorf(
 		pgerror.CodeOutOfMemoryError,
-		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+		`memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget
+try increasing memory budget with --max-sql-memory; for details see https://tinyurl.com/y8cctlna`,
 		requestedBytes,
 		reservedBytes,
 		budgetBytes,
@@ -55,7 +56,8 @@ func (d diskResource) NewBudgetExceededError(
 ) error {
 	return pgerror.NewErrorf(
 		pgerror.CodeDiskFullError,
-		"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+		`disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget
+try increasing disk budget with --cache; for details see https://tinyurl.com/y8cctlna`,
 		requestedBytes,
 		reservedBytes,
 		budgetBytes,
