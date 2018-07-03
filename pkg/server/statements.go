@@ -23,6 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -89,9 +91,15 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 	}
 
 	for i, stmt := range stmtStats {
+		stmts, err := parser.Parse(stmt.Key.Query)
+		if err != nil {
+			return nil, err
+		}
+		pretty := tree.PrettyWithOpts(stmts[0], 80, false, 4)
+
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_StatementStatisticsKey{
-				Statement: stmt.Key.Query,
+				Statement: pretty,
 				App:       stmt.Key.App,
 				NodeID:    s.gossip.NodeID.Get(),
 				DistSQL:   stmt.Key.DistSQL,
