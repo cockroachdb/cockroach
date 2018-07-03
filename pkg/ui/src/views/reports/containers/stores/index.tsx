@@ -58,7 +58,7 @@ class Stores extends React.Component<StoresProps, {}> {
     );
   }
 
-  renderStore(store: protos.cockroach.server.serverpb.StoreDetails$Properties, key: number) {
+  renderStore(store: protos.cockroach.server.serverpb.IStoreDetails, key: number) {
     return (
       <table key={key} className="stores-table">
         <tbody>

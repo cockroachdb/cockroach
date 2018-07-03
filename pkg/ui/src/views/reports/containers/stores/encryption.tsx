@@ -3,7 +3,7 @@ import React from "react";
 import * as protos from "src/js/protos";
 
 export interface EncryptionStatusProps {
-  store: protos.cockroach.server.serverpb.StoreDetails$Properties;
+  store: protos.cockroach.server.serverpb.IStoreDetails;
 }
 
 export default class EncryptionStatus extends React.Component<EncryptionStatusProps, {}> {

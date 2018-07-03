@@ -14,10 +14,10 @@ export class TableInfo {
   public numColumns: number;
   public numIndices: number;
   public physicalSize: number;
-  public mvccSize: protos.cockroach.storage.engine.enginepb.MVCCStats$Properties;
+  public mvccSize: protos.cockroach.storage.engine.enginepb.IMVCCStats;
   public rangeCount: number;
   public createStatement: string;
-  public grants: protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties[];
+  public grants: protos.cockroach.server.serverpb.TableDetailsResponse.IGrant[];
   constructor(name: string, details: TableDetailsResponse, stats: TableStatsResponse) {
       this.name = name;
       this.id = details && details.descriptor_id.toNumber();

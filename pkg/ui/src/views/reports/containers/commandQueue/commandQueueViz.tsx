@@ -9,7 +9,7 @@ import Print from "src/views/reports/containers/range/print";
 
 interface QueueVizProps {
   queue: {
-    [ID: string]: protos.cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties,
+    [ID: string]: protos.cockroach.storage.storagebase.CommandQueuesSnapshot.ICommand,
   };
 }
 

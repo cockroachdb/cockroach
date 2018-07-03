@@ -9,7 +9,7 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 interface ConnectionTableColumn {
   title: string;
   extract: (
-    p: protos.cockroach.server.serverpb.ProblemRangesResponse.NodeProblems$Properties,
+    p: protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems,
     id?: number,
   ) => React.ReactNode;
 }

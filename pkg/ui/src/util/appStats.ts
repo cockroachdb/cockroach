@@ -6,8 +6,8 @@ import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
-export type StatementStatistics = protos.cockroach.sql.StatementStatistics$Properties;
-export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics$Properties;
+export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
+export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 export interface NumericStat {
   mean?: number;

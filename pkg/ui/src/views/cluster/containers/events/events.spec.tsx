@@ -14,7 +14,7 @@ import { allEvents } from "src/util/eventTypes";
 type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 
 function makeEventBox(
-  events: protos.cockroach.server.serverpb.EventsResponse.Event$Properties[],
+  events: protos.cockroach.server.serverpb.EventsResponse.IEvent[],
   refreshEventsFn: typeof refreshEvents,
 ) {
   return shallow(

@@ -11,7 +11,7 @@ import {
 import * as api from "src/util/api";
 import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
-import { NodeStatus$Properties, RollupStoreMetrics } from "src/util/proto";
+import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
 
 // The primary export of this file are the "refresh" functions of the various
@@ -42,7 +42,7 @@ export const refreshHealth = healthReducerObj.refresh;
 
 function rollupStoreMetrics(
   res: api.NodesResponseMessage,
-): NodeStatus$Properties[] {
+): INodeStatus[] {
   return _.map(res.nodes, node => {
     RollupStoreMetrics(node);
     return node;
@@ -259,7 +259,7 @@ export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
   health: HealthState;
-  nodes: CachedDataReducerState<NodeStatus$Properties[]>;
+  nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;

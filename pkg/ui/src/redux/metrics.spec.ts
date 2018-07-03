@@ -166,7 +166,7 @@ describe("metrics reducer", function() {
       });
     }
 
-    function createResponse(queries: protos.cockroach.ts.tspb.Query$Properties[]) {
+    function createResponse(queries: protos.cockroach.ts.tspb.IQuery[]) {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: queries.map(q => {
           return {
