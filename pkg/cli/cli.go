@@ -162,6 +162,7 @@ func init() {
 		genCmd,
 		versionCmd,
 		debugCmd,
+		sqlfmtCmd,
 	)
 }
 
