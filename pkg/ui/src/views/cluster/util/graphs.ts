@@ -247,7 +247,7 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
 }
 
 type formattedSeries = {
-  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties[],
+  values: protos.cockroach.ts.tspb.ITimeSeriesDatapoint[],
   key: string,
   area: boolean,
   fillOpacity: number,

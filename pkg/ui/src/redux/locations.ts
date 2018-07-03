@@ -5,7 +5,7 @@ import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { Pick } from "src/util/pick";
 
-export type Location = protos.cockroach.server.serverpb.LocationsResponse.Location$Properties;
+export type ILocation = protos.cockroach.server.serverpb.LocationsResponse.ILocation;
 
 type LocationState = Pick<AdminUIState, "cachedData", "locations">;
 
@@ -22,18 +22,18 @@ export function selectLocations(state: LocationState) {
 }
 
 const nestLocations = d3.nest()
-  .key((loc: Location) => loc.locality_key)
-  .key((loc: Location) => loc.locality_value)
+  .key((loc: ILocation) => loc.locality_key)
+  .key((loc: ILocation) => loc.locality_value)
   .rollup((locations) => locations[0]) // cannot collide since ^^ is primary key
   .map;
 
 export interface LocationTree {
   [key: string]: {
-    [value: string]: Location,
+    [value: string]: ILocation,
   };
 }
 
 export const selectLocationTree = createSelector(
   selectLocations,
-  (ls: Location[]) => nestLocations(ls), // TSLint won't let this be point-free
+  (ls: ILocation[]) => nestLocations(ls), // TSLint won't let this be point-free
 );

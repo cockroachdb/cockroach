@@ -2,8 +2,8 @@ import _ from "lodash";
 
 import * as protos from "src/js/protos";
 
-export type NodeStatus$Properties = protos.cockroach.server.status.NodeStatus$Properties;
-const nodeStatus: NodeStatus$Properties = null;
+export type INodeStatus = protos.cockroach.server.status.INodeStatus;
+const nodeStatus: INodeStatus = null;
 export type StatusMetrics = typeof nodeStatus.metrics;
 
 /**
@@ -29,7 +29,7 @@ export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[])
  * metrics collection of the supplied NodeStatus object. This is convenient
  * for all current usages of NodeStatus in the UI.
  */
-export function RollupStoreMetrics(ns: NodeStatus$Properties): void {
+export function RollupStoreMetrics(ns: INodeStatus): void {
   AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, (ss) => ss.metrics));
 }
 
@@ -74,7 +74,7 @@ export namespace MetricConstants {
 /**
  * TotalCPU computes the total CPU usage accounted for in a NodeStatus.
  */
-export function TotalCpu(status: NodeStatus$Properties): number {
+export function TotalCpu(status: INodeStatus): number {
   const metrics = status.metrics;
   return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
 }
@@ -88,7 +88,7 @@ const aggregateByteKeys = [
   MetricConstants.sysBytes,
 ];
 
-export function BytesUsed(s: NodeStatus$Properties): number {
+export function BytesUsed(s: INodeStatus): number {
   const usedCapacity = s.metrics[MetricConstants.usedCapacity];
   if (usedCapacity !== 0) {
     return usedCapacity;

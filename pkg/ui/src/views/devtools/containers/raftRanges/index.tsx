@@ -136,9 +136,9 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
-      const nodeIDs = _(statuses.ranges).flatMap((range: protos.cockroach.server.serverpb.RaftRangeStatus$Properties) => {
+      const nodeIDs = _(statuses.ranges).flatMap((range: protos.cockroach.server.serverpb.IRaftRangeStatus) => {
         return range.nodes;
-      }).map((node: protos.cockroach.server.serverpb.RaftRangeNode$Properties) => {
+      }).map((node: protos.cockroach.server.serverpb.IRaftRangeNode) => {
         return node.node_id;
       }).uniq().sort().value();
 

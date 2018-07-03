@@ -18,8 +18,8 @@ import { TreeNode, TreePath } from "./tree";
 import "./index.styl";
 
 type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
-type NodeDescriptor = cockroach.roachpb.NodeDescriptor$Properties;
-type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.ZoneConfig$Properties;
+type NodeDescriptor = cockroach.roachpb.INodeDescriptor;
+type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
 
 const ZONE_CONFIG_TEXT = (
   <span>

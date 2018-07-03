@@ -7,7 +7,7 @@ import * as protos from "src/js/protos";
 import { versionsSelector } from "src/redux/alerts";
 import { store, history, AdminUIState } from "src/redux/state";
 
-type ClusterResponse = protos.cockroach.server.serverpb.ClusterResponse$Properties;
+type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
 
 /**
  * List of current redactions needed for pages tracked by the Admin UI.
