@@ -242,6 +242,10 @@ func TestQueryDownsampling(t *testing.T) {
 
 			query.Sources = []string{"source2"}
 			query.assertSuccess(4, 1)
+
+			query.Sources = nil
+			query.SampleDurationNanos = 50
+			query.assertSuccess(2, 2)
 		}
 
 		// Query boundaries don't align to downsample period.
