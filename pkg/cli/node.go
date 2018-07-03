@@ -273,7 +273,7 @@ func getStatusNodeAlignment() string {
 var decommissionNodesColumnHeaders = []string{
 	"id",
 	"is_live",
-	"gossiped_replicas",
+	"replicas",
 	"is_decommissioning",
 	"is_draining",
 }
@@ -316,6 +316,9 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 func runDecommissionNodeImpl(
 	ctx context.Context, c serverpb.AdminClient, wait nodeDecommissionWaitType, args []string,
 ) error {
+	if wait == nodeDecommissionWaitLive {
+		fmt.Fprintln(stderr, "\n--wait=live is deprecated and is treated as --wait=all")
+	}
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
@@ -351,19 +354,12 @@ func runDecommissionNodeImpl(
 		var replicaCount int64
 		allDecommissioning := true
 		for _, status := range resp.Status {
-			if wait != nodeDecommissionWaitLive || status.IsLive {
-				replicaCount += status.ReplicaCount
-			}
+			replicaCount += status.ReplicaCount
 			allDecommissioning = allDecommissioning && status.Decommissioning
 		}
 		if replicaCount == 0 && allDecommissioning {
-			if wait == nodeDecommissionWaitAll {
-				fmt.Fprintln(os.Stdout, "\nAll target nodes report that they hold no more data. "+
-					"Please verify cluster health before removing the nodes.")
-			} else {
-				fmt.Fprintln(os.Stdout, "\nDecommissioning finished. Please verify cluster health "+
-					"before removing the nodes.")
-			}
+			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
+				"Please verify cluster health before removing the nodes.")
 			return nil
 		}
 		if wait == nodeDecommissionWaitNone {
