@@ -83,6 +83,10 @@ type OptTesterFlags struct {
 	// Verbose indicates whether verbose test debugging information will be
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
+
+	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
+	// of a specific rule.
+	ExploreTraceRule string
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -143,6 +147,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
+//
+//  - rule: used with exploretrace; the value is the name of a rule. When
+//    specified, the exploretrace output is filtered to only show expression
+//    changes due to that specific rule.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -261,6 +269,12 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		f.FullyQualifyNames = true
 		// Hiding qualifications defeats the purpose.
 		f.ExprFormat &= ^opt.ExprFmtHideQualifications
+
+	case "rule":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("rule requires one argument")
+		}
+		f.ExploreTraceRule = arg.Vals[0]
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -445,6 +459,10 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		}
 		if et.Done() {
 			break
+		}
+
+		if ot.Flags.ExploreTraceRule != "" && et.LastRuleName().String() != ot.Flags.ExploreTraceRule {
+			continue
 		}
 
 		ot.separator("=")
