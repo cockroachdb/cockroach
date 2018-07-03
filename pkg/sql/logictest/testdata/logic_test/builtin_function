@@ -283,6 +283,24 @@ query error ascii\(\): the input string must not be empty
 select ascii('')
 
 query T
+select chr(122)
+----
+z
+
+query T
+select chr(ascii('Z'))
+----
+Z
+
+query T
+select chr(31109)
+----
+禅
+
+query error chr\(\): input value must be >= 0
+SELECT chr(-1)
+
+query T
 SELECT md5('abc')
 ----
 900150983cd24fb0d6963f7d28e17f72
