@@ -1100,6 +1100,16 @@ func (n *Node) setupSpanForIncomingRPC(
 	return ctx, finishSpan
 }
 
+// RangeFeed ... WIP:
+func (n *Node) RangeFeed(
+	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) error {
+	growStack()
+
+	ctx := n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(stream.Context())
+	return n.stores.RangeFeed(ctx, args, stream)
+}
+
 var growStackGlobal = false
 
 //go:noinline

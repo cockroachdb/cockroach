@@ -240,8 +240,17 @@ message RaftCommand {
 
   // Proposer-evaluated KV mode.
 
+  // replicated_eval_result is a set of structured information that instructs
+  // replicated state changes to the Range state machine outside of RocksDB.
   ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
+  // write_batch is a RocksDB WriteBatch that will be applied to RockDB during
+  // the application of the Raft command. The batch can be thought of as a
+  // series of replicated instructions that instruct RocksDB engines on how to
+  // change.
   WriteBatch write_batch = 14;
+  // logical_ops is a series of logical MVCC operations that correspond to the
+  // physical operations being made in the write_batch.
+  repeated storage.engine.enginepb.MVCCLogicalOp logical_ops = 15 [(gogoproto.nullable) = false];
 
   reserved 1, 10001 to 10014;
 }

@@ -189,6 +189,24 @@ func (ls *Stores) Send(
 	return br, pErr
 }
 
+// RangeFeed ... WIP:
+func (ls *Stores) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) error {
+	if args.RangeID == 0 {
+		log.Fatal(ctx, "rangefeed request missing range ID")
+	} else if args.Replica.StoreID == 0 {
+		log.Fatal(ctx, "rangefeed request missing store ID")
+	}
+
+	store, err := ls.GetStore(args.Replica.StoreID)
+	if err != nil {
+		return err
+	}
+
+	return store.RangeFeed(ctx, args, stream)
+}
+
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
 // attempts to read gossip bootstrap info from every known store and
 // finds the most recent from all stores to initialize the bootstrap
