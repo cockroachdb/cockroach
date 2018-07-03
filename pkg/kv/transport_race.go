@@ -19,7 +19,7 @@ package kv
 
 import (
 	"context"
-	"encoding/gob"
+	"encoding/json"
 	"io/ioutil"
 	"math/rand"
 	"sync/atomic"
@@ -74,7 +74,7 @@ func GRPCTransportFactory(
 				// are evicted in FIFO order.
 				const size = 1000
 				bas := make([]*roachpb.BatchRequest, size)
-				encoder := gob.NewEncoder(ioutil.Discard)
+				encoder := json.NewEncoder(ioutil.Discard)
 				for {
 					iters++
 					start := timeutil.Now()

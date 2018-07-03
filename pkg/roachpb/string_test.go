@@ -68,9 +68,13 @@ func TestBatchRequestString(t *testing.T) {
 	)
 	br.Txn = &txn
 	for i := 0; i < 100; i++ {
-		br.Requests = append(br.Requests, roachpb.RequestUnion{Get: &roachpb.GetRequest{}})
+		var ru roachpb.RequestUnion
+		ru.MustSetInner(&roachpb.GetRequest{})
+		br.Requests = append(br.Requests, ru)
 	}
-	br.Requests = append(br.Requests, roachpb.RequestUnion{EndTransaction: &roachpb.EndTransactionRequest{}})
+	var ru roachpb.RequestUnion
+	ru.MustSetInner(&roachpb.EndTransactionRequest{})
+	br.Requests = append(br.Requests, ru)
 
 	e := fmt.Sprintf(`[txn: %s], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction(commit:false) [/Min]`,
 		br.Txn.Short())

@@ -1429,6 +1429,7 @@ logictestccl-package = ./pkg/ccl/logictestccl
 
 # Additional dependencies for binaries that depend on generated code.
 bin/workload bin/docgen bin/roachtest: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/roachtest: $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
