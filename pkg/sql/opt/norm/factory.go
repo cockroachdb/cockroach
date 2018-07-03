@@ -31,11 +31,15 @@ type MatchedRuleFunc func(ruleName opt.RuleName) bool
 
 // AppliedRuleFunc defines the callback function for the NotifyOnAppliedRule
 // event supported by the optimizer and factory. It is invoked each time an
-// optimization rule (Normalize or Explore) has been applied. The function is
-// called with the name of the rule and the memo group it affected. If the rule
-// was an exploration rule, then the added parameter gives the number of
-// expressions added to the group by the rule.
-type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
+// optimization rule (Normalize or Explore) has been applied.
+//
+// The function is called with the name of the rule and the memo group it
+// affected. If the rule was an exploration rule, then the expr parameter
+// indicates the expression on which the rule was applied, and the added
+// parameter number of expressions added to the group by the rule.
+type AppliedRuleFunc func(
+	ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int,
+)
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs

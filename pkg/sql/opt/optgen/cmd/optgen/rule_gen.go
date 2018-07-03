@@ -609,7 +609,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 
 	// Notify listeners that rule was applied.
 	g.w.nestIndent("if _f.appliedRule != nil {\n")
-	g.w.writeIndent("_f.appliedRule(opt.%s, _group, 0)\n", rule.Name)
+	g.w.writeIndent("_f.appliedRule(opt.%s, _group, 0, 0)\n", rule.Name)
 	g.w.unnest("}\n")
 
 	g.w.writeIndent("return _group\n")
@@ -657,7 +657,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	// Notify listeners that rule was applied.
 	g.w.nestIndent("if _e.o.appliedRule != nil {\n")
 	g.w.writeIndent("_after := _e.mem.ExprCount(_root.Group)\n")
-	g.w.writeIndent("_e.o.appliedRule(opt.%s, _root.Group, _after-_before)\n", rule.Name)
+	g.w.writeIndent("_e.o.appliedRule(opt.%s, _root.Group, _root.Expr, _after-_before)\n", rule.Name)
 	g.w.unnest("}\n")
 
 	g.w.unnest("}\n")

@@ -38,12 +38,24 @@ type forcingOptimizer struct {
 	// by the optimizer.
 	lastMatched opt.RuleName
 
-	// lastApplied records the id of the expression that marks the portion of the
-	// tree affected by the most recent rule application. All expressions in the
-	// same memo group that are < lastApplied.Expr will assigned an infinite cost
-	// by the forcingCoster. Therefore, only expressions >= lastApplied.Expr can
-	// be in the output expression tree.
-	lastApplied memo.ExprID
+	// lastApplied records the name of the rule that was most recently applied by
+	// the optimizer. This is not necessarily the same with lastMatched because
+	// normalization rules can run in-between the match and the application of an
+	// exploration rule.
+	lastApplied opt.RuleName
+
+	// lastAppliedGroup is the group where the last rule was applied (for both
+	// normalization and exploration rules).
+	lastAppliedGroup memo.GroupID
+
+	// The following fields are only valid if lastApplied is an exploration rule:
+	//  - lastExploreSourceExpr is the ordinal of the expression on which the last
+	//    explore rule ran.
+	//  - lastExploreNewExprs is the set of expression ordinals that were added by
+	//    the rule (can be empty).
+	// All expressions are in lastAppliedGroup.
+	lastExploreSourceExpr memo.ExprOrdinal
+	lastExploreNewExprs   util.FastIntSet
 }
 
 // newForcingOptimizer creates a forcing optimizer that stops applying any rules
@@ -53,7 +65,6 @@ func newForcingOptimizer(tester *OptTester, steps int) (*forcingOptimizer, error
 		o:           xform.NewOptimizer(&tester.evalCtx),
 		remaining:   steps,
 		lastMatched: opt.InvalidRuleName,
-		lastApplied: memo.InvalidExprID,
 	}
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
@@ -67,22 +78,23 @@ func newForcingOptimizer(tester *OptTester, steps int) (*forcingOptimizer, error
 
 	// Hook the AppliedRule notification in order to track the portion of the
 	// expression tree affected by each transformation rule.
-	fo.lastApplied = memo.InvalidExprID
-	fo.o.NotifyOnAppliedRule(func(ruleName opt.RuleName, group memo.GroupID, added int) {
-		if added > 0 {
-			// This was an exploration rule that added one or more expressions to
-			// an existing group. Record the id of the first of those expressions.
-			// Previous expressions will be suppressed.
-			ord := memo.ExprOrdinal(fo.o.Memo().ExprCount(group) - added)
-			fo.lastApplied = memo.ExprID{Group: group, Expr: ord}
-		} else {
-			// This was a normalization that created a new memo group, or it was
-			// an exploration rule that didn't add any expressions to the group.
-			// Either way, none of the expressions in the group need to be
-			// suppressed.
-			fo.lastApplied = memo.MakeNormExprID(group)
-		}
-	})
+	fo.o.NotifyOnAppliedRule(
+		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
+			fo.lastApplied = ruleName
+			fo.lastAppliedGroup = group
+
+			if ruleName.IsExplore() {
+				// This was an exploration rule. Record the expression on which the rule
+				// was applied and the set of expressions that were generated.
+				fo.lastExploreSourceExpr = expr
+				fo.lastExploreNewExprs = util.FastIntSet{}
+				if added > 0 {
+					exprCount := fo.o.Memo().ExprCount(group)
+					fo.lastExploreNewExprs.AddRange(exprCount-added, exprCount-1)
+				}
+			}
+		},
+	)
 
 	var err error
 	fo.root, fo.required, err = tester.buildExpr(fo.o.Factory())
@@ -116,6 +128,15 @@ func (fo *forcingOptimizer) restrictToExprs(
 		}
 	}
 
+	fo.o.SetCoster(coster)
+}
+
+// restrictToGroup is a convenience variant of restrictToExprs when all
+// expressions in a group are to be retained.
+func (fo *forcingOptimizer) restrictToGroup(mem *memo.Memo, group memo.GroupID) {
+	coster := newForcingCoster(fo.o.Coster())
+
+	restrictToGroup(coster, mem, fo.root, group)
 	fo.o.SetCoster(coster)
 }
 

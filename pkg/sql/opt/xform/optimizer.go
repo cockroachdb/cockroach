@@ -531,7 +531,7 @@ func (o *Optimizer) optimizeRootWithProps(
 			rootProps = &simplified
 
 			if o.appliedRule != nil {
-				o.appliedRule(opt.SimplifyRootOrdering, root, 0)
+				o.appliedRule(opt.SimplifyRootOrdering, root, 0, 0)
 			}
 		}
 	}
@@ -547,7 +547,7 @@ func (o *Optimizer) optimizeRootWithProps(
 		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
 			root = o.f.CustomFuncs().PruneCols(root, neededCols)
 			if o.appliedRule != nil {
-				o.appliedRule(opt.PruneRootCols, root, 0)
+				o.appliedRule(opt.PruneRootCols, root, 0, 0)
 			}
 		}
 	}

@@ -41,6 +41,9 @@ type ExprID struct {
 // expression.
 var InvalidExprID = ExprID{}
 
+// Suppress linter complaint.
+var _ = InvalidExprID
+
 // MakeNormExprID returns the id of the normalized expression for the given
 // group.
 func MakeNormExprID(group GroupID) ExprID {
