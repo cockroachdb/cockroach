@@ -15,11 +15,15 @@
 package ts
 
 import (
+	"context"
 	"math"
 	"sort"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type rollupDatapoint struct {
@@ -91,8 +95,6 @@ func computeRollupsFromData(data tspb.TimeSeriesData, rollupPeriodNanos int64) r
 			max:            -math.MaxFloat64,
 			min:            math.MaxFloat64,
 		}
-		mean := 0.0
-		meanSquaredDist := 0.0
 		for i, dp := range dataSlice {
 			if i == 0 {
 				result.first = dp.Value
@@ -100,17 +102,26 @@ func computeRollupsFromData(data tspb.TimeSeriesData, rollupPeriodNanos int64) r
 			result.last = dp.Value
 			result.max = math.Max(result.max, dp.Value)
 			result.min = math.Min(result.min, dp.Value)
+
+			if result.count > 0 {
+				result.variance = computeParallelVariance(
+					parallelVarianceArgs{
+						count:    result.count,
+						average:  result.sum / float64(result.count),
+						variance: result.variance,
+					},
+					parallelVarianceArgs{
+						count:    1,
+						average:  dp.Value,
+						variance: 0,
+					},
+				)
+			}
+
 			result.count++
 			result.sum += dp.Value
-
-			// Welford's algorithm for computing variance.
-			delta := dp.Value - mean
-			mean = mean + delta/float64(result.count)
-			delta2 := dp.Value - mean
-			meanSquaredDist = meanSquaredDist + delta*delta2
 		}
 
-		result.variance = meanSquaredDist / float64(result.count)
 		rollup.datapoints = append(rollup.datapoints, result)
 	}
 
@@ -125,4 +136,192 @@ func computeRollupsFromData(data tspb.TimeSeriesData, rollupPeriodNanos int64) r
 	}
 
 	return rollup
+}
+
+func (db *DB) rollupTimeSeries(
+	ctx context.Context,
+	timeSeriesList []timeSeriesResolutionInfo,
+	now hlc.Timestamp,
+	qmc QueryMemoryContext,
+) error {
+	thresholds := db.computeThresholds(now.WallTime)
+	for _, timeSeries := range timeSeriesList {
+		// Only process rollup if this resolution has a target rollup resolution.
+		targetResolution, ok := timeSeries.Resolution.TargetRollupResolution()
+		if !ok {
+			continue
+		}
+
+		// Query from beginning of time up to the threshold for this resolution.
+		threshold := thresholds[timeSeries.Resolution]
+
+		// Create an initial targetSpan to find data for this series, starting at
+		// the beginning of time and ending with the threshold time. Queries use
+		// MaxSpanRequestKeys to limit the number of rows in memory at one time,
+		// and will use ResumeSpan to issue additional queries if necessary.
+		targetSpan := roachpb.Span{
+			Key: MakeDataKey(timeSeries.Name, "" /* source */, timeSeries.Resolution, 0),
+			EndKey: MakeDataKey(
+				timeSeries.Name, "" /* source */, timeSeries.Resolution, threshold,
+			),
+		}
+
+		// For each row, generate a rollup datapoint and add it to the correct
+		// rollupData object.
+		rollupDataMap := make(map[string]rollupData)
+
+		account := qmc.workerMonitor.MakeBoundAccount()
+		defer account.Close(ctx)
+
+		childQmc := QueryMemoryContext{
+			workerMonitor:      qmc.workerMonitor,
+			resultAccount:      &account,
+			QueryMemoryOptions: qmc.QueryMemoryOptions,
+		}
+		for querySpan := targetSpan; querySpan.Valid(); {
+			var err error
+			querySpan, err = db.queryAndComputeRollupsForSpan(
+				ctx, timeSeries, querySpan, targetResolution, rollupDataMap, childQmc,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Write computed rollupDataMap to disk
+		var rollupDataSlice []rollupData
+		for _, data := range rollupDataMap {
+			rollupDataSlice = append(rollupDataSlice, data)
+		}
+		if err := db.storeRollup(ctx, targetResolution, rollupDataSlice); err != nil {
+			return err
+		}
+
+		// Issue a prune command to delete the higher-resolution data.
+		// Time series data for a specific resolution falls in a contiguous key
+		// range, and can be deleted with a DelRange command.
+		b := &client.Batch{}
+		b.AddRawRequest(&roachpb.DeleteRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    targetSpan.Key,
+				EndKey: targetSpan.EndKey,
+			},
+			Inline: true,
+		})
+		if err := db.db.Run(ctx, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// queryAndComputeRollupsForSpan queries time series data from the provided
+// span, up to a maximum limit of rows based on memory limits.
+func (db *DB) queryAndComputeRollupsForSpan(
+	ctx context.Context,
+	series timeSeriesResolutionInfo,
+	span roachpb.Span,
+	targetResolution Resolution,
+	rollupDataMap map[string]rollupData,
+	qmc QueryMemoryContext,
+) (roachpb.Span, error) {
+	b := &client.Batch{}
+	b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
+	b.Scan(span.Key, span.EndKey)
+	if err := db.db.Run(ctx, b); err != nil {
+		return roachpb.Span{}, err
+	}
+
+	// Convert result data into a map of source strings to ordered spans of
+	// time series data.
+	diskAccount := qmc.workerMonitor.MakeBoundAccount()
+	defer diskAccount.Close(ctx)
+	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	// For each source, iterate over the data span and compute
+	// rollupDatapoints.
+	for source, span := range sourceSpans {
+		rollup, ok := rollupDataMap[source]
+		if !ok {
+			rollup = rollupData{
+				name:   series.Name,
+				source: source,
+			}
+			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(rollup))); err != nil {
+				return roachpb.Span{}, err
+			}
+		}
+
+		var end timeSeriesSpanIterator
+		for start := makeTimeSeriesSpanIterator(span); start.isValid(); start = end {
+			rollupPeriod := targetResolution.SampleDuration()
+			sampleTimestamp := normalizeToPeriod(start.timestamp, rollupPeriod)
+			datapoint := rollupDatapoint{
+				timestampNanos: sampleTimestamp,
+				max:            -math.MaxFloat64,
+				min:            math.MaxFloat64,
+				first:          start.first(),
+			}
+			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(datapoint))); err != nil {
+				return roachpb.Span{}, err
+			}
+			for end = start; end.isValid() && normalizeToPeriod(end.timestamp, rollupPeriod) == sampleTimestamp; end.forward() {
+				datapoint.last = end.last()
+				datapoint.max = math.Max(datapoint.max, end.max())
+				datapoint.min = math.Min(datapoint.min, end.min())
+
+				// Chan et al. algorithm for computing parallel variance. This allows
+				// the combination of two previously computed sample variances into a
+				// variance for the combined sample; this is needed when further
+				// downsampling previously downsampled variance values.
+				if datapoint.count > 0 {
+					datapoint.variance = computeParallelVariance(
+						parallelVarianceArgs{
+							count:    end.count(),
+							average:  end.average(),
+							variance: end.variance(),
+						},
+						parallelVarianceArgs{
+							count:    datapoint.count,
+							average:  datapoint.sum / float64(datapoint.count),
+							variance: datapoint.variance,
+						},
+					)
+				}
+
+				datapoint.count += end.count()
+				datapoint.sum += end.sum()
+			}
+			rollup.datapoints = append(rollup.datapoints, datapoint)
+		}
+		rollupDataMap[source] = rollup
+	}
+	return b.Results[0].ResumeSpan, nil
+}
+
+type parallelVarianceArgs struct {
+	count    uint32
+	average  float64
+	variance float64
+}
+
+// computeParallelVariance computes the combined variance of two previously
+// computed sample variances. This is an implementation of the Chan et al.
+// algorithm for computing parallel variance. This allows the combination of two
+// previously computed sample variances into a variance for the combined sample;
+// this is needed when further downsampling previously downsampled variance
+// values. Note that it is exactly equivalent to the more widely used Welford's
+// algorithm when either variance set has a count of one.
+func computeParallelVariance(left, right parallelVarianceArgs) float64 {
+	leftCount := float64(left.count)
+	rightCount := float64(right.count)
+	totalCount := leftCount + rightCount
+	averageDelta := left.average - right.average
+	leftSumOfSquareDeviations := left.variance * leftCount
+	rightSumOfSquareDeviations := right.variance * rightCount
+	totalSumOfSquareDeviations := leftSumOfSquareDeviations + rightSumOfSquareDeviations + (averageDelta*averageDelta)*rightCount*leftCount/totalCount
+	return totalSumOfSquareDeviations / totalCount
 }

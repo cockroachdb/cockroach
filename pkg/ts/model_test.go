@@ -158,9 +158,11 @@ var modelTestRowCount = len(modelTestGapBitmap)
 
 // modelTestStartTime, the first time at which data is recorded in the model, is
 // set at a reasonably modern time and configured to overlap a slab boundary.
-var modelTestStartTime = Resolution10s.normalizeToSlab(
-	time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
-) - (int64(modelTestRowCount/2) * Resolution10s.SampleDuration())
+// This is accomplished by computing an anchor time, and then putting the start
+// time earlier than the anchor time such that half of recorded samples occur
+// before the anchor time.
+var modelTestAnchorTime = time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+var modelTestStartTime = modelTestAnchorTime - int64(modelTestRowCount/2)*Resolution10s.SampleDuration()
 
 // modelTestQueryTimes are the bounds that will be queried for the tests.
 var modelTestQueryTimes = []struct {
@@ -211,6 +213,64 @@ func TestTimeSeriesModelTest(t *testing.T) {
 			modelTestMetricNames[0], Resolution10s, modelTestStartTime, modelTestStartTime+time.Hour.Nanoseconds(),
 		)
 		query.assertSuccess(len(modelTestGapBitmap)-2, 4)
+	}
+
+	executeQueryMatrix(t, tm)
+}
+
+func TestTimeSeriesRollupModelTest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	s1 := rand.NewSource(timeutil.Now().UnixNano())
+	r1 := rand.New(s1)
+
+	// populate model with random values according to gap bitmap.
+	for rowNum := 0; rowNum <= modelTestRowCount; rowNum++ {
+		for metricNum, metric := range modelTestMetricNames {
+			for sourceNum, source := range modelTestSourceNames {
+				// Check the gap bitmap to see if this sample period and source get a
+				// data point.
+				if modelTestGapBitmap[rowNum%len(modelTestGapBitmap)][4*metricNum+sourceNum] > 0 {
+					tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+						tsd(metric, source,
+							tsdp(getSampleTime(rowNum), math.Floor(r1.Float64()*10000)),
+						),
+					})
+				}
+			}
+		}
+	}
+
+	for _, metric := range modelTestMetricNames {
+		// Roll-up data points before the anchor time.
+		tm.rollup(
+			modelTestAnchorTime+resolution10sDefaultPruneThreshold.Nanoseconds(),
+			timeSeriesResolutionInfo{
+				Name:       metric,
+				Resolution: Resolution10s,
+			},
+		)
+	}
+
+	tm.assertModelCorrect()
+	{
+		// Sanity check: after the rollup, the 10s resolution should only have half
+		// of its data points.
+		query := tm.makeQuery(
+			modelTestMetricNames[0], Resolution10s, modelTestStartTime, modelTestStartTime+time.Hour.Nanoseconds(),
+		)
+		query.assertSuccess(modelTestRowCount/2-1, 4)
+	}
+	{
+		// Sanity check: after the rollup, the 30m resolution should contain a
+		// single data point.
+		query := tm.makeQuery(
+			modelTestMetricNames[0], Resolution30m, modelTestStartTime, modelTestStartTime+time.Hour.Nanoseconds(),
+		)
+		query.assertSuccess(1, 4)
 	}
 
 	executeQueryMatrix(t, tm)

@@ -29,8 +29,10 @@ import (
 )
 
 var (
-	resolution1nsDefaultPruneThreshold = time.Second
-	resolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
+	resolution1nsDefaultPruneThreshold  = time.Second
+	resolution10sDefaultPruneThreshold  = 30 * 24 * time.Hour
+	resolution30mDefaultPruneThreshold  = 365 * 24 * time.Hour
+	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
@@ -68,8 +70,10 @@ type DB struct {
 // NewDB creates a new DB instance.
 func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
-		Resolution10s: func() int64 { return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds() },
-		resolution1ns: func() int64 { return resolution1nsDefaultPruneThreshold.Nanoseconds() },
+		Resolution10s:  func() int64 { return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds() },
+		Resolution30m:  func() int64 { return resolution30mDefaultPruneThreshold.Nanoseconds() },
+		resolution1ns:  func() int64 { return resolution1nsDefaultPruneThreshold.Nanoseconds() },
+		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
 	return &DB{
 		db:                         db,
