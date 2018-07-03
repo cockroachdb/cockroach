@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	isatty "github.com/mattn/go-isatty"
@@ -114,6 +115,12 @@ func initCLIDefaults() {
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false
 	nodeCtx.statusShowDecommission = false
+
+	sqlfmtCtx.len = tree.DefaultPrettyWidth
+	sqlfmtCtx.useSpaces = false
+	sqlfmtCtx.tabWidth = 4
+	sqlfmtCtx.noSimplify = false
+	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
 }
@@ -232,4 +239,14 @@ var nodeCtx struct {
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
+}
+
+// sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
+// Defaults set by InitCLIDefaults() above.
+var sqlfmtCtx struct {
+	len        int
+	useSpaces  bool
+	tabWidth   int
+	noSimplify bool
+	execStmts  statementsValue
 }
