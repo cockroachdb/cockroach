@@ -34,9 +34,6 @@ type explainDistSQLNode struct {
 	// pointing to a visual query plan with statistics will be in the row
 	// returned by the node.
 	analyze bool
-	// stmtType is the StatementType of the plan. It is needed by the
-	// distSQLWrapper when analyzing a statement.
-	stmtType tree.StatementType
 
 	run explainDistSQLRun
 }
@@ -89,10 +86,14 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			return nil
 		})
 		execCfg := params.p.ExecCfg()
+		// tree.RowsAffected is used as the statement type passed in to the distsql
+		// receiver because it isn't necessary to process any result rows from the
+		// wrapped plan.
+		const stmtType = tree.RowsAffected
 		recv := makeDistSQLReceiver(
 			params.ctx,
 			rw,
-			n.stmtType,
+			stmtType,
 			execCfg.RangeDescriptorCache,
 			execCfg.LeaseHolderCache,
 			params.p.txn,
