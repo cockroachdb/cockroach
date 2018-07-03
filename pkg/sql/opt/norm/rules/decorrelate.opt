@@ -142,6 +142,39 @@
     (ProjectColsFromBoth $left $right)
 )
 
+# TryDecorrelateInnerJoin tries to decorrelate an InnerJoin operator nested
+# beneath another Join operator by pulling up its join condition to the outer
+# join. This may be enough to decorrelate the outer join, or it may allow any
+# outer column references to continue to journey upwards.
+#
+# See the comment for TryDecorrelateSelect for an explanation of why the
+# DetectCycle and HighPriority tags are in use.
+#
+# TODO(andyk): Consider adding case for outer cols in $left.
+[TryDecorrelateInnerJoin, Normalize, DetectCycle, HighPriority]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+ SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (InnerJoin | InnerJoinApply
+            $innerLeft:*
+            $innerRight:*
+            $innerOn:*
+        )
+    $on:*
+)
+=>
+((OpName)
+    $left
+    ((OpName $right)
+        $innerLeft
+        $innerRight
+        (True)
+    )
+    (ConcatFilters $on $innerOn)
+)
+
 # TryDecorrelateScalarGroupBy "pushes down" a Join into a GroupBy operator, in
 # an attempt to keep "digging" down to find and eliminate unnecessary
 # correlation. The eventual hope is to trigger the DecorrelateJoin rule to turn

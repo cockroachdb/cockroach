@@ -1,0 +1,214 @@
+exec-ddl
+create table Company (
+   id int8 not null,
+    location_id int8,
+    primary key (id)
+)
+----
+TABLE company
+ ├── id int not null
+ ├── location_id int
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+create table Company_Employee (
+   Company_id int8 not null,
+    employees_id int8 not null,
+    primary key (Company_id, employees_id)
+)
+----
+TABLE company_employee
+ ├── company_id int not null
+ ├── employees_id int not null
+ └── INDEX primary
+      ├── company_id int not null
+      └── employees_id int not null
+
+exec-ddl
+create table Manager (
+   id int8 not null,
+    primary key (id)
+)
+----
+TABLE manager
+ ├── id int not null
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+create table Location (
+   id int8 not null,
+    address varchar(255),
+    zip int4 not null,
+    primary key (id)
+)
+----
+TABLE location
+ ├── id int not null
+ ├── address string
+ ├── zip int not null
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+create table Employee (
+   id int8 not null,
+    email varchar(255),
+    currentProject_id int8,
+    primary key (id)
+)
+----
+TABLE employee
+ ├── id int not null
+ ├── email string
+ ├── currentproject_id int
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+create table Employee_phones (
+   Employee_id int8 not null,
+    phone_number varchar(255)
+)
+----
+TABLE employee_phones
+ ├── employee_id int not null
+ ├── phone_number string
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+opt
+select
+    componenti0_.id as id1_0_,
+    componenti0_.email as email2_0_,
+    componenti0_.currentProject_id as currentP3_0_
+from
+    EMPLOYEE componenti0_
+where
+    (
+        select
+            count(phones1_.Employee_id)
+        from
+            Employee_phones phones1_
+        where
+            componenti0_.id=phones1_.Employee_id
+    )=1
+----
+project
+ ├── columns: id1_0_:1(int!null) email2_0_:2(string) currentp3_0_:3(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── select
+      ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int) count:7(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(2,3)
+      ├── group-by
+      │    ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int) count:7(int)
+      │    ├── grouping columns: id:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3,7)
+      │    ├── left-join
+      │    │    ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int) employee_id:4(int)
+      │    │    ├── fd: (1)-->(2,3)
+      │    │    ├── scan employee
+      │    │    │    ├── columns: id:1(int!null) email:2(string) currentproject_id:3(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2,3)
+      │    │    ├── scan employee_phones
+      │    │    │    └── columns: employee_id:4(int!null)
+      │    │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │         └── employee.id = employee_phones.employee_id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    └── aggregations [outer=(2-4)]
+      │         ├── count [type=int, outer=(4)]
+      │         │    └── variable: employee_phones.employee_id [type=int, outer=(4)]
+      │         ├── any-not-null [type=string, outer=(2)]
+      │         │    └── variable: employee.email [type=string, outer=(2)]
+      │         └── any-not-null [type=int, outer=(3)]
+      │              └── variable: employee.currentproject_id [type=int, outer=(3)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+opt
+select
+    company0_.id as id1_0_0_,
+    location3_.id as id1_8_1_,
+    company0_.location_id as location2_0_0_,
+    location3_.address as address2_8_1_,
+    location3_.zip as zip3_8_1_
+from
+    Company company0_
+left outer join
+    Location location3_
+        on company0_.location_id=location3_.id
+where
+    not (exists (select
+        employee2_.id
+    from
+        Company_Employee employees1_,
+        ( select
+            id,
+            0 as clazz_
+        from
+            Employee
+        union
+        all select
+            id,
+            1 as clazz_
+        from
+            Manager ) employee2_
+    where
+        company0_.id=employees1_.Company_id
+        and employees1_.employees_id=employee2_.id))
+----
+left-join
+ ├── columns: id1_0_0_:1(int!null) id1_8_1_:3(int) location2_0_0_:2(int) address2_8_1_:4(string) zip3_8_1_:5(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4,5)
+ ├── anti-join
+ │    ├── columns: company.id:1(int!null) location_id:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan company
+ │    │    ├── columns: company.id:1(int!null) location_id:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── inner-join
+ │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null) id:14(int!null) clazz_:15(int!null)
+ │    │    ├── fd: (7)==(14), (14)==(7)
+ │    │    ├── union-all
+ │    │    │    ├── columns: id:14(int!null) clazz_:15(int!null)
+ │    │    │    ├── left columns: employee.id:8(int) clazz_:11(int)
+ │    │    │    ├── right columns: manager.id:12(int) clazz_:13(int)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: clazz_:11(int!null) employee.id:8(int!null)
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    ├── fd: ()-->(11)
+ │    │    │    │    ├── scan employee
+ │    │    │    │    │    ├── columns: employee.id:8(int!null)
+ │    │    │    │    │    └── key: (8)
+ │    │    │    │    └── projections [outer=(8)]
+ │    │    │    │         └── const: 0 [type=int]
+ │    │    │    └── project
+ │    │    │         ├── columns: clazz_:13(int!null) manager.id:12(int!null)
+ │    │    │         ├── key: (12)
+ │    │    │         ├── fd: ()-->(13)
+ │    │    │         ├── scan manager
+ │    │    │         │    ├── columns: manager.id:12(int!null)
+ │    │    │         │    └── key: (12)
+ │    │    │         └── projections [outer=(12)]
+ │    │    │              └── const: 1 [type=int]
+ │    │    ├── scan company_employee
+ │    │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null)
+ │    │    │    └── key: (6,7)
+ │    │    └── filters [type=bool, outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+ │    │         └── company_employee.employees_id = id [type=bool, outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ])]
+ │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── company.id = company_employee.company_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ ├── scan location
+ │    ├── columns: location.id:3(int!null) address:4(string) zip:5(int!null)
+ │    ├── key: (3)
+ │    └── fd: (3)-->(4,5)
+ └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      └── company.location_id = location.id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
