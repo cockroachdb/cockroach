@@ -160,6 +160,26 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
 
     const { stats, statement, app, distSQL, failed } = this.props.statement;
 
+    if (!stats) {
+      const sourceApp = this.props.params[appAttr];
+      const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
+
+      return (
+        <React.Fragment>
+          <section className="section">
+            <SqlBox value={ statement } />
+          </section>
+          <section className="section">
+            <h3>Unable to find statement</h3>
+            There are no execution statistics for this statement.{" "}
+            <Link className="back-link" to={ listUrl }>
+              Back to Statements
+            </Link>
+          </section>
+        </React.Fragment>
+      );
+    }
+
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
 

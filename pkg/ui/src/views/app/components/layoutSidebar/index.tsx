@@ -127,7 +127,7 @@ export default class Sidebar extends React.Component {
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
           <LoginIndicatorConnected />
-          <IconLink to="/" icon={cockroachIcon} className="cockroach" />
+          <IconLink to="/debug" icon={cockroachIcon} className="cockroach" />
         </ul>
       </nav>
     );
