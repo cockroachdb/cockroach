@@ -177,6 +177,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/benesch/cgosymbolizer"
+  packages = ["."]
+  revision = "70e1ee2b39d3b616a6ab9996820dde224c27f351"
+
+[[projects]]
+  branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
@@ -1298,6 +1304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "a718d1cdb47e3857a4335d58ac3041c233a4d1990f7619d61b2062d780623674"
+  inputs-digest = "1a7fcdf3667287db7a66b6c4d794a7b8a448833aad85225fed64fe92ceb8e59d"
   solver-name = "gps-cdcl"
   solver-version = 1

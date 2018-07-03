@@ -22,6 +22,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
