@@ -126,6 +126,10 @@ func (r *Replica) CheckConsistency(
 		// isn't duplicated except in rare leaseholder change scenarios (and concurrent invocation of
 		// RecomputeStats is allowed because these requests block on one another). Also, we're
 		// essentially paced by the consistency checker so we won't call this too often.
+		f := log.Infof
+		if !results[0].Response.Delta.ContainsEstimates {
+			f = log.Warningf
+		}
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		req := roachpb.RecomputeStatsRequest{
