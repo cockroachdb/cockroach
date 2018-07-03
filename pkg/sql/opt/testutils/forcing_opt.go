@@ -59,8 +59,11 @@ type forcingOptimizer struct {
 }
 
 // newForcingOptimizer creates a forcing optimizer that stops applying any rules
-// after <steps> rules are matched.
-func newForcingOptimizer(tester *OptTester, steps int) (*forcingOptimizer, error) {
+// after <steps> rules are matched. If ignoreNormRules is true, normalization
+// rules don't count against this limit.
+func newForcingOptimizer(
+	tester *OptTester, steps int, ignoreNormRules bool,
+) (*forcingOptimizer, error) {
 	fo := &forcingOptimizer{
 		o:           xform.NewOptimizer(&tester.evalCtx),
 		remaining:   steps,
@@ -68,6 +71,9 @@ func newForcingOptimizer(tester *OptTester, steps int) (*forcingOptimizer, error
 	}
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if ignoreNormRules && ruleName.IsNormalize() {
+			return true
+		}
 		if fo.remaining == 0 {
 			return false
 		}
@@ -80,6 +86,9 @@ func newForcingOptimizer(tester *OptTester, steps int) (*forcingOptimizer, error
 	// expression tree affected by each transformation rule.
 	fo.o.NotifyOnAppliedRule(
 		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
+			if ignoreNormRules && ruleName.IsNormalize() {
+				return
+			}
 			fo.lastApplied = ruleName
 			fo.lastAppliedGroup = group
 
