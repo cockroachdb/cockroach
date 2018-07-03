@@ -36,7 +36,7 @@ func TestVersionUpgrade(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	cfg := readConfigFromFlags()
+	cfg := ReadConfigFromFlags()
 	RunLocal(t, func(t *testing.T) {
 		testVersionUpgrade(ctx, t, cfg)
 	})

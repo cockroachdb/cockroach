@@ -61,7 +61,7 @@ func runTestWithCluster(
 	testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
 	options ...func(*cluster.TestConfig),
 ) {
-	cfg := readConfigFromFlags()
+	cfg := ReadConfigFromFlags()
 	ctx := context.Background()
 
 	for _, opt := range options {
