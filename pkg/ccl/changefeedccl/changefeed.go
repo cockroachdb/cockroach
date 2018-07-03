@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -104,23 +104,23 @@ func runChangefeedFlow(
 	// easy to later make it into a DistSQL processor.
 	//
 	// TODO(dan): Make this into a DistSQL flow.
-	changedKVsFn := exportRequestPoll(execCfg, details, progress)
-	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
-	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
+	eventCh := make(chan *roachpb.RangeFeedEvent)
+	g := ctxgroup.WithContext(ctx)
+	for _, tableDesc := range details.TableDescs {
+		g.GoCtx(func(ctx context.Context) error {
+			args := roachpb.RangeFeedRequest{
+				Span: tableDesc.PrimaryIndexSpan(),
+			}
+			return execCfg.DistSender.RangeFeed(ctx, &args, eventCh).GoError()
+		})
+	}
+
+	rowCh := kvsToRows(&g, execCfg, details, eventCh)
+	err = emitRows(&g, details, jobProgressedFn, rowCh, resultsCh)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := closeFn(); err != nil {
-			log.Warningf(ctx, "failed to close changefeed sink: %+v", err)
-		}
-	}()
-
-	for {
-		if err := emitRowsFn(ctx); err != nil {
-			return err
-		}
-	}
+	return g.Wait()
 }
 
 // exportRequestPoll uses ExportRequest with the `ReturnSST` to fetch every kvs
@@ -201,64 +201,44 @@ func exportRequestPoll(
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
+	g *ctxgroup.Group,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	inputFn func(context.Context) (changedKVs, error),
-) func(context.Context) ([]emitRow, error) {
+	eventCh <-chan *roachpb.RangeFeedEvent,
+) <-chan emitRow {
 	rfCache := newRowFetcherCache(execCfg.LeaseManager)
 
-	var output []emitRow
-	var kvs sqlbase.SpanKVFetcher
-	var scratch bufalloc.ByteAllocator
-	return func(ctx context.Context) ([]emitRow, error) {
-		// Reuse output, kvs, scratch to save allocations.
-		output, kvs.KVs, scratch = output[:0], kvs.KVs[:0], scratch[:0]
-
-		input, err := inputFn(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if input.sst != nil {
-			it, err := engineccl.NewMemSSTIterator(input.sst, false /* verify */)
-			if err != nil {
-				return nil, err
-			}
-			defer it.Close()
-			for it.Seek(engine.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return nil, err
-				} else if !ok {
-					break
+	rowCh := make(chan emitRow)
+	g.GoCtx(func(ctx context.Context) error {
+		for event := range eventCh {
+			switch v := event.GetValue().(type) {
+			case *roachpb.RangeFeedValue:
+				mvccKey := engine.MVCCKey{
+					Key:       v.Key,
+					Timestamp: v.Value.Timestamp,
 				}
-
-				unsafeKey := it.UnsafeKey()
-				rf, err := rfCache.RowFetcherForKey(ctx, unsafeKey)
+				rf, err := rfCache.RowFetcherForKey(ctx, mvccKey)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				if log.V(3) {
-					log.Infof(ctx, "changed key %s", unsafeKey)
+					log.Infof(ctx, "changed key %s", v.Key)
 				}
-				var key, value []byte
-				scratch, key = scratch.Copy(unsafeKey.Key, 0 /* extraCap */)
-				scratch, value = scratch.Copy(it.UnsafeValue(), 0 /* extraCap */)
-				// TODO(dan): Handle tables with multiple column families.
+
+				var kvs sqlbase.SpanKVFetcher
 				kvs.KVs = append(kvs.KVs, roachpb.KeyValue{
-					Key: key,
-					Value: roachpb.Value{
-						Timestamp: unsafeKey.Timestamp,
-						RawBytes:  value,
-					},
+					Key:   v.Key,
+					Value: v.Value,
 				})
 				if err := rf.StartScanFrom(ctx, &kvs); err != nil {
-					return nil, err
+					return err
 				}
 
 				for {
 					var r emitRow
 					r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
 					if err != nil {
-						return nil, err
+						return err
 					}
 					if r.row == nil {
 						break
@@ -266,16 +246,18 @@ func kvsToRows(
 					r.row = append(tree.Datums(nil), r.row...)
 
 					r.deleted = rf.RowIsDeleted()
-					r.rowTimestamp = unsafeKey.Timestamp
-					output = append(output, r)
+					r.rowTimestamp = v.Value.Timestamp
+					rowCh <- r
 				}
+			case *roachpb.RangeFeedCheckpoint:
+				rowCh <- emitRow{resolved: v.ResolvedTS}
+			default:
+				panic("unreachable")
 			}
 		}
-		if input.resolved != (hlc.Timestamp{}) {
-			output = append(output, emitRow{resolved: input.resolved})
-		}
-		return output, nil
-	}
+		return nil
+	})
+	return rowCh
 }
 
 // emitRows connects to a sink, receives rows from a closure, and repeatedly
@@ -283,16 +265,18 @@ func kvsToRows(
 // be repeatedly called to advance the changefeed. The returned closure is not
 // threadsafe.
 func emitRows(
+	g *ctxgroup.Group,
 	details jobspb.ChangefeedDetails,
 	jobProgressedFn func(context.Context, hlc.Timestamp) error,
-	inputFn func(context.Context) ([]emitRow, error),
+	inputCh <-chan emitRow,
 	resultsCh chan<- tree.Datums,
-) (emitFn func(context.Context) error, closeFn func() error, err error) {
+) error {
 	var sink Sink
+	var closeFn func() error
 
 	sinkURI, err := url.Parse(details.SinkURI)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	switch sinkURI.Scheme {
 	case sinkSchemeChannel:
@@ -302,7 +286,7 @@ func emitRows(
 		kafkaTopicPrefix := sinkURI.Query().Get(sinkParamTopicPrefix)
 		sink, err = getKafkaSink(kafkaTopicPrefix, sinkURI.Host)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 		closeFn = sink.Close
 
@@ -314,31 +298,30 @@ func emitRows(
 		// jobs, then it breaks instead of returning nonsense.
 		resultsCh <- tree.Datums(nil)
 	default:
-		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
+		return errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
 
-	var rows []SinkRow
-	var scratch bufalloc.ByteAllocator
-	emitRows := func(ctx context.Context) error {
-		if len(rows) == 0 {
-			return nil
-		}
-		err := sink.EmitRows(ctx, rows)
-		rows = rows[:0]
-		scratch = scratch[:0]
-		return err
-	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer func() {
+			if err := closeFn(); err != nil {
+				log.Warningf(ctx, "failed to close changefeed sink: %+v", err)
+			}
+		}()
 
-	var key, value bytes.Buffer
-	return func(ctx context.Context) error {
-		rows = rows[:0]
-		scratch = scratch[:0]
-
-		inputs, err := inputFn(ctx)
-		if err != nil {
+		var rows []SinkRow
+		var scratch bufalloc.ByteAllocator
+		emitRows := func(ctx context.Context) error {
+			if len(rows) == 0 {
+				return nil
+			}
+			err := sink.EmitRows(ctx, rows)
+			rows = rows[:0]
+			scratch = scratch[:0]
 			return err
 		}
-		for _, input := range inputs {
+
+		var key, value bytes.Buffer
+		for input := range inputCh {
 			if input.row != nil {
 				key.Reset()
 				value.Reset()
@@ -383,7 +366,8 @@ func emitRows(
 				}
 
 				// TODO(dan): Tune this and make it based on bytes.
-				const kafkaBatchSize = 1000
+				const kafkaBatchSize = 1
+				// const kafkaBatchSize = 1000
 				if len(rows) >= kafkaBatchSize {
 					if err := emitRows(ctx); err != nil {
 						return err
@@ -424,7 +408,7 @@ func emitRows(
 				}
 			}
 		}
-
-		return emitRows(ctx)
-	}, closeFn, nil
+		return nil
+	})
+	return nil
 }

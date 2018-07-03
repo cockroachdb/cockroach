@@ -1452,7 +1452,36 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
+message RangeFeedRequest {
+  Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span   span   = 2 [(gogoproto.nullable) = false];
+}
+
+message RangeFeedValue {
+  bytes key   = 1 [(gogoproto.casttype) = "Key"];
+  Value value = 2 [(gogoproto.nullable) = false];
+}
+
+message RangeFeedCheckpoint {
+  Span               span        = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp resolved_ts = 2 [
+    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+}
+
+message RangeFeedError {
+  Error error = 1 [(gogoproto.nullable) = false];
+}
+
+message RangeFeedEvent {
+  option (gogoproto.onlyone) = true;
+
+  RangeFeedValue      val        = 1;
+  RangeFeedCheckpoint checkpoint = 2;
+  RangeFeedError      error      = 3;
+}
+
 // Batch service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch (BatchRequest) returns (BatchResponse) {}
+  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
+  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
 }

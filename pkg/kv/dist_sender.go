@@ -17,6 +17,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync/atomic"
 	"unsafe"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1346,4 +1348,93 @@ func (ds *DistSender) sendToReplicas(
 		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, transport.NextReplica())
 		br, err = transport.SendNext(ctx)
 	}
+}
+
+// RangeFeed implements the TODO interface.
+func (ds *DistSender) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, eventCh chan<- *roachpb.RangeFeedEvent,
+) *roachpb.Error {
+	ctx = ds.AnnotateCtx(ctx)
+	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
+	defer cleanup()
+
+	startRKey, err := keys.Addr(args.Span.Key)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	endRKey, err := keys.Addr(args.Span.EndKey)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	rs := roachpb.RSpan{Key: startRKey, EndKey: endRKey}
+
+	g := ctxgroup.WithContext(ctx)
+	ri := NewRangeIterator(ds)
+	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
+		desc := ri.Desc()
+		argsCopy := *args
+		argsCopy.RangeID = desc.RangeID
+		argsCopy.Span = desc.RSpan().AsRawSpanWithNoLocals()
+		ds.partialRangeFeed(&g, argsCopy, eventCh, desc)
+
+		if !ri.NeedAnother(rs) {
+			break
+		}
+	}
+	g.Go(func() error {
+		return ri.Error().GoError()
+	})
+	return roachpb.NewError(g.Wait())
+}
+
+func (ds *DistSender) partialRangeFeed(
+	g *ctxgroup.Group,
+	args roachpb.RangeFeedRequest,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+	desc *roachpb.RangeDescriptor,
+) {
+	g.GoCtx(func(ctx context.Context) error {
+		replicas := NewReplicaSlice(ds.gossip, desc)
+
+		var latencyFn LatencyFunc
+		if ds.rpcContext != nil {
+			latencyFn = ds.rpcContext.RemoteClocks.Latency
+		}
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
+
+		transport, err := ds.transportFactory(SendOptions{}, ds.rpcContext, replicas, roachpb.BatchRequest{})
+		if err != nil {
+			return err
+		}
+		defer transport.Close()
+		for {
+			if transport.IsExhausted() {
+				return roachpb.NewSendError(fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
+			}
+
+			args.Replica = transport.NextReplica()
+			client, err := transport.NextInternalClient(ctx)
+			if err != nil {
+				log.VErrEventf(ctx, 2, "RPC error: %s", err)
+				continue
+			}
+
+			stream, err := client.RangeFeed(ctx, &args)
+			if err != nil {
+				log.VErrEventf(ctx, 2, "RPC error: %s", err)
+				continue
+			}
+			for {
+				event, err := stream.Recv()
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					log.VErrEventf(ctx, 2, "RPC error: %s", err)
+					continue
+				}
+				eventCh <- event
+			}
+		}
+	})
 }

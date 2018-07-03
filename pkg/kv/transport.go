@@ -82,6 +82,9 @@ type Transport interface {
 	// any) into the local trace.
 	SendNext(context.Context) (*roachpb.BatchResponse, error)
 
+	// NextInternalClient ...
+	NextInternalClient(context.Context) (roachpb.InternalClient, error)
+
 	// NextReplica returns the replica descriptor of the replica to be tried in
 	// the next call to SendNext. MoveToFront will cause the return value to
 	// change. Returns a zero value if the transport is exhausted.
@@ -180,6 +183,23 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 		gt.moveToFrontLocked(c.args.Replica)
 	}
 	return len(resurrect) > 0
+}
+
+func (gt *grpcTransport) NextInternalClient(ctx context.Context) (roachpb.InternalClient, error) {
+	client := gt.orderedClients[gt.clientIndex]
+	gt.clientIndex++
+
+	// if localServer := gt.rpcContext.GetLocalInternalClientForAddr(client.remoteAddr); localServer != nil {
+	// 	return localServer, nil
+	// }
+	conn, err := gt.rpcContext.GRPCDial(client.remoteAddr).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := grpcutil.ConnectionReady(conn); err != nil {
+		return nil, err
+	}
+	return roachpb.NewInternalClient(conn), nil
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -421,6 +441,10 @@ func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
 		return roachpb.ReplicaDescriptor{}
 	}
 	return s.args.Replica
+}
+
+func (s *senderTransport) NextInternalClient(ctx context.Context) (roachpb.InternalClient, error) {
+	panic("unimplemented")
 }
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {

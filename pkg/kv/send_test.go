@@ -46,6 +46,10 @@ func (n Node) Batch(
 	return &roachpb.BatchResponse{}, nil
 }
 
+func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer) error {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
@@ -105,6 +109,12 @@ func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchRespon
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{}
+}
+
+func (f *firstNErrorTransport) NextInternalClient(
+	ctx context.Context,
+) (roachpb.InternalClient, error) {
+	panic("unimplemented")
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {

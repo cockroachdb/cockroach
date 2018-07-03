@@ -160,6 +160,12 @@ func (l *legacyTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchRe
 	return l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
 }
 
+func (l *legacyTransportAdapter) NextInternalClient(
+	ctx context.Context,
+) (roachpb.InternalClient, error) {
+	panic("unimplemented")
+}
+
 func (l *legacyTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{}
 }

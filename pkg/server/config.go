@@ -76,7 +76,8 @@ const (
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
-	defaultConnResultsBufferBytes = 16 << 10 // 16 KiB
+	// defaultConnResultsBufferBytes = 16 << 10 // 16 KiB
+	defaultConnResultsBufferBytes = 1 // 16 KiB
 
 	defaultSQLTableStatCacheSize = 256
 )
