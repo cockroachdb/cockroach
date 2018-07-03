@@ -15,6 +15,73 @@ TABLE abc
       └── a string not null
 
 opt
+select max(a) FROM abc
+----
+group-by
+ ├── columns: max:5(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc,rev
+ │    ├── columns: a:1(string!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=string, outer=(1)]
+           └── variable: abc.a [type=string, outer=(1)]
+
+opt
+select max(b) FROM abc
+----
+group-by
+ ├── columns: max:5(float)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc
+ │    └── columns: b:2(float)
+ └── aggregations [outer=(2)]
+      └── max [type=float, outer=(2)]
+           └── variable: abc.b [type=float, outer=(2)]
+
+memo
+select max(b) from abc
+----
+memo (optimized)
+ ├── G1: (group-by G9 G2 cols=()) (group-by G3 G4 cols=())
+ │    └── "[presentation: max:5]"
+ │         ├── best: (group-by G9 G2 cols=())
+ │         └── cost: 1050.00
+ ├── G2: (aggregations G5)
+ ├── G3: (limit G6 G7 ordering=-2)
+ │    └── ""
+ │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
+ │         └── cost: 1087.94
+ ├── G4: (aggregations G8)
+ ├── G5: (max G12)
+ ├── G6: (select G9 G10)
+ │    ├── ""
+ │    │    ├── best: (select G9 G10)
+ │    │    └── cost: 1060.00
+ │    └── "[ordering: -2]"
+ │         ├── best: (sort G6)
+ │         └── cost: 1087.94
+ ├── G7: (const 1)
+ ├── G8: (any-not-null G12)
+ ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
+ │    ├── ""
+ │    │    ├── best: (scan abc,cols=(2))
+ │    │    └── cost: 1050.00
+ │    └── "[ordering: -2]"
+ │         ├── best: (sort G9)
+ │         └── cost: 1149.66
+ ├── G10: (filters G11)
+ ├── G11: (is-not G12 G13)
+ ├── G12: (variable abc.b)
+ └── G13: (null anyelement)
+
+opt
 SELECT min(a) FROM abc
 ----
 group-by
@@ -98,6 +165,88 @@ group-by
       └── any-not-null [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
+# ReplaceMaxWithLimit has the same behavior with max() as
+# the previous min() query because x is a unique key
+opt
+SELECT max(y) FROM xyz where x=7
+----
+group-by
+ ├── columns: max:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── limit
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── scan xyz@xy
+ │    │    ├── columns: x:1(int!null) y:2(int!null)
+ │    │    ├── constraint: /1/2: (/7/NULL - /7]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1,2)
+ │    └── const: 1 [type=int]
+ └── aggregations [outer=(2)]
+      └── any-not-null [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
+
+# We expect ReplaceMinWithLimit not to be preferred here.
+# This is because we know nothing about the ordering of y
+# on the index xy after a scan on xy with x>7.
+opt
+SELECT min(y) FROM xyz WHERE x>7
+----
+group-by
+ ├── columns: min:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1/2: [/8 - ]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(2)]
+      └── min [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
+
+# We expect ReplaceMaxWithLimit not to be preferred here.
+# This is because we know nothing about the ordering of y
+# on the index xy after a scan on xy with x>7
+opt
+SELECT max(y) FROM xyz WHERE x>7
+----
+group-by
+ ├── columns: max:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1/2: [/8 - ]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(2)]
+      └── max [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
+
+opt
+SELECT max(x) FROM xyz
+----
+group-by
+ ├── columns: max:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy,rev
+ │    ├── columns: x:1(int!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=int, outer=(1)]
+           └── variable: xyz.x [type=int, outer=(1)]
+
 opt
 SELECT min(x) FROM xyz
 ----
@@ -124,6 +273,24 @@ group-by
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy
+ │    ├── columns: x:1(int!null)
+ │    ├── constraint: /1/2: [/0 - /0] [/4 - /4] [/7 - /7]
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── any-not-null [type=int, outer=(1)]
+           └── variable: xyz.x [type=int, outer=(1)]
+
+opt
+SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
+----
+group-by
+ ├── columns: max:4(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xyz@xy,rev
  │    ├── columns: x:1(int!null)
  │    ├── constraint: /1/2: [/0 - /0] [/4 - /4] [/7 - /7]
  │    ├── limit: 1
@@ -187,6 +354,24 @@ project
            └── min [type=int, outer=(2)]
                 └── variable: xyz.y [type=int, outer=(2)]
 
+# ReplaceMaxWithLimit does not apply when there is
+# a grouping column
+opt
+SELECT max(y) FROM xyz GROUP BY y
+----
+project
+ ├── columns: max:4(int)
+ └── group-by
+      ├── columns: y:2(int) max:4(int)
+      ├── grouping columns: y:2(int)
+      ├── key: (2)
+      ├── fd: (2)-->(4)
+      ├── scan xyz@xy
+      │    └── columns: y:2(int)
+      └── aggregations [outer=(2)]
+           └── max [type=int, outer=(2)]
+                └── variable: xyz.y [type=int, outer=(2)]
+
 # ReplaceMinWithLimit does not apply when there is
 # a grouping column
 opt
@@ -227,6 +412,27 @@ group-by
       └── min [type=int, outer=(1)]
            └── variable: xyz.x [type=int, outer=(1)]
 
+
+# ReplaceMaxWithLimit does not apply on multiple aggregations
+# on different columns
+opt
+SELECT max(y), max(x) FROM xyz
+----
+group-by
+ ├── columns: max:4(int) max:5(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4,5)
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(1,2)]
+      ├── max [type=int, outer=(2)]
+      │    └── variable: xyz.y [type=int, outer=(2)]
+      └── max [type=int, outer=(1)]
+           └── variable: xyz.x [type=int, outer=(1)]
+
 # ReplaceMinWithLimit does not apply with
 # multiple grouping columns
 opt
@@ -249,6 +455,28 @@ project
            └── min [type=int, outer=(2)]
                 └── variable: xyz.y [type=int, outer=(2)]
 
+# ReplaceMaxWithLimit does not apply with
+# multiple grouping columns
+opt
+SELECT x,max(y) FROM xyz GROUP BY x,y
+----
+project
+ ├── columns: x:1(int!null) max:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ └── group-by
+      ├── columns: x:1(int!null) y:2(int) max:4(int)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── scan xyz@xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── aggregations [outer=(2)]
+           └── max [type=int, outer=(2)]
+                └── variable: xyz.y [type=int, outer=(2)]
+
 # ReplaceMinWithLimit does not apply to non-scalar
 # aggregates
 opt
@@ -267,6 +495,28 @@ project
       │    └── fd: (1)-->(2)
       └── aggregations [outer=(1,2)]
            ├── min [type=int, outer=(1)]
+           │    └── variable: xyz.x [type=int, outer=(1)]
+           └── count [type=int, outer=(2)]
+                └── variable: xyz.y [type=int, outer=(2)]
+
+# ReplaceMaxWithLimit does not apply to non-scalar
+# aggregates
+opt
+SELECT max(x), count(y) FROM xyz GROUP BY x,y
+----
+project
+ ├── columns: max:4(int) count:5(int)
+ └── group-by
+      ├── columns: x:1(int!null) y:2(int) max:4(int) count:5(int)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4,5)
+      ├── scan xyz@xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── aggregations [outer=(1,2)]
+           ├── max [type=int, outer=(1)]
            │    └── variable: xyz.x [type=int, outer=(1)]
            └── count [type=int, outer=(2)]
                 └── variable: xyz.y [type=int, outer=(2)]
@@ -326,6 +576,68 @@ memo (optimized)
  │    │    ├── best: (scan abc,cols=(2))
  │    │    └── cost: 1050.00
  │    └── "[ordering: +2]"
+ │         ├── best: (sort G9)
+ │         └── cost: 1149.66
+ ├── G10: (filters G11)
+ ├── G11: (is-not G12 G13)
+ ├── G12: (variable abc.b)
+ └── G13: (null anyelement)
+
+memo
+SELECT max(a) FROM abc
+----
+memo (optimized)
+ ├── G1: (group-by G6 G2 cols=()) (group-by G3 G4 cols=())
+ │    └── "[presentation: max:5]"
+ │         ├── best: (group-by G3 G4 cols=())
+ │         └── cost: 1.10
+ ├── G2: (aggregations G5)
+ ├── G3: (limit G6 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1)
+ │    └── ""
+ │         ├── best: (scan abc,rev,cols=(1),lim=1)
+ │         └── cost: 1.10
+ ├── G4: (aggregations G8)
+ ├── G5: (max G9)
+ ├── G6: (scan abc,cols=(1)) (scan abc,rev,cols=(1))
+ │    ├── ""
+ │    │    ├── best: (scan abc,cols=(1))
+ │    │    └── cost: 1050.00
+ │    └── "[ordering: -1]"
+ │         ├── best: (scan abc,rev,cols=(1))
+ │         └── cost: 1100.00
+ ├── G7: (const 1)
+ ├── G8: (any-not-null G9)
+ └── G9: (variable abc.a)
+
+memo
+SELECT max(b) FROM abc
+----
+memo (optimized)
+ ├── G1: (group-by G9 G2 cols=()) (group-by G3 G4 cols=())
+ │    └── "[presentation: max:5]"
+ │         ├── best: (group-by G9 G2 cols=())
+ │         └── cost: 1050.00
+ ├── G2: (aggregations G5)
+ ├── G3: (limit G6 G7 ordering=-2)
+ │    └── ""
+ │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
+ │         └── cost: 1087.94
+ ├── G4: (aggregations G8)
+ ├── G5: (max G12)
+ ├── G6: (select G9 G10)
+ │    ├── ""
+ │    │    ├── best: (select G9 G10)
+ │    │    └── cost: 1060.00
+ │    └── "[ordering: -2]"
+ │         ├── best: (sort G6)
+ │         └── cost: 1087.94
+ ├── G7: (const 1)
+ ├── G8: (any-not-null G12)
+ ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
+ │    ├── ""
+ │    │    ├── best: (scan abc,cols=(2))
+ │    │    └── cost: 1050.00
+ │    └── "[ordering: -2]"
  │         ├── best: (sort G9)
  │         └── cost: 1149.66
  ├── G10: (filters G11)
