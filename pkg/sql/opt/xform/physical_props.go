@@ -228,7 +228,7 @@ func (o *Optimizer) optimizeProjectOrdering(project *memo.ProjectExpr, physical 
 			physical.Ordering.Simplify(&relational.FuncDeps)
 
 			if o.appliedRule != nil {
-				o.appliedRule(opt.SimplifyProjectOrdering, project.Input(), 0)
+				o.appliedRule(opt.SimplifyProjectOrdering, project.Input(), 0, 0)
 			}
 		}
 	}

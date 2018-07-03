@@ -17,7 +17,6 @@ package testutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // optSteps implements the stepping algorithm used by the OptTester's OptSteps
@@ -136,9 +135,17 @@ func (os *optSteps) next() error {
 			return err
 		}
 
-		var exprs util.FastIntSet
-		exprs.AddRange(int(fo.lastApplied.Expr), fo.o.Memo().ExprCount(fo.lastApplied.Group)-1)
-		fo2.restrictToExprs(fo.o.Memo(), fo.lastApplied.Group, exprs)
+		if fo.lastApplied.IsNormalize() || fo.lastExploreNewExprs.Empty() {
+			// This was a normalization that created a new memo group, or it was
+			// an exploration rule that didn't add any expressions to the group.
+			// Either way, none of the expressions in the group need to be
+			// suppressed.
+			fo2.restrictToGroup(fo.o.Memo(), fo.lastAppliedGroup)
+		} else {
+			// This was an exploration rule that added one or more expressions to
+			// an existing group. Suppress all other expressions in the group.
+			fo2.restrictToExprs(fo.o.Memo(), fo.lastAppliedGroup, fo.lastExploreNewExprs)
+		}
 		os.ev = fo2.optimize()
 	}
 
