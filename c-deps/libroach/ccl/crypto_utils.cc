@@ -28,6 +28,10 @@ std::string RandomBytes(size_t length) {
   return std::string(reinterpret_cast<const char*>(data.data()), data.size());
 }
 
+void FillRandomBytes(unsigned char* address, size_t size) {
+  CryptoPP::OS_GenerateRandomBlock(false /* blocking */, address, size);
+}
+
 class AESEncryptCipher : public rocksdb_utils::BlockCipher {
  public:
   // The key must have a valid length (16/24/32 bytes) or CryptoPP will fail.

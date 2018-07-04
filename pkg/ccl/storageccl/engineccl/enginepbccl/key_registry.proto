@@ -10,6 +10,11 @@ syntax = "proto3";
 package cockroach.ccl.storageccl.engineccl.enginepbccl;
 option go_package = "enginepbccl";
 
+// Enable arena allocation for messages in this proto.
+// We use it to mlock and madvise memory for secret keys.
+// WARNING: DO NOT DISABLE.
+option cc_enable_arenas = true;
+
 import "gogoproto/gogo.proto";
 
 enum EncryptionType {

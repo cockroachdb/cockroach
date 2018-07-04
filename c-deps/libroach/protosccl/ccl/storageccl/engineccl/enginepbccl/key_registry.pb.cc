@@ -212,6 +212,16 @@ DataKeysRegistry::DataKeysRegistry()
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry)
 }
+DataKeysRegistry::DataKeysRegistry(::google::protobuf::Arena* arena)
+  : ::google::protobuf::MessageLite(),
+  _internal_metadata_(arena),
+  store_keys_(arena),
+  data_keys_(arena) {
+  ::google::protobuf::internal::InitSCC(&protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::scc_info_DataKeysRegistry.base);
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry)
+}
 DataKeysRegistry::DataKeysRegistry(const DataKeysRegistry& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
@@ -220,11 +230,13 @@ DataKeysRegistry::DataKeysRegistry(const DataKeysRegistry& from)
   data_keys_.MergeFrom(from.data_keys_);
   active_store_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.active_store_key().size() > 0) {
-    active_store_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_);
+    active_store_key_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key(),
+      GetArenaNoVirtual());
   }
   active_data_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.active_data_key().size() > 0) {
-    active_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_);
+    active_data_key_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key(),
+      GetArenaNoVirtual());
   }
   // @@protoc_insertion_point(copy_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry)
 }
@@ -240,10 +252,17 @@ DataKeysRegistry::~DataKeysRegistry() {
 }
 
 void DataKeysRegistry::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaNoVirtual() == NULL);
   active_store_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   active_data_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
+void DataKeysRegistry::ArenaDtor(void* object) {
+  DataKeysRegistry* _this = reinterpret_cast< DataKeysRegistry* >(object);
+  (void)_this;
+}
+void DataKeysRegistry::RegisterArenaDtor(::google::protobuf::Arena* arena) {
+}
 void DataKeysRegistry::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
@@ -261,8 +280,8 @@ void DataKeysRegistry::Clear() {
 
   store_keys_.Clear();
   data_keys_.Clear();
-  active_store_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  active_data_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_store_key_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
+  active_data_key_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
   _internal_metadata_.Clear();
 }
 
@@ -419,6 +438,9 @@ void DataKeysRegistry::SerializeWithCachedSizes(
             items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
         ::google::protobuf::internal::WireFormatLite::WriteMessage(
             1, *entry, output);
+        if (entry->GetArena() != NULL) {
+          entry.release();
+        }
         Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
       }
     } else {
@@ -430,6 +452,9 @@ void DataKeysRegistry::SerializeWithCachedSizes(
             it->first, it->second));
         ::google::protobuf::internal::WireFormatLite::WriteMessage(
             1, *entry, output);
+        if (entry->GetArena() != NULL) {
+          entry.release();
+        }
         Utf8Check::Check(&*it);
       }
     }
@@ -468,6 +493,9 @@ void DataKeysRegistry::SerializeWithCachedSizes(
             items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
         ::google::protobuf::internal::WireFormatLite::WriteMessage(
             2, *entry, output);
+        if (entry->GetArena() != NULL) {
+          entry.release();
+        }
         Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
       }
     } else {
@@ -479,6 +507,9 @@ void DataKeysRegistry::SerializeWithCachedSizes(
             it->first, it->second));
         ::google::protobuf::internal::WireFormatLite::WriteMessage(
             2, *entry, output);
+        if (entry->GetArena() != NULL) {
+          entry.release();
+        }
         Utf8Check::Check(&*it);
       }
     }
@@ -523,9 +554,15 @@ size_t DataKeysRegistry::ByteSizeLong() const {
     for (::google::protobuf::Map< ::std::string, ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo >::const_iterator
         it = this->store_keys().begin();
         it != this->store_keys().end(); ++it) {
+      if (entry.get() != NULL && entry->GetArena() != NULL) {
+        entry.release();
+      }
       entry.reset(store_keys_.NewEntryWrapper(it->first, it->second));
       total_size += ::google::protobuf::internal::WireFormatLite::
           MessageSizeNoVirtual(*entry);
+    }
+    if (entry.get() != NULL && entry->GetArena() != NULL) {
+      entry.release();
     }
   }
 
@@ -537,9 +574,15 @@ size_t DataKeysRegistry::ByteSizeLong() const {
     for (::google::protobuf::Map< ::std::string, ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey >::const_iterator
         it = this->data_keys().begin();
         it != this->data_keys().end(); ++it) {
+      if (entry.get() != NULL && entry->GetArena() != NULL) {
+        entry.release();
+      }
       entry.reset(data_keys_.NewEntryWrapper(it->first, it->second));
       total_size += ::google::protobuf::internal::WireFormatLite::
           MessageSizeNoVirtual(*entry);
+    }
+    if (entry.get() != NULL && entry->GetArena() != NULL) {
+      entry.release();
     }
   }
 
@@ -577,12 +620,10 @@ void DataKeysRegistry::MergeFrom(const DataKeysRegistry& from) {
   store_keys_.MergeFrom(from.store_keys_);
   data_keys_.MergeFrom(from.data_keys_);
   if (from.active_store_key().size() > 0) {
-
-    active_store_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_);
+    set_active_store_key(from.active_store_key());
   }
   if (from.active_data_key().size() > 0) {
-
-    active_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_);
+    set_active_data_key(from.active_data_key());
   }
 }
 
@@ -599,6 +640,21 @@ bool DataKeysRegistry::IsInitialized() const {
 
 void DataKeysRegistry::Swap(DataKeysRegistry* other) {
   if (other == this) return;
+  if (GetArenaNoVirtual() == other->GetArenaNoVirtual()) {
+    InternalSwap(other);
+  } else {
+    DataKeysRegistry* temp = New(GetArenaNoVirtual());
+    temp->MergeFrom(*other);
+    other->CopyFrom(*this);
+    InternalSwap(temp);
+    if (GetArenaNoVirtual() == NULL) {
+      delete temp;
+    }
+  }
+}
+void DataKeysRegistry::UnsafeArenaSwap(DataKeysRegistry* other) {
+  if (other == this) return;
+  GOOGLE_DCHECK(GetArenaNoVirtual() == other->GetArenaNoVirtual());
   InternalSwap(other);
 }
 void DataKeysRegistry::InternalSwap(DataKeysRegistry* other) {
@@ -637,21 +693,32 @@ KeyInfo::KeyInfo()
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo)
 }
+KeyInfo::KeyInfo(::google::protobuf::Arena* arena)
+  : ::google::protobuf::MessageLite(),
+  _internal_metadata_(arena) {
+  ::google::protobuf::internal::InitSCC(&protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::scc_info_KeyInfo.base);
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo)
+}
 KeyInfo::KeyInfo(const KeyInfo& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.key_id().size() > 0) {
-    key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id_);
+    key_id_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id(),
+      GetArenaNoVirtual());
   }
   source_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.source().size() > 0) {
-    source_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.source_);
+    source_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.source(),
+      GetArenaNoVirtual());
   }
   parent_key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.parent_key_id().size() > 0) {
-    parent_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.parent_key_id_);
+    parent_key_id_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.parent_key_id(),
+      GetArenaNoVirtual());
   }
   ::memcpy(&creation_time_, &from.creation_time_,
     static_cast<size_t>(reinterpret_cast<char*>(&was_exposed_) -
@@ -674,11 +741,18 @@ KeyInfo::~KeyInfo() {
 }
 
 void KeyInfo::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaNoVirtual() == NULL);
   key_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   source_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   parent_key_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
+void KeyInfo::ArenaDtor(void* object) {
+  KeyInfo* _this = reinterpret_cast< KeyInfo* >(object);
+  (void)_this;
+}
+void KeyInfo::RegisterArenaDtor(::google::protobuf::Arena* arena) {
+}
 void KeyInfo::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
@@ -694,9 +768,9 @@ void KeyInfo::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  source_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  parent_key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  key_id_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
+  source_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
+  parent_key_id_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
   ::memset(&creation_time_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&was_exposed_) -
       reinterpret_cast<char*>(&creation_time_)) + sizeof(was_exposed_));
@@ -950,16 +1024,13 @@ void KeyInfo::MergeFrom(const KeyInfo& from) {
   (void) cached_has_bits;
 
   if (from.key_id().size() > 0) {
-
-    key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id_);
+    set_key_id(from.key_id());
   }
   if (from.source().size() > 0) {
-
-    source_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.source_);
+    set_source(from.source());
   }
   if (from.parent_key_id().size() > 0) {
-
-    parent_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.parent_key_id_);
+    set_parent_key_id(from.parent_key_id());
   }
   if (from.creation_time() != 0) {
     set_creation_time(from.creation_time());
@@ -985,6 +1056,21 @@ bool KeyInfo::IsInitialized() const {
 
 void KeyInfo::Swap(KeyInfo* other) {
   if (other == this) return;
+  if (GetArenaNoVirtual() == other->GetArenaNoVirtual()) {
+    InternalSwap(other);
+  } else {
+    KeyInfo* temp = New(GetArenaNoVirtual());
+    temp->MergeFrom(*other);
+    other->CopyFrom(*this);
+    InternalSwap(temp);
+    if (GetArenaNoVirtual() == NULL) {
+      delete temp;
+    }
+  }
+}
+void KeyInfo::UnsafeArenaSwap(KeyInfo* other) {
+  if (other == this) return;
+  GOOGLE_DCHECK(GetArenaNoVirtual() == other->GetArenaNoVirtual());
   InternalSwap(other);
 }
 void KeyInfo::InternalSwap(KeyInfo* other) {
@@ -1012,6 +1098,19 @@ void SecretKey::InitAsDefaultInstance() {
   ::cockroach::ccl::storageccl::engineccl::enginepbccl::_SecretKey_default_instance_._instance.get_mutable()->info_ = const_cast< ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo*>(
       ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo::internal_default_instance());
 }
+void SecretKey::unsafe_arena_set_allocated_info(
+    ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo* info) {
+  if (GetArenaNoVirtual() == NULL) {
+    delete info_;
+  }
+  info_ = info;
+  if (info) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.SecretKey.info)
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int SecretKey::kInfoFieldNumber;
 const int SecretKey::kKeyFieldNumber;
@@ -1024,13 +1123,22 @@ SecretKey::SecretKey()
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.SecretKey)
 }
+SecretKey::SecretKey(::google::protobuf::Arena* arena)
+  : ::google::protobuf::MessageLite(),
+  _internal_metadata_(arena) {
+  ::google::protobuf::internal::InitSCC(&protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::scc_info_SecretKey.base);
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.SecretKey)
+}
 SecretKey::SecretKey(const SecretKey& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.key().size() > 0) {
-    key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+    key_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key(),
+      GetArenaNoVirtual());
   }
   if (from.has_info()) {
     info_ = new ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo(*from.info_);
@@ -1051,10 +1159,17 @@ SecretKey::~SecretKey() {
 }
 
 void SecretKey::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaNoVirtual() == NULL);
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete info_;
 }
 
+void SecretKey::ArenaDtor(void* object) {
+  SecretKey* _this = reinterpret_cast< SecretKey* >(object);
+  (void)_this;
+}
+void SecretKey::RegisterArenaDtor(::google::protobuf::Arena* arena) {
+}
 void SecretKey::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
@@ -1070,7 +1185,7 @@ void SecretKey::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  key_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
   if (GetArenaNoVirtual() == NULL && info_ != NULL) {
     delete info_;
   }
@@ -1199,8 +1314,7 @@ void SecretKey::MergeFrom(const SecretKey& from) {
   (void) cached_has_bits;
 
   if (from.key().size() > 0) {
-
-    key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+    set_key(from.key());
   }
   if (from.has_info()) {
     mutable_info()->::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo::MergeFrom(from.info());
@@ -1220,6 +1334,21 @@ bool SecretKey::IsInitialized() const {
 
 void SecretKey::Swap(SecretKey* other) {
   if (other == this) return;
+  if (GetArenaNoVirtual() == other->GetArenaNoVirtual()) {
+    InternalSwap(other);
+  } else {
+    SecretKey* temp = New(GetArenaNoVirtual());
+    temp->MergeFrom(*other);
+    other->CopyFrom(*this);
+    InternalSwap(temp);
+    if (GetArenaNoVirtual() == NULL) {
+      delete temp;
+    }
+  }
+}
+void SecretKey::UnsafeArenaSwap(SecretKey* other) {
+  if (other == this) return;
+  GOOGLE_DCHECK(GetArenaNoVirtual() == other->GetArenaNoVirtual());
   InternalSwap(other);
 }
 void SecretKey::InternalSwap(SecretKey* other) {
@@ -1253,17 +1382,27 @@ EncryptionSettings::EncryptionSettings()
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings)
 }
+EncryptionSettings::EncryptionSettings(::google::protobuf::Arena* arena)
+  : ::google::protobuf::MessageLite(),
+  _internal_metadata_(arena) {
+  ::google::protobuf::internal::InitSCC(&protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::scc_info_EncryptionSettings.base);
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings)
+}
 EncryptionSettings::EncryptionSettings(const EncryptionSettings& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.key_id().size() > 0) {
-    key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id_);
+    key_id_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id(),
+      GetArenaNoVirtual());
   }
   nonce_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.nonce().size() > 0) {
-    nonce_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.nonce_);
+    nonce_.SetLite(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.nonce(),
+      GetArenaNoVirtual());
   }
   ::memcpy(&encryption_type_, &from.encryption_type_,
     static_cast<size_t>(reinterpret_cast<char*>(&counter_) -
@@ -1285,10 +1424,17 @@ EncryptionSettings::~EncryptionSettings() {
 }
 
 void EncryptionSettings::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaNoVirtual() == NULL);
   key_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   nonce_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
+void EncryptionSettings::ArenaDtor(void* object) {
+  EncryptionSettings* _this = reinterpret_cast< EncryptionSettings* >(object);
+  (void)_this;
+}
+void EncryptionSettings::RegisterArenaDtor(::google::protobuf::Arena* arena) {
+}
 void EncryptionSettings::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
@@ -1304,8 +1450,8 @@ void EncryptionSettings::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  nonce_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  key_id_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
+  nonce_.ClearToEmpty(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), GetArenaNoVirtual());
   ::memset(&encryption_type_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&counter_) -
       reinterpret_cast<char*>(&encryption_type_)) + sizeof(counter_));
@@ -1494,12 +1640,10 @@ void EncryptionSettings::MergeFrom(const EncryptionSettings& from) {
   (void) cached_has_bits;
 
   if (from.key_id().size() > 0) {
-
-    key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_id_);
+    set_key_id(from.key_id());
   }
   if (from.nonce().size() > 0) {
-
-    nonce_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.nonce_);
+    set_nonce(from.nonce());
   }
   if (from.encryption_type() != 0) {
     set_encryption_type(from.encryption_type());
@@ -1522,6 +1666,21 @@ bool EncryptionSettings::IsInitialized() const {
 
 void EncryptionSettings::Swap(EncryptionSettings* other) {
   if (other == this) return;
+  if (GetArenaNoVirtual() == other->GetArenaNoVirtual()) {
+    InternalSwap(other);
+  } else {
+    EncryptionSettings* temp = New(GetArenaNoVirtual());
+    temp->MergeFrom(*other);
+    other->CopyFrom(*this);
+    InternalSwap(temp);
+    if (GetArenaNoVirtual() == NULL) {
+      delete temp;
+    }
+  }
+}
+void EncryptionSettings::UnsafeArenaSwap(EncryptionSettings* other) {
+  if (other == this) return;
+  GOOGLE_DCHECK(GetArenaNoVirtual() == other->GetArenaNoVirtual());
   InternalSwap(other);
 }
 void EncryptionSettings::InternalSwap(EncryptionSettings* other) {
@@ -1549,22 +1708,22 @@ void EncryptionSettings::InternalSwap(EncryptionSettings* other) {
 namespace google {
 namespace protobuf {
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_StoreKeysEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_StoreKeysEntry_DoNotUse >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_StoreKeysEntry_DoNotUse >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_StoreKeysEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_DataKeysEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_DataKeysEntry_DoNotUse >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_DataKeysEntry_DoNotUse >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry_DataKeysEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::DataKeysRegistry >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::KeyInfo >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionSettings* Arena::CreateMaybeMessage< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionSettings >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionSettings >(arena);
+  return Arena::CreateMessageInternal< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionSettings >(arena);
 }
 }  // namespace protobuf
 }  // namespace google

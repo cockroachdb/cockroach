@@ -234,7 +234,8 @@ inline void EncryptionStatus::set_allocated_active_store_key(::cockroach::ccl::s
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(active_store_key_);
   }
   if (active_store_key) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
+    ::google::protobuf::Arena* submessage_arena =
+      reinterpret_cast<::google::protobuf::MessageLite*>(active_store_key)->GetArena();
     if (message_arena != submessage_arena) {
       active_store_key = ::google::protobuf::internal::GetOwnedMessage(
           message_arena, active_store_key, submessage_arena);
@@ -282,7 +283,8 @@ inline void EncryptionStatus::set_allocated_active_data_key(::cockroach::ccl::st
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(active_data_key_);
   }
   if (active_data_key) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
+    ::google::protobuf::Arena* submessage_arena =
+      reinterpret_cast<::google::protobuf::MessageLite*>(active_data_key)->GetArena();
     if (message_arena != submessage_arena) {
       active_data_key = ::google::protobuf::internal::GetOwnedMessage(
           message_arena, active_data_key, submessage_arena);

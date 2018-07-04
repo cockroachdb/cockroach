@@ -62,6 +62,7 @@ add_library(roachccl
   ccl/crypto_utils.cc
   ccl/ctr_stream.cc
   ccl/db.cc
+  ccl/key_arena.cc
   ccl/key_manager.cc
   protosccl/ccl/baseccl/encryption_options.pb.cc
   protosccl/ccl/storageccl/engineccl/enginepbccl/key_registry.pb.cc
@@ -95,6 +96,7 @@ set(tests
   ccl/crypto_utils_test.cc
   ccl/db_test.cc
   ccl/encrypted_env_test.cc
+  ccl/key_arena_test.cc
   ccl/key_manager_test.cc
 )
 

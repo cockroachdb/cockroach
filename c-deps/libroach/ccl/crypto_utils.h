@@ -26,6 +26,9 @@ std::string HexString(const std::string& s);
 // This is non-blocking.
 std::string RandomBytes(size_t length);
 
+// Write 'size' random bytes starting at 'address'.
+void FillRandomBytes(unsigned char* address, size_t size);
+
 // Create a new AES cipher using the passed-in key.
 // Suitable for encryption only, Decrypt is not implemented.
 rocksdb_utils::BlockCipher* NewAESEncryptCipher(const enginepbccl::SecretKey* key);
