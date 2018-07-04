@@ -2487,12 +2487,11 @@ func (s *Store) removeReplicaImpl(
 	}
 	rep.mu.Unlock()
 
-	// TODO(peter): Could use s.mu.RLock here?
-	s.mu.Lock()
 	if _, err := s.GetReplica(rep.RangeID); err != nil {
-		s.mu.Unlock()
 		return err
 	}
+
+	s.mu.Lock()
 	if !opts.AllowPlaceholders {
 		if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
 			// This is a fatal error because uninitialized replicas shouldn't make it
