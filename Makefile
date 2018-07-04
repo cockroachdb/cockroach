@@ -763,7 +763,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/operator.og.go \
 	pkg/sql/opt/xform/explorer.og.go \
 	pkg/sql/opt/norm/factory.og.go \
-	pkg/sql/opt/rule_name.og.go
+	pkg/sql/opt/rule_name.og.go \
+	pkg/sql/opt/rule_name_string.go
 
 go-targets-ccl := \
 	$(COCKROACH) build buildshort go-install \
@@ -1340,7 +1341,10 @@ pkg/sql/opt/operator.og.go: $(optgen-defs) bin/optgen
 	optgen -out $@ ops $(optgen-defs)
 
 pkg/sql/opt/rule_name.og.go: $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules) bin/optgen
-	optgen -out $(@D)/rule_name.og.go rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)
+	optgen -out $@ rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)
+
+pkg/sql/opt/rule_name_string.go: pkg/sql/opt/rule_name.go pkg/sql/opt/rule_name.og.go bin/.bootstrap
+	stringer -output=$@ -type=RuleName $(filter %.go,$^)
 
 pkg/sql/opt/xform/explorer.og.go: $(optgen-defs) $(optgen-xform-rules) bin/optgen
 	optgen -out $@ explorer $(optgen-defs) $(optgen-xform-rules)
