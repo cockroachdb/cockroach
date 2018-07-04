@@ -62,6 +62,48 @@ memo (optimized)
            ├── best: (sort G2)
            └── cost: 1169.66
 
+exploretrace rule=GenerateIndexScans
+SELECT s, i, f FROM a ORDER BY s, k, i
+----
+----
+================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  sort
+   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── key: (1)
+   ├── fd: (1)-->(2-4)
+   ├── ordering: +4,+1
+   └── scan a
+        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+        ├── key: (1)
+        └── fd: (1)-->(2-4)
+
+New expression 1 of 2:
+  scan a@s_idx
+   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── key: (1)
+   ├── fd: (1)-->(2-4)
+   └── ordering: +4,+1
+
+New expression 2 of 2:
+  sort
+   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── key: (1)
+   ├── fd: (1)-->(2-4)
+   ├── ordering: +4,+1
+   └── index-join a
+        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+        ├── key: (1)
+        ├── fd: (1)-->(2-4)
+        └── scan a@si_idx
+             ├── columns: k:1(int!null) i:2(int) s:4(string)
+             ├── key: (1)
+             └── fd: (1)-->(2,4)
+----
+----
+
 memo
 SELECT s, i, f FROM a ORDER BY f
 ----
