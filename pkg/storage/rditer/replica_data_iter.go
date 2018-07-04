@@ -24,6 +24,7 @@ import (
 // KeyRange is a helper struct for the ReplicaDataIterator.
 type KeyRange struct {
 	Start, End engine.MVCCKey
+	IsMetadata bool // whether this key range stores metadata
 }
 
 // ReplicaDataIterator provides a complete iteration over all key / value
@@ -72,12 +73,14 @@ func makeReplicaKeyRanges(
 	sysRangeIDKey := metaFunc(d.RangeID)
 	return []KeyRange{
 		{
-			Start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
-			End:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+			Start:      engine.MakeMVCCMetadataKey(sysRangeIDKey),
+			End:        engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+			IsMetadata: true,
 		},
 		{
-			Start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-			End:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+			Start:      engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+			End:        engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+			IsMetadata: true,
 		},
 		{
 			Start: engine.MakeMVCCMetadataKey(dataStartKey),

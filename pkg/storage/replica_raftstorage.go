@@ -654,21 +654,18 @@ func clearRangeData(
 	// perhaps we should fix RocksDB to handle large numbers of tombstones in an
 	// sstable better.
 	const clearRangeMinKeys = 64
-	const metadataRanges = 2
 	keyRanges := rditer.MakeAllKeyRanges(desc)
-	if !destroyData {
-		// TODO(benesch): The fact that we hardcode the number of metadata ranges,
-		// here and above, suggests that rditer.MakeAllKeyRanges has the wrong API.
-		keyRanges = keyRanges[:1]
-	}
-	for i, keyRange := range keyRanges {
+	for _, keyRange := range keyRanges {
+		if !destroyData && !keyRange.IsMetadata {
+			continue
+		}
+		var err error
 		// Metadata ranges always have too few keys to justify ClearRange (see
 		// above), but the data range's key count needs to be explicitly checked.
-		var err error
-		if i >= metadataRanges && keyCount >= clearRangeMinKeys {
-			err = batch.ClearRange(keyRange.Start, keyRange.End)
-		} else {
+		if keyRange.IsMetadata || keyCount < clearRangeMinKeys {
 			err = batch.ClearIterRange(iter, keyRange.Start, keyRange.End)
+		} else {
+			err = batch.ClearRange(keyRange.Start, keyRange.End)
 		}
 		if err != nil {
 			return err
