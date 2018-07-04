@@ -15,7 +15,6 @@
 package testutils
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -55,6 +54,8 @@ type OptTester struct {
 	ctx     context.Context
 	semaCtx tree.SemaContext
 	evalCtx tree.EvalContext
+
+	builder strings.Builder
 }
 
 // OptTesterFlags are control knobs for tests. Note that specific testcases can
@@ -82,6 +83,10 @@ type OptTesterFlags struct {
 	// Verbose indicates whether verbose test debugging information will be
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
+
+	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
+	// of a specific rule.
+	ExploreTraceRule string
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -119,6 +124,11 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    Outputs the lowest cost tree for each step in optimization using the
 //    standard unified diff format. Used for debugging the optimizer.
 //
+//  - exploretrace [flags]
+//
+//    Outputs information about exploration rule application. Used for debugging
+//    the optimizer.
+//
 //  - memo [flags]
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
@@ -137,6 +147,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
+//
+//  - rule: used with exploretrace; the value is the name of a rule. When
+//    specified, the exploretrace output is filtered to only show expression
+//    changes due to that specific rule.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -183,6 +197,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "optsteps":
 		result, err := ot.OptSteps()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
+
+	case "exploretrace":
+		result, err := ot.ExploreTrace()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
@@ -249,6 +270,12 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		// Hiding qualifications defeats the purpose.
 		f.ExprFormat &= ^opt.ExprFmtHideQualifications
 
+	case "rule":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("rule requires one argument")
+		}
+		f.ExploreTraceRule = arg.Vals[0]
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
 	}
@@ -307,8 +334,8 @@ func (ot *OptTester) Memo() (string, error) {
 // the rule, even if the total expression tree cost worsened.
 //
 func (ot *OptTester) OptSteps() (string, error) {
-	var buf bytes.Buffer
 	var prevBest, prev, next string
+	ot.builder.Reset()
 
 	os := newOptSteps(ot)
 	for {
@@ -328,62 +355,48 @@ func (ot *OptTester) OptSteps() (string, error) {
 
 		if prev == "" {
 			// Output starting tree.
-			ot.optStepsDisplay(&buf, "", next, os)
+			ot.optStepsDisplay("", next, os)
 			prevBest = next
 		} else if next == prev || next == prevBest {
-			ot.optStepsDisplay(&buf, next, next, os)
+			ot.optStepsDisplay(next, next, os)
 		} else if os.isBetter() {
 			// New expression is better than the previous expression. Diff
 			// it against the previous *best* expression (might not be the
 			// previous expression).
-			ot.optStepsDisplay(&buf, prevBest, next, os)
+			ot.optStepsDisplay(prevBest, next, os)
 			prevBest = next
 		} else {
 			// New expression is not better than the previous expression, but
 			// still show the change. Diff it against the previous expression,
 			// regardless if it was a "best" expression or not.
-			ot.optStepsDisplay(&buf, prev, next, os)
+			ot.optStepsDisplay(prev, next, os)
 		}
 
 		prev = next
 	}
 
 	// Output ending tree.
-	ot.optStepsDisplay(&buf, next, "", os)
+	ot.optStepsDisplay(next, "", os)
 
-	return buf.String(), nil
+	return ot.builder.String(), nil
 }
 
-func (ot *OptTester) optStepsDisplay(buf *bytes.Buffer, before string, after string, os *optSteps) {
-	output := func(format string, args ...interface{}) {
-		fmt.Fprintf(buf, format, args...)
-		if ot.Flags.Verbose {
-			fmt.Printf(format, args...)
-		}
-	}
-	indent := func(str string) {
-		str = strings.TrimRight(str, " \n\t\r")
-		lines := strings.Split(str, "\n")
-		for _, line := range lines {
-			output("  %s\n", line)
-		}
-	}
-
+func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) {
 	// bestHeader is used when the expression is an improvement over the previous
 	// expression.
 	bestHeader := func(ev memo.ExprView, format string, args ...interface{}) {
-		output("%s\n", strings.Repeat("=", 80))
-		output(format, args...)
-		output("  Cost: %.2f\n", ev.Cost())
-		output("%s\n", strings.Repeat("=", 80))
+		ot.separator("=")
+		ot.output(format, args...)
+		ot.output("  Cost: %.2f\n", ev.Cost())
+		ot.separator("=")
 	}
 
 	// altHeader is used when the expression doesn't improve over the previous
 	// expression, but it's still desirable to see what changed.
 	altHeader := func(format string, args ...interface{}) {
-		output("%s\n", strings.Repeat("-", 80))
-		output(format, args...)
-		output("%s\n", strings.Repeat("-", 80))
+		ot.separator("-")
+		ot.output(format, args...)
+		ot.separator("-")
 	}
 
 	if before == "" {
@@ -391,7 +404,7 @@ func (ot *OptTester) optStepsDisplay(buf *bytes.Buffer, before string, after str
 			fmt.Print("------ optsteps verbose output starts ------\n")
 		}
 		bestHeader(os.exprView(), "Initial expression\n")
-		indent(after)
+		ot.indent(after)
 		return
 	}
 
@@ -402,7 +415,7 @@ func (ot *OptTester) optStepsDisplay(buf *bytes.Buffer, before string, after str
 
 	if after == "" {
 		bestHeader(os.exprView(), "Final best expression\n")
-		indent(before)
+		ot.indent(before)
 
 		if ot.Flags.Verbose {
 			fmt.Print("------ optsteps verbose output ends ------\n")
@@ -428,7 +441,48 @@ func (ot *OptTester) optStepsDisplay(buf *bytes.Buffer, before string, after str
 	text, _ := difflib.GetUnifiedDiffString(diff)
 	// Skip the "@@ ... @@" header (first line).
 	text = strings.SplitN(text, "\n", 2)[1]
-	indent(text)
+	ot.indent(text)
+}
+
+// ExploreTrace steps through exploration transformations performed by the
+// optimizer, one-by-one. The output of each step is the expression on which the
+// rule was applied, and the expressions that were generated by the rule.
+func (ot *OptTester) ExploreTrace() (string, error) {
+	ot.builder.Reset()
+
+	et := newExploreTracer(ot)
+
+	for {
+		err := et.Next()
+		if err != nil {
+			return "", err
+		}
+		if et.Done() {
+			break
+		}
+
+		if ot.Flags.ExploreTraceRule != "" && et.LastRuleName().String() != ot.Flags.ExploreTraceRule {
+			continue
+		}
+
+		if ot.builder.Len() > 0 {
+			ot.output("\n")
+		}
+		ot.separator("=")
+		ot.output("%s\n", et.LastRuleName())
+		ot.separator("=")
+		ot.output("Source expression:\n")
+		ot.indent(et.SrcExpr().FormatString(ot.Flags.ExprFormat))
+		newExprs := et.NewExprs()
+		if len(newExprs) == 0 {
+			ot.output("\nNo new expressions.\n")
+		}
+		for i := range newExprs {
+			ot.output("\nNew expression %d of %d:\n", i+1, len(newExprs))
+			ot.indent(newExprs[i].FormatString(ot.Flags.ExprFormat))
+		}
+	}
+	return ot.builder.String(), nil
 }
 
 func (ot *OptTester) buildExpr(
@@ -457,4 +511,23 @@ func (ot *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error
 		return memo.ExprView{}, err
 	}
 	return o.Optimize(root, required), nil
+}
+
+func (ot *OptTester) output(format string, args ...interface{}) {
+	fmt.Fprintf(&ot.builder, format, args...)
+	if ot.Flags.Verbose {
+		fmt.Printf(format, args...)
+	}
+}
+
+func (ot *OptTester) separator(sep string) {
+	ot.output("%s\n", strings.Repeat(sep, 80))
+}
+
+func (ot *OptTester) indent(str string) {
+	str = strings.TrimRight(str, " \n\t\r")
+	lines := strings.Split(str, "\n")
+	for _, line := range lines {
+		ot.output("  %s\n", line)
+	}
 }

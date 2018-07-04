@@ -114,7 +114,7 @@ func (os *optSteps) next() error {
 		panic("iteration already complete")
 	}
 
-	fo, err := newForcingOptimizer(os.tester, os.steps)
+	fo, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (os *optSteps) next() error {
 	} else if !os.done() {
 		// The expression is not better, so suppress the lowest cost expressions
 		// so that the changed portions of the tree will be part of the output.
-		fo2, err := newForcingOptimizer(os.tester, os.steps)
+		fo2, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */)
 		if err != nil {
 			return err
 		}
