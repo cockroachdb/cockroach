@@ -777,8 +777,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <td>Case-sensitive matching</td>
 </tr>
 <tr>
+<td><strong>g</strong></td>
+<td>Global matching (match each substring instead of only the first)</td>
+</tr>
+<tr>
 <td><strong>i</strong></td>
-<td>Global matching (match each substring instead of only the first).</td>
+<td>Case-insensitive matching</td>
 </tr>
 <tr>
 <td><strong>m</strong> or <strong>n</strong></td>

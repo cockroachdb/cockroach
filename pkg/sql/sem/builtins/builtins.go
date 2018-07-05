@@ -1049,7 +1049,8 @@ CockroachDB supports the following flags:
 | Flag           | Description                                                       |
 |----------------|-------------------------------------------------------------------|
 | **c**          | Case-sensitive matching                                           |
-| **i**          | Global matching (match each substring instead of only the first). |
+| **g**          | Global matching (match each substring instead of only the first)  |
+| **i**          | Case-insensitive matching                                         |
 | **m** or **n** | Newline-sensitive (see below)                                     |
 | **p**          | Partial newline-sensitive matching (see below)                    |
 | **s**          | Newline-insensitive (default)                                     |
