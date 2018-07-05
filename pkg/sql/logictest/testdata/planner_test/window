@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local 5node-dist
 
 statement ok
 CREATE TABLE kv (
@@ -38,7 +38,7 @@ sort                 ·      ·
 statement ok
 SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
