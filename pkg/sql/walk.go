@@ -502,6 +502,11 @@ func (v *planVisitor) visit(plan planNode) {
 	case *controlJobsNode:
 		v.visit(n.rows)
 
+	case *setZoneConfigNode:
+		if v.observer.expr != nil {
+			v.observer.expr(name, "yaml", -1, n.yamlConfig)
+		}
+
 	case *projectSetNode:
 		if v.observer.expr != nil {
 			for i, texpr := range n.exprs {
