@@ -8262,6 +8262,7 @@ unreserved_keyword:
 | VALIDATE
 | VALUE
 | VARYING
+| VIEW
 | WITHIN
 | WITHOUT
 | WRITE
@@ -8436,7 +8437,6 @@ reserved_keyword:
 | USER
 | USING
 | VARIADIC
-| VIEW
 | WHEN
 | WHERE
 | WINDOW
