@@ -431,6 +431,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *zeroNode:
 		return canDistribute, nil
 
+	case *windowNode:
+		return dsp.checkSupportForNode(n.plan)
+
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2240,8 +2243,15 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *zeroNode:
 		plan, err = dsp.createPlanForZero(planCtx, n)
 
+	case *windowNode:
+		plan, err = dsp.createPlanForWindow(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
+	}
+
+	if err != nil {
+		return plan, err
 	}
 
 	if dsp.shouldPlanTestMetadata() {
@@ -2774,6 +2784,511 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	return p, nil
+}
+
+// samePartition returns whether 'f' and 'other' have the same PARTITION BY clauses.
+func (f *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
+	if len(f.partitionIdxs) != len(other.partitionIdxs) {
+		return false
+	}
+	for i, p := range f.partitionIdxs {
+		if p != other.partitionIdxs[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// findUnprocessedWindowFnsWithSamePartition loops through all window functions
+// in the same order they appear in the query, finds first one that has not
+// yet been planned, and then accumulates all following window functions
+// with the same PARTITION BY clause.
+//
+// It also inserts windowFn.argIdxStart into windowFuncOutputColumnIdx since
+// windowers will put the output of windowFn at argIdxStart (if it is not
+// possible - like in the case of two window functions having the same argIdxStart
+// (which is possible when the first function takes zero arguments) - second
+// function's index in the map will be adjusted later, by adjustColumnIndices.
+//
+// This function returns columns from PARTITION BY clause that all window functions
+// in samePartitionFuncsIdx share along with indices of those functions in n.funcs
+// (where n is windowNode).
+func findUnprocessedWindowFnsWithSamePartition(
+	windowFns []*windowFuncHolder,
+	isWindowFuncProcessed []bool,
+	windowFuncOutputColumnIdx map[*windowFuncHolder]int,
+) ([]uint32, []int) {
+	notProcessedIdx := -1
+	for funcIdx := 0; funcIdx < len(windowFns); funcIdx++ {
+		if !isWindowFuncProcessed[funcIdx] {
+			notProcessedIdx = funcIdx
+			break
+		}
+	}
+	if notProcessedIdx == -1 {
+		panic("unexpected: no unprocessed window function")
+	}
+
+	windowFnToProcess := windowFns[notProcessedIdx]
+	partitionIdxs := make([]uint32, len(windowFnToProcess.partitionIdxs))
+	for i, idx := range windowFnToProcess.partitionIdxs {
+		partitionIdxs[i] = uint32(idx)
+	}
+
+	samePartitionFuncsIdx := make([]int, 0, len(windowFns)-notProcessedIdx)
+	samePartitionFuncsIdx = append(samePartitionFuncsIdx, notProcessedIdx)
+	isWindowFuncProcessed[notProcessedIdx] = true
+	windowFuncOutputColumnIdx[windowFnToProcess] = windowFnToProcess.argIdxStart
+	for funcIdx := notProcessedIdx + 1; funcIdx < len(windowFns); funcIdx++ {
+		if isWindowFuncProcessed[funcIdx] {
+			continue
+		}
+		if windowFnToProcess.samePartition(windowFns[funcIdx]) {
+			samePartitionFuncsIdx = append(samePartitionFuncsIdx, funcIdx)
+			isWindowFuncProcessed[funcIdx] = true
+			windowFuncOutputColumnIdx[windowFns[funcIdx]] = windowFns[funcIdx].argIdxStart
+		}
+	}
+
+	return partitionIdxs, samePartitionFuncsIdx
+}
+
+// adjustColumnIndices shifts all the indices due to window functions in
+// funcsInProgressIdx that add or remove columns. It maintains:
+// 1. argIdxStart of yet unprocessed window functions in windowFns to correctly
+// point at the start of their arguments;
+// 2. windowFuncOutputColumnIdx to map already processed (including added in
+// the current stage) window function to the output column index in the output
+// of the current stage of windowers;
+// 3. indices of columns referred to in PARTITION BY and ORDER BY clauses
+// of unprocessed window functions.
+func adjustColumnIndices(
+	windowFns []*windowFuncHolder,
+	isWindowFuncProcessed []bool,
+	windowFuncOutputColumnIdx map[*windowFuncHolder]int,
+	funcsInProgressIdx []int,
+) {
+	for _, funcInProgressIdx := range funcsInProgressIdx {
+		if windowFns[funcInProgressIdx].argCount != 1 {
+			argShift := 1 - windowFns[funcInProgressIdx].argCount
+			// All window functions after funcInProgress need to be adjusted
+			// since funcInProgress adds/removes columns. Important assumption:
+			// all window functions are initially sorted by their
+			// argIdxStart, and these shifts keep that order intact.
+			//
+			// Some edge cases for two window functions f1 and f2 (f1 appears
+			// before f2 in windowFns) with f1.argIdxStart == f2.argIdxStart:
+			//
+			// 1. both f1 and f2 are in samePartitionFuncsIdx:
+			// a) f1.argCount == 0
+			// - handled correctly because we'll insert a new column
+			// at f1.argIdxStart, and the result of f2 will be appended right
+			// after f1, i.e. f2.argIdxStart == f1.argIdxStart + 1;
+			// b) f1.argCount > 0
+			// - not possible because f2.argIdxStart would not have been
+			// equal to f1.argIdxStart.
+			//
+			// 2. f1 in samePartitionFuncsIdx, f2 is not:
+			// a) f2 has been processed already, so we want to maintain
+			// the pointer to its output column in windowFuncOutputColumnIdx.
+			// f1 shifts all columns after f1.argIdxStart by argShift,
+			// so we need to adjust column index accordingly.
+			// b) f2 will be processed later, so we want to maintain
+			// f2.argIdxStart as an index of starting argument to f2.
+			//
+			// 3. f1 not in samePartitionFuncsIdx, f2 is:
+			// f2 has no influence on f1 because f1 appears before f2
+			// in windowFns.
+			for idx, f := range windowFns[funcInProgressIdx+1:] {
+				funcIdx := idx + funcInProgressIdx + 1
+				if isWindowFuncProcessed[funcIdx] {
+					windowFuncOutputColumnIdx[f] += argShift
+				} else {
+					f.argIdxStart += argShift
+				}
+			}
+		}
+	}
+
+	// Assumption: all PARTITION BY and ORDER BY related columns come
+	// after columns-arguments to window functions, so we need to adjust
+	// those indices accordingly.
+	partitionOrderColShift := 0
+	for _, funcInProgressIdx := range funcsInProgressIdx {
+		partitionOrderColShift += 1 - windowFns[funcInProgressIdx].argCount
+	}
+	if partitionOrderColShift != 0 {
+		for idx, f := range windowFns {
+			if !isWindowFuncProcessed[idx] {
+				for p := range f.partitionIdxs {
+					f.partitionIdxs[p] += partitionOrderColShift
+				}
+				oldColumnOrdering := f.columnOrdering
+				f.columnOrdering = make(sqlbase.ColumnOrdering, 0, len(oldColumnOrdering))
+				for _, o := range oldColumnOrdering {
+					f.columnOrdering = append(f.columnOrdering, sqlbase.ColumnOrderInfo{
+						ColIdx:    o.ColIdx + partitionOrderColShift,
+						Direction: o.Direction,
+					})
+				}
+			}
+		}
+	}
+}
+
+// createPlanForWindow creates a physical plan for computing window functions.
+// We add a new stage of windower processors for each different partitioning scheme
+// found in the query's window functions.
+//
+// The result of a window function computation is put at windowFn.argIdxStart index,
+// in a sense, we replace the first argument to window function by its output;
+// also, window function "consumes" windowFn.argCount columns.
+// So if a window function takes zero arguments, we'll put an extra column and
+// need to shift all indices (argIdxStart, partitionIdxs, and column ordering from
+// ORDER BY clause) of window functions after the current one to the "right".
+// Similarly, if a window function takes more than one argument, we'll consume
+// extra columns and need to shift all indices of window functions after the current
+// one accordingly to the "left".
+// We also adjust windowFuncOutputColumnIdx that maps already processed window function
+// to the index of the output column of that window function during all stages.
+//
+// Important assumption: arguments of all window functions and columns needed
+// for ORDER BY clause of the whole query come before columns used to "render"
+// PARTITION BY and ORDER BY clauses and before all columns referenced by
+// IndexedVar's that correspond to columns and aggregations above "windowing level".
+// (See comment for replaceIndexVarsAndAggFuncs method of windowNode for context.)
+func (dsp *DistSQLPlanner) createPlanForWindow(
+	planCtx *planningCtx, n *windowNode,
+) (physicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	// windowFuncOutputColumnIdx is maintained throughout all stages
+	// of windowers to point at the output column of the corresponding
+	// to a windowFuncHolder window function.
+	windowFuncOutputColumnIdx := make(map[*windowFuncHolder]int)
+	isWindowFuncProcessed, numWindowFuncProcessed := make([]bool, len(n.funcs)), 0
+
+	for numWindowFuncProcessed < len(n.funcs) {
+		// We find first window function that has not yet been planned along
+		// with all window functions that have the same partition scheme.
+		partitionIdxs, samePartitionFuncsIdx := findUnprocessedWindowFnsWithSamePartition(
+			n.funcs,
+			isWindowFuncProcessed,
+			windowFuncOutputColumnIdx,
+		)
+		numWindowFuncProcessed += len(samePartitionFuncsIdx)
+
+		windowerSpec := distsqlrun.WindowerSpec{
+			PartitionBy: partitionIdxs,
+			WindowFns:   make([]distsqlrun.WindowerSpec_WindowFn, len(samePartitionFuncsIdx)),
+		}
+
+		// Populating output types of this stage since windowers
+		// will likely change them from its input types.
+		newResultTypes := make([]sqlbase.ColumnType, 0, len(plan.ResultTypes))
+		// inputColIdx is the index of the column that should be processed next
+		// among input columns to the current stage.
+		inputColIdx := 0
+		for windowFnSpecIdx, windowFnIdx := range samePartitionFuncsIdx {
+			windowFn := n.funcs[windowFnIdx]
+
+			// Figure out which built-in to compute.
+			funcStr := strings.ToUpper(windowFn.expr.Func.String())
+			// The function might be an aggregate, so let's try looking up
+			// corresponding aggregate function.
+			builtinIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
+			isWindowFunc := false
+			if !ok {
+				// The function is not an aggregate, so let's
+				// look up corresponding window function.
+				builtinIdx, ok = distsqlrun.WindowerSpec_WindowFunc_value[funcStr]
+				isWindowFunc = true
+			}
+			if !ok {
+				// The function is neither an aggregate nor window function.
+				return plan, errors.Errorf("unknown window function %s", funcStr)
+			}
+			funcSpec := distsqlrun.WindowerSpec_Func{IsWindowFunc: isWindowFunc}
+			if isWindowFunc {
+				funcSpec.WindowFunc = distsqlrun.WindowerSpec_WindowFunc(builtinIdx)
+			} else {
+				funcSpec.AggregateFunc = distsqlrun.AggregatorSpec_Func(builtinIdx)
+			}
+
+			// All window functions are sorted by their argIdxStart,
+			// so we simply "copy" all columns up to windowFn.argIdxStart
+			// (all window functions in samePartitionFuncsIdx after windowFn
+			// have their arguments in later columns).
+			newResultTypes = append(newResultTypes, plan.ResultTypes[inputColIdx:windowFn.argIdxStart]...)
+
+			// TODO: should we panic? This condition indicates a problem in
+			// extractWindowFunctions of sql/window.go.
+			if windowFn.argIdxStart+windowFn.argCount > len(plan.ResultTypes) {
+				return physicalPlan{}, errors.Errorf("ColIdx out of range (%d)", windowFn.argIdxStart+windowFn.argCount-1)
+			}
+			argTypes := plan.ResultTypes[windowFn.argIdxStart : windowFn.argIdxStart+windowFn.argCount]
+			_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
+			if err != nil {
+				return physicalPlan{}, err
+			}
+
+			// Windower processor consumes all arguments of windowFn
+			// and puts the result of computation of this window function
+			// at windowFn.argIdxStart.
+			newResultTypes = append(newResultTypes, outputType)
+			inputColIdx = windowFn.argIdxStart + windowFn.argCount
+
+			// Populating column ordering from ORDER BY clause of windowFn.
+			ordCols := make([]distsqlrun.Ordering_Column, 0, len(windowFn.columnOrdering))
+			for _, column := range windowFn.columnOrdering {
+				ordCols = append(ordCols, distsqlrun.Ordering_Column{
+					ColIdx: uint32(column.ColIdx),
+					// We need this -1 because encoding.Direction has extra value "_"
+					// as zeroth "entry" which its proto equivalent doesn't have.
+					Direction: distsqlrun.Ordering_Column_Direction(column.Direction - 1),
+				})
+			}
+
+			windowFnSpec := distsqlrun.WindowerSpec_WindowFn{
+				Func:        funcSpec,
+				ArgIdxStart: uint32(windowFn.argIdxStart),
+				ArgCount:    uint32(windowFn.argCount),
+				Ordering:    distsqlrun.Ordering{Columns: ordCols},
+			}
+
+			if frame := n.run.windowFrames[windowFnIdx]; frame != nil {
+				// windowFn has a custom window frame, so we convert it to spec.
+				frameSpec, err := distsqlrun.ConvertToSpec(*frame, planCtx.EvalContext())
+				if err != nil {
+					return physicalPlan{}, err
+				}
+				windowFnSpec.Frame = &frameSpec
+			}
+
+			windowerSpec.WindowFns[windowFnSpecIdx] = windowFnSpec
+		}
+		// We keep all the columns after the last window function
+		// that is being processed in the current stage.
+		newResultTypes = append(newResultTypes, plan.ResultTypes[inputColIdx:]...)
+
+		// We need to adjust indices since windower's output schema might not be
+		// equal to its input schema, and we need to maintain windowFuncOutputColumnIdx
+		// of processed window functions and argIdxStart of unprocessed window function
+		// to point at the correct columns.
+		adjustColumnIndices(n.funcs, isWindowFuncProcessed, windowFuncOutputColumnIdx, samePartitionFuncsIdx)
+
+		// Check if the previous stage is all on one node.
+		prevStageNode := plan.Processors[plan.ResultRouters[0]].Node
+		for i := 1; i < len(plan.ResultRouters); i++ {
+			if n := plan.Processors[plan.ResultRouters[i]].Node; n != prevStageNode {
+				prevStageNode = 0
+				break
+			}
+		}
+
+		if len(partitionIdxs) == 0 || len(plan.ResultRouters) == 1 {
+			// No PARTITION BY or we have a single stream. Use a single windower.
+			// If the previous stage was all on a single node, put the windower
+			// there. Otherwise, bring the results back on this node.
+			node := dsp.nodeDesc.NodeID
+			if prevStageNode != 0 {
+				node = prevStageNode
+			}
+			plan.AddSingleGroupStage(
+				node,
+				distsqlrun.ProcessorCoreUnion{Windower: &windowerSpec},
+				distsqlrun.PostProcessSpec{},
+				newResultTypes,
+			)
+		} else {
+			// Set up the output routers from the previous stage.
+			// We use hash routers with hashing on the columns
+			// from PARTITION BY clause of window functions
+			// we're processing in the current stage.
+			for _, resultProc := range plan.ResultRouters {
+				plan.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
+					Type:        distsqlrun.OutputRouterSpec_BY_HASH,
+					HashColumns: partitionIdxs,
+				}
+			}
+			stageID := plan.NewStageID()
+
+			// Get all nodes from the previous stage.
+			nodes := findJoinProcessorNodes(plan.ResultRouters, nil /* rightRouter */, plan.Processors, false /* includeRight */)
+			if len(nodes) != len(plan.ResultRouters) {
+				panic("unexpected number of nodes")
+			}
+
+			// We put a windower on each node and we connect it
+			// with all hash routers from the previous stage in
+			// a such way that each node has its designated
+			// SourceRouterSlot - namely, position in which
+			// a node appear in nodes.
+			prevStageRouters := plan.ResultRouters
+			plan.ResultRouters = make([]distsqlplan.ProcessorIdx, 0, len(nodes))
+			for bucket, nodeID := range nodes {
+				proc := distsqlplan.Processor{
+					Node: nodeID,
+					Spec: distsqlrun.ProcessorSpec{
+						Input: []distsqlrun.InputSyncSpec{{
+							Type:        distsqlrun.InputSyncSpec_UNORDERED,
+							ColumnTypes: plan.ResultTypes,
+						}},
+						Core: distsqlrun.ProcessorCoreUnion{Windower: &windowerSpec},
+						Post: distsqlrun.PostProcessSpec{},
+						Output: []distsqlrun.OutputRouterSpec{{
+							Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+						}},
+						StageID: stageID,
+					},
+				}
+				pIdx := plan.AddProcessor(proc)
+
+				for router := 0; router < len(nodes); router++ {
+					plan.Streams = append(plan.Streams, distsqlplan.Stream{
+						SourceProcessor:  prevStageRouters[router],
+						SourceRouterSlot: bucket,
+						DestProcessor:    pIdx,
+						DestInput:        0,
+					})
+				}
+				plan.ResultRouters = append(plan.ResultRouters, pIdx)
+			}
+
+			plan.ResultTypes = newResultTypes
+		}
+	}
+
+	// We probably added/removed columns throughout all the stages of windowers,
+	// so we need to update planToStreamColMap.
+	plan.planToStreamColMap = identityMap(plan.planToStreamColMap, len(plan.ResultTypes))
+
+	// After all window functions are computed, we might need to add rendering.
+	if err := addWindowFunctionsRenderingIfNecessary(&plan, planCtx.EvalContext(), n, windowFuncOutputColumnIdx); err != nil {
+		return physicalPlan{}, err
+	}
+
+	return plan, nil
+}
+
+func addWindowFunctionsRenderingIfNecessary(
+	plan *physicalPlan,
+	evalCtx *tree.EvalContext,
+	n *windowNode,
+	windowFuncOutputColumnIdx map[*windowFuncHolder]int,
+) error {
+	needRendering := false
+	// numWindowFuncsAsIs is the number of window functions
+	// output of which is used directly (i.e. simply as
+	// an output column).
+	numWindowFuncsAsIs := 0
+	for _, render := range n.windowRender {
+		if _, ok := render.(*windowFuncHolder); ok {
+			numWindowFuncsAsIs++
+		}
+	}
+	if numWindowFuncsAsIs != len(n.funcs) {
+		// Not all window functions' outputs are used directly,
+		// so we need some rendering to do.
+		needRendering = true
+	}
+	if !needRendering {
+		return nil
+	}
+
+	// windowNode contains render expressions that might contain
+	// 1) IndexedVar's that refer to columns by their indices in the full table,
+	// 2) IndexedVar's that replaced regular aggregates that are
+	// above "windowing level."
+	// The mapping for both types IndexedVar's is stored
+	// in n.colAndAggContainer. We need to make columnsMap that maps index of
+	// an indexedVar to the column in the output of windower processor.
+
+	// maxColumnIdx is the largest column index referenced by
+	// any IndexedVar in renders of windowNode.
+	maxColumnIdx := -1
+	for col := range n.colAndAggContainer.idxMap {
+		if col > maxColumnIdx {
+			maxColumnIdx = col
+		}
+	}
+
+	// We initialize columnsMap with -1's.
+	columnsMap := makePlanToStreamColMap(maxColumnIdx + 1)
+
+	// colShift refers to the number of columns added/removed
+	// due to window functions that take number of arguments
+	// other than one. IndexedVar's from the container
+	// point to columns after window functions-related columns,
+	// so we need to shift all indices by colShift.
+	colShift := 0
+	for _, windowFn := range n.funcs {
+		colShift += 1 - windowFn.argCount
+	}
+	for col, idx := range n.colAndAggContainer.idxMap {
+		columnsMap[col] = idx + colShift
+	}
+
+	renderExprs := make([]tree.TypedExpr, len(n.windowRender))
+	visitor := replaceWindowFuncsVisitor{
+		windowFuncToOrdinalMap: windowFuncOutputColumnIdx,
+		columnsMap:             columnsMap,
+	}
+
+	renderTypes := make([]sqlbase.ColumnType, 0, len(n.windowRender))
+	for i, render := range n.windowRender {
+		if render != nil {
+			// render contains at least one reference to windowFuncHolder,
+			// so we need to walk over the render and replace all windowFuncHolder's
+			// and (if found) IndexedVar's using two maps.
+			renderExprs[i] = visitor.replace(render)
+		} else {
+			// render is nil meaning that a column is being passed through.
+			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, plan.ResultTypes[visitor.colIdx].ToDatumType())
+			visitor.colIdx++
+		}
+		outputType, err := sqlbase.DatumTypeToColumnType(renderExprs[i].ResolvedType())
+		if err != nil {
+			return err
+		}
+		renderTypes = append(renderTypes, outputType)
+	}
+	plan.AddRendering(renderExprs, evalCtx, plan.planToStreamColMap, renderTypes)
+	plan.planToStreamColMap = identityMap(plan.planToStreamColMap, len(renderTypes))
+	return nil
+}
+
+type replaceWindowFuncsVisitor struct {
+	windowFuncToOrdinalMap map[*windowFuncHolder]int
+	columnsMap             []int
+	colIdx                 int // index of the current column in the output of last stage of windowers
+}
+
+var _ tree.Visitor = &replaceWindowFuncsVisitor{}
+
+func (v *replaceWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	switch t := expr.(type) {
+	case *windowFuncHolder:
+		v.colIdx++
+		return false, tree.NewTypedOrdinalReference(v.windowFuncToOrdinalMap[t], t.ResolvedType())
+	case *tree.IndexedVar:
+		// We don't need to increment colIdx because
+		// all IndexedVar-related columns are the very end.
+		return false, tree.NewTypedOrdinalReference(v.columnsMap[t.Idx], t.ResolvedType())
+	}
+	return true, expr
+}
+
+func (v *replaceWindowFuncsVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	return expr
+}
+
+func (v *replaceWindowFuncsVisitor) replace(typedExpr tree.TypedExpr) tree.TypedExpr {
+	expr, _ := tree.WalkExpr(v, typedExpr)
+	return expr.(tree.TypedExpr)
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(

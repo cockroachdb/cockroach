@@ -137,6 +137,7 @@ message ProcessorCoreUnion {
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
+  optional WindowerSpec windower = 23;
 
   reserved 6, 12;
 }
@@ -819,4 +820,89 @@ message ProjectSetSpec {
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;
+}
+
+// WindowerSpec is the specification of a processors that performs computations
+// of window functions that have the same PARTITION BY clause. For a particular
+// windowFn, the processor puts the output at windowFn.ArgIdxStart and "consumes"
+// all arguments to windowFn (windowFn.ArgCount of them). So if windowFn takes
+// no arguments, an extra column is added; if windowFn takes more than one
+// argument, (windowFn.ArgCount - 1) columns are removed.
+message WindowerSpec {
+  enum WindowFunc {
+    // These mirror window functions from window_builtins.go.
+    ROW_NUMBER = 0;
+    RANK = 1;
+    DENSE_RANK = 2;
+    PERCENT_RANK = 3;
+    CUME_DIST = 4;
+    NTILE = 5;
+    LAG = 6;
+    LEAD = 7;
+    FIRST_VALUE = 8;
+    LAST_VALUE = 9;
+    NTH_VALUE = 10;
+  }
+
+  // Func specifies which function to compute. It can either be built-in
+  // aggregate or built-in window function. Flag isWindowFunc distinguishes
+  // between these two cases.
+  message Func {
+    optional AggregatorSpec.Func aggregateFunc = 1 [(gogoproto.nullable) = false];
+    optional WindowFunc windowFunc = 2 [(gogoproto.nullable) = false];
+    optional bool isWindowFunc = 3 [(gogoproto.nullable) = false];
+  }
+
+  // Frame is the specification of a single window frame for a window function.
+  message Frame {
+    // Mode indicates which mode of framing is used.
+    enum Mode {
+      // RANGE is the mode of specifying frame in terms of logical range (e.g. 100 units cheaper).
+      RANGE = 0;
+      // ROWS is the mode of specifying frame in terms of physical offsets (e.g. 1 row before etc).
+      ROWS = 1;
+    }
+
+    // BoundType indicates which type of boundary is used.
+    enum BoundType {
+      UNBOUNDED_PRECEDING = 0; // represents UNBOUNDED PRECEDING type of boundary
+      VALUE_PRECEDING = 1;     // represents 'value' PRECEDING type of boundary
+      CURRENT_ROW = 2;         // represents CURRENT ROW type of boundary
+      VALUE_FOLLOWING = 3;     // represents 'value' FOLLOWING type of boundary
+      UNBOUNDED_FOLLOWING = 4; // represents UNBOUNDED FOLLOWING type of boundary
+    }
+
+    // Bound specifies the offset and the type of boundary.
+    message Bound {
+      optional BoundType boundType = 1 [(gogoproto.nullable) = false];
+      optional uint32 offset = 2 [(gogoproto.nullable) = false];
+    }
+    // Bounds specifies boundaries of the window frame.
+    message Bounds {
+      optional Bound start = 1 [(gogoproto.nullable) = false];
+      optional Bound end = 2;
+    }
+    optional Mode mode = 1 [(gogoproto.nullable) = false];
+    optional Bounds bounds = 2 [(gogoproto.nullable) = false];
+  }
+
+  // WindowFn is the specification of a single window function.
+  message WindowFn {
+    // Func is which function to compute.
+    optional Func func = 1 [(gogoproto.nullable) = false];
+    // ArgIdxStart indicates from which index arguments to this window function start.
+    optional uint32 argIdxStart = 2 [(gogoproto.nullable) = false];
+    // ArgCount indicates how many arguments this window function takes in.
+    optional uint32 argCount = 3 [(gogoproto.nullable) = false];
+    // Ordering specifies in which order rows should be considered by this window function.
+    // Its contents come from ORDER BY clause of a window function.
+    optional Ordering ordering = 4 [(gogoproto.nullable) = false];
+    // Frame specifies over which frame this window function should be computed.
+    optional Frame frame = 5;
+  }
+
+  // PartitionBy specifies how to partition rows for all window functions.
+  repeated uint32 partitionBy = 1;
+  // WindowFns is the specification of all window functions to be computed.
+  repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
 }
