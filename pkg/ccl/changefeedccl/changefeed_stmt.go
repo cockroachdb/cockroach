@@ -117,7 +117,7 @@ func changefeedPlanHook(
 		if cursor, ok := opts[optCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if highwater, err = sql.EvalAsOfTimestamp(nil, asOf, now); err != nil {
+			if highwater, err = p.EvalAsOfTimestamp(asOf, now); err != nil {
 				return err
 			}
 		}
