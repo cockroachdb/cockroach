@@ -5661,7 +5661,7 @@ opt_alias_clause:
   }
 
 as_of_clause:
-  AS_LA OF SYSTEM TIME a_expr_const
+  AS_LA OF SYSTEM TIME a_expr
   {
     $$.val = tree.AsOfClause{Expr: $5.expr()}
   }

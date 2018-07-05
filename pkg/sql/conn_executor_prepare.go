@@ -188,7 +188,7 @@ func (ex *connExecutor) prepare(
 		p.extendedEvalCtx.ActiveMemAcc = &constantMemAcc
 		defer constantMemAcc.Close(ctx)
 
-		protoTS, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now() /* max */)
+		protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
 		if err != nil {
 			return err
 		}

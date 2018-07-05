@@ -391,7 +391,7 @@ preparable_stmt ::=
 	| upsert_stmt
 
 as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -1011,17 +1011,6 @@ sub_type ::=
 	| 'SOME'
 	| 'ALL'
 
-a_expr_const ::=
-	'ICONST'
-	| 'FCONST'
-	| 'SCONST'
-	| 'BCONST'
-	| const_typename 'SCONST'
-	| interval
-	| 'TRUE'
-	| 'FALSE'
-	| 'NULL'
-
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
 	| 
@@ -1360,33 +1349,6 @@ math_op ::=
 	| 'GREATER_EQUALS'
 	| 'NOT_EQUALS'
 
-const_typename ::=
-	numeric
-	| bit_without_length
-	| character_without_length
-	| const_datetime
-	| const_json
-	| 'BLOB'
-	| 'BYTES'
-	| 'BYTEA'
-	| 'TEXT'
-	| 'NAME'
-	| 'SERIAL'
-	| 'SERIAL2'
-	| 'SERIAL4'
-	| 'SERIAL8'
-	| 'SMALLSERIAL'
-	| 'UUID'
-	| 'INET'
-	| 'BIGSERIAL'
-	| 'OID'
-	| 'OIDVECTOR'
-	| 'INT2VECTOR'
-	| 'identifier'
-
-interval ::=
-	const_interval 'SCONST' opt_interval
-
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
 
@@ -1612,6 +1574,17 @@ column_path_with_star ::=
 	| name '.' unrestricted_name '.' '*'
 	| name '.' '*'
 
+a_expr_const ::=
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| 'BCONST'
+	| const_typename 'SCONST'
+	| interval
+	| 'TRUE'
+	| 'FALSE'
+	| 'NULL'
+
 iconst64 ::=
 	'ICONST'
 
@@ -1642,6 +1615,30 @@ case_default ::=
 	'ELSE' a_expr
 	| 
 
+const_typename ::=
+	numeric
+	| bit_without_length
+	| character_without_length
+	| const_datetime
+	| const_json
+	| 'BLOB'
+	| 'BYTES'
+	| 'BYTEA'
+	| 'TEXT'
+	| 'NAME'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLSERIAL'
+	| 'UUID'
+	| 'INET'
+	| 'BIGSERIAL'
+	| 'OID'
+	| 'OIDVECTOR'
+	| 'INT2VECTOR'
+	| 'identifier'
+
 bit_with_length ::=
 	'BIT' opt_varying '(' iconst64 ')'
 
@@ -1666,47 +1663,6 @@ opt_interval ::=
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
 	| 
-
-numeric ::=
-	'INT'
-	| 'INT2'
-	| 'INT4'
-	| 'INT8'
-	| 'INT64'
-	| 'INTEGER'
-	| 'SMALLINT'
-	| 'BIGINT'
-	| 'REAL'
-	| 'FLOAT4'
-	| 'FLOAT8'
-	| 'FLOAT' opt_float
-	| 'DOUBLE' 'PRECISION'
-	| 'DECIMAL' opt_numeric_modifiers
-	| 'DEC' opt_numeric_modifiers
-	| 'NUMERIC' opt_numeric_modifiers
-	| 'BOOLEAN'
-	| 'BOOL'
-
-bit_without_length ::=
-	'BIT' opt_varying
-
-character_without_length ::=
-	character_base
-
-const_datetime ::=
-	'DATE'
-	| 'TIME'
-	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMETZ'
-	| 'TIME' 'WITH' 'TIME' 'ZONE'
-	| 'TIMESTAMP'
-	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMPTZ'
-	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
-
-const_json ::=
-	'JSON'
-	| 'JSONB'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -1831,6 +1787,9 @@ column_path ::=
 	name
 	| prefixed_column_path
 
+interval ::=
+	const_interval 'SCONST' opt_interval
+
 func_application ::=
 	func_name '(' ')'
 	| func_name '(' expr_list ')'
@@ -1883,6 +1842,47 @@ opt_slice_bound ::=
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
+numeric ::=
+	'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+	| 'BOOL'
+
+bit_without_length ::=
+	'BIT' opt_varying
+
+character_without_length ::=
+	character_base
+
+const_datetime ::=
+	'DATE'
+	| 'TIME'
+	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMETZ'
+	| 'TIME' 'WITH' 'TIME' 'ZONE'
+	| 'TIMESTAMP'
+	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
+
+const_json ::=
+	'JSON'
+	| 'JSONB'
+
 opt_varying ::=
 	'VARYING'
 	| 
@@ -1895,15 +1895,6 @@ character_base ::=
 
 interval_second ::=
 	'SECOND'
-
-opt_float ::=
-	'(' 'ICONST' ')'
-	| 
-
-opt_numeric_modifiers ::=
-	'(' iconst64 ')'
-	| '(' iconst64 ',' iconst64 ')'
-	| 
 
 from_list ::=
 	( table_ref ) ( ( ',' table_ref ) )*
@@ -2037,6 +2028,15 @@ special_function ::=
 	| 'TRIM' '(' trim_list ')'
 	| 'GREATEST' '(' expr_list ')'
 	| 'LEAST' '(' expr_list ')'
+
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst64 ')'
+	| '(' iconst64 ',' iconst64 ')'
+	| 
 
 window_definition ::=
 	window_name 'AS' window_specification
