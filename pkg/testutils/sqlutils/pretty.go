@@ -15,7 +15,6 @@
 package sqlutils
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -26,11 +25,6 @@ import (
 // correctly round trip through the pretty printer.
 func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	t.Helper()
-
-	if strings.Contains(strings.ToUpper(sql), "AS OF SYSTEM TIME") {
-		// TODO(mjibson): See #26976
-		return
-	}
 
 	stmts, err := parser.Parse(sql)
 	if err != nil {

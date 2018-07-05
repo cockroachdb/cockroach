@@ -481,7 +481,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
 		// subqueries or view queries) but they must all point to the same
 		// timestamp.
-		ts, err := EvalAsOfTimestamp(p.EvalContext(), asOf, hlc.MaxTimestamp)
+		ts, err := p.EvalAsOfTimestamp(asOf, hlc.MaxTimestamp)
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
