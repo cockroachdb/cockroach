@@ -419,6 +419,37 @@ func (s *CSVWriterSpec) summary() (string, []string) {
 	return "CSVWriter", []string{s.Destination}
 }
 
+// summary implements the diagramCellType interface.
+func (w *WindowerSpec) summary() (string, []string) {
+	details := make([]string, 0, len(w.WindowFns))
+	if len(w.PartitionBy) > 0 {
+		details = append(details, fmt.Sprintf("PARTITION BY: %s", colListStr(w.PartitionBy)))
+	}
+	for _, windowFn := range w.WindowFns {
+		var buf bytes.Buffer
+		if windowFn.Func.WindowFunc != nil {
+			buf.WriteString(windowFn.Func.WindowFunc.String())
+		} else {
+			buf.WriteString(windowFn.Func.AggregateFunc.String())
+		}
+		buf.WriteByte('(')
+		args := make([]uint32, windowFn.ArgCount)
+		for i := uint32(0); i < windowFn.ArgCount; i++ {
+			args[i] = i + windowFn.ArgIdxStart
+		}
+		buf.WriteString(colListStr(args))
+		buf.WriteByte(')')
+		if len(windowFn.Ordering.Columns) > 0 {
+			buf.WriteString(" (ORDER BY ")
+			buf.WriteString(windowFn.Ordering.diagramString())
+			buf.WriteByte(')')
+		}
+		details = append(details, buf.String())
+	}
+
+	return "Windower", details
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
