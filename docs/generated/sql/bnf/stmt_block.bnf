@@ -972,8 +972,6 @@ table_elem ::=
 c_expr ::=
 	d_expr
 	| d_expr array_subscripts
-	| case_expr
-	| 'EXISTS' select_with_parens
 
 cast_target ::=
 	typename
@@ -1312,16 +1310,15 @@ d_expr ::=
 	| '(' a_expr ')'
 	| func_expr
 	| select_with_parens
+	| 'EXISTS' select_with_parens
 	| 'ARRAY' select_with_parens
 	| 'ARRAY' array_expr
 	| row
 	| '(' row 'AS' name_list ')'
+	| 'CASE' case_arg when_clause_list case_default 'END'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
-
-case_expr ::=
-	'CASE' case_arg when_clause_list case_default 'END'
 
 postgres_oid ::=
 	'REGPROC'
@@ -1626,10 +1623,6 @@ row ::=
 	'ROW' '(' opt_expr_list ')'
 	| '(' expr_list ',' a_expr ')'
 
-array_subscript ::=
-	'[' a_expr ']'
-	| '[' opt_slice_bound ':' opt_slice_bound ']'
-
 case_arg ::=
 	a_expr
 	| 
@@ -1640,6 +1633,10 @@ when_clause_list ::=
 case_default ::=
 	'ELSE' a_expr
 	| 
+
+array_subscript ::=
+	'[' a_expr ']'
+	| '[' opt_slice_bound ':' opt_slice_bound ']'
 
 bit_with_length ::=
 	'BIT' opt_varying '(' iconst64 ')'
@@ -1875,12 +1872,12 @@ opt_expr_list ::=
 array_expr_list ::=
 	( array_expr ) ( ( ',' array_expr ) )*
 
+when_clause ::=
+	'WHEN' a_expr 'THEN' a_expr
+
 opt_slice_bound ::=
 	a_expr
 	| 
-
-when_clause ::=
-	'WHEN' a_expr 'THEN' a_expr
 
 opt_varying ::=
 	'VARYING'

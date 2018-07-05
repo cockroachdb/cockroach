@@ -867,7 +867,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <tree.Tuple> row
-%type <tree.Expr> case_expr case_arg case_default
+%type <tree.Expr> case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
 %type <tree.ComparisonOperator> sub_type
@@ -6776,11 +6776,6 @@ c_expr:
       Indirection: $2.arraySubscripts(),
     }
   }
-| case_expr
-| EXISTS select_with_parens
-  {
-    $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
-  }
 
 // Productions that can be followed by a postfix operator.
 //
@@ -6886,6 +6881,10 @@ d_expr:
   {
     $$.val = &tree.Subquery{Select: $1.selectStmt()}
   }
+| EXISTS select_with_parens
+  {
+    $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
+  }
 | ARRAY select_with_parens
   {
     $$.val = &tree.ArrayFlatten{Subquery: &tree.Subquery{Select: $2.selectStmt()}}
@@ -6908,6 +6907,15 @@ d_expr:
       t.Labels[i] = string(l)
     }
     $$.val = &t
+  }
+// Define SQL-style CASE clause.
+// - Full specification
+//      CASE WHEN a = b THEN c ... ELSE d END
+// - Implicit argument
+//      CASE a WHEN b THEN c ... ELSE d END
+| CASE case_arg when_clause_list case_default END
+  {
+    $$.val = &tree.CaseExpr{Expr: $2.expr(), Whens: $3.whens(), Else: $4.expr()}
   }
 
 // TODO(pmattis): Support this notation?
@@ -7570,17 +7578,6 @@ in_expr:
 | '(' expr_list ')'
   {
     $$.val = &tree.Tuple{Exprs: $2.exprs()}
-  }
-
-// Define SQL-style CASE clause.
-// - Full specification
-//      CASE WHEN a = b THEN c ... ELSE d END
-// - Implicit argument
-//      CASE a WHEN b THEN c ... ELSE d END
-case_expr:
-  CASE case_arg when_clause_list case_default END
-  {
-    $$.val = &tree.CaseExpr{Expr: $2.expr(), Whens: $3.whens(), Else: $4.expr()}
   }
 
 when_clause_list:

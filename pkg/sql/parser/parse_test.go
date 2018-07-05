@@ -723,6 +723,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a = NULLIF(b, c)`},
 		{`SELECT a FROM t WHERE a = COALESCE(a, b, c, d, e)`},
 		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
+		{`SELECT CASE a WHEN b THEN c ELSE d END[e]`},
+		{`SELECT EXISTS (SELECT 1)[1]`},
 
 		{`SELECT a FROM t ORDER BY a`},
 		{`SELECT a FROM t ORDER BY a ASC`},
@@ -1913,20 +1915,6 @@ SELECT (0) FROM y[array[]]
 INSERT INTO kv (k[0]) VALUES ('hello')
                  ^
 HINT: try \h <SELECTCLAUSE>`,
-		},
-		{
-			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
-			`syntax error at or near "["
-SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
-                                                                 ^
-`,
-		},
-		{
-			`SELECT EXISTS(SELECT 1)[1]`,
-			`syntax error at or near "["
-SELECT EXISTS(SELECT 1)[1]
-                       ^
-`,
 		},
 		{
 			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
