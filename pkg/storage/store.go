@@ -398,8 +398,7 @@ type Store struct {
 	nodeDesc     *roachpb.NodeDescriptor
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
-	// Semaphore to limit concurrent non-empty snapshot application and replica
-	// data destruction.
+	// Semaphore to limit concurrent non-empty snapshot application.
 	snapshotApplySem chan struct{}
 
 	// Channel of newly-acquired expiration-based leases that we want to
@@ -2440,23 +2439,6 @@ type RemoveOptions struct {
 func (s *Store) RemoveReplica(
 	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, opts RemoveOptions,
 ) error {
-	if opts.DestroyData {
-		// Destroying replica state is moderately expensive, so we serialize such
-		// operations with applying non-empty snapshots.
-		//
-		// TODO(benesch): I'm not sure this is true now that we use RocksDB range
-		// deletion tombstones for replicas with many keys.
-		select {
-		case s.snapshotApplySem <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.stopper.ShouldStop():
-			return errors.Errorf("stopped")
-		}
-		defer func() {
-			<-s.snapshotApplySem
-		}()
-	}
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	return s.removeReplicaImpl(ctx, rep, consistentDesc, opts)

@@ -43,7 +43,7 @@ const (
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
-	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
+	snapshotApplySemBusyMsg = "store busy applying snapshots"
 	storeDrainingMsg        = "store is draining"
 
 	// IntersectingSnapshotMsg is part of the error message returned from
