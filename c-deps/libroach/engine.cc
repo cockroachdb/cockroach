@@ -435,4 +435,9 @@ DBStatus DBImpl::EnvDeleteDirAndFiles(DBSlice dir) {
   return ToDBStatus(status);
 }
 
+// EnvLinkFile creates 'newname' as a hard link to 'oldname'.
+DBStatus DBImpl::EnvLinkFile(DBSlice oldname, DBSlice newname) {
+  return ToDBStatus(this->rep->GetEnv()->LinkFile(ToString(oldname), ToString(newname)));
+}
+
 }  // namespace cockroach

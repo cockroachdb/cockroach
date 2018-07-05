@@ -43,7 +43,9 @@ func registerUpgrade(r *registry) {
 		}
 
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes))
+		// Force disable encryption.
+		// TODO(mberhault): allow it once oldVersion >= 2.1.
+		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -129,7 +131,7 @@ func registerUpgrade(r *registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, c.Node(i))
+			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -151,7 +153,7 @@ func registerUpgrade(r *registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, c.Node(nodes))
+		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +194,7 @@ func registerUpgrade(r *registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, c.Node(nodes-1))
+		c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}

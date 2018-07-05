@@ -402,6 +402,9 @@ DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path);
 // files it contains but not subdirectories in the given engine.
 DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir);
 
+// DBEnvLinkFile creates 'newname' as a hard link to 'oldname using the given engine.
+DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname);
+
 // DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
 typedef void* DBFileLock;
 
