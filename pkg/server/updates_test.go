@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -507,6 +508,8 @@ func TestReportUsage(t *testing.T) {
 	}
 	sort.Strings(foundKeys)
 	expectedKeys := []string{
+		`[false,false] ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
+		`[false,false] ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
 		`[false,false] CREATE DATABASE _`,
 		`[false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
 		`[false,false] INSERT INTO _ VALUES (_)`,
@@ -524,6 +527,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 		`[true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 	}
+	t.Logf("expected:\n%s\ngot:\n%s", pretty.Sprint(expectedKeys), pretty.Sprint(foundKeys))
 	for i, found := range foundKeys {
 		if i >= len(expectedKeys) {
 			t.Fatalf("extraneous stat entry: %q", found)
@@ -547,6 +551,8 @@ func TestReportUsage(t *testing.T) {
 
 	for appName, expectedStatements := range map[string][]string{
 		"": {
+			`ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
+			`ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
 			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
