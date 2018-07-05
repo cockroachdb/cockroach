@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata 5node-local 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
 
 statement ok
 CREATE TABLE kv (
@@ -627,6 +627,16 @@ SELECT round((avg(d) OVER wind) * max(k) + (lag(d, 1, 42.0) OVER wind) * max(d))
 -1874
 -385
 -372
+
+query RR
+SELECT avg(k) OVER w, avg(k) OVER w + 1 FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY k
+----
+4.6666666666666666667  5.6666666666666666667
+5.5                    6.5
+5                      6
+4.6666666666666666667  5.6666666666666666667
+7                      8
+8                      9
 
 statement OK
 INSERT INTO kv VALUES
@@ -2042,7 +2052,7 @@ Samsung          Tablet      200.00   350
 iPad             Tablet      700.00   450
 
 query TTRR
-SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ROWS (SELECT count(*) FROM PRODUCTS WHERE price = 200) PRECEDING) AS running_avg_of_three FROM products ORDER BY group_id
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS (SELECT count(*) FROM PRODUCTS WHERE price = 200) PRECEDING) AS running_avg_of_three FROM products ORDER BY group_id
 ----
 Smartphone  Microsoft Lumia  200.00   200.00
 Smartphone  HTC One          400.00   300.00
@@ -2177,7 +2187,7 @@ Kindle Fire      150.00   150.00   700.00   1050.00  150.00
 Samsung          200.00   150.00   700.00   350.00   200.00
 
 query RRR
-SELECT avg(price) OVER w1, avg(price) OVER w2, avg(price) OVER w1 FROM products WINDOW w1 AS (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING), w2 AS (ORDER BY group_id ROWS 1 PRECEDING)
+SELECT avg(price) OVER w1, avg(price) OVER w2, avg(price) OVER w1 FROM products WINDOW w1 AS (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING), w2 AS (ORDER BY group_id ROWS 1 PRECEDING) ORDER BY group_id
 ----
 300.00                 200.00   300.00
 366.66666666666666667  300.00   366.66666666666666667

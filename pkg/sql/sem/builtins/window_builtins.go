@@ -177,6 +177,16 @@ type aggregateWindowFunc struct {
 	peerRes tree.Datum
 }
 
+// NewAggregateWindowFunc creates a constructor of aggregateWindowFunc
+// with agg initialized by provided aggConstructor.
+func NewAggregateWindowFunc(
+	aggConstructor func(*tree.EvalContext) tree.AggregateFunc,
+) func(*tree.EvalContext) tree.WindowFunc {
+	return func(evalCtx *tree.EvalContext) tree.WindowFunc {
+		return &aggregateWindowFunc{agg: aggConstructor(evalCtx)}
+	}
+}
+
 func (w *aggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
