@@ -689,6 +689,9 @@ func (node *StatementSource) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (node *RowsFromExpr) doc(p PrettyCfg) pretty.Doc {
+	if len(node.Items) == 1 {
+		return p.Doc(node.Items[0])
+	}
 	return p.bracket("ROWS FROM (", p.Doc(&node.Items), ")")
 }
 
