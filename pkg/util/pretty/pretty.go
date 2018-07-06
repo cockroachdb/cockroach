@@ -36,7 +36,7 @@ func Pretty(d Doc, n int) string {
 func best(w int, x Doc) Doc {
 	b := beExec{
 		w:     w,
-		cache: make(map[string]Doc),
+		cache: make(map[cacheKey]Doc),
 	}
 	return b.be(0, iDoc{0, "", x})
 }
@@ -51,10 +51,15 @@ func (i iDoc) String() string {
 	return fmt.Sprintf("{%d: %s}", i.i, i.d)
 }
 
+type cacheKey struct {
+	k int
+	s string
+}
+
 type beExec struct {
 	w int
 	// cache is a memoized cache used during better calculation.
-	cache map[string]Doc
+	cache map[cacheKey]Doc
 	buf   bytes.Buffer
 }
 
@@ -95,9 +100,12 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 		for _, xd := range x {
 			b.buf.WriteString(xd.String())
 		}
-		s := b.buf.String()
+		key := cacheKey{
+			k: k,
+			s: b.buf.String(),
+		}
 		b.buf.Reset()
-		cached, ok := b.cache[s]
+		cached, ok := b.cache[key]
 		if ok {
 			return cached
 		}
@@ -110,7 +118,7 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 				return b.be(k, n...)
 			},
 		)
-		b.cache[s] = res
+		b.cache[key] = res
 		return res
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
@@ -128,16 +136,16 @@ func fits(w int, x Doc) bool {
 	if w < 0 {
 		return false
 	}
-	if x == Nil {
+	switch t := x.(type) {
+	case nilDoc:
 		return true
-	}
-	if t, ok := x.(textX); ok {
+	case textX:
 		return fits(w-len(t.s), t.d)
-	}
-	if _, ok := x.(lineX); ok {
+	case lineX:
 		return true
+	default:
+		panic(fmt.Errorf("unknown type: %T", x))
 	}
-	panic(fmt.Errorf("unknown type: %T", x))
 }
 
 func layout(sb *strings.Builder, d Doc) {

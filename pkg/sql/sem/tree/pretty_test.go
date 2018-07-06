@@ -30,6 +30,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
 
 var (
@@ -131,5 +132,34 @@ func TestPrettyVerify(t *testing.T) {
 				t.Fatalf("got: %s\nexpected: %s", got, pretty)
 			}
 		})
+	}
+}
+
+func BenchmarkPrettyData(b *testing.B) {
+	matches, err := filepath.Glob(filepath.Join("testdata", "pretty", "*.sql"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	var docs []pretty.Doc
+	cfg := tree.PrettyCfg{Tab: "\t", TabWidth: 4}
+	for _, m := range matches {
+		sql, err := ioutil.ReadFile(m)
+		if err != nil {
+			b.Fatal(err)
+		}
+		stmt, err := parser.ParseOne(string(sql))
+		if err != nil {
+			b.Fatal(err)
+		}
+		docs = append(docs, cfg.Doc(stmt))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, doc := range docs {
+			for _, w := range []int{1, 30, 80} {
+				pretty.Pretty(doc, w)
+			}
+		}
 	}
 }
