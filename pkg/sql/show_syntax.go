@@ -126,7 +126,7 @@ func runShowSyntax(
 		}
 	} else {
 		for _, stmt := range stmts {
-			if err := report(ctx, "sql", tree.AsStringWithFlags(stmt, tree.FmtParsable)); err != nil {
+			if err := report(ctx, "sql", tree.Pretty(stmt)); err != nil {
 				return err
 			}
 		}
