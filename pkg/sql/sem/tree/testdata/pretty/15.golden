@@ -1,6 +1,6 @@
 1:
 -
-SELECT DISTINCT
+SELECT DISTINCT ON (pk1, pk2, x, y)
 	x,
 	y,
 	z
@@ -12,7 +12,7 @@ ORDER BY
 
 8:
 --------
-SELECT DISTINCT
+SELECT DISTINCT ON (pk1, pk2, x, y)
 	x,
 	y,
 	z
@@ -22,7 +22,7 @@ ORDER BY
 
 11:
 -----------
-SELECT DISTINCT
+SELECT DISTINCT ON (pk1, pk2, x, y)
 	x, y, z
 FROM xyz
 ORDER BY
@@ -30,22 +30,22 @@ ORDER BY
 
 13:
 -------------
-SELECT DISTINCT
+SELECT DISTINCT ON (pk1, pk2, x, y)
 	x, y, z
 FROM xyz
 ORDER BY x, y
 
-23:
------------------------
-SELECT DISTINCT x, y, z
+43:
+-------------------------------------------
+SELECT DISTINCT ON (pk1, pk2, x, y) x, y, z
 FROM xyz
 ORDER BY x, y
 
-32:
---------------------------------
-SELECT DISTINCT x, y, z FROM xyz
+52:
+----------------------------------------------------
+SELECT DISTINCT ON (pk1, pk2, x, y) x, y, z FROM xyz
 ORDER BY x, y
 
-46:
-----------------------------------------------
-SELECT DISTINCT x, y, z FROM xyz ORDER BY x, y
+66:
+------------------------------------------------------------------
+SELECT DISTINCT ON (pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
