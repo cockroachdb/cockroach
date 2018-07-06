@@ -244,17 +244,14 @@ func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (p PrettyCfg) docBinaryOp(l, r Expr, op string) pretty.Doc {
-	return pretty.Group(pretty.Concat(
+	return pretty.Group(pretty.Fold(pretty.Concat,
 		p.exprDocWithParen(l),
-		pretty.Concat(
+		pretty.Line,
+		pretty.Group(pretty.Fold(pretty.Concat,
+			pretty.Text(op),
 			pretty.Line,
-			pretty.Group(pretty.Fold(pretty.Concat,
-				pretty.Text(op),
-				pretty.Line,
-				p.exprDocWithParen(r),
-			)),
-		),
-	))
+			p.exprDocWithParen(r),
+		))))
 }
 
 func (node *Exprs) doc(p PrettyCfg) pretty.Doc {
@@ -333,6 +330,8 @@ func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
 
 func (node *ParenExpr) doc(p PrettyCfg) pretty.Doc {
 	return p.bracket("(", p.Doc(node.Expr), ")")
+	// return pretty.Fold(pretty.Concat,
+	// pretty.Text("("), p.Doc(node.Expr), pretty.Text(")"))
 }
 
 func (node *ParenSelect) doc(p PrettyCfg) pretty.Doc {
@@ -533,18 +532,35 @@ func (node *FuncExpr) doc(p PrettyCfg) pretty.Doc {
 	return d
 }
 
-func (node *ComparisonExpr) doc(p PrettyCfg) pretty.Doc {
-	if node.Operator.hasSubOperator() {
-		return p.docAsString(node)
+func (p PrettyCfg) peelCompOperand(e Expr) Expr {
+	if !p.Simplify {
+		return e
 	}
+	stripped := StripParens(e)
+	switch stripped.(type) {
+	case *FuncExpr, *IndirectionExpr, *UnaryExpr,
+		*AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		return stripped
+	}
+	return e
+}
 
+func (node *ComparisonExpr) doc(p PrettyCfg) pretty.Doc {
 	opStr := node.Operator.String()
 	if node.Operator == IsDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
 	} else if node.Operator == IsNotDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
-	return p.docBinaryOp(node.Left, node.Right, opStr)
+	opDoc := pretty.Text(opStr)
+	if node.Operator.hasSubOperator() {
+		opDoc = pretty.ConcatSpace(opDoc, pretty.Text(node.SubOperator.String()))
+	}
+	return pretty.Group(
+		pretty.JoinNestedRight(p.TabWidth, p.Tab,
+			opDoc,
+			p.Doc(p.peelCompOperand(node.Left)),
+			p.Doc(p.peelCompOperand(node.Right))))
 }
 
 func (node *AliasClause) doc(p PrettyCfg) pretty.Doc {
