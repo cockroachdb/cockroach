@@ -947,6 +947,31 @@ var binaryOpName = [...]string{
 	JSONFetchTextPath: "#>>",
 }
 
+// binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
+var binaryOpPrio = [...]int{
+	Pow:  1,
+	Mult: 2, Div: 2, FloorDiv: 2, Mod: 2,
+	Plus: 3, Minus: 3,
+	LShift: 4, RShift: 4,
+	Bitand: 5,
+	Bitxor: 6,
+	Bitor:  7,
+	Concat: 8, JSONFetchVal: 8, JSONFetchText: 8, JSONFetchValPath: 8, JSONFetchTextPath: 8,
+}
+
+// binaryOpFullyAssoc indicates whether an operator is fully associative.
+// Reminder: an op R is fully associative if (a R b) R c == a R (b R c)
+var binaryOpFullyAssoc = [...]bool{
+	Pow:  false,
+	Mult: true, Div: false, FloorDiv: false, Mod: false,
+	Plus: true, Minus: false,
+	LShift: false, RShift: false,
+	Bitand: true,
+	Bitxor: true,
+	Bitor:  true,
+	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
+}
+
 func (i BinaryOperator) isPadded() bool {
 	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
 }

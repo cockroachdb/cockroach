@@ -106,6 +106,24 @@ func Concat(a, b Doc) Doc {
 	})
 }
 
+// Fill concatenates a list of docs with spaces if possible,
+// otherwise with newlines.
+// See linked paper pp 14-15.
+// func Fill(d ...Doc) Doc {
+// 	switch len(d) {
+// 	case 0:
+// 		return Nil
+// 	case 1:
+// 		return d[0]
+// 	default:
+// 		rest := Fill(d[1:]...)
+// 		return union{
+// 			ConcatSpace(flatten(d[0]), rest),
+// 			ConcatLine(d[0], rest),
+// 		}
+// 	}
+// }
+
 // Group will format d on one line if possible.
 func Group(d Doc) Doc {
 	return union{flatten(d), d}
