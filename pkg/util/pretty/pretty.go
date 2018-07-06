@@ -136,16 +136,16 @@ func fits(w int, x Doc) bool {
 	if w < 0 {
 		return false
 	}
-	if x == Nil {
+	switch t := x.(type) {
+	case nilDoc:
 		return true
-	}
-	if t, ok := x.(textX); ok {
+	case textX:
 		return fits(w-len(t.s), t.d)
-	}
-	if _, ok := x.(lineX); ok {
+	case lineX:
 		return true
+	default:
+		panic(fmt.Errorf("unknown type: %T", x))
 	}
-	panic(fmt.Errorf("unknown type: %T", x))
 }
 
 func layout(sb *strings.Builder, d Doc) {
