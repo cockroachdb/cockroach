@@ -24,23 +24,29 @@ import (
 // ExampleTree demonstrates the Tree example from the paper.
 func Example_tree() {
 	type Tree struct {
-		s string
-		n []Tree
+		s  string
+		n  []Tree
+		op string
 	}
 	tree := Tree{
-		"aaa",
-		[]Tree{
+		s: "aaa",
+		n: []Tree{
 			{
-				"bbbbb",
-				[]Tree{
+				s: "bbbbb",
+				n: []Tree{
 					{s: "ccc"},
 					{s: "dd"},
+					{s: "ee", op: "*", n: []Tree{
+						{s: "some"},
+						{s: "another", n: []Tree{{s: "2a"}, {s: "2b"}}},
+						{s: "final"},
+					}},
 				},
 			},
 			{s: "eee"},
 			{
-				"ffff",
-				[]Tree{
+				s: "ffff",
+				n: []Tree{
 					{s: "gg"},
 					{s: "hhh"},
 					{s: "ii"},
@@ -75,9 +81,24 @@ func Example_tree() {
 		)
 	}
 	showTree = func(t Tree) pretty.Doc {
+		var doc pretty.Doc
+		if t.op != "" {
+			var operands []pretty.Doc
+			for _, o := range t.n {
+				operands = append(operands, showTree(o))
+			}
+			doc = pretty.Fold(pretty.Concat,
+				pretty.Text("("),
+				pretty.JoinNestedRight(len(t.s), strings.Repeat(" ", len(t.s)),
+					pretty.Text(t.op), operands...),
+				pretty.Text(")"),
+			)
+		} else {
+			doc = showBracket(t.n)
+		}
 		return pretty.Group(pretty.Concat(
 			pretty.Text(t.s),
-			pretty.Nest(len(t.s), strings.Repeat(" ", len(t.s)), showBracket(t.n)),
+			pretty.Nest(len(t.s), strings.Repeat(" ", len(t.s)), doc),
 		))
 	}
 	for _, n := range []int{1, 30, 80} {
@@ -87,17 +108,25 @@ func Example_tree() {
 	// Output:
 	// 1:
 	// aaa[bbbbb[ccc,
-	//           dd],
+	//           dd,
+	//           ee(some
+	//             * another[2a,
+	//                       2b]
+	//             * final)],
 	//     eee,
 	//     ffff[gg,
 	//          hhh,
 	//          ii]]
 	//
 	// 30:
-	// aaa[bbbbb[ccc, dd],
+	// aaa[bbbbb[ccc,
+	//           dd,
+	//           ee(some
+	//             * another[2a, 2b]
+	//             * final)],
 	//     eee,
 	//     ffff[gg, hhh, ii]]
 	//
 	// 80:
-	// aaa[bbbbb[ccc, dd], eee, ffff[gg, hhh, ii]]
+	// aaa[bbbbb[ccc, dd, ee(some * another[2a, 2b] * final)], eee, ffff[gg, hhh, ii]]
 }
