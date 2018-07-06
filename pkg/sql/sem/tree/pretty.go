@@ -812,7 +812,11 @@ func (node *UpdateExpr) doc(p PrettyCfg) pretty.Doc {
 	if node.Tuple {
 		d = p.bracket("(", d, ")")
 	}
-	return pretty.Stack(d, pretty.Text("="), p.Doc(node.Expr))
+	e := node.Expr
+	if p.Simplify {
+		e = StripParens(e)
+	}
+	return pretty.Group(p.nestName(d, pretty.ConcatSpace(pretty.Text("="), p.Doc(e))))
 }
 
 func (node *CreateTable) doc(p PrettyCfg) pretty.Doc {
