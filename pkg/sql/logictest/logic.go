@@ -531,7 +531,8 @@ func (ls *logicStatement) readSQL(
 						fmt.Fprintln(&newSyntax, ";")
 					}
 					fmt.Fprint(&newSyntax,
-						tree.PrettyWithOpts(s, *sqlfmtLen, false /* useTabs */, 4 /* tab width */))
+						tree.PrettyWithOpts(s,
+							*sqlfmtLen, false /* useTabs */, 4 /* tab width */, false /* simplify */))
 				}
 				return newSyntax.String(), nil
 			}(ls.sql)

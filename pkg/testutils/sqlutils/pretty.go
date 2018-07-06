@@ -37,7 +37,8 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 		t.Fatalf("%s: %s", err, sql)
 	}
 	for _, origStmt := range stmts {
-		prettyStmt := tree.Pretty(origStmt)
+		// Be careful to not simplify otherwise the tests won't round trip.
+		prettyStmt := tree.PrettyWithOpts(origStmt, tree.DefaultPrettyWidth, true, 4, false /* simplify */)
 		parsedPretty, err := parser.ParseOne(prettyStmt)
 		if err != nil {
 			t.Fatalf("%s: %s", err, prettyStmt)

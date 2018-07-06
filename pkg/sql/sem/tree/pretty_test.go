@@ -71,7 +71,7 @@ func TestPrettyData(t *testing.T) {
 			g, _ := errgroup.WithContext(context.Background())
 			worker := func() error {
 				for i := range work {
-					res[i-1] = tree.PrettyWithOpts(stmt, i, true, 4)
+					res[i-1] = tree.PrettyWithOpts(stmt, i, true, 4, true)
 				}
 				return nil
 			}
