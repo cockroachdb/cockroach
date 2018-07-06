@@ -102,15 +102,6 @@ func (p PrettyCfg) bracket(l string, x pretty.Doc, r string) pretty.Doc {
 	return pretty.Bracket(p.TabWidth, p.Tab, l, x, r)
 }
 
-func (p PrettyCfg) indentArgs(l pretty.Doc, op string, r pretty.Doc) pretty.Doc {
-	return pretty.Fold(pretty.Concat,
-		pretty.Nest(p.TabWidth, p.Tab, l),
-		pretty.Line,
-		pretty.Text(op),
-		pretty.Nest(p.TabWidth, p.Tab, pretty.Concat(pretty.Line, r)),
-	)
-}
-
 // docer is implemented by nodes that can convert themselves into
 // pretty.Docs. If nodes cannot, node.Format is used instead as a Text Doc.
 type docer interface {
@@ -884,7 +875,7 @@ func (node *UnionClause) doc(p PrettyCfg) pretty.Doc {
 	if node.All {
 		op += " ALL"
 	}
-	return p.indentArgs(p.Doc(node.Left), op, p.Doc(node.Right))
+	return pretty.Stack(p.Doc(node.Left), p.nestName(pretty.Text(op), p.Doc(node.Right)))
 }
 
 func (node *NoReturningClause) doc(PrettyCfg) pretty.Doc { return pretty.Nil }
