@@ -87,7 +87,12 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString("SELECT ")
 		if node.Distinct {
-			ctx.WriteString("DISTINCT ")
+			if node.DistinctOn != nil {
+				ctx.FormatNode(&node.DistinctOn)
+				ctx.WriteByte(' ')
+			} else {
+				ctx.WriteString("DISTINCT ")
+			}
 		}
 		ctx.FormatNode(&node.Exprs)
 		ctx.FormatNode(node.From)
@@ -436,12 +441,9 @@ type DistinctOn []Expr
 
 // Format implements the NodeFormatter interface.
 func (node *DistinctOn) Format(ctx *FmtCtx) {
-	prefix := " DISTINCT ON "
-	for _, n := range *node {
-		ctx.WriteString(prefix)
-		ctx.FormatNode(n)
-		prefix = ", "
-	}
+	ctx.WriteString("DISTINCT ON (")
+	ctx.FormatNode((*Exprs)(node))
+	ctx.WriteByte(')')
 }
 
 // OrderBy represents an ORDER By clause.

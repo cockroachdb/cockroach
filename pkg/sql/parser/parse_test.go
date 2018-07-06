@@ -812,6 +812,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t LIMIT a OFFSET b`},
 		{`SELECT DISTINCT * FROM t`},
 		{`SELECT DISTINCT a, b FROM t`},
+		{`SELECT DISTINCT ON (a, b) c FROM t`},
 		{`SET a = 3`},
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},

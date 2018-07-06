@@ -259,12 +259,16 @@ func (node SelectClause) doc(p prettyCfg) pretty.Doc {
 	if node.TableSelect {
 		return p.nestName(pretty.Text("TABLE"), p.Doc(node.From.Tables[0]))
 	}
-	sel := "SELECT"
+	sel := pretty.Text("SELECT")
 	if node.Distinct {
-		sel += " DISTINCT"
+		if node.DistinctOn != nil {
+			sel = pretty.ConcatSpace(sel, p.Doc(&node.DistinctOn))
+		} else {
+			sel = pretty.Concat(sel, pretty.Text(" DISTINCT"))
+		}
 	}
 	return pretty.Group(pretty.Stack(
-		p.nestName(pretty.Text(sel), node.Exprs.doc(p)),
+		p.nestName(sel, node.Exprs.doc(p)),
 		node.From.doc(p),
 		node.Where.doc(p),
 		node.GroupBy.doc(p),
