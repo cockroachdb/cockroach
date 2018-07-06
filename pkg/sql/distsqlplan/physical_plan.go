@@ -242,9 +242,9 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	p.MergeOrdering = distsqlrun.Ordering{}
 }
 
-// GetLastStagePost returns the PostProcessSpec for the processors in the last
-// stage (ResultRouters).
-func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
+// CheckLastStagePost checks that the processors of the last stage of the
+// PhysicalPlan have identical post-processing, returning an error if not.
+func (p *PhysicalPlan) CheckLastStagePost() error {
 	post := p.Processors[p.ResultRouters[0]].Spec.Post
 
 	// All processors of a stage should be identical in terms of post-processing;
@@ -253,16 +253,25 @@ func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
 		pi := &p.Processors[p.ResultRouters[i]].Spec.Post
 		if pi.Filter != post.Filter || pi.Projection != post.Projection ||
 			len(pi.OutputColumns) != len(post.OutputColumns) {
-			panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+			return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
 		}
 		for j, col := range pi.OutputColumns {
 			if col != post.OutputColumns[j] {
-				panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+				return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
 			}
 		}
 	}
 
-	return post
+	return nil
+}
+
+// GetLastStagePost returns the PostProcessSpec for the processors in the last
+// stage (ResultRouters).
+func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
+	if err := p.CheckLastStagePost(); err != nil {
+		panic(err)
+	}
+	return p.Processors[p.ResultRouters[0]].Spec.Post
 }
 
 // SetLastStagePost changes the PostProcess spec of the processors in the last
@@ -763,7 +772,7 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 			merged[i] = leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
 			merged[i] = rightType
-		} else if leftType.Equal(rightType) {
+		} else if leftType.Equivalent(rightType) {
 			merged[i] = leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)

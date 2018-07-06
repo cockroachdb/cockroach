@@ -237,3 +237,25 @@ union             ·     ·
  └── render       ·     ·
       └── values  ·     ·
 ·                 size  3 columns, 6 rows
+
+# Check that UNION permits columns of different visible types
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (a INTEGER PRIMARY KEY)
+
+query I
+SELECT * FROM a UNION ALL SELECT * FROM b
+
+
+# Make sure that UNION ALL doesn't crash when its two children have different
+# post-processing stages.
+
+statement ok
+CREATE TABLE c (a INT PRIMARY KEY, b INT)
+
+query I
+SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
+----
