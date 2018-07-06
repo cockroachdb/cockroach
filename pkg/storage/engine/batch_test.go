@@ -174,8 +174,14 @@ func TestReadOnlyBasics(t *testing.T) {
 		func() { _, _ = b.Get(a) },
 		func() { _, _, _, _ = b.GetProto(a, getVal) },
 		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-		func() { b.NewIterator(IterOptions{}).Close() },
-		func() { b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}, false).Close() },
+		func() { b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+		func() {
+			b.NewIterator(IterOptions{
+				MinTimestampHint: hlc.MinTimestamp,
+				MaxTimestampHint: hlc.MaxTimestamp,
+				UpperBound:       roachpb.KeyMax,
+			}).Close()
+		},
 	}
 	defer func() {
 		b.Close()
@@ -873,7 +879,7 @@ func TestBatchDistinct(t *testing.T) {
 
 	// Similarly, for distinct batch iterators we will see previous writes to the
 	// batch.
-	iter := distinct.NewIterator(IterOptions{})
+	iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid; err=%v", err)
@@ -924,7 +930,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 	// Verify that reads on the distinct batch go to the underlying engine, not
 	// to the write-only batch.
-	iter := distinct.NewIterator(IterOptions{})
+	iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -970,7 +976,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 		func() { _, _ = batch.Get(a) },
 		func() { _, _, _, _ = batch.GetProto(a, nil) },
 		func() { _ = batch.Iterate(a, a, nil) },
-		func() { _ = batch.NewIterator(IterOptions{}) },
+		func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
 	}
 	for i, f := range testCases {
 		func() {
@@ -999,6 +1005,7 @@ func TestBatchIteration(t *testing.T) {
 
 	k1 := MakeMVCCMetadataKey(roachpb.Key("c"))
 	k2 := MakeMVCCMetadataKey(roachpb.Key("d"))
+	k3 := MakeMVCCMetadataKey(roachpb.Key("e"))
 	v1 := []byte("value1")
 	v2 := []byte("value2")
 
@@ -1008,8 +1015,11 @@ func TestBatchIteration(t *testing.T) {
 	if err := b.Put(k2, v2); err != nil {
 		t.Fatal(err)
 	}
+	if err := b.Put(k3, []byte("doesn't matter")); err != nil {
+		t.Fatal(err)
+	}
 
-	iter := b.NewIterator(IterOptions{})
+	iter := b.NewIterator(IterOptions{UpperBound: k3.Key})
 	defer iter.Close()
 
 	// Forward iteration

@@ -168,12 +168,16 @@ func BenchmarkTimeBoundIterate(b *testing.B) {
 		b.Run(fmt.Sprintf("LoadFactor=%.2f", loadFactor), func(b *testing.B) {
 			b.Run("NormalIterator", func(b *testing.B) {
 				runIterate(b, loadFactor, func(e engine.Engine, _, _ hlc.Timestamp) engine.Iterator {
-					return e.NewIterator(engine.IterOptions{})
+					return e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 				})
 			})
 			b.Run("TimeBoundIterator", func(b *testing.B) {
 				runIterate(b, loadFactor, func(e engine.Engine, startTime, endTime hlc.Timestamp) engine.Iterator {
-					return e.NewTimeBoundIterator(startTime, endTime, false)
+					return e.NewIterator(engine.IterOptions{
+						MinTimestampHint: startTime,
+						MaxTimestampHint: endTime,
+						UpperBound:       roachpb.KeyMax,
+					})
 				})
 			})
 		})

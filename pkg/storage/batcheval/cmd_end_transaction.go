@@ -413,7 +413,11 @@ func resolveLocalIntents(
 	}
 
 	min, max := txn.InclusiveTimeBounds()
-	iter := batch.NewTimeBoundIterator(min, max, false)
+	iter := batch.NewIterator(engine.IterOptions{
+		MinTimestampHint: min,
+		MaxTimestampHint: max,
+		UpperBound:       desc.EndKey.AsRawKey(),
+	})
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
@@ -1035,7 +1039,9 @@ func mergeTrigger(
 	}
 
 	// Copy the rewritten RHS data into the command's batch.
-	iter := eng.NewIterator(engine.IterOptions{})
+	iter := eng.NewIterator(engine.IterOptions{
+		UpperBound: roachpb.KeyMax, // all the data in this engine is relevant
+	})
 	defer iter.Close()
 	for iter.Seek(engine.MVCCKey{}); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {

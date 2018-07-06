@@ -110,16 +110,20 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Sl
 // records. A BaseDeltaIterator is an iterator which provides a merged
 // view of a base iterator and a delta where the delta iterator is
 // from a WriteBatchWithIndex.
+//
+// The prefix_same_as_start and upper_bound settings must also be applied to
+// base_iterator for correct operation.
 class BaseDeltaIterator : public rocksdb::Iterator {
  public:
   BaseDeltaIterator(rocksdb::Iterator* base_iterator, rocksdb::WBWIIterator* delta_iterator,
-                    bool prefix_same_as_start)
+                    bool prefix_same_as_start, const rocksdb::Slice* upper_bound)
       : current_at_base_(true),
         equal_keys_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
         delta_iterator_(delta_iterator),
-        prefix_same_as_start_(prefix_same_as_start) {
+        prefix_same_as_start_(prefix_same_as_start),
+        upper_bound_(upper_bound) {
     merged_.data = NULL;
   }
 
@@ -316,6 +320,15 @@ class BaseDeltaIterator : public rocksdb::Iterator {
           current_at_base_ = true;
           return;
         }
+        if (upper_bound_ != nullptr &&
+            kComparator.Compare(delta_iterator_->Entry().key, *upper_bound_) >= 0) {
+          // The delta iterator key is not less than the upper bound. As above,
+          // we set current_at_base_ to true which will cause the iterator
+          // overall to be considered not valid (since base currently isn't
+          // valid).
+          current_at_base_ = true;
+          return;
+        }
         if (!ProcessDelta()) {
           current_at_base_ = false;
           return;
@@ -336,14 +349,17 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
       const int compare = Compare();
       if (compare > 0) {
-        // Delta is greater than base (use base).
+        // Delta is greater than base (use base). The base iterator enforces
+        // its own upper bound.
         current_at_base_ = true;
         return;
       }
       // Delta is less than or equal to base. If check_prefix is true,
       // for base to be valid it has to contain the prefix we were
       // searching for. It follows that delta contains the prefix
-      // we're searching for.
+      // we're searching for. Similarly, if upper_bound is set, for
+      // base to be valid it has to be less than the upper bound.
+      // It follows that delta is less than upper_bound.
       if (compare == 0) {
         // Delta is equal to base.
         equal_keys_ = true;
@@ -394,6 +410,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   // prefix_same_as_start_ is true.
   std::string prefix_start_buf_;
   rocksdb::Slice prefix_start_key_;
+  const rocksdb::Slice* upper_bound_;
 };
 
 class DBBatchInserter : public rocksdb::WriteBatch::Handler {
@@ -496,16 +513,16 @@ DBStatus DBBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBSlice DBBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
-DBIterator* DBBatch::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator(iters);
+DBIterator* DBBatch::NewIter(DBIterOptions iter_options) {
   if (has_delete_range) {
     // TODO(peter): We don't support iterators when the batch contains
     // delete range entries.
     return NULL;
   }
-  rocksdb::Iterator* base = rep->NewIterator(*read_opts);
+  DBIterator* iter = new DBIterator(iters, iter_options);
+  rocksdb::Iterator* base = rep->NewIterator(iter->read_opts);
   rocksdb::WBWIIterator* delta = batch.NewIterator();
-  iter->rep.reset(new BaseDeltaIterator(base, delta, read_opts->prefix_same_as_start));
+  iter->rep.reset(new BaseDeltaIterator(base, delta, iter_options.prefix, &iter->upper_bound));
   return iter;
 }
 
@@ -594,7 +611,9 @@ DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBSlice DBWriteOnlyBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
-DBIterator* DBWriteOnlyBatch::NewIter(rocksdb::ReadOptions* read_opts) { return NULL; }
+DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) {
+  return NULL;
+}
 
 DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 

@@ -49,7 +49,7 @@ func assertEq(t *testing.T, engine ReadWriter, debug string, ms, expMS *enginepb
 		t.Errorf("%s: diff(ms, expMS) nontrivial", debug)
 	}
 
-	it := engine.NewIterator(IterOptions{})
+	it := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 	from, to := MVCCKey{}, MVCCKey{Key: roachpb.KeyMax}
 
@@ -1466,7 +1466,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := engine.NewIterator(IterOptions{})
+	iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	for _, mvccStatsTest := range mvccStatsTests {
 		t.Run(mvccStatsTest.name, func(t *testing.T) {

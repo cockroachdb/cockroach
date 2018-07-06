@@ -1668,6 +1668,9 @@ func mvccScanInternal(
 	if max == 0 {
 		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
 	}
+	if len(endKey) == 0 {
+		return nil, nil, nil, emptyKeyError()
+	}
 
 	var ownIter bool
 	var withStats bool
@@ -1679,19 +1682,20 @@ func mvccScanInternal(
 		// 	withStats = true
 		// }
 
-		iter = engine.NewIterator(IterOptions{WithStats: withStats})
+		iter = engine.NewIterator(IterOptions{
+			UpperBound: endKey,
+			WithStats:  withStats,
+		})
 		ownIter = true
 	}
 	kvData, numKvs, intentData, err := iter.MVCCScan(
 		key, endKey, max, timestamp, txn, consistent, reverse, tombstones)
-
 	if withStats {
 		log.Eventf(ctx, "engine stats: %+v", iter.Stats())
 	}
 	if ownIter {
 		iter.Close()
 	}
-
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1880,7 +1884,7 @@ func MVCCIterate(
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	// Get a new iterator.
-	iter := engine.NewIterator(IterOptions{})
+	iter := engine.NewIterator(IterOptions{UpperBound: endKey})
 	defer iter.Close()
 
 	return MVCCIterateUsingIter(
@@ -2297,8 +2301,8 @@ type IterAndBuf struct {
 }
 
 // GetIterAndBuf returns an IterAndBuf for passing into various MVCC* methods.
-func GetIterAndBuf(engine Reader) IterAndBuf {
-	return GetBufUsingIter(engine.NewIterator(IterOptions{}))
+func GetIterAndBuf(engine Reader, opts IterOptions) IterAndBuf {
+	return GetBufUsingIter(engine.NewIterator(opts))
 }
 
 // GetBufUsingIter returns an IterAndBuf using the supplied iterator.
@@ -2323,7 +2327,7 @@ func (b IterAndBuf) Cleanup() {
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, *roachpb.Span, error) {
-	iterAndBuf := GetIterAndBuf(engine)
+	iterAndBuf := GetIterAndBuf(engine, IterOptions{UpperBound: intent.Span.EndKey})
 	defer iterAndBuf.Cleanup()
 	return MVCCResolveWriteIntentRangeUsingIter(ctx, engine, iterAndBuf, ms, intent, max)
 }
@@ -2534,7 +2538,7 @@ func MVCCFindSplitKey(
 		key = roachpb.RKey(keys.LocalMax)
 	}
 
-	it := engine.NewIterator(IterOptions{})
+	it := engine.NewIterator(IterOptions{UpperBound: endKey.AsRawKey()})
 	defer it.Close()
 
 	// We must never return a split key that falls within a table row. (Rows in

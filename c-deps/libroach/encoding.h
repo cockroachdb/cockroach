@@ -79,6 +79,10 @@ WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall
 WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice buf,
                                         cockroach::util::hlc::Timestamp* timestamp);
 
+// EmptyTimestamp returns whether ts represents an empty timestamp where both
+// the wall_time and logical components are zero.
+bool EmptyTimestamp(DBTimestamp ts);
+
 // DecodeKey splits an MVCC key into a key slice and decoded
 // timestamp. See also SplitKey if you want to do not need to decode
 // the timestamp. Returns true on success and false on any decoding
