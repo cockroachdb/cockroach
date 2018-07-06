@@ -5,29 +5,9 @@ FROM
 	unindexed
 WHERE
 	k
-	>
-	1
-	AND v
-		<
-		7
-ORDER BY
-	v
-		DESC
-RETURNING
-	v,
-	k
-
-7:
--------
-DELETE
-FROM
-	unindexed
-WHERE
-	k
 	> 1
 	AND v
-		<
-		7
+		< 7
 ORDER BY
 	v
 		DESC
@@ -44,8 +24,7 @@ WHERE
 	k
 	> 1
 	AND v
-		<
-		7
+		< 7
 ORDER BY
 	v
 		DESC
@@ -60,8 +39,7 @@ FROM
 WHERE
 	k > 1
 	AND v
-		<
-		7
+		< 7
 ORDER BY
 	v
 		DESC
@@ -70,21 +48,6 @@ RETURNING
 
 10:
 ----------
-DELETE
-FROM
-	unindexed
-WHERE
-	k > 1
-	AND v
-		<
-		7
-ORDER BY
-	v DESC
-RETURNING
-	v, k
-
-11:
------------
 DELETE
 FROM
 	unindexed
