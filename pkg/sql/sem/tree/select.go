@@ -346,6 +346,7 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Right)
 		if node.Cond != nil {
+			ctx.WriteByte(' ')
 			ctx.FormatNode(node.Cond)
 		}
 	}
@@ -376,7 +377,7 @@ type OnJoinCond struct {
 
 // Format implements the NodeFormatter interface.
 func (node *OnJoinCond) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ON ")
+	ctx.WriteString("ON ")
 	ctx.FormatNode(node.Expr)
 }
 
@@ -387,7 +388,7 @@ type UsingJoinCond struct {
 
 // Format implements the NodeFormatter interface.
 func (node *UsingJoinCond) Format(ctx *FmtCtx) {
-	ctx.WriteString(" USING (")
+	ctx.WriteString("USING (")
 	ctx.FormatNode(&node.Cols)
 	ctx.WriteByte(')')
 }
