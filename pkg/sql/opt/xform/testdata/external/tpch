@@ -372,8 +372,7 @@ project
       │         │    │    ├── fd: (1)-->(3)
       │         │    │    └── inner-join-apply
       │         │    │         ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float!null) min:48(float!null)
-      │         │    │         ├── key: (1,10,17,18)
-      │         │    │         ├── fd: ()-->(6), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20,48), (20)==(48), (48)==(20)
+      │         │    │         ├── fd: ()-->(6), (1)-->(3,5), (10)-->(11-16)
       │         │    │         ├── inner-join
       │         │    │         │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string)
       │         │    │         │    ├── key: (1,10)
