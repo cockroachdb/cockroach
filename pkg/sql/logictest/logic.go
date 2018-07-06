@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -351,6 +352,13 @@ var (
 			"run. Used to update tests when a change affects many cases; please verify the testfile "+
 			"diffs carefully!",
 	)
+	rewriteSQL = flag.Bool(
+		"rewrite-sql", false,
+		"pretty-reformat the SQL queries. Only use this incidentally when importing new tests. "+
+			"beware! some tests INTEND to use non-formatted SQL queries (e.g. case sensitivity). "+
+			"do not bluntly apply!",
+	)
+	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyWidth, "target line length when using -rewrite-sql")
 )
 
 type testClusterConfig struct {
@@ -475,10 +483,17 @@ func (ls *logicStatement) readSQL(
 	t *logicTest, s *lineScanner, allowSeparator bool,
 ) (separator bool, _ error) {
 	var buf bytes.Buffer
+	hasVars := false
 	for s.Scan() {
 		line := s.Text()
-		t.emit(line)
-		line = t.substituteVars(line)
+		if !*rewriteSQL {
+			t.emit(line)
+		}
+		substLine := t.substituteVars(line)
+		if line != substLine {
+			hasVars = true
+			line = substLine
+		}
 		if line == "" {
 			break
 		}
@@ -498,6 +513,41 @@ func (ls *logicStatement) readSQL(
 		fmt.Fprintln(&buf, line)
 	}
 	ls.sql = strings.TrimSpace(buf.String())
+	if *rewriteSQL {
+		if !hasVars {
+			newSyntax, err := func(inSql string) (string, error) {
+				// Can't rewrite the SQL otherwise because the vars make it invalid.
+				stmtList, err := parser.Parse(inSql)
+				if err != nil {
+					if ls.expectErr != "" {
+						// Maybe a parse error was expected. Simply do not rewrite.
+						return inSql, nil
+					}
+					return "", errors.Wrapf(err, "%s: error while parsing SQL for reformat:\n%s", ls.pos, ls.sql)
+				}
+				var newSyntax bytes.Buffer
+				for i, s := range stmtList {
+					if i > 0 {
+						fmt.Fprintln(&newSyntax, ";")
+					}
+					fmt.Fprint(&newSyntax,
+						tree.PrettyWithOpts(s, *sqlfmtLen, false /* useTabs */, 4 /* tab width */))
+				}
+				return newSyntax.String(), nil
+			}(ls.sql)
+			if err != nil {
+				return false, err
+			}
+			ls.sql = newSyntax
+		}
+
+		t.emit(ls.sql)
+		if separator {
+			t.emit("----")
+		} else {
+			t.emit("")
+		}
+	}
 	return separator, nil
 }
 
@@ -788,7 +838,7 @@ func (t *logicTest) substituteVars(line string) string {
 
 // emit is used for the --generate-testfiles mode; it emits a line of testfile.
 func (t *logicTest) emit(line string) {
-	if *rewriteResultsInTestfiles {
+	if *rewriteResultsInTestfiles || *rewriteSQL {
 		t.rewriteResTestBuf.WriteString(line)
 		t.rewriteResTestBuf.WriteString("\n")
 	}
@@ -1074,7 +1124,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 	}
 
-	if *rewriteResultsInTestfiles && !t.t.Failed() {
+	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.t.Failed() {
 		// Rewrite the test file.
 		file, err := os.Create(path)
 		if err != nil {
@@ -1802,7 +1852,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 	}
 
-	if *rewriteResultsInTestfiles {
+	if *rewriteResultsInTestfiles || *rewriteSQL {
 		if query.expectedHash != "" {
 			if query.expectedValues == 1 {
 				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
@@ -1812,9 +1862,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 
 		if query.checkResults {
-			// If the results match, emit them the way they were originally
+			// If the results match or we're not rewriting, emit them the way they were originally
 			// formatted/ordered in the testfile. Otherwise, emit the actual results.
-			if reflect.DeepEqual(query.expectedResults, actualResults) {
+			if !*rewriteResultsInTestfiles || reflect.DeepEqual(query.expectedResults, actualResults) {
 				for _, l := range query.expectedResultsRaw {
 					t.emit(l)
 				}
@@ -1993,7 +2043,7 @@ func RunLogicTest(t *testing.T, globs ...string) {
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
-					if !*showSQL && !*rewriteResultsInTestfiles {
+					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL {
 						// If we're not printing out all of the SQL interactions and we're
 						// not generating testfiles, run the tests in parallel.
 						// Skip parallelizing tests that use the kv-batch-size directive since
@@ -2162,11 +2212,11 @@ func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
-	log.Error(context.Background(), args...)
+	log.Error(context.Background(), "\n", fmt.Sprint(args...))
 	if t.subtestT != nil {
-		t.subtestT.Error(args...)
+		t.subtestT.Error("\n", fmt.Sprint(args...))
 	} else {
-		t.t.Error(args...)
+		t.t.Error("\n", fmt.Sprint(args...))
 	}
 	t.failures++
 }
@@ -2180,9 +2230,9 @@ func (t *logicTest) Errorf(format string, args ...interface{}) {
 	}
 	log.Errorf(context.Background(), format, args...)
 	if t.subtestT != nil {
-		t.subtestT.Errorf(format, args...)
+		t.subtestT.Errorf("\n"+format, args...)
 	} else {
-		t.t.Errorf(format, args...)
+		t.t.Errorf("\n"+format, args...)
 	}
 	t.failures++
 }
