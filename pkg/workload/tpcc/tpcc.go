@@ -36,10 +36,11 @@ import (
 type tpcc struct {
 	flags workload.Flags
 
-	seed        int64
-	warehouses  int
-	interleaved bool
-	nowString   string
+	seed             int64
+	warehouses       int
+	activeWarehouses int
+	interleaved      bool
+	nowString        string
 
 	mix        string
 	doWaits    bool
@@ -61,7 +62,6 @@ type tpcc struct {
 	partitions        int
 	affinityPartition int
 	zones             []string
-	activeWarehouses  int
 
 	usePostgres  bool
 	serializable bool
@@ -130,7 +130,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
-		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, -1, `Run the load generator against a specific number of warehouses'`)
+		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -155,7 +155,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
 			}
 
-			if w.activeWarehouses == -1 {
+			if w.activeWarehouses == 0 {
 				w.activeWarehouses = w.warehouses
 			}
 
@@ -227,7 +227,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(12.86*float64(w.warehouses)),
+						100*tpmC/(12.86*float64(w.activeWarehouses)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
@@ -367,7 +367,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.warehouses / len(urls)
+	nConns := w.activeWarehouses / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
 		dbs[i], err = gosql.Open(`postgres`, url)
@@ -434,14 +434,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		warehouse := workerIdx % w.activeWarehouses
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
-		p := (warehouse * w.partitions) / w.warehouses
-		// Here we're making sure that if we have a warehouse affinity, that we only create
-		// workers for the correct warehouses.
-		if w.activeWarehouses != w.warehouses {
-			warehouse += startWarehouse
-		} else if w.affinityPartition != -1 && p != w.affinityPartition {
-			continue
-		}
+		p := (warehouse * w.partitions) / w.activeWarehouses
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
@@ -449,7 +442,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			hists:     reg.GetHandle(),
 			idx:       workerIdx,
 			db:        db,
-			warehouse: warehouse,
+			warehouse: warehouse + startWarehouse,
 			deckPerm:  make([]int, len(w.deck)),
 			permIdx:   len(w.deck),
 		}
