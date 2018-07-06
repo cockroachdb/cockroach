@@ -288,3 +288,10 @@ code      42601
 file      sql/show_syntax.go
 function  runShowSyntax
 detail    source SQL: foo ^
+
+query T
+SELECT text FROM [SHOW SYNTAX 'select a, b from c as something inner join d on e=f and g=h*2+1 union all select a or b and c and d or e']
+----
+SELECT a, b
+FROM c AS something INNER JOIN d ON e = f AND g = h * 2 + 1
+UNION ALL SELECT a OR b AND c AND d OR e
