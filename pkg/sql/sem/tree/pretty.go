@@ -42,11 +42,13 @@ const DefaultPrettyWidth = 60
 
 // Pretty pretty prints stmt with default options.
 func Pretty(stmt NodeFormatter) string {
-	return PrettyWithOpts(stmt, DefaultPrettyWidth, true, 4)
+	return PrettyWithOpts(stmt, DefaultPrettyWidth, true, 4, true /* simplify */)
 }
 
 // PrettyWithOpts pretty prints stmt with specified options.
-func PrettyWithOpts(stmt NodeFormatter, lineWidth int, useTabs bool, tabWidth int) string {
+func PrettyWithOpts(
+	stmt NodeFormatter, lineWidth int, useTabs bool, tabWidth int, simplify bool,
+) string {
 	var tab string
 	if useTabs {
 		tab = "\t"
@@ -56,6 +58,7 @@ func PrettyWithOpts(stmt NodeFormatter, lineWidth int, useTabs bool, tabWidth in
 	cfg := PrettyCfg{
 		Tab:      tab,
 		TabWidth: tabWidth,
+		Simplify: simplify,
 	}
 	doc := cfg.Doc(stmt)
 	return pretty.Pretty(doc, lineWidth)
@@ -68,6 +71,8 @@ type PrettyCfg struct {
 	// TabWidth is the effective length of Tab. When using spaces, it should be
 	// len(Tab). When using tabs, it should be the desired tab width.
 	TabWidth int
+	// Simplify, when set, removes extraneous parentheses.
+	Simplify bool
 }
 
 // Doc converts f (generally a Statement) to a pretty.Doc. If f does not have a
@@ -121,7 +126,11 @@ func (node SelectExprs) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (node SelectExpr) doc(p PrettyCfg) pretty.Doc {
-	d := p.Doc(node.Expr)
+	e := node.Expr
+	if p.Simplify {
+		e = StripParens(e)
+	}
+	d := p.Doc(e)
 	if node.As != "" {
 		d = p.nestName(
 			d,
@@ -146,7 +155,11 @@ func (node *Where) doc(p PrettyCfg) pretty.Doc {
 	if node == nil {
 		return pretty.Nil
 	}
-	return p.nestName(pretty.Text(node.Type), p.Doc(node.Expr))
+	e := node.Expr
+	if p.Simplify {
+		e = StripParens(e)
+	}
+	return p.nestName(pretty.Text(node.Type), p.Doc(e))
 }
 
 func (node GroupBy) doc(p PrettyCfg) pretty.Doc {
@@ -155,6 +168,9 @@ func (node GroupBy) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := make([]pretty.Doc, len(node))
 	for i, e := range node {
+		// Beware! The GROUP BY items should never be simplified by
+		// stripping parentheses, because parentheses there are
+		// semantically important.
 		d[i] = p.Doc(e)
 	}
 	return p.joinGroup("GROUP BY", ",", d...)
@@ -169,21 +185,32 @@ func (node *NormalizableTableName) doc(p PrettyCfg) pretty.Doc {
 func (p PrettyCfg) flattenOp(
 	e Expr,
 	pred func(e Expr, recurse func(e Expr)) bool,
-	parenthesize func(e Expr) bool,
+	formatOperand func(e Expr) pretty.Doc,
 	in []pretty.Doc,
 ) []pretty.Doc {
 	if ok := pred(e, func(sub Expr) {
-		in = p.flattenOp(sub, pred, parenthesize, in)
+		in = p.flattenOp(sub, pred, formatOperand, in)
 	}); ok {
 		return in
 	}
-	var d pretty.Doc
-	if parenthesize(e) {
-		d = p.exprDocWithParen(e)
-	} else {
-		d = p.Doc(e)
+	return append(in, formatOperand(e))
+}
+
+func (p PrettyCfg) peelAndOrOperand(e Expr) Expr {
+	if !p.Simplify {
+		return e
 	}
-	return append(in, d)
+	stripped := StripParens(e)
+	switch stripped.(type) {
+	case *BinaryExpr, *ComparisonExpr, *RangeCond, *FuncExpr, *IndirectionExpr,
+		*UnaryExpr, *AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		// All these expressions have higher precedence than binary
+		// expressions.
+		return stripped
+	}
+	// Everything else - we don't know. Be conservative and keep the
+	// original form.
+	return e
 }
 
 func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
@@ -195,15 +222,11 @@ func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
 		}
 		return false
 	}
-	parenthesize := func(e Expr) bool {
-		// The only operator that has a lower precedence than AND is
-		// OR. We must always disambiguate in that case, and we never have
-		// to in every other case.
-		_, ok := e.(*OrExpr)
-		return ok
+	formatOperand := func(e Expr) pretty.Doc {
+		return p.Doc(p.peelAndOrOperand(e))
 	}
-	operands := p.flattenOp(node.Left, pred, parenthesize, nil)
-	operands = p.flattenOp(node.Right, pred, parenthesize, operands)
+	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
+	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
 	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
 		pretty.Text("AND"), operands...)
 }
@@ -217,17 +240,11 @@ func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
 		}
 		return false
 	}
-	parenthesize := func(e Expr) bool {
-		// OR has the lowest precedence we never *have* to parenthesize
-		// its operands.
-		// However, users are likely to be confused by the relative
-		// precedence of AND and OR, so as a graceful gesture we
-		// do parenthesize AND sub-expressions/
-		_, ok := e.(*AndExpr)
-		return ok
+	formatOperand := func(e Expr) pretty.Doc {
+		return p.Doc(p.peelAndOrOperand(e))
 	}
-	operands := p.flattenOp(node.Left, pred, parenthesize, nil)
-	operands = p.flattenOp(node.Right, pred, parenthesize, operands)
+	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
+	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
 	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
 		pretty.Text("OR"), operands...)
 }
@@ -252,9 +269,33 @@ func (node *Exprs) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := make([]pretty.Doc, len(*node))
 	for i, e := range *node {
+		if p.Simplify {
+			e = StripParens(e)
+		}
 		d[i] = p.Doc(e)
 	}
 	return pretty.Join(",", d...)
+}
+
+func (p PrettyCfg) peelBinaryOperand(e Expr, op BinaryOperator) Expr {
+	if !p.Simplify {
+		return e
+	}
+	stripped := StripParens(e)
+	switch te := stripped.(type) {
+	case *BinaryExpr:
+		parenPrio := binaryOpPrio[op]
+		childPrio := binaryOpPrio[te.Operator]
+		if te.Operator == op && childPrio <= parenPrio {
+			return stripped
+		}
+	case *UnaryExpr, *AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		// All these expressions have higher precedence than binary expressions.
+		return stripped
+	}
+	// Everything else - we don't know. Be conservative and keep the
+	// original form.
+	return e
 }
 
 func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
@@ -262,14 +303,23 @@ func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
 	if node.Operator.isPadded() {
 		pad = pretty.Line
 	}
+	// All the binary operators are at least left-associative.
+	// So we can always simplify "(a OP b) OP c" to "a OP b OP c".
+	leftOperand := p.peelBinaryOperand(node.Left, node.Operator)
+	rightOperand := node.Right
+	if binaryOpFullyAssoc[node.Operator] {
+		// If the binary operator is also fully associative,
+		// we can also simplify "a OP (b OP c)" to "a OP b OP c".
+		rightOperand = p.peelBinaryOperand(node.Right, node.Operator)
+	}
 	return pretty.Group(pretty.Concat(
-		p.Doc(node.Left),
+		p.Doc(leftOperand),
 		pretty.Concat(
 			pad,
 			pretty.Group(pretty.Fold(pretty.Concat,
 				pretty.Text(node.Operator.String()),
 				pad,
-				p.Doc(node.Right),
+				p.Doc(rightOperand),
 			)),
 		),
 	))
@@ -293,10 +343,18 @@ func (node *Limit) doc(p PrettyCfg) pretty.Doc {
 	}
 	var count, offset pretty.Doc
 	if node.Count != nil {
-		count = p.nestName(pretty.Text("LIMIT"), p.Doc(node.Count))
+		e := node.Count
+		if p.Simplify {
+			e = StripParens(e)
+		}
+		count = p.nestName(pretty.Text("LIMIT"), p.Doc(e))
 	}
 	if node.Offset != nil {
-		offset = p.nestName(pretty.Text("OFFSET"), p.Doc(node.Offset))
+		e := node.Offset
+		if p.Simplify {
+			e = StripParens(e)
+		}
+		offset = p.nestName(pretty.Text("OFFSET"), p.Doc(e))
 	}
 	return pretty.ConcatLine(count, offset)
 }
@@ -307,6 +365,8 @@ func (node *OrderBy) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := make([]pretty.Doc, len(*node))
 	for i, e := range *node {
+		// Beware! The ORDER BY items should never be simplified,
+		// because parentheses there are semantically important.
 		d[i] = p.Doc(e)
 	}
 	return p.joinGroup("ORDER BY", ",", d...)
@@ -512,10 +572,11 @@ func (node *JoinTableExpr) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (node *OnJoinCond) doc(p PrettyCfg) pretty.Doc {
-	return p.nestName(
-		pretty.Text("ON"),
-		p.Doc(node.Expr),
-	)
+	e := node.Expr
+	if p.Simplify {
+		e = StripParens(e)
+	}
+	return p.nestName(pretty.Text("ON"), p.Doc(e))
 }
 
 func (node *Insert) doc(p PrettyCfg) pretty.Doc {
