@@ -717,33 +717,33 @@ func (node *CaseExpr) doc(p PrettyCfg) pretty.Doc {
 	var d []pretty.Doc
 	c := pretty.Text("CASE")
 	if node.Expr != nil {
-		c = p.nestName(c, p.Doc(node.Expr))
+		c = pretty.Group(pretty.ConcatSpace(c, p.Doc(node.Expr)))
 	}
 	d = append(d, c)
 	for _, when := range node.Whens {
 		d = append(d, p.Doc(when))
 	}
 	if node.Else != nil {
-		d = append(d, p.nestName(
+		d = append(d, pretty.Group(pretty.ConcatSpace(
 			pretty.Text("ELSE"),
 			p.Doc(node.Else),
-		))
+		)))
 	}
 	d = append(d, pretty.Text("END"))
 	return pretty.Stack(d...)
 }
 
 func (node *When) doc(p PrettyCfg) pretty.Doc {
-	return pretty.ConcatLine(
-		p.nestName(
+	return pretty.Group(pretty.ConcatLine(
+		pretty.Group(pretty.ConcatSpace(
 			pretty.Text("WHEN"),
 			p.Doc(node.Cond),
-		),
-		p.nestName(
+		)),
+		pretty.Group(pretty.ConcatSpace(
 			pretty.Text("THEN"),
 			p.Doc(node.Val),
-		),
-	)
+		)),
+	))
 }
 
 func (node *UnionClause) doc(p PrettyCfg) pretty.Doc {

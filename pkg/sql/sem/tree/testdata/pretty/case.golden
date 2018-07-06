@@ -2,38 +2,19 @@
 -
 SELECT
 	CASE
-	WHEN
-		1
-	THEN
-		2
-	WHEN
-		3
-	THEN
-		4
-	ELSE
-		NULL
-	END
-
-10:
-----------
-SELECT
-	CASE
 	WHEN 1
 	THEN 2
 	WHEN 3
 	THEN 4
-	ELSE
-		NULL
+	ELSE NULL
 	END
 
-13:
--------------
+17:
+-----------------
 SELECT
 	CASE
-	WHEN 1
-	THEN 2
-	WHEN 3
-	THEN 4
+	WHEN 1 THEN 2
+	WHEN 3 THEN 4
 	ELSE NULL
 	END
 
