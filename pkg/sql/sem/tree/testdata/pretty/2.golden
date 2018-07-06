@@ -7,111 +7,6 @@ SELECT
 		AS count,
 	winner,
 	counter
-	*
-	60
-	*
-	5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length
-				/
-				60
-				/
-				5
-			)
-				AS counter
-		FROM
-			players
-		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
-					hero
-					=
-					$2
-				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
-	)
-GROUP BY
-	winner,
-	counter
-
-7:
--------
-SELECT
-	count(
-		*
-	)
-		AS count,
-	winner,
-	counter
-	*
-	60
-	* 5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length
-				/
-				60
-				/
-				5
-			)
-				AS counter
-		FROM
-			players
-		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
-					hero
-					=
-					$2
-				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
-	)
-GROUP BY
-	winner,
-	counter
-
-8:
---------
-SELECT
-	count(
-		*
-	)
-		AS count,
-	winner,
-	counter
 	* 60
 	* 5
 		AS counter
@@ -121,34 +16,21 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
-				/
-				5
+				/ 60
+				/ 5
 			)
 				AS counter
 		FROM
 			players
 		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
+			build
+			= $1
+			AND (
 					hero
-					=
-					$2
+					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
 	)
 GROUP BY
 	winner,
@@ -170,82 +52,21 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
-				/
-				5
+				/ 60
+				/ 5
 			)
 				AS counter
 		FROM
 			players
 		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
+			build
+			= $1
+			AND (
 					hero
-					=
-					$2
+					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
-	)
-GROUP BY
-	winner,
-	counter
-
-16:
-----------------
-SELECT
-	count(*)
-		AS count,
-	winner,
-	counter * 60
-	* 5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length
-				/
-				60
-				/
-				5
-			)
-				AS counter
-		FROM
-			players
-		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
-					hero
-					=
-					$2
-				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
 	)
 GROUP BY
 	winner,
@@ -257,7 +78,8 @@ SELECT
 	count(*)
 		AS count,
 	winner,
-	counter * 60
+	counter
+	* 60
 	* 5
 		AS counter
 FROM
@@ -266,33 +88,21 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
+				/ 60
 				/ 5
 			)
 				AS counter
 		FROM
 			players
 		WHERE
-			(
-				build
-				=
-				$1
-			)
-			AND
-			(
-				(
+			build
+			= $1
+			AND (
 					hero
-					=
-					$2
+					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
 	)
 GROUP BY
 	winner, counter
@@ -317,24 +127,14 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(
-				build
-				= $1
-			)
-			AND
-			(
-				(
+			build
+			= $1
+			AND (
 					hero
-					=
-					$2
+					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
 	)
 GROUP BY
 	winner, counter
@@ -358,24 +158,13 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(
-				build
-				= $1
-			)
-			AND
-			(
-				(
+			build = $1
+			AND (
 					hero
-					=
-					$2
+					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					=
-					$3
-				)
-			)
 	)
 GROUP BY
 	winner, counter
@@ -399,50 +188,13 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			(
-				(
+			build = $1
+			AND (
 					hero
 					= $2
+					OR region
+						= $3
 				)
-				OR
-				(
-					region
-					= $3
-				)
-			)
-	)
-GROUP BY winner, counter
-
-27:
----------------------------
-SELECT
-	count(*) AS count,
-	winner,
-	counter * 60 * 5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length / 60
-				/ 5
-			)
-				AS counter
-		FROM players
-		WHERE
-			(build = $1)
-			AND
-			(
-				(hero = $2)
-				OR
-				(
-					region
-					= $3
-				)
-			)
 	)
 GROUP BY winner, counter
 
@@ -458,19 +210,19 @@ FROM
 		SELECT
 			winner,
 			round(
-				length / 60
+				length
+				/ 60
 				/ 5
 			)
 				AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			(
-				(hero = $2)
-				OR
-				(region = $3)
-			)
+			build = $1
+			AND (
+					hero = $2
+					OR region
+						= $3
+				)
 	)
 GROUP BY winner, counter
 
@@ -490,38 +242,12 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			(
-				(hero = $2)
-				OR
-				(region = $3)
-			)
-	)
-GROUP BY winner, counter
-
-32:
---------------------------------
-SELECT
-	count(*) AS count,
-	winner,
-	counter * 60 * 5 AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length / 60 / 5
-			)
-				AS counter
-		FROM players
-		WHERE
-			(build = $1)
-			AND
-			(
-				(hero = $2)
-				OR (region = $3)
-			)
+			build = $1
+			AND (
+					hero = $2
+					OR region
+						= $3
+				)
 	)
 GROUP BY winner, counter
 
@@ -539,12 +265,11 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			(
-				(hero = $2)
-				OR (region = $3)
-			)
+			build = $1
+			AND (
+					hero = $2
+					OR region = $3
+				)
 	)
 GROUP BY winner, counter
 
@@ -562,9 +287,8 @@ FROM
 				AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			((hero = $2) OR (region = $3))
+			build = $1
+			AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
@@ -581,27 +305,8 @@ FROM
 			round(length / 60 / 5) AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND
-			((hero = $2) OR (region = $3))
-	)
-GROUP BY winner, counter
-
-46:
-----------------------------------------------
-SELECT
-	count(*) AS count,
-	winner,
-	counter * 60 * 5 AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(length / 60 / 5) AS counter
-		FROM players
-		WHERE
-			(build = $1)
-			AND ((hero = $2) OR (region = $3))
+			build = $1
+			AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
@@ -617,8 +322,22 @@ FROM
 			winner, round(length / 60 / 5) AS counter
 		FROM players
 		WHERE
-			(build = $1)
-			AND ((hero = $2) OR (region = $3))
+			build = $1 AND (hero = $2 OR region = $3)
+	)
+GROUP BY winner, counter
+
+55:
+-------------------------------------------------------
+SELECT
+	count(*) AS count,
+	winner,
+	counter * 60 * 5 AS counter
+FROM
+	(
+		SELECT
+			winner, round(length / 60 / 5) AS counter
+		FROM players
+		WHERE build = $1 AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
@@ -632,9 +351,7 @@ FROM
 	(
 		SELECT winner, round(length / 60 / 5) AS counter
 		FROM players
-		WHERE
-			(build = $1)
-			AND ((hero = $2) OR (region = $3))
+		WHERE build = $1 AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
@@ -646,22 +363,7 @@ FROM
 	(
 		SELECT winner, round(length / 60 / 5) AS counter
 		FROM players
-		WHERE
-			(build = $1)
-			AND ((hero = $2) OR (region = $3))
-	)
-GROUP BY winner, counter
-
-59:
------------------------------------------------------------
-SELECT
-	count(*) AS count, winner, counter * 60 * 5 AS counter
-FROM
-	(
-		SELECT winner, round(length / 60 / 5) AS counter
-		FROM players
-		WHERE
-			(build = $1) AND ((hero = $2) OR (region = $3))
+		WHERE build = $1 AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
@@ -672,23 +374,23 @@ FROM
 	(
 		SELECT winner, round(length / 60 / 5) AS counter
 		FROM players
-		WHERE (build = $1) AND ((hero = $2) OR (region = $3))
+		WHERE build = $1 AND (hero = $2 OR region = $3)
 	)
 GROUP BY winner, counter
 
-121:
--------------------------------------------------------------------------------------------------------------------------
+115:
+-------------------------------------------------------------------------------------------------------------------
 SELECT count(*) AS count, winner, counter * 60 * 5 AS counter
 FROM
-	(SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE (build = $1) AND ((hero = $2) OR (region = $3)))
+	(SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE build = $1 AND (hero = $2 OR region = $3))
 GROUP BY winner, counter
 
-122:
---------------------------------------------------------------------------------------------------------------------------
+116:
+--------------------------------------------------------------------------------------------------------------------
 SELECT count(*) AS count, winner, counter * 60 * 5 AS counter
-FROM (SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE (build = $1) AND ((hero = $2) OR (region = $3)))
+FROM (SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE build = $1 AND (hero = $2 OR region = $3))
 GROUP BY winner, counter
 
-209:
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT count(*) AS count, winner, counter * 60 * 5 AS counter FROM (SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE (build = $1) AND ((hero = $2) OR (region = $3))) GROUP BY winner, counter
+203:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT count(*) AS count, winner, counter * 60 * 5 AS counter FROM (SELECT winner, round(length / 60 / 5) AS counter FROM players WHERE build = $1 AND (hero = $2 OR region = $3)) GROUP BY winner, counter
