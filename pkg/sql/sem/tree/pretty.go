@@ -137,6 +137,9 @@ func (node TableExprs) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := make([]pretty.Doc, len(node))
 	for i, e := range node {
+		if p.Simplify {
+			e = StripTableParens(e)
+		}
 		d[i] = p.Doc(e)
 	}
 	return p.joinGroup("FROM", ",", d...)
