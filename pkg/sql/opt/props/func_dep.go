@@ -942,18 +942,32 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 
 // MakeApply modifies the FD set to reflect the impact of an apply join. This
 // FD set reflects the properties of the outer query, and the given FD set
-// reflects the properties of the inner query. The logic is similar to
-// MakeProduct, except that constant dependencies introduced by MakeMax1Row
-// must be handled differently. For example:
+// reflects the properties of the inner query. The FD set from the inner query
+// is mostly ignored, since most FDs no longer hold. For example:
 //
 //   SELECT *
 //   FROM a
-//   INNER JOIN LATERAL (SELECT COUNT(*) FROM b WHERE b.x=a.x)
+//   INNER JOIN LATERAL (SELECT * FROM b WHERE b.y=a.y)
 //   ON True
 //
-// Although the right input to the join produces one row, it can have a
-// different value for each row of the outer relation. This invalidates its
-// constant dependencies.
+// 1. The constant dependency created from the outer column reference b.y=a.y
+//    does not hold for the Apply operator.
+// 2. If a strict dependency (b.x,b.y)-->(b.z) held, it would have been reduced
+//    to (b.x)-->(b.z) because (b.y) is constant in the inner query. However,
+//    (b.x)-->(b.z) does not hold for the Apply operator, since (b.y) is not
+//    constant in that case.
+// 3. Lax dependencies can be invalidated for similar reasons to #2.
+// 4. Equivalence dependencies in the inner query do still hold for the Apply
+//    operator.
+// 5. Any key for the inner query cannot be inherited by the Apply operator,
+//    since it may have been reduced by an outer column constant, such as if the
+//    strict dependency in #2 had been a key. The exception is if the inner
+//    query returns at most one row, in which a key can be derived for the Apply
+//    operator based on the outer query's key.
+//
+// Given that nearly all dependencies are invalidated by the Apply, and since
+// the hope is that the Apply can be eliminated anyway (via decorrelation),
+// MakeApply ignores most of the inner query's FD information.
 func (f *FuncDepSet) MakeApply(fdset *FuncDepSet) {
 	if fdset.HasMax1Row() {
 		if f.hasKey {
@@ -961,7 +975,7 @@ func (f *FuncDepSet) MakeApply(fdset *FuncDepSet) {
 			f.addDependency(f.key, cols, true /* strict */, false /* equiv */)
 		}
 	} else {
-		f.MakeProduct(fdset)
+		f.ClearKey()
 	}
 }
 
@@ -970,8 +984,8 @@ func (f *FuncDepSet) MakeApply(fdset *FuncDepSet) {
 // cartesian product + ON filtering, and an outer join is modeled as an inner
 // join + union of NULL-extended rows. MakeOuter performs the final step, given
 // the set of columns that will be null-extended (i.e. columns from the
-// null-providing side(s) of the join), as well as the set of all not null
-// columns in the relation (from both sides of join).
+// null-providing side(s) of the join), as well as the set of input columns from
+// both sides of the join that are not null.
 //
 // See the "Left outer join" section on page 84 of the Master's Thesis for
 // the impact of outer joins on FDs.
@@ -1032,24 +1046,26 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 			//
 			if fd.from.Intersects(nullExtendedCols) {
 				if !fd.from.SubsetOf(nullExtendedCols) {
-					panic(fmt.Sprintf("determinant cannot contain columns from both sides of join: %s", f))
-				}
+					if !f.ColsAreStrictKey(fd.from) {
+						panic(fmt.Sprintf("determinant cannot contain columns from both sides of join: %s", f))
+					}
+				} else {
+					// Rule #1, described above (determinant is on null-supplying side).
+					if !fd.to.SubsetOf(nullExtendedCols) {
+						// Split the dependants by which side of the join they're on.
+						laxCols := fd.to.Difference(nullExtendedCols)
+						newFDs = append(newFDs, funcDep{from: fd.from, to: laxCols})
+						if !fd.removeToCols(laxCols) {
+							continue
+						}
+					}
 
-				// Rule #1, described above (determinant is on null-supplying side).
-				if !fd.to.SubsetOf(nullExtendedCols) {
-					// Split the dependants by which side of the join they're on.
-					laxCols := fd.to.Difference(nullExtendedCols)
-					newFDs = append(newFDs, funcDep{from: fd.from, to: laxCols})
-					if !fd.removeToCols(laxCols) {
+					// Rule #2, described above. Note that this rule does not apply to
+					// equivalence FDs, which remain valid.
+					if fd.strict && !fd.equiv && !fd.from.Intersects(notNullCols) {
+						newFDs = append(newFDs, funcDep{from: fd.from, to: fd.to})
 						continue
 					}
-				}
-
-				// Rule #2, described above. Note that this rule does not apply to
-				// equivalence FDs, which remain valid.
-				if fd.strict && !fd.equiv && !fd.from.Intersects(notNullCols) {
-					newFDs = append(newFDs, funcDep{from: fd.from, to: fd.to})
-					continue
 				}
 			} else {
 				// Rule #1, described above (determinant is on row-supplying side).
