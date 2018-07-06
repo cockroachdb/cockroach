@@ -1404,6 +1404,10 @@ func (r *batchIterator) MVCCScan(
 	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
 }
 
+func (r *batchIterator) SetUpperBound(key roachpb.Key) {
+	r.iter.SetUpperBound(key)
+}
+
 func (r *batchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
@@ -2148,6 +2152,10 @@ func (r *rocksDBIterator) MVCCScan(
 	}
 	kvs = copyFromSliceVector(state.data.bufs, state.data.len)
 	return kvs, int64(state.data.count), cSliceToGoBytes(state.intents), nil
+}
+
+func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {
+	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(key)))
 }
 
 func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
