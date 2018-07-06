@@ -164,12 +164,72 @@ func (node *NormalizableTableName) doc(p PrettyCfg) pretty.Doc {
 	return p.Doc(node.TableNameReference)
 }
 
+// flattenOp populates a slice with all the leaves operands of an expression
+// tree where all the nodes satisfy the given predicate.
+func (p PrettyCfg) flattenOp(
+	e Expr,
+	pred func(e Expr, recurse func(e Expr)) bool,
+	parenthesize func(e Expr) bool,
+	in []pretty.Doc,
+) []pretty.Doc {
+	if ok := pred(e, func(sub Expr) {
+		in = p.flattenOp(sub, pred, parenthesize, in)
+	}); ok {
+		return in
+	}
+	var d pretty.Doc
+	if parenthesize(e) {
+		d = p.exprDocWithParen(e)
+	} else {
+		d = p.Doc(e)
+	}
+	return append(in, d)
+}
+
 func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
-	return p.docBinaryOp(node.Left, node.Right, "AND")
+	pred := func(e Expr, recurse func(e Expr)) bool {
+		if a, ok := e.(*AndExpr); ok {
+			recurse(a.Left)
+			recurse(a.Right)
+			return true
+		}
+		return false
+	}
+	parenthesize := func(e Expr) bool {
+		// The only operator that has a lower precedence than AND is
+		// OR. We must always disambiguate in that case, and we never have
+		// to in every other case.
+		_, ok := e.(*OrExpr)
+		return ok
+	}
+	operands := p.flattenOp(node.Left, pred, parenthesize, nil)
+	operands = p.flattenOp(node.Right, pred, parenthesize, operands)
+	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		pretty.Text("AND"), operands...)
 }
 
 func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
-	return p.docBinaryOp(node.Left, node.Right, "OR")
+	pred := func(e Expr, recurse func(e Expr)) bool {
+		if a, ok := e.(*OrExpr); ok {
+			recurse(a.Left)
+			recurse(a.Right)
+			return true
+		}
+		return false
+	}
+	parenthesize := func(e Expr) bool {
+		// OR has the lowest precedence we never *have* to parenthesize
+		// its operands.
+		// However, users are likely to be confused by the relative
+		// precedence of AND and OR, so as a graceful gesture we
+		// do parenthesize AND sub-expressions/
+		_, ok := e.(*AndExpr)
+		return ok
+	}
+	operands := p.flattenOp(node.Left, pred, parenthesize, nil)
+	operands = p.flattenOp(node.Right, pred, parenthesize, operands)
+	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		pretty.Text("OR"), operands...)
 }
 
 func (p PrettyCfg) docBinaryOp(l, r Expr, op string) pretty.Doc {

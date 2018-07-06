@@ -19,15 +19,44 @@ package pretty
 // that are generally useful or need to create certain structures (like union)
 // in a correct way.
 
-// Join joins Docs d with string s and Line.
+// Join joins Docs d with string s and Line. There is no space between each
+// item in d and the subsequent instance of s.
 func Join(s string, d ...Doc) Doc {
+	return JoinDoc(Concat(Text(s), Line), d...)
+}
+
+// JoinDoc joins Docs d with Doc s.
+func JoinDoc(s Doc, d ...Doc) Doc {
 	switch len(d) {
 	case 0:
 		return Nil
 	case 1:
 		return d[0]
 	default:
-		return Fold(Concat, d[0], Text(s), Line, Join(s, d[1:]...))
+		return Fold(Concat, d[0], s, JoinDoc(s, d[1:]...))
+	}
+}
+
+// JoinNestedRight nests nested with string s.
+// Every item after the first is indented.
+// For example:
+// aaaa
+// <sep> bbb
+//       bbb
+// <sep> ccc
+//       ccc
+func JoinNestedRight(n int, s string, sep Doc, nested ...Doc) Doc {
+	switch len(nested) {
+	case 0:
+		return Nil
+	case 1:
+		return nested[0]
+	default:
+		return Concat(
+			nested[0],
+			FoldMap(Concat,
+				func(a Doc) Doc { return Concat(Line, ConcatSpace(sep, Nest(n, s, Group(a)))) },
+				nested[1:]...))
 	}
 }
 
@@ -87,6 +116,18 @@ func Fold(f func(a, b Doc) Doc, d ...Doc) Doc {
 		return d[0]
 	default:
 		return f(d[0], Fold(f, d[1:]...))
+	}
+}
+
+// FoldMap applies f recursively to all Docs in d processed through g.
+func FoldMap(f func(a, b Doc) Doc, g func(Doc) Doc, d ...Doc) Doc {
+	switch len(d) {
+	case 0:
+		return Nil
+	case 1:
+		return g(d[0])
+	default:
+		return f(g(d[0]), FoldMap(f, g, d[1:]...))
 	}
 }
 
