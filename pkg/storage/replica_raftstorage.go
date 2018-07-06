@@ -643,7 +643,7 @@ func clearRangeData(
 	batch engine.Batch,
 	destroyData bool,
 ) error {
-	iter := eng.NewIterator(engine.IterOptions{})
+	iter := eng.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same

@@ -479,62 +479,8 @@ DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir) { return db->EnvDelet
 
 DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) { return db->EnvLinkFile(oldname, newname); }
 
-DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
-  rocksdb::ReadOptions opts;
-  opts.prefix_same_as_start = prefix;
-  opts.total_order_seek = !prefix;
-  auto db_iter = db->NewIter(&opts);
-
-  if (stats) {
-    db_iter->stats.reset(new IteratorStats);
-    *db_iter->stats = {};
-  }
-
-  return db_iter;
-}
-
-DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts,
-                               bool with_stats) {
-  IteratorStats* stats = nullptr;
-  if (with_stats) {
-    stats = new IteratorStats;
-    *stats = {};
-  }
-
-  const std::string min = EncodeTimestamp(min_ts);
-  const std::string max = EncodeTimestamp(max_ts);
-  rocksdb::ReadOptions opts;
-  opts.total_order_seek = true;
-  opts.table_filter = [min, max, stats](const rocksdb::TableProperties& props) {
-    auto userprops = props.user_collected_properties;
-    auto tbl_min = userprops.find("crdb.ts.min");
-    if (tbl_min == userprops.end() || tbl_min->second.empty()) {
-      if (stats != nullptr) {
-        ++stats->timebound_num_ssts;
-      }
-      return true;
-    }
-    auto tbl_max = userprops.find("crdb.ts.max");
-    if (tbl_max == userprops.end() || tbl_max->second.empty()) {
-      if (stats != nullptr) {
-        ++stats->timebound_num_ssts;
-      }
-      return true;
-    }
-    // If the timestamp range of the table overlaps with the timestamp range we
-    // want to iterate, the table might contain timestamps we care about.
-    bool used = max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
-    if (used && stats != nullptr) {
-      ++stats->timebound_num_ssts;
-    }
-    return used;
-  };
-
-  auto db_iter = db->NewIter(&opts);
-  if (stats != nullptr) {
-    db_iter->stats.reset(stats);
-  }
-  return db_iter;
+DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options) {
+  return db->NewIter(iter_options);
 }
 
 void DBIterDestroy(DBIterator* iter) { delete iter; }
@@ -644,6 +590,10 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   }
 
   return DBIterGetState(iter);
+}
+
+void DBIterSetUpperBound(DBIterator* iter, DBKey key) {
+  iter->SetUpperBound(key);
 }
 
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {

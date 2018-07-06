@@ -5642,7 +5642,7 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := batch.NewIterator(engine.IterOptions{})
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: maxKey})
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,

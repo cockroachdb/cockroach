@@ -52,6 +52,14 @@ typedef struct {
 } DBTimestamp;
 
 typedef struct {
+  bool prefix;
+  DBKey upper_bound;
+  bool with_stats;
+  DBTimestamp min_timestamp_hint;
+  DBTimestamp max_timestamp_hint;
+} DBIterOptions;
+
+typedef struct {
   bool valid;
   DBKey key;
   DBSlice value;
@@ -171,18 +179,23 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 // caller's responsibility to call DBClose().
 DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 
-// Creates a new database iterator. When prefix is true, Seek will use
-// the user-key prefix of the key supplied to DBIterSeek() to restrict
-// which sstables are searched, but iteration (using Next) over keys
-// without the same user-key prefix will not work correctly (keys may
-// be skipped). When stats is true, the iterator will collect RocksDB
+// Creates a new database iterator.
+//
+// When iter_options.prefix is true, Seek will use the user-key prefix of the
+// key supplied to DBIterSeek() to restrict which sstables are searched, but
+// iteration (using Next) over keys without the same user-key prefix will not
+// work correctly (keys may be skipped).
+//
+// When iter_options.upper_bound is non-nil, the iterator will become invalid
+// after seeking past the provided upper bound. This can drastically improve
+// performance when seeking within a region covered by range deletion
+// tombstones. See #24029 for discussion.
+//
+// When iter_options.with_stats is true, the iterator will collect RocksDB
 // performance counters which can be retrieved via `DBIterStats`.
 //
 // It is the caller's responsibility to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats);
-
-DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts,
-                               bool with_stats);
+DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
@@ -221,6 +234,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // current key are skipped. After this call, DBIterValid() returns 1
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
+
+// DBIterSetUpperBound updates this iterator's upper bound.
+void DBIterSetUpperBound(DBIterator* iter, DBKey key);
 
 // Implements the merge operator on a single pair of values. update is
 // merged with existing. This method is provided for invocation from

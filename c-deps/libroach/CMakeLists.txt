@@ -33,6 +33,7 @@ add_library(roach
   file_registry.cc
   getter.cc
   godefs.cc
+  iterator.cc
   ldb.cc
   merge.cc
   mvcc.cc
