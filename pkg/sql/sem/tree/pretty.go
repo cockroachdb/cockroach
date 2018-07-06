@@ -553,25 +553,28 @@ func (node *AliasClause) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (node *JoinTableExpr) doc(p PrettyCfg) pretty.Doc {
-	var d []pretty.Doc
+	d := []pretty.Doc{p.Doc(node.Left)}
 	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
 		// Natural joins have a different syntax: "<a> NATURAL <join_type> <b>"
 		d = append(d,
-			p.Doc(node.Cond),
-			pretty.Text(node.Join),
-			p.Doc(node.Right),
+			p.nestName(
+				pretty.ConcatSpace(p.Doc(node.Cond), pretty.Text(node.Join)),
+				p.Doc(node.Right)),
 		)
 	} else {
 		// General syntax: "<a> <join_type> <b> <condition>"
-		d = append(d, p.nestName(
-			pretty.Text(node.Join),
-			p.Doc(node.Right),
-		))
-		if node.Cond != nil {
-			d = append(d, p.Doc(node.Cond))
+		operand := []pretty.Doc{
+			p.nestName(
+				pretty.Text(node.Join),
+				p.Doc(node.Right)),
 		}
+		if node.Cond != nil {
+			operand = append(operand, p.Doc(node.Cond))
+		}
+
+		d = append(d, pretty.Group(pretty.Fold(pretty.ConcatLine, operand...)))
 	}
-	return p.nestName(p.Doc(node.Left), pretty.Stack(d...))
+	return pretty.Stack(d...)
 }
 
 func (node *OnJoinCond) doc(p PrettyCfg) pretty.Doc {
