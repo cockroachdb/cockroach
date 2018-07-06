@@ -17,15 +17,13 @@ WITH
 					)
 			SELECT
 				x
-				*
-				10
+				* 10
 			FROM
 				t
 		)
 SELECT
 	x
-	+
-	2
+	+ 2
 FROM
 	t
 
@@ -48,38 +46,7 @@ WITH
 					)
 			SELECT
 				x
-				*
-				10
-			FROM
-				t
-		)
-SELECT
-	x
-	+
-	2
-FROM t
-
-7:
--------
-WITH
-	t
-		(
-			x
-		)
-		AS (
-			WITH
-				t
-					(
-						x
-					)
-					AS (
-						SELECT
-							1
-					)
-			SELECT
-				x
-				*
-				10
+				* 10
 			FROM
 				t
 		)
@@ -104,8 +71,7 @@ WITH
 					)
 			SELECT
 				x
-				*
-				10
+				* 10
 			FROM
 				t
 		)
@@ -129,8 +95,7 @@ WITH
 					)
 			SELECT
 				x
-				*
-				10
+				* 10
 			FROM
 				t
 		)
@@ -153,8 +118,7 @@ WITH
 					)
 			SELECT
 				x
-				*
-				10
+				* 10
 			FROM t
 		)
 SELECT x + 2
@@ -162,28 +126,6 @@ FROM t
 
 19:
 -------------------
-WITH
-	t (x)
-		AS (
-			WITH
-				t
-					(
-						x
-					)
-					AS (
-						SELECT
-							1
-					)
-			SELECT
-				x
-				*
-				10
-			FROM t
-		)
-SELECT x + 2 FROM t
-
-20:
---------------------
 WITH
 	t (x)
 		AS (

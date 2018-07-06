@@ -7,95 +7,6 @@ SELECT
 		AS count,
 	winner,
 	counter
-	*
-	60
-	*
-	5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length
-				/
-				60
-				/
-				5
-			)
-				AS counter
-		FROM
-			players
-		WHERE
-			build
-			=
-			$1
-			AND (
-					hero
-					=
-					$2
-					OR region
-						=
-						$3
-				)
-	)
-GROUP BY
-	winner,
-	counter
-
-7:
--------
-SELECT
-	count(
-		*
-	)
-		AS count,
-	winner,
-	counter
-	*
-	60
-	* 5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length
-				/
-				60
-				/
-				5
-			)
-				AS counter
-		FROM
-			players
-		WHERE
-			build
-			=
-			$1
-			AND (
-					hero
-					=
-					$2
-					OR region
-						=
-						$3
-				)
-	)
-GROUP BY
-	winner,
-	counter
-
-8:
---------
-SELECT
-	count(
-		*
-	)
-		AS count,
-	winner,
-	counter
 	* 60
 	* 5
 		AS counter
@@ -105,10 +16,8 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
-				/
-				5
+				/ 60
+				/ 5
 			)
 				AS counter
 		FROM
@@ -146,10 +55,8 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
-				/
-				5
+				/ 60
+				/ 5
 			)
 				AS counter
 		FROM
@@ -177,7 +84,8 @@ SELECT
 	count(*)
 		AS count,
 	winner,
-	counter * 60
+	counter
+	* 60
 	* 5
 		AS counter
 FROM
@@ -186,10 +94,8 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
-				/
-				5
+				/ 60
+				/ 5
 			)
 				AS counter
 		FROM
@@ -216,7 +122,8 @@ SELECT
 	count(*)
 		AS count,
 	winner,
-	counter * 60
+	counter
+	* 60
 	* 5
 		AS counter
 FROM
@@ -225,8 +132,7 @@ FROM
 			winner,
 			round(
 				length
-				/
-				60
+				/ 60
 				/ 5
 			)
 				AS counter
@@ -343,35 +249,6 @@ FROM
 	)
 GROUP BY winner, counter
 
-27:
----------------------------
-SELECT
-	count(*) AS count,
-	winner,
-	counter * 60 * 5
-		AS counter
-FROM
-	(
-		SELECT
-			winner,
-			round(
-				length / 60
-				/ 5
-			)
-				AS counter
-		FROM players
-		WHERE
-			build = $1
-			AND (
-					hero
-					= $2
-					OR region
-						=
-						$3
-				)
-	)
-GROUP BY winner, counter
-
 28:
 ----------------------------
 SELECT
@@ -384,7 +261,8 @@ FROM
 		SELECT
 			winner,
 			round(
-				length / 60
+				length
+				/ 60
 				/ 5
 			)
 				AS counter
@@ -412,7 +290,8 @@ FROM
 		SELECT
 			winner,
 			round(
-				length / 60
+				length
+				/ 60
 				/ 5
 			)
 				AS counter

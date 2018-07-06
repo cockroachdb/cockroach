@@ -299,10 +299,6 @@ func (p PrettyCfg) peelBinaryOperand(e Expr, op BinaryOperator) Expr {
 }
 
 func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
-	var pad pretty.Doc = pretty.Nil
-	if node.Operator.isPadded() {
-		pad = pretty.Line
-	}
 	// All the binary operators are at least left-associative.
 	// So we can always simplify "(a OP b) OP c" to "a OP b OP c".
 	leftOperand := p.peelBinaryOperand(node.Left, node.Operator)
@@ -312,17 +308,33 @@ func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
 		// we can also simplify "a OP (b OP c)" to "a OP b OP c".
 		rightOperand = p.peelBinaryOperand(node.Right, node.Operator)
 	}
-	return pretty.Group(pretty.Concat(
-		p.Doc(leftOperand),
-		pretty.Concat(
-			pad,
-			pretty.Group(pretty.Fold(pretty.Concat,
-				pretty.Text(node.Operator.String()),
-				pad,
-				p.Doc(rightOperand),
-			)),
-		),
-	))
+	opDoc := pretty.Text(node.Operator.String())
+	var res pretty.Doc
+	if !node.Operator.isPadded() {
+		res = pretty.JoinDoc(opDoc, p.Doc(leftOperand), p.Doc(rightOperand))
+	} else {
+		pred := func(e Expr, recurse func(e Expr)) bool {
+			if b, ok := e.(*BinaryExpr); ok && b.Operator == node.Operator {
+				leftSubOperand := p.peelBinaryOperand(b.Left, node.Operator)
+				rightSubOperand := b.Right
+				if binaryOpFullyAssoc[node.Operator] {
+					rightSubOperand = p.peelBinaryOperand(rightSubOperand, node.Operator)
+				}
+				recurse(leftSubOperand)
+				recurse(rightSubOperand)
+				return true
+			}
+			return false
+		}
+		formatOperand := func(e Expr) pretty.Doc {
+			return p.Doc(e)
+		}
+		operands := p.flattenOp(leftOperand, pred, formatOperand, nil)
+		operands = p.flattenOp(rightOperand, pred, formatOperand, operands)
+		res = pretty.JoinNestedRight(p.TabWidth, p.Tab,
+			opDoc, operands...)
+	}
+	return pretty.Group(res)
 }
 
 func (node *ParenExpr) doc(p PrettyCfg) pretty.Doc {
