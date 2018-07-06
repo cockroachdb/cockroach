@@ -11,40 +11,8 @@ SELECT
 	i,
 	(
 		1e9
-		+
-		i
-		/
-		2e4
-	)::FLOAT
-FROM
-	ROWS FROM (
-		generate_series(
-			1,
-			2e4
-		)
-	)
-		AS i
-			(
-				i
-			)
-RETURNING NOTHING
-
-13:
--------------
-INSERT
-INTO
-	mnop
-		(
-			m,
-			n
-		)
-SELECT
-	i,
-	(
-		1e9
-		+
-		i
-		/ 2e4
+		+ i
+			/ 2e4
 	)::FLOAT
 FROM
 	ROWS FROM (
@@ -69,9 +37,8 @@ SELECT
 	i,
 	(
 		1e9
-		+
-		i
-		/ 2e4
+		+ i
+			/ 2e4
 	)::FLOAT
 FROM
 	ROWS FROM (
@@ -95,8 +62,8 @@ SELECT
 	i,
 	(
 		1e9
-		+
-		i / 2e4
+		+ i
+			/ 2e4
 	)::FLOAT
 FROM
 	ROWS FROM (
@@ -117,8 +84,8 @@ SELECT
 	i,
 	(
 		1e9
-		+
-		i / 2e4
+		+ i
+			/ 2e4
 	)::FLOAT
 FROM
 	ROWS FROM (
