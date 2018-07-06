@@ -75,11 +75,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos
 			(
@@ -221,11 +219,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos
 			(
@@ -365,11 +361,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos
 			(n),
@@ -507,11 +501,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos
 			(n),
@@ -647,11 +639,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos
 			(n),
@@ -775,11 +765,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -900,11 +888,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1025,11 +1011,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1146,11 +1130,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1266,11 +1248,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1383,11 +1363,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1497,11 +1475,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1608,11 +1584,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1711,11 +1685,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend
@@ -1809,11 +1781,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
@@ -1901,11 +1871,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
@@ -1993,11 +1961,9 @@ FROM
 		AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
@@ -2080,11 +2046,9 @@ FROM
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint
 		AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
@@ -2165,12 +2129,90 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
+	pg_catalog.generate_series(
+		1,
+		32
 	)
+		AS pos (n),
+	pg_catalog.pg_depend AS dep,
+	pg_catalog.pg_class AS pkic
+WHERE
+	pkn.oid = pkc.relnamespace
+	AND pkc.oid = pka.attrelid
+	AND pka.attnum
+		= con.confkey[pos.n]
+	AND con.confrelid = pkc.oid
+	AND fkn.oid = fkc.relnamespace
+	AND fkc.oid = fka.attrelid
+	AND fka.attnum
+		= con.conkey[pos.n]
+	AND con.conrelid = fkc.oid
+	AND con.contype = 'f'
+	AND con.oid = dep.objid
+	AND pkic.oid = dep.refobjid
+	AND pkic.relkind = 'i'
+	AND dep.classid
+		=
+		'pg_constraint'::REGCLASS::OID
+	AND dep.refclassid
+		= 'pg_class'::REGCLASS::OID
+	AND fkn.nspname = 'public'
+	AND fkc.relname = 'orders'
+ORDER BY
+	pkn.nspname,
+	pkc.relname,
+	con.conname,
+	pos.n
+
+37:
+-------------------------------------
+SELECT
+	NULL::TEXT AS pktable_cat,
+	pkn.nspname AS pktable_schem,
+	pkc.relname AS pktable_name,
+	pka.attname AS pkcolumn_name,
+	NULL::TEXT AS fktable_cat,
+	fkn.nspname AS fktable_schem,
+	fkc.relname AS fktable_name,
+	fka.attname AS fkcolumn_name,
+	pos.n AS key_seq,
+	CASE con.confupdtype
+	WHEN 'c' THEN 0
+	WHEN 'n' THEN 2
+	WHEN 'd' THEN 4
+	WHEN 'r' THEN 1
+	WHEN 'a' THEN 3
+	ELSE NULL
+	END
+		AS update_rule,
+	CASE con.confdeltype
+	WHEN 'c' THEN 0
+	WHEN 'n' THEN 2
+	WHEN 'd' THEN 4
+	WHEN 'r' THEN 1
+	WHEN 'a' THEN 3
+	ELSE NULL
+	END
+		AS delete_rule,
+	con.conname AS fk_name,
+	pkic.relname AS pk_name,
+	CASE
+	WHEN con.condeferrable
+	AND con.condeferred
+	THEN 5
+	WHEN con.condeferrable THEN 6
+	ELSE 7
+	END
+		AS deferrability
+FROM
+	pg_catalog.pg_namespace AS pkn,
+	pg_catalog.pg_class AS pkc,
+	pg_catalog.pg_attribute AS pka,
+	pg_catalog.pg_namespace AS fkn,
+	pg_catalog.pg_class AS fkc,
+	pg_catalog.pg_attribute AS fka,
+	pg_catalog.pg_constraint AS con,
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2250,12 +2292,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
-	)
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2334,12 +2371,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
-	)
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2417,91 +2449,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(
-			1,
-			32
-		)
-	)
-		AS pos (n),
-	pg_catalog.pg_depend AS dep,
-	pg_catalog.pg_class AS pkic
-WHERE
-	pkn.oid = pkc.relnamespace
-	AND pkc.oid = pka.attrelid
-	AND pka.attnum = con.confkey[pos.n]
-	AND con.confrelid = pkc.oid
-	AND fkn.oid = fkc.relnamespace
-	AND fkc.oid = fka.attrelid
-	AND fka.attnum = con.conkey[pos.n]
-	AND con.conrelid = fkc.oid
-	AND con.contype = 'f'
-	AND con.oid = dep.objid
-	AND pkic.oid = dep.refobjid
-	AND pkic.relkind = 'i'
-	AND dep.classid
-		= 'pg_constraint'::REGCLASS::OID
-	AND dep.refclassid
-		= 'pg_class'::REGCLASS::OID
-	AND fkn.nspname = 'public'
-	AND fkc.relname = 'orders'
-ORDER BY
-	pkn.nspname,
-	pkc.relname,
-	con.conname,
-	pos.n
-
-41:
------------------------------------------
-SELECT
-	NULL::TEXT AS pktable_cat,
-	pkn.nspname AS pktable_schem,
-	pkc.relname AS pktable_name,
-	pka.attname AS pkcolumn_name,
-	NULL::TEXT AS fktable_cat,
-	fkn.nspname AS fktable_schem,
-	fkc.relname AS fktable_name,
-	fka.attname AS fkcolumn_name,
-	pos.n AS key_seq,
-	CASE con.confupdtype
-	WHEN 'c' THEN 0
-	WHEN 'n' THEN 2
-	WHEN 'd' THEN 4
-	WHEN 'r' THEN 1
-	WHEN 'a' THEN 3
-	ELSE NULL
-	END
-		AS update_rule,
-	CASE con.confdeltype
-	WHEN 'c' THEN 0
-	WHEN 'n' THEN 2
-	WHEN 'd' THEN 4
-	WHEN 'r' THEN 1
-	WHEN 'a' THEN 3
-	ELSE NULL
-	END
-		AS delete_rule,
-	con.conname AS fk_name,
-	pkic.relname AS pk_name,
-	CASE
-	WHEN con.condeferrable
-	AND con.condeferred
-	THEN 5
-	WHEN con.condeferrable THEN 6
-	ELSE 7
-	END
-		AS deferrability
-FROM
-	pg_catalog.pg_namespace AS pkn,
-	pg_catalog.pg_class AS pkc,
-	pg_catalog.pg_attribute AS pka,
-	pg_catalog.pg_namespace AS fkn,
-	pg_catalog.pg_class AS fkc,
-	pg_catalog.pg_attribute AS fka,
-	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(1, 32)
-	)
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2577,9 +2525,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(1, 32)
-	)
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2655,9 +2601,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (
-		pg_catalog.generate_series(1, 32)
-	)
+	pg_catalog.generate_series(1, 32)
 		AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
@@ -2730,8 +2674,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32))
-		AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -2803,8 +2746,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32))
-		AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -2875,8 +2817,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32))
-		AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -2945,76 +2886,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32))
-		AS pos (n),
-	pg_catalog.pg_depend AS dep,
-	pg_catalog.pg_class AS pkic
-WHERE
-	pkn.oid = pkc.relnamespace
-	AND pkc.oid = pka.attrelid
-	AND pka.attnum = con.confkey[pos.n]
-	AND con.confrelid = pkc.oid
-	AND fkn.oid = fkc.relnamespace
-	AND fkc.oid = fka.attrelid
-	AND fka.attnum = con.conkey[pos.n]
-	AND con.conrelid = fkc.oid
-	AND con.contype = 'f'
-	AND con.oid = dep.objid
-	AND pkic.oid = dep.refobjid
-	AND pkic.relkind = 'i'
-	AND dep.classid = 'pg_constraint'::REGCLASS::OID
-	AND dep.refclassid = 'pg_class'::REGCLASS::OID
-	AND fkn.nspname = 'public'
-	AND fkc.relname = 'orders'
-ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
-
-61:
--------------------------------------------------------------
-SELECT
-	NULL::TEXT AS pktable_cat,
-	pkn.nspname AS pktable_schem,
-	pkc.relname AS pktable_name,
-	pka.attname AS pkcolumn_name,
-	NULL::TEXT AS fktable_cat,
-	fkn.nspname AS fktable_schem,
-	fkc.relname AS fktable_name,
-	fka.attname AS fkcolumn_name,
-	pos.n AS key_seq,
-	CASE con.confupdtype
-	WHEN 'c' THEN 0
-	WHEN 'n' THEN 2
-	WHEN 'd' THEN 4
-	WHEN 'r' THEN 1
-	WHEN 'a' THEN 3
-	ELSE NULL
-	END
-		AS update_rule,
-	CASE con.confdeltype
-	WHEN 'c' THEN 0
-	WHEN 'n' THEN 2
-	WHEN 'd' THEN 4
-	WHEN 'r' THEN 1
-	WHEN 'a' THEN 3
-	ELSE NULL
-	END
-		AS delete_rule,
-	con.conname AS fk_name,
-	pkic.relname AS pk_name,
-	CASE
-	WHEN con.condeferrable AND con.condeferred THEN 5
-	WHEN con.condeferrable THEN 6
-	ELSE 7
-	END
-		AS deferrability
-FROM
-	pg_catalog.pg_namespace AS pkn,
-	pg_catalog.pg_class AS pkc,
-	pg_catalog.pg_attribute AS pka,
-	pg_catalog.pg_namespace AS fkn,
-	pg_catalog.pg_class AS fkc,
-	pg_catalog.pg_attribute AS fka,
-	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -3077,7 +2949,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -3124,7 +2996,7 @@ FROM
 	pg_catalog.pg_class AS fkc,
 	pg_catalog.pg_attribute AS fka,
 	pg_catalog.pg_constraint AS con,
-	ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n),
+	pg_catalog.generate_series(1, 32) AS pos (n),
 	pg_catalog.pg_depend AS dep,
 	pg_catalog.pg_class AS pkic
 WHERE
@@ -3146,8 +3018,8 @@ WHERE
 	AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-335:
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+323:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT
 	NULL::TEXT AS pktable_cat,
 	pkn.nspname AS pktable_schem,
@@ -3164,7 +3036,7 @@ SELECT
 	pkic.relname AS pk_name,
 	CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
 FROM
-	pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+	pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE
 	pkn.oid = pkc.relnamespace
 	AND pkc.oid = pka.attrelid
@@ -3184,8 +3056,8 @@ WHERE
 	AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-336:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+324:
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT
 	NULL::TEXT AS pktable_cat,
 	pkn.nspname AS pktable_schem,
@@ -3201,7 +3073,7 @@ SELECT
 	con.conname AS fk_name,
 	pkic.relname AS pk_name,
 	CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
-FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE
 	pkn.oid = pkc.relnamespace
 	AND pkc.oid = pka.attrelid
@@ -3238,7 +3110,7 @@ SELECT
 	con.conname AS fk_name,
 	pkic.relname AS pk_name,
 	CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
-FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE
 	pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
@@ -3260,7 +3132,7 @@ SELECT
 	con.conname AS fk_name,
 	pkic.relname AS pk_name,
 	CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
-FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
@@ -3268,22 +3140,22 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT
 	NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
-FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 680:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
-FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
+FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
 WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-1508:
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
+1496:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-1562:
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, ROWS FROM (pg_catalog.generate_series(1, 32)) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders' ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
+1550:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders' ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
