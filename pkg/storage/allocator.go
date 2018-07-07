@@ -34,10 +34,16 @@ import (
 )
 
 const (
-	// baseLeaseRebalanceThreshold is the minimum ratio of a store's lease surplus
+	// leaseRebalanceThreshold is the minimum ratio of a store's lease surplus
 	// to the mean range/lease count that permits lease-transfers away from that
 	// store.
-	baseLeaseRebalanceThreshold = 0.05
+	leaseRebalanceThreshold = 0.05
+
+	// baseLoadBasedLeaseRebalanceThreshold is the equivalent of
+	// leaseRebalanceThreshold for load-based lease rebalance decisions (i.e.
+	// "follow-the-workload"). It's the base threshold for decisions that get
+	// adjusted based on the load and latency of the involved ranges/nodes.
+	baseLoadBasedLeaseRebalanceThreshold = 2 * leaseRebalanceThreshold
 
 	// minReplicaWeight sets a floor for how low a replica weight can be. This is
 	// needed because a weight of zero doesn't work in the current lease scoring
@@ -714,7 +720,7 @@ func (a *Allocator) TransferLeaseTarget(
 	// whether we actually should be transferring the lease. The transfer
 	// decision is only needed if we've been asked to check the source.
 	transferDec, repl := a.shouldTransferLeaseUsingStats(
-		ctx, sl, source, existing, stats,
+		ctx, sl, source, existing, stats, nil,
 	)
 	if checkTransferLeaseSource {
 		switch transferDec {
@@ -814,7 +820,7 @@ func (a *Allocator) ShouldTransferLease(
 		return false
 	}
 
-	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, nil)
 	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
@@ -831,12 +837,36 @@ func (a *Allocator) ShouldTransferLease(
 	return result
 }
 
+func (a Allocator) followTheWorkloadPrefersLocal(
+	ctx context.Context,
+	sl StoreList,
+	source roachpb.StoreDescriptor,
+	candidate roachpb.StoreID,
+	existing []roachpb.ReplicaDescriptor,
+	stats *replicaStats,
+) bool {
+	adjustments := make(map[roachpb.StoreID]float64)
+	decision, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, adjustments)
+	if decision == decideWithoutStats {
+		return false
+	}
+	adjustment := adjustments[candidate]
+	if adjustment > baseLoadBasedLeaseRebalanceThreshold {
+		log.VEventf(ctx, 3,
+			"s%d is a better fit than s%d due to follow-the-workload (score: %.2f; threshold: %.2f)",
+			source.StoreID, candidate, adjustment, baseLoadBasedLeaseRebalanceThreshold)
+		return true
+	}
+	return false
+}
+
 func (a Allocator) shouldTransferLeaseUsingStats(
 	ctx context.Context,
 	sl StoreList,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	stats *replicaStats,
+	rebalanceAdjustments map[roachpb.StoreID]float64,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
@@ -903,7 +933,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 		addr, err := a.storePool.gossip.GetNodeIDAddress(repl.NodeID)
 		if err != nil {
-			log.Errorf(ctx, "missing address for node %d: %s", repl.NodeID, err)
+			log.Errorf(ctx, "missing address for n%d: %s", repl.NodeID, err)
 			continue
 		}
 		remoteLatency, ok := a.nodeLatencyFn(addr.String())
@@ -912,20 +942,24 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 
 		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
-		score := loadBasedLeaseRebalanceScore(
+		replScore, rebalanceAdjustment := loadBasedLeaseRebalanceScore(
 			ctx, a.storePool.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
-		if score > bestReplScore {
-			bestReplScore = score
+		if replScore > bestReplScore {
+			bestReplScore = replScore
 			bestRepl = repl
 		}
+		if rebalanceAdjustments != nil {
+			rebalanceAdjustments[repl.StoreID] = rebalanceAdjustment
+		}
+	}
+
+	if bestReplScore > 0 {
+		return shouldTransfer, bestRepl
 	}
 
 	// Return the best replica even in cases where transferring is not advised in
 	// order to support forced lease transfers, such as when removing a replica or
 	// draining all leases before shutdown.
-	if bestReplScore > 0 {
-		return shouldTransfer, bestRepl
-	}
 	return shouldNotTransfer, bestRepl
 }
 
@@ -948,7 +982,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 // logic behind each part of the formula is as follows:
 //
 // * LeaseRebalancingAggressiveness: Allow the aggressiveness to be tuned via
-//   an environment variable.
+//   a cluster setting.
 // * 0.1: Constant factor to reduce aggressiveness by default
 // * math.Log10(remoteWeight/sourceWeight): Comparison of the remote replica's
 //   weight to the local replica's weight. Taking the log of the ratio instead
@@ -963,6 +997,18 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 //   of the ideal number of leases on each store. We then calculate these to
 //   compare how close each node is to its ideal state and use the differences
 //   from the ideal state on each node to compute a final score.
+//
+// Returns a total score for the replica that takes into account the number of
+// leases already on each store. Also returns the raw "adjustment" value that's
+// purely based on replica weights and latency in order for the caller to
+// determine how large a role the user's workload played in the decision.  The
+// adjustment value is positive if the remote store is preferred for load-based
+// reasons or negative if the local store is preferred. The magnitude depends
+// on the difference in load and the latency between the nodes.
+//
+// TODO(a-robinson): Should this be changed to avoid even thinking about lease
+// counts now that we try to spread leases and replicas based on QPS? As is it
+// may fight back a little bit against store-level QPS-based rebalancing.
 func loadBasedLeaseRebalanceScore(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -972,14 +1018,14 @@ func loadBasedLeaseRebalanceScore(
 	sourceWeight float64,
 	source roachpb.StoreDescriptor,
 	meanLeases float64,
-) int32 {
+) (int32, float64) {
 	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
 	rebalanceAdjustment :=
 		leaseRebalancingAggressiveness.Get(&st.SV) * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
 	// Start with twice the base rebalance threshold in order to fight more
 	// strongly against thrashing caused by small variances in the distribution
 	// of request weights.
-	rebalanceThreshold := (2 * baseLeaseRebalanceThreshold) - rebalanceAdjustment
+	rebalanceThreshold := baseLoadBasedLeaseRebalanceThreshold - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
@@ -995,7 +1041,7 @@ func loadBasedLeaseRebalanceScore(
 		rebalanceThreshold, meanLeases, source.Capacity.LeaseCount, overfullLeaseThreshold,
 		remoteStore.Capacity.LeaseCount, underfullLeaseThreshold, totalScore,
 	)
-	return totalScore
+	return totalScore, rebalanceAdjustment
 }
 
 func (a Allocator) shouldTransferLeaseWithoutStats(
@@ -1004,9 +1050,14 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
+	// TODO(a-robinson): Should we disable this behavior when load-based lease
+	// rebalancing is enabled? In happy cases it's nice to keep this working
+	// to even out the number of leases in addition to the number of replicas,
+	// but it's certainly a blunt instrument that could undo what we want.
+
 	// Allow lease transfer if we're above the overfull threshold, which is
-	// mean*(1+baseLeaseRebalanceThreshold).
-	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + baseLeaseRebalanceThreshold)))
+	// mean*(1+leaseRebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + leaseRebalanceThreshold)))
 	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
@@ -1016,7 +1067,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	}
 
 	if float64(source.Capacity.LeaseCount) > sl.candidateLeases.mean {
-		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - baseLeaseRebalanceThreshold)))
+		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - leaseRebalanceThreshold)))
 		minUnderfullThreshold := int32(math.Ceil(sl.candidateLeases.mean - 5))
 		if underfullLeaseThreshold > minUnderfullThreshold {
 			underfullLeaseThreshold = minUnderfullThreshold
