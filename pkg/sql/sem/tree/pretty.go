@@ -803,7 +803,7 @@ func (node *UpdateExpr) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return pretty.Group(p.nestName(d, pretty.ConcatSpace(pretty.Text("="), p.Doc(e))))
+	return p.nestName(d, pretty.ConcatSpace(pretty.Text("="), p.Doc(e)))
 }
 
 func (node *CreateTable) doc(p PrettyCfg) pretty.Doc {
