@@ -361,6 +361,7 @@ type Store struct {
 	tsCache            tscache.Cache        // Most recent timestamps for keys / key ranges
 	allocator          Allocator            // Makes allocation decisions
 	replRankings       *replicaRankings
+	storeRebalancer    *StoreRebalancer
 	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
 	mergeQueue         *mergeQueue                 // Range merging queue
@@ -987,6 +988,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		}
 	}
 
+	s.storeRebalancer = NewStoreRebalancer(
+		s.cfg.AmbientCtx, cfg.Settings, s.replicateQueue, s.replRankings)
+
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
 	}
@@ -1119,7 +1123,7 @@ func (s *Store) SetDraining(drain bool) {
 								log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
 							}
 						}
-						leaseTransferred, err := s.replicateQueue.transferLease(
+						leaseTransferred, err := s.replicateQueue.findTargetAndTransferLease(
 							ctx,
 							r,
 							desc,
@@ -1508,6 +1512,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
 	}
+
+	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
