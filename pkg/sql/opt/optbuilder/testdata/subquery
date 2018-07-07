@@ -868,6 +868,11 @@ select
                                └── max [type=int]
                                     └── variable: xyz.x [type=int]
 
+# Drop previous table with same name, but different schema.
+exec-ddl
+DROP TABLE kv
+----
+
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
 ----

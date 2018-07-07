@@ -109,33 +109,6 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	return tab
 }
 
-// qualifyTableName updates the given table name to include catalog and schema
-// if not already included.
-func (tc *Catalog) qualifyTableName(name *tree.TableName) {
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
-			// Already 3 parts: nothing to do.
-			return
-		}
-
-		if name.SchemaName == tree.PublicSchemaName {
-			// Use the current database.
-			name.CatalogName = testDB
-			return
-		}
-
-		// Compatibility with CockroachDB v1.1: use D.public.T.
-		name.CatalogName = name.SchemaName
-		name.SchemaName = tree.PublicSchemaName
-		name.ExplicitCatalog = true
-		return
-	}
-
-	// Use the current database.
-	name.CatalogName = testDB
-	name.SchemaName = tree.PublicSchemaName
-}
-
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
