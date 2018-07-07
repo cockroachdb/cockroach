@@ -1085,6 +1085,12 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int64 logical_bytes() const;
   void set_logical_bytes(::google::protobuf::int64 value);
 
+  bool has_queries_per_second() const;
+  void clear_queries_per_second();
+  static const int kQueriesPerSecondFieldNumber = 10;
+  double queries_per_second() const;
+  void set_queries_per_second(double value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreCapacity)
  private:
   void set_has_capacity();
@@ -1099,6 +1105,8 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void clear_has_range_count();
   void set_has_lease_count();
   void clear_has_lease_count();
+  void set_has_queries_per_second();
+  void clear_has_queries_per_second();
   void set_has_writes_per_second();
   void clear_has_writes_per_second();
   void set_has_bytes_per_replica();
@@ -1118,6 +1126,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   double writes_per_second_;
   ::google::protobuf::int64 used_;
   ::google::protobuf::int64 logical_bytes_;
+  double queries_per_second_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2728,6 +2737,29 @@ inline void StoreCapacity::set_lease_count(::google::protobuf::int32 value) {
   set_has_lease_count();
   lease_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.lease_count)
+}
+
+inline bool StoreCapacity::has_queries_per_second() const {
+  return (_has_bits_[0] & 0x00000200u) != 0;
+}
+inline void StoreCapacity::set_has_queries_per_second() {
+  _has_bits_[0] |= 0x00000200u;
+}
+inline void StoreCapacity::clear_has_queries_per_second() {
+  _has_bits_[0] &= ~0x00000200u;
+}
+inline void StoreCapacity::clear_queries_per_second() {
+  queries_per_second_ = 0;
+  clear_has_queries_per_second();
+}
+inline double StoreCapacity::queries_per_second() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.queries_per_second)
+  return queries_per_second_;
+}
+inline void StoreCapacity::set_queries_per_second(double value) {
+  set_has_queries_per_second();
+  queries_per_second_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.queries_per_second)
 }
 
 inline bool StoreCapacity::has_writes_per_second() const {
