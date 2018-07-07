@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	// TODO(a-robinson): Scale this up based on the number of replicas on a store?
 	numTopReplicasToTrack = 128
 )
 
