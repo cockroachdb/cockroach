@@ -143,7 +143,7 @@ TABLE xyz
       └── x int not null
 
 opt
-SELECT min(y) FROM xyz where x=7
+SELECT min(y) FROM xyz where z=7
 ----
 group-by
  ├── columns: min:4(int)
@@ -151,24 +151,24 @@ group-by
  ├── key: ()
  ├── fd: ()-->(4)
  ├── limit
- │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── columns: y:2(int!null) z:3(float!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2)
- │    ├── scan xyz@xy
- │    │    ├── columns: x:1(int!null) y:2(int!null)
- │    │    ├── constraint: /1/2: (/7/NULL - /7]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(1,2)
+ │    ├── fd: ()-->(2,3)
+ │    ├── scan xyz@zyx
+ │    │    ├── columns: y:2(int!null) z:3(float!null)
+ │    │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
+ │    │    ├── fd: ()-->(3)
+ │    │    └── ordering: +2 opt(3)
  │    └── const: 1 [type=int]
  └── aggregations [outer=(2)]
       └── any-not-null [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit has the same behavior with max() as
-# the previous min() query because x is a unique key
+# the previous min() query because z is the prefix of a unique key
 opt
-SELECT max(y) FROM xyz where x=7
+SELECT max(y) FROM xyz where z=7
 ----
 group-by
  ├── columns: max:4(int)
@@ -176,15 +176,18 @@ group-by
  ├── key: ()
  ├── fd: ()-->(4)
  ├── limit
- │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── columns: y:2(int!null) z:3(float!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2)
- │    ├── scan xyz@xy
- │    │    ├── columns: x:1(int!null) y:2(int!null)
- │    │    ├── constraint: /1/2: (/7/NULL - /7]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(1,2)
+ │    ├── fd: ()-->(2,3)
+ │    ├── sort
+ │    │    ├── columns: y:2(int!null) z:3(float!null)
+ │    │    ├── fd: ()-->(3)
+ │    │    ├── ordering: -2 opt(3)
+ │    │    └── scan xyz@zyx
+ │    │         ├── columns: y:2(int!null) z:3(float!null)
+ │    │         ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
+ │    │         └── fd: ()-->(3)
  │    └── const: 1 [type=int]
  └── aggregations [outer=(2)]
       └── any-not-null [type=int, outer=(2)]

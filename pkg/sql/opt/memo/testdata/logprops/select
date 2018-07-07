@@ -22,6 +22,7 @@ SELECT * FROM xy WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1]
  ├── key: ()
  ├── fd: ()-->(1,2)

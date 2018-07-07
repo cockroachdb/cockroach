@@ -962,6 +962,7 @@ SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 group-by
  ├── columns: i:2(int!null) count:6(int)
  ├── grouping columns: i:2(int!null)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
  ├── select
@@ -981,6 +982,7 @@ SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 group-by
  ├── columns: i:2(int!null)
  ├── grouping columns: i:2(int!null)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2)
  └── select
@@ -1070,6 +1072,7 @@ SELECT k FROM b WHERE k IS NULL
 scan b
  ├── columns: k:1(int!null)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 1]
  ├── key: ()
  └── fd: ()-->(1)
 

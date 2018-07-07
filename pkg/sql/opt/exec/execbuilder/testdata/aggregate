@@ -351,46 +351,44 @@ group         ·            ·                (max int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·                (min int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /1/!NULL-/2      ·               ·
+group      ·            ·                (min int)       ·
+ │         aggregate 0  any_not_null(y)  ·               ·
+ └── scan  ·            ·                (x int, y int)  ·
+·          table        xyz@xy           ·               ·
+·          spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·                (max int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /1/!NULL-/2      ·               ·
+group      ·            ·                (max int)       ·
+ │         aggregate 0  any_not_null(y)  ·               ·
+ └── scan  ·            ·                (x int, y int)  ·
+·          table        xyz@xy           ·               ·
+·          spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7
 ----
-group           ·            ·                (min int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /7/!NULL-/8      ·               ·
+group           ·            ·                            (min int)         ·
+ │              aggregate 0  any_not_null(y)              ·                 ·
+ └── limit      ·            ·                            (y int, z float)  +y
+      │         count        (1)[int]                     ·                 ·
+      └── scan  ·            ·                            (y int, z float)  +y
+·               table        xyz@zyx                      ·                 ·
+·               spans        /7/!NULL-/7.000000000000001  ·                 ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE z = 7
 ----
-group           ·            ·                (max int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /7/!NULL-/8      ·               ·
+group                ·            ·                            (max int)         ·
+ │                   aggregate 0  any_not_null(y)              ·                 ·
+ └── limit           ·            ·                            (y int, z float)  -y
+      │              count        (1)[int]                     ·                 ·
+      └── sort       ·            ·                            (y int, z float)  -y
+           │         order        -y                           ·                 ·
+           └── scan  ·            ·                            (y int, z float)  ·
+·                    table        xyz@zyx                      ·                 ·
+·                    spans        /7/!NULL-/7.000000000000001  ·                 ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
