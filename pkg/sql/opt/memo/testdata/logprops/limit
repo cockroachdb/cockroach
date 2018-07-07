@@ -157,17 +157,17 @@ project
 
 # Test very high limit (> max uint32).
 opt
-SELECT s, x FROM xyzs WHERE x=1 LIMIT 4294967296
+SELECT s, x FROM xyzs WHERE s='foo' LIMIT 4294967296
 ----
 limit
- ├── columns: s:4(string) x:1(int!null)
- ├── stats: [rows=1]
- ├── key: ()
- ├── fd: ()-->(1,4)
- ├── scan xyzs
- │    ├── columns: x:1(int!null) s:4(string)
- │    ├── constraint: /1: [/1 - /1]
- │    ├── stats: [rows=1, distinct(1)=1]
- │    ├── key: ()
- │    └── fd: ()-->(1,4)
+ ├── columns: s:4(string!null) x:1(int!null)
+ ├── stats: [rows=1.42857143]
+ ├── key: (1)
+ ├── fd: ()-->(4)
+ ├── scan xyzs@secondary
+ │    ├── columns: x:1(int!null) s:4(string!null)
+ │    ├── constraint: /-4/3: [/'foo' - /'foo']
+ │    ├── stats: [rows=1.42857143, distinct(4)=1]
+ │    ├── key: (1)
+ │    └── fd: ()-->(4)
  └── const: 4294967296 [type=int]
