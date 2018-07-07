@@ -1639,8 +1639,10 @@ SELECT pg_catalog.pg_get_userbyid(20)
 ----
 unknown (OID=20)
 
-query error unknown index \(OID=0\)
+query T
 SELECT pg_catalog.pg_get_indexdef(0)
+----
+NULL
 
 statement ok
 CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
@@ -1650,8 +1652,48 @@ SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_in
 ----
 CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test (a ASC)
 
-query error pq: unknown signature: pg_get_indexdef\(int, int, bool\)
+query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
+----
+NULL
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'), 0, true)
+----
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test (a ASC)
+
+statement ok
+CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_cols_idx (a ASC, b DESC), INDEX other (a DESC))
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 0, true)
+----
+CREATE UNIQUE INDEX pg_indexdef_cols_idx ON test.public.pg_indexdef_test_cols (a ASC, b DESC)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 1, true)
+----
+a
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 2, false)
+----
+b
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 3, false)
+----
+rowid
+
+query I
+SELECT length(pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 4, false))
+----
+0
+
+query I
+SELECT length(pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), -1, false))
+----
+0
 
 query T
 SELECT pg_catalog.pg_get_viewdef(0)
