@@ -62,7 +62,7 @@ func JoinNestedRight(n int, s string, sep Doc, nested ...Doc) Doc {
 
 // ConcatLine concatenates two Docs with a Line.
 func ConcatLine(a, b Doc) Doc {
-	return concatFn(a, b, func(a, b Doc) Doc {
+	return simplifyNil(a, b, func(a, b Doc) Doc {
 		return Concat(
 			a,
 			Concat(
@@ -75,7 +75,7 @@ func ConcatLine(a, b Doc) Doc {
 
 // ConcatSpace concatenates two Docs with a space.
 func ConcatSpace(a, b Doc) Doc {
-	return concatFn(a, b, func(a, b Doc) Doc {
+	return simplifyNil(a, b, func(a, b Doc) Doc {
 		return Concat(
 			a,
 			Concat(
@@ -145,4 +145,22 @@ func Bracket(n int, s string, l string, x Doc, r string) Doc {
 		Text(r),
 	)
 	return union{flatten(a), b}
+}
+
+// simplifyNil returns fn(a, b). nil (the Go value) is converted to Nil (the
+// Doc). If either Doc is Nil, the other Doc is returned without invoking fn.
+func simplifyNil(a, b Doc, fn func(Doc, Doc) Doc) Doc {
+	if a == nil {
+		a = Nil
+	}
+	if b == nil {
+		b = Nil
+	}
+	if a == Nil {
+		return b
+	}
+	if b == Nil {
+		return a
+	}
+	return fn(a, b)
 }

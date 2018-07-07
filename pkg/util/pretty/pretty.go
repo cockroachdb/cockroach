@@ -24,6 +24,37 @@ import (
 // of the below code. Methods, variables, and implementation details were
 // made to resemble it as close as possible.
 
+// docBest represents a selected document as described by the type
+// "Doc" in the referenced paper (not "DOC"). This is the
+// less-abstract representation constructed during "best layout"
+// selection.
+type docBest interface {
+	String() string
+	isDocBest()
+}
+
+func (nilDocB) String() string { return "Nil" }
+func (d textB) String() string { return fmt.Sprintf("(%q `Text` %s)", d.s, d.d) }
+func (d lineB) String() string { return fmt.Sprintf("(%q `Line` %s)", d.s, d.d) }
+
+func (nilDocB) isDocBest() {}
+func (textB) isDocBest()   {}
+func (lineB) isDocBest()   {}
+
+type nilDocB struct{}
+
+var nilB nilDocB
+
+type textB struct {
+	s string
+	d docBest
+}
+
+type lineB struct {
+	s string
+	d docBest
+}
+
 // Pretty returns a pretty-printed string for the Doc d at line length n.
 func Pretty(d Doc, n int) string {
 	var sb strings.Builder
@@ -33,10 +64,10 @@ func Pretty(d Doc, n int) string {
 }
 
 // w is the max line width.
-func best(w int, x Doc) Doc {
+func best(w int, x Doc) docBest {
 	b := beExec{
 		w:     w,
-		cache: make(map[cacheKey]Doc),
+		cache: make(map[cacheKey]docBest),
 	}
 	return b.be(0, iDoc{0, "", x})
 }
@@ -59,13 +90,13 @@ type cacheKey struct {
 type beExec struct {
 	w int
 	// cache is a memoized cache used during better calculation.
-	cache map[cacheKey]Doc
+	cache map[cacheKey]docBest
 	buf   bytes.Buffer
 }
 
-func (b beExec) be(k int, x ...iDoc) Doc {
+func (b beExec) be(k int, x ...iDoc) docBest {
 	if len(x) == 0 {
-		return Nil
+		return nilB
 	}
 	d := x[0]
 	z := x[1:]
@@ -82,12 +113,12 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 		}
 		return b.be(k, x...)
 	case text:
-		return textX{
+		return textB{
 			s: string(t),
 			d: b.be(k+len(t), z...),
 		}
 	case line:
-		return lineX{
+		return lineB{
 			s: d.s,
 			d: b.be(d.i, z...),
 		}
@@ -113,7 +144,7 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 		n := append([]iDoc{{d.i, d.s, t.x}}, z...)
 		res := better(b.w, k,
 			b.be(k, n...),
-			func() Doc {
+			func() docBest {
 				n[0].d = t.y
 				return b.be(k, n...)
 			},
@@ -125,37 +156,37 @@ func (b beExec) be(k int, x ...iDoc) Doc {
 	}
 }
 
-func better(w, k int, x Doc, y func() Doc) Doc {
+func better(w, k int, x docBest, y func() docBest) docBest {
 	if fits(w-k, x) {
 		return x
 	}
 	return y()
 }
 
-func fits(w int, x Doc) bool {
+func fits(w int, x docBest) bool {
 	if w < 0 {
 		return false
 	}
 	switch t := x.(type) {
-	case nilDoc:
+	case nilDocB:
 		return true
-	case textX:
+	case textB:
 		return fits(w-len(t.s), t.d)
-	case lineX:
+	case lineB:
 		return true
 	default:
 		panic(fmt.Errorf("unknown type: %T", x))
 	}
 }
 
-func layout(sb *strings.Builder, d Doc) {
+func layout(sb *strings.Builder, d docBest) {
 	switch d := d.(type) {
-	case nilDoc:
+	case nilDocB:
 		// ignore
-	case textX:
+	case textB:
 		sb.WriteString(d.s)
 		layout(sb, d.d)
-	case lineX:
+	case lineB:
 		sb.WriteString("\n")
 		sb.WriteString(d.s)
 		layout(sb, d.d)
