@@ -861,6 +861,11 @@ limit
  │         └── ordering: +1,+2,+3
  └── const: 1 [type=int]
 
+# Drop previous table with same name, but different schema.
+exec-ddl
+DROP TABLE abcd
+----
+
 exec-ddl
 CREATE TABLE abcd (
   a INT PRIMARY KEY,
