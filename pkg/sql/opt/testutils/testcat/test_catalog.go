@@ -99,7 +99,11 @@ func (tc *Catalog) Table(name string) *Table {
 
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
-	tc.tables[tab.Name.FQString()] = tab
+	fq := tab.Name.FQString()
+	if _, ok := tc.tables[fq]; ok {
+		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.Name)))
+	}
+	tc.tables[fq] = tab
 }
 
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
@@ -123,9 +127,40 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		tc.AlterTable(stmt)
 		return "", nil
 
+	case *tree.DropTable:
+		tc.DropTable(stmt)
+		return "", nil
+
 	default:
 		return "", fmt.Errorf("expected CREATE TABLE or ALTER TABLE statement but found: %v", stmt)
 	}
+}
+
+// qualifyTableName updates the given table name to include catalog and schema
+// if not already included.
+func (tc *Catalog) qualifyTableName(name *tree.TableName) {
+	if name.ExplicitSchema {
+		if name.ExplicitCatalog {
+			// Already 3 parts: nothing to do.
+			return
+		}
+
+		if name.SchemaName == tree.PublicSchemaName {
+			// Use the current database.
+			name.CatalogName = testDB
+			return
+		}
+
+		// Compatibility with CockroachDB v1.1: use D.public.T.
+		name.CatalogName = name.SchemaName
+		name.SchemaName = tree.PublicSchemaName
+		name.ExplicitCatalog = true
+		return
+	}
+
+	// Use the current database.
+	name.CatalogName = testDB
+	name.SchemaName = tree.PublicSchemaName
 }
 
 // Table implements the opt.Table interface for testing purposes.
