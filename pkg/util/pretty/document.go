@@ -42,9 +42,6 @@ import (
 // referenced paper. This is the abstract representation constructed
 // by the pretty-printing code.
 type Doc interface {
-	// All Docs can uniquely convert themselves into a string so they can be
-	// memoized during better calculation.
-	String() string
 	isDoc()
 }
 
@@ -54,13 +51,6 @@ func (nilDoc) isDoc() {}
 func (concat) isDoc() {}
 func (nest) isDoc()   {}
 func (union) isDoc()  {}
-
-func (d text) String() string   { return fmt.Sprintf("(TEXT %q)", string(d)) }
-func (line) String() string     { return "LINE" }
-func (nilDoc) String() string   { return "NIL" }
-func (d concat) String() string { return fmt.Sprintf("(%s :<> %s)", d.a, d.b) }
-func (d nest) String() string   { return fmt.Sprintf("(NEST %d %s)", d.n, d.d) }
-func (d union) String() string  { return fmt.Sprintf("(%s :<|> %s)", d.x, d.y) }
 
 //
 // Implementations of Doc ("DOC" in paper).
