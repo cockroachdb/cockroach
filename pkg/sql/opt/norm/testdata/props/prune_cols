@@ -37,6 +37,7 @@ SELECT * FROM a WHERE k=1 AND f=1.0
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (2,4)
@@ -360,6 +361,7 @@ union-all
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,2)
  │    ├── prune: (2)

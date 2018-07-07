@@ -350,13 +350,11 @@ group      ·            ·       (max int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·                (min int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /1/!NULL-/2      ·               ·
+group      ·            ·                (min int)       ·
+ │         aggregate 0  any_not_null(y)  ·               ·
+ └── scan  ·            ·                (x int, y int)  ·
+·          table        xyz@xy           ·               ·
+·          spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
@@ -370,13 +368,11 @@ group      ·            ·       (max int)       ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 7
 ----
-group           ·            ·                (min int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- └── limit      ·            ·                (x int, y int)  ·
-      │         count        (1)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /7/!NULL-/8      ·               ·
+group      ·            ·                (min int)       ·
+ │         aggregate 0  any_not_null(y)  ·               ·
+ └── scan  ·            ·                (x int, y int)  ·
+·          table        xyz@xy           ·               ·
+·          spans        /7/!NULL-/8      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 7

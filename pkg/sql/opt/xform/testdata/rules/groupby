@@ -83,17 +83,12 @@ group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── limit
+ ├── scan xyz@xy
  │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── constraint: /1/2: (/7/NULL - /7]
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2)
- │    ├── scan xyz@xy
- │    │    ├── columns: x:1(int!null) y:2(int!null)
- │    │    ├── constraint: /1/2: (/7/NULL - /7]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(1,2)
- │    └── const: 1 [type=int]
+ │    └── fd: ()-->(1,2)
  └── aggregations [outer=(2)]
       └── any-not-null [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
