@@ -142,6 +142,9 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// since those are created by exploration patterns and won't ever be the
 	// basis for the logical props on a newly created memo group.
 	relational.Cardinality = props.AnyCardinality
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -197,6 +200,9 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// -----------
 	// Select filter can filter any or all rows.
 	relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -415,6 +421,9 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	relational.Cardinality = b.makeJoinCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -519,6 +528,9 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 		// has. However, if the input has at least one row, then at least one row
 		// will also be returned by GroupBy.
 		relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
+		if relational.FuncDeps.HasMax1Row() {
+			relational.Cardinality = relational.Cardinality.AtMost(1)
+		}
 	}
 
 	// Statistics

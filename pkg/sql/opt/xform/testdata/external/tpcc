@@ -544,6 +544,7 @@ SELECT w_tax FROM warehouse WHERE w_id = 10
 ----
 project
  ├── columns: w_tax:8(decimal)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── cost: 1.11
  ├── key: ()
@@ -552,6 +553,7 @@ project
  └── scan warehouse
       ├── columns: warehouse.w_id:1(int!null) warehouse.w_tax:8(decimal)
       ├── constraint: /1: [/10 - /10]
+      ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1]
       ├── cost: 1.11
       ├── key: ()
@@ -566,6 +568,7 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
  ├── columns: c_discount:16(decimal) c_last:6(string) c_credit:14(string)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=6.80272109e-07]
  ├── cost: 8.63945578e-07
  ├── key: ()
@@ -574,6 +577,7 @@ project
  └── scan customer
       ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_last:6(string) customer.c_credit:14(string) customer.c_discount:16(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── cardinality: [0 - 1]
       ├── stats: [rows=6.80272109e-07, distinct(1)=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07]
       ├── cost: 8.63945578e-07
       ├── key: ()
@@ -674,6 +678,7 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
  ├── columns: c_balance:17(decimal) c_first:4(string) c_middle:5(string) c_last:6(string)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=6.80272109e-07]
  ├── cost: 8.70748299e-07
  ├── key: ()
@@ -682,6 +687,7 @@ project
  └── scan customer
       ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string) customer.c_balance:17(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── cardinality: [0 - 1]
       ├── stats: [rows=6.80272109e-07, distinct(1)=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07]
       ├── cost: 8.70748299e-07
       ├── key: ()
@@ -896,6 +902,7 @@ WHERE d_w_id = 10 AND d_id = 100
 ----
 project
  ├── columns: d_next_o_id:11(int)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=0.142857143]
  ├── cost: 0.162857143
  ├── key: ()
@@ -904,6 +911,7 @@ project
  └── scan district
       ├── columns: district.d_id:1(int!null) district.d_w_id:2(int!null) district.d_next_o_id:11(int)
       ├── constraint: /2/1: [/10/100 - /10/100]
+      ├── cardinality: [0 - 1]
       ├── stats: [rows=0.142857143, distinct(1)=0.142857143, distinct(2)=0.142857143]
       ├── cost: 0.162857143
       ├── key: ()

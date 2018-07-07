@@ -208,10 +208,12 @@ SELECT * FROM a WHERE (SELECT x FROM (SELECT * FROM xy LIMIT 1) WHERE k=x) > 100
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+      ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
       ├── scan a
@@ -266,6 +268,7 @@ semi-join-apply
  │    ├── scan uv
  │    │    ├── columns: u:8(int!null) v:9(int)
  │    │    ├── constraint: /8: [/10 - /10]
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(8,9)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -337,10 +340,12 @@ SELECT * FROM a WHERE (SELECT y+1 AS r FROM (SELECT * FROM xy LIMIT 1) WHERE x=k
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+      ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
       ├── scan a
@@ -1354,19 +1359,23 @@ WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LI
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int!null)
+      ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-5,7)
       ├── select
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1-5)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    ├── constraint: /1: [/10 - /10]
+      │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1-5)
       │    └── filters [type=bool]
@@ -2247,15 +2256,18 @@ SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── constraint: /1: [/10 - /10]
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(1-5)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
