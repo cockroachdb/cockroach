@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -49,30 +47,23 @@ func Pretty(stmt NodeFormatter) string {
 func PrettyWithOpts(
 	stmt NodeFormatter, lineWidth int, useTabs bool, tabWidth int, simplify bool,
 ) string {
-	var tab string
-	if useTabs {
-		tab = "\t"
-	} else {
-		tab = strings.Repeat(" ", tabWidth)
-	}
 	cfg := PrettyCfg{
-		Tab:      tab,
-		TabWidth: tabWidth,
 		Simplify: simplify,
+		// We'll indent each nested level with a single tab.
+		IndentWidth: tabWidth,
 	}
 	doc := cfg.Doc(stmt)
-	return pretty.Pretty(doc, lineWidth)
+	return pretty.Pretty(doc, lineWidth, useTabs, tabWidth)
 }
 
 // PrettyCfg holds configuration for pretty printing statements.
 type PrettyCfg struct {
-	// Tab is the string to use when indenting.
-	Tab string
-	// TabWidth is the effective length of Tab. When using spaces, it should be
-	// len(Tab). When using tabs, it should be the desired tab width.
-	TabWidth int
 	// Simplify, when set, removes extraneous parentheses.
 	Simplify bool
+	// IndentWidth is the amount of space at the beginning of the line
+	// for nested items. If useTabs was set, these spaces will be
+	// converted to tabs when rendering, using tabWidth spaces per tab.
+	IndentWidth int
 }
 
 // Doc converts f (generally a Statement) to a pretty.Doc. If f does not have a
@@ -90,16 +81,16 @@ func (p PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 	return pretty.Text(AsStringWithFlags(f, prettyFlags))
 }
 
-func (p PrettyCfg) nestName(a, b pretty.Doc) pretty.Doc {
-	return pretty.NestName(p.TabWidth, p.Tab, a, b)
+func (p PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
+	return pretty.NestUnder(p.IndentWidth, a, b)
 }
 
 func (p PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
-	return pretty.JoinGroup(p.TabWidth, p.Tab, name, divider, d...)
+	return pretty.JoinGroup(p.IndentWidth, name, divider, d...)
 }
 
 func (p PrettyCfg) bracket(l string, x pretty.Doc, r string) pretty.Doc {
-	return pretty.Bracket(p.TabWidth, p.Tab, l, x, r)
+	return pretty.Bracket(p.IndentWidth, l, x, r)
 }
 
 // docer is implemented by nodes that can convert themselves into
@@ -123,7 +114,7 @@ func (node SelectExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := p.Doc(e)
 	if node.As != "" {
-		d = p.nestName(
+		d = p.nestUnder(
 			d,
 			pretty.Concat(pretty.Text("AS "), p.Doc(&node.As)),
 		)
@@ -153,7 +144,7 @@ func (node *Where) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return p.nestName(pretty.Text(node.Type), p.Doc(e))
+	return p.nestUnder(pretty.Text(node.Type), p.Doc(e))
 }
 
 func (node GroupBy) doc(p PrettyCfg) pretty.Doc {
@@ -221,7 +212,7 @@ func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+	return pretty.JoinNestedRight(p.IndentWidth,
 		pretty.Text("AND"), operands...)
 }
 
@@ -239,7 +230,7 @@ func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+	return pretty.JoinNestedRight(p.IndentWidth,
 		pretty.Text("OR"), operands...)
 }
 
@@ -330,7 +321,7 @@ func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
 		}
 		operands := p.flattenOp(leftOperand, pred, formatOperand, nil)
 		operands = p.flattenOp(rightOperand, pred, formatOperand, operands)
-		res = pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		res = pretty.JoinNestedRight(p.IndentWidth,
 			opDoc, operands...)
 	}
 	return pretty.Group(res)
@@ -358,14 +349,14 @@ func (node *Limit) doc(p PrettyCfg) pretty.Doc {
 		if p.Simplify {
 			e = StripParens(e)
 		}
-		count = p.nestName(pretty.Text("LIMIT"), p.Doc(e))
+		count = p.nestUnder(pretty.Text("LIMIT"), p.Doc(e))
 	}
 	if node.Offset != nil {
 		e := node.Offset
 		if p.Simplify {
 			e = StripParens(e)
 		}
-		offset = p.nestName(pretty.Text("OFFSET"), p.Doc(e))
+		offset = p.nestUnder(pretty.Text("OFFSET"), p.Doc(e))
 	}
 	return pretty.ConcatLine(count, offset)
 }
@@ -394,7 +385,7 @@ func (node Select) doc(p PrettyCfg) pretty.Doc {
 
 func (node SelectClause) doc(p PrettyCfg) pretty.Doc {
 	if node.TableSelect {
-		return p.nestName(pretty.Text("TABLE"), p.Doc(node.From.Tables[0]))
+		return p.nestUnder(pretty.Text("TABLE"), p.Doc(node.From.Tables[0]))
 	}
 	sel := pretty.Text("SELECT")
 	if node.Distinct {
@@ -405,7 +396,7 @@ func (node SelectClause) doc(p PrettyCfg) pretty.Doc {
 		}
 	}
 	return pretty.Group(pretty.Stack(
-		p.nestName(sel, node.Exprs.doc(p)),
+		p.nestUnder(sel, node.Exprs.doc(p)),
 		node.From.doc(p),
 		node.Where.doc(p),
 		node.GroupBy.doc(p),
@@ -420,7 +411,7 @@ func (node *From) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := node.Tables.doc(p)
 	if node.AsOf.Expr != nil {
-		d = p.nestName(
+		d = p.nestUnder(
 			d,
 			p.Doc(&node.AsOf),
 		)
@@ -449,7 +440,7 @@ func (node *With) doc(p PrettyCfg) pretty.Doc {
 	}
 	d := make([]pretty.Doc, len(node.CTEList))
 	for i, cte := range node.CTEList {
-		d[i] = p.nestName(
+		d[i] = p.nestUnder(
 			p.Doc(&cte.Name),
 			p.bracket("AS (", p.Doc(cte.Stmt), ")"),
 		)
@@ -486,7 +477,7 @@ func (node *AliasedTableExpr) doc(p PrettyCfg) pretty.Doc {
 		)
 	}
 	if node.As.Alias != "" {
-		d = p.nestName(
+		d = p.nestUnder(
 			d,
 			pretty.Concat(
 				pretty.Text("AS "),
@@ -563,7 +554,7 @@ func (node *ComparisonExpr) doc(p PrettyCfg) pretty.Doc {
 		opDoc = pretty.ConcatSpace(pretty.Text(node.SubOperator.String()), opDoc)
 	}
 	return pretty.Group(
-		pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		pretty.JoinNestedRight(p.IndentWidth,
 			opDoc,
 			p.Doc(p.peelCompOperand(node.Left)),
 			p.Doc(p.peelCompOperand(node.Right))))
@@ -572,7 +563,7 @@ func (node *ComparisonExpr) doc(p PrettyCfg) pretty.Doc {
 func (node *AliasClause) doc(p PrettyCfg) pretty.Doc {
 	d := pretty.Text(node.Alias.String())
 	if len(node.Cols) != 0 {
-		d = p.nestName(d, p.bracket("(", p.Doc(&node.Cols), ")"))
+		d = p.nestUnder(d, p.bracket("(", p.Doc(&node.Cols), ")"))
 	}
 	return d
 }
@@ -582,14 +573,14 @@ func (node *JoinTableExpr) doc(p PrettyCfg) pretty.Doc {
 	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
 		// Natural joins have a different syntax: "<a> NATURAL <join_type> <b>"
 		d = append(d,
-			p.nestName(
+			p.nestUnder(
 				pretty.ConcatSpace(p.Doc(node.Cond), pretty.Text(node.Join)),
 				p.Doc(node.Right)),
 		)
 	} else {
 		// General syntax: "<a> <join_type> <b> <condition>"
 		operand := []pretty.Doc{
-			p.nestName(
+			p.nestUnder(
 				pretty.Text(node.Join),
 				p.Doc(node.Right)),
 		}
@@ -607,7 +598,7 @@ func (node *OnJoinCond) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return p.nestName(pretty.Text("ON"), p.Doc(e))
+	return p.nestUnder(pretty.Text("ON"), p.Doc(e))
 }
 
 func (node *Insert) doc(p PrettyCfg) pretty.Doc {
@@ -622,9 +613,9 @@ func (node *Insert) doc(p PrettyCfg) pretty.Doc {
 	}
 	into := p.Doc(node.Table)
 	if node.Columns != nil {
-		into = p.nestName(into, p.bracket("(", p.Doc(&node.Columns), ")"))
+		into = p.nestUnder(into, p.bracket("(", p.Doc(&node.Columns), ")"))
 	}
-	d = append(d, p.nestName(pretty.Text("INTO"), into))
+	d = append(d, p.nestUnder(pretty.Text("INTO"), into))
 	if node.DefaultValues() {
 		d = append(d, pretty.Text("DEFAULT VALUES"))
 	} else {
@@ -688,7 +679,7 @@ func (node *CastExpr) doc(p PrettyCfg) pretty.Doc {
 			pretty.Text("CAST"),
 			p.bracket(
 				"(",
-				p.nestName(
+				p.nestUnder(
 					p.Doc(node.Expr),
 					pretty.Concat(
 						pretty.Text("AS "),
@@ -737,14 +728,14 @@ func (node *Tuple) doc(p PrettyCfg) pretty.Doc {
 		}
 		d = p.bracket("(", pretty.Stack(
 			d,
-			p.nestName(pretty.Text("AS"), pretty.Join(",", labels...)),
+			p.nestUnder(pretty.Text("AS"), pretty.Join(",", labels...)),
 		), ")")
 	}
 	return d
 }
 
 func (node *ReturningExprs) doc(p PrettyCfg) pretty.Doc {
-	return p.nestName(pretty.Text("RETURNING"), p.Doc((*SelectExprs)(node)))
+	return p.nestUnder(pretty.Text("RETURNING"), p.Doc((*SelectExprs)(node)))
 }
 
 func (node *UpdateExprs) doc(p PrettyCfg) pretty.Doc {
@@ -765,8 +756,8 @@ func (p PrettyCfg) exprDocWithParen(e Expr) pretty.Doc {
 func (node *Update) doc(p PrettyCfg) pretty.Doc {
 	return pretty.Group(pretty.Stack(
 		p.Doc(node.With),
-		p.nestName(pretty.Text("UPDATE"), p.Doc(node.Table)),
-		p.nestName(pretty.Text("SET"), p.Doc(&node.Exprs)),
+		p.nestUnder(pretty.Text("UPDATE"), p.Doc(node.Table)),
+		p.nestUnder(pretty.Text("SET"), p.Doc(&node.Exprs)),
 		p.Doc(node.Where),
 		p.Doc(&node.OrderBy),
 		p.Doc(node.Limit),
@@ -778,7 +769,7 @@ func (node *Delete) doc(p PrettyCfg) pretty.Doc {
 	return pretty.Group(pretty.Stack(
 		p.Doc(node.With),
 		pretty.Text("DELETE"),
-		p.nestName(pretty.Text("FROM"), p.Doc(node.Table)),
+		p.nestUnder(pretty.Text("FROM"), p.Doc(node.Table)),
 		p.Doc(node.Where),
 		p.Doc(&node.OrderBy),
 		p.Doc(node.Limit),
@@ -808,7 +799,7 @@ func (node *Order) doc(p PrettyCfg) pretty.Doc {
 		}
 	}
 	if node.Direction != DefaultDirection {
-		d = p.nestName(d, pretty.Text(node.Direction.String()))
+		d = p.nestUnder(d, pretty.Text(node.Direction.String()))
 	}
 	return d
 }
@@ -822,7 +813,7 @@ func (node *UpdateExpr) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return p.nestName(d, pretty.ConcatSpace(pretty.Text("="), p.Doc(e)))
+	return p.nestUnder(d, pretty.ConcatSpace(pretty.Text("="), p.Doc(e)))
 }
 
 func (node *CreateTable) doc(p PrettyCfg) pretty.Doc {
@@ -842,7 +833,7 @@ func (node *CreateTable) doc(p PrettyCfg) pretty.Doc {
 				p.bracket("(", p.Doc(&node.AsColumnNames), ")"),
 			)
 		}
-		d = p.nestName(
+		d = p.nestUnder(
 			pretty.Concat(
 				d,
 				pretty.Text(" AS"),
@@ -910,7 +901,7 @@ func (node *UnionClause) doc(p PrettyCfg) pretty.Doc {
 	if node.All {
 		op += " ALL"
 	}
-	return pretty.Stack(p.Doc(node.Left), p.nestName(pretty.Text(op), p.Doc(node.Right)))
+	return pretty.Stack(p.Doc(node.Left), p.nestUnder(pretty.Text(op), p.Doc(node.Right)))
 }
 
 func (node *NoReturningClause) doc(PrettyCfg) pretty.Doc { return pretty.Nil }

@@ -29,6 +29,7 @@ import (
 // selection.
 type docBest struct {
 	tag docBestType
+	i   int
 	s   string
 	d   *docBest
 }
@@ -40,11 +41,12 @@ const (
 	lineB
 )
 
-// Pretty returns a pretty-printed string for the Doc d at line length n.
-func Pretty(d Doc, n int) string {
+// Pretty returns a pretty-printed string for the Doc d at line length
+// n and tab width t.
+func Pretty(d Doc, n int, useTabs bool, tabWidth int) string {
 	var sb strings.Builder
 	b := best(n, d)
-	layout(&sb, b)
+	layout(&sb, useTabs, tabWidth, b)
 	return sb.String()
 }
 
@@ -55,7 +57,7 @@ func best(w int, x Doc) *docBest {
 		memoBe:   make(map[beArgs]*docBest),
 		memoiDoc: make(map[iDoc]*iDoc),
 	}
-	return b.be(0, &iDoc{0, "", x, nil})
+	return b.be(0, &iDoc{0, x, nil})
 }
 
 // iDoc represents the type [(Int,DOC)] in the paper,
@@ -64,7 +66,6 @@ func best(w int, x Doc) *docBest {
 // recursion more efficient than slices.
 type iDoc struct {
 	i    int
-	s    string
 	d    Doc
 	next *iDoc
 }
@@ -114,9 +115,9 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 	case nilDoc:
 		res = b.be(k, z)
 	case concat:
-		res = b.be(k, b.iDoc(d.i, d.s, t.a, b.iDoc(d.i, d.s, t.b, z)))
+		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
 	case nest:
-		res = b.be(k, b.iDoc(d.i+t.n, d.s+t.s, t.d, z))
+		res = b.be(k, b.iDoc(d.i+t.n, t.d, z))
 	case text:
 		res = b.newDocBest(docBest{
 			tag: textB,
@@ -126,15 +127,15 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 	case line:
 		res = b.newDocBest(docBest{
 			tag: lineB,
-			s:   d.s,
+			i:   d.i,
 			d:   b.be(d.i, z),
 		})
 	case union:
 		res = better(b.w, k,
-			b.be(k, b.iDoc(d.i, d.s, t.x, z)),
+			b.be(k, b.iDoc(d.i, t.x, z)),
 			// We eta-lift the second argument to avoid eager evaluation.
 			func() *docBest {
-				return b.be(k, b.iDoc(d.i, d.s, t.y, z))
+				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
 	default:
@@ -166,8 +167,8 @@ func (b *beExec) newDocBest(d docBest) *docBest {
 //
 // The results of this function guarantee that the pointer addresses
 // are equal if the arguments used to construct the value were equal.
-func (b *beExec) iDoc(i int, s string, d Doc, z *iDoc) *iDoc {
-	idoc := iDoc{i, s, d, z}
+func (b *beExec) iDoc(i int, d Doc, z *iDoc) *iDoc {
+	idoc := iDoc{i, d, z}
 	if m, ok := b.memoiDoc[idoc]; ok {
 		return m
 	}
@@ -220,20 +221,25 @@ func fits(w int, x *docBest) bool {
 	}
 }
 
-func layout(sb *strings.Builder, d *docBest) {
-	if d == nil {
-		// Nil doc: no output.
-		return
-	}
-	switch d.tag {
-	case textB:
-		sb.WriteString(d.s)
-		layout(sb, d.d)
-	case lineB:
-		sb.WriteByte('\n')
-		sb.WriteString(d.s)
-		layout(sb, d.d)
-	default:
-		panic(fmt.Errorf("unknown type: %d", d.tag))
+func layout(sb *strings.Builder, useTabs bool, tabWidth int, d *docBest) {
+	for ; d != nil; d = d.d {
+		switch d.tag {
+		case textB:
+			sb.WriteString(d.s)
+		case lineB:
+			sb.WriteByte('\n')
+			// Fill as many blanks with tabs, then the rest with spaces.
+			c := 0
+			if useTabs {
+				for ; c+tabWidth <= d.i; c += tabWidth {
+					sb.WriteByte('\t')
+				}
+			}
+			for ; c < d.i; c++ {
+				sb.WriteByte(' ')
+			}
+		default:
+			panic(fmt.Errorf("unknown type: %d", d.tag))
+		}
 	}
 }
