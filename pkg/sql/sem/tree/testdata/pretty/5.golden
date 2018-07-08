@@ -4,10 +4,10 @@ SELECT
 	"primary",
 	'primary'
 
-24:
-------------------------
-SELECT
-	"primary", 'primary'
+17:
+-----------------
+SELECT "primary",
+	   'primary'
 
 27:
 ---------------------------

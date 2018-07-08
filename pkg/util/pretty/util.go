@@ -91,9 +91,9 @@ func Stack(d ...Doc) Doc {
 	return Fold(ConcatLine, d...)
 }
 
-// JoinGroup nests joined d with divider under head.
-func JoinGroup(n int, head, divider string, d ...Doc) Doc {
-	return NestUnder(n, Text(head), Join(divider, d...))
+// JoinGroup nests joined d with divider under name.
+func JoinGroup(n int, name, divider string, d ...Doc) Doc {
+	return AlignUnder(n, Text(name), Join(divider, d...))
 }
 
 // NestUnder nests nested under head.
@@ -153,6 +153,16 @@ func Bracket(n int, l string, x Doc, r string) Doc {
 		Text(r),
 	)
 	return union{flatten(a), b}
+}
+
+// AlignUnder aligns nested to the right of name, and, if
+// this does not fit on the line, nests nested under name
+// with nesting level n.
+func AlignUnder(n int, name, nested Doc) Doc {
+	g := Group(nested)
+	a := ConcatSpace(name, Align(g))
+	b := Concat(name, Nest(n, Concat(Line, g)))
+	return Group(union{a, b})
 }
 
 // simplifyNil returns fn(a, b). nil (the Go value) is converted to Nil (the

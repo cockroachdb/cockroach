@@ -85,6 +85,10 @@ func (p PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
 	return pretty.NestUnder(p.IndentWidth, a, b)
 }
 
+func (p PrettyCfg) alignUnder(a, b pretty.Doc) pretty.Doc {
+	return pretty.AlignUnder(p.IndentWidth, a, b)
+}
+
 func (p PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
 	return pretty.JoinGroup(p.IndentWidth, name, divider, d...)
 }
@@ -144,7 +148,7 @@ func (node *Where) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return p.nestUnder(pretty.Text(node.Type), p.Doc(e))
+	return p.alignUnder(pretty.Text(node.Type), p.Doc(e))
 }
 
 func (node GroupBy) doc(p PrettyCfg) pretty.Doc {
@@ -349,14 +353,14 @@ func (node *Limit) doc(p PrettyCfg) pretty.Doc {
 		if p.Simplify {
 			e = StripParens(e)
 		}
-		count = p.nestUnder(pretty.Text("LIMIT"), p.Doc(e))
+		count = p.alignUnder(pretty.Text("LIMIT"), p.Doc(e))
 	}
 	if node.Offset != nil {
 		e := node.Offset
 		if p.Simplify {
 			e = StripParens(e)
 		}
-		offset = p.nestUnder(pretty.Text("OFFSET"), p.Doc(e))
+		offset = p.alignUnder(pretty.Text("OFFSET"), p.Doc(e))
 	}
 	return pretty.ConcatLine(count, offset)
 }
@@ -385,7 +389,7 @@ func (node Select) doc(p PrettyCfg) pretty.Doc {
 
 func (node SelectClause) doc(p PrettyCfg) pretty.Doc {
 	if node.TableSelect {
-		return p.nestUnder(pretty.Text("TABLE"), p.Doc(node.From.Tables[0]))
+		return p.alignUnder(pretty.Text("TABLE"), p.Doc(node.From.Tables[0]))
 	}
 	sel := pretty.Text("SELECT")
 	if node.Distinct {
@@ -396,7 +400,7 @@ func (node SelectClause) doc(p PrettyCfg) pretty.Doc {
 		}
 	}
 	return pretty.Group(pretty.Stack(
-		p.nestUnder(sel, node.Exprs.doc(p)),
+		p.alignUnder(sel, node.Exprs.doc(p)),
 		node.From.doc(p),
 		node.Where.doc(p),
 		node.GroupBy.doc(p),
@@ -598,7 +602,7 @@ func (node *OnJoinCond) doc(p PrettyCfg) pretty.Doc {
 	if p.Simplify {
 		e = StripParens(e)
 	}
-	return p.nestUnder(pretty.Text("ON"), p.Doc(e))
+	return p.alignUnder(pretty.Text("ON"), p.Doc(e))
 }
 
 func (node *Insert) doc(p PrettyCfg) pretty.Doc {
@@ -735,7 +739,7 @@ func (node *Tuple) doc(p PrettyCfg) pretty.Doc {
 }
 
 func (node *ReturningExprs) doc(p PrettyCfg) pretty.Doc {
-	return p.nestUnder(pretty.Text("RETURNING"), p.Doc((*SelectExprs)(node)))
+	return p.alignUnder(pretty.Text("RETURNING"), p.Doc((*SelectExprs)(node)))
 }
 
 func (node *UpdateExprs) doc(p PrettyCfg) pretty.Doc {

@@ -138,6 +138,10 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
+	case *column:
+		res = b.be(k, b.iDoc(d.i, t.f(k), z))
+	case *nesting:
+		res = b.be(k, b.iDoc(d.i, t.f(d.i), z))
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}

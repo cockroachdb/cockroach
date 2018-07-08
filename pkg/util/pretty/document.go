@@ -45,12 +45,14 @@ type Doc interface {
 	isDoc()
 }
 
-func (text) isDoc()   {}
-func (line) isDoc()   {}
-func (nilDoc) isDoc() {}
-func (concat) isDoc() {}
-func (nest) isDoc()   {}
-func (union) isDoc()  {}
+func (text) isDoc()     {}
+func (line) isDoc()     {}
+func (nilDoc) isDoc()   {}
+func (concat) isDoc()   {}
+func (nest) isDoc()     {}
+func (union) isDoc()    {}
+func (*column) isDoc()  {}
+func (*nesting) isDoc() {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -135,7 +137,50 @@ func flatten(d Doc) Doc {
 		return textSpace
 	case union:
 		return flatten(t.x)
+	case *column:
+		return &column{f: func(c int) Doc { return flatten(t.f(c)) }}
+	case *nesting:
+		return &nesting{f: func(i int) Doc { return flatten(t.f(i)) }}
 	default:
 		panic(fmt.Errorf("unknown type: %T", d))
+	}
+}
+
+// column is a special document which is replaced during rendering by
+// another document depending on the current column on the rendering
+// line.
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type column struct {
+	f func(int) Doc
+}
+
+// nesting is a special document which is replaced during rendering by
+// another document depending on the current nesting level.
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type nesting struct {
+	f func(int) Doc
+}
+
+// Align renders document d with the nesting level set to the current
+// column.
+func Align(d Doc) Doc {
+	return &column{
+		f: func(k int) Doc {
+			return &nesting{
+				f: func(i int) Doc {
+					return nest{k - i, d}
+				},
+			}
+		},
 	}
 }

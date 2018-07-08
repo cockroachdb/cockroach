@@ -20,7 +20,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
 
-// ExampleTree demonstrates the Tree example from the paper.
+// Example_align demonstrates alignment.
+func Example_align() {
+	doc := pretty.JoinGroup(2, "SELECT", ",",
+		pretty.Text("aaa"),
+		pretty.Text("bbb"),
+		pretty.Text("ccc"))
+	for _, n := range []int{1, 15, 30, 80} {
+		p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/)
+		fmt.Printf("%d:\n%s\n\n", n, p)
+	}
+
+	// Output:
+	// 1:
+	// SELECT
+	//   aaa,
+	//   bbb,
+	//   ccc
+	//
+	// 15:
+	// SELECT aaa,
+	// 	   bbb,
+	// 	   ccc
+	//
+	// 30:
+	// SELECT aaa, bbb, ccc
+	//
+	// 80:
+	// SELECT aaa, bbb, ccc
+}
+
+// Example_tree demonstrates the Tree example from the paper.
 func Example_tree() {
 	type Tree struct {
 		s  string

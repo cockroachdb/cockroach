@@ -15,31 +15,31 @@ RETURNING
 	v,
 	k
 
+7:
+-------
+DELETE
+FROM
+	unindexed
+WHERE k
+	  > 1
+	  AND v
+		  < 7
+ORDER BY
+	v
+		DESC
+RETURNING
+	v,
+	k
+
 8:
 --------
 DELETE
 FROM
 	unindexed
-WHERE
-	k
-	> 1
-	AND v
-		< 7
-ORDER BY
-	v
-		DESC
-RETURNING
-	v, k
-
-9:
----------
-DELETE
-FROM
-	unindexed
-WHERE
-	k > 1
-	AND v
-		< 7
+WHERE k
+	  > 1
+	  AND v
+		  < 7
 ORDER BY
 	v
 		DESC
@@ -51,55 +51,58 @@ RETURNING
 DELETE
 FROM
 	unindexed
-WHERE
-	k > 1
-	AND v
-		< 7
-ORDER BY
-	v DESC
+WHERE k
+	  > 1
+	  AND v
+		  < 7
+ORDER BY v
+			 DESC
 RETURNING
 	v, k
 
-13:
--------------
+11:
+-----------
 DELETE
 FROM
 	unindexed
-WHERE
-	k > 1
-	AND v < 7
-ORDER BY
-	v DESC
+WHERE k > 1
+	  AND v
+		  < 7
+ORDER BY v
+			 DESC
 RETURNING
 	v, k
+
+12:
+------------
+DELETE
+FROM
+	unindexed
+WHERE k > 1
+	  AND v
+		  < 7
+ORDER BY v
+			 DESC
+RETURNING v,
+		  k
 
 14:
 --------------
 DELETE
 FROM unindexed
-WHERE
-	k > 1
-	AND v < 7
-ORDER BY
-	v DESC
+WHERE k > 1
+	  AND v
+		  < 7
+ORDER BY v
+			 DESC
 RETURNING v, k
 
 15:
 ---------------
 DELETE
 FROM unindexed
-WHERE
-	k > 1
-	AND v < 7
-ORDER BY v DESC
-RETURNING v, k
-
-19:
--------------------
-DELETE
-FROM unindexed
-WHERE
-	k > 1 AND v < 7
+WHERE k > 1
+	  AND v < 7
 ORDER BY v DESC
 RETURNING v, k
 

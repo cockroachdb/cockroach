@@ -25,164 +25,176 @@ FROM
 			f
 	)
 
+6:
+------
+SELECT
+	*
+FROM a
+	 CROSS JOIN
+		 b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (
+		 TABLE
+			 x
+	 ),
+	 (
+		 TABLE
+			 e
+		 ORDER BY
+			 f
+	 )
+
 8:
 --------
 SELECT *
-FROM
-	a
-	CROSS JOIN
-		b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-	d,
-	(
-		TABLE
-			x
-	),
-	(
-		TABLE
-			e
-		ORDER BY
-			f
-	)
-
-14:
---------------
-SELECT *
-FROM
-	a
-	CROSS JOIN
-		b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-	d,
-	(TABLE x),
-	(
-		TABLE
-			e
-		ORDER BY
-			f
-	)
+FROM a
+	 CROSS JOIN
+		 b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (
+		 TABLE
+			 x
+	 ),
+	 (
+		 TABLE
+			 e
+		 ORDER BY
+			 f
+	 )
 
 15:
 ---------------
 SELECT *
-FROM
-	a
-	CROSS JOIN
-		b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-	d,
-	(TABLE x),
-	(
-		TABLE e
-		ORDER BY
-			f
-	)
+FROM a
+	 CROSS JOIN
+		 b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (TABLE x),
+	 (
+		 TABLE
+			 e
+		 ORDER BY
+			 f
+	 )
 
-17:
------------------
+16:
+----------------
 SELECT *
-FROM
-	a
-	CROSS JOIN b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-	d,
-	(TABLE x),
-	(
-		TABLE e
-		ORDER BY
-			f
-	)
+FROM a
+	 CROSS JOIN
+		 b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (TABLE x),
+	 (
+		 TABLE e
+		 ORDER BY
+			 f
+	 )
 
 18:
 ------------------
 SELECT *
-FROM
-	a
-	CROSS JOIN b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-	d,
-	(TABLE x),
-	(
-		TABLE e
-		ORDER BY f
-	)
+FROM a
+	 CROSS JOIN b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (TABLE x),
+	 (
+		 TABLE e
+		 ORDER BY
+			 f
+	 )
 
-24:
-------------------------
+19:
+-------------------
 SELECT *
-FROM
-	a
-	CROSS JOIN b,
-	a
-	CROSS JOIN
-		(
-			c
-			CROSS JOIN d
-		),
-	d,
-	(TABLE x),
-	(TABLE e ORDER BY f)
+FROM a
+	 CROSS JOIN b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN
+				 d
+		 ),
+	 d,
+	 (TABLE x),
+	 (
+		 TABLE e
+		 ORDER BY f
+	 )
 
 25:
 -------------------------
 SELECT *
-FROM
-	a
-	CROSS JOIN b,
-	a
-	CROSS JOIN
-		(c CROSS JOIN d),
-	d,
-	(TABLE x),
-	(TABLE e ORDER BY f)
+FROM a
+	 CROSS JOIN b,
+	 a
+	 CROSS JOIN
+		 (
+			 c
+			 CROSS JOIN d
+		 ),
+	 d,
+	 (TABLE x),
+	 (TABLE e ORDER BY f)
 
-32:
---------------------------------
+26:
+--------------------------
 SELECT *
-FROM
-	a
-	CROSS JOIN b,
-	a
-	CROSS JOIN (c CROSS JOIN d),
-	d,
-	(TABLE x),
-	(TABLE e ORDER BY f)
+FROM a
+	 CROSS JOIN b,
+	 a
+	 CROSS JOIN
+		 (c CROSS JOIN d),
+	 d,
+	 (TABLE x),
+	 (TABLE e ORDER BY f)
 
-85:
--------------------------------------------------------------------------------------
+33:
+---------------------------------
 SELECT *
-FROM
-	a CROSS JOIN b, a CROSS JOIN (c CROSS JOIN d), d, (TABLE x), (TABLE e ORDER BY f)
+FROM a
+	 CROSS JOIN b,
+	 a
+	 CROSS JOIN (c CROSS JOIN d),
+	 d,
+	 (TABLE x),
+	 (TABLE e ORDER BY f)
 
 86:
 --------------------------------------------------------------------------------------
