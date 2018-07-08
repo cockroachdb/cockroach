@@ -16,7 +16,6 @@ package pretty_test
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -76,7 +75,7 @@ func Example_tree() {
 		}
 		return pretty.Fold(pretty.Concat,
 			pretty.Text("["),
-			pretty.Nest(1, " ", showTrees(ts)),
+			pretty.Nest(1, showTrees(ts)),
 			pretty.Text("]"),
 		)
 	}
@@ -89,7 +88,7 @@ func Example_tree() {
 			}
 			doc = pretty.Fold(pretty.Concat,
 				pretty.Text("("),
-				pretty.JoinNestedRight(len(t.s), strings.Repeat(" ", len(t.s)),
+				pretty.JoinNestedRight(len(t.s),
 					pretty.Text(t.op), operands...),
 				pretty.Text(")"),
 			)
@@ -98,34 +97,34 @@ func Example_tree() {
 		}
 		return pretty.Group(pretty.Concat(
 			pretty.Text(t.s),
-			pretty.Nest(len(t.s), strings.Repeat(" ", len(t.s)), doc),
+			pretty.Nest(len(t.s), doc),
 		))
 	}
 	for _, n := range []int{1, 30, 80} {
-		p := pretty.Pretty(showTree(tree), n)
+		p := pretty.Pretty(showTree(tree), n, true /*useTabs*/, 4 /*tabWidth*/)
 		fmt.Printf("%d:\n%s\n\n", n, p)
 	}
 	// Output:
 	// 1:
 	// aaa[bbbbb[ccc,
-	//           dd,
-	//           ee(some
-	//             * another[2a,
-	//                       2b]
-	//             * final)],
-	//     eee,
-	//     ffff[gg,
-	//          hhh,
-	//          ii]]
+	// 		  dd,
+	// 		  ee(some
+	// 			* another[2a,
+	// 					  2b]
+	// 			* final)],
+	// 	eee,
+	// 	ffff[gg,
+	// 		 hhh,
+	// 		 ii]]
 	//
 	// 30:
 	// aaa[bbbbb[ccc,
-	//           dd,
-	//           ee(some
-	//             * another[2a, 2b]
-	//             * final)],
-	//     eee,
-	//     ffff[gg, hhh, ii]]
+	// 		  dd,
+	// 		  ee(some
+	// 			* another[2a, 2b]
+	// 			* final)],
+	// 	eee,
+	// 	ffff[gg, hhh, ii]]
 	//
 	// 80:
 	// aaa[bbbbb[ccc, dd, ee(some * another[2a, 2b] * final)], eee, ffff[gg, hhh, ii]]
