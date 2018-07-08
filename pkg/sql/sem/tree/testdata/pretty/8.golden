@@ -15,101 +15,86 @@ FROM
 			v
 	]
 
-6:
-------
-SELECT
-	count(
-		*
-	)
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT
-			 5
-		 RETURNING
-			 v
-	 ]
-
 12:
 ------------
 SELECT
 	count(*)
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT
-			 5
-		 RETURNING
-			 v
-	 ]
+FROM
+	[
+		DELETE
+		FROM
+			unindexed
+		LIMIT
+			5
+		RETURNING
+			v
+	]
 
 13:
 -------------
 SELECT count(
 		   *
 	   )
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT
-			 5
-		 RETURNING
-			 v
-	 ]
+  FROM [
+		   DELETE
+		   FROM
+			   unindexed
+		   LIMIT
+			   5
+		   RETURNING
+			   v
+	   ]
 
 15:
 ---------------
 SELECT count(*)
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT
-			 5
-		 RETURNING
-			 v
-	 ]
+  FROM [
+		   DELETE
+		   FROM
+			   unindexed
+		   LIMIT
+			   5
+		   RETURNING
+			   v
+	   ]
 
-16:
-----------------
+18:
+------------------
 SELECT count(*)
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT 5
-		 RETURNING
-			 v
-	 ]
+  FROM [
+		   DELETE
+		   FROM
+			   unindexed
+		   LIMIT 5
+		   RETURNING
+			   v
+	   ]
 
-20:
---------------------
+22:
+----------------------
 SELECT count(*)
-FROM [
-		 DELETE
-		 FROM
-			 unindexed
-		 LIMIT 5
-		 RETURNING v
-	 ]
+  FROM [
+		   DELETE
+		   FROM
+			   unindexed
+		   LIMIT 5
+		   RETURNING v
+	   ]
 
-23:
------------------------
+25:
+-------------------------
 SELECT count(*)
-FROM [
-		 DELETE
-		 FROM unindexed
-		 LIMIT 5
-		 RETURNING v
-	 ]
+  FROM [
+		   DELETE
+		   FROM unindexed
+		   LIMIT 5
+		   RETURNING v
+	   ]
 
-48:
-------------------------------------------------
+50:
+--------------------------------------------------
 SELECT count(*)
-FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
+  FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 
 64:
 ----------------------------------------------------------------

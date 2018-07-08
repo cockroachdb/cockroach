@@ -2411,17 +2411,17 @@ func Example_sqlfmt() {
 	// SELECT 1,
 	// 	   2,
 	// 	   3
-	// FROM a,
-	// 	 b,
-	// 	 c;
+	//   FROM a,
+	// 	   b,
+	// 	   c;
 	// SELECT 4;
 	// sqlfmt --print-width=10 --tab-width=2 --use-spaces -e select 1,2,3 from a,b,c;;;select 4
 	// SELECT 1,
 	//        2,
 	//        3
-	// FROM a,
-	//      b,
-	//      c;
+	//   FROM a,
+	//        b,
+	//        c;
 	// SELECT 4;
 	// sqlfmt -e select (1+2)+3
 	// SELECT 1 + 2 + 3
