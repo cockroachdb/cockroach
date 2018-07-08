@@ -132,27 +132,16 @@ func FoldMap(f func(a, b Doc) Doc, g func(Doc) Doc, d ...Doc) Doc {
 }
 
 // Bracket brackets x with l and r and given Nest arguments.
+// We use the "soft break" special document here so that
+// the flattened version (when grouped) does not insert
+// spaces between the parentheses and their content.
 func Bracket(n int, l string, x Doc, r string) Doc {
-	// The "straightforward" implementation of Bracket should really be:
-	//   return Group(Fold(Concat,
-	//     	Text(l),
-	//     	Nest(n, Concat(Line, x)),
-	//     	Line,
-	//     	Text(r),
-	//   ))
-	// However for efficiency we inline the effect of Group here.
-	a := Fold(Concat,
+	return Group(Fold(Concat,
 		Text(l),
-		x,
+		Nest(n, Concat(SoftBreak, x)),
+		SoftBreak,
 		Text(r),
-	)
-	b := Fold(Concat,
-		Text(l),
-		Nest(n, Concat(Line, x)),
-		Line,
-		Text(r),
-	)
-	return union{flatten(a), b}
+	))
 }
 
 // simplifyNil returns fn(a, b). nil (the Go value) is converted to Nil (the
