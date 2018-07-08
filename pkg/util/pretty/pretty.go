@@ -15,7 +15,6 @@
 package pretty
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 )
@@ -23,6 +22,23 @@ import (
 // See the referenced paper in the package documentation for explanations
 // of the below code. Methods, variables, and implementation details were
 // made to resemble it as close as possible.
+
+// docBest represents a selected document as described by the type
+// "Doc" in the referenced paper (not "DOC"). This is the
+// less-abstract representation constructed during "best layout"
+// selection.
+type docBest struct {
+	tag docBestType
+	s   string
+	d   *docBest
+}
+
+type docBestType int
+
+const (
+	textB docBestType = iota
+	lineB
+)
 
 // Pretty returns a pretty-printed string for the Doc d at line length n.
 func Pretty(d Doc, n int) string {
@@ -33,133 +49,191 @@ func Pretty(d Doc, n int) string {
 }
 
 // w is the max line width.
-func best(w int, x Doc) Doc {
+func best(w int, x Doc) *docBest {
 	b := beExec{
-		w:     w,
-		cache: make(map[cacheKey]Doc),
+		w:        w,
+		memoBe:   make(map[beArgs]*docBest),
+		memoiDoc: make(map[iDoc]*iDoc),
 	}
-	return b.be(0, iDoc{0, "", x})
+	return b.be(0, &iDoc{0, "", x, nil})
 }
 
+// iDoc represents the type [(Int,DOC)] in the paper,
+// extended with arbitrary string prefixes (not just int).
+// We'll use linked lists because this makes the
+// recursion more efficient than slices.
 type iDoc struct {
-	i int
-	s string
-	d Doc
-}
-
-func (i iDoc) String() string {
-	return fmt.Sprintf("{%d: %s}", i.i, i.d)
-}
-
-type cacheKey struct {
-	k int
-	s string
+	i    int
+	s    string
+	d    Doc
+	next *iDoc
 }
 
 type beExec struct {
+	// w is the available line width.
 	w int
-	// cache is a memoized cache used during better calculation.
-	cache map[cacheKey]Doc
-	buf   bytes.Buffer
+
+	// memoBe internalizes the results of the be function, so that the
+	// same value is not computed multiple times.
+	memoBe map[beArgs]*docBest
+
+	// memo internalizes iDoc objects to ensure they are unique in memory,
+	// and we can use pointer-pointer comparisons.
+	memoiDoc map[iDoc]*iDoc
+
+	// docAlloc speeds up the allocations of be()'s return values
+	// by (*beExec).newDocBest() defined below.
+	docAlloc []docBest
+
+	// idocAlloc speeds up the allocations by (*beExec).iDoc() defined
+	// below.
+	idocAlloc []iDoc
 }
 
-func (b beExec) be(k int, x ...iDoc) Doc {
-	if len(x) == 0 {
-		return Nil
+func (b *beExec) be(k int, xlist *iDoc) *docBest {
+	// Shortcut: be k [] = Nil
+	if xlist == nil {
+		return nil
 	}
-	d := x[0]
-	z := x[1:]
+
+	// If we've computed this result before, short cut here too.
+	memoKey := beArgs{k: k, d: xlist}
+	if cached, ok := b.memoBe[memoKey]; ok {
+		return cached
+	}
+
+	// General case.
+
+	d := *xlist
+	z := xlist.next
+
+	// Note: we'll need to memoize the result below.
+	var res *docBest
+
 	switch t := d.d.(type) {
 	case nilDoc:
-		return b.be(k, z...)
+		res = b.be(k, z)
 	case concat:
-		return b.be(k, append([]iDoc{{d.i, d.s, t.a}, {d.i, d.s, t.b}}, z...)...)
+		res = b.be(k, b.iDoc(d.i, d.s, t.a, b.iDoc(d.i, d.s, t.b, z)))
 	case nest:
-		x[0] = iDoc{
-			d: t.d,
-			s: d.s + t.s,
-			i: d.i + t.n,
-		}
-		return b.be(k, x...)
+		res = b.be(k, b.iDoc(d.i+t.n, d.s+t.s, t.d, z))
 	case text:
-		return textX{
-			s: string(t),
-			d: b.be(k+len(t), z...),
-		}
+		res = b.newDocBest(docBest{
+			tag: textB,
+			s:   string(t),
+			d:   b.be(k+len(t), z),
+		})
 	case line:
-		return lineX{
-			s: d.s,
-			d: b.be(d.i, z...),
-		}
+		res = b.newDocBest(docBest{
+			tag: lineB,
+			s:   d.s,
+			d:   b.be(d.i, z),
+		})
 	case union:
-		// Use a memoized version of the Doc and check if it's been through this
-		// function before. There may be a faster implementation that converts this
-		// function to an iterative style, but this current implementation is almost
-		// identical to the paper (as this in done automatically in Haskell) and is
-		// fast enough.
-		for _, xd := range x {
-			b.buf.WriteString(xd.String())
-		}
-		key := cacheKey{
-			k: k,
-			s: b.buf.String(),
-		}
-		b.buf.Reset()
-		cached, ok := b.cache[key]
-		if ok {
-			return cached
-		}
-
-		n := append([]iDoc{{d.i, d.s, t.x}}, z...)
-		res := better(b.w, k,
-			b.be(k, n...),
-			func() Doc {
-				n[0].d = t.y
-				return b.be(k, n...)
+		res = better(b.w, k,
+			b.be(k, b.iDoc(d.i, d.s, t.x, z)),
+			// We eta-lift the second argument to avoid eager evaluation.
+			func() *docBest {
+				return b.be(k, b.iDoc(d.i, d.s, t.y, z))
 			},
 		)
-		b.cache[key] = res
-		return res
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}
+
+	// Memoize so we don't compute the same result twice.
+	b.memoBe[memoKey] = res
+
+	return res
 }
 
-func better(w, k int, x Doc, y func() Doc) Doc {
+// newDocBest makes a new docBest on the heap. Allocations
+// are batched for more efficiency.
+func (b *beExec) newDocBest(d docBest) *docBest {
+	buf := &b.docAlloc
+	if len(*buf) == 0 {
+		*buf = make([]docBest, 100)
+	}
+	r := &(*buf)[0]
+	*r = d
+	*buf = (*buf)[1:]
+	return r
+}
+
+// iDoc retrieves the unique instance of iDoc in memory for the given
+// values of i, s, d and z. The object is constructed if it does not
+// exist yet.
+//
+// The results of this function guarantee that the pointer addresses
+// are equal if the arguments used to construct the value were equal.
+func (b *beExec) iDoc(i int, s string, d Doc, z *iDoc) *iDoc {
+	idoc := iDoc{i, s, d, z}
+	if m, ok := b.memoiDoc[idoc]; ok {
+		return m
+	}
+	r := b.newiDoc(idoc)
+	b.memoiDoc[idoc] = r
+	return r
+}
+
+// newiDoc makes a new iDoc on the heap. Allocations are batched
+// for more efficiency. Do not use this directly! Instead
+// use the iDoc() method defined above.
+func (b *beExec) newiDoc(d iDoc) *iDoc {
+	buf := &b.idocAlloc
+	if len(*buf) == 0 {
+		*buf = make([]iDoc, 100)
+	}
+	r := &(*buf)[0]
+	*r = d
+	*buf = (*buf)[1:]
+	return r
+}
+
+type beArgs struct {
+	k int
+	d *iDoc
+}
+
+func better(w, k int, x *docBest, y func() *docBest) *docBest {
 	if fits(w-k, x) {
 		return x
 	}
 	return y()
 }
 
-func fits(w int, x Doc) bool {
+func fits(w int, x *docBest) bool {
 	if w < 0 {
 		return false
 	}
-	switch t := x.(type) {
-	case nilDoc:
+	if x == nil {
+		// Nil doc.
 		return true
-	case textX:
-		return fits(w-len(t.s), t.d)
-	case lineX:
+	}
+	switch x.tag {
+	case textB:
+		return fits(w-len(x.s), x.d)
+	case lineB:
 		return true
 	default:
-		panic(fmt.Errorf("unknown type: %T", x))
+		panic(fmt.Errorf("unknown type: %d", x.tag))
 	}
 }
 
-func layout(sb *strings.Builder, d Doc) {
-	switch d := d.(type) {
-	case nilDoc:
-		// ignore
-	case textX:
+func layout(sb *strings.Builder, d *docBest) {
+	if d == nil {
+		// Nil doc: no output.
+		return
+	}
+	switch d.tag {
+	case textB:
 		sb.WriteString(d.s)
 		layout(sb, d.d)
-	case lineX:
-		sb.WriteString("\n")
+	case lineB:
+		sb.WriteByte('\n')
 		sb.WriteString(d.s)
 		layout(sb, d.d)
 	default:
-		panic(fmt.Errorf("unknown type: %T", d))
+		panic(fmt.Errorf("unknown type: %d", d.tag))
 	}
 }
