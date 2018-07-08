@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -49,30 +47,23 @@ func Pretty(stmt NodeFormatter) string {
 func PrettyWithOpts(
 	stmt NodeFormatter, lineWidth int, useTabs bool, tabWidth int, simplify bool,
 ) string {
-	var tab string
-	if useTabs {
-		tab = "\t"
-	} else {
-		tab = strings.Repeat(" ", tabWidth)
-	}
 	cfg := PrettyCfg{
-		Tab:      tab,
-		TabWidth: tabWidth,
 		Simplify: simplify,
+		// We'll indent each nested level with a single tab.
+		IndentWidth: tabWidth,
 	}
 	doc := cfg.Doc(stmt)
-	return pretty.Pretty(doc, lineWidth)
+	return pretty.Pretty(doc, lineWidth, useTabs, tabWidth)
 }
 
 // PrettyCfg holds configuration for pretty printing statements.
 type PrettyCfg struct {
-	// Tab is the string to use when indenting.
-	Tab string
-	// TabWidth is the effective length of Tab. When using spaces, it should be
-	// len(Tab). When using tabs, it should be the desired tab width.
-	TabWidth int
 	// Simplify, when set, removes extraneous parentheses.
 	Simplify bool
+	// IndentWidth is the amount of space at the beginning of the line
+	// for nested items. If useTabs was set, these spaces will be
+	// converted to tabs when rendering, using tabWidth spaces per tab.
+	IndentWidth int
 }
 
 // Doc converts f (generally a Statement) to a pretty.Doc. If f does not have a
@@ -91,15 +82,15 @@ func (p PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 }
 
 func (p PrettyCfg) nestName(a, b pretty.Doc) pretty.Doc {
-	return pretty.NestName(p.TabWidth, p.Tab, a, b)
+	return pretty.NestName(p.IndentWidth, a, b)
 }
 
 func (p PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
-	return pretty.JoinGroup(p.TabWidth, p.Tab, name, divider, d...)
+	return pretty.JoinGroup(p.IndentWidth, name, divider, d...)
 }
 
 func (p PrettyCfg) bracket(l string, x pretty.Doc, r string) pretty.Doc {
-	return pretty.Bracket(p.TabWidth, p.Tab, l, x, r)
+	return pretty.Bracket(p.IndentWidth, l, x, r)
 }
 
 // docer is implemented by nodes that can convert themselves into
@@ -221,7 +212,7 @@ func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+	return pretty.JoinNestedRight(p.IndentWidth,
 		pretty.Text("AND"), operands...)
 }
 
@@ -239,7 +230,7 @@ func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.TabWidth, p.Tab,
+	return pretty.JoinNestedRight(p.IndentWidth,
 		pretty.Text("OR"), operands...)
 }
 
@@ -330,7 +321,7 @@ func (node *BinaryExpr) doc(p PrettyCfg) pretty.Doc {
 		}
 		operands := p.flattenOp(leftOperand, pred, formatOperand, nil)
 		operands = p.flattenOp(rightOperand, pred, formatOperand, operands)
-		res = pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		res = pretty.JoinNestedRight(p.IndentWidth,
 			opDoc, operands...)
 	}
 	return pretty.Group(res)
@@ -563,7 +554,7 @@ func (node *ComparisonExpr) doc(p PrettyCfg) pretty.Doc {
 		opDoc = pretty.ConcatSpace(pretty.Text(node.SubOperator.String()), opDoc)
 	}
 	return pretty.Group(
-		pretty.JoinNestedRight(p.TabWidth, p.Tab,
+		pretty.JoinNestedRight(p.IndentWidth,
 			opDoc,
 			p.Doc(p.peelCompOperand(node.Left)),
 			p.Doc(p.peelCompOperand(node.Right))))

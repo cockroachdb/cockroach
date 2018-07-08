@@ -45,7 +45,7 @@ func JoinDoc(s Doc, d ...Doc) Doc {
 //       bbb
 // <sep> ccc
 //       ccc
-func JoinNestedRight(n int, s string, sep Doc, nested ...Doc) Doc {
+func JoinNestedRight(n int, sep Doc, nested ...Doc) Doc {
 	switch len(nested) {
 	case 0:
 		return Nil
@@ -55,7 +55,7 @@ func JoinNestedRight(n int, s string, sep Doc, nested ...Doc) Doc {
 		return Concat(
 			nested[0],
 			FoldMap(Concat,
-				func(a Doc) Doc { return Concat(Line, ConcatSpace(sep, Nest(n, s, Group(a)))) },
+				func(a Doc) Doc { return Concat(Line, ConcatSpace(sep, Nest(n, Group(a)))) },
 				nested[1:]...))
 	}
 }
@@ -92,15 +92,15 @@ func Stack(d ...Doc) Doc {
 }
 
 // JoinGroup nests joined d with divider under name.
-func JoinGroup(n int, s string, name, divider string, d ...Doc) Doc {
-	return NestName(n, s, Text(name), Join(divider, d...))
+func JoinGroup(n int, name, divider string, d ...Doc) Doc {
+	return NestName(n, Text(name), Join(divider, d...))
 }
 
-// NestName nests nested under name with string s.
-func NestName(n int, s string, name, nested Doc) Doc {
+// NestName nests nested under name.
+func NestName(n int, name, nested Doc) Doc {
 	return Group(Concat(
 		name,
-		Nest(n, s, Concat(
+		Nest(n, Concat(
 			Line,
 			Group(nested),
 		)),
@@ -132,7 +132,7 @@ func FoldMap(f func(a, b Doc) Doc, g func(Doc) Doc, d ...Doc) Doc {
 }
 
 // Bracket brackets x with l and r and given Nest arguments.
-func Bracket(n int, s string, l string, x Doc, r string) Doc {
+func Bracket(n int, l string, x Doc, r string) Doc {
 	a := Fold(Concat,
 		Text(l),
 		x,
@@ -140,7 +140,7 @@ func Bracket(n int, s string, l string, x Doc, r string) Doc {
 	)
 	b := Fold(Concat,
 		Text(l),
-		Nest(n, s, Concat(Line, x)),
+		Nest(n, Concat(Line, x)),
 		Line,
 		Text(r),
 	)
