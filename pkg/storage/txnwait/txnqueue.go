@@ -35,6 +35,11 @@ import (
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
+// TxnLivenessThreshold is the maximum duration between transaction heartbeats
+// before the transaction is considered expired by Queue. It is exposed and
+// mutable to allow tests to override it.
+var TxnLivenessThreshold = 2 * base.DefaultHeartbeatInterval
+
 // ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
 // ABORT nor TIMESTAMP, but also for ABORT and TIMESTAMP pushes where
@@ -58,9 +63,10 @@ func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.Less(txn.Timestamp)))
 }
 
-// TxnExpiration is the timestamp after which the transaction will be considered expired.
+// TxnExpiration computes the timestamp after which the transaction will be
+// considered expired.
 func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
-	return txn.LastActive().Add(2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)
+	return txn.LastActive().Add(TxnLivenessThreshold.Nanoseconds(), 0)
 }
 
 // IsExpired is true if the given transaction is expired.

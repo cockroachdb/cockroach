@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -116,7 +115,7 @@ func declareKeysEndTransaction(
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 			// Merges write to the left side's abort span and the right side's data
-			// span.
+			// and range-local spans.
 			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 			spans.Add(spanset.SpanReadWrite, roachpb.Span{
 				Key:    leftRangeIDPrefix,
@@ -125,6 +124,10 @@ func declareKeysEndTransaction(
 			spans.Add(spanset.SpanReadWrite, roachpb.Span{
 				Key:    mt.RightDesc.StartKey.AsRawKey(),
 				EndKey: mt.RightDesc.EndKey.AsRawKey(),
+			})
+			spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
 			})
 		}
 	}
@@ -776,45 +779,11 @@ func splitTrigger(
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
-	// Initialize the RHS range's AbortSpan by copying the LHS's. Put a little extra
-	// effort into only copying records that are required: certain workloads create
-	// sizable abort spans, and repeated splitting can blow them up further. Once
-	// it reaches approximately the Raft MaxCommandSize, splits become impossible,
-	// which is pretty bad (see #25233).
-	{
-		var abortSpanCopyCount, abortSpanSkipCount int
-		// Abort span entries before this span are eligible for GC, so we don't
-		// copy them into the new range. We could try to delete them from the LHS
-		// as well, but that could create a large Raft command in itself. Plus,
-		// we'd have to adjust the stats computations.
-		threshold := ts.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
-		var scratch [64]byte
-		if err := rec.AbortSpan().Iterate(ctx, batch, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
-			if entry.Timestamp.Less(threshold) {
-				// The entry would be garbage collected (if GC had run), so
-				// don't bother copying it. Note that we can't filter on the key,
-				// that is just where the txn record lives, but it doesn't tell
-				// us whether the intents that triggered the abort span record
-				// where on the LHS, RHS, or both.
-				abortSpanSkipCount++
-				return nil
-			}
-
-			abortSpanCopyCount++
-			var txnID uuid.UUID
-			txnID, err = keys.DecodeAbortSpanKey(k, scratch[:0])
-			if err != nil {
-				return err
-			}
-			return engine.MVCCPutProto(ctx, batch, &bothDeltaMS,
-				keys.AbortSpanKey(split.RightDesc.RangeID, txnID),
-				hlc.Timestamp{}, nil, &entry,
-			)
-		}); err != nil {
-			// TODO(tschottdorf): ReplicaCorruptionError.
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
-		}
-		log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
+	// Initialize the RHS range's AbortSpan by copying the LHS's.
+	if err := rec.AbortSpan().CopyTo(
+		ctx, batch, batch, &bothDeltaMS, ts, split.RightDesc.RangeID,
+	); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
 	// Compute (absolute) stats for RHS range.
@@ -1025,25 +994,21 @@ func mergeTrigger(
 		return result.Result{}, err
 	}
 
-	// TODO(benesch): copy the non-expired abort span records from the RHS into
-	// the LHS. See the corresponding code for splits.
-
-	// Delete the RHS's range ID keys. Besides the abort span, which we copied
-	// above, it's all irrelevant.
-	rightRangeIDKey := keys.MakeRangeIDPrefix(merge.RightDesc.RangeID)
-	if err := eng.ClearRange(
-		engine.MakeMVCCMetadataKey(rightRangeIDKey),
-		engine.MakeMVCCMetadataKey(rightRangeIDKey.PrefixEnd()),
+	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
+		ctx, eng, batch, ms, ts, merge.LeftDesc.RangeID,
 	); err != nil {
 		return result.Result{}, err
 	}
 
-	// Copy the rewritten RHS data into the command's batch.
+	// Copy the RHS data into the command's batch. We skip over the range-ID local
+	// keys. The abort span is the only relevant part of the range-ID local
+	// keyspace, and we already copied it above.
+	rhsRelevantStartKey := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.StartKey))
 	iter := eng.NewIterator(engine.IterOptions{
 		UpperBound: roachpb.KeyMax, // all the data in this engine is relevant
 	})
 	defer iter.Close()
-	for iter.Seek(engine.MVCCKey{}); ; iter.Next() {
+	for iter.Seek(rhsRelevantStartKey); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return result.Result{}, err
 		} else if !ok {
@@ -1054,8 +1019,10 @@ func mergeTrigger(
 		}
 	}
 
-	// Adjust stats for the rewritten RHS data.
-	rhsMS, err := iter.ComputeStats(engine.MVCCKey{}, engine.MVCCKeyMax, 0 /* nowNanos */)
+	// Adjust stats for the rewritten RHS data. Again, we skip over the range-ID
+	// local keys, as only the abort span is relevant and its stats were accounted
+	// for above.
+	rhsMS, err := iter.ComputeStats(rhsRelevantStartKey, engine.MVCCKeyMax, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, err
 	}
