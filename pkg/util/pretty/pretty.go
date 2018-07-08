@@ -124,7 +124,7 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 			s:   string(t),
 			d:   b.be(k+len(t), z),
 		})
-	case line:
+	case line, softbreak:
 		res = b.newDocBest(docBest{
 			tag: lineB,
 			i:   d.i,
