@@ -171,3 +171,66 @@ func simplifyNil(a, b Doc, fn func(Doc, Doc) Doc) Doc {
 	}
 	return fn(a, b)
 }
+
+// RLTableRow is the data for one row of a RLTable (see below).
+type RLTableRow struct {
+	Label string
+	Doc   Doc
+}
+
+// RLTable defines a document that formats a list of pairs of items either:
+//  - as a 2-column table, with the left column right-aligned and the right
+//    column left-aligned, for example:
+//       SELECT aaa
+//              bbb
+//         FROM ccc
+//  - as sections, for example:
+//       SELECT
+//           aaa
+//           bbb
+//       FROM
+//           ccc
+//
+// We restrict the left value in each list item to be a one-line string
+// to make the width computation efficient.
+//
+// For convenience, the function also skips over rows with a nil
+// pointer as doc.
+func RLTable(n int, rows ...RLTableRow) Doc {
+	items := make([]Doc, len(rows))
+
+	// We'll compute the aligned formatting first. For this we first
+	// need the left column width.
+	leftwidth := 0
+	for _, r := range rows {
+		if r.Doc == nil {
+			continue
+		}
+		if leftwidth < len(r.Label) {
+			leftwidth = len(r.Label)
+		}
+	}
+	// Now convert the rows.
+	for i, r := range rows {
+		if r.Doc == nil {
+			continue
+		}
+		items[i] = Concat(pad{leftwidth - len(r.Label)},
+			ConcatSpace(Text(r.Label), Align(Group(r.Doc))))
+	}
+	alignedTable := Stack(items...)
+
+	// The compute the nested formatting. It's simpler.
+	// Note that we do not use NestUnder() because we are not
+	// grouping at this level (the group is done for the final
+	// form below).
+	for i, r := range rows {
+		if r.Doc == nil {
+			continue
+		}
+		items[i] = Concat(Text(r.Label), Nest(n, Concat(Line, Group(r.Doc))))
+	}
+	nestedSections := Stack(items...)
+
+	return Group(union{alignedTable, nestedSections})
+}

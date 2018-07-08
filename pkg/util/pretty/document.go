@@ -54,6 +54,7 @@ func (nest) isDoc()      {}
 func (union) isDoc()     {}
 func (*column) isDoc()   {}
 func (*nesting) isDoc()  {}
+func (pad) isDoc()       {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -153,6 +154,8 @@ func flatten(d Doc) Doc {
 		return &column{f: func(c int) Doc { return flatten(t.f(c)) }}
 	case *nesting:
 		return &nesting{f: func(i int) Doc { return flatten(t.f(i)) }}
+	case pad:
+		return Nil
 	default:
 		panic(fmt.Errorf("unknown type: %T", d))
 	}
@@ -195,4 +198,27 @@ func Align(d Doc) Doc {
 			}
 		},
 	}
+}
+
+// pad is a special document which is replaced during rendering by
+// the specified amount of whitespace. However it is flattened
+// to an empty document during grouping.
+//
+// This is an extension to Wadler's printer first prototyped in
+// https://github.com/knz/prettier.
+//
+// Note that this special document must be handled especially
+// carefully with anything that produces a union (<|>) (e.g. Group),
+// so as to preserve the invariant of unions: "no first line of a
+// document in x is shorter than some first line of a document in y;
+// or, equivalently, every first line in x is at least as long as
+// every first line in y".
+//
+// The operator RLTable, defined in util.go, is properly careful about
+// this.
+//
+// This document type is not exposed publicly because of the risk
+// described above.
+type pad struct {
+	n int
 }
