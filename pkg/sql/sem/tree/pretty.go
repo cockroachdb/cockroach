@@ -93,6 +93,23 @@ func (p PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
 	return pretty.JoinGroup(p.IndentWidth, name, divider, d...)
 }
 
+func (p PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
+	if len(d) == 0 {
+		return pretty.Nil
+	}
+	sep := pretty.Text(lbl)
+	return pretty.Concat(d[0],
+		pretty.Nest(-len(lbl)-1,
+			pretty.FoldMap(
+				pretty.Concat,
+				func(x pretty.Doc) pretty.Doc {
+					return pretty.Concat(
+						pretty.Line,
+						pretty.ConcatSpace(sep, pretty.Align(pretty.Group(x))))
+				},
+				d[1:]...)))
+}
+
 func (p PrettyCfg) bracket(l string, x pretty.Doc, r string) pretty.Doc {
 	return pretty.Bracket(p.IndentWidth, l, x, r)
 }
@@ -216,8 +233,7 @@ func (node *AndExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.IndentWidth,
-		pretty.Text("AND"), operands...)
+	return p.joinNestedOuter("AND", operands...)
 }
 
 func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
@@ -234,8 +250,7 @@ func (node *OrExpr) doc(p PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(p.IndentWidth,
-		pretty.Text("OR"), operands...)
+	return p.joinNestedOuter("OR", operands...)
 }
 
 func (node *Exprs) doc(p PrettyCfg) pretty.Doc {
