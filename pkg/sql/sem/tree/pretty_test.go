@@ -141,7 +141,7 @@ func BenchmarkPrettyData(b *testing.B) {
 		b.Fatal(err)
 	}
 	var docs []pretty.Doc
-	cfg := tree.PrettyCfg{Tab: "\t", TabWidth: 4}
+	cfg := tree.PrettyCfg{IndentWidth: 4}
 	for _, m := range matches {
 		sql, err := ioutil.ReadFile(m)
 		if err != nil {
@@ -158,7 +158,7 @@ func BenchmarkPrettyData(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, doc := range docs {
 			for _, w := range []int{1, 30, 80} {
-				pretty.Pretty(doc, w)
+				pretty.Pretty(doc, w, true /*useTabs*/, 4 /*tabWidth*/)
 			}
 		}
 	}

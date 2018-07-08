@@ -89,17 +89,15 @@ func Concat(a, b Doc) Doc {
 }
 
 // nest represents (NEST Int DOC) :: DOC -- nesting a doc "under" another.
-// NEST indents d by s at effective length n. len(s) does not have to be
-// n. This allows s to be a tab character and n can be a tab width.
+// NEST indents d at effective length n.
 type nest struct {
 	n int
-	s string
 	d Doc
 }
 
 // Nest is the NEST constructor.
-func Nest(n int, s string, d Doc) Doc {
-	return nest{n, s, d}
+func Nest(n int, d Doc) Doc {
+	return nest{n, d}
 }
 
 // union represents (DOC <|> DOC) :: DOC -- the union of two docs.
@@ -130,7 +128,7 @@ func flatten(d Doc) Doc {
 	case concat:
 		return Concat(flatten(t.a), flatten(t.b))
 	case nest:
-		return Nest(t.n, t.s, flatten(t.d))
+		return Nest(t.n, flatten(t.d))
 	case text:
 		return d
 	case line:
