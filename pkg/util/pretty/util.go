@@ -91,15 +91,15 @@ func Stack(d ...Doc) Doc {
 	return Fold(ConcatLine, d...)
 }
 
-// JoinGroup nests joined d with divider under name.
-func JoinGroup(n int, name, divider string, d ...Doc) Doc {
-	return NestName(n, Text(name), Join(divider, d...))
+// JoinGroup nests joined d with divider under head.
+func JoinGroup(n int, head, divider string, d ...Doc) Doc {
+	return NestUnder(n, Text(head), Join(divider, d...))
 }
 
-// NestName nests nested under name.
-func NestName(n int, name, nested Doc) Doc {
+// NestUnder nests nested under head.
+func NestUnder(n int, head, nested Doc) Doc {
 	return Group(Concat(
-		name,
+		head,
 		Nest(n, Concat(
 			Line,
 			Group(nested),
