@@ -39,6 +39,7 @@ type docBestType int
 const (
 	textB docBestType = iota
 	lineB
+	spacesB
 )
 
 // Pretty returns a pretty-printed string for the Doc d at line length
@@ -152,6 +153,12 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 		res = b.be(k, b.iDoc(d.i, t.f(k.spaces), z))
 	case *snesting:
 		res = b.be(k, b.iDoc(d.i, t.f(d.i.spaces), z))
+	case pad:
+		res = b.newDocBest(docBest{
+			tag: spacesB,
+			i:   docPos{spaces: t.n},
+			d:   b.be(docPos{k.tabs, k.spaces + t.n}, z),
+		})
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}
@@ -231,6 +238,8 @@ func fits(w int16, x *docBest) bool {
 		return fits(w-int16(len(x.s)), x.d)
 	case lineB:
 		return true
+	case spacesB:
+		return fits(w-x.i.spaces, x.d)
 	default:
 		panic(fmt.Errorf("unknown type: %d", x.tag))
 	}
@@ -254,6 +263,10 @@ func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 
 			// Fill the remaining spaces.
 			for i := int16(0); i < padTabs+d.i.spaces; i++ {
+				sb.WriteByte(' ')
+			}
+		case spacesB:
+			for i := int16(0); i < d.i.spaces; i++ {
 				sb.WriteByte(' ')
 			}
 		default:
