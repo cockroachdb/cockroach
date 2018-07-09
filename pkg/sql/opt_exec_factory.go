@@ -63,6 +63,7 @@ func (ef *execFactory) ConstructScan(
 	cols exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
+	reverse bool,
 	reqOrder sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -84,6 +85,7 @@ func (ef *execFactory) ConstructScan(
 	scan.index = indexDesc
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
+	scan.reverse = reverse
 	var err error
 	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint)
 	if err != nil {

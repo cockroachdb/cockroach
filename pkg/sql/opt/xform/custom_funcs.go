@@ -67,6 +67,11 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 		pkCols[i] = md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)
 	}
 
+	// Add a reverse index scan memo group for the primary index.
+	newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: 0, Cols: scanOpDef.Cols, Reverse: true}
+	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
+	c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
+
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
 		if tab.Index(i).IsInverted() {
@@ -81,6 +86,10 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 			newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: i, Cols: scanOpDef.Cols}
 			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
 			c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
+
+			newDefRev := &memo.ScanOpDef{Table: scanOpDef.Table, Index: i, Cols: scanOpDef.Cols, Reverse: true}
+			indexScanRev := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDefRev))
+			c.e.exprs = append(c.e.exprs, memo.Expr(indexScanRev))
 		} else {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
@@ -99,16 +108,27 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 				Cols:  scanCols,
 			}
 
+			indexScanOpDefRev := memo.ScanOpDef{
+				Table:   scanOpDef.Table,
+				Index:   i,
+				Cols:    scanCols,
+				Reverse: true,
+			}
+
 			input := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDef))
+			inputRev := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDefRev))
 
 			def := memo.IndexJoinDef{
 				Table: scanOpDef.Table,
 				Cols:  scanOpDef.Cols,
 			}
 
-			join := memo.MakeIndexJoinExpr(input, c.e.mem.InternIndexJoinDef(&def))
+			private := c.e.mem.InternIndexJoinDef(&def)
+			join := memo.MakeIndexJoinExpr(input, private)
+			joinRev := memo.MakeIndexJoinExpr(inputRev, private)
 
 			c.e.exprs = append(c.e.exprs, memo.Expr(join))
+			c.e.exprs = append(c.e.exprs, memo.Expr(joinRev))
 		}
 	}
 

@@ -2,7 +2,6 @@
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
-import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import {

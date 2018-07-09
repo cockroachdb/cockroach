@@ -3,7 +3,6 @@
  */
 
 import _ from "lodash";
-import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import * as protos from "src/js/protos";
