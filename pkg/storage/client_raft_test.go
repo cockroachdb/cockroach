@@ -2588,7 +2588,7 @@ func TestReplicaGCRace(t *testing.T) {
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, storage.GossipAddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
-		mtc.rpcContext,
+		mtc.transportStopper,
 	)
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	fromTransport.Listen(fromStore.StoreID(), errChan)
@@ -2996,7 +2996,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, storage.GossipAddressResolver(mtc.gossips[0])),
 		nil, /* grpcServer */
-		mtc.rpcContext,
+		mtc.transportStopper,
 	)
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(mtc.stores[0].StoreID(), errChan)

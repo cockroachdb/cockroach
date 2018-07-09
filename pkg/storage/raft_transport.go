@@ -31,11 +31,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -150,7 +150,7 @@ type RaftTransport struct {
 	log.AmbientContext
 	st *cluster.Settings
 
-	rpcContext *rpc.Context
+	stopper *stop.Stopper
 
 	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
 	stats    syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
@@ -174,23 +174,23 @@ func NewRaftTransport(
 	st *cluster.Settings,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	rpcContext *rpc.Context,
+	stopper *stop.Stopper,
 ) *RaftTransport {
 	t := &RaftTransport{
 		AmbientContext: ambient,
 		st:             st,
 
-		rpcContext: rpcContext,
-		dialer:     dialer,
+		stopper: stopper,
+		dialer:  dialer,
 	}
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
 	}
 
-	if t.rpcContext != nil && log.V(1) {
+	if t.stopper != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
-		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+		t.stopper.RunWorker(ctx, func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -246,7 +246,7 @@ func NewRaftTransport(
 					}
 					lastTime = now
 					log.Infof(ctx, "stats:\n%s", buf.String())
-				case <-t.rpcContext.Stopper.ShouldStop():
+				case <-t.stopper.ShouldStop():
 					return
 				}
 			}
@@ -316,10 +316,10 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.rpcContext.Stopper.RunTask(
+	if err := t.stopper.RunTask(
 		stream.Context(), "storage.RaftTransport: processing batch",
 		func(ctx context.Context) {
-			t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					var stats *raftTransportStats
 					stream := &lockedRaftMessageResponseStream{MultiRaft_RaftMessageBatchServer: stream}
@@ -356,7 +356,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	select {
 	case err := <-errCh:
 		return err
-	case <-t.rpcContext.Stopper.ShouldQuiesce():
+	case <-t.stopper.ShouldQuiesce():
 		return nil
 	}
 }
@@ -364,7 +364,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
 	errCh := make(chan error, 1)
-	if err := t.rpcContext.Stopper.RunAsyncTask(
+	if err := t.stopper.RunAsyncTask(
 		stream.Context(), "storage.RaftTransport: processing snapshot",
 		func(ctx context.Context) {
 			errCh <- func() error {
@@ -390,7 +390,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	select {
-	case <-t.rpcContext.Stopper.ShouldStop():
+	case <-t.stopper.ShouldStop():
 		return nil
 	case err := <-errCh:
 		return err
@@ -421,10 +421,10 @@ func (t *RaftTransport) processQueue(
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	if err := t.rpcContext.Stopper.RunTask(
+	if err := t.stopper.RunTask(
 		stream.Context(), "storage.RaftTransport: processing queue",
 		func(ctx context.Context) {
-			t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					for {
 						resp, err := stream.Recv()
@@ -454,7 +454,7 @@ func (t *RaftTransport) processQueue(
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
+		case <-t.stopper.ShouldStop():
 			return nil
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
@@ -601,10 +601,10 @@ func (t *RaftTransport) startProcessNewQueue(
 	}
 
 	// Starting workers in a task prevents data races during shutdown.
-	if t.rpcContext.Stopper.RunTask(
+	if t.stopper.RunTask(
 		ctx, "storage.RaftTransport: sending message",
 		func(ctx context.Context) {
-			t.rpcContext.Stopper.RunWorker(ctx, worker)
+			t.stopper.RunWorker(ctx, worker)
 		}) != nil {
 		t.queues.Delete(int64(toNodeID))
 		return false

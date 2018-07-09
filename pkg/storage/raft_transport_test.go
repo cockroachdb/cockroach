@@ -152,7 +152,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rttc.nodeRPCContext, storage.GossipAddressResolver(rttc.gossip)),
 		grpcServer,
-		rttc.nodeRPCContext,
+		rttc.stopper,
 	)
 	rttc.transports[nodeID] = transport
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
