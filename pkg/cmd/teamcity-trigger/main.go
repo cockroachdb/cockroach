@@ -62,7 +62,6 @@ func runTC(branches []string, queueBuild func(string, string, map[string]string)
 		for _, opts := range []map[string]string{
 			{}, // uninstrumented
 			{"env.GOFLAGS": "-race"},
-			{"env.TAGS": "deadlock"},
 		} {
 			for _, importPath := range importPaths {
 				opts["env.PKG"] = importPath
