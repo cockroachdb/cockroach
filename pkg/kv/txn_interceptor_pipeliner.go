@@ -33,6 +33,11 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
+var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
+	"kv.transaction.write_pipelining_max_batch_size",
+	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
+	0,
+)
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been
@@ -174,15 +179,27 @@ func (tp *txnPipeliner) SendLocked(
 // the list of writes we proved to exist that are no longer "outstanding" in
 // updateOutstandingWrites.
 //
-// TODO(nvanbenschoten): the number of writes that we permit to use async
-// consensus in a given Batch should be bound. We'll have to resolve each one
-// using a QueryIntent, so there's a point where it makes more sense to just
-// perform consensus for the entire batch synchronously and avoid all of the
-// overhead of pipelining. We might also want to bound the size of the
-// outstandingWrites tree.
+// TODO(nvanbenschoten): Consider placing an upper bound on the size of the
+// outstandingWrites tree. Once this limit is hit, we'll either need to
+// proactively resolve outstanding writes or stop pipelining new writes.
 func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := tp.st.Version.IsActive(cluster.VersionAsyncConsensus) &&
 		pipelinedWritesEnabled.Get(&tp.st.SV)
+
+	// We provide a setting to bound the number of writes we permit in a batch
+	// that uses async consensus. This is useful because we'll have to resolve
+	// each write that uses async consensus using a QueryIntent, so there's a
+	// point where it makes more sense to just perform consensus for the entire
+	// batch synchronously and avoid all of the overhead of pipelining.
+	if maxBatch := pipelinedWritesMaxBatchSize.Get(&tp.st.SV); maxBatch > 0 {
+		batchSize := int64(len(ba.Requests))
+		if _, hasBT := ba.GetArg(roachpb.BeginTransaction); hasBT {
+			batchSize--
+		}
+		if batchSize > maxBatch {
+			asyncConsensus = false
+		}
+	}
 
 	forked := false
 	oldReqs := ba.Requests
