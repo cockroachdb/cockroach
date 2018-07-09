@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.3"
+      "version": "5.2.1"
     },
     {
       "type": "panel",
@@ -52,7 +52,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1530778481777,
+  "iteration": 1531124780142,
   "links": [
     {
       "asDropdown": true,
@@ -155,7 +155,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [
@@ -325,7 +329,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [
@@ -524,7 +532,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [
@@ -640,7 +652,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sql_exec_latency:rate1m:quantile_99{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "histogram_quantile(0.99,rate(sql_exec_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[1m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -685,7 +697,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [
@@ -800,7 +816,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sql_exec_latency:rate1m:quantile_95{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "histogram_quantile(0.95,rate(sql_exec_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[1m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -845,7 +861,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [
@@ -1120,7 +1140,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": false,
