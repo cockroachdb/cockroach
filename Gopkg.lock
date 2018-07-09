@@ -242,7 +242,7 @@
   branch = "master"
   name = "github.com/cockroachdb/crlfmt"
   packages = ["."]
-  revision = "ec6cff36e0bd2fa9e2ecd36b9fd6ea70568ad3ce"
+  revision = "ea27cb9045ae7c4e7e63926df6300454e3d6f3d8"
 
 [[projects]]
   branch = "master"
@@ -255,6 +255,12 @@
   name = "github.com/cockroachdb/stress"
   packages = ["."]
   revision = "29b5d31b4c3a949cb3a726750bc34c4d58ec15e8"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/cockroachdb/ttycolor"
+  packages = ["."]
+  revision = "5bed2b5a875c88a9d87d0f12b21ba156e2f995f7"
 
 [[projects]]
   branch = "master"
@@ -1304,6 +1310,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1a7fcdf3667287db7a66b6c4d794a7b8a448833aad85225fed64fe92ceb8e59d"
+  inputs-digest = "6dd969b1491fd706f2daf81ae63b5d18fea95986d977811a438b3ed50bbd936a"
   solver-name = "gps-cdcl"
   solver-version = 1
