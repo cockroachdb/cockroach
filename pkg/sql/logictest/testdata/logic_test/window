@@ -1723,3 +1723,19 @@ Dell             800.00   700.00  1200.00
 iPad             700.00   150.00  700.00
 Kindle Fire      150.00   150.00  700.00
 Samsung          200.00   150.00  700.00
+
+# Issue #27293: tuples cannot be compared with ==.
+query TRI
+SELECT *, count(*) OVER (PARTITION BY combined_name) FROM (SELECT (group_name, product_name) AS "combined_name", price FROM products) AS "foo" ORDER BY combined_name;
+----
+('Laptop','Dell')                 800.00   1
+('Laptop','HP Elite')             1200.00  1
+('Laptop','Lenovo Thinkpad')      700.00   1
+('Laptop','Sony VAIO')            700.00   1
+('Smartphone','HTC One')          400.00   1
+('Smartphone','Microsoft Lumia')  200.00   1
+('Smartphone','Nexus')            500.00   1
+('Smartphone','iPhone')           900.00   1
+('Tablet','Kindle Fire')          150.00   1
+('Tablet','Samsung')              200.00   1
+('Tablet','iPad')                 700.00   1
