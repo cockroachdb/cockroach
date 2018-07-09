@@ -38,10 +38,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
 
@@ -444,7 +444,7 @@ var noColor bool
 // 	line             The line number
 // 	msg              The user-supplied message
 func formatHeader(
-	s Severity, now time.Time, gid int, file string, line int, cp color.Profile,
+	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile,
 ) *buffer {
 	if noColor {
 		cp = nil
@@ -463,11 +463,11 @@ func formatHeader(
 	var prefix []byte
 	switch s {
 	case Severity_INFO:
-		prefix = cp[color.Cyan]
+		prefix = cp[ttycolor.Cyan]
 	case Severity_WARNING:
-		prefix = cp[color.Yellow]
+		prefix = cp[ttycolor.Yellow]
 	case Severity_ERROR, Severity_FATAL:
-		prefix = cp[color.Red]
+		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
@@ -483,7 +483,7 @@ func formatHeader(
 	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
-	n += copy(tmp[n:], cp[color.Gray]) // gray for time, file & line
+	n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
 	tmp[n] = ' '
 	n++
 	n += buf.twoDigits(n, hour)
@@ -511,7 +511,7 @@ func formatHeader(
 	// Extra space between the header and the actual message for scannability.
 	tmp[n] = ' '
 	n++
-	n += copy(tmp[n:], cp[color.Reset])
+	n += copy(tmp[n:], cp[ttycolor.Reset])
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
@@ -562,7 +562,7 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry Entry, stacks []byte, cp color.Profile) *buffer {
+func formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), cp)
 	_, _ = buf.WriteString(entry.Message)
@@ -935,7 +935,7 @@ func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 
 // processForStderr formats a log entry for output to standard error.
 func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, color.StderrProfile)
+	return formatLogEntry(entry, stacks, ttycolor.StderrProfile)
 }
 
 // processForFile formats a log entry for output to a file.
