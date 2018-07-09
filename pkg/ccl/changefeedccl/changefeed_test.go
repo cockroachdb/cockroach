@@ -273,8 +273,8 @@ func TestChangefeedErrors(t *testing.T) {
 
 	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-	); !testutils.IsError(err, `no test producer: nope`) {
-		t.Fatalf(`expected 'no test producer: nope' error got: %+v`, err)
+	); !testutils.IsError(err, `client has run out of available brokers`) {
+		t.Fatalf(`expected 'client has run out of available brokers' error got: %+v`, err)
 	}
 	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO ''`,
