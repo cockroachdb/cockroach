@@ -3170,6 +3170,17 @@ func (r *Replica) evaluateProposal(
 	// replication is not necessary.
 	res.Local.Reply = br
 
+	// Assert that successful write requests result in intents. This is
+	// important for transactional pipelining and the parallel commit proposal
+	// because both use the presence of an intent to indicate that a write
+	// succeeded. This check may have false negatives but will never have false
+	// positives.
+	if br.Txn != nil && br.Txn.Status != roachpb.ABORTED {
+		if ba.IsTransactionWrite() && !ba.IsRange() && batch.Empty() {
+			log.Fatalf(ctx, "successful transaction point write batch %v resulted in no-op", ba)
+		}
+	}
+
 	// needConsensus determines if the result needs to be replicated and
 	// proposed through Raft. This is necessary if at least one of the
 	// following conditions is true:
