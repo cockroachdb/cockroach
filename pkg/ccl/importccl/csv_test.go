@@ -762,6 +762,14 @@ func TestImportStmt(t *testing.T) {
 			``,
 			`invalid option "into_db"`,
 		},
+		{
+			"sequences",
+			`IMPORT TABLE t (a int default nextval('s')) CSV DATA (%s)`,
+			nil,
+			files,
+			``,
+			`sequence operations unsupported`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			intodb := fmt.Sprintf(`csv%d`, i)
