@@ -1238,7 +1238,7 @@ func restorePlanHook(
 			// Use Now() for the max timestamp because Restore does its own
 			// (more restrictive) check.
 			var err error
-			endTime, err = sql.EvalAsOfTimestamp(nil, restoreStmt.AsOf, p.ExecCfg().Clock.Now())
+			endTime, err = p.EvalAsOfTimestamp(restoreStmt.AsOf, p.ExecCfg().Clock.Now())
 			if err != nil {
 				return err
 			}

@@ -725,6 +725,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY['foo','bar','baz'] IS NOT DISTINCT FROM ARRAY['foo','bar','baz']`, `true`},
 		{`ARRAY[1,2,3] IS DISTINCT FROM NULL`, `true`},
 		{`ARRAY[1,2,3] IS NOT DISTINCT FROM NULL`, `false`},
+		{`CASE 1 WHEN 2 THEN ARRAY[3] ELSE ARRAY[4] END[1]`, `4`},
 		{`NULL::INT[] IS DISTINCT FROM NULL::INT[]`, `false`},
 		// IS expressions.
 		{`0 IS NULL`, `false`},

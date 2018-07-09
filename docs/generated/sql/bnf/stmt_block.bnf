@@ -391,7 +391,7 @@ preparable_stmt ::=
 	| upsert_stmt
 
 as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -972,8 +972,6 @@ table_elem ::=
 c_expr ::=
 	d_expr
 	| d_expr array_subscripts
-	| case_expr
-	| 'EXISTS' select_with_parens
 
 cast_target ::=
 	typename
@@ -1011,17 +1009,6 @@ sub_type ::=
 	'ANY'
 	| 'SOME'
 	| 'ALL'
-
-a_expr_const ::=
-	'ICONST'
-	| 'FCONST'
-	| 'SCONST'
-	| 'BCONST'
-	| const_typename 'SCONST'
-	| interval
-	| 'TRUE'
-	| 'FALSE'
-	| 'NULL'
 
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
@@ -1306,8 +1293,16 @@ table_constraint ::=
 	| constraint_elem
 
 d_expr ::=
-	column_path_with_star
-	| a_expr_const
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| 'BCONST'
+	| const_typename 'SCONST'
+	| interval
+	| 'TRUE'
+	| 'FALSE'
+	| 'NULL'
+	| column_path_with_star
 	| '@' iconst64
 	| 'PLACEHOLDER'
 	| '(' a_expr ')' '.' '*'
@@ -1315,16 +1310,15 @@ d_expr ::=
 	| '(' a_expr ')'
 	| func_expr
 	| select_with_parens
+	| 'EXISTS' select_with_parens
 	| 'ARRAY' select_with_parens
 	| 'ARRAY' array_expr
 	| row
 	| '(' row 'AS' name_list ')'
+	| 'CASE' case_arg when_clause_list case_default 'END'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
-
-case_expr ::=
-	'CASE' case_arg when_clause_list case_default 'END'
 
 postgres_oid ::=
 	'REGPROC'
@@ -1360,33 +1354,6 @@ math_op ::=
 	| 'LESS_EQUALS'
 	| 'GREATER_EQUALS'
 	| 'NOT_EQUALS'
-
-const_typename ::=
-	numeric
-	| bit_without_length
-	| character_without_length
-	| const_datetime
-	| const_json
-	| 'BLOB'
-	| 'BYTES'
-	| 'BYTEA'
-	| 'TEXT'
-	| 'NAME'
-	| 'SERIAL'
-	| 'SERIAL2'
-	| 'SERIAL4'
-	| 'SERIAL8'
-	| 'SMALLSERIAL'
-	| 'UUID'
-	| 'INET'
-	| 'BIGSERIAL'
-	| 'OID'
-	| 'OIDVECTOR'
-	| 'INT2VECTOR'
-	| 'identifier'
-
-interval ::=
-	const_interval 'SCONST' opt_interval
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -1608,6 +1575,33 @@ constraint_elem ::=
 	| 'PRIMARY' 'KEY' '(' index_params ')'
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list reference_actions
 
+const_typename ::=
+	numeric
+	| bit_without_length
+	| character_without_length
+	| const_datetime
+	| const_json
+	| 'BLOB'
+	| 'BYTES'
+	| 'BYTEA'
+	| 'TEXT'
+	| 'NAME'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLSERIAL'
+	| 'UUID'
+	| 'INET'
+	| 'BIGSERIAL'
+	| 'OID'
+	| 'OIDVECTOR'
+	| 'INT2VECTOR'
+	| 'identifier'
+
+interval ::=
+	const_interval 'SCONST' opt_interval
+
 column_path_with_star ::=
 	column_path
 	| name '.' unrestricted_name '.' unrestricted_name '.' '*'
@@ -1629,10 +1623,6 @@ row ::=
 	'ROW' '(' opt_expr_list ')'
 	| '(' expr_list ',' a_expr ')'
 
-array_subscript ::=
-	'[' a_expr ']'
-	| '[' opt_slice_bound ':' opt_slice_bound ']'
-
 case_arg ::=
 	a_expr
 	| 
@@ -1643,6 +1633,10 @@ when_clause_list ::=
 case_default ::=
 	'ELSE' a_expr
 	| 
+
+array_subscript ::=
+	'[' a_expr ']'
+	| '[' opt_slice_bound ':' opt_slice_bound ']'
 
 bit_with_length ::=
 	'BIT' opt_varying '(' iconst64 ')'
@@ -1668,47 +1662,6 @@ opt_interval ::=
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
 	| 
-
-numeric ::=
-	'INT'
-	| 'INT2'
-	| 'INT4'
-	| 'INT8'
-	| 'INT64'
-	| 'INTEGER'
-	| 'SMALLINT'
-	| 'BIGINT'
-	| 'REAL'
-	| 'FLOAT4'
-	| 'FLOAT8'
-	| 'FLOAT' opt_float
-	| 'DOUBLE' 'PRECISION'
-	| 'DECIMAL' opt_numeric_modifiers
-	| 'DEC' opt_numeric_modifiers
-	| 'NUMERIC' opt_numeric_modifiers
-	| 'BOOLEAN'
-	| 'BOOL'
-
-bit_without_length ::=
-	'BIT' opt_varying
-
-character_without_length ::=
-	character_base
-
-const_datetime ::=
-	'DATE'
-	| 'TIME'
-	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMETZ'
-	| 'TIME' 'WITH' 'TIME' 'ZONE'
-	| 'TIMESTAMP'
-	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMPTZ'
-	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
-
-const_json ::=
-	'JSON'
-	| 'JSONB'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -1829,6 +1782,47 @@ reference_actions ::=
 	| reference_on_delete reference_on_update
 	| 
 
+numeric ::=
+	'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+	| 'BOOL'
+
+bit_without_length ::=
+	'BIT' opt_varying
+
+character_without_length ::=
+	character_base
+
+const_datetime ::=
+	'DATE'
+	| 'TIME'
+	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMETZ'
+	| 'TIME' 'WITH' 'TIME' 'ZONE'
+	| 'TIMESTAMP'
+	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
+
+const_json ::=
+	'JSON'
+	| 'JSONB'
+
 column_path ::=
 	name
 	| prefixed_column_path
@@ -1878,12 +1872,12 @@ opt_expr_list ::=
 array_expr_list ::=
 	( array_expr ) ( ( ',' array_expr ) )*
 
+when_clause ::=
+	'WHEN' a_expr 'THEN' a_expr
+
 opt_slice_bound ::=
 	a_expr
 	| 
-
-when_clause ::=
-	'WHEN' a_expr 'THEN' a_expr
 
 opt_varying ::=
 	'VARYING'
@@ -1897,15 +1891,6 @@ character_base ::=
 
 interval_second ::=
 	'SECOND'
-
-opt_float ::=
-	'(' 'ICONST' ')'
-	| 
-
-opt_numeric_modifiers ::=
-	'(' iconst64 ')'
-	| '(' iconst64 ',' iconst64 ')'
-	| 
 
 from_list ::=
 	( table_ref ) ( ( ',' table_ref ) )*
@@ -2006,6 +1991,15 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
+
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst64 ')'
+	| '(' iconst64 ',' iconst64 ')'
+	| 
 
 prefixed_column_path ::=
 	name '.' unrestricted_name

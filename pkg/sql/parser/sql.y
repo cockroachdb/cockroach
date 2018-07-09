@@ -858,7 +858,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.IndexHints> opt_index_hints
 %type <*tree.IndexHints> index_hints_param
 %type <*tree.IndexHints> index_hints_param_list
-%type <tree.Expr> a_expr b_expr c_expr a_expr_const d_expr
+%type <tree.Expr> a_expr b_expr c_expr d_expr
 %type <tree.Expr> substr_from substr_for
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
@@ -867,7 +867,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <tree.Tuple> row
-%type <tree.Expr> case_expr case_arg case_default
+%type <tree.Expr> case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
 %type <tree.ComparisonOperator> sub_type
@@ -1274,7 +1274,7 @@ alter_relocate_index_stmt:
   }
 
 alter_zone_range_stmt:
-  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1284,7 +1284,7 @@ alter_zone_range_stmt:
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1294,7 +1294,7 @@ alter_zone_database_stmt:
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1304,7 +1304,7 @@ alter_zone_table_stmt:
       YAMLConfig: $7.expr(),
     }
   }
-| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1317,7 +1317,7 @@ alter_zone_table_stmt:
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -5666,7 +5666,7 @@ opt_alias_clause:
   }
 
 as_of_clause:
-  AS_LA OF SYSTEM TIME a_expr_const
+  AS_LA OF SYSTEM TIME a_expr
   {
     $$.val = tree.AsOfClause{Expr: $5.expr()}
   }
@@ -6776,11 +6776,6 @@ c_expr:
       Indirection: $2.arraySubscripts(),
     }
   }
-| case_expr
-| EXISTS select_with_parens
-  {
-    $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
-  }
 
 // Productions that can be followed by a postfix operator.
 //
@@ -6813,11 +6808,48 @@ c_expr:
 //     |  array_subscripts
 
 d_expr:
-  column_path_with_star
+  ICONST
+  {
+    $$.val = $1.numVal()
+  }
+| FCONST
+  {
+    $$.val = $1.numVal()
+  }
+| SCONST
+  {
+    $$.val = tree.NewStrVal($1)
+  }
+| BCONST
+  {
+    $$.val = tree.NewBytesStrVal($1)
+  }
+| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
+| const_typename SCONST
+  {
+    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
+  }
+| interval
+  {
+    $$.val = $1.expr()
+  }
+| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
+| TRUE
+  {
+    $$.val = tree.MakeDBool(true)
+  }
+| FALSE
+  {
+    $$.val = tree.MakeDBool(false)
+  }
+| NULL
+  {
+    $$.val = tree.DNull
+  }
+| column_path_with_star
   {
     $$.val = tree.Expr($1.unresolvedName())
   }
-| a_expr_const
 | '@' iconst64
   {
     colNum := $2.int64()
@@ -6849,6 +6881,10 @@ d_expr:
   {
     $$.val = &tree.Subquery{Select: $1.selectStmt()}
   }
+| EXISTS select_with_parens
+  {
+    $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
+  }
 | ARRAY select_with_parens
   {
     $$.val = &tree.ArrayFlatten{Subquery: &tree.Subquery{Select: $2.selectStmt()}}
@@ -6871,6 +6907,15 @@ d_expr:
       t.Labels[i] = string(l)
     }
     $$.val = &t
+  }
+// Define SQL-style CASE clause.
+// - Full specification
+//      CASE WHEN a = b THEN c ... ELSE d END
+// - Implicit argument
+//      CASE a WHEN b THEN c ... ELSE d END
+| CASE case_arg when_clause_list case_default END
+  {
+    $$.val = &tree.CaseExpr{Expr: $2.expr(), Whens: $3.whens(), Else: $4.expr()}
   }
 
 // TODO(pmattis): Support this notation?
@@ -7535,17 +7580,6 @@ in_expr:
     $$.val = &tree.Tuple{Exprs: $2.exprs()}
   }
 
-// Define SQL-style CASE clause.
-// - Full specification
-//      CASE WHEN a = b THEN c ... ELSE d END
-// - Implicit argument
-//      CASE a WHEN b THEN c ... ELSE d END
-case_expr:
-  CASE case_arg when_clause_list case_default END
-  {
-    $$.val = &tree.CaseExpr{Expr: $2.expr(), Whens: $3.whens(), Else: $4.expr()}
-  }
-
 when_clause_list:
   // There must be at least one
   when_clause
@@ -7726,46 +7760,6 @@ name_list:
   }
 
 // Constants
-a_expr_const:
-  ICONST
-  {
-    $$.val = $1.numVal()
-  }
-| FCONST
-  {
-    $$.val = $1.numVal()
-  }
-| SCONST
-  {
-    $$.val = tree.NewStrVal($1)
-  }
-| BCONST
-  {
-    $$.val = tree.NewBytesStrVal($1)
-  }
-| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
-| const_typename SCONST
-  {
-    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
-  }
-| interval
-  {
-    $$.val = $1.expr()
-  }
-| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
-| TRUE
-  {
-    $$.val = tree.MakeDBool(true)
-  }
-| FALSE
-  {
-    $$.val = tree.MakeDBool(false)
-  }
-| NULL
-  {
-    $$.val = tree.DNull
-  }
-
 signed_iconst:
   ICONST
 | '+' ICONST

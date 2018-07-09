@@ -597,12 +597,23 @@ func checkResultType(typ types.T) error {
 
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
-func EvalAsOfTimestamp(
-	evalCtx *tree.EvalContext, asOf tree.AsOfClause, max hlc.Timestamp,
+func (p *planner) EvalAsOfTimestamp(
+	asOf tree.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	te, err := asOf.Expr.TypeCheck(nil, types.String)
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
+	scalarProps.Require("AS OF SYSTEM TIME", tree.RejectSpecial|tree.RejectSubqueries)
+
+	te, err := asOf.Expr.TypeCheck(&p.semaCtx, types.String)
 	if err != nil {
 		return hlc.Timestamp{}, err
+	}
+	evalCtx := p.EvalContext()
+	if !tree.IsConst(evalCtx, te) {
+		return hlc.Timestamp{}, errors.Errorf("AS OF SYSTEM TIME: only constant expressions are allowed")
 	}
 	d, err := te.Eval(evalCtx)
 	if err != nil {
@@ -695,9 +706,7 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 //
 // max is a lower bound on what the transaction's timestamp will be.
 // Used to check that the user didn't specify a timestamp in the future.
-func isAsOf(
-	stmt tree.Statement, evalCtx *tree.EvalContext, max hlc.Timestamp,
-) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -718,7 +727,7 @@ func isAsOf(
 
 		asOf = sc.From.AsOf
 	case *tree.ShowTrace:
-		return isAsOf(s.Statement, evalCtx, max)
+		return p.isAsOf(s.Statement, max)
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -728,7 +737,7 @@ func isAsOf(
 		return nil, nil
 	}
 
-	ts, err := EvalAsOfTimestamp(evalCtx, asOf, max)
+	ts, err := p.EvalAsOfTimestamp(asOf, max)
 	return &ts, err
 }
 

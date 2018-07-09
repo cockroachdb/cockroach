@@ -1169,6 +1169,18 @@ func (stmt *SetVar) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SetZoneConfig) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	e, changed := WalkExpr(v, stmt.YAMLConfig)
+	if changed {
+		newStmt := *stmt
+		ret = &newStmt
+		ret.YAMLConfig = e
+	}
+	return ret
+}
+
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *SetTracing) CopyNode() *SetTracing {
 	stmtCopy := *stmt
