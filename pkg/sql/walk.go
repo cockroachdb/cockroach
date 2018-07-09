@@ -472,9 +472,6 @@ func (v *planVisitor) visit(plan planNode) {
 			v.visit(n.plan)
 		}
 
-	case *distSQLWrapper:
-		v.visit(n.plan)
-
 	case *explainDistSQLNode:
 		v.visit(n.plan)
 
@@ -486,11 +483,6 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 		}
 		v.visit(n.source)
-
-	case *showTraceNode:
-		if n.plan != nil {
-			v.visit(n.plan)
-		}
 
 	case *showTraceReplicaNode:
 		v.visit(n.plan)
@@ -563,36 +555,32 @@ func nodeName(plan planNode) string {
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterIndexNode{}):           "alter index",
-	reflect.TypeOf(&alterTableNode{}):           "alter table",
 	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
+	reflect.TypeOf(&alterTableNode{}):           "alter table",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&cancelQueriesNode{}):        "cancel queries",
 	reflect.TypeOf(&cancelSessionsNode{}):       "cancel sessions",
 	reflect.TypeOf(&controlJobsNode{}):          "control jobs",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
+	reflect.TypeOf(&createSequenceNode{}):       "create sequence",
+	reflect.TypeOf(&createStatsNode{}):          "create statistics",
 	reflect.TypeOf(&createTableNode{}):          "create table",
 	reflect.TypeOf(&CreateUserNode{}):           "create user/role",
 	reflect.TypeOf(&createViewNode{}):           "create view",
-	reflect.TypeOf(&createSequenceNode{}):       "create sequence",
-	reflect.TypeOf(&createStatsNode{}):          "create statistics",
 	reflect.TypeOf(&delayedNode{}):              "virtual table",
 	reflect.TypeOf(&deleteNode{}):               "delete",
 	reflect.TypeOf(&distinctNode{}):             "distinct",
 	reflect.TypeOf(&dropDatabaseNode{}):         "drop database",
 	reflect.TypeOf(&dropIndexNode{}):            "drop index",
-	reflect.TypeOf(&dropTableNode{}):            "drop table",
-	reflect.TypeOf(&dropViewNode{}):             "drop view",
 	reflect.TypeOf(&dropSequenceNode{}):         "drop sequence",
+	reflect.TypeOf(&dropTableNode{}):            "drop table",
 	reflect.TypeOf(&DropUserNode{}):             "drop user/role",
-	reflect.TypeOf(&distSQLWrapper{}):           "distsql query",
+	reflect.TypeOf(&dropViewNode{}):             "drop view",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
-	reflect.TypeOf(&showTraceNode{}):            "show trace for",
-	reflect.TypeOf(&showTraceReplicaNode{}):     "replica trace",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",
-	reflect.TypeOf(&unaryNode{}):                "emptyrow",
 	reflect.TypeOf(&hookFnNode{}):               "plugin",
 	reflect.TypeOf(&indexJoinNode{}):            "index-join",
 	reflect.TypeOf(&insertNode{}):               "insert",
@@ -608,15 +596,18 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&scrubNode{}):                "scrub",
 	reflect.TypeOf(&sequenceSelectNode{}):       "sequence select",
 	reflect.TypeOf(&serializeNode{}):            "run",
-	reflect.TypeOf(&setVarNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}):    "set cluster setting",
+	reflect.TypeOf(&setVarNode{}):               "set",
 	reflect.TypeOf(&setZoneConfigNode{}):        "configure zone",
-	reflect.TypeOf(&showZoneConfigNode{}):       "show zone configuration",
-	reflect.TypeOf(&showRangesNode{}):           "showRanges",
 	reflect.TypeOf(&showFingerprintsNode{}):     "showFingerprints",
+	reflect.TypeOf(&showRangesNode{}):           "showRanges",
+	reflect.TypeOf(&showTraceNode{}):            "show trace for",
+	reflect.TypeOf(&showTraceReplicaNode{}):     "replica trace",
+	reflect.TypeOf(&showZoneConfigNode{}):       "show zone configuration",
 	reflect.TypeOf(&sortNode{}):                 "sort",
 	reflect.TypeOf(&splitNode{}):                "split",
 	reflect.TypeOf(&spoolNode{}):                "spool",
+	reflect.TypeOf(&unaryNode{}):                "emptyrow",
 	reflect.TypeOf(&unionNode{}):                "union",
 	reflect.TypeOf(&updateNode{}):               "update",
 	reflect.TypeOf(&upsertNode{}):               "upsert",

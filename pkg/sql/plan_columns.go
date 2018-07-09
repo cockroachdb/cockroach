@@ -124,8 +124,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
-	case *distSQLWrapper:
-		return getPlanColumns(n.plan, mut)
 	}
 
 	// Every other node has no columns in their results.

@@ -353,14 +353,6 @@ define Explain {
     Def   ExplainOpDef
 }
 
-# ShowTrace runs the "input" expressions in a special tracing mode and returns
-# trace results.
-[Relational]
-define ShowTrace {
-    Input Expr
-    Def   ShowTraceOpDef
-}
-
 # ShowTraceForSession returns the current session traces.
 [Relational]
 define ShowTraceForSession {

@@ -116,7 +116,7 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ExplainOp:
 		ep, err = b.buildExplain(ev)
 
-	case opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ShowTraceForSessionOp:
 		ep, err = b.buildShowTrace(ev)
 
 	case opt.RowNumberOp:
@@ -767,17 +767,8 @@ func (b *Builder) buildExplain(ev memo.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildShowTrace(ev memo.ExprView) (execPlan, error) {
-	var inputPlan exec.Node
-	if ev.Operator() == opt.ShowTraceOp {
-		input, err := b.buildRelational(ev.Child(0))
-		if err != nil {
-			return execPlan{}, err
-		}
-		inputPlan = input.root
-	}
-
 	def := ev.Private().(*memo.ShowTraceOpDef)
-	node, err := b.factory.ConstructShowTrace(def.Type, def.Compact, inputPlan)
+	node, err := b.factory.ConstructShowTrace(def.Type, def.Compact)
 	if err != nil {
 		return execPlan{}, err
 	}
