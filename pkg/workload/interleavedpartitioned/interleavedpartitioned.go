@@ -170,13 +170,18 @@ type interleavedPartitioned struct {
 	variantsPerSession   int
 	parametersPerSession int
 	queriesPerSession    int
-	eastPercent          int
 
 	// flags for setting operations
-	insertPercent int
-	queryPercent  int
-	updatePercent int
-	deletePercent int
+	insertPercent   int
+	retrievePercent int
+	updatePercent   int
+	deletePercent   int
+
+	eastPercent          int
+	east                 bool
+	insertLocalPercent   int
+	retrieveLocalPercent int
+	updateLocalPercent   int
 
 	deleteBatchSize int
 
@@ -199,12 +204,16 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.variantsPerSession, `variants-per-session`, 5, `Number of variants associated with each session`)
 		g.flags.IntVar(&g.parametersPerSession, `parameters-per-session`, 1, `Number of parameters associated with each session`)
 		g.flags.IntVar(&g.queriesPerSession, `queries-per-session`, 1, `Number of queries associated with each session`)
-		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage of sessions that are in us-east`)
-		g.flags.IntVar(&g.insertPercent, `insert-percent`, 50, `Percentage of operations that are inserts`)
-		g.flags.IntVar(&g.queryPercent, `query-percent`, 0, `Percentage of operations that are retrieval queries`)
-		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage of operations that are update queries`)
-		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage of operations that are delete queries`)
+		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage (0-100) of sessions that are in us-east`)
+		g.flags.IntVar(&g.insertPercent, `insert-percent`, 50, `Percentage (0-100) of operations that are inserts`)
+		g.flags.IntVar(&g.insertLocalPercent, `insert-local-percent`, 100, `Percentage of insert operations that are local`)
+		g.flags.IntVar(&g.retrievePercent, `retrieve-percent`, 0, `Percentage (0-100) of operations that are retrieval queries`)
+		g.flags.IntVar(&g.retrieveLocalPercent, `retrieve-local-percent`, 100, `Percentage of retrieve operations that are local`)
+		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage (0-100) of operations that are update queries`)
+		g.flags.IntVar(&g.updateLocalPercent, `update-local-percent`, 100, `Percentage of update operations that are local`)
+		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage (0-100) of operations that are delete queries`)
 		g.flags.IntVar(&g.deleteBatchSize, `delete-batch-size`, 100, `Number of rows per delete operation`)
+		g.flags.BoolVar(&g.east, `east`, true, `Is this location in the east (true) or the west (false)`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -304,7 +313,7 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.insertLocalPercent))
 			args := []interface{}{
 				sessionID,            // session_id
 				randString(rng, 100), // affiliate
@@ -399,9 +408,9 @@ func (w *interleavedPartitioned) Ops(
 			}
 			hists.Get(`insert`).Record(timeutil.Since(start))
 			return nil
-		} else if opRand < w.insertPercent+w.queryPercent { // query
+		} else if opRand < w.insertPercent+w.retrievePercent { // retrieve
 			log.Warning(context.TODO(), "querying")
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.retrieveLocalPercent))
 			args := []interface{}{
 				sessionID,
 			}
@@ -418,9 +427,9 @@ func (w *interleavedPartitioned) Ops(
 			}
 			hists.Get(`retrieve`).Record(timeutil.Since(start))
 			return nil
-		} else if opRand < w.insertPercent+w.queryPercent+w.updatePercent { // update
+		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // update
 			log.Warning(context.TODO(), "updating")
-			sessionID := w.generateSessionID(rng, randInt(rng, 0, 100))
+			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.updateLocalPercent))
 			args := []interface{}{
 				sessionID,
 			}
@@ -554,6 +563,23 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 		})
 	}
 	return rows
+}
+
+func (w *interleavedPartitioned) pickLocality(rng *rand.Rand, percent int) bool {
+	localRand := rng.Intn(100)
+	if localRand < percent {
+		return w.east
+	}
+	return !w.east
+}
+
+func (w *interleavedPartitioned) randomSessionID(rng *rand.Rand, east bool) string {
+	id := randString(rng, 98)
+	if east {
+		return fmt.Sprintf("E-%s", id)
+	}
+	return fmt.Sprintf("W-%s", id)
+
 }
 
 func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) string {
