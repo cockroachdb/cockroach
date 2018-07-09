@@ -363,6 +363,12 @@ d
 			typ:    "NOPE",
 			err:    `unsupported import format`,
 		},
+		{
+			name:   "sequences",
+			create: `i int default nextval('s')`,
+			typ:    "CSV",
+			err:    `sequence operations unsupported`,
+		},
 	}
 
 	var dataString string

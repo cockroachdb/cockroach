@@ -157,7 +157,10 @@ func MakeSimpleTableDescriptor(
 		}
 	}
 	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{CtxProvider: ctxProvider{ctx}}
+	evalCtx := tree.EvalContext{
+		CtxProvider: ctxProvider{ctx},
+		Sequence:    &importSequenceOperators{},
+	}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -177,6 +180,52 @@ func MakeSimpleTableDescriptor(
 	}
 
 	return &tableDesc, nil
+}
+
+var errSequenceOperators = errors.New("sequence operations unsupported")
+
+// Implements the tree.SequenceOperators interface.
+type importSequenceOperators struct {
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	return nil, errSequenceOperators
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
+	return errSequenceOperators
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (bool, tree.SchemaMeta, error) {
+	return false, nil, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) IncrementSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) SetSequenceValue(
+	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
+) error {
+	return errSequenceOperators
 }
 
 const csvDatabaseName = "csv"
