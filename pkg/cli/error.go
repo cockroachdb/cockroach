@@ -65,6 +65,8 @@ communicate with a secure cluster).
 			return connDropped()
 		case *net.OpError:
 			return connDropped()
+		case *roachpb.InitialHeartBeatFailedError:
+			return connDropped()
 		}
 
 		// No, it's not. Is it a plain context cancellation (i.e. timeout)?

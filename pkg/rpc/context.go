@@ -246,7 +246,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// If connection is invalid, return latest heartbeat error.
 	h := c.heartbeatResult.Load().(heartbeatResult)
 	if !h.everSucceeded {
-		return nil, errors.Wrap(h.err, "initial connection heartbeat failed")
+		return nil, roachpb.NewInitialHeartBeatFailedError(h.err)
 	}
 	return c.grpcConn, nil
 }

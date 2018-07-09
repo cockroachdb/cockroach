@@ -362,8 +362,10 @@ communicate with a secure cluster\).
 		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`Failed to connect to the node: initial connection heartbeat failed: rpc error: ` +
-				`code = Unavailable desc = all SubConns are in TransientFailure`),
+			`Failed to connect to the node: initial connection heartbeat failed: rpc ` +
+				`error: code = Unavailable desc = all SubConns are in TransientFailure, ` +
+				`latest connection error: connection error: desc = "transport: Error while dialing dial tcp .*: ` +
+				`connect: connection refused"`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.

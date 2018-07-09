@@ -706,3 +706,14 @@ func (e *IntentMissingError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &IntentMissingError{}
+
+func (e InitialHeartBeatFailedError) Error() string {
+	return fmt.Sprintf("initial connection heartbeat failed: %s", e.WrappedErr)
+}
+
+// NewInitialHeartBeatFailedError creates a new InitialHeartBeatFailedError.
+func NewInitialHeartBeatFailedError(cause error) *InitialHeartBeatFailedError {
+	return &InitialHeartBeatFailedError{
+		WrappedErr: NewError(cause),
+	}
+}

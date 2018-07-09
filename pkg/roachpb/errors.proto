@@ -243,6 +243,14 @@ message SendError {
   optional string message = 1 [(gogoproto.nullable) = false];
   reserved 2;
 }
+// An InitialHeartBeatFailedError indicates that while attempting a GRPC
+// connection to a node, we aren't successful and have never seen a
+// heartbeat over that connection before.
+message InitialHeartBeatFailedError {
+  option (gogoproto.equal) = true;
+  // This can be set to give extra information about the connection failure.
+  optional Error wrapped_err = 1;
+}
 
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.

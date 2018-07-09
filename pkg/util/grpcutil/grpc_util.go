@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -87,6 +88,9 @@ func IsClosedConnection(err error) bool {
 // https://github.com/grpc/grpc-go/issues/1443 is resolved.
 func RequestDidNotStart(err error) bool {
 	if _, ok := err.(connectionNotReadyError); ok {
+		return true
+	}
+	if _, ok := err.(roachpb.InitialHeartBeatFailedError); ok {
 		return true
 	}
 	s, ok := status.FromError(err)

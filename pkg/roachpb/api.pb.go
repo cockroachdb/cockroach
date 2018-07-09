@@ -141,6 +141,7 @@
 		ConditionFailedError
 		LeaseRejectedError
 		SendError
+		InitialHeartBeatFailedError
 		AmbiguousResultError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
