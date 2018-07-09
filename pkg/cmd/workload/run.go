@@ -111,8 +111,10 @@ func cmdHelper(
 
 	return handleErrs(func(cmd *cobra.Command, args []string) error {
 		if h, ok := gen.(workload.Hookser); ok {
-			if err := h.Hooks().Validate(); err != nil {
-				return err
+			if h.Hooks().Validate != nil {
+				if err := h.Hooks().Validate(); err != nil {
+					return errors.Wrapf(err, "could not validate")
+				}
 			}
 		}
 

@@ -278,6 +278,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 	return []workload.Table{sessionsTable, customerTable, devicesTable, variantsTable, parametersTable, queriesTable}
 }
 
+// Ops implements the Opser interface.
 func (w *interleavedPartitioned) Ops(
 	urls []string, reg *workload.HistogramRegistry,
 ) (workload.QueryLoad, error) {
