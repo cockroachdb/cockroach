@@ -2257,8 +2257,17 @@ func TestMVCCInitPut(t *testing.T) {
 		t.Fatalf("unexpected error %T", e)
 	}
 
-	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
-		value, _, err := MVCCGet(ctx, engine, testKey1, ts, true, nil)
+	// Ensure that the timestamps were correctly updated.
+	for _, check := range []struct {
+		ts, expTS hlc.Timestamp
+	}{
+		{ts: hlc.Timestamp{Logical: 1}, expTS: hlc.Timestamp{Logical: 1}},
+		{ts: hlc.Timestamp{Logical: 2}, expTS: hlc.Timestamp{Logical: 2}},
+		// If we're checking the future wall time case, the rewrite after delete
+		// will be present.
+		{ts: hlc.Timestamp{WallTime: 1}, expTS: hlc.Timestamp{Logical: 5}},
+	} {
+		value, _, err := MVCCGet(ctx, engine, testKey1, check.ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2266,15 +2275,8 @@ func TestMVCCInitPut(t *testing.T) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				value1.RawBytes, value.RawBytes)
 		}
-		// Ensure that the timestamp didn't get updated.
-		expTS := (hlc.Timestamp{Logical: 1})
-		if ts.WallTime != 0 {
-			// If we're checking the future wall time case, the rewrite after delete
-			// will be present.
-			expTS.Logical = 5
-		}
-		if value.Timestamp != expTS {
-			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, expTS)
+		if value.Timestamp != check.expTS {
+			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, check.expTS)
 		}
 	}
 
