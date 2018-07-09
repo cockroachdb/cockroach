@@ -408,3 +408,81 @@ func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	tp.epochBumpedLocked()
 	require.Equal(t, 0, tp.outstandingWritesLen())
 }
+
+// TestTxnPipelinerMaxBatchSize tests that batches that contain more requests
+// than allowed by the maxBatchSize setting will not be pipelined.
+func TestTxnPipelinerMaxBatchSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tp, mockSender := makeMockTxnPipeliner()
+
+	// Set maxBatchSize limit to 1.
+	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 1)
+
+	txn := makeTxnProto()
+	key, key2 := roachpb.Key("a"), roachpb.Key("c")
+
+	// Batch below limit.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 2, len(ba.Requests))
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(context.Background(), ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, 1, tp.outstandingWritesLen())
+
+	// Batch above limit.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key2}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 3, len(ba.Requests))
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[2].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(context.Background(), ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, 0, tp.outstandingWritesLen())
+
+	// Increase maxBatchSize limit to 2.
+	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 2)
+
+	// Same batch now below limit.
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 2, len(ba.Requests))
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(context.Background(), ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, 2, tp.outstandingWritesLen())
+}
