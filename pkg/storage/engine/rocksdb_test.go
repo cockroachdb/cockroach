@@ -1431,7 +1431,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				err := db.IngestExternalFiles(context.Background(), []string{filename}, true)
+				err = db.IngestExternalFiles(context.Background(), []string{filename}, true)
 				if err != nil {
 					b.Fatal(err)
 				}
