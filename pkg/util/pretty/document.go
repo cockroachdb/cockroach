@@ -45,12 +45,13 @@ type Doc interface {
 	isDoc()
 }
 
-func (text) isDoc()   {}
-func (line) isDoc()   {}
-func (nilDoc) isDoc() {}
-func (concat) isDoc() {}
-func (nest) isDoc()   {}
-func (union) isDoc()  {}
+func (text) isDoc()      {}
+func (line) isDoc()      {}
+func (softbreak) isDoc() {}
+func (nilDoc) isDoc()    {}
+func (concat) isDoc()    {}
+func (nest) isDoc()      {}
+func (union) isDoc()     {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -75,6 +76,23 @@ type line struct{}
 
 // Line is the LINE constructor.
 var Line line
+
+// softbreak represents SOFTBREAK :: DOC -- an invisible space between
+// words that tries to break the text across lines.
+//
+// For example, text "hello" <> softbreak <> text "world"
+// flattens to "helloworld" (one word) but splits across lines as:
+//     hello
+//     world
+//
+// This is a common extension to Wadler's printer.
+//
+// Idea borrowed from Daniel Mendler's printer at
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+type softbreak struct{}
+
+// SoftBreak is the softbreak constructor.
+var SoftBreak softbreak
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
@@ -133,6 +151,8 @@ func flatten(d Doc) Doc {
 		return d
 	case line:
 		return textSpace
+	case softbreak:
+		return Nil
 	case union:
 		return flatten(t.x)
 	default:
