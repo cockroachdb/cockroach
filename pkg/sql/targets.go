@@ -90,7 +90,7 @@ func (s *renderNode) equivalentRenders(i, j int) bool {
 }
 
 // isRenderEquivalent is a helper function for equivalentRenders() and
-// addOrMergeRenders(). Do not use directly.
+// addOrReuseRenders(). Do not use directly.
 func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 	otherExprStr := s.renderStrings[j]
 	// otherExprStr may be the empty string if the render columns were reset.
@@ -117,7 +117,7 @@ func (s *renderNode) addOrReuseRender(
 		// already so that comparison occurs after replacing column names
 		// to IndexedVars.
 		for j := range s.render {
-			if s.isRenderEquivalent(exprStr, j) && s.render[j].ResolvedType() == col.Typ {
+			if s.isRenderEquivalent(exprStr, j) && types.EqualTypes(s.render[j].ResolvedType(), col.Typ) {
 				return j
 			}
 		}

@@ -117,6 +117,34 @@ var (
 	FamPlaceholder T = TPlaceholder{}
 )
 
+// EqualTypes returns true if types x and y are equal.
+func EqualTypes(x, y T) bool {
+	switch t := x.(type) {
+	case TTuple:
+		// Go does not allow comparison of structs containing slices using ==,
+		// so we need to handle tuples separately.
+		if u, ok := y.(TTuple); ok {
+			if len(t.Types) != len(u.Types) || len(t.Labels) != len(u.Labels) {
+				return false
+			}
+			for i := 0; i < len(t.Types); i++ {
+				if !EqualTypes(t.Types[i], u.Types[i]) {
+					return false
+				}
+			}
+			for i := 0; i < len(t.Labels); i++ {
+				if t.Labels[i] != u.Labels[i] {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	default:
+		return x == y
+	}
+}
+
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
 type tUnknown struct{}
