@@ -87,6 +87,9 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 	case opt.RowNumberOp:
 		b.buildRowNumberProps(ev)
 
+	case opt.ZipOp:
+		b.buildZipProps(ev)
+
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around the Explain (it's not capable
@@ -217,4 +220,11 @@ func (b *rulePropsBuilder) buildRowNumberProps(ev memo.ExprView) {
 	// not used as an ordering column. The new row number column cannot be pruned
 	// without adding an additional Project operator, so don't add it to the set.
 	relational.Rule.PruneCols = inputProps.Rule.PruneCols.Difference(ordering)
+}
+
+func (b *rulePropsBuilder) buildZipProps(ev memo.ExprView) {
+	relational := ev.Logical().Relational
+
+	// All columns can potentially be pruned from the Zip operator.
+	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
 }
