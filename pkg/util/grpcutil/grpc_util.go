@@ -89,6 +89,9 @@ func RequestDidNotStart(err error) bool {
 	if _, ok := err.(connectionNotReadyError); ok {
 		return true
 	}
+	if _, ok := err.(netutil.InitialHeartbeatFailedError); ok {
+		return true
+	}
 	s, ok := status.FromError(err)
 	if !ok {
 		// This is a non-gRPC error; assume nothing.
