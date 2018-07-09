@@ -111,7 +111,7 @@ type RaftMessageHandler interface {
 
 // GossipAddressResolver is a thin wrapper around gossip's GetNodeIDAddress
 // that allows its return value to be used as the net.Addr interface.
-func GossipAddressResolver(gossip *gossip.Gossip) nodedialer.NodeAddressResolver {
+func GossipAddressResolver(gossip *gossip.Gossip) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		return gossip.GetNodeIDAddress(nodeID)
 	}
@@ -150,12 +150,12 @@ type RaftTransport struct {
 	log.AmbientContext
 	st *cluster.Settings
 
-	resolver   nodedialer.NodeAddressResolver
+	resolver   nodedialer.AddressResolver
 	rpcContext *rpc.Context
 
 	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
 	stats    syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
-	dialer   *nodedialer.NodeDialer
+	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
 
@@ -172,7 +172,7 @@ func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
-	resolver nodedialer.NodeAddressResolver,
+	resolver nodedialer.AddressResolver,
 	grpcServer *grpc.Server,
 	rpcContext *rpc.Context,
 ) *RaftTransport {
@@ -182,7 +182,7 @@ func NewRaftTransport(
 
 		resolver:   resolver,
 		rpcContext: rpcContext,
-		dialer:     nodedialer.NewNodeDialer(rpcContext, resolver),
+		dialer:     nodedialer.New(rpcContext, resolver),
 	}
 
 	if grpcServer != nil {
@@ -556,7 +556,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
 func (t *RaftTransport) startProcessNewQueue(
 	ctx context.Context, toNodeID roachpb.NodeID, stats *raftTransportStats,
 ) bool {
-	conn, err := t.dialer.DialNode(ctx, toNodeID)
+	conn, err := t.dialer.Dial(ctx, toNodeID)
 	if err != nil {
 		// DialNode already logs sufficiently, so just return after deleting the
 		// queue.
@@ -626,7 +626,7 @@ func (t *RaftTransport) SendSnapshot(
 	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
-	conn, err := t.dialer.DialNode(ctx, nodeID)
+	conn, err := t.dialer.Dial(ctx, nodeID)
 	if err != nil {
 		return err
 	}

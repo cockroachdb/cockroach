@@ -38,32 +38,30 @@ type wrappedBreaker struct {
 	log.EveryN
 }
 
-// A NodeAddressResolver translates NodeIDs into addresses.
-type NodeAddressResolver func(roachpb.NodeID) (net.Addr, error)
+// An AddressResolver translates NodeIDs into addresses.
+type AddressResolver func(roachpb.NodeID) (net.Addr, error)
 
-// A NodeDialer wraps an *rpc.Context for dialing based on node IDs. For each node,
+// A Dialer wraps an *rpc.Context for dialing based on node IDs. For each node,
 // it maintains a circuit breaker that prevents rapid connection attempts and
 // provides hints to the callers on whether to log the outcome of the operation.
-type NodeDialer struct {
+type Dialer struct {
 	rpcContext *rpc.Context
-	resolver   NodeAddressResolver
+	resolver   AddressResolver
 
 	breakers syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
 }
 
-// NewNodeDialer initializes a NodeDialer.
-func NewNodeDialer(rpcContext *rpc.Context, resolver NodeAddressResolver) *NodeDialer {
-	return &NodeDialer{
+// New initializes a Dialer.
+func New(rpcContext *rpc.Context, resolver AddressResolver) *Dialer {
+	return &Dialer{
 		rpcContext: rpcContext,
 		resolver:   resolver,
 	}
 }
 
-// DialNode returns a grpc connection to the given node. It logs whenever the
+// Dial returns a grpc connection to the given node. It logs whenever the
 // node first becomes unreachable or reachable.
-func (n *NodeDialer) DialNode(
-	ctx context.Context, nodeID roachpb.NodeID,
-) (_ *grpc.ClientConn, err error) {
+func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.ClientConn, err error) {
 	breaker := n.getBreaker(nodeID)
 	// If this is the first time connecting, or if connections have been failing repeatedly,
 	// consider logging.
@@ -102,11 +100,11 @@ func (n *NodeDialer) DialNode(
 // GetCircuitBreaker retrieves the circuit breaker for connections to the given
 // node. The breaker should not be mutated as this affects all connections
 // dialing to that node through this NodeDialer.
-func (n *NodeDialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
+func (n *Dialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	return n.getBreaker(nodeID).Breaker
 }
 
-func (n *NodeDialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
+func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 	value, ok := n.breakers.Load(int64(nodeID))
 	if !ok {
 		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(), EveryN: log.Every(logPerNodeFailInterval)}
