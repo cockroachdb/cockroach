@@ -137,6 +137,7 @@ define VALID_VARS
   UI_TS_CCL
   UI_TS_OSS
   UNAME
+  USE_ROCKSDB_ASSERTIONS
   WEBPACK
   WEBPACK_DASHBOARD
   WEBPACK_DEV_SERVER
@@ -173,7 +174,6 @@ define VALID_VARS
   term-reset
   testbins
   use-msan
-  use-rocksdb-assertions
   use-stdmalloc
   xcmake-flags
   xconfigure-flags
