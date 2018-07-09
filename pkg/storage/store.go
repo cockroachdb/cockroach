@@ -25,6 +25,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 
 	"github.com/coreos/etcd/raft"
@@ -556,6 +557,7 @@ type StoreConfig struct {
 	NodeLiveness *NodeLiveness
 	StorePool    *StorePool
 	Transport    *RaftTransport
+	NodeDialer   *nodedialer.Dialer
 	RPCContext   *rpc.Context
 
 	// SQLExecutor is used by the store to execute SQL statements.

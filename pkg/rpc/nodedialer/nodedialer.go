@@ -62,6 +62,9 @@ func New(rpcContext *rpc.Context, resolver AddressResolver) *Dialer {
 // Dial returns a grpc connection to the given node. It logs whenever the
 // node first becomes unreachable or reachable.
 func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.ClientConn, err error) {
+	if n == nil {
+		return nil, errors.New("no node dialer configured")
+	}
 	breaker := n.getBreaker(nodeID)
 	// If this is the first time connecting, or if connections have been failing repeatedly,
 	// consider logging.
@@ -95,6 +98,27 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	}
 	breaker.Success()
 	return conn, nil
+}
+
+// ConnHealth returns nil if we have an open connection to the given node
+// that succeeded on its most recent heartbeat. See the method of the same
+// name on rpc.Context for more details.
+func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
+	if n == nil {
+		return errors.New("no node dialer configured")
+	}
+	addr, err := n.resolver(nodeID)
+	if err != nil {
+		return err
+	}
+	// TODO(bdarnell): GRPCDial should detect local addresses and return
+	// a dummy connection instead of requiring callers to do this check.
+	if n.rpcContext.GetLocalInternalServerForAddr(addr.String()) != nil {
+		// The local server is always considered healthy.
+		return nil
+	}
+	conn := n.rpcContext.GRPCDial(addr.String())
+	return conn.Health()
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the given

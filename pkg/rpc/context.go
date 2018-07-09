@@ -257,6 +257,13 @@ func (c *Connection) setInitialHeartbeatDone() {
 	})
 }
 
+// Health returns an error indicating the success or failure of the
+// connection's latest heartbeat. Returns ErrNotHeartbeated if the
+// first heartbeat has not completed.
+func (c *Connection) Health() error {
+	return c.heartbeatResult.Load().(heartbeatResult).err
+}
+
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	*base.Config
@@ -548,7 +555,7 @@ func (ctx *Context) ConnHealth(target string) error {
 		return nil
 	}
 	conn := ctx.GRPCDial(target)
-	return conn.heartbeatResult.Load().(heartbeatResult).err
+	return conn.Health()
 }
 
 func (ctx *Context) runHeartbeat(

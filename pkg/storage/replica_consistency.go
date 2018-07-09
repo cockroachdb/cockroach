@@ -177,15 +177,10 @@ type ConsistencyCheckResult struct {
 func (r *Replica) collectChecksumFromReplica(
 	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
 ) (CollectChecksumResponse, error) {
-	addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
-	if err != nil {
-		return CollectChecksumResponse{}, errors.Wrapf(err, "could not resolve node ID %d",
-			replica.NodeID)
-	}
-	conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID)
 	if err != nil {
 		return CollectChecksumResponse{},
-			errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr)
+			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)
 	}
 	client := NewConsistencyClient(conn)
 	req := &CollectChecksumRequest{
