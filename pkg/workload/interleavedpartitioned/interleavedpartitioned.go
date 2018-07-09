@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,6 +33,11 @@ import (
 )
 
 const (
+	zoneLocationsStmt = `
+UPSERT INTO system.locations VALUES
+	('zone', 'us-east1-b', 33.0641249, -80.0433347),
+	('zone', 'us-west1-b', 45.6319052, -121.2010282)
+`
 	sessionSchema = `
 (
 	session_id STRING(100) PRIMARY KEY,
@@ -474,6 +480,29 @@ func (w *interleavedPartitioned) Ops(
 	}
 
 	return ql, nil
+}
+
+// Hooks implements the Hookser interface.
+func (w *interleavedPartitioned) Hooks() workload.Hooks {
+	return workload.Hooks{
+		PreLoad: func(db *gosql.DB) error {
+			log.Warning(context.TODO(), "Preload")
+			if _, err := db.Exec(zoneLocationsStmt); err != nil {
+				return err
+			}
+			if _, err := db.Exec(
+				"ALTER PARTITION west OF TABLE sessions EXPERIMENTAL CONFIGURE ZONE 'experimental_lease_preferences: [[+zone=us-west1-b]]'",
+			); err != nil {
+				return errors.Wrapf(err, "could not set zone for partition east")
+			}
+			if _, err := db.Exec(
+				"ALTER PARTITION east OF TABLE sessions EXPERIMENTAL CONFIGURE ZONE 'experimental_lease_preferences: [[+zone=us-east4-b]]'",
+			); err != nil {
+				return errors.Wrapf(err, "could not set zone for partition west")
+			}
+			return nil
+		},
+	}
 }
 
 func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
