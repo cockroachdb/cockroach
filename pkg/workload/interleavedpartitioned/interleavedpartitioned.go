@@ -451,19 +451,20 @@ func (w *interleavedPartitioned) Ops(
 			_, err = updateStatement.ExecContext(ctx, randString(rng, 20), sessionID)
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return err
+		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // delete
+			log.Warning(context.TODO(), "deleting")
+			start := timeutil.Now()
+			deleteStatement, err := db.Prepare(deleteQuery)
+			if err != nil {
+				return err
+			}
+			_, err = deleteStatement.ExecContext(ctx, w.deleteBatchSize)
+			if err != nil {
+				return err
+			}
+			hists.Get(`delete`).Record(timeutil.Since(start))
 		}
-		// else case, delete
-		log.Warning(context.TODO(), "deleting")
-		start := timeutil.Now()
-		deleteStatement, err := db.Prepare(deleteQuery)
-		if err != nil {
-			return err
-		}
-		_, err = deleteStatement.ExecContext(ctx, w.deleteBatchSize)
-		if err != nil {
-			return err
-		}
-		hists.Get(`delete`).Record(timeutil.Since(start))
+
 		return nil
 	}
 
@@ -498,13 +499,10 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 ) func(int) [][]interface{} {
 	return func(sessionRowIdx int) [][]interface{} {
 		log.Warningf(context.TODO(), "inserting into child %d, sessionRowIdx %d. len(w.sessionIDs) = %d", rngFactor, sessionRowIdx, len(w.sessionIDs))
-		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
-		if sessionRowIdx >= len(w.sessionIDs) {
-			sessionRowIdx = randInt(rng, 0, len(w.sessionIDs)-1)
-			// log.Warningf(context.TODO(), "len(w.sessionIDs): %d, w.sessionIDs[len] = %s", len(w.sessionIDs), w.sessionIDs[sessionRowIdx])
-		}
-		sessionID := w.sessionIDs[sessionRowIdx]
+		sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
+		sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
+		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
 		var rows [][]interface{}
 		for i := 0; i < nPerBatch; i++ {
 			rows = append(rows, []interface{}{
@@ -522,10 +520,8 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]interface{} {
 	log.Warningf(context.TODO(), "inserting into devices, sessionRowIdx %d", sessionRowIdx)
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
-	if sessionRowIdx >= len(w.sessionIDs) {
-		sessionRowIdx = randInt(rng, 0, len(w.sessionIDs)-1)
-	}
-	sessionID := w.sessionIDs[sessionRowIdx]
+	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
+	sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	var rows [][]interface{}
 	for i := 0; i < w.devicesPerSession; i++ {
@@ -549,10 +545,8 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 	log.Warningf(context.TODO(), "inserting into queries, sessionRowIdx %d", sessionRowIdx)
 	var rows [][]interface{}
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
-	if sessionRowIdx >= len(w.sessionIDs) {
-		sessionRowIdx = randInt(rng, 0, len(w.sessionIDs)-1)
-	}
-	sessionID := w.sessionIDs[sessionRowIdx]
+	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
+	sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	for i := 0; i < w.queriesPerSession; i++ {
 		rows = append(rows, []interface{}{
@@ -579,7 +573,6 @@ func (w *interleavedPartitioned) randomSessionID(rng *rand.Rand, east bool) stri
 		return fmt.Sprintf("E-%s", id)
 	}
 	return fmt.Sprintf("W-%s", id)
-
 }
 
 func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) string {
