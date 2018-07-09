@@ -249,6 +249,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		needed,
 		def.Constraint,
 		def.HardLimit,
+		def.Reverse,
 		reqOrder,
 	)
 	if err != nil {

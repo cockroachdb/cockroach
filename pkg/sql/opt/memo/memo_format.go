@@ -276,7 +276,9 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		} else {
 			fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
 		}
-
+		if t.Reverse {
+			fmt.Fprintf(f.buf, ",rev")
+		}
 		if mode == formatMemo {
 			if tab.ColumnCount() != t.Cols.Len() {
 				fmt.Fprintf(f.buf, ",cols=%s", t.Cols)

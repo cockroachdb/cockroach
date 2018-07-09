@@ -64,6 +64,7 @@ type Factory interface {
 		needed ColumnOrdinalSet,
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
+		reverse bool,
 		reqOrder sqlbase.ColumnOrdering,
 	) (Node, error)
 
