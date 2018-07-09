@@ -39,7 +39,7 @@ func TestRapidRestarts(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	cfg := readConfigFromFlags()
+	cfg := ReadConfigFromFlags()
 	RunLocal(t, func(t *testing.T) {
 		deadline := timeutil.Now().Add(cfg.Duration)
 		// In a loop, bootstrap a new node and immediately kill it. This is more

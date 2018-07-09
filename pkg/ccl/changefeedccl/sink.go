@@ -34,13 +34,6 @@ type Sink interface {
 	Close() error
 }
 
-// testKafkaProducersHook is used as a Kafka mock instead of an external
-// connection. The map key is the bootstrap servers part of the sink URI, so use
-// it in a test with something like `INTO 'kafka://<map key>'`. If this map is
-// non-nil, it's guaranteed that no external Kafka connections will be
-// attempted.
-var testKafkaProducersHook map[string]sarama.SyncProducer
-
 type kafkaSink struct {
 	// TODO(dan): This uses the shopify kafka producer library because the
 	// official confluent one depends on librdkafka and it didn't seem worth it
@@ -60,13 +53,6 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 	sink := &kafkaSink{
 		kafkaTopicPrefix: kafkaTopicPrefix,
 		topicsSeen:       make(map[string]struct{}),
-	}
-
-	if testKafkaProducersHook != nil {
-		if sink.SyncProducer = testKafkaProducersHook[bootstrapServers]; sink.SyncProducer == nil {
-			return nil, errors.Errorf(`no test producer: %s`, bootstrapServers)
-		}
-		return sink, nil
 	}
 
 	config := sarama.NewConfig()
