@@ -33,6 +33,7 @@ message IOFileFormat {
   optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
   optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
+  optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
 
   enum Compression {
     Auto = 0;
@@ -84,4 +85,12 @@ message PgCopyOptions {
   optional int32 delimiter = 1 [(gogoproto.nullable) = false];
   // null is the NULL value (NULL)
   optional string null = 2 [(gogoproto.nullable) = false];
+  // maxRowSize is the maximum row size
+  optional int32 maxRowSize = 3 [(gogoproto.nullable) = false];
+}
+
+// PgDumpOptions describe the format of postgresql's pg_dump.
+message PgDumpOptions {
+  // maxRowSize is the maximum row size
+  optional int32 maxRowSize = 1 [(gogoproto.nullable) = false];
 }
