@@ -164,6 +164,7 @@ func newInterleavedReaderJoiner(
 
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.joinerBase.init(
+		nil, /* self */
 		flowCtx,
 		processorID,
 		irj.tables[0].post.outputTypes,
@@ -401,7 +402,9 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 
 	irj.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, irj.out.output)
-	sendTxnCoordMetaMaybe(irj.flowCtx.txn, irj.out.output)
+	if txnMeta := getTxnCoordMeta(irj.flowCtx.txn); txnMeta != nil {
+		irj.out.output.Push(nil /* row */, &ProducerMetadata{TxnMeta: txnMeta})
+	}
 	irj.out.Close()
 }
 

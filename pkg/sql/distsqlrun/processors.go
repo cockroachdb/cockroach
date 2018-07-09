@@ -737,6 +737,7 @@ var procNameToLogTag = map[string]string{
 	distinctProcName:                "distinct",
 	hashAggregatorProcName:          "hashAgg",
 	hashJoinerProcName:              "hashJoiner",
+	indexJoinerProcName:             "indexJoiner",
 	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
 	joinReaderProcName:              "joinReader",
 	mergeJoinerProcName:             "mergeJoiner",
@@ -934,6 +935,10 @@ func newProcessor(
 	if core.JoinReader != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
+		}
+		if len(core.JoinReader.LookupColumns) == 0 {
+			return newIndexJoiner(
+				flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 		}
 		return newJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 	}
