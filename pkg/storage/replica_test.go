@@ -1738,6 +1738,16 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, false, false, false, false, false,
 			},
 		},
+		// Existing key at 09, ten puts, expect first nine puts are blind.
+		{
+			roachpb.Key("09"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, false,
+			},
+		},
 		// No existing key, ten puts + inc + ten cputs.
 		{
 			nil,

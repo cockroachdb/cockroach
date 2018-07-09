@@ -5644,7 +5644,11 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: maxKey})
+	iter := batch.NewIterator(engine.IterOptions{
+		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
+		// need to set it to the key after maxKey.
+		UpperBound: maxKey.Next(),
+	})
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,
