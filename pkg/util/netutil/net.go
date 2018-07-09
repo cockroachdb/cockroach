@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"fmt"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -157,5 +158,23 @@ func IsClosedConnection(err error) bool {
 func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) {
 		log.Fatal(context.TODO(), err)
+	}
+}
+
+// InitialHeartBeatFailedError indicates that while attempting a GRPC
+// connection to a node, we aren't successful and have never seen a
+// heartbeat over that connection before.
+type InitialHeartBeatFailedError struct {
+	WrappedErr error
+}
+
+func (e InitialHeartBeatFailedError) Error() string {
+	return fmt.Sprintf("initial connection heartbeat failed: %s", e.WrappedErr)
+}
+
+// NewInitialHeartBeatFailedError creates a new InitialHeartBeatFailedError.
+func NewInitialHeartBeatFailedError(cause error) *InitialHeartBeatFailedError {
+	return &InitialHeartBeatFailedError{
+		WrappedErr: cause,
 	}
 }
