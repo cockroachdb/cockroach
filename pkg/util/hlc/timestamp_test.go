@@ -72,3 +72,19 @@ func TestTimestampPrev(t *testing.T) {
 		}
 	}
 }
+
+func TestAsOfSystemTime(t *testing.T) {
+	testCases := []struct {
+		ts  Timestamp
+		exp string
+	}{
+		{makeTS(145, 0), "145.0000000000"},
+		{makeTS(145, 123), "145.0000000123"},
+		{makeTS(145, 1123456789), "145.1123456789"},
+	}
+	for i, c := range testCases {
+		if exp := c.ts.AsOfSystemTime(); exp != c.exp {
+			t.Errorf("%d: expected %s; got %s", i, c.exp, exp)
+		}
+	}
+}
