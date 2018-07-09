@@ -150,7 +150,6 @@ type RaftTransport struct {
 	log.AmbientContext
 	st *cluster.Settings
 
-	resolver   nodedialer.AddressResolver
 	rpcContext *rpc.Context
 
 	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
@@ -165,14 +164,15 @@ func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, resolver, nil, nil)
+	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st,
+		nodedialer.New(nil, resolver), nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
-	resolver nodedialer.AddressResolver,
+	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	rpcContext *rpc.Context,
 ) *RaftTransport {
@@ -180,9 +180,8 @@ func NewRaftTransport(
 		AmbientContext: ambient,
 		st:             st,
 
-		resolver:   resolver,
 		rpcContext: rpcContext,
-		dialer:     nodedialer.New(rpcContext, resolver),
+		dialer:     dialer,
 	}
 
 	if grpcServer != nil {
