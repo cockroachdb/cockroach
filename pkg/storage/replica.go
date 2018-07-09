@@ -2649,8 +2649,6 @@ func (r *Replica) limitTxnMaxTimestamp(
 // maybeWatchForMerge checks whether a merge of this replica into its left
 // neighbor is in its critical phase and, if so, arranges to block all requests
 // until the merge completes.
-//
-// TODO(benesch): Ensure this is called in the lease acquisition path.
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -2798,7 +2796,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
-	if result.Local.DetachSetMerging() {
+	if result.Local.DetachMaybeWatchForMerge() {
 		if err := r.maybeWatchForMerge(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
