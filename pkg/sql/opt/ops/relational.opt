@@ -64,8 +64,8 @@ define Select {
 # synthesized output columns.
 [Relational]
 define Project {
-    Input           Expr
-    Projections     Expr
+    Input       Expr
+    Projections Expr
 }
 
 # InnerJoin creates a result set that combines columns from its left and right
@@ -366,4 +366,26 @@ define ShowTraceForSession {
 define RowNumber {
     Input    Expr
     Def      RowNumberDef
+}
+
+# Zip represents a functional zip over generators a,b,c, which returns tuples of
+# values from a,b,c picked "simultaneously". NULLs are used when a generator is
+# "shorter" than another. In SQL, these generators can be either a generator
+# function such as generate_series(), or a scalar function such as
+# upper(). For example, consider this query:
+#
+#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#
+# It is equivalent to (Zip [(Function generate_series), (Function upper)]).
+# It produces:
+#
+#     generate_series | upper
+#    -----------------+-------
+#                   0 | ABC
+#                   1 | NULL
+#
+[Relational]
+define Zip {
+    Elems ExprList
+    Cols  ColList
 }
