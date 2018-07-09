@@ -878,9 +878,17 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
+stress: ## Run tests under stress.
+stress stressrace: override GOFLAGS += -exec 'stress $(STRESSFLAGS)'
+stress stressrace: override TESTFLAGS += -v # necessary for interactive output from `stress`
+
+stressrace: ## Run tests under stress with the race detector enabled.
+stressrace: override GOFLAGS += -race
+stressrace: TESTTIMEOUT := $(RACETIMEOUT)
+
 .PHONY: check test testshort testrace testlogic testccllogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort:
+check test testshort testrace bench benchshort stress stressrace:
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testlogic: ## Run SQL Logic Tests.
@@ -901,24 +909,6 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow:
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-
-stressrace: override GOFLAGS += -race
-stressrace: TESTTIMEOUT := $(RACETIMEOUT)
-
-# Beware! This target is complicated because it needs to handle complexity:
-# - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
-# github.com/cockroachdb/cockroach/gossip), and this target needs to create
-# the test binary in the correct location and `cd` to the correct directory.
-# This is handled by having `go list` produce the command line.
-# - PKG may also be recursive (e.g. './pkg/...'). This is also handled by piping
-# through `go list`.
-# - PKG may not contain any tests! This is handled with an `if` statement that
-# checks for the presence of a test binary before running `stress` on it.
-.PHONY: stress stressrace
-stress: ## Run tests under stress.
-stressrace: ## Run tests under stress with the race detector enabled.
-stress stressrace:
-	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
 upload-coverage: bin/.bootstrap
