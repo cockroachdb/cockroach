@@ -149,15 +149,21 @@ t      c_idx    true    4    d       N/A        true     false
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/b_idx/2/1/c/d -> /3/4
 output row: [1 2 3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@c_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@c_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/c_idx/3 -> /1/2/4
@@ -168,8 +174,11 @@ output row: [1 2 3 4]
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, d FROM t@d_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/d_idx/4/1/b -> /2
@@ -178,8 +187,11 @@ output row: [1 2 4]
 statement ok
 CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b FROM t@a_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t@a_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_idx/1/b -> /2
@@ -192,8 +204,11 @@ INSERT INTO t (a) VALUES (2)
 statement ok
 INSERT INTO t VALUES (3)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/b_idx/NULL/2 -> NULL
@@ -365,8 +380,11 @@ INSERT INTO dt VALUES
   ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
@@ -374,15 +392,21 @@ fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
 output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
 
+statement ok
+SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM dt WHERE b < '2015-08-29'::date]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453+00:00'
 output row: ['2015-08-25']
 
+statement ok
+SET tracing = on,kv,results; SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
@@ -442,8 +466,11 @@ INSERT INTO c (a) VALUES(2)
 statement ok
 INSERT INTO c VALUES(3)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM c@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM c@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /c/b_idx/NULL/2 -> NULL

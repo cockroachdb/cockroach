@@ -15,8 +15,11 @@ CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f
 statement ok
 INSERT INTO t VALUES (1, 9)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/f -> /9
@@ -28,8 +31,11 @@ ALTER TABLE t ADD b INT
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
+statement ok
+SET tracing = on,kv,results; SELECT b FROM t@foo; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM t@foo]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/foo/NULL -> /1
@@ -47,8 +53,11 @@ ALTER TABLE t DROP CONSTRAINT check_a
 statement ok
 DROP INDEX foo CASCADE
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/f -> /9
@@ -61,8 +70,11 @@ output row: [3 9 2 1]
 statement ok
 ALTER TABLE t DROP b, DROP c
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/f -> /9
@@ -108,8 +120,11 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1,1)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1 -> NULL
@@ -130,8 +145,11 @@ CREATE INDEX bar ON t (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@foo]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/foo/1/1 -> NULL
@@ -140,8 +158,11 @@ output row: [1 1]
 statement ok
 INSERT INTO t VALUES (2,1)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@foo]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/foo/1/1 -> NULL
@@ -171,8 +192,11 @@ statement ok
 CREATE INDEX b_asc ON t (b ASC, c DESC)
 
 # index b_desc is well formed and column c is scanned using the primary index.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@b_desc; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_desc]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/b_desc/2/2 -> NULL

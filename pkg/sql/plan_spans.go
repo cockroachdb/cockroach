@@ -67,13 +67,9 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		return collectSpans(params, n.plan)
 	case *distinctNode:
 		return collectSpans(params, n.plan)
-	case *distSQLWrapper:
-		return collectSpans(params, n.plan)
 	case *explainDistSQLNode:
 		return collectSpans(params, n.plan)
 	case *explainPlanNode:
-		return collectSpans(params, n.plan)
-	case *showTraceNode:
 		return collectSpans(params, n.plan)
 	case *limitNode:
 		return collectSpans(params, n.plan)

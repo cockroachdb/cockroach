@@ -260,7 +260,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	switch ev.Operator() {
-	case opt.ScanOp, opt.IndexJoinOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ScanOp, opt.IndexJoinOp, opt.ShowTraceForSessionOp:
 		formatter := ev.mem.makeExprFormatter(&buf)
 		formatter.formatPrivate(ev.Private(), formatNormal)
 	}

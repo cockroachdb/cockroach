@@ -522,6 +522,7 @@ func (sc *SchemaChanger) distBackfill(
 				func(ts hlc.Timestamp) {
 					_ = sc.clock.Update(ts)
 				},
+				evalCtx.Tracing,
 			)
 			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
@@ -597,6 +598,7 @@ func runSchemaChangesInTxn(
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
+	traceKV bool,
 ) error {
 	if len(tableDesc.DrainingNames) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
@@ -627,13 +629,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !columnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, txn, tableDesc); err != nil {
+				if err := indexBackfillInTxn(ctx, txn, tableDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -648,13 +650,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc); err != nil {
+				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -678,6 +680,7 @@ func columnBackfillInTxn(
 	tc *TableCollection,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
+	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
 	if tableDesc.Adding() {
@@ -714,7 +717,9 @@ func columnBackfillInTxn(
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
 		var err error
-		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx, txn, *tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize, false)
+		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
+			txn, *tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize,
+			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err
 		}
@@ -723,7 +728,7 @@ func columnBackfillInTxn(
 }
 
 func indexBackfillInTxn(
-	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor, traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.Init(*tableDesc); err != nil {
@@ -732,7 +737,8 @@ func indexBackfillInTxn(
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
 		var err error
-		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx, txn, *tableDesc, sp, indexBackfillChunkSize, false)
+		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx,
+			txn, *tableDesc, sp, indexBackfillChunkSize, false /* alsoCommit */, traceKV)
 		if err != nil {
 			return err
 		}
@@ -741,7 +747,11 @@ func indexBackfillInTxn(
 }
 
 func indexTruncateInTxn(
-	ctx context.Context, txn *client.Txn, execCfg *ExecutorConfig, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	txn *client.Txn,
+	execCfg *ExecutorConfig,
+	tableDesc *sqlbase.TableDescriptor,
+	traceKV bool,
 ) error {
 	alloc := &sqlbase.DatumAlloc{}
 	idx := tableDesc.Mutations[0].GetIndex()
@@ -758,7 +768,7 @@ func indexTruncateInTxn(
 			return err
 		}
 		sp, err = td.deleteIndex(
-			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, false, /* traceKV */
+			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, traceKV,
 		)
 		if err != nil {
 			return err

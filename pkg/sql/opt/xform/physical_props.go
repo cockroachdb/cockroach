@@ -123,7 +123,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
 		case opt.LimitOp, opt.OffsetOp,
-			opt.ExplainOp, opt.ShowTraceOp,
+			opt.ExplainOp,
 			opt.RowNumberOp, opt.GroupByOp,
 			opt.MergeJoinOp:
 			// These operations can require an ordering of some child even if there is
@@ -179,11 +179,6 @@ func (o *Optimizer) buildChildPhysicalProps(
 	case opt.ExplainOp:
 		if nth == 0 {
 			childProps = o.mem.LookupPrivate(mexpr.AsExplain().Def()).(*memo.ExplainOpDef).Props
-		}
-
-	case opt.ShowTraceOp:
-		if nth == 0 {
-			childProps = o.mem.LookupPrivate(mexpr.AsShowTrace().Def()).(*memo.ShowTraceOpDef).Props
 		}
 
 	case opt.MergeJoinOp:

@@ -403,8 +403,8 @@ memo (optimized)
  │    └── "[presentation: tag:4]"
  │         ├── best: (group-by G2 G3 cols=(4))
  │         └── cost: 0.00
- ├── G2: (show-trace-for-session)
+ ├── G2: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │    └── ""
- │         ├── best: (show-trace-for-session)
+ │         ├── best: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │         └── cost: 0.00
  └── G3: (aggregations)

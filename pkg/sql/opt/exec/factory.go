@@ -141,9 +141,9 @@ type Factory interface {
 	// information about the given plan.
 	ConstructExplain(options *tree.ExplainOptions, plan Plan) (Node, error)
 
-	// ConstructShowTrace returns a node that implements a SHOW TRACE statement.
-	// If the input is nil, it creates a node for SHOW TRACE FOR SESSION.
-	ConstructShowTrace(typ tree.ShowTraceType, compact bool, input Node) (Node, error)
+	// ConstructShowTrace returns a node that implements a SHOW TRACE
+	// FOR SESSION statement.
+	ConstructShowTrace(typ tree.ShowTraceType, compact bool) (Node, error)
 }
 
 // Subquery encapsulates information about a subquery that is part of a plan.

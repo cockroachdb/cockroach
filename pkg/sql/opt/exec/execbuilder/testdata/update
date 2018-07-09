@@ -12,8 +12,11 @@ CREATE TABLE kv2 (
 statement count 4
 INSERT INTO kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /kv2/primary/'a' -> NULL
@@ -29,8 +32,11 @@ fetched: /kv2/primary/'f' -> NULL
 fetched: /kv2/primary/'f'/v -> 'g'
 output row: ['f' 'g']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /kv2/a/'b' -> /'a'
@@ -45,8 +51,11 @@ output row: ['f' 'g']
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /kv2/primary/'a' -> NULL
@@ -62,8 +71,11 @@ fetched: /kv2/primary/'f' -> NULL
 fetched: /kv2/primary/'f'/v -> 'g'
 output row: ['f' 'g']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /kv2/a/'b' -> /'a'
@@ -159,8 +171,11 @@ UPDATE pks SET k2 = 5 where k1 = 1
 statement count 1
 UPDATE pks SET k1 = 2 WHERE k1 = 1
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM pks WHERE k1 = 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /pks/primary/2/2 -> NULL
@@ -211,8 +226,11 @@ statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
 
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR UPDATE tu SET b = NULL, c = NULL, d = NULL]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 Scan /Table/57/{1-2}
 querying next range at /Table/57/1
@@ -223,5 +241,6 @@ fetched: /tu/primary/1/c/d -> /3/4
 Del /Table/57/1/1/1/1
 Del /Table/57/1/1/2/1
 querying next range at /Table/57/1/1/1/1
-r1: sending batch 2 Del, 1 BeginTxn to (n1,s1):1
-fast path - rows affected: 1
+r1: sending batch 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 1

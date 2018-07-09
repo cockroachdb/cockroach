@@ -396,8 +396,11 @@ group      ·            ·          (min int)                ·
 ·          table        xyz@zyx    ·                        ·
 ·          spans        /3/2-/3/3  ·                        ·
 
+statement ok
+SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -414,8 +417,11 @@ group      ·            ·          (max int)                ·
 
 # VARIANCE/STDDEV
 
+statement ok
+SET tracing = on,kv,results; SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/primary/1 -> NULL

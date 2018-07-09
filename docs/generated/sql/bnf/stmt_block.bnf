@@ -518,8 +518,6 @@ show_tables_stmt ::=
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
 	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
-	| 'SHOW' opt_compact 'TRACE' 'FOR' explainable_stmt
-	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' explainable_stmt
 
 show_users_stmt ::=
 	'SHOW' 'USERS'

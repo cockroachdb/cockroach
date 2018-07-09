@@ -334,8 +334,11 @@ group           ·            ·
 statement okSE
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
+statement ok
+SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -357,8 +360,11 @@ group              ·            ·
 
 # VARIANCE/STDDEV
 
+statement ok
+SET tracing = on,kv,results; SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/primary/1 -> NULL
@@ -385,8 +391,11 @@ group           ·            ·
 ·               spans        /1-/2
 
 # Verify we only look at one row for MIN when we have an index on that column.
+statement ok
+SET tracing = on,kv,results; SELECT min(z) FROM xyz; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT min(z) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -424,8 +433,11 @@ INSERT INTO ab VALUES
   (5, 50)
 
 # Verify we only buffer one row.
+statement ok
+SET tracing = on,kv,results; SELECT min(a) FROM ab; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT min(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/1 -> NULL
@@ -447,8 +459,11 @@ group              ·            ·
 ·                  limit        1
 
 # Verify we only buffer one row.
+statement ok
+SET tracing = on,kv,results; SELECT max(a) FROM ab; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT max(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/5/b -> 50

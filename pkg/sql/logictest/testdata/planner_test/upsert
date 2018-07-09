@@ -31,13 +31,16 @@ statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
 
+statement ok
+SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR UPSERT INTO tu VALUES (1, NULL, NULL, NULL)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 Put /Table/54/1/1/0 -> /TUPLE/
 Del /Table/54/1/1/1/1
 Del /Table/54/1/1/2/1
 querying next range at /Table/54/1/1/0
-r1: sending batch 1 Put, 2 Del, 1 BeginTxn to (n1,s1):1
-fast path - rows affected: 1
+r1: sending batch 1 Put, 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 1

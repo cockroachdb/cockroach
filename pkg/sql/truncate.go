@@ -118,10 +118,9 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		return nil, err
 	}
 
-	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
-	// andrei: Also, the current code runs the risk of executing the truncation at
-	// prepare time. That doesn't happen currently because we don't prepare
-	// TRUNCATE statements.
+	// TODO(knz,andrei): The current code runs the risk of executing the
+	// truncation at prepare time. That doesn't happen currently because
+	// we don't prepare TRUNCATE statements.
 	if p.extendedEvalCtx.PrepareOnly {
 		return nil, errors.Errorf("programming error: cannot prepare a TRUNCATE statement")
 	}

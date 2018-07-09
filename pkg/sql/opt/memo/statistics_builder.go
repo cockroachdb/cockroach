@@ -262,7 +262,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet)
 
-	case opt.ExplainOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		return sb.colStatMetadata(colSet)
 	}
 
