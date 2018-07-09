@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -500,8 +501,39 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 16, len(r.last.SqlStats); expected != actual {
-		t.Fatalf("expected %d queries in stats report, got %d :\n %v", expected, actual, r.last.SqlStats)
+	var foundKeys []string
+	for _, s := range r.last.SqlStats {
+		foundKeys = append(foundKeys, fmt.Sprintf("[%v,%v] %s", s.Key.DistSQL, s.Key.Failed, s.Key.Query))
+	}
+	sort.Strings(foundKeys)
+	expectedKeys := []string{
+		`[false,false] CREATE DATABASE _`,
+		`[false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
+		`[false,false] INSERT INTO _ VALUES (_)`,
+		`[false,false] INSERT INTO _ VALUES (length($1::STRING))`,
+		`[false,false] INSERT INTO _(_, _) VALUES (_, _)`,
+		`[false,false] SET CLUSTER SETTING "cluster.organization" = _`,
+		`[false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
+		`[false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+		`[false,false] UPDATE _ SET _ = _ + _`,
+		`[false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
+		`[false,true] SELECT _ / $1`,
+		`[false,true] SELECT _ / _`,
+		`[false,true] SELECT crdb_internal.force_error(_, $1)`,
+		`[true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+		`[true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
+		`[true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
+	}
+	for i, found := range foundKeys {
+		if i >= len(expectedKeys) {
+			t.Fatalf("extraneous stat entry: %q", found)
+		}
+		if expectedKeys[i] != found {
+			t.Fatalf("expected entry %d to be %q, got %q", i, expectedKeys[i], found)
+		}
+	}
+	if len(foundKeys) < len(expectedKeys) {
+		t.Fatalf("expected %d stat entries, found %d", len(expectedKeys), len(foundKeys))
 	}
 
 	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
