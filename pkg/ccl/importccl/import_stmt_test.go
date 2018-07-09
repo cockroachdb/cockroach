@@ -290,6 +290,71 @@ d
 				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
 			},
 		},
+		{
+			name:   "size out of range",
+			create: `i int`,
+			typ:    "PGCOPY",
+			with:   `WITH max_row_size = '10GB'`,
+			err:    "max_row_size out of range",
+		},
+		{
+			name:   "line too long",
+			create: `i int`,
+			typ:    "PGCOPY",
+			data:   "123456",
+			with:   `WITH max_row_size = '5B'`,
+			err:    "line too long",
+		},
+
+		// Postgres DUMP
+		{
+			name: "mismatch cols",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE d.t (i int);
+				COPY d.t (s) FROM stdin;
+				0
+				\.
+			`,
+			err: `COPY columns do not match table columns for table t`,
+		},
+		{
+			name: "missing COPY done",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE d.t (i int);
+				COPY d.t (i) FROM stdin;
+0
+`,
+			err: `unexpected EOF`,
+		},
+		{
+			name: "semicolons and comments",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE t (i int);
+				;;;
+				-- nothing ;
+				;
+				-- blah
+			`,
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name: "size out of range",
+			typ:  "PGDUMP",
+			with: `WITH max_row_size = '10GB'`,
+			err:  "max_row_size out of range",
+		},
+		{
+			name: "line too long",
+			typ:  "PGDUMP",
+			data: "CREATE TABLE t (i INT);",
+			with: `WITH max_row_size = '5B'`,
+			err:  "line too long",
+		},
 
 		// Error
 		{
@@ -311,7 +376,12 @@ d
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
-			q := fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+			var q string
+			if tc.create != "" {
+				q = fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+			} else {
+				q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+			}
 			t.Log(q)
 			dataString = tc.data
 			_, err := db.Exec(q, srv.URL)
@@ -1708,13 +1778,25 @@ func TestImportPgCopy(t *testing.T) {
 			t.Log(cmd, opts)
 			sqlDB.Exec(t, cmd, opts...)
 			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
-				expected, actual := testRows[idx].s, row[1]
-				if expected == injectNull {
-					expected = "NULL"
+				{
+					expected, actual := testRows[idx].s, row[1]
+					if expected == injectNull {
+						expected = "NULL"
+					}
+
+					if expected != actual {
+						t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+					}
 				}
 
-				if expected != actual {
-					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+				{
+					expected, actual := testRows[idx].b, row[2]
+					if expected == nil {
+						expected = []byte("NULL")
+					}
+					if !bytes.Equal(expected, []byte(actual)) {
+						t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+					}
 				}
 			}
 		})

@@ -9,10 +9,12 @@
 package importccl
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,93 +25,98 @@ import (
 )
 
 type postgreStream struct {
-	r     io.Reader
-	b     []byte
-	queue []tree.Statement
-	max   int
+	s    *bufio.Scanner
+	copy *postgreStreamCopy
 }
-
-const (
-	defaultPgStreamInit = 1024 * 64
-	defaultPgStreamMax  = 1024 * 1024 * 10
-)
 
 // newPostgreStream returns a struct that can stream statements from an
-// io.Reader by parsing chunks of statements at a time. initialCap is the
-// initial buffer size. It will grow up to maxCap. maxCap must be larger
-// than the expected largest statement.
-func newPostgreStream(r io.Reader, initialCap, maxCap int) *postgreStream {
-	return &postgreStream{
-		r:   r,
-		b:   make([]byte, 0, initialCap),
-		max: maxCap,
-	}
+// io.Reader.
+func newPostgreStream(r io.Reader, max int) *postgreStream {
+	s := bufio.NewScanner(r)
+	s.Buffer(nil, max)
+	p := &postgreStream{s: s}
+	s.Split(p.split)
+	return p
 }
 
-func (p *postgreStream) Next() (tree.Statement, error) {
-	if len(p.queue) == 0 {
-		sl, err := p.read()
+func (p *postgreStream) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if p.copy == nil {
+		return splitSQLSemicolon(data, atEOF)
+	}
+	return bufio.ScanLines(data, atEOF)
+}
+
+// splitSQLSemicolon is a bufio.SplitFunc that splits on SQL semicolon tokens.
+func splitSQLSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+
+	sc := parser.MakeScanner(string(data))
+	if pos := sc.Until(';'); pos > 0 {
+		return pos, data[:pos], nil
+	}
+	// If we're at EOF, we have a final, non-terminated line. Return it.
+	if atEOF {
+		return len(data), data, nil
+	}
+	// Request more data.
+	return 0, nil, nil
+}
+
+// Next returns the next statement. The type of statement can be one of
+// tree.Statement, copyData, or errCopyDone. A nil statement and io.EOF are
+// returned when there are no more statements.
+func (p *postgreStream) Next() (interface{}, error) {
+	if p.copy != nil {
+		row, err := p.copy.Next()
+		if err == errCopyDone {
+			p.copy = nil
+			return errCopyDone, nil
+		}
+		return row, err
+	}
+
+	for p.s.Scan() {
+		stmts, err := parser.Parse(p.s.Text())
 		if err != nil {
 			return nil, err
 		}
-		p.queue = sl
-	}
-	// len(p.queue) is guaranteed to be > 0 here because EOF would have been
-	// returned earlier if nothing was read.
-	s := p.queue[0]
-	p.queue = p.queue[1:]
-	return s, nil
-}
+		switch len(stmts) {
+		case 0:
+			// Got whitespace or comments; try again.
+		case 1:
+			// If the statement is COPY ... FROM STDIN, set p.copy so the next call to
+			// this function will read copy data. We still return this COPY statement
+			// for this invocation.
+			if cf, ok := stmts[0].(*tree.CopyFrom); ok && cf.Stdin {
+				// Set p.copy which reconfigures the scanner's split func.
+				p.copy = newPostgreStreamCopy(p.s, copyDefaultDelimiter, copyDefaultNull)
 
-func (p *postgreStream) read() (tree.StatementList, error) {
-	for {
-		// First attempt to read the possibly empty p.b.
-		bs := string(p.b)
-		s := parser.MakeScanner(bs)
-		pos := s.Until(';')
-		// Find the last semicolon.
-		for pos != 0 {
-			npos := s.Until(';')
-			if npos != 0 {
-				pos = npos
-			} else {
-				break
+				// We expect a single newline character following the COPY statement before
+				// the copy data starts.
+				if !p.s.Scan() {
+					return nil, errors.Errorf("expected empty line")
+				}
+				if err := p.s.Err(); err != nil {
+					return nil, err
+				}
+				if len(p.s.Bytes()) != 0 {
+					return nil, errors.Errorf("expected empty line")
+				}
 			}
-		}
-		// We found something. Shift over the unused p.b to its beginning using the
-		// same underlying location and parse what we found.
-		if pos != 0 {
-			n := copy(p.b, p.b[pos:])
-			p.b = p.b[:n]
-			return parser.Parse(bs[:pos])
-		}
-
-		// We didn't find a semicolon. Need to read more into p.b. See if p.b already
-		// has more cap space.
-		start := len(p.b)
-		sz := cap(p.b)
-		// If len(b) == cap(b) then we need a bigger slice.
-		if len(p.b) == cap(p.b) {
-			sz = cap(p.b) * 2
-			if sz > p.max {
-				sz = p.max
-			}
-			if sz < cap(p.b) {
-				sz = cap(p.b)
-			}
-		}
-		p.b = append(p.b, make([]byte, sz-start)...)
-
-		// Read in data after whatever was already there.
-		n, err := io.ReadFull(p.r, p.b[start:])
-		if err == io.ErrUnexpectedEOF {
-			p.b = p.b[:start+n]
-		} else if err != nil {
-			return nil, err
-		} else if n == 0 {
-			return nil, errors.Errorf("buffer too small: %d", sz)
+			return stmts[0], nil
+		default:
+			return nil, errors.Errorf("unexpected: got %d statements", len(stmts))
 		}
 	}
+	if err := p.s.Err(); err != nil {
+		if err == bufio.ErrTooLong {
+			err = errors.New("line too long")
+		}
+		return nil, err
+	}
+	return nil, io.EOF
 }
 
 // readPostgresCreateTable returns table descriptors for all tables or the
@@ -121,6 +128,7 @@ func readPostgresCreateTable(
 	match string,
 	parentID sqlbase.ID,
 	walltime int64,
+	max int,
 ) ([]*sqlbase.TableDescriptor, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -129,7 +137,7 @@ func readPostgresCreateTable(
 	// we'd have to delete the index and row and modify the column family. This
 	// is much easier and probably safer too.
 	createTbl := make(map[string]*tree.CreateTable)
-	ps := newPostgreStream(input, defaultPgStreamInit, defaultPgStreamMax)
+	ps := newPostgreStream(input, max)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -224,13 +232,17 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 type pgDumpReader struct {
 	tables map[string]*rowConverter
 	kvCh   chan kvBatch
+	opts   roachpb.PgDumpOptions
 }
 
 var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
-	kvCh chan kvBatch, tables map[string]*sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan kvBatch,
+	opts roachpb.PgDumpOptions,
+	tables map[string]*sqlbase.TableDescriptor,
+	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*rowConverter, len(tables))
 	for name, table := range tables {
@@ -240,7 +252,11 @@ func newPgDumpReader(
 		}
 		converters[name] = conv
 	}
-	return &pgDumpReader{kvCh: kvCh, tables: converters}, nil
+	return &pgDumpReader{
+		kvCh:   kvCh,
+		tables: converters,
+		opts:   opts,
+	}, nil
 }
 
 func (m *pgDumpReader) start(ctx ctxgroup.Group) {
@@ -254,7 +270,7 @@ func (m *pgDumpReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
-	ps := newPostgreStream(input, defaultPgStreamInit, defaultPgStreamMax)
+	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
 	semaCtx := &tree.SemaContext{}
 	for {
 		stmt, err := ps.Next()
@@ -308,6 +324,64 @@ func (m *pgDumpReader) readFile(
 				}
 				if err := conv.row(ctx, inputIdx, count); err != nil {
 					return err
+				}
+			}
+		case *tree.CopyFrom:
+			if !i.Stdin {
+				return errors.New("expected STDIN option on COPY FROM")
+			}
+			name, err := getTableName(i.Table)
+			if err != nil {
+				return errors.Wrapf(err, "%s", i)
+			}
+			conv, importing := m.tables[name]
+			if importing && conv == nil {
+				return errors.Errorf("missing schema info for requested table %q", name)
+			}
+			if conv != nil {
+				if expected, got := len(conv.visibleCols), len(i.Columns); expected != got {
+					return errors.Errorf("expected %d values, got %d", expected, got)
+				}
+				for colI, col := range i.Columns {
+					if string(col) != conv.visibleCols[colI].Name {
+						return errors.Errorf("COPY columns do not match table columns for table %s", name)
+					}
+				}
+			}
+			for {
+				row, err := ps.Next()
+				// We expect an explicit copyDone here. io.EOF is unexpected.
+				if err == io.EOF {
+					return makeRowErr(inputName, count, "unexpected EOF")
+				}
+				if row == errCopyDone {
+					break
+				}
+				count++
+				if err != nil {
+					return makeRowErr(inputName, count, "%s", err)
+				}
+				if !importing {
+					continue
+				}
+				switch row := row.(type) {
+				case copyData:
+					for i, s := range row {
+						if s == nil {
+							conv.datums[i] = tree.DNull
+						} else {
+							conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], *s, conv.evalCtx)
+							if err != nil {
+								col := conv.visibleCols[i]
+								return makeRowErr(inputName, count, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
+							}
+						}
+					}
+					if err := conv.row(ctx, inputIdx, count); err != nil {
+						return err
+					}
+				default:
+					return makeRowErr(inputName, count, "unexpected: %v", row)
 				}
 			}
 		default:
