@@ -448,8 +448,8 @@ func CountLeases(
 		)
 	}
 
-	stmt := fmt.Sprintf(`SELECT count(1) FROM system.lease AS OF SYSTEM TIME %d.%d WHERE `,
-		at.WallTime, at.Logical) +
+	stmt := fmt.Sprintf(`SELECT count(1) FROM system.lease AS OF SYSTEM TIME %s WHERE `,
+		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
 	values, err := executor.QueryRow(
 		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
