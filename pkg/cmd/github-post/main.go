@@ -15,8 +15,10 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -24,10 +26,11 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
-	"github.com/pkg/errors"
-	"github.com/tebeka/go2xunit/lib"
 )
 
 const (
@@ -54,14 +57,54 @@ func listFailures(
 	var inputBuf bytes.Buffer
 	input = io.TeeReader(input, &inputBuf)
 
-	suites, err := lib.ParseGotest(input, "")
-	if err != nil {
-		return errors.Wrap(err, "failed to parse `go test` output")
+	// The `go test -json` output stream is a newline-separate sequence of
+	// structs. Seek to the first such struct to ignore non-JSON preamble.
+	buf := bufio.NewReader(input)
+	for {
+		b, err := buf.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if bytes.HasPrefix(b, []byte{'{'}) {
+			input = io.MultiReader(bytes.NewReader(b), buf)
+			break
+		}
 	}
 
-	posted := false
-	for _, suite := range suites {
-		packageName := suite.Name
+	dec := json.NewDecoder(input)
+	dec.DisallowUnknownFields()
+
+	type TestEvent struct {
+		//lint:ignore U1000 we disallow unknown fields.
+		Time    time.Time // encodes as an RFC3339-format string
+		Action  string
+		Package string
+		Test    string
+		//lint:ignore U1000 we disallow unknown fields.
+		Elapsed float64 // seconds
+		Output  string
+	}
+
+	type ID struct {
+		Package string
+		Test    string
+	}
+
+	failures := make(map[ID][]TestEvent)
+
+	for {
+		var te TestEvent
+		if err := dec.Decode(&te); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		packageName := te.Package
 		if packageName == "" {
 			var ok bool
 			packageName, ok = os.LookupEnv(pkgEnv)
@@ -69,22 +112,21 @@ func listFailures(
 				log.Fatalf("package name environment variable %s is not set", pkgEnv)
 			}
 		}
-		for _, test := range suite.Tests {
-			switch test.Status {
-			case lib.Failed:
-				authorEmail, err := getAuthorEmail(ctx, packageName, test.Name)
-				if err != nil {
-					log.Printf("unable to determine test author email: %s\n", err)
-				}
-				if err := f(ctx, packageName, test.Name, test.Message, authorEmail); err != nil {
-					return errors.Wrap(err, "failed to post issue")
-				}
-				posted = true
+		id := ID{
+			Package: packageName,
+			Test:    te.Test,
+		}
+		switch te.Action {
+		case "fail":
+			failures[id] = nil
+		case "output":
+			if tes, ok := failures[id]; ok {
+				failures[id] = append(tes, te)
 			}
 		}
 	}
 
-	if !posted {
+	if len(failures) == 0 {
 		// We're only invoked upon failure. If we couldn't find a failing Go test,
 		// assume that a failure occurred before running Go and post an issue about
 		// that.
@@ -93,8 +135,26 @@ func listFailures(
 		if !ok {
 			packageName = unknown
 		}
+		if _, err := inputBuf.ReadFrom(input); err != nil {
+			log.Printf("failed to read remaining test output: %s\n", err)
+		}
 		if err := f(ctx, packageName, unknown, inputBuf.String(), ""); err != nil {
 			return errors.Wrap(err, "failed to post issue")
+		}
+	} else {
+		for id, tes := range failures {
+			authorEmail, err := getAuthorEmail(ctx, id.Package, id.Test)
+			if err != nil {
+				log.Printf("unable to determine test author email: %s\n", err)
+			}
+			var outputs []string
+			for _, te := range tes {
+				outputs = append(outputs, te.Output)
+			}
+			message := strings.Join(outputs, "\n")
+			if err := f(ctx, id.Package, id.Test, message, authorEmail); err != nil {
+				return errors.Wrap(err, "failed to post issue")
+			}
 		}
 	}
 	return nil
