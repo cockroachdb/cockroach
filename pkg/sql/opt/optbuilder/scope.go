@@ -48,6 +48,10 @@ type scope struct {
 	// type checking. This only applies to the top-level subqueries that are
 	// anchored directly to a relational expression.
 	columns int
+
+	// This is a temporary flag, which is currently used to allow generator
+	// functions in the FROM clause, but not in the SELECT list.
+	allowGeneratorFunc bool
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -243,6 +247,12 @@ func (s *scope) removeHiddenCols() {
 		}
 	}
 	s.cols = s.cols[:n]
+}
+
+// isAnonymousTable returns true if the table name of the first column
+// in this scope is empty.
+func (s *scope) isAnonymousTable() bool {
+	return len(s.cols) > 0 && s.cols[0].table.TableName == ""
 }
 
 // setTableAlias qualifies the names of all columns in this scope with the
@@ -575,7 +585,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if err != nil {
 			panic(builderError{err})
 		}
-		if isGenerator(def) {
+		if !s.allowGeneratorFunc && isGenerator(def) {
 			panic(unimplementedf("generator functions are not supported"))
 		}
 

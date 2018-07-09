@@ -64,8 +64,8 @@ define Select {
 # synthesized output columns.
 [Relational]
 define Project {
-    Input           Expr
-    Projections     Expr
+    Input       Expr
+    Projections Expr
 }
 
 # InnerJoin creates a result set that combines columns from its left and right
@@ -365,4 +365,19 @@ define ShowTraceForSession {
 define RowNumber {
     Input    Expr
     Def      RowNumberDef
+}
+
+# Zip represents a functional zip over iterators a,b,c, which returns tuples of
+# values from a,b,c picked "simultaneously". NULLs are used when an iterator is
+# "shorter" than another. For example:
+#
+#    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
+#
+# Each element of Elems is an iterator. Zip is most commonly used with
+# generator functions such as generate_series(), but it can also be used with
+# scalar functions.
+[Relational]
+define Zip {
+    Elems ExprList
+    Cols  ColList
 }
