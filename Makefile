@@ -381,9 +381,12 @@ ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
 
+# Derived build variants.
 use-stdmalloc          := $(findstring stdmalloc,$(TAGS))
 use-msan               := $(findstring msan,$(GOFLAGS))
-use-rocksdb-assertions := $(findstring race,$(GOFLAGS))
+
+# User-requested build variants.
+USE_ROCKSDB_ASSERTIONS :=
 
 BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
 
@@ -399,7 +402,7 @@ endif
 CRYPTOPP_DIR := $(BUILD_DIR)/cryptopp$(if $(use-msan),_msan)
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc$(if $(use-msan),_msan)
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(use-msan),_msan)
-ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(use-msan),_msan)$(if $(use-stdmalloc),_stdmalloc)$(if $(use-rocksdb-assertions),_assert)
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(use-msan),_msan)$(if $(use-stdmalloc),_stdmalloc)$(if $(USE_ROCKSDB_ASSERTIONS),_assert)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy$(if $(use-msan),_msan)
 LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(use-msan),_msan)
 # Can't share with protobuf because protoc is always built for the host.

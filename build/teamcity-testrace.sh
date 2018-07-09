@@ -39,7 +39,7 @@ run build/builder.sh env \
     PKG="$pkgspec" \
     TESTTIMEOUT=45m \
     TESTFLAGS='-v' \
-    ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
+    USE_ROCKSDB_ASSERTIONS=1 2>&1 \
 	| tee artifacts/testrace.log \
 	| go-test-teamcity
 tc_end_block "Run Go tests under race detector"
