@@ -1179,26 +1179,28 @@ func (m *multiTestContext) transferLeaseNonFatal(
 	// advanced recently, so all the liveness records (including the destination)
 	// are expired. In that case, the simple fact that the transfer succeeded
 	// doesn't mean that the destination now has a usable lease.
-	m.mu.RLock()
-	nl := m.nodeLivenesses[dest]
-	m.mu.RUnlock()
-	l, err := nl.Self()
-	if err != nil {
-		return err
-	}
-	if err := nl.Heartbeat(ctx, l); err != nil {
-		return err
-	}
+	m.heartbeatLiveness(ctx, dest)
 
 	sourceRepl, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		return err
 	}
-	if err := sourceRepl.AdminTransferLease(context.Background(), m.idents[dest].StoreID); err != nil {
+	if err := sourceRepl.AdminTransferLease(ctx, m.idents[dest].StoreID); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) error {
+	m.mu.RLock()
+	nl := m.nodeLivenesses[store]
+	m.mu.RUnlock()
+	l, err := nl.Self()
+	if err != nil {
+		return err
+	}
+	return nl.Heartbeat(ctx, l)
 }
 
 // advanceClock advances the mtc's manual clock such that all

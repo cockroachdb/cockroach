@@ -152,6 +152,11 @@ func evalNewLease(
 		pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
 	}
 
+	// Upon acquisition of a new lease, we're responsible for checking whether
+	// there is a merge in progress. (If there is, we cannot serve traffic unless
+	// the merge aborts.)
+	pd.Local.MaybeWatchForMerge = true
+
 	pd.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
 	if isTransfer {
 		*pd.Local.LeaseMetricsResult = result.LeaseTransferSuccess
