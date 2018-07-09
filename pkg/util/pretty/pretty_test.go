@@ -20,7 +20,77 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
 
-// ExampleTree demonstrates the Tree example from the paper.
+// Example_align demonstrates alignment.
+func Example_align() {
+	testData := []pretty.Doc{
+		pretty.JoinGroup(2, "SELECT", ",",
+			pretty.Text("aaa"),
+			pretty.Text("bbb"),
+			pretty.Text("ccc")),
+		pretty.RLTable(2,
+			pretty.RLTableRow{"SELECT",
+				pretty.Join(",",
+					pretty.Text("aaa"),
+					pretty.Text("bbb"),
+					pretty.Text("ccc")),
+			},
+			pretty.RLTableRow{"FROM",
+				pretty.Join(",",
+					pretty.Text("t"),
+					pretty.Text("u"),
+					pretty.Text("v")),
+			}),
+	}
+	for _, n := range []int{1, 15, 30, 80} {
+		for _, doc := range testData {
+			p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/)
+			fmt.Printf("%d:\n%s\n\n", n, p)
+		}
+	}
+
+	// Output:
+	// 1:
+	// SELECT
+	//   aaa,
+	//   bbb,
+	//   ccc
+	//
+	// 1:
+	// SELECT
+	//   aaa,
+	//   bbb,
+	//   ccc
+	// FROM
+	//   t,
+	//   u,
+	//   v
+	//
+	// 15:
+	// SELECT aaa,
+	// 	   bbb,
+	// 	   ccc
+	//
+	// 15:
+	// SELECT aaa,
+	// 	   bbb,
+	// 	   ccc
+	//   FROM t, u, v
+	//
+	// 30:
+	// SELECT aaa, bbb, ccc
+	//
+	// 30:
+	// SELECT aaa, bbb, ccc
+	//   FROM t, u, v
+	//
+	// 80:
+	// SELECT aaa, bbb, ccc
+	//
+	// 80:
+	// SELECT aaa, bbb, ccc FROM t, u, v
+}
+
+// Example_tree demonstrates the Tree example from the paper.
 func Example_tree() {
 	type Tree struct {
 		s  string

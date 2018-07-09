@@ -21,79 +21,68 @@ FROM
 8:
 --------
 SELECT *
-FROM
-	generate_series(
-		a
-	),
-	generate_series(
-		b
-	),
-	ROWS FROM (
-		generate_series(
-			a
-		),
-		generate_series(
-			b
-		)
-	)
-
-23:
------------------------
-SELECT *
-FROM
-	generate_series(a),
-	generate_series(b),
-	ROWS FROM (
-		generate_series(
-			a
-		),
-		generate_series(
-			b
-		)
-	)
+  FROM generate_series(
+		   a
+	   ),
+	   generate_series(
+		   b
+	   ),
+	   ROWS FROM (
+		   generate_series(
+			   a
+		   ),
+		   generate_series(
+			   b
+		   )
+	   )
 
 26:
 --------------------------
 SELECT *
-FROM
-	generate_series(a),
-	generate_series(b),
-	ROWS FROM (
-		generate_series(
-			a
-		),
-		generate_series(b)
-	)
+  FROM generate_series(a),
+	   generate_series(b),
+	   ROWS FROM (
+		   generate_series(
+			   a
+		   ),
+		   generate_series(
+			   b
+		   )
+	   )
 
-27:
----------------------------
+29:
+-----------------------------
 SELECT *
-FROM
-	generate_series(a),
-	generate_series(b),
-	ROWS FROM (
-		generate_series(a),
-		generate_series(b)
-	)
+  FROM generate_series(a),
+	   generate_series(b),
+	   ROWS FROM (
+		   generate_series(
+			   a
+		   ),
+		   generate_series(b)
+	   )
 
-54:
-------------------------------------------------------
+30:
+------------------------------
 SELECT *
-FROM
-	generate_series(a),
-	generate_series(b),
-	ROWS FROM (generate_series(a), generate_series(b))
+  FROM generate_series(a),
+	   generate_series(b),
+	   ROWS FROM (
+		   generate_series(a),
+		   generate_series(b)
+	   )
 
-94:
-----------------------------------------------------------------------------------------------
+57:
+---------------------------------------------------------
 SELECT *
-FROM
-	generate_series(a), generate_series(b), ROWS FROM (generate_series(a), generate_series(b))
+  FROM generate_series(a),
+	   generate_series(b),
+	   ROWS FROM (generate_series(a), generate_series(b))
 
-95:
------------------------------------------------------------------------------------------------
+97:
+-------------------------------------------------------------------------------------------------
 SELECT *
-FROM generate_series(a), generate_series(b), ROWS FROM (generate_series(a), generate_series(b))
+  FROM generate_series(a), generate_series(b), ROWS FROM (generate_series(a), generate_series(b))
 
 104:
 --------------------------------------------------------------------------------------------------------

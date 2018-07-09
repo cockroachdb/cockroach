@@ -14,8 +14,8 @@ SET
 WHERE
 	a
 	= 2
-	AND b
-		= c
+AND b
+	= c
 ORDER BY
 	v
 		DESC
@@ -43,8 +43,8 @@ SET
 WHERE
 	a
 	= 2
-	AND b
-		= c
+AND b
+	= c
 ORDER BY
 	v
 		DESC
@@ -70,8 +70,7 @@ SET
 		)
 WHERE
 	a = 2
-	AND b
-		= c
+AND b = c
 ORDER BY
 	v
 		DESC
@@ -93,28 +92,7 @@ SET
 		)
 WHERE
 	a = 2
-	AND b
-		= c
-ORDER BY
-	v DESC
-LIMIT 1
-RETURNING
-	abc.b,
-	c,
-	4 AS d
-
-13:
--------------
-UPDATE abc
-SET
-	(b, c)
-		= (
-			8,
-			9
-		)
-WHERE
-	a = 2
-	AND b = c
+AND b = c
 ORDER BY
 	v DESC
 LIMIT 1
@@ -134,7 +112,7 @@ SET
 		)
 WHERE
 	a = 2
-	AND b = c
+AND b = c
 ORDER BY v DESC
 LIMIT 1
 RETURNING
@@ -150,13 +128,12 @@ SET
 		= (8, 9)
 WHERE
 	a = 2
-	AND b = c
+AND b = c
 ORDER BY v DESC
 LIMIT 1
-RETURNING
-	abc.b,
-	c,
-	4 AS d
+RETURNING abc.b,
+		  c,
+		  4 AS d
 
 19:
 -------------------
@@ -166,21 +143,9 @@ WHERE
 	a = 2 AND b = c
 ORDER BY v DESC
 LIMIT 1
-RETURNING
-	abc.b,
-	c,
-	4 AS d
-
-20:
---------------------
-UPDATE abc
-SET (b, c) = (8, 9)
-WHERE
-	a = 2 AND b = c
-ORDER BY v DESC
-LIMIT 1
-RETURNING
-	abc.b, c, 4 AS d
+RETURNING abc.b,
+		  c,
+		  4 AS d
 
 21:
 ---------------------
@@ -189,8 +154,9 @@ SET (b, c) = (8, 9)
 WHERE a = 2 AND b = c
 ORDER BY v DESC
 LIMIT 1
-RETURNING
-	abc.b, c, 4 AS d
+RETURNING abc.b,
+		  c,
+		  4 AS d
 
 26:
 --------------------------

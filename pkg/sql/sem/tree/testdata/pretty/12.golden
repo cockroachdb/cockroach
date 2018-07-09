@@ -13,8 +13,8 @@ VALUES
 		2
 	)
 
-10:
-----------
+8:
+--------
 INSERT
 INTO
 	t
@@ -22,16 +22,20 @@ INTO
 			a,
 			b
 		)
-VALUES
-	(1, 2)
+VALUES (
+		   1,
+		   2
+	   )
 
 12:
 ------------
 INSERT
 INTO
 	t (a, b)
-VALUES
-	(1, 2)
+VALUES (
+		   1,
+		   2
+	   )
 
 13:
 -------------

@@ -39,6 +39,7 @@ type docBestType int
 const (
 	textB docBestType = iota
 	lineB
+	spacesB
 )
 
 // Pretty returns a pretty-printed string for the Doc d at line length
@@ -124,7 +125,7 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 			s:   string(t),
 			d:   b.be(k+len(t), z),
 		})
-	case line:
+	case line, softbreak:
 		res = b.newDocBest(docBest{
 			tag: lineB,
 			i:   d.i,
@@ -138,6 +139,16 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
+	case *column:
+		res = b.be(k, b.iDoc(d.i, t.f(k), z))
+	case *nesting:
+		res = b.be(k, b.iDoc(d.i, t.f(d.i), z))
+	case pad:
+		res = b.newDocBest(docBest{
+			tag: spacesB,
+			i:   t.n,
+			d:   b.be(k+t.n, z),
+		})
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}
@@ -216,27 +227,52 @@ func fits(w int, x *docBest) bool {
 		return fits(w-len(x.s), x.d)
 	case lineB:
 		return true
+	case spacesB:
+		return fits(w-x.i, x.d)
 	default:
 		panic(fmt.Errorf("unknown type: %d", x.tag))
 	}
 }
 
 func layout(sb *strings.Builder, useTabs bool, tabWidth int, d *docBest) {
+	curCol := 0
 	for ; d != nil; d = d.d {
 		switch d.tag {
 		case textB:
 			sb.WriteString(d.s)
+			curCol += len(d.s)
 		case lineB:
 			sb.WriteByte('\n')
 			// Fill as many blanks with tabs, then the rest with spaces.
-			c := 0
+			curCol = 0
 			if useTabs {
-				for ; c+tabWidth <= d.i; c += tabWidth {
+				for ; curCol+tabWidth <= d.i; curCol += tabWidth {
 					sb.WriteByte('\t')
 				}
 			}
-			for ; c < d.i; c++ {
+			for ; curCol < d.i; curCol++ {
 				sb.WriteByte(' ')
+			}
+		case spacesB:
+			// we'll want to try and use tabs. However, we may be
+			// starting spaces at a point that is not tab-aligned. So first fill in
+			// with spaces to get tab alignment.
+			numSpaces := 0
+			for ; numSpaces < d.i && curCol%tabWidth != 0; numSpaces++ {
+				sb.WriteByte(' ')
+				curCol++
+			}
+			// Now try to use tabs to fill in the spaces.
+			if useTabs {
+				for ; numSpaces+tabWidth <= d.i; numSpaces += tabWidth {
+					sb.WriteByte('\t')
+					curCol += tabWidth
+				}
+			}
+			// Then fill the remainder with spaces.
+			for ; numSpaces < d.i; numSpaces++ {
+				sb.WriteByte(' ')
+				curCol++
 			}
 		default:
 			panic(fmt.Errorf("unknown type: %d", d.tag))

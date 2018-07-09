@@ -45,12 +45,16 @@ type Doc interface {
 	isDoc()
 }
 
-func (text) isDoc()   {}
-func (line) isDoc()   {}
-func (nilDoc) isDoc() {}
-func (concat) isDoc() {}
-func (nest) isDoc()   {}
-func (union) isDoc()  {}
+func (text) isDoc()      {}
+func (line) isDoc()      {}
+func (softbreak) isDoc() {}
+func (nilDoc) isDoc()    {}
+func (concat) isDoc()    {}
+func (nest) isDoc()      {}
+func (union) isDoc()     {}
+func (*column) isDoc()   {}
+func (*nesting) isDoc()  {}
+func (pad) isDoc()       {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -75,6 +79,15 @@ type line struct{}
 
 // Line is the LINE constructor.
 var Line line
+
+// softbreak is a common extension to Wadler's printer that insert a
+// line break but where the flattened version does not use a space.
+// Idea borrowed from Daniel Mendler's printer at
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+type softbreak struct{}
+
+// SoftBreak is the softbreak constructor.
+var SoftBreak softbreak
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
@@ -133,9 +146,79 @@ func flatten(d Doc) Doc {
 		return d
 	case line:
 		return textSpace
+	case softbreak:
+		return Nil
 	case union:
 		return flatten(t.x)
+	case *column:
+		return &column{f: func(c int) Doc { return flatten(t.f(c)) }}
+	case *nesting:
+		return &nesting{f: func(i int) Doc { return flatten(t.f(i)) }}
+	case pad:
+		return Nil
 	default:
 		panic(fmt.Errorf("unknown type: %T", d))
 	}
+}
+
+// column is a special document which is replaced during rendering by
+// another document depending on the current column on the rendering
+// line.
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type column struct {
+	f func(int) Doc
+}
+
+// nesting is a special document which is replaced during rendering by
+// another document depending on the current nesting level.
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type nesting struct {
+	f func(int) Doc
+}
+
+// Align renders document d with the nesting level set to the current
+// column.
+func Align(d Doc) Doc {
+	return &column{
+		f: func(k int) Doc {
+			return &nesting{
+				f: func(i int) Doc {
+					return nest{k - i, d}
+				},
+			}
+		},
+	}
+}
+
+// pad is a special document which is replaced during rendering by
+// the specified amount of whitespace. However it is flattened
+// to an empty document during grouping.
+//
+// This is an extension to Wadler's printer first prototyped in
+// https://github.com/knz/prettier.
+//
+// Note that this special document must be handled especially
+// carefully with anything that produces a union (<|>) (e.g. Group),
+// so as to preserve the invariant of unions: "no first line of a
+// document in x is shorter than some first line of a document in y;
+// or, equivalently, every first line in x is at least as long as
+// every first line in y".
+//
+// The operator RLTable, defined in util.go, is properly careful about
+// this.
+//
+// This document type is not exposed publicly because of the risk
+// described above.
+type pad struct {
+	n int
 }
