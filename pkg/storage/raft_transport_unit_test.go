@@ -66,7 +66,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
-		rpcC,
+		stopper,
 	)
 
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, &util.UnresolvedAddr{NetworkField: "tcp", AddressField: "localhost:0"})

@@ -317,7 +317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	s.raftTransport = storage.NewRaftTransport(
-		s.cfg.AmbientCtx, st, s.nodeDialer, s.grpc, s.rpcContext,
+		s.cfg.AmbientCtx, st, s.nodeDialer, s.grpc, s.stopper,
 	)
 
 	// Set up internal memory metrics for use by internal SQL executors.

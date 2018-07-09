@@ -289,7 +289,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.nodeDialer = nodedialer.New(m.rpcContext, m.getNodeIDAddress)
 	m.transport = storage.NewRaftTransport(
 		log.AmbientContext{Tracer: st.Tracer}, st,
-		m.nodeDialer, nil, m.rpcContext,
+		m.nodeDialer, nil, m.transportStopper,
 	)
 
 	for idx := 0; idx < numStores; idx++ {
