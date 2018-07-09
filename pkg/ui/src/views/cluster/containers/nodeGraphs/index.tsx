@@ -34,6 +34,7 @@ import replicationDashboard from "./dashboards/replication";
 import distributedDashboard from "./dashboards/distributed";
 import queuesDashboard from "./dashboards/queues";
 import requestsDashboard from "./dashboards/requests";
+import hardwareDashboard from "./dashboards/hardware";
 
 interface GraphDashboard {
   label: string;
@@ -48,7 +49,8 @@ const dashboards: {[key: string]: GraphDashboard} = {
   "replication": { label: "Replication", component: replicationDashboard },
   "distributed": { label: "Distributed", component: distributedDashboard },
   "queues": { label: "Queues", component: queuesDashboard },
-  "requests": { label: "Slow Requests", component: requestsDashboard},
+  "requests": { label: "Slow Requests", component: requestsDashboard },
+  "hardware": { label: "Hardware", component: hardwareDashboard },
 };
 
 const defaultDashboard = "overview";
