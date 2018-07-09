@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+
 	// We dot-import fsm to use common names such as fsm.True/False.
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
 )

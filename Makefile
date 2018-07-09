@@ -1260,6 +1260,7 @@ pkg/sql/parser/sql.go: pkg/sql/parser/gen/sql.go.tmp
 	 cat $^ | \
 	 sed -E 's/^const ([A-Z][_A-Z0-9]*) =.*$$/const \1 = lex.\1/g') > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
+	goimports -w $@
 
 # This modifies the grammar to:
 # - improve the types used by the generated parser for non-terminals

@@ -26,12 +26,12 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/sync/errgroup"
+	"github.com/cockroachdb/ttycolor"
 )
 
 func registerTPCC(r *registry) {
@@ -395,15 +395,15 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			pass := tpmCRatio > passRatio
 
 			// Print the result.
-			color.Stdout(color.Green)
+			ttycolor.Stdout(ttycolor.Green)
 			passStr := "PASS"
 			if !pass {
-				color.Stdout(color.Red)
+				ttycolor.Stdout(ttycolor.Red)
 				passStr = "FAIL"
 			}
 			c.l.printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				passStr, warehouses, tpmC, tpmCRatio*100)
-			color.Stdout(color.Reset)
+			ttycolor.Stdout(ttycolor.Reset)
 
 			return pass, nil
 		})
@@ -411,9 +411,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			return err
 		}
 
-		color.Stdout(color.Green)
+		ttycolor.Stdout(ttycolor.Green)
 		c.l.printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
-		color.Stdout(color.Reset)
+		ttycolor.Stdout(ttycolor.Reset)
 		return nil
 	})
 	m.Wait()
