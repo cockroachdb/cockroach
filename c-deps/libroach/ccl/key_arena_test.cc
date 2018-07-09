@@ -13,6 +13,13 @@
 #include "ccl/storageccl/engineccl/enginepbccl/key_registry.pb.h"
 namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
+bool IsZeroMemory(const char* addr, size_t size) {
+  if (addr[0] != 0) {
+    return false;
+  }
+  return (memcmp(addr, addr + 1, size - 1) == 0);
+}
+
 TEST(KeyArena, TestPageSupport) { ASSERT_OK(CanLockPages()); }
 
 TEST(KeyArena, TestArenaAllocation) {
@@ -87,5 +94,5 @@ TEST(KeyArena, TestSecretKeyLocking) {
   // Delete arena. Raw contents are overwritten and page is no longer locked.
   delete arena;
   EXPECT_FALSE(IsLocked((size_t)raw_key, key.size()));
-  EXPECT_NE(0, strncmp(raw_key, key.c_str(), key.size()));
+  EXPECT_TRUE(IsZeroMemory(raw_key, key.size()));
 }

@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "key_arena.h"
+#include <cstring>
 #include <iostream>
 #include <unordered_map>
 #include "../fmt.h"
@@ -33,7 +34,50 @@ bool IsLocked(size_t addr, size_t size) { return false; }
 // Determine page size at startup.
 static const size_t kPageSize = (size_t)sysconf(_SC_PAGE_SIZE);
 
-// Defined here to allow testing. Only used internally.
+// mlock and maybe madvise the page starting at 'addr'.
+rocksdb::Status LockPage(void* page_start) {
+  rocksdb::Status status;
+
+  if (mlock(page_start, kPageSize) != 0) {
+    status = rocksdb::Status::NotSupported(
+        fmt::StringPrintf("failed to mlock page: %s", strerror(errno)));
+  }
+
+// Check for both defines otherwise we could not revert.
+#if defined(MADV_DONTDUMP) && defined(MADV_DODUMP)
+  if (madvise(page_start, kPageSize, MADV_DONTDUMP) != 0) {
+    status = rocksdb::Status::NotSupported(
+        fmt::StringPrintf("failed to madvise(MADV_DONTDUMP) page: %s", strerror(errno)));
+  }
+#else
+  status =
+      rocksdb::Status::NotSupported("madvise does not support flags MADV_DONTDUMP or MADV_DODUMP");
+#endif
+
+  return status;
+}
+
+// munlock and maybe madvise the page starting at 'addr'.
+rocksdb::Status UnlockPage(void* page_start) {
+  rocksdb::Status status;
+
+  if (munlock(page_start, kPageSize) != 0) {
+    status = rocksdb::Status::NotSupported(
+        fmt::StringPrintf("failed to munlock page: %s", strerror(errno)));
+  }
+
+// Execute only if we called DONTDUMP and if DODUMP is defined.
+#if defined(MADV_DONTDUMP) && defined(MADV_DODUMP)
+  if (madvise(page_start, kPageSize, MADV_DODUMP) != 0) {
+    status = rocksdb::Status::NotSupported(
+        fmt::StringPrintf("failed to madvise(MADV_DODUMP) page: %s", strerror(errno)));
+  }
+// Do not repeat the "madvise not supported" errors, it's caught in LockPage.
+#endif
+
+  return status;
+}
+
 class PageRegistry {
  public:
   PageRegistry() {}
@@ -44,8 +88,8 @@ class PageRegistry {
 
   // Unlock the range of [addr, addr+size).
   void Unlock(size_t addr, size_t size) {
-    // Overwrite memory with random bytes.
-    FillRandomBytes((unsigned char*)addr, size);
+    // Zero memory.
+    std::memset((void*)addr, 0, size);
     // Decrease lock counter.
     ModifyAddress(addr, size, false /* increment */);
   }
@@ -78,44 +122,28 @@ class PageRegistry {
   void ModifyPageLocked(size_t page_start, bool increment) {
     std::pair<LockedPageMap::iterator, bool> it =
         locked_pages_.insert(std::make_pair(page_start, 0));
+
     if (increment) {
-      it.first->second++;
-      if (it.first->second > 1) {
-        // We locked this page before.
-        return;
+      if (it.first->second == 0) {
+        // First time this page is used: lock it.
+        auto status = LockPage((void*)page_start);
+        if (!status.ok()) {
+          // We don't have a good way to surface errors here: log it.
+          std::cerr << status.getState() << std::endl;
+        }
       }
+      it.first->second++;
     } else {
       it.first->second--;
-      if (it.first->second != 0) {
-        // This page is still referenced.
-        return;
+      if (it.first->second == 0) {
+        // Last reference to this page: unlock it and delete the entry.
+        auto status = UnlockPage((void*)page_start);
+        if (!status.ok()) {
+          // We don't have a good way to surface errors here: log it.
+          std::cerr << status.getState() << std::endl;
+        }
+        locked_pages_.erase(it.first);
       }
-      locked_pages_.erase(it.first);
-    }
-
-    if (increment) {
-      // We don't have a good way to surface mlock/madvise errors. Log to stdout instead.
-      if (mlock((void*)page_start, kPageSize) != 0) {
-        std::cout << "mlock failed with: " << strerror(errno) << std::endl;
-      }
-
-// Check for both defines otherwise we could not revert.
-#if defined(MADV_DONTDUMP) && defined(MADV_DODUMP)
-      if (madvise((void*)page_start, kPageSize, MADV_DONTDUMP) != 0) {
-        std::cout << "madvise failed with: " << strerror(errno) << std::endl;
-      }
-#endif
-    } else {
-      if (munlock((void*)page_start, kPageSize) != 0) {
-        std::cout << "mlock failed with: " << strerror(errno) << std::endl;
-      }
-
-// Execute only if we called DONTDUMP and if DODUMP is defined.
-#if defined(MADV_DONTDUMP) && defined(MADV_DODUMP)
-      if (madvise((void*)page_start, kPageSize, MADV_DODUMP) != 0) {
-        std::cout << "madvise failed with: " << strerror(errno) << std::endl;
-      }
-#endif
     }
   }
 
@@ -128,42 +156,6 @@ class PageRegistry {
 // Global page registry.
 static PageRegistry pageRegistry;
 
-// Try to lock/madvise and release a single page containing 'addr'.
-rocksdb::Status TryLockUnlock(size_t addr) {
-  addr -= (addr % kPageSize);
-
-  if (mlock((void*)addr, kPageSize) != 0) {
-    return rocksdb::Status::NotSupported(
-        fmt::StringPrintf("failed to mlock page : %s", strerror(errno)));
-  }
-
-#ifdef MADV_DONTDUMP
-  if (madvise((void*)addr, kPageSize, MADV_DONTDUMP) != 0) {
-    return rocksdb::Status::NotSupported(
-        fmt::StringPrintf("failed to madvise(MADV_DONTDUMP) page : %s", strerror(errno)));
-  }
-#else
-  return rocksdb::Status::NotSupported("madvise(MADV_DONTDUMP) is not supported");
-#endif
-
-  if (munlock((void*)addr, kPageSize) != 0) {
-    return rocksdb::Status::NotSupported(
-        fmt::StringPrintf("failed to munlock page : %s", strerror(errno)));
-  }
-
-// We've already failed if !defined(MADV_DONTDUMP), don't check for both.
-#ifdef MADV_DODUMP
-  if (madvise((void*)addr, kPageSize, MADV_DODUMP) != 0) {
-    return rocksdb::Status::NotSupported(
-        fmt::StringPrintf("failed to madvise(MADV_DODUMP) page : %s", strerror(errno)));
-  }
-#else
-  return rocksdb::Status::NotSupported("madvise(MADV_DODUMP) is not supported");
-#endif
-
-  return rocksdb::Status::OK();
-}
-
 rocksdb::Status CanLockPages() {
   long page_size = sysconf(_SC_PAGE_SIZE);
   if (page_size == -1) {
@@ -173,10 +165,19 @@ rocksdb::Status CanLockPages() {
 
   // Make a small allocation and try locking/unlocking.
   char* foo = new char[128];
-  auto status = TryLockUnlock((size_t)foo);
-  delete[] foo;
+  auto page_addr = (size_t)foo;
+  page_addr -= (page_addr % kPageSize);
 
-  return status;
+  auto lock_status = LockPage((void*)page_addr);
+  delete[] foo;
+  // Always unlock regardless of lock_status. We may have failed in madvise but still need
+  // to unlock the page.
+  auto unlock_status = UnlockPage((void*)page_addr);
+
+  if (!lock_status.ok()) {
+    return lock_status;
+  }
+  return unlock_status;
 }
 
 bool IsLocked(size_t addr, size_t size) { return pageRegistry.IsLocked(addr, size); }

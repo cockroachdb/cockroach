@@ -18,11 +18,11 @@
 // Deallocation:
 // - munlock pages
 // - madvise(MADV_DODUMP) to re-enable inclusion in core dumps
-// - overwrite memory with random bytes
+// - overwrite memory with zeros
 //
 // mlock/munlock/madvise are only called once per page (using reference counting)
 // because these calls don't stack on some systems.
-// Memory overwrite with random bytes is performed on every deallocation.
+// Memory overwrite with zeros is performed on every deallocation.
 //
 // Objects owned by the arena should not have their destructors run. Instead,
 // deleting the arena deletes all the contained objects.
