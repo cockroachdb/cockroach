@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 )
 
 // MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
@@ -64,6 +65,8 @@ communicate with a secure cluster).
 		case *roachpb.SendError:
 			return connDropped()
 		case *net.OpError:
+			return connDropped()
+		case *netutil.InitialHeartbeatFailedError:
 			return connDropped()
 		}
 
