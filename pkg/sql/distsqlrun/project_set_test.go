@@ -110,6 +110,7 @@ func TestProjectSet(t *testing.T) {
 				c.input,
 				append(c.inputTypes, c.spec.GeneratedColumns...), /* outputTypes */
 				c.expected,
+				nil,
 			)
 		})
 	}
