@@ -20,7 +20,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: simple; Type: TABLE; Schema: public; Owner: -
+-- Name: simple; Type: TABLE; Schema: public; Owner: postgres
 --
 
 CREATE TABLE public.simple (
@@ -30,8 +30,10 @@ CREATE TABLE public.simple (
 );
 
 
+ALTER TABLE public.simple OWNER TO postgres;
+
 --
--- Data for Name: simple; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: simple; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.simple (i, s, b) FROM stdin;
@@ -68,7 +70,7 @@ COPY public.simple (i, s, b) FROM stdin;
 
 
 --
--- Name: simple simple_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: simple simple_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.simple
@@ -76,14 +78,14 @@ ALTER TABLE ONLY public.simple
 
 
 --
--- Name: simple_b_s_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: simple_b_s_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE UNIQUE INDEX simple_b_s_idx ON public.simple USING btree (b, s);
 
 
 --
--- Name: simple_s_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: simple_s_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX simple_s_idx ON public.simple USING btree (s);
