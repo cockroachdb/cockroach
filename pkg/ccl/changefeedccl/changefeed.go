@@ -33,14 +33,25 @@ import (
 	"github.com/pkg/errors"
 )
 
-var changefeedPollInterval = settings.RegisterDurationSetting(
+// TODO(dan): Should these be cluster settings or WITH options? We probably
+// wouldn't want to switch to the latter until after `ALTER CHANGEFEED` is
+// implemented (so that they can be adjusted on an already created changefeed).
+// Either way, they are going away once we switch to RangeFeed so maybe it
+// doesn't matter.
+var changefeedPollInterval = settings.RegisterNonNegativeDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the prototype changefeed implementation",
 	1*time.Second,
 )
+var changefeedReadBehindInterval = settings.RegisterNonNegativeDurationSetting(
+	"changefeed.experimental_readbehind_interval",
+	"how far behind realtime the prototype changefeed implementation polls",
+	10*time.Second,
+)
 
 func init() {
 	changefeedPollInterval.Hide()
+	changefeedReadBehindInterval.Hide()
 }
 
 const (
@@ -152,21 +163,64 @@ func exportRequestPoll(
 			return ret, nil
 		}
 
-		pollDuration := changefeedPollInterval.Get(&execCfg.Settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, highwater.WallTime))
-		if pollDuration > 0 {
-			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
-			select {
-			case <-ctx.Done():
-				return changedKVs{}, ctx.Err()
-			case <-time.After(pollDuration):
+		pollInterval := changefeedPollInterval.Get(&execCfg.Settings.SV)
+		readBehind := changefeedReadBehindInterval.Get(&execCfg.Settings.SV)
+
+		// This code attempts to figure out what the next poll's highwater mark
+		// should be and at what time we should start that poll.
+		// - nextHighwater needs to be at least readBehind in the past
+		// - nextHighwater needs to be at least pollInterval greater than
+		//   highwater
+		//   - note that if the changefeed has just started or restarted, then
+		//     nextHighwater-highwater may (and should) be much greater than
+		//     pollInterval, but we can't just blindly set it to now-readBehind
+		//     because that could be before highwater
+		// - busy waiting should be avoided
+		// - this should all still work when pollInterval and readBehind are
+		//   being adjusted by the user
+		// - the sleep should never be overly long, so the changefeed stays
+		//   responsive to pollInterval and readBehind adjustments
+		//   - TODO(dan): this is not true of the current implementation. fixme
+		nextHighwater := hlc.Timestamp{WallTime: highwater.WallTime + pollInterval.Nanoseconds()}
+		nextPoll := timeutil.Unix(0, nextHighwater.WallTime).Add(readBehind)
+		if now := execCfg.Clock.PhysicalTime(); now.After(nextPoll) {
+			// The last poll took longer than the polling interval (or this is
+			// the first poll), so the proposed nextHighwater needs to be
+			// adjusted.
+			nextHighwater.WallTime = now.Add(-readBehind).UnixNano()
+			nextPoll = now
+			if nextHighwater.Less(highwater) {
+				// NB:
+				// now > highwater + pollInterval + readBehind
+				// nextHighwater = now - readBehind
+				//
+				// substituting:
+				// nextHighwater + readBehind > highwater + pollInterval + readBehind
+				//
+				// which guarantees that nextHighwater is greater than highwater
+				// as long as pollInterval isn't negative (which the setting
+				// enforces).
+				//
+				// TODO(dan): It feels like there should be a way to structure
+				// this code to be more obvious, but after trying for a bit, I
+				// haven't found it. Any suggestions?
+				panic(`unreachable`)
 			}
 		}
 
-		nextHighwater := execCfg.Clock.Now()
+		if sleep := nextPoll.Sub(execCfg.Clock.PhysicalTime()); sleep > 0 {
+			log.VEventf(ctx, 1, `sleeping for %s`, sleep)
+			select {
+			case <-ctx.Done():
+				return changedKVs{}, ctx.Err()
+			case <-time.After(sleep):
+			}
+		}
+
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			highwater, nextHighwater, time.Duration(nextHighwater.WallTime-highwater.WallTime))
 
+		pollStart := execCfg.Clock.PhysicalTime()
 		// TODO(dan): Send these out in parallel.
 		for _, span := range spans {
 			header := roachpb.Header{Timestamp: nextHighwater}
@@ -185,8 +239,7 @@ func exportRequestPoll(
 				buffer.append(changedKVs{sst: file.SST})
 			}
 		}
-		log.VEventf(ctx, 2, `poll took %s`,
-			time.Duration(execCfg.Clock.Now().WallTime-nextHighwater.WallTime))
+		log.VEventf(ctx, 2, `poll took %s`, execCfg.Clock.PhysicalTime().Sub(pollStart))
 
 		// There is guaranteed to be at least one entry in buffer because we
 		// always append the resolved timestamp.

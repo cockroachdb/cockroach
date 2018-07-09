@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestChangefeedBasics(t *testing.T) {
@@ -39,6 +41,7 @@ func TestChangefeedBasics(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '0ns'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
@@ -82,6 +85,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '0ns'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
@@ -111,6 +115,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -140,6 +145,7 @@ func TestChangefeedCursor(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -286,7 +292,60 @@ func TestChangefeedErrors(t *testing.T) {
 	); !testutils.IsError(err, `omit the SINK clause`) {
 		t.Fatalf(`expected 'omit the SINK clause' error got: %+v`, err)
 	}
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Second),
+	); !testutils.IsError(err, `cannot specify timestamp in the future`) {
+		t.Fatalf(`expected 'cannot specify timestamp in the future' error got: %+v`, err)
+	}
+}
 
+func TestChangefeedReadBehind(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_readbehind_interval = '20ms'`)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
+	defer closeFeedRowsHack(t, sqlDB, rows)
+
+	// Open a transaction that can't be pushed (by reading
+	// cluster_logical_timestamp), hold it for some amount of time that is less
+	// than the readbehind interval, and then commit it and verify that we don't
+	// need a transaction restart.
+	tx, err := sqlDB.DB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ts string
+	if err := tx.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts); err != nil {
+		t.Fatal(err)
+	}
+	// TODO(dan): Wait for some resolved timestamps instead.
+	time.Sleep(10 * time.Millisecond)
+	if _, err := tx.Exec(`INSERT INTO foo VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	assertPayloads(t, rows, []string{
+		`foo: [0]->{"a": 0}`,
+		`foo: [1]->{"a": 1}`,
+	})
 }
 
 func assertPayloads(t *testing.T, rows *gosql.Rows, expected []string) {
