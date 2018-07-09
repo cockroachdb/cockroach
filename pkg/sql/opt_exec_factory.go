@@ -479,6 +479,41 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
+// ConstructProjectSet is part of the exec.Factory interface.
+func (ef *execFactory) ConstructProjectSet(
+	n exec.Node, exprs tree.TypedExprs, cols sqlbase.ResultColumns,
+) (exec.Node, error) {
+	src := asDataSource(n)
+	p := &projectSetNode{
+		source:          src.plan,
+		sourceInfo:      src.info,
+		columns:         cols,
+		numColsInSource: len(src.info.SourceColumns),
+		exprs:           exprs,
+		funcs:           make([]*tree.FuncExpr, len(exprs)),
+		numColsPerGen:   make([]int, len(exprs)),
+		run: projectSetRun{
+			gens:      make([]tree.ValueGenerator, len(exprs)),
+			done:      make([]bool, len(exprs)),
+			rowBuffer: make(tree.Datums, len(cols)),
+		},
+	}
+
+	for i, expr := range exprs {
+		if tFunc, ok := expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
+			// Set-generating functions: generate_series() etc.
+			tType := expr.ResolvedType().(types.TTuple)
+			p.funcs[i] = tFunc
+			p.numColsPerGen[i] = len(tType.Types)
+		} else {
+			// A simple non-generator expression.
+			p.numColsPerGen[i] = 1
+		}
+	}
+
+	return p, nil
+}
+
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery,

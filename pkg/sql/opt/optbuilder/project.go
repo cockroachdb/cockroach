@@ -164,7 +164,7 @@ func (b *Builder) finishBuildScalar(
 	if col := outScope.findExistingCol(texpr); col != nil {
 		col = outScope.appendColumn(col, label)
 		col.group = group
-		return
+		return group
 	}
 
 	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr, group)

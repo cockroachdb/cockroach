@@ -1,21 +1,31 @@
-# LogicTest: local
-#
-# TODO(radu): enable once SRF's are supported
-#
-#subtest generate_series
-#
-#query TTT
-#EXPLAIN SELECT * FROM generate_series(1, 3)
-#----
-#generator  ·  ·
-#
-#query TTT
-#EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
-#----
-#join            ·     ·
-# │              type  cross
-# ├── generator  ·     ·
-# └── generator  ·     ·
+# LogicTest: local-opt
+
+subtest generate_series
+
+query TTT
+EXPLAIN SELECT * FROM generate_series(1, 3)
+----
+project set    ·  ·
+ └── emptyrow  ·  ·
+
+query TTT
+EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+----
+join                ·     ·
+ │                  type  cross
+ ├── project set    ·     ·
+ │    └── emptyrow  ·     ·
+ └── project set    ·     ·
+      └── emptyrow  ·     ·
+
+query TTT
+EXPLAIN SELECT * FROM ROWS FROM (cos(1))
+----
+project set    ·  ·
+ └── emptyrow  ·  ·
+
+
+# TODO(radu): enable once SRF's are supported in the Select list.
 #
 #query TTT
 #EXPLAIN SELECT generate_series(1, 3)
