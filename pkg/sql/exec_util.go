@@ -669,6 +669,16 @@ func (p *planner) EvalAsOfTimestamp(
 	return ts, nil
 }
 
+// ParseHLC parses the string representation of an `hlc.Timestamp` that is
+// accepted by `AS OF SYSTEM TIME`.
+func ParseHLC(s string) (hlc.Timestamp, error) {
+	dec, _, err := apd.NewFromString(s)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return decimalToHLC(dec)
+}
+
 func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	// Format the decimal into a string and split on `.` to extract the nanosecond
 	// walltime and logical tick parts.
