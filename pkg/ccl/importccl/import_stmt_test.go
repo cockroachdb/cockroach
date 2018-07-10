@@ -62,13 +62,14 @@ func TestImportData(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
 
 	tests := []struct {
-		name   string
-		create string
-		with   string
-		typ    string
-		data   string
-		err    string
-		query  map[string][][]string
+		name    string
+		create  string
+		with    string
+		typ     string
+		data    string
+		err     string
+		cleanup string
+		query   map[string][][]string
 	}{
 		{
 			name: "duplicate unique index key",
@@ -412,6 +413,37 @@ COPY t (a, b, c) FROM stdin;
 			`,
 			err: "expected 2 columns, got 3",
 		},
+		{
+			name: "fk",
+			typ:  "PGDUMP",
+			data: testPgdumpFk,
+			query: map[string][][]string{
+				`SHOW TABLES`:              {{"cities"}, {"weather"}},
+				`SELECT city FROM cities`:  {{"Berkeley"}},
+				`SELECT city FROM weather`: {{"Berkeley"}},
+
+				`SELECT dependson_name
+				FROM crdb_internal.backward_dependencies
+				`: {{"weather_city_fkey"}},
+
+				`SELECT create_statement
+				FROM crdb_internal.create_statements
+				WHERE descriptor_name in ('cities', 'weather')
+				ORDER BY descriptor_name
+				`: {{testPgdumpCreateCities}, {testPgdumpCreateWeather}},
+
+				// Verify the constraint is unvalidated.
+				`SHOW CONSTRAINTS FROM weather
+				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities (city)", "false"}},
+			},
+			cleanup: `DROP TABLE cities, weather`,
+		},
+		{
+			name: "fk unreferenced",
+			typ:  "TABLE weather FROM PGDUMP",
+			data: testPgdumpFk,
+			err:  `table "cities" not found`,
+		},
 
 		// Error
 		{
@@ -438,7 +470,7 @@ COPY t (a, b, c) FROM stdin;
 
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t, t`)
 			var q string
 			if tc.create != "" {
 				q = fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
@@ -454,6 +486,9 @@ COPY t (a, b, c) FROM stdin;
 			for query, res := range tc.query {
 				sqlDB.CheckQueryResults(t, query, res)
 			}
+			if tc.cleanup != "" {
+				sqlDB.Exec(t, tc.cleanup)
+			}
 		})
 	}
 
@@ -464,6 +499,55 @@ COPY t (a, b, c) FROM stdin;
 		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t`, [][]string{{"1"}, {"1"}})
 	})
 }
+
+const (
+	testPgdumpCreateCities = `CREATE TABLE cities (
+	city STRING(80) NOT NULL,
+	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
+	FAMILY "primary" (city)
+)`
+	testPgdumpCreateWeather = `CREATE TABLE weather (
+	city STRING(80) NULL,
+	temp_lo INTEGER NULL,
+	temp_hi INTEGER NULL,
+	prcp REAL NULL,
+	date DATE NULL,
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities (city),
+	INDEX weather_auto_index_weather_city_fkey (city ASC),
+	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
+)`
+	testPgdumpFk = `
+CREATE TABLE cities (
+    city character varying(80) NOT NULL
+);
+
+ALTER TABLE cities OWNER TO postgres;
+
+CREATE TABLE weather (
+    city character varying(80),
+    temp_lo integer,
+    temp_hi integer,
+    prcp real,
+    date date
+);
+
+ALTER TABLE weather OWNER TO postgres;
+
+COPY cities (city) FROM stdin;
+Berkeley
+\.
+
+COPY weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
+Berkeley	45	53	0	1994-11-28
+\.
+
+ALTER TABLE ONLY cities
+    ADD CONSTRAINT cities_pkey PRIMARY KEY (city);
+
+ALTER TABLE ONLY weather
+    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities(city);
+`
+)
 
 // TODO(dt): switch to a helper in sampledataccl.
 func makeCSVData(
@@ -1136,7 +1220,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	create := stmt.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), nil, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
