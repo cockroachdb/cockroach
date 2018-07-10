@@ -458,7 +458,7 @@ func (w *interleavedPartitioned) Ops(
 			_, err = updateStatement.ExecContext(ctx, randString(rng, 20), sessionID)
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return err
-		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // delete
+		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent { // delete
 			log.Warning(context.TODO(), "deleting")
 			start := timeutil.Now()
 			deleteStatement, err := db.Prepare(deleteQuery)
@@ -615,7 +615,4 @@ func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) s
 
 func randString(rng *rand.Rand, length int) string {
 	return string(randutil.RandBytes(rng, length))
-}
-func randInt(rng *rand.Rand, min, max int) int {
-	return rng.Intn(max-min+1) + min
 }
