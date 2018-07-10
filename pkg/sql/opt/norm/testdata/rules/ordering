@@ -34,7 +34,7 @@ limit
  ├── ordering: +4,+5 opt(6)
  ├── sort
  │    ├── columns: d:4(int) e:5(int)
- │    ├── ordering: +4,+5 opt(6)
+ │    ├── ordering: +4,+5
  │    └── scan abcde
  │         └── columns: d:4(int) e:5(int)
  └── const: 10 [type=int]
