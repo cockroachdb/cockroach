@@ -215,10 +215,10 @@ TEST(EncryptedEnv, FileOps) {
   EXPECT_OK(checkFileEntry(*file_registry, file1, enginepbccl::AES128_CTR));
   EXPECT_OK(checkFileEntry(*file_registry, file2, enginepbccl::AES128_CTR));
 
-  // Create a new file. This should delete the previous file entry.
+  // Create a new file. This should overwrite the previous file entry.
   std::string contents3("we're in plaintext!");
   ASSERT_OK(rocksdb::WriteStringToFile(encrypted_env.get(), contents3, file1, false));
-  EXPECT_OK(checkNoFileEntry(*file_registry, file1));
+  EXPECT_OK(checkFileEntry(*file_registry, file1, enginepbccl::Plaintext));
   EXPECT_OK(checkFileEntry(*file_registry, file2, enginepbccl::AES128_CTR));
   EXPECT_OK(checkFileContents(encrypted_env.get(), file1, contents3));
   // Check with the plain env.
