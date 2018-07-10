@@ -227,9 +227,9 @@ WHERE id = $1`
 	}
 
 	if row.Len() != 4 ||
-		row[0].ResolvedType() != types.Bytes ||
-		row[1].ResolvedType() != types.String ||
-		row[2].ResolvedType() != types.Timestamp {
+		!types.EqualTypes(row[0].ResolvedType(), types.Bytes) ||
+		!types.EqualTypes(row[1].ResolvedType(), types.String) ||
+		!types.EqualTypes(row[2].ResolvedType(), types.Timestamp) {
 		return false, "", errors.Errorf("values returned from auth session lookup do not match expectation")
 	}
 
@@ -237,7 +237,7 @@ WHERE id = $1`
 	hashedSecret = []byte(*row[0].(*tree.DBytes))
 	username = string(*row[1].(*tree.DString))
 	expiresAt = row[2].(*tree.DTimestamp).Time
-	isRevoked = row[3].ResolvedType() != types.Unknown
+	isRevoked = !types.EqualTypes(row[3].ResolvedType(), types.Unknown)
 
 	if isRevoked {
 		return false, "", nil
@@ -308,7 +308,7 @@ RETURNING id
 	if err != nil {
 		return 0, nil, err
 	}
-	if row.Len() != 1 || row[0].ResolvedType() != types.Int {
+	if row.Len() != 1 || !types.EqualTypes(row[0].ResolvedType(), types.Int) {
 		return 0, nil, errors.Errorf(
 			"expected create auth session statement to return exactly one integer, returned %v",
 			row,

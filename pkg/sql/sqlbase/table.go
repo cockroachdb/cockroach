@@ -1485,7 +1485,7 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 		return tree.DNull, b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valType != types.Bool {
+	if !types.EqualTypes(valType, types.Bool) {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatum(a, valType, b)

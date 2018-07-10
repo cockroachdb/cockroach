@@ -1131,7 +1131,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			if startVal.Compare(sb.evalCtx, endVal) != 0 {
 				// TODO(rytaft): are there other types we should handle here
 				// besides int?
-				if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
+				if types.EqualTypes(startVal.ResolvedType(), types.Int) && types.EqualTypes(endVal.ResolvedType(), types.Int) {
 					start := int(*startVal.(*tree.DInt))
 					end := int(*endVal.(*tree.DInt))
 					// We assume that both start and end boundaries are inclusive. This

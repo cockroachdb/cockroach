@@ -86,7 +86,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
 	}
-	if datum.ResolvedType() != types.Bytes {
+	if !types.EqualTypes(datum.ResolvedType(), types.Bytes) {
 		return fmt.Errorf("histogram datum type should be Bytes")
 	}
 	h := &HistogramData{}

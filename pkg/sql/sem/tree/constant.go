@@ -64,7 +64,7 @@ func isConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	avail := c.AvailableTypes()
-	if desired != types.Any {
+	if !types.EqualTypes(desired, types.Any) {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, desired)

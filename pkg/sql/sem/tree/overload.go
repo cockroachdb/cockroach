@@ -351,7 +351,7 @@ func FirstNonNullReturnType() ReturnTyper {
 			return UnknownReturnType
 		}
 		for _, arg := range args {
-			if t := arg.ResolvedType(); t != types.Unknown {
+			if t := arg.ResolvedType(); !types.EqualTypes(t, types.Unknown) {
 				return t
 			}
 		}
@@ -485,7 +485,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
-	if desired != types.Any {
+	if !types.EqualTypes(desired, types.Any) {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 			func(o overloadImpl) bool {
 				// For now, we only filter on the return type for overloads with

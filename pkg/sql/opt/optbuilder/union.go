@@ -89,7 +89,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 
 		if newColsNeeded {
 			var typ types.T
-			if l.typ != types.Unknown {
+			if !types.EqualTypes(l.typ, types.Unknown) {
 				typ = l.typ
 			} else {
 				typ = r.typ

@@ -482,7 +482,7 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
 	if typ := filter.ResolvedType(); typ == types.Unknown {
 		return util.FastIntSet{}
-	} else if typ != types.Bool {
+	} else if !types.EqualTypes(typ, types.Bool) {
 		panic(fmt.Sprintf("non-bool filter expression: %s (type: %s)", filter, filter.ResolvedType()))
 	}
 	switch t := filter.(type) {

@@ -95,7 +95,7 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType() != types.Float && v.isNumericZero(val) {
+		if !types.EqualTypes(val.ResolvedType(), types.Float) && v.isNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -422,7 +422,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
 				// lookups.
 
-				if left.TypedRight().ResolvedType() != types.String {
+				if !types.EqualTypes(left.TypedRight().ResolvedType(), types.String) {
 					break
 				}
 

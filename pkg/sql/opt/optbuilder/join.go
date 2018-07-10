@@ -281,7 +281,7 @@ func (b *Builder) buildUsingJoinPredicate(
 		} else {
 			// Construct a new merged column to represent IFNULL(left, right).
 			var typ types.T
-			if leftCol.typ != types.Unknown {
+			if !types.EqualTypes(leftCol.typ, types.Unknown) {
 				typ = leftCol.typ
 			} else {
 				typ = rightCol.typ

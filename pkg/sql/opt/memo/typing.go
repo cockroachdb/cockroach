@@ -252,7 +252,7 @@ func typeAsAny(_ ExprView) types.T {
 func typeCoalesce(ev ExprView) types.T {
 	for i := 0; i < ev.ChildCount(); i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
-		if childType != types.Unknown {
+		if !types.EqualTypes(childType, types.Unknown) {
 			return childType
 		}
 	}
@@ -272,7 +272,7 @@ func typeCase(ev ExprView) types.T {
 	// Skip over the first child since that corresponds to the input <cond>.
 	for i := 1; i < ev.ChildCount(); i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
-		if childType != types.Unknown {
+		if !types.EqualTypes(childType, types.Unknown) {
 			return childType
 		}
 	}

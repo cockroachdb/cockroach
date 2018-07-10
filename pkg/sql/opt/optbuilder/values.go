@@ -61,7 +61,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 			// Verify that types of each tuple match one another.
 			if colTypes[i] == types.Unknown {
 				colTypes[i] = typ
-			} else if typ != types.Unknown && !typ.Equivalent(colTypes[i]) {
+			} else if !types.EqualTypes(typ, types.Unknown) && !typ.Equivalent(colTypes[i]) {
 				panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, colTypes[i])})
 			}

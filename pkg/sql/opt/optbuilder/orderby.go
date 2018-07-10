@@ -165,7 +165,7 @@ func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {
-	if _, ok := e.ResolvedType().(types.TArray); ok || e.ResolvedType() == types.JSON {
+	if _, ok := e.ResolvedType().(types.TArray); ok || types.EqualTypes(e.ResolvedType(), types.JSON) {
 		panic(unimplementedf("can't order by column type %s", e.ResolvedType()))
 	}
 }

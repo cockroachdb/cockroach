@@ -127,7 +127,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if d.ResolvedType() != typ {
+					if !types.EqualTypes(d.ResolvedType(), typ) {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtParseDatums)
