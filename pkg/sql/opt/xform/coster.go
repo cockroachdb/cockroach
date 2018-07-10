@@ -15,6 +15,7 @@
 package xform
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -70,30 +71,34 @@ const (
 // expression's cost must always be >= the total costs of its children, so that
 // branch-and-bound pruning will work properly.
 func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	var cost memo.Cost
 	switch candidate.Operator() {
 	case opt.SortOp:
-		return c.computeSortCost(candidate, logical)
+		cost = c.computeSortCost(candidate, logical)
 
 	case opt.ScanOp:
-		return c.computeScanCost(candidate, logical)
+		cost = c.computeScanCost(candidate, logical)
 
 	case opt.SelectOp:
-		return c.computeSelectCost(candidate, logical)
+		cost = c.computeSelectCost(candidate, logical)
 
 	case opt.ValuesOp:
-		return c.computeValuesCost(candidate, logical)
+		cost = c.computeValuesCost(candidate, logical)
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		// All join ops use hash join by default.
-		return c.computeHashJoinCost(candidate, logical)
+		cost = c.computeHashJoinCost(candidate, logical)
 
 	case opt.MergeJoinOp:
-		return c.computeMergeJoinCost(candidate, logical)
+		cost = c.computeMergeJoinCost(candidate, logical)
 
 	case opt.IndexJoinOp:
-		return c.computeIndexJoinCost(candidate, logical)
+		cost = c.computeIndexJoinCost(candidate, logical)
+
+	case opt.LookupJoinOp:
+		cost = c.computeLookupJoinCost(candidate, logical)
 
 	// TODO(rytaft): Add linear cost functions for GROUP BY, set ops, etc.
 
@@ -106,8 +111,15 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 
 	default:
 		// By default, cost of parent is sum of child costs.
-		return c.computeChildrenCost(candidate)
+		cost = c.computeChildrenCost(candidate)
 	}
+	if !cost.Less(memo.MaxCost) {
+		// Optsteps uses MaxCost to suppress expressions in the memo. When an
+		// expression with MaxCost is added to the memo, it can lead to an obscure
+		// crash with an unknown operation. We'd rather detect this early.
+		panic(fmt.Sprintf("operator %s with MaxCost added to the memo", candidate.Operator()))
+	}
+	return cost
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
@@ -207,6 +219,11 @@ func (c *coster) computeIndexJoinCost(candidate *memo.BestExpr, logical *props.L
 	perRowCost := cpuCostFactor + randIOCostFactor +
 		c.rowScanCost(def.Table, opt.PrimaryIndex, def.Cols.Len())
 	return leftCost + memo.Cost(leftRowCount)*perRowCost
+}
+
+func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// TODO(radu): we can't execute lookup joins yet, set a very large cost.
+	return 1e100
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {

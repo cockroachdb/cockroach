@@ -39,6 +39,14 @@ type CustomFuncs struct {
 	f *Factory
 }
 
+// MakeCustomFuncs returns a new CustomFuncs initialized with the given factory.
+func MakeCustomFuncs(f *Factory) CustomFuncs {
+	return CustomFuncs{
+		CustomFuncs: xfunc.MakeCustomFuncs(f.mem, f.evalCtx),
+		f:           f,
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // List functions

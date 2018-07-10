@@ -414,11 +414,82 @@ GenerateMergeJoins
   +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
   +                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 --------------------------------------------------------------------------------
+GenerateLookupJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4(string)
+  - └── inner-join (merge)
+  + └── inner-join (lookup xy)
+         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+  +      ├── key columns: [1] = [6]
+         ├── key: (6)
+         ├── fd: (1)-->(2,4), (1)==(6), (6)==(1)
+         ├── select
+         │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2,4)
+  -      │    ├── ordering: +1
+         │    ├── scan a
+         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+         │    │    ├── key: (1)
+  -      │    │    ├── fd: (1)-->(2,4)
+  -      │    │    └── ordering: +1
+  +      │    │    └── fd: (1)-->(2,4)
+         │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+  -      ├── scan xy
+  -      │    ├── columns: x:6(int!null)
+  -      │    ├── key: (6)
+  -      │    └── ordering: +6
+  -      └── merge-on
+  -           ├── left ordering: +1
+  -           ├── right ordering: +6
+  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  -                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  +           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+--------------------------------------------------------------------------------
 CommuteJoin (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoinWithFilter (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4(string)
+  - └── inner-join (merge)
+  + └── inner-join (lookup a)
+         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+  +      ├── key columns: [6] = [1]
+         ├── key: (6)
+         ├── fd: (1)-->(2,4), (1)==(6), (6)==(1)
+  -      ├── select
+  -      │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
+  -      │    ├── key: (1)
+  -      │    ├── fd: (1)-->(2,4)
+  -      │    ├── ordering: +1
+  -      │    ├── scan a
+  -      │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+  -      │    │    ├── key: (1)
+  -      │    │    ├── fd: (1)-->(2,4)
+  -      │    │    └── ordering: +1
+  -      │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+  -      │         └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+         ├── scan xy
+         │    ├── columns: x:6(int!null)
+  -      │    ├── key: (6)
+  -      │    └── ordering: +6
+  -      └── merge-on
+  -           ├── left ordering: +1
+  -           ├── right ordering: +6
+  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  -                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +      │    └── key: (6)
+  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  +           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +           └── a.i = (10 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
 ================================================================================
 Final best expression
   Cost: 2466.67

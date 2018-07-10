@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,7 +30,7 @@ import (
 // CustomFuncs to provide a clean interface for calling functions from both the
 // xform and xfunc packages using the same struct.
 type CustomFuncs struct {
-	xfunc.CustomFuncs
+	norm.CustomFuncs
 	e *explorer
 }
 
@@ -142,10 +142,9 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 //
 // ----------------------------------------------------------------------
 
-// CanConstrainScan returns true if the given expression can have a constraint
-// applied to it. This is only possible when it has no constraints and when it
-// does not have a limit applied to it (since limit is applied after the
-// constraint).
+// CanConstrainScan returns true if the scan can have a constraint applied to
+// it. This is only possible when it has no constraints and when it does not
+// have a limit applied to it (since limit is applied after the constraint).
 func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	return scanOpDef.Constraint == nil && scanOpDef.HardLimit == 0
@@ -435,6 +434,89 @@ func isJoinEquality(
 		return true, rhsCol, lhsCol
 	}
 	return false, 0, 0
+}
+
+// CanUseLookupJoin returns true if a join with the given join type can be
+// converted to a lookup join. This is only possible when:
+//  - the scan has no constraints, and
+//  - the scan has no limit, and
+//  - a prefix of the scan index columns have equality constraints.
+// We also disallow reverse scans since it's enough to apply the rule on the
+// corresponding forward scan.
+func (c *CustomFuncs) CanUseLookupJoin(
+	input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
+) bool {
+	md := c.e.mem.Metadata()
+	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
+	if scanDef.Constraint != nil || scanDef.HardLimit != 0 || scanDef.Reverse {
+		return false
+	}
+
+	inputProps := c.e.mem.GroupProperties(input).Relational
+	onExpr := memo.MakeNormExprView(c.e.mem, on)
+	_, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanDef.Cols, onExpr)
+
+	// Check if the first column in the index has an equality constraint.
+	idx := md.Table(scanDef.Table).Index(scanDef.Index)
+	firstCol := md.TableColumn(scanDef.Table, idx.Column(0).Ordinal)
+	for i := range rightEq {
+		if rightEq[i] == firstCol {
+			return true
+		}
+	}
+	return false
+}
+
+// ConstructLookupJoin creates a lookup join expression.
+func (c *CustomFuncs) ConstructLookupJoin(
+	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
+) []memo.Expr {
+	md := c.e.mem.Metadata()
+	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
+	inputProps := c.e.mem.GroupProperties(input).Relational
+	onExpr := memo.MakeNormExprView(c.e.mem, on)
+	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanDef.Cols, onExpr)
+	n := len(leftEq)
+	if n == 0 {
+		return nil
+	}
+
+	idx := md.Table(scanDef.Table).Index(scanDef.Index)
+	numIndexCols := idx.LaxKeyColumnCount()
+	lookupJoinDef := memo.LookupJoinDef{
+		JoinType:   joinType,
+		Table:      scanDef.Table,
+		Index:      scanDef.Index,
+		LookupCols: scanDef.Cols,
+	}
+	for i := 0; i < numIndexCols; i++ {
+		idxCol := md.TableColumn(scanDef.Table, idx.Column(i).Ordinal)
+		found := -1
+		for j := range rightEq {
+			if rightEq[j] == idxCol {
+				found = j
+			}
+		}
+		if found == -1 {
+			break
+		}
+		inputCol := leftEq[found]
+		if lookupJoinDef.KeyCols == nil {
+			lookupJoinDef.KeyCols = make(opt.ColList, 0, numIndexCols)
+		}
+		lookupJoinDef.KeyCols = append(lookupJoinDef.KeyCols, inputCol)
+	}
+	if lookupJoinDef.KeyCols == nil {
+		// CanUseLookupJoin ensures this is not possible.
+		panic("lookup join not possible")
+	}
+
+	// Create a lookup join expression in the same group.
+	// TODO(radu): simplify the ON condition (we can remove the equalities on
+	// KeyCols).
+	lookupJoin := memo.MakeLookupJoinExpr(input, on, c.e.mem.InternLookupJoinDef(&lookupJoinDef))
+	c.e.exprs = append(c.e.exprs[:0], memo.Expr(lookupJoin))
+	return c.e.exprs
 }
 
 // ----------------------------------------------------------------------

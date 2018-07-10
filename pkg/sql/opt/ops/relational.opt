@@ -116,16 +116,16 @@ define AntiJoin {
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
-# index. It is a special case of LookupInnerJoin where the input columns are the
-# PK columns of the table we are looking up into, and every input row results
-# in exactly one output row.
+# index. It is a special case of LookupJoin where the input columns are the PK
+# columns of the table we are looking up into, and every input row results in
+# exactly one output row.
 #
 # IndexJoin operators are created from Scan operators (unlike lookup joins which
 # are created from Join operators).
 [Relational]
 define IndexJoin {
     Input Expr
-    Def IndexJoinDef
+    Def   IndexJoinDef
 }
 
 # LookupJoin represents a join between an input expression and an index.
@@ -133,6 +133,7 @@ define IndexJoin {
 [Relational]
 define LookupJoin {
     Input Expr
+    On    Expr
     Def   LookupJoinDef
 }
 
