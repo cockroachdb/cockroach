@@ -22,7 +22,6 @@
 
 #include <algorithm>
 
-#include "../file_registry.h"
 #include "../fmt.h"
 #include "../plaintext_stream.h"
 #include "aligned_buffer.h"
@@ -572,19 +571,11 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
       return status;
     }
 
-    if (encryption_settings.size() == 0) {
-      // Plaintext: delete registry entry if is exists.
-      return file_registry_->MaybeDeleteEntry(fname);
-    } else {
-      // Encryption settings specified: create a FileEntry and save it, overwriting any existing
-      // one.
-      std::unique_ptr<enginepb::FileEntry> new_entry(new enginepb::FileEntry());
-      new_entry->set_env_type(stream_creator_->GetEnvType());
-      new_entry->set_encryption_settings(encryption_settings);
-      return file_registry_->SetFileEntry(fname, std::move(new_entry));
-    }
-
-    return rocksdb::Status::OK();
+    // Create a FileEntry and save it, overwriting any existing one.
+    std::unique_ptr<enginepb::FileEntry> new_entry(new enginepb::FileEntry());
+    new_entry->set_env_type(stream_creator_->GetEnvType());
+    new_entry->set_encryption_settings(encryption_settings);
+    return file_registry_->SetFileEntry(fname, std::move(new_entry));
   }
 
  private:

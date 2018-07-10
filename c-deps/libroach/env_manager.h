@@ -15,7 +15,7 @@
 #pragma once
 
 #include <rocksdb/env.h>
-#include "file_registry.h"
+#include "../file_registry.h"
 #include "rocksdbutils/env_encryption.h"
 
 namespace cockroach {

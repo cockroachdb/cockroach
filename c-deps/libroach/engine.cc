@@ -225,112 +225,20 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   stats->encryption_status = ToDBString(encryption_status);
 
   // Get file statistics.
-  // We compute the total number of files and total file size and break it down by
-  // whether the file is encrypted using the active data key or not.
-  //
-  // Only files accounted for by rocksdb are included. This will ignore files multiple types
-  // of files:
-  // - files that are no longer live (eg: older OPTIONS files, files pending deletion)
-  // - files created by libroach (eg: file/key registries)
-  // - files created by cockroach (eg: working directory, side loading, etc...)
-  //
-  // We use the file size reported by rocksdb when available and stat other files ourselves.
-  //
-  // There is no synchronization between the various rocksdb calls and the file registry. We also
-  // do not call DisableFileDeletions. This means that some files may be listed by rocksdb but not
-  // present in the file registry (deleted between calls). Such files will be considered
-  // "plaintext".
-  //
-  // TODO(mberhault): to obtain accurate statistics, we need at least:
-  // - FileRegistry entries for all plaintext files
-  // - Scan files in the FileRegistry
-  // - Disable deletions in rocksdb during the scan
-  // - Report "unknown" files (no registry entry) to avoid false positives.
-
-  struct FileStat {
-    FileStat() : has_size(false), size(0), entry(nullptr) {}
-    bool has_size;
-    uint64_t size;
-    std::unique_ptr<enginepb::FileEntry> entry;
-  };
-
-  std::unordered_map<std::string, FileStat> file_list;
-
-  // List of all live files. Filename only.
-  // Contains SSTs, miscellaneous files (eg: CURRENT, MANIFEST, OPTIONS)
-  std::vector<std::string> files;
-  uint64_t manifest_size = 0;
-  status = rep->GetLiveFiles(files, &manifest_size, false /* flush_memtable */);
+  FileStats file_stats(env_mgr.get());
+  status = file_stats.GetFiles(rep);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
 
-  for (auto it = files.begin(); it != files.end(); ++it) {
-    file_list[*it];
-  }
-
-  // List of WAL files. Filename and size.
-  // Contains log files only.
-  rocksdb::VectorLogPtr wal_files;
-  status = rep->GetSortedWalFiles(wal_files);
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-
-  for (auto it = wal_files.begin(); it != wal_files.end(); ++it) {
-    file_list[(*it)->PathName()].has_size = true;
-    file_list[(*it)->PathName()].size = (*it)->SizeFileBytes();
-  }
-
-  // Metadata about live files. Filename and size.
-  // Contains SSTs only.
-  std::vector<rocksdb::LiveFileMetaData> live_files;
-  rep->GetLiveFilesMetaData(&live_files);
-
-  for (auto it = live_files.begin(); it != live_files.end(); ++it) {
-    file_list[it->name].has_size = true;
-    file_list[it->name].size = it->size;
-  }
-
-  uint64_t total_files = 0, total_bytes = 0, active_key_files = 0, active_key_bytes = 0;
-
-  // Run through the list of found files.
+  // Get current active key ID.
   auto active_key_id = env_mgr->env_stats_handler->GetActiveDataKeyID();
 
-  for (auto it = file_list.begin(); it != file_list.end(); ++it) {
-    it->second.entry = env_mgr->file_registry->GetFileEntry(it->first, true /* relative */);
-
-    if (!it->second.has_size) {
-      // Unknown file size: stat it.
-      // Ignore all errors. We can't filter for "not found" as that returns an I/O error.
-      uint64_t size;
-      status = env_mgr->db_env->GetFileSize(env_mgr->file_registry->db_dir() + it->first, &size);
-      if (status.ok()) {
-        it->second.has_size = true;
-        it->second.size = size;
-      }
-    }
-
-    // Check whether the file is using the active key.
-    std::string id;
-    status = env_mgr->env_stats_handler->GetFileEntryKeyID(it->second.entry.get(), &id);
-    if (!status.ok()) {
-      return ToDBStatus(status);
-    }
-
-    if (id == active_key_id) {
-      active_key_files++;
-      active_key_bytes += it->second.size;
-    }
-
-    total_files++;
-    total_bytes += it->second.size;
+  // Request stats for the Data env only.
+  status = file_stats.GetStatsForEnvAndKey(enginepb::Data, active_key_id, stats);
+  if (!status.ok()) {
+    return ToDBStatus(status);
   }
-
-  stats->total_files = total_files;
-  stats->total_bytes = total_bytes;
-  stats->active_key_files = active_key_files;
-  stats->active_key_bytes = active_key_bytes;
 
   return kSuccess;
 }

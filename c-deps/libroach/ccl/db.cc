@@ -82,6 +82,7 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
   virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry,
                                             std::string* id) override {
     if (entry == nullptr) {
+      // No file entry: file written in plaintext before the file registry was used.
       *id = kPlainKeyID;
       return rocksdb::Status::OK();
     }
@@ -91,7 +92,7 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
       return rocksdb::Status::InvalidArgument("failed to parse encryption settings");
     }
 
-    if (enc_settings.key_id() == "") {
+    if (enc_settings.encryption_type() == enginepbccl::Plaintext) {
       *id = kPlainKeyID;
     } else {
       *id = enc_settings.key_id();
