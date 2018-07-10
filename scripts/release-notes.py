@@ -61,6 +61,7 @@ author_aliases = {
     'solongordon': "Solon Gordon",
     'Amruta': "Amruta Ranade",
     'yuzefovich': "Yahor Yuzefovich",
+    'madhavsuresh': "Madhav Suresh",
 }
 
 # FIXME(knz): This too.
@@ -87,6 +88,7 @@ crdb_folk = set([
     "Justin Jaffray",
     "Kuan Luo",
     "Lauren Hirata",
+    "Madhav Suresh",
     "Marc Berhault",
     "Masha Schneider",
     "Matt Jibson",
