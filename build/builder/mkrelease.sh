@@ -69,9 +69,9 @@ case "${1-}" in
 
   ?(amd64-)darwin)
     args=(
-      GOOS=darwin
-      GOARCH=amd64
-      XCMAKE_SYSTEM_NAME=Linux
+      XGOOS=darwin
+      XGOARCH=amd64
+      XCMAKE_SYSTEM_NAME=Darwin
       TARGET_TRIPLE=x86_64-apple-darwin13
       EXTRA_XCMAKE_FLAGS=-DCMAKE_INSTALL_NAME_TOOL=x86_64-apple-darwin13-install_name_tool
       SUFFIX=-darwin-10.9-amd64
@@ -79,9 +79,9 @@ case "${1-}" in
 
   ?(amd64-)windows)
     args=(
-      GOOS=windows
-      GOARCH=amd64
-      CMAKE_SYSTEM_NAME=Windows
+      XGOOS=windows
+      XGOARCH=amd64
+      XCMAKE_SYSTEM_NAME=Windows
       TARGET_TRIPLE=x86_64-w64-mingw32
       SUFFIX=-windows-6.2-amd64
     ) ;;
@@ -91,4 +91,4 @@ case "${1-}" in
 esac
 
 shift
-(set -x && make "${args[@]}" "$@")
+(set -x && CGO_ENABLED=1 make "${args[@]}" "$@")
