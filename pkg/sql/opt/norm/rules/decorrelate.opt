@@ -175,6 +175,69 @@
     (ConcatFilters $on $innerOn)
 )
 
+# TryDecorrelateGroupBy "pushes down" a Join into a GroupBy operator, in an
+# attempt to keep "digging" down to find and eliminate unnecessary correlation.
+# The eventual hope is to trigger the DecorrelateJoin rule to turn a JoinApply
+# operator into a non-apply Join operator.
+#
+# Example:
+#
+#   SELECT left.x, left.y, input.*
+#   FROM left
+#   INNER JOIN LATERAL
+#   (
+#     SELECT COUNT(*) FROM input WHERE input.x = left.x GROUP BY c
+#   ) AS input
+#   ON left.y = 10
+#   =>
+#   SELECT ANY_NOT_NULL(left.x), ANY_NOT_NULL(left.y), COUNT(*)
+#   FROM left WITH ORDINALITY
+#   INNER JOIN LATERAL
+#   (
+#     SELECT * FROM input WHERE input.x = left.x
+#   ) AS input
+#   ON True
+#   GROUP BY input.c, left.ordinality
+#   HAVING left.y = 10
+#
+# An ordinality column only needs to be synthesized if "left" does not already
+# have a strict key.
+#
+# ANY_NOT_NULL is an internal aggregation function that returns the first non-
+# null value in the grouping set (or null if there are no non-null values).
+# Since the grouping column(s) will always contain a candidate key of the left
+# input, any additional column selected from the left input will always have the
+# same value for all rows in the grouping set (whether it be null or non-null).
+#
+# Citations: [3] (see identity #8)
+[TryDecorrelateGroupBy, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (GroupBy
+            $input:*
+            $aggregations:*
+            $def:*
+        ) &
+        ^(IsScalarGroupBy $def) &
+        (IsUnorderedGroupBy $def)
+    $on:*
+)
+=>
+(Select
+    (GroupBy
+        (InnerJoinApply
+            $newLeft:(EnsureKey $left)
+            $input
+            (True)
+        )
+        (AppendNonKeyCols $newLeft $aggregations)
+        (GroupByUnionKey $newLeft $def)
+    )
+    $on
+)
+
 # TryDecorrelateScalarGroupBy "pushes down" a Join into a GroupBy operator, in
 # an attempt to keep "digging" down to find and eliminate unnecessary
 # correlation. The eventual hope is to trigger the DecorrelateJoin rule to turn
