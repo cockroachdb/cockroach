@@ -17,7 +17,6 @@ package log
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -67,7 +66,6 @@ func NewSecondaryLogger(
 			syncWrites:       forceSyncWrites || logging.syncWrites,
 			gcNotify:         make(chan struct{}, 1),
 			disableDaemons:   logging.disableDaemons,
-			exitFunc:         os.Exit,
 		},
 		forceSyncWrites: forceSyncWrites,
 	}

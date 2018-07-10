@@ -40,11 +40,19 @@ func FatalOnPanic() {
 }
 
 // SetExitFunc allows setting a function that will be called to exit the
-// process when a Fatal message is generated.
-func SetExitFunc(f func(int)) {
+// process when a Fatal message is generated. The supplied bool, if true,
+// supresses the stack trace, which is useful for test callers wishing
+// to keep the logs reasonably clean.
+//
+// Call with a nil function to undo.
+func SetExitFunc(hideStack bool, f func(int)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
-	logging.exitFunc = f
+	if f == nil && hideStack {
+		panic("can't pass hideStack when resetting logger")
+	}
+	logging.exitOverride.f = f
+	logging.exitOverride.hideStack = hideStack
 }
 
 // logDepth uses the PrintWith to format the output string and
