@@ -858,6 +858,159 @@ semi-join-apply
  └── true [type=bool]
 
 # --------------------------------------------------
+# TryDecorrelateGroupBy
+# --------------------------------------------------
+opt
+SELECT *
+FROM a
+WHERE EXISTS
+(
+    SELECT * FROM xy INNER JOIN (SELECT count(*) AS cnt, sum(v) FROM uv WHERE i=5 GROUP BY v) ON x=cnt
+)
+----
+semi-join-apply
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── select
+ │    ├── columns: x:6(int!null) y:7(int) v:9(int) cnt:10(int!null) sum:11(decimal)
+ │    ├── outer: (2)
+ │    ├── key: (6,9)
+ │    ├── fd: (6)-->(7), (6,9)-->(7,10,11), (6)==(10), (10)==(6)
+ │    ├── group-by
+ │    │    ├── columns: x:6(int!null) y:7(int) v:9(int) cnt:10(int) sum:11(decimal)
+ │    │    ├── grouping columns: x:6(int!null) v:9(int)
+ │    │    ├── outer: (2)
+ │    │    ├── key: (6,9)
+ │    │    ├── fd: (6)-->(7), (6,9)-->(7,10,11)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: x:6(int!null) y:7(int) v:9(int)
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── fd: (6)-->(7)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    └── fd: (6)-->(7)
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:9(int)
+ │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+ │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    └── aggregations [outer=(7,9)]
+ │    │         ├── count-rows [type=int]
+ │    │         ├── sum [type=decimal, outer=(9)]
+ │    │         │    └── variable: uv.v [type=int, outer=(9)]
+ │    │         └── any-not-null [type=int, outer=(7)]
+ │    │              └── variable: xy.y [type=int, outer=(7)]
+ │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+ │         └── xy.x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ └── true [type=bool]
+
+# Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
+opt
+SELECT *
+FROM xy, uv
+WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (1,3)-->(2,4)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (1,3)-->(2,4,10), (3)==(10), (10)==(3)
+      ├── group-by
+      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── grouping columns: x:1(int!null) u:3(int!null)
+      │    ├── key: (1,3)
+      │    ├── fd: (1)-->(2), (1,3)-->(2,4,10)
+      │    ├── inner-join-apply
+      │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── left-join
+      │    │    │    ├── columns: u:3(int!null) v:4(int) k:5(int) i:6(int)
+      │    │    │    ├── outer: (1)
+      │    │    │    ├── key: (3,5)
+      │    │    │    ├── fd: (3)-->(4), (5)-->(6)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    │    │    ├── key: (3)
+      │    │    │    │    └── fd: (3)-->(4)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:5(int!null) i:6(int)
+      │    │    │    │    ├── key: (5)
+      │    │    │    │    └── fd: (5)-->(6)
+      │    │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │         └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    └── aggregations [outer=(2,4,6)]
+      │         ├── max [type=int, outer=(6)]
+      │         │    └── variable: a.i [type=int, outer=(6)]
+      │         ├── any-not-null [type=int, outer=(4)]
+      │         │    └── variable: uv.v [type=int, outer=(4)]
+      │         └── any-not-null [type=int, outer=(2)]
+      │              └── variable: xy.y [type=int, outer=(2)]
+      └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+           └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
+
+# Synthesize key when one is not present.
+opt
+SELECT *
+FROM
+(
+    SELECT y, 'foo' AS cst FROM xy
+)
+WHERE 'bar'=(SELECT max(s) FROM (SELECT * FROM a LIMIT 1) WHERE k=y GROUP BY i)
+----
+project
+ ├── columns: y:2(int) cst:3(string!null)
+ ├── fd: ()-->(2,3)
+ ├── select
+ │    ├── columns: y:2(int) i:5(int) max:9(string!null) rownum:10(int!null)
+ │    ├── key: (10)
+ │    ├── fd: ()-->(2,5,9)
+ │    ├── group-by
+ │    │    ├── columns: y:2(int) i:5(int) max:9(string) rownum:10(int!null)
+ │    │    ├── grouping columns: i:5(int) rownum:10(int!null)
+ │    │    ├── key: (10)
+ │    │    ├── fd: ()-->(2,5), (10)-->(2,5,9)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: y:2(int!null) k:4(int!null) i:5(int) s:7(string) rownum:10(int!null)
+ │    │    │    ├── key: (10)
+ │    │    │    ├── fd: ()-->(2,4,5,7), (2)==(4), (4)==(2)
+ │    │    │    ├── row-number
+ │    │    │    │    ├── columns: y:2(int) rownum:10(int!null)
+ │    │    │    │    ├── key: (10)
+ │    │    │    │    ├── fd: (10)-->(2)
+ │    │    │    │    └── scan xy
+ │    │    │    │         └── columns: y:2(int)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:4(int!null) i:5(int) s:7(string)
+ │    │    │    │    ├── limit: 1
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(4,5,7)
+ │    │    │    └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+ │    │    │         └── a.k = xy.y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+ │    │    └── aggregations [outer=(2,7)]
+ │    │         ├── max [type=string, outer=(7)]
+ │    │         │    └── variable: a.s [type=string, outer=(7)]
+ │    │         └── any-not-null [type=int, outer=(2)]
+ │    │              └── variable: xy.y [type=int, outer=(2)]
+ │    └── filters [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight), fd=()-->(9)]
+ │         └── max = 'bar' [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight)]
+ └── projections [outer=(2)]
+      └── const: 'foo' [type=string]
+
+# --------------------------------------------------
 # TryDecorrelateScalarGroupBy
 # --------------------------------------------------
 opt
