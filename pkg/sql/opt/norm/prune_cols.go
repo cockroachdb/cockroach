@@ -45,7 +45,8 @@ func (c *CustomFuncs) NeededCols3(group1, group2, group3 memo.GroupID) opt.ColSe
 func (c *CustomFuncs) NeededColsGroupBy(aggs memo.GroupID, def memo.PrivateID) opt.ColSet {
 	groupByDef := c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
 	colSet := groupByDef.GroupingCols.Union(groupByDef.Ordering.ColSet())
-	return c.OuterCols(aggs).Union(colSet)
+	colSet.UnionWith(c.OuterCols(aggs))
+	return colSet
 }
 
 // NeededColsLimit unions the columns needed by Projections with the columns in

@@ -135,6 +135,7 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality = 2
 ----
 select
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(3)=1]
  ├── key: ()
  ├── fd: ()-->(1-3)

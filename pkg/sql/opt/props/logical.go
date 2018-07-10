@@ -242,6 +242,45 @@ func (p *Logical) OuterCols() opt.ColSet {
 	return p.Relational.OuterCols
 }
 
+// Verify runs consistency checks against the logical properties, in order to
+// ensure that they conform to several invariants:
+//
+//   1. Functional dependencies are internally consistent.
+//   2. Not null columns are a subset of output columns.
+//   3. Outer columns do not intersect output columns.
+//   4. If functional dependencies indicate that the relation can have at most
+//      one row, then the cardinality reflects that as well.
+//
+func (p *Logical) Verify() {
+	scalar := p.Scalar
+	if scalar != nil {
+		scalar.FuncDeps.Verify()
+
+		if p.Relational != nil {
+			panic("relational and scalar properties cannot both be set")
+		}
+		return
+	}
+
+	relational := p.Relational
+	relational.FuncDeps.Verify()
+
+	if !relational.NotNullCols.SubsetOf(relational.OutputCols) {
+		panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
+			relational.NotNullCols, relational.OutputCols))
+	}
+	if relational.OuterCols.Intersects(relational.OutputCols) {
+		panic(fmt.Sprintf("outer cols %s intersect output cols %s",
+			relational.OuterCols, relational.OutputCols))
+	}
+	if relational.FuncDeps.HasMax1Row() {
+		if relational.Cardinality.Max > 1 {
+			panic(fmt.Sprintf(
+				"max cardinality must be <= 1 if FDs have max 1 row: %s", relational.Cardinality))
+		}
+	}
+}
+
 // FormatColSet outputs the specified set of columns using FormatCol to format
 // the output.
 func (p *Logical) FormatColSet(

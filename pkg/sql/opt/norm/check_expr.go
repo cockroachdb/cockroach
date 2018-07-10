@@ -26,18 +26,7 @@ import (
 // this code in regular builds).
 func (f *Factory) checkExpr(ev memo.ExprView) {
 	// Check logical properties.
-	relational := ev.Logical().Relational
-	if relational != nil {
-		if !relational.NotNullCols.SubsetOf(relational.OutputCols) {
-			panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
-				relational.NotNullCols, relational.OutputCols))
-		}
-		if relational.OuterCols.Intersects(relational.OutputCols) {
-			panic(fmt.Sprintf("outer cols %s intersect output cols %s",
-				relational.OuterCols, relational.OutputCols))
-		}
-		relational.FuncDeps.Verify()
-	}
+	ev.Logical().Verify()
 
 	switch ev.Operator() {
 	case opt.ProjectionsOp:

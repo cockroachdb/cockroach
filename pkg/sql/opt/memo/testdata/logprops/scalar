@@ -89,12 +89,13 @@ select
                 ├── columns: u:3(int!null) v:4(int!null)
                 ├── outer: (1)
                 ├── stats: [rows=111.111111]
+                ├── fd: ()-->(3)
                 └── select
                      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                      ├── outer: (1)
                      ├── stats: [rows=111.111111]
                      ├── key: (5)
-                     ├── fd: (5)-->(3,4)
+                     ├── fd: ()-->(3), (5)-->(4)
                      ├── scan uv
                      │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
                      │    ├── stats: [rows=1000]
@@ -129,7 +130,7 @@ select
            │         ├── outer: (1)
            │         ├── stats: [rows=111.111111]
            │         ├── key: (5)
-           │         ├── fd: (5)-->(3,4)
+           │         ├── fd: ()-->(3), (5)-->(4)
            │         ├── scan uv
            │         │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
            │         │    ├── stats: [rows=1000]

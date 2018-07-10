@@ -601,6 +601,17 @@ func TestFuncDeps_MakeApply(t *testing.T) {
 	abcde.MakeApply(mnpq)
 	verifyFD(t, abcde, "(1): (1)-->(2-5,10-13), (2,3)~~>(1,4,5)")
 
+	// SELECT *
+	// FROM abcde
+	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a AND m=1 AND p=1)
+	// ON True
+	abcde = makeAbcdeFD(t)
+	mnpq = makeMnpqFD(t)
+	mnpq.AddConstants(util.MakeFastIntSet(10, 12))
+	verifyFD(t, mnpq, "(11): ()-->(10,12), (11)-->(13)")
+	abcde.MakeApply(mnpq)
+	verifyFD(t, abcde, "(1)-->(2-5), (2,3)~~>(1,4,5)")
+
 	// No key in outer relation.
 	//   SELECT *
 	//   FROM (SELECT b, c, d, e FROM abcde)
@@ -685,6 +696,20 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	verifyFD(t, roj, "(10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(2,10), (10)==(1,2), (2)==(1,10)")
 	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 10, 11))
 	verifyFD(t, roj, "(10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(1-5,12,13), (1)==(2), (2)==(1), (1)~~>(10), (2)~~>(10)")
+
+	// Test multiple calls to MakeOuter, where the first creates determinant with
+	// columns from both sides of join.
+	//   SELECT * FROM (SELECT * FROM abcde WHERE b=1) FULL JOIN mnpq ON True
+	nullExtendedCols = util.MakeFastIntSet(1, 2, 3, 4, 5)
+	nullExtendedCols2 := util.MakeFastIntSet(10, 11, 12, 13)
+	roj = makeAbcdeFD(t)
+	roj.AddConstants(util.MakeFastIntSet(2))
+	roj.MakeProduct(makeMnpqFD(t))
+	verifyFD(t, roj, "(1,10,11): ()-->(2), (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13)")
+	roj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1, 2, 10, 11))
+	verifyFD(t, roj, "(1,10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), ()~~>(2), (1,10,11)-->(2)")
+	roj.MakeOuter(nullExtendedCols2, util.MakeFastIntSet(1, 2, 10, 11))
+	verifyFD(t, roj, "(1,10,11): (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), ()~~>(2), (1,10,11)-->(2)")
 
 	// Join keyless relations with nullable columns.
 	//   SELECT * FROM (SELECT d, e, d+e FROM abcde) LEFT JOIN (SELECT p, q, p+q FROM mnpq) ON True

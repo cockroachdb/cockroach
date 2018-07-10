@@ -56,6 +56,7 @@ SELECT k FROM a WHERE k = 1
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
  ├── key: ()
  └── fd: ()-->(1)
 
@@ -115,11 +116,13 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan a@u
       ├── columns: k:1(int!null) u:2(int!null)
       ├── constraint: /2/1: [/1/5 - /1/5]
+      ├── cardinality: [0 - 1]
       ├── key: ()
       └── fd: ()-->(1,2)
 
@@ -215,15 +218,18 @@ SELECT k FROM a WHERE u = 1 AND v = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── select
       ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── scan a@v
       │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
       │    ├── constraint: /3: [/5 - /5]
+      │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(1-3)
       └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
