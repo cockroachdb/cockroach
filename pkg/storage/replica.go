@@ -1138,11 +1138,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
 
-		addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
-		if err != nil {
-			continue
-		}
-		if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
 			continue
 		}
 

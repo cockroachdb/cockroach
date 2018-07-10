@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -63,9 +64,9 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	tp := NewRaftTransport(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		cluster.MakeTestingClusterSettings(),
-		resolver,
+		nodedialer.New(rpcC, resolver),
 		grpcServer,
-		rpcC,
+		stopper,
 	)
 
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, &util.UnresolvedAddr{NetworkField: "tcp", AddressField: "localhost:0"})
