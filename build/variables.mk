@@ -156,6 +156,7 @@ define VALID_VARS
   have-defs
   host-is-macos
   host-is-mingw
+  is-cross-compile
   langgen-package
   libroach-inputs
   logictest-package
