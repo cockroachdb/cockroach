@@ -17,7 +17,31 @@
             (Filters [(IsNot $variable (Null (AnyType)))])
         )
         (MakeOne)
-        (MakeAscOrderingChoiceFromColumn $col)
+        (MakeOrderingChoiceFromColumn Min $col)
+    )
+    (Aggregations [(AnyNotNull $variable)] $cols)
+    $def
+)
+
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule.
+# Due to limitations with OpName in exploration rules, the rule
+# had to be duplicated with minor modifications (we replace occurrences
+# of Min with Max)
+[ReplaceMaxWithLimit, Explore]
+(GroupBy
+    $input:*
+    (Aggregations [(Max $variable:(Variable $col:*))] $cols:*)
+    $def:* & (IsScalarGroupBy $def)
+)
+=>
+(GroupBy
+    (Limit
+        (Select
+            $input
+            (Filters [(IsNot $variable (Null (AnyType)))])
+        )
+        (MakeOne)
+        (MakeOrderingChoiceFromColumn Max $col)
     )
     (Aggregations [(AnyNotNull $variable)] $cols)
     $def
