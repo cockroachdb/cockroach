@@ -831,10 +831,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.DurationField> opt_interval interval_second
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique opt_column
+%type <bool> opt_unique
 %type <bool> opt_using_gin_btree
-
-%type <bool> opt_set_data
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_limit_value
@@ -1365,32 +1363,32 @@ alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
   ADD column_def
   {
-    $$.val = &tree.AlterTableAddColumn{ColumnKeyword: false, IfNotExists: false, ColumnDef: $2.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $2.colDef()}
   }
   // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
 | ADD IF NOT EXISTS column_def
   {
-    $$.val = &tree.AlterTableAddColumn{ColumnKeyword: false, IfNotExists: true, ColumnDef: $5.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $5.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN <coldef>
 | ADD COLUMN column_def
   {
-    $$.val = &tree.AlterTableAddColumn{ColumnKeyword: true, IfNotExists: false, ColumnDef: $3.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $3.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
 | ADD COLUMN IF NOT EXISTS column_def
   {
-    $$.val = &tree.AlterTableAddColumn{ColumnKeyword: true, IfNotExists: true, ColumnDef: $6.colDef()}
+    $$.val = &tree.AlterTableAddColumn{IfNotExists: true, ColumnDef: $6.colDef()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column column_name alter_column_default
   {
-    $$.val = &tree.AlterTableSetDefault{ColumnKeyword: $2.bool(), Column: tree.Name($3), Default: $4.expr()}
+    $$.val = &tree.AlterTableSetDefault{Column: tree.Name($3), Default: $4.expr()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column column_name DROP NOT NULL
   {
-    $$.val = &tree.AlterTableDropNotNull{ColumnKeyword: $2.bool(), Column: tree.Name($3)}
+    $$.val = &tree.AlterTableDropNotNull{Column: tree.Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP STORED
 | ALTER opt_column column_name DROP STORED
@@ -1403,7 +1401,6 @@ alter_table_cmd:
 | DROP opt_column IF EXISTS column_name opt_drop_behavior
   {
     $$.val = &tree.AlterTableDropColumn{
-      ColumnKeyword: $2.bool(),
       IfExists: true,
       Column: tree.Name($5),
       DropBehavior: $6.dropBehavior(),
@@ -1413,7 +1410,6 @@ alter_table_cmd:
 | DROP opt_column column_name opt_drop_behavior
   {
     $$.val = &tree.AlterTableDropColumn{
-      ColumnKeyword: $2.bool(),
       IfExists: false,
       Column: tree.Name($3),
       DropBehavior: $4.dropBehavior(),
@@ -1426,9 +1422,7 @@ alter_table_cmd:
 | ALTER opt_column column_name opt_set_data TYPE typename opt_collate opt_alter_column_using
   {
     $$.val = &tree.AlterTableAlterColumnType{
-      ColumnKeyword: $2.bool(),
       Column: tree.Name($3),
-      SetDataKeyword: $4.bool(),
       ToType: $6.colType(),
       Collation: $7,
       Using: $8.expr(),
@@ -4378,18 +4372,12 @@ alter_rename_index_stmt:
   }
 
 opt_column:
-  COLUMN
-  {
-    $$.val = true
-  }
-| /* EMPTY */
-  {
-    $$.val = false
-  }
+  COLUMN {}
+| /* EMPTY */ {}
 
 opt_set_data:
-  SET DATA { $$.val = true }
-| /* EMPTY */ { $$.val = false }
+  SET DATA {}
+| /* EMPTY */ {}
 
 // %Help: RELEASE - complete a retryable block
 // %Category: Txn

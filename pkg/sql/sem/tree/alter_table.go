@@ -91,17 +91,13 @@ type ColumnMutationCmd interface {
 
 // AlterTableAddColumn represents an ADD COLUMN command.
 type AlterTableAddColumn struct {
-	ColumnKeyword bool
-	IfNotExists   bool
-	ColumnDef     *ColumnTableDef
+	IfNotExists bool
+	ColumnDef   *ColumnTableDef
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ADD ")
-	if node.ColumnKeyword {
-		ctx.WriteString("COLUMN ")
-	}
+	ctx.WriteString(" ADD COLUMN ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -135,34 +131,22 @@ func (node *AlterTableAddConstraint) Format(ctx *FmtCtx) {
 
 // AlterTableAlterColumnType represents an ALTER TABLE ALTER COLUMN TYPE command.
 type AlterTableAlterColumnType struct {
-	Collation      string
-	Column         Name
-	ColumnKeyword  bool
-	SetDataKeyword bool
-	ToType         coltypes.T
-	Using          Expr
+	Collation string
+	Column    Name
+	ToType    coltypes.T
+	Using     Expr
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ALTER ")
-	if node.ColumnKeyword {
-		ctx.WriteString("COLUMN ")
-	}
+	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
-
-	if node.SetDataKeyword {
-		ctx.WriteString(" SET DATA")
-	}
-
-	ctx.WriteString(" TYPE ")
+	ctx.WriteString(" SET DATA TYPE ")
 	node.ToType.Format(ctx.Buffer, ctx.flags.EncodeFlags())
-
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
 		ctx.WriteString(node.Collation)
 	}
-
 	if node.Using != nil {
 		ctx.WriteString(" USING ")
 		ctx.FormatNode(node.Using)
@@ -176,18 +160,14 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 
 // AlterTableDropColumn represents a DROP COLUMN command.
 type AlterTableDropColumn struct {
-	ColumnKeyword bool
-	IfExists      bool
-	Column        Name
-	DropBehavior  DropBehavior
+	IfExists     bool
+	Column       Name
+	DropBehavior DropBehavior
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropColumn) Format(ctx *FmtCtx) {
-	ctx.WriteString(" DROP ")
-	if node.ColumnKeyword {
-		ctx.WriteString("COLUMN ")
-	}
+	ctx.WriteString(" DROP COLUMN ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
@@ -230,9 +210,8 @@ func (node *AlterTableValidateConstraint) Format(ctx *FmtCtx) {
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
 // or DROP DEFAULT command.
 type AlterTableSetDefault struct {
-	ColumnKeyword bool
-	Column        Name
-	Default       Expr
+	Column  Name
+	Default Expr
 }
 
 // GetColumn implements the ColumnMutationCmd interface.
@@ -242,10 +221,7 @@ func (node *AlterTableSetDefault) GetColumn() Name {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ALTER ")
-	if node.ColumnKeyword {
-		ctx.WriteString("COLUMN ")
-	}
+	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	if node.Default == nil {
 		ctx.WriteString(" DROP DEFAULT")
@@ -258,8 +234,7 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 // AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL
 // command.
 type AlterTableDropNotNull struct {
-	ColumnKeyword bool
-	Column        Name
+	Column Name
 }
 
 // GetColumn implements the ColumnMutationCmd interface.
@@ -269,10 +244,7 @@ func (node *AlterTableDropNotNull) GetColumn() Name {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropNotNull) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ALTER ")
-	if node.ColumnKeyword {
-		ctx.WriteString("COLUMN ")
-	}
+	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" DROP NOT NULL")
 }

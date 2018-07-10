@@ -134,6 +134,16 @@ func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) buil
 	}
 }
 
+func newDecodeError(enc string) error {
+	return pgerror.NewErrorf(pgerror.CodeCharacterNotInRepertoireError,
+		"invalid byte sequence for encoding %q", enc)
+}
+
+func newEncodeError(c rune, enc string) error {
+	return pgerror.NewErrorf(pgerror.CodeUntranslatableCharacterError,
+		"character %q has no representation in encoding %q", c, enc)
+}
+
 // builtins contains the built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
@@ -242,6 +252,68 @@ var builtins = map[string]builtinDefinition{
 				"returns `wow!great`.",
 		},
 	),
+
+	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				str := []byte(tree.MustBeDBytes(args[0]))
+				enc := strings.ToLower(string(tree.MustBeDString(args[1])))
+				switch enc {
+				// All the following are aliases to each other in PostgreSQL.
+				case "utf8", "utf-8", "unicode", "cp65001":
+					if !utf8.Valid(str) {
+						return nil, newDecodeError("UTF8")
+					}
+					return tree.NewDString(string(str)), nil
+
+					// All the following are aliases to each other in PostgreSQL.
+				case "latin1", "latin-1", "iso88591", "iso8859-1", "iso-8859-1", "cp28591":
+					var buf strings.Builder
+					for _, c := range str {
+						buf.WriteRune(rune(c))
+					}
+					return tree.NewDString(buf.String()), nil
+				}
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"invalid source encoding name %q", enc)
+			},
+			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
+				"Supports encodings 'UTF8' and 'LATIN1'.",
+		}),
+
+	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
+	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.String}, {"enc", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				str := string(tree.MustBeDString(args[0]))
+				enc := strings.ToLower(string(tree.MustBeDString(args[1])))
+				switch enc {
+				// All the following are aliases to each other in PostgreSQL.
+				case "utf8", "utf-8", "unicode", "cp65001":
+					return tree.NewDBytes(tree.DBytes([]byte(str))), nil
+
+					// All the following are aliases to each other in PostgreSQL.
+				case "latin1", "latin-1", "iso88591", "iso8859-1", "iso-8859-1", "cp28591":
+					res := make([]byte, 0, len(str))
+					for _, c := range str {
+						if c > 255 {
+							return nil, newEncodeError(c, "LATIN1")
+						}
+						res = append(res, byte(c))
+					}
+					return tree.NewDBytes(tree.DBytes(res)), nil
+				}
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"invalid destination encoding name %q", enc)
+			},
+			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
+				"Supports encodings 'UTF8' and 'LATIN1'.",
+		}),
 
 	"gen_random_uuid": makeBuiltin(
 		tree.FunctionProperties{
