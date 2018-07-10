@@ -18,22 +18,17 @@ const (
 	DefineFieldsOp
 	DefineFieldOp
 	RuleOp
-	BindOp
-	RefOp
-	MatchOp
+	FuncOp
 	NamesOp
 	NameOp
-	MatchAndOp
-	MatchNotOp
-	MatchAnyOp
-	MatchListAnyOp
-	MatchListFirstOp
-	MatchListLastOp
-	MatchListSingleOp
-	MatchListEmptyOp
-	ConstructOp
-	ConstructListOp
+	AndOp
+	NotOp
 	ListOp
+	ListAnyOp
+	BindOp
+	RefOp
+	AnyOp
+	SliceOp
 	StringOp
 	CustomFuncOp
 )
