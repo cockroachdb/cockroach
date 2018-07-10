@@ -584,7 +584,6 @@ func init() {
 
 	logging.prefix = program
 	logging.setVState(0, nil, false)
-	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
 	logging.fatalCh = make(chan struct{})
 
@@ -689,11 +688,14 @@ type loggingT struct {
 	disableDaemons bool
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
-	vmodule   moduleSpec    // The state of the --vmodule flag.
-	verbosity level         // V logging level, the value of the --verbosity flag/
-	exitFunc  func(int)     // func that will be called on fatal errors
-	gcNotify  chan struct{} // notify GC daemon that a new log file was created
-	fatalCh   chan struct{} // closed on fatal error
+	vmodule      moduleSpec // The state of the --vmodule flag.
+	verbosity    level      // V logging level, the value of the --verbosity flag/
+	exitOverride struct {
+		f         func(int) // overrides os.Exit when non-nil; testing only
+		hideStack bool      // hides stack trace; only in effect when f is not nil
+	}
+	gcNotify chan struct{} // notify GC daemon that a new log file was created
+	fatalCh  chan struct{} // closed on fatal error
 
 	interceptor atomic.Value // InterceptorFn
 
@@ -848,8 +850,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		//
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
-		exitFunc := l.exitFunc
+		exitFunc := os.Exit
+		if l.exitOverride.f != nil {
+			if l.exitOverride.hideStack {
+				stacks = []byte("stack trace omitted via SetExitFunc)\n")
+			}
+			exitFunc = l.exitOverride.f
+		}
 		exitCalled := make(chan struct{})
+
 		defer func() {
 			<-exitCalled
 		}()
@@ -998,7 +1007,11 @@ func (l *loggingT) exitLocked(err error) {
 		return
 	}
 	l.flushAndSync(true /*doSync*/)
-	l.exitFunc(2)
+	if l.exitOverride.f != nil {
+		l.exitOverride.f(2)
+	} else {
+		os.Exit(2)
+	}
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the

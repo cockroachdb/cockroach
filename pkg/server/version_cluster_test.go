@@ -17,7 +17,6 @@ package server_test
 import (
 	"context"
 	gosql "database/sql"
-	"os"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -320,8 +319,8 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	exits := make(chan int, 100)
 
-	log.SetExitFunc(func(i int) { exits <- i })
-	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+	defer log.ResetExitFunc()
 
 	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
 	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
@@ -376,8 +375,8 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 
 	exits := make(chan int, 100)
 
-	log.SetExitFunc(func(i int) { exits <- i })
-	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+	defer log.ResetExitFunc()
 
 	// Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
 	// incompatible with anything earlier).

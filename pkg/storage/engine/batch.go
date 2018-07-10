@@ -407,7 +407,7 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 // 	   fmt.Printf("merge(%x,%x)", r.Key(), r.Value())
 // 	 }
 // }
-// if err != nil {
+// if err := r.Error(); err != nil {
 //   return err
 // }
 type RocksDBBatchReader struct {

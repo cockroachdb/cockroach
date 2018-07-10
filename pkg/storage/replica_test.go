@@ -5801,120 +5801,139 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 func TestQueryIntentRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, behavior := range []roachpb.QueryIntentRequest_IfMissingBehavior{
-		roachpb.QueryIntentRequest_DO_NOTHING,
-		roachpb.QueryIntentRequest_RETURN_ERROR,
-		roachpb.QueryIntentRequest_PREVENT,
-	} {
-		t.Run(fmt.Sprintf("behavior=%s", behavior), func(t *testing.T) {
-			tc := testContext{}
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			tc.Start(t, stopper)
+	for _, iso := range []enginepb.IsolationType{enginepb.SNAPSHOT, enginepb.SERIALIZABLE} {
+		t.Run(iso.String(), func(t *testing.T) {
+			for _, behavior := range []roachpb.QueryIntentRequest_IfMissingBehavior{
+				roachpb.QueryIntentRequest_DO_NOTHING,
+				roachpb.QueryIntentRequest_RETURN_ERROR,
+				roachpb.QueryIntentRequest_PREVENT,
+			} {
+				if iso == enginepb.SNAPSHOT && behavior == roachpb.QueryIntentRequest_PREVENT {
+					// Cannot prevent SNAPSHOT transaction with QueryIntent.
+					continue
+				}
+				t.Run(fmt.Sprintf("behavior=%s", behavior), func(t *testing.T) {
 
-			key1 := roachpb.Key("a")
-			key2 := roachpb.Key("b")
-			txn := newTransaction("test", key1, 1, enginepb.SERIALIZABLE, tc.Clock())
+					tc := testContext{}
+					stopper := stop.NewStopper()
+					defer stopper.Stop(context.TODO())
+					tc.Start(t, stopper)
 
-			pArgs := putArgs(key1, []byte("value1"))
-			assignSeqNumsForReqs(txn, &pArgs)
-			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
+					key1 := roachpb.Key("a")
+					key2 := roachpb.Key("b")
+					txn := newTransaction("test", key1, 1, iso, tc.Clock())
+					txn2 := newTransaction("test2", key2, 1, iso, tc.Clock())
 
-			queryIntent := func(
-				key []byte,
-				txnMeta enginepb.TxnMeta,
-				baTxn *roachpb.Transaction,
-				expectIntent bool,
-			) {
-				t.Helper()
-				qiArgs := queryIntentArgs(key, txnMeta, behavior)
-				qiRes, pErr := tc.SendWrappedWith(roachpb.Header{Txn: baTxn}, &qiArgs)
-				if behavior == roachpb.QueryIntentRequest_RETURN_ERROR && !expectIntent {
-					if _, ok := pErr.GetDetail().(*roachpb.IntentMissingError); !ok {
-						t.Fatalf("expected IntentMissingError, found %v", pErr)
+					pArgs := putArgs(key1, []byte("value1"))
+					assignSeqNumsForReqs(txn, &pArgs)
+					if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+						t.Fatal(pErr)
 					}
-				} else {
+
+					queryIntent := func(
+						key []byte,
+						txnMeta enginepb.TxnMeta,
+						baTxn *roachpb.Transaction,
+						expectIntent bool,
+					) {
+						t.Helper()
+						qiArgs := queryIntentArgs(key, txnMeta, behavior)
+						qiRes, pErr := tc.SendWrappedWith(roachpb.Header{Txn: baTxn}, &qiArgs)
+						if behavior == roachpb.QueryIntentRequest_RETURN_ERROR && !expectIntent {
+							ownIntent := baTxn != nil && baTxn.ID == txnMeta.ID
+							if ownIntent && txnMeta.Timestamp.Less(txn.Timestamp) {
+								if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+									t.Fatalf("expected TransactionRetryError, found %v %v", txnMeta, pErr)
+								}
+							} else {
+								if _, ok := pErr.GetDetail().(*roachpb.IntentMissingError); !ok {
+									t.Fatalf("expected IntentMissingError, found %v", pErr)
+								}
+							}
+						} else {
+							if pErr != nil {
+								t.Fatal(pErr)
+							}
+							if e, a := expectIntent, qiRes.(*roachpb.QueryIntentResponse).FoundIntent; e != a {
+								t.Fatalf("expected FoundIntent=%t but FoundIntent=%t", e, a)
+							}
+						}
+					}
+
+					for _, baTxn := range []*roachpb.Transaction{nil, txn, txn2} {
+						// Query the intent with the correct txn meta. Should see intent regardless
+						// of whether we're inside the txn or not.
+						queryIntent(key1, txn.TxnMeta, baTxn, true)
+
+						// Query an intent on a different key for the same transaction. Should not
+						// see an intent.
+						queryIntent(key2, txn.TxnMeta, baTxn, false)
+
+						// Query an intent on the same key for a different transaction. Should not
+						// see an intent.
+						diffIDMeta := txn.TxnMeta
+						diffIDMeta.ID = txn2.ID
+						queryIntent(key1, diffIDMeta, baTxn, false)
+
+						// Query the intent with a larger epoch. Should not see an intent.
+						largerEpochMeta := txn.TxnMeta
+						largerEpochMeta.Epoch++
+						queryIntent(key1, largerEpochMeta, baTxn, false)
+
+						// Query the intent with a smaller epoch. Should not see an intent.
+						smallerEpochMeta := txn.TxnMeta
+						smallerEpochMeta.Epoch--
+						queryIntent(key1, smallerEpochMeta, baTxn, false)
+
+						// Query the intent with a larger timestamp. Should see an intent.
+						// See the comment on QueryIntentRequest.Txn for an explanation of why
+						// the request behaves like this.
+						largerTSMeta := txn.TxnMeta
+						largerTSMeta.Timestamp = largerTSMeta.Timestamp.Next()
+						queryIntent(key1, largerTSMeta, baTxn, true)
+
+						// Query the intent with a smaller timestamp. Should not see an intent
+						// if transaction is serializable. Should see an intent if the transaction
+						// is SNAPSHOT.
+						smallerTSMeta := txn.TxnMeta
+						smallerTSMeta.Timestamp = smallerTSMeta.Timestamp.Prev()
+						queryIntent(key1, smallerTSMeta, baTxn, iso == enginepb.SNAPSHOT)
+
+						// Query the intent with a larger sequence number. Should not see an intent.
+						largerSeqMeta := txn.TxnMeta
+						largerSeqMeta.Sequence++
+						queryIntent(key1, largerSeqMeta, baTxn, false)
+
+						// Query the intent with a smaller sequence number. Should see an intent.
+						// See the comment on QueryIntentRequest.Txn for an explanation of why
+						// the request behaves like this.
+						smallerSeqMeta := txn.TxnMeta
+						smallerSeqMeta.Sequence--
+						queryIntent(key1, smallerSeqMeta, baTxn, true)
+					}
+
+					// Perform a write at key2. Depending on the behavior of the queryIntent
+					// that queried that key, this write should have different results.
+					pArgs2 := putArgs(key2, []byte("value2"))
+					assignSeqNumsForReqs(txn, &pArgs2)
+					ba := roachpb.BatchRequest{}
+					ba.Header = roachpb.Header{Txn: txn}
+					ba.Add(&pArgs2)
+					br, pErr := tc.Sender().Send(context.Background(), ba)
 					if pErr != nil {
 						t.Fatal(pErr)
 					}
-					if e, a := expectIntent, qiRes.(*roachpb.QueryIntentResponse).FoundIntent; e != a {
-						t.Fatalf("expected FoundIntent=%T but FoundIntent=%T", e, a)
+					tsBumped := br.Txn.Timestamp != br.Txn.OrigTimestamp
+					if behavior == roachpb.QueryIntentRequest_PREVENT {
+						if !tsBumped {
+							t.Fatalf("transaction timestamp not bumped: %v", br.Txn)
+						}
+					} else {
+						if tsBumped {
+							t.Fatalf("unexpected transaction timestamp bumped: %v", br.Txn)
+						}
 					}
-				}
-			}
-
-			for _, baTxn := range []*roachpb.Transaction{nil, txn} {
-				// Query the intent with the correct txn meta. Should see intent regardless
-				// of whether we're inside the txn or not.
-				queryIntent(key1, txn.TxnMeta, baTxn, true)
-
-				// Query an intent on a different key for the same transaction. Should not
-				// see an intent.
-				queryIntent(key2, txn.TxnMeta, baTxn, false)
-
-				// Query an intent on the same key for a different transaction. Should not
-				// see an intent.
-				diffIDMeta := txn.TxnMeta
-				diffIDMeta.ID = uuid.MakeV4()
-				queryIntent(key1, diffIDMeta, baTxn, false)
-
-				// Query the intent with a larger epoch. Should not see an intent.
-				largerEpochMeta := txn.TxnMeta
-				largerEpochMeta.Epoch++
-				queryIntent(key1, largerEpochMeta, baTxn, false)
-
-				// Query the intent with a smaller epoch. Should not see an intent.
-				smallerEpochMeta := txn.TxnMeta
-				smallerEpochMeta.Epoch--
-				queryIntent(key1, smallerEpochMeta, baTxn, false)
-
-				// Query the intent with a larger timestamp. Should see an intent.
-				// See the comment on QueryIntentRequest.Txn for an explanation of why
-				// the request behaves like this.
-				largerTSMeta := txn.TxnMeta
-				largerTSMeta.Timestamp = largerTSMeta.Timestamp.Next()
-				queryIntent(key1, largerTSMeta, baTxn, true)
-
-				// Query the intent with a smaller timestamp. Should not see an intent.
-				smallerTSMeta := txn.TxnMeta
-				smallerTSMeta.Timestamp = smallerTSMeta.Timestamp.Prev()
-				queryIntent(key1, smallerTSMeta, baTxn, false)
-
-				// Query the intent with a larger sequence number. Should not see an intent.
-				largerSeqMeta := txn.TxnMeta
-				largerSeqMeta.Sequence++
-				queryIntent(key1, largerSeqMeta, baTxn, false)
-
-				// Query the intent with a smaller sequence number. Should see an intent.
-				// See the comment on QueryIntentRequest.Txn for an explanation of why
-				// the request behaves like this.
-				smallerSeqMeta := txn.TxnMeta
-				smallerSeqMeta.Sequence--
-				queryIntent(key1, smallerSeqMeta, baTxn, true)
-			}
-
-			// Perform a write at key2. Depending on the behavior of the queryIntent
-			// that queried that key, this write should have different results.
-			pArgs2 := putArgs(key2, []byte("value2"))
-			assignSeqNumsForReqs(txn, &pArgs2)
-			ba := roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: txn}
-			ba.Add(&pArgs2)
-			br, pErr := tc.Sender().Send(context.Background(), ba)
-			if pErr != nil {
-				t.Fatal(pErr)
-			}
-			tsBumped := br.Txn.Timestamp != br.Txn.OrigTimestamp
-			if behavior == roachpb.QueryIntentRequest_PREVENT {
-				if !tsBumped {
-					t.Fatalf("transaction timestamp not bumped: %v", br.Txn)
-				}
-			} else {
-				if tsBumped {
-					t.Fatalf("unexpected transaction timestamp bumped: %v", br.Txn)
-				}
+				})
 			}
 		})
 	}
