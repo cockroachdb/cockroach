@@ -5266,7 +5266,9 @@ func TestAllocatorFullDisks(t *testing.T) {
 						false,
 					)
 					if target != nil {
-						log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
+						if log.V(1) {
+							log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
+						}
 						testStores[k].rebalance(&testStores[int(target.StoreID)], rangeSize)
 					}
 				}
