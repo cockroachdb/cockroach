@@ -27,9 +27,8 @@ namespace cockroach {
 static const std::string kFileRegistryFilename = "COCKROACHDB_REGISTRY";
 
 // FileRegistry keeps track of encryption information per file.
-// Plaintext files are not registered for two reasons:
-// - they may be missing if transitioning from a non-registry version
-// - we don't want to add the extra file rewrite in non-encrypted setups
+// Plaintext files created before use of the file registry will not have an entry.
+// All files created after enabling the file registry are guaranteed to have an entry.
 //
 // All paths given to FileRegistry should be absolute paths. It converts
 // paths within `db_dir` to relative paths internally.
@@ -55,6 +54,7 @@ class FileRegistry {
 
   // Returns the FileEntry for the specified file.
   // If 'relative' is true, the path is relative to 'db_dir'.
+  // A 'nullptr' result indicates a plaintext file.
   std::unique_ptr<enginepb::FileEntry> GetFileEntry(const std::string& filename,
                                                     bool relative = false);
 
