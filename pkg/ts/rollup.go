@@ -147,8 +147,8 @@ func (db *DB) rollupTimeSeries(
 	thresholds := db.computeThresholds(now.WallTime)
 	for _, timeSeries := range timeSeriesList {
 		// Only process rollup if this resolution has a target rollup resolution.
-		targetResolution, ok := timeSeries.Resolution.TargetRollupResolution()
-		if !ok {
+		targetResolution, hasRollup := timeSeries.Resolution.TargetRollupResolution()
+		if !hasRollup {
 			continue
 		}
 
@@ -194,21 +194,6 @@ func (db *DB) rollupTimeSeries(
 			rollupDataSlice = append(rollupDataSlice, data)
 		}
 		if err := db.storeRollup(ctx, targetResolution, rollupDataSlice); err != nil {
-			return err
-		}
-
-		// Issue a prune command to delete the higher-resolution data.
-		// Time series data for a specific resolution falls in a contiguous key
-		// range, and can be deleted with a DelRange command.
-		b := &client.Batch{}
-		b.AddRawRequest(&roachpb.DeleteRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key:    targetSpan.Key,
-				EndKey: targetSpan.EndKey,
-			},
-			Inline: true,
-		})
-		if err := db.db.Run(ctx, b); err != nil {
 			return err
 		}
 	}
