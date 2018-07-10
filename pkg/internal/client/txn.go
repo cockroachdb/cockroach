@@ -464,6 +464,31 @@ func (txn *Txn) ReverseScan(
 	return txn.scan(ctx, begin, end, maxRows, true)
 }
 
+// Iterate performs a paginated scan and applying the function f to every page.
+// The semantics of retrieval and ordering are the same as for Scan. Note that
+// Txn auto-retries the transaction if necessary. Hence, the paginated data
+// must not be used for side-effects before the txn has committed.
+func (txn *Txn) Iterate(
+	ctx context.Context, begin, end interface{}, pageSize int, f func([]KeyValue) error,
+) error {
+	for {
+		rows, err := txn.Scan(ctx, begin, end, int64(pageSize))
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if err := f(rows); err != nil {
+			return errors.Wrap(err, "running iterate callback")
+		}
+		if len(rows) < pageSize {
+			return nil
+		}
+		begin = rows[len(rows)-1].Key.Next()
+	}
+}
+
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.

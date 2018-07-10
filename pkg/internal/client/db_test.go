@@ -262,6 +262,51 @@ func TestDB_ReverseScan(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_TxnIterate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.TODO(), b); err != nil {
+		t.Fatal(err)
+	}
+
+	tc := []struct{ pageSize, numPages int }{
+		{1, 2},
+		{2, 1},
+	}
+	var rows []client.KeyValue = nil
+	var p int
+	for _, c := range tc {
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			p = 0
+			rows = make([]client.KeyValue, 0)
+			return txn.Iterate(context.TODO(), "a", "b", c.pageSize,
+				func(rs []client.KeyValue) error {
+					p++
+					rows = append(rows, rs...)
+					return nil
+				})
+		}); err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"aa": []byte("1"),
+			"ab": []byte("2"),
+		}
+
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+		if p != c.numPages {
+			t.Errorf("expected %d pages, got %d", c.numPages, p)
+		}
+	}
+}
+
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)

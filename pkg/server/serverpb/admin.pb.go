@@ -686,11 +686,12 @@ func (*DecommissionStatusResponse) ProtoMessage()               {}
 func (*DecommissionStatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{24} }
 
 type DecommissionStatusResponse_Status struct {
-	NodeID          github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	IsLive          bool                                                `protobuf:"varint,2,opt,name=is_live,json=isLive,proto3" json:"is_live,omitempty"`
-	ReplicaCount    int64                                               `protobuf:"varint,3,opt,name=replica_count,json=replicaCount,proto3" json:"replica_count,omitempty"`
-	Decommissioning bool                                                `protobuf:"varint,4,opt,name=decommissioning,proto3" json:"decommissioning,omitempty"`
-	Draining        bool                                                `protobuf:"varint,5,opt,name=draining,proto3" json:"draining,omitempty"`
+	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	IsLive bool                                                `protobuf:"varint,2,opt,name=is_live,json=isLive,proto3" json:"is_live,omitempty"`
+	// The number of replicas on the node, computed by scanning meta2 ranges.
+	ReplicaCount    int64 `protobuf:"varint,3,opt,name=replica_count,json=replicaCount,proto3" json:"replica_count,omitempty"`
+	Decommissioning bool  `protobuf:"varint,4,opt,name=decommissioning,proto3" json:"decommissioning,omitempty"`
+	Draining        bool  `protobuf:"varint,5,opt,name=draining,proto3" json:"draining,omitempty"`
 }
 
 func (m *DecommissionStatusResponse_Status) Reset()         { *m = DecommissionStatusResponse_Status{} }
