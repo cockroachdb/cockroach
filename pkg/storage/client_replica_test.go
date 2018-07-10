@@ -1449,6 +1449,21 @@ func TestRangeInfo(t *testing.T) {
 		t.Errorf("on put reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
 	}
 
+	// Verify range info on an admin request.
+	adminArgs := &roachpb.AdminTransferLeaseRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: splitKey.AsRawKey(),
+		},
+		Target: rhsLease.Replica.StoreID,
+	}
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, adminArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on admin reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	}
+
 	// Verify multiple range infos on a scan request.
 	scanArgs := roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeader{
