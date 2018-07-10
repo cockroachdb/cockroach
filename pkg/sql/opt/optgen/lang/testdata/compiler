@@ -564,6 +564,87 @@ define Op {
 )
 
 #
+# Bind expressions in all parts of rule.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op $matchOp:(Op (Func $matchArg:"foo")))
+=>
+(Op $replaceOp:(Op (Func $replaceArg:"foo")))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="matchOp"
+						Target=(Func
+							Name=Op
+							Args=(Slice
+								(CustomFunc
+									Name=Func
+									Args=(Slice
+										(Bind Label="matchArg" Target="foo" Src=<test.opt:6:24>)
+									)
+									Src=<test.opt:6:18>
+								)
+							)
+							Src=<test.opt:6:14>
+						)
+						Src=<test.opt:6:5>
+					)
+				)
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="replaceOp"
+						Target=(Func
+							Name=Op
+							Args=(Slice
+								(CustomFunc
+									Name=Func
+									Args=(Slice
+										(Bind Label="replaceArg" Target="foo" Src=<test.opt:8:26>)
+									)
+									Src=<test.opt:8:20>
+								)
+							)
+							Src=<test.opt:8:16>
+						)
+						Src=<test.opt:8:5>
+					)
+				)
+				Src=<test.opt:8:1>
+			)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
 # Compile errors.
 #
 compile
@@ -587,6 +668,9 @@ define Op {
 [DuplicateLabel]
 (Op $input:"foo" $input:"bar") => (Op)
 
+[DuplicateLabel2]
+(Op $input:"foo") => (Op $input:"bar")
+
 [UnrecognizedLabel]
 (Op $input:* & (Func $unknown)) => (Op)
 
@@ -601,9 +685,6 @@ define Op {
 
 [CustomMultiNames]
 (Op (Func | Func2)) => (Op)
-
-[CustomBind]
-(Op (Func $bind:(SubFunc))) => (Op)
 
 [CustomList]
 (Op (Func [])) => (Op)
@@ -655,11 +736,11 @@ test.opt:10:1: unrecognized match name 'Unknown'
 test.opt:13:10: too many arguments to OpName function
 test.opt:16:10: invalid OpName argument: argument must be a variable reference
 test.opt:19:18: duplicate bind label 'input'
-test.opt:22:22: unrecognized variable name 'unknown'
-test.opt:27:1: duplicate rule name 'DuplicateName'
-test.opt:31:5: match pattern cannot use variable references
-test.opt:34:5: custom function cannot have multiple names
-test.opt:37:11: custom match function cannot bind arguments
+test.opt:22:26: duplicate bind label 'input'
+test.opt:25:22: unrecognized variable name 'unknown'
+test.opt:30:1: duplicate rule name 'DuplicateName'
+test.opt:34:5: match pattern cannot use variable references
+test.opt:37:5: custom function cannot have multiple names
 test.opt:40:11: custom match function cannot use lists
 test.opt:43:11: custom match function cannot use lists
 test.opt:46:11: custom match function cannot use boolean expressions
