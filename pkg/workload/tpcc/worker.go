@@ -148,7 +148,11 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.doWaits {
 		warehouseID = rand.Intn(w.config.warehouses)
 	} else {
-		time.Sleep(time.Duration(t.keyingTime) * time.Second)
+		select {
+		case <-time.After(time.Duration(t.keyingTime) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	start := timeutil.Now()
@@ -166,7 +170,11 @@ func (w *worker) run(ctx context.Context) error {
 		if thinkTime > (t.thinkTime * 10) {
 			thinkTime = t.thinkTime * 10
 		}
-		time.Sleep(time.Duration(thinkTime) * time.Second)
+		select {
+		case <-time.After(time.Duration(thinkTime) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	return nil
 }

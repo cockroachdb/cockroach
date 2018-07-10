@@ -157,7 +157,7 @@ var numOps uint64
 // workerRun is an infinite loop in which the worker continuously attempts to
 // read / write blocks of random data into a table in cockroach DB.
 func workerRun(
-	ctx context.Context,
+	rampCtx, runCtx context.Context,
 	errCh chan<- error,
 	wg *sync.WaitGroup,
 	limiter *rate.Limiter,
@@ -165,7 +165,13 @@ func workerRun(
 ) {
 	defer wg.Done()
 
+	ctx := rampCtx
 	for {
+		// Switch to runCtx once the rampCtx is canceled.
+		if ctx == rampCtx && ctx.Err() != nil {
+			ctx = runCtx
+		}
+
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
 			if err := limiter.Wait(ctx); err != nil {
@@ -174,7 +180,9 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			errCh <- err
+			if err != context.Canceled {
+				errCh <- err
+			}
 			continue
 		}
 
@@ -218,7 +226,11 @@ func runInitImpl(
 }
 
 func runRun(gen workload.Generator, urls []string, dbName string) error {
-	ctx := context.Background()
+	runCtx := context.Background()
+
+	rampCtx, cancelRamp := context.WithCancel(context.Background())
+	rampCtxDone := rampCtx.Done()
+	defer cancelRamp()
 
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
@@ -226,7 +238,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	if *doInit || *drop {
 		for {
-			err = runInitImpl(ctx, gen, initDB, dbName)
+			err = runInitImpl(runCtx, gen, initDB, dbName)
 			if err == nil {
 				break
 			}
@@ -255,11 +267,10 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	for _, table := range gen.Tables() {
 		splitConcurrency := len(ops.WorkerFns)
-		if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
+		if err := workload.Split(runCtx, initDB, table, splitConcurrency); err != nil {
 			return err
 		}
 	}
-	rampDone := make(chan bool)
 	start := timeutil.Now()
 	errCh := make(chan error)
 	var wg sync.WaitGroup
@@ -268,10 +279,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	go func() {
 		for _, workFn := range ops.WorkerFns {
 			workFn := workFn
-			go workerRun(ctx, errCh, &wg, limiter, workFn)
+			go workerRun(rampCtx, runCtx, errCh, &wg, limiter, workFn)
 			time.Sleep(sleepTime)
 		}
-		rampDone <- true
+		// Cancel the ramp context. This has two effects:
+		// 1. notifies the process loop below to reset timers and histograms.
+		// 2. interupts all worker loops so that they start again.
+		cancelRamp()
 	}()
 
 	var numErr int
@@ -306,7 +320,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		case err := <-errCh:
 			numErr++
 			if *tolerateErrors {
-				log.Error(ctx, err)
+				log.Error(runCtx, err)
 				continue
 			}
 			return err
@@ -335,7 +349,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			})
 		// Once the load generator is fully ramped up, we reset the histogram and the start time, to
 		// throw away the stats for the the ramp up period.
-		case <-rampDone:
+		case <-rampCtxDone:
+			rampCtxDone = nil
 			start = timeutil.Now()
 			i = 0
 			reg.Tick(func(t workload.HistogramTick) {
@@ -388,7 +403,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(start); err != nil {
+					if err := h.Hooks().PostRun(startElapsed); err != nil {
 						fmt.Printf("failed post-run hook: %v\n", err)
 					}
 				}
