@@ -692,10 +692,8 @@ func (v *NormalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 	switch expr.(type) {
 	case *Subquery:
-		// Avoid normalizing subqueries. We need the subquery to be expanded in
-		// order to do so properly.
-		// TODO(knz): This should happen when the prepare and execute phases are
-		//     separated for SelectClause.
+		// Subqueries are pre-normalized during semantic analysis. There
+		// is nothing to do here.
 		return false, expr
 	}
 

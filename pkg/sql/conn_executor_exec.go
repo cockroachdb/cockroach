@@ -335,7 +335,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if os.ImplicitTxn.Get() {
-		ts, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now())
+		ts, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -349,7 +349,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now())
+		ts, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
 		if err != nil {
 			return makeErrEvent(err)
 		}

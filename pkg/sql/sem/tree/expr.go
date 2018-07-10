@@ -74,6 +74,13 @@ type VariableExpr interface {
 	Variable()
 }
 
+var _ VariableExpr = &IndexedVar{}
+var _ VariableExpr = &Subquery{}
+var _ VariableExpr = UnqualifiedStar{}
+var _ VariableExpr = &UnresolvedName{}
+var _ VariableExpr = &AllColumnsSelector{}
+var _ VariableExpr = &ColumnItem{}
+
 // operatorExpr is used to identify expression types that involve operators;
 // used by exprStrWithParen.
 type operatorExpr interface {
