@@ -267,11 +267,9 @@ func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
 	return c.LookupLogical(group).OuterCols()
 }
 
-// ShortestKey returns the strong key in the given memo group that is composed
-// of the fewest columns. If there are multiple keys with the same number of
-// columns, any one of them may be returned. If there are no strong keys in the
-// group, then ShortestKey returns ok=false.
-func (c *CustomFuncs) ShortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
+// CandidateKey returns the candidate key columns from the given group. If there
+// is no candidate key, CandidateKey returns ok=false.
+func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool) {
 	return c.LookupLogical(group).Relational.FuncDeps.Key()
 }
 
