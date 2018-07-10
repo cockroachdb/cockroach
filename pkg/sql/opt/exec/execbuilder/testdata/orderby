@@ -805,3 +805,19 @@ sort       ·      ·
 #           └── scan  ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
 #·                    table           kv@foo             ·                               ·
 #·                    spans           ALL                ·                               ·
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
+
+# Verify that we set up the ordering of the inner scan correctly (see #27347).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
+----
+filter           ·       ·                (x, y, z)              ·
+ │               filter  x = y            ·                      ·
+ └── index-join  ·       ·                (x, y, z)              +x
+      ├── scan   ·       ·                (y, z, rowid[hidden])  +y
+      │          table   xyz@xyz_z_y_idx  ·                      ·
+      │          spans   /1-/2            ·                      ·
+      └── scan   ·       ·                (x, y, z)              ·
+·                table   xyz@primary      ·                      ·

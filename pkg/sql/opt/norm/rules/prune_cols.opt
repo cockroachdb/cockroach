@@ -105,9 +105,9 @@
 =>
 (Project
     (Limit
-        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
         $limit
-        $ordering
+        (ProjectOrdering $newInput $ordering)
     )
     $projections
 )
@@ -129,9 +129,9 @@
 =>
 (Project
     (Offset
-        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
         $offset
-        $ordering
+        (ProjectOrdering $newInput $ordering)
     )
     $projections
 )
@@ -211,9 +211,9 @@
 )
 =>
 (GroupBy
-    (PruneCols $input (NeededColsGroupBy $aggregations $def))
+    $newInput:(PruneCols $input (NeededColsGroupBy $aggregations $def))
     $aggregations
-    $def
+    (ProjectOrderingGroupBy $newInput $def)
 )
 
 # PruneValuesCols discards Values columns that are never used.
@@ -237,8 +237,8 @@
 =>
 (Project
     (RowNumber
-        (PruneCols $input (NeededColsRowNumber $projections $def))
-        $def
+        $newInput:(PruneCols $input (NeededColsRowNumber $projections $def))
+        (ProjectOrderingRowNumber $newInput $def)
     )
     $projections
 )

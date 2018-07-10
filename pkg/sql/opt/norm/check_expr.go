@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // checkExpr does sanity checking on an Expr. This code is called from
@@ -58,6 +59,20 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 					panic("aggregation contains bare variable")
 				}
 			}
+		}
+
+	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp:
+		var ordering *props.OrderingChoice
+		switch ev.Operator() {
+		case opt.LimitOp, opt.OffsetOp:
+			ordering = ev.Private().(*props.OrderingChoice)
+		case opt.RowNumberOp:
+			ordering = &ev.Private().(*memo.RowNumberDef).Ordering
+		case opt.GroupByOp:
+			ordering = &ev.Private().(*memo.GroupByDef).Ordering
+		}
+		if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {
+			panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, ev.Operator(), outCols))
 		}
 	}
 }
