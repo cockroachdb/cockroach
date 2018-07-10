@@ -1048,12 +1048,6 @@
   version = "v1.1.4"
 
 [[projects]]
-  name = "github.com/tebeka/go2xunit"
-  packages = ["lib"]
-  revision = "dd64c3313b8aef16e869ef93eb970221aefb7549"
-  version = "v1.4.5"
-
-[[projects]]
   branch = "master"
   name = "github.com/wadey/gocovmerge"
   packages = ["."]
@@ -1310,6 +1304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6dd969b1491fd706f2daf81ae63b5d18fea95986d977811a438b3ed50bbd936a"
+  inputs-digest = "8022836223059aead87f6d7d6b9451a5d7ad8a20f4358cb709ccf2859f9c74ce"
   solver-name = "gps-cdcl"
   solver-version = 1
