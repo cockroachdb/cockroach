@@ -96,6 +96,8 @@
 #   SELECT * FROM a INNER JOIN b ON a.x = b.x WHERE b.y < 5
 #
 # since b.y < 5 is a null-rejecting filter on the right side.
+#
+# Citations: [1]
 [SimplifySelectLeftJoin, Normalize]
 (Select
     $input:(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
