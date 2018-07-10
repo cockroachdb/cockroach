@@ -503,7 +503,7 @@ func (txn *Txn) Iterate(
 	for {
 		rows, err := txn.Scan(ctx, begin, end, int64(pageSize))
 		if err != nil {
-			return errors.Wrap(err, "scanning meta2 keys")
+			return err
 		}
 		if len(rows) == 0 {
 			return nil
