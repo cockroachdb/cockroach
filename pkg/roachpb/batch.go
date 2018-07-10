@@ -347,13 +347,15 @@ func (ba *BatchRequest) Methods() []Method {
 // sending a whole transaction in a single Batch when addressing a single
 // range.
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
-	compatible := func(method Method, exFlags, newFlags int) bool {
-		// If no flags are set so far, everything goes.
-		if exFlags == 0 || (!canSplitET && method == EndTransaction) {
-			return true
-		}
-		if (newFlags & isAlone) != 0 {
+	compatible := func(exFlags, newFlags int) bool {
+		// isAlone requests are never compatible.
+		if (exFlags&isAlone) != 0 || (newFlags&isAlone) != 0 {
 			return false
+		}
+		// If the current or new flags are empty and neither include isAlone,
+		// everything goes.
+		if exFlags == 0 || newFlags == 0 {
+			return true
 		}
 		// Otherwise, the flags below must remain the same with the new
 		// request added.
@@ -368,20 +370,51 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	var parts [][]RequestUnion
 	for len(ba.Requests) > 0 {
 		part := ba.Requests
-		var gFlags int
+		var gFlags, hFlags = -1, -1
 		for i, union := range ba.Requests {
 			args := union.GetInner()
 			flags := args.flags()
 			method := args.Method()
-			// Regardless of flags, a NoopRequest is always compatible.
-			if method == Noop {
-				continue
+			if (flags & isPrefix) != 0 {
+				// Requests with the isPrefix flag want to be grouped with the
+				// next non-header request in a batch. Scan forward and find
+				// first non-header request. Naively, this would result in
+				// quadratic behavior for repeat isPrefix requests. We avoid
+				// this by caching first non-header request's flags in hFlags.
+				if hFlags == -1 {
+					for _, nUnion := range ba.Requests[i+1:] {
+						nArgs := nUnion.GetInner()
+						nFlags := nArgs.flags()
+						nMethod := nArgs.Method()
+						if !canSplitET && nMethod == EndTransaction {
+							nFlags = 0 // always compatible
+						}
+						if (nFlags & isPrefix) == 0 {
+							hFlags = nFlags
+							break
+						}
+					}
+				}
+				if hFlags != -1 && (hFlags&isAlone) == 0 {
+					flags = hFlags
+				}
+			} else {
+				hFlags = -1 // reset
 			}
-			if !compatible(method, gFlags, flags) {
-				part = ba.Requests[:i]
-				break
+			cmpFlags := flags
+			if !canSplitET && method == EndTransaction {
+				cmpFlags = 0 // always compatible
 			}
-			gFlags |= flags
+			if gFlags == -1 {
+				// If no flags are set so far, everything goes.
+				gFlags = flags
+			} else {
+				if !compatible(gFlags, cmpFlags) {
+					part = ba.Requests[:i]
+					break
+				}
+				gFlags |= flags
+			}
 		}
 		parts = append(parts, part)
 		ba.Requests = ba.Requests[len(part):]
