@@ -152,9 +152,9 @@ and a "Const" node as its right child.
 
 Binding
 
-Child patterns within a node match pattern can be "bound" to a named variable.
-These variables can then be referenced later in the match pattern or in the
-replace pattern. This is a critical part of the Optgen language, since
+Child patterns within match and replace patterns can be "bound" to a named
+variable. These variables can then be referenced later in the match pattern or
+in the replace pattern. This is a critical part of the Optgen language, since
 virtually every pattern constructs its replacement pattern based on parts of
 the match pattern. For example:
 

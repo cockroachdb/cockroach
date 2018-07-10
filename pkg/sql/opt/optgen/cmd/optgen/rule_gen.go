@@ -572,6 +572,8 @@ func (g *ruleGen) genDynamicMatch(
 
 // genMatchCustom generates code to invoke a custom matching function.
 func (g *ruleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool) {
+	g.genBoundStatements(matchCustom)
+
 	if noMatch {
 		g.w.nestIndent("if !")
 	} else {
@@ -609,6 +611,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 		g.w.writeIndent("_f.ruleCycles[%s.Fingerprint()] = true\n", exprName)
 	}
 
+	g.genBoundStatements(rule.Replace)
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()
@@ -661,6 +664,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 		if !ok {
 			panic("exploration pattern with dynamic replace name not yet supported")
 		}
+		g.genBoundStatements(t)
 		g.w.nestIndent("_expr := memo.Make%sExpr(\n", *name)
 		for _, arg := range t.Args {
 			g.w.writeIndent("")
@@ -674,6 +678,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	case *lang.CustomFuncExpr:
 		// Top-level custom function returns a memo.Expr slice, so iterate
 		// through that and memoize each expression.
+		g.genBoundStatements(rule.Replace)
 		g.w.writeIndent("_exprs := ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
@@ -695,8 +700,41 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	g.w.unnest("}\n")
 }
 
-// genNestedExpr recursively generates an Optgen expression as one large Go
-// expression.
+// genBoundStatements is called before genNestedExpr in order to generate zero
+// or more statements that construct subtrees of the given expression that are
+// bound to variables. Those variables can be used when constructing other parts
+// of the result tree. For example:
+//
+//   (InnerJoin $left:* $right:* $on:*)
+//   =>
+//   (InnerJoin
+//     $varname:(SomeFunc $left)
+//     $varname2:(Select $varname (SomeOtherFunc $right))
+//     (MakeOn $varname $varname2)
+//   )
+//
+//   varname := _f.funcs.SomeFunc(left)
+//   varname2 := _f.ConstructSelect(varname, _f.funcs.SomeOtherFunc(right))
+//
+func (g *ruleGen) genBoundStatements(e lang.Expr) {
+	var visitFunc lang.VisitFunc
+	visitFunc = func(e lang.Expr) lang.Expr {
+		// Post-order traversal so that all descendants are generated before
+		// generating ancestor.
+		e.Visit(visitFunc)
+		if be, ok := e.(*lang.BindExpr); ok {
+			g.w.writeIndent("%s := ", be.Label)
+			g.genNestedExpr(be.Target)
+			g.w.newline()
+		}
+		return e
+	}
+	visitFunc(e)
+}
+
+// genNestedExpr recursively generates an Optgen expression. Bound expressions
+// should have already been generated as statements by genBoundStatements, so
+// that genNestedExpr can generate references to those statements.
 func (g *ruleGen) genNestedExpr(e lang.Expr) {
 	switch t := e.(type) {
 	case *lang.FuncExpr:
@@ -707,6 +745,9 @@ func (g *ruleGen) genNestedExpr(e lang.Expr) {
 
 	case *lang.CustomFuncExpr:
 		g.genCustomFunc(t)
+
+	case *lang.BindExpr:
+		g.w.write(string(t.Label))
 
 	case *lang.RefExpr:
 		g.w.write(string(t.Label))

@@ -314,17 +314,12 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 		return c.compileFunc(t)
 
 	case *BindExpr:
-		// If in a match pattern and not in a custom match function, then ensure
-		// that binding labels are unique.
-		if c.matchPattern && !c.customFunc {
-			_, ok := c.compiler.bindings[t.Label]
-			if ok {
-				c.addErr(t, fmt.Errorf("duplicate bind label '%s'", t.Label))
-			}
-			c.compiler.bindings[t.Label] = t
-		} else {
-			c.addDisallowedErr(t, "cannot bind arguments")
+		// Ensure that binding labels are unique.
+		_, ok := c.compiler.bindings[t.Label]
+		if ok {
+			c.addErr(t, fmt.Errorf("duplicate bind label '%s'", t.Label))
 		}
+		c.compiler.bindings[t.Label] = t
 
 	case *RefExpr:
 		if c.matchPattern && !c.customFunc {
