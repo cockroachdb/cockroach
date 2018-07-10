@@ -172,6 +172,7 @@ func LoadCSV(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
+	oversample int64,
 	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
 	ctx = log.WithLogTag(ctx, "import-distsql", nil)
@@ -250,7 +251,7 @@ func LoadCSV(
 	var parsedTables map[sqlbase.ID]*sqlbase.TableDescriptor
 	if samples == nil {
 		var err error
-		samples, parsedTables, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, inputSpecs, sstSpecs)
+		samples, parsedTables, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
@@ -478,6 +479,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	nodes []roachpb.NodeID,
 	from []string,
 	splitSize int64,
+	oversample int64,
 	planCtx *planningCtx,
 	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
@@ -494,7 +496,9 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	// factor of 3 would sample the KV with probability 100/10000000 since we are
 	// sampling at 3x. Since we're now getting back 3x more samples than needed,
 	// we only use every 1/(oversample), or 1/3 here, in our final sampling.
-	const oversample = 3
+	if oversample < 1 {
+		oversample = 3
+	}
 	sampleSize := splitSize / oversample
 	if sampleSize > math.MaxInt32 {
 		return nil, nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
@@ -572,7 +576,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		}
 
 		sampleCount++
-		sampleCount = sampleCount % oversample
+		sampleCount = sampleCount % int(oversample)
 		if sampleCount == 0 {
 			k, err := keys.EnsureSafeSplitKey(key)
 			if err != nil {

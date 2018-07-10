@@ -167,6 +167,13 @@ d
 			data:   `\x0`,
 			err:    "odd length hex string",
 		},
+		{
+			name:   "oversample",
+			create: `i int`,
+			with:   `WITH oversample = '100'`,
+			typ:    "CSV",
+			data:   "1",
+		},
 
 		// MySQL OUTFILE
 		{

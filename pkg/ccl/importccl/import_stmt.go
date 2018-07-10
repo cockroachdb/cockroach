@@ -56,6 +56,7 @@ const (
 	importOptionTransform  = "transform"
 	importOptionSSTSize    = "sstsize"
 	importOptionDecompress = "decompress"
+	importOptionOversample = "oversample"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -77,6 +78,7 @@ var importOptionExpectValues = map[string]bool{
 	importOptionTransform:  true,
 	importOptionSSTSize:    true,
 	importOptionDecompress: true,
+	importOptionOversample: true,
 
 	pgMaxRowSize: true,
 }
@@ -537,6 +539,14 @@ func importPlanHook(
 			}
 			sstSize = sz
 		}
+		var oversample int64
+		if override, ok := opts[importOptionOversample]; ok {
+			os, err := strconv.ParseInt(override, 10, 64)
+			if err != nil {
+				return err
+			}
+			sstSize = os
+		}
 
 		if override, ok := opts[importOptionDecompress]; ok {
 			found := false
@@ -675,6 +685,7 @@ func importPlanHook(
 				Tables:     tableDetails,
 				BackupPath: transform,
 				SSTSize:    sstSize,
+				Oversample: oversample,
 				Walltime:   walltime,
 			},
 			Progress: jobspb.ImportProgress{},
@@ -698,6 +709,7 @@ func doDistributedCSVTransform(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
+	oversample int64,
 ) error {
 	evalCtx := p.ExtendedEvalContext()
 
@@ -726,6 +738,7 @@ func doDistributedCSVTransform(
 		format,
 		walltime,
 		sstSize,
+		oversample,
 		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
 			return storageccl.MakeKeyRewriter(descs)
 		},
@@ -837,6 +850,7 @@ func (r *importResumer) Resume(
 	parentID := details.ParentID
 	sstSize := details.SSTSize
 	format := details.Format
+	oversample := details.Oversample
 
 	if sstSize == 0 {
 		// The distributed importer will correctly chunk up large ranges into
@@ -864,7 +878,7 @@ func (r *importResumer) Resume(
 	}
 
 	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize,
+		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample,
 	)
 }
 
