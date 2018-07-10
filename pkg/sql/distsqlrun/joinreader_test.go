@@ -59,6 +59,11 @@ func TestJoinReader(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
+	// Insert a row for NULL testing.
+	if _, err := sqlDB.Exec("INSERT INTO test.t VALUES (10, 0, NULL, NULL)"); err != nil {
+		t.Fatal(err)
+	}
+
 	tdSecondary := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	sqlutils.CreateTable(t, sqlDB, "t2",
@@ -208,6 +213,20 @@ func TestJoinReader(t *testing.T) {
 			joinType:        sqlbase.LeftOuterJoin,
 			outputTypes:     []sqlbase.ColumnType{intType, intType},
 			expected:        "[[2 3] [10 NULL]]",
+		},
+		{
+			description: "Test lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			outputTypes: oneIntCol,
+			expected:    "[]",
 		},
 	}
 	for _, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily} {

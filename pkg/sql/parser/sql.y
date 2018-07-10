@@ -1275,7 +1275,7 @@ alter_relocate_index_stmt:
   }
 
 alter_zone_range_stmt:
-  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1285,7 +1285,7 @@ alter_zone_range_stmt:
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1295,7 +1295,7 @@ alter_zone_database_stmt:
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1305,7 +1305,7 @@ alter_zone_table_stmt:
       YAMLConfig: $7.expr(),
     }
   }
-| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
@@ -1318,7 +1318,7 @@ alter_zone_table_stmt:
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{

@@ -34,6 +34,10 @@ statement ok
 CREATE TABLE distsql_lookup_test_2 (d INT, e INT, f INT, PRIMARY KEY (f, e));
 INSERT INTO distsql_lookup_test_2 VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
 
+statement ok
+CREATE TABLE distsql_lookup_test_3 (g INT, h INT, INDEX g_idx (g));
+INSERT INTO distsql_lookup_test_3 VALUES (NULL, 1)
+
 query IIIIII rowsort
 SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
 ----
@@ -82,6 +86,11 @@ SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WH
 1  1  1
 2  1  1
 2  1  2
+
+# Test lookup join on NULL column. (https://github.com/cockroachdb/cockroach/issues/27032)
+query I
+SELECT h FROM distsql_lookup_test_1 JOIN distsql_lookup_test_3@g_idx ON b = g
+----
 
 # Ensure join performs properly on input that has more than 100 rows.
 query I
