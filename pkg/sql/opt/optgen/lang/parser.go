@@ -255,41 +255,88 @@ func (p *Parser) parseRule(comments CommentsExpr, tags TagsExpr, src SourceLoc) 
 		Name:     StringExpr(tags[0]),
 		Comments: comments,
 		Tags:     tags[1:],
-		Match:    match.(*MatchExpr),
+		Match:    match.(*FuncExpr),
 		Replace:  replace,
 	}
 }
 
-// match = '(' match-names match-child* ')'
+// match = func
 func (p *Parser) parseMatch() Expr {
 	if !p.scanToken(LPAREN, "match pattern") {
 		return nil
 	}
+	p.unscan()
+	return p.parseFunc()
+}
 
-	src := p.src
-	names := p.parseMatchNames()
-	if names == nil {
-		return nil
-	}
-
-	match := &MatchExpr{Src: &src, Names: names}
-	for {
-		if p.scan() == RPAREN {
-			return match
-		}
-
+// replace = func | ref | STRING
+func (p *Parser) parseReplace() Expr {
+	switch p.scan() {
+	case LPAREN:
 		p.unscan()
-		matchChild := p.parseMatchChild()
-		if matchChild == nil {
-			return nil
-		}
+		return p.parseFunc()
 
-		match.Args = append(match.Args, matchChild)
+	case DOLLAR:
+		p.unscan()
+		return p.parseRef()
+
+	case STRING:
+		p.unscan()
+		return p.parseString()
+
+	default:
+		p.addExpectedTokenErr("replace pattern")
+		return nil
 	}
 }
 
-// match-names = name ('|' name)*
-func (p *Parser) parseMatchNames() NamesExpr {
+// func = '(' func-name arg* ')'
+func (p *Parser) parseFunc() Expr {
+	if p.scan() != LPAREN {
+		panic("caller should have checked for left parenthesis")
+	}
+
+	src := p.src
+	name := p.parseFuncName()
+	if name == nil {
+		return nil
+	}
+
+	fn := &FuncExpr{Src: &src, Name: name}
+	for {
+		if p.scan() == RPAREN {
+			return fn
+		}
+
+		p.unscan()
+		arg := p.parseArg()
+		if arg == nil {
+			return nil
+		}
+
+		fn.Args = append(fn.Args, arg)
+	}
+}
+
+// func-name = names | func
+func (p *Parser) parseFuncName() Expr {
+	switch p.scan() {
+	case IDENT:
+		p.unscan()
+		return p.parseNames()
+
+	case LPAREN:
+		// Constructed name.
+		p.unscan()
+		return p.parseFunc()
+	}
+
+	p.addExpectedTokenErr("name")
+	return nil
+}
+
+// names = name ('|' name)*
+func (p *Parser) parseNames() Expr {
 	var names NamesExpr
 	for {
 		if !p.scanToken(IDENT, "name") {
@@ -300,13 +347,13 @@ func (p *Parser) parseMatchNames() NamesExpr {
 
 		if p.scan() != PIPE {
 			p.unscan()
-			return names
+			return &names
 		}
 	}
 }
 
 // match-child = bind | ref | match-and
-func (p *Parser) parseMatchChild() Expr {
+func (p *Parser) parseArg() Expr {
 	tok := p.scan()
 	p.unscan()
 
@@ -314,10 +361,10 @@ func (p *Parser) parseMatchChild() Expr {
 		return p.parseBindOrRef()
 	}
 
-	return p.parseMatchAnd()
+	return p.parseAnd()
 }
 
-// bind = '$' label ':' match-and
+// bind = '$' label ':' and
 // ref  = '$' label
 func (p *Parser) parseBindOrRef() Expr {
 	if p.scan() != DOLLAR {
@@ -337,18 +384,18 @@ func (p *Parser) parseBindOrRef() Expr {
 		return &RefExpr{Src: &src, Label: label}
 	}
 
-	target := p.parseMatchAnd()
+	target := p.parseAnd()
 	if target == nil {
 		return nil
 	}
 	return &BindExpr{Src: &src, Label: label, Target: target}
 }
 
-// match-and = match-item ('&' match-and)
-func (p *Parser) parseMatchAnd() Expr {
+// and = expr ('&' and)
+func (p *Parser) parseAnd() Expr {
 	src := p.peekNextSource()
 
-	left := p.parseMatchItem()
+	left := p.parseExpr()
 	if left == nil {
 		return nil
 	}
@@ -358,30 +405,30 @@ func (p *Parser) parseMatchAnd() Expr {
 		return left
 	}
 
-	right := p.parseMatchAnd()
+	right := p.parseAnd()
 	if right == nil {
 		return nil
 	}
-	return &MatchAndExpr{Src: src, Left: left, Right: right}
+	return &AndExpr{Src: src, Left: left, Right: right}
 }
 
-// match-item = match | match-not | match-list | match-any | name | STRING
-func (p *Parser) parseMatchItem() Expr {
+// expr = func | not | list | any | name | STRING
+func (p *Parser) parseExpr() Expr {
 	switch p.scan() {
 	case LPAREN:
 		p.unscan()
-		return p.parseMatch()
+		return p.parseFunc()
 
 	case CARET:
 		p.unscan()
-		return p.parseMatchNot()
+		return p.parseNot()
 
 	case LBRACKET:
 		p.unscan()
-		return p.parseMatchList()
+		return p.parseList()
 
 	case ASTERISK:
-		return &MatchAnyExpr{}
+		return &AnyExpr{}
 
 	case IDENT:
 		name := NameExpr(p.s.Literal())
@@ -392,157 +439,42 @@ func (p *Parser) parseMatchItem() Expr {
 		return p.parseString()
 
 	default:
-		p.addExpectedTokenErr("match pattern")
+		p.addExpectedTokenErr("expression")
 		return nil
 	}
 }
 
-// match-not = '^' match-item
-func (p *Parser) parseMatchNot() Expr {
+// not = '^' expr
+func (p *Parser) parseNot() Expr {
 	if p.scan() != CARET {
 		panic("caller should have checked for caret")
 	}
 
 	src := p.src
 
-	input := p.parseMatchItem()
+	input := p.parseExpr()
 	if input == nil {
 		return nil
 	}
-	return &MatchNotExpr{Src: &src, Input: input}
+	return &NotExpr{Src: &src, Input: input}
 }
 
-// match-list        = match-list-any | match-list-first | match-list-last |
-//                     match-list-single | match-list-empty
-// match-list-any    = '[' '...' match-child '...' ']'
-// match-list-first  = '[' match-child '...' ']'
-// match-list-last   = '[' '...' match-child ']'
-// match-list-single = '[' match-child ']'
-// match-list-empty  = '[' ']'
-func (p *Parser) parseMatchList() Expr {
+// list = '[' list-child* ']'
+func (p *Parser) parseList() Expr {
 	if p.scan() != LBRACKET {
 		panic("caller should have checked for left bracket")
 	}
 
 	src := p.src
 
-	var hasStartEllipses, hasEndEllipses bool
-
-	switch p.scan() {
-	case ELLIPSES:
-		hasStartEllipses = true
-
-	case RBRACKET:
-		// Empty list case.
-		return &MatchListEmptyExpr{}
-
-	default:
-		p.unscan()
-	}
-
-	matchItem := p.parseMatchChild()
-	if matchItem == nil {
-		return nil
-	}
-
-	switch p.scan() {
-	case ELLIPSES:
-		hasEndEllipses = true
-
-	default:
-		p.unscan()
-	}
-
-	if !p.scanToken(RBRACKET, "']'") {
-		return nil
-	}
-
-	// Handle various combinations of start and end ellipses.
-	if hasStartEllipses {
-		if hasEndEllipses {
-			return &MatchListAnyExpr{Src: &src, MatchItem: matchItem}
-		}
-		return &MatchListLastExpr{Src: &src, MatchItem: matchItem}
-	} else if hasEndEllipses {
-		return &MatchListFirstExpr{Src: &src, MatchItem: matchItem}
-	}
-	return &MatchListSingleExpr{Src: &src, MatchItem: matchItem}
-}
-
-// replace = construct | construct-list | ref | name | STRING
-func (p *Parser) parseReplace() Expr {
-	switch p.scan() {
-	case LPAREN:
-		p.unscan()
-		return p.parseConstruct()
-
-	case LBRACKET:
-		p.unscan()
-		return p.parseConstructList()
-
-	case DOLLAR:
-		p.unscan()
-		return p.parseRef()
-
-	case IDENT:
-		name := NameExpr(p.s.Literal())
-		return &name
-
-	case STRING:
-		p.unscan()
-		return p.parseString()
-
-	default:
-		p.addExpectedTokenErr("replace pattern")
-		return nil
-	}
-}
-
-// construct = '(' construct-name replace* ')'
-func (p *Parser) parseConstruct() Expr {
-	if p.scan() != LPAREN {
-		panic("caller should have checked for left paren")
-	}
-
-	src := p.src
-
-	name := p.parseConstructName()
-	if name == nil {
-		return nil
-	}
-
-	construct := &ConstructExpr{Src: &src, Name: name}
-	for {
-		if p.scan() == RPAREN {
-			return construct
-		}
-
-		p.unscan()
-		arg := p.parseReplace()
-		if arg == nil {
-			return nil
-		}
-
-		construct.Args = append(construct.Args, arg)
-	}
-}
-
-// construct-list = '[' replace* ']'
-func (p *Parser) parseConstructList() Expr {
-	if p.scan() != LBRACKET {
-		panic("caller should have checked for left bracket")
-	}
-
-	src := p.src
-
-	list := &ConstructListExpr{Src: &src}
+	list := &ListExpr{Src: &src}
 	for {
 		if p.scan() == RBRACKET {
 			return list
 		}
 
 		p.unscan()
-		item := p.parseReplace()
+		item := p.parseListChild()
 		if item == nil {
 			return nil
 		}
@@ -551,21 +483,13 @@ func (p *Parser) parseConstructList() Expr {
 	}
 }
 
-// construct-name = name | construct
-func (p *Parser) parseConstructName() Expr {
-	switch p.scan() {
-	case IDENT:
-		name := NameExpr(p.s.Literal())
-		return &name
-
-	case LPAREN:
-		// Constructed name.
-		p.unscan()
-		return p.parseConstruct()
+// list-child = list-any | arg
+func (p *Parser) parseListChild() Expr {
+	if p.scan() == ELLIPSES {
+		return &ListAnyExpr{}
 	}
-
-	p.addExpectedTokenErr("construct name")
-	return nil
+	p.unscan()
+	return p.parseArg()
 }
 
 // ref = '$' label
