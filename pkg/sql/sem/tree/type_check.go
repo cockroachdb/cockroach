@@ -109,6 +109,7 @@ const (
 	RejectWindowApplications
 	RejectGenerators
 	RejectImpureFunctions
+	RejectSubqueries
 	RejectSpecial SemaRejectFlags = RejectAggregates | RejectGenerators | RejectWindowApplications
 )
 
@@ -639,7 +640,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	}
 
 	if sc == nil {
-		// We can't check anything furgher. Give up.
+		// We can't check anything further. Give up.
 		return nil
 	}
 
@@ -971,7 +972,11 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Subquery) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) {
+func (expr *Subquery) TypeCheck(sc *SemaContext, _ types.T) (TypedExpr, error) {
+	if sc != nil && sc.Properties.required.rejectFlags&RejectSubqueries != 0 {
+		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			"subqueries are not allowed in %s", sc.Properties.required.context)
+	}
 	expr.assertTyped()
 	return expr, nil
 }

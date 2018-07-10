@@ -802,6 +802,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'`},
 		{`SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'`},
+		{`SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL`},
 
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
