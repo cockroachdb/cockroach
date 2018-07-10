@@ -139,6 +139,10 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "value out of range") {
 		t.Fatal(err)
 	}
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.4"); !testutils.IsError(err,
+		`parsing argument: strconv.ParseInt: parsing "4000000000": value out of range`) {
+		t.Fatal(err)
+	}
 
 	// Verify logical parts parse with < 10 digits.
 	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.123456789"); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
