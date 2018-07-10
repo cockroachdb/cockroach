@@ -312,6 +312,20 @@ func (c *CustomFuncs) GroupByKey(in memo.GroupID) memo.PrivateID {
 	})
 }
 
+// GroupByUnionKey constructs a new GroupByDef using the candidate key columns
+// from the given input group union'ed with the grouping columns from the given
+// GroupByDef.
+func (c *CustomFuncs) GroupByUnionKey(in memo.GroupID, def memo.PrivateID) memo.PrivateID {
+	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic("expected input expression to have key")
+	}
+	return c.f.InternGroupByDef(&memo.GroupByDef{
+		GroupingCols: groupingCols.Union(keyCols),
+	})
+}
+
 // ConstructAnyCondition builds an expression that compares the given scalar
 // expression with the first (and only) column of the input rowset, using the
 // given comparison operator.
