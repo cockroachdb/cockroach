@@ -17,7 +17,6 @@ package hlc
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -115,8 +114,8 @@ func isErrSimilar(expected *regexp.Regexp, actual error) bool {
 
 func TestHLCPhysicalClockJump(t *testing.T) {
 	var fatal bool
-	defer log.SetExitFunc(os.Exit)
-	log.SetExitFunc(func(r int) {
+	defer log.ResetExitFunc()
+	log.SetExitFunc(true /* hideStack */, func(r int) {
 		if r != 0 {
 			fatal = true
 		}
@@ -372,8 +371,8 @@ func TestHLCMonotonicityCheck(t *testing.T) {
 
 func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 	var fatal bool
-	defer log.SetExitFunc(os.Exit)
-	log.SetExitFunc(func(r int) {
+	defer log.ResetExitFunc()
+	log.SetExitFunc(true /* hideStack */, func(r int) {
 		defer log.Flush()
 		if r != 0 {
 			fatal = true
@@ -421,8 +420,8 @@ func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 
 func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	var fatal bool
-	defer log.SetExitFunc(os.Exit)
-	log.SetExitFunc(func(r int) {
+	defer log.ResetExitFunc()
+	log.SetExitFunc(true /* hideStack */, func(r int) {
 		defer log.Flush()
 		if r != 0 {
 			fatal = true

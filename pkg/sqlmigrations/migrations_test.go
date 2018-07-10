@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -335,8 +334,8 @@ func TestLeaseExpiration(t *testing.T) {
 	defer func() { leaseRefreshInterval = oldLeaseRefreshInterval }()
 
 	exitCalled := make(chan bool)
-	log.SetExitFunc(func(int) { exitCalled <- true })
-	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(true /* hideStack */, func(int) { exitCalled <- true })
+	defer log.ResetExitFunc()
 	// Disable stack traces to make the test output in teamcity less deceiving.
 	defer log.DisableTracebacks()()
 

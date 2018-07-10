@@ -441,7 +441,7 @@ func main() {
 	c := &localcluster.LocalCluster{Cluster: localcluster.New(cfg)}
 	defer c.Close()
 
-	log.SetExitFunc(func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code int) {
 		c.Close()
 		os.Exit(code)
 	})
