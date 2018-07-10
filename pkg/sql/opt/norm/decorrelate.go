@@ -306,8 +306,8 @@ func (c *CustomFuncs) AppendNonKeyCols(in, aggs memo.GroupID) memo.GroupID {
 	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
 }
 
-// GroupByKey constructs a new GroupByDef using the candidate key columns from
-// the given input group as the grouping columns.
+// GroupByKey constructs a new unordered GroupByDef using the candidate key
+// columns from the given input group as the grouping columns.
 func (c *CustomFuncs) GroupByKey(in memo.GroupID) memo.PrivateID {
 	keyCols, ok := c.CandidateKey(in)
 	if !ok {
@@ -315,6 +315,20 @@ func (c *CustomFuncs) GroupByKey(in memo.GroupID) memo.PrivateID {
 	}
 	return c.f.InternGroupByDef(&memo.GroupByDef{
 		GroupingCols: keyCols,
+	})
+}
+
+// GroupByUnionKey constructs a new unordered GroupByDef using the candidate key
+// columns from the given input group union'ed with the grouping columns from
+// the given GroupByDef.
+func (c *CustomFuncs) GroupByUnionKey(in memo.GroupID, def memo.PrivateID) memo.PrivateID {
+	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic("expected input expression to have key")
+	}
+	return c.f.InternGroupByDef(&memo.GroupByDef{
+		GroupingCols: groupingCols.Union(keyCols),
 	})
 }
 
