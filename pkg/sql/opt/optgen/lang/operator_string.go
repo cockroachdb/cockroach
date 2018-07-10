@@ -4,9 +4,9 @@ package lang
 
 import "strconv"
 
-const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpCommentsOpCommentOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpBindOpRefOpMatchOpNamesOpNameOpMatchAndOpMatchNotOpMatchAnyOpMatchListAnyOpMatchListFirstOpMatchListLastOpMatchListSingleOpMatchListEmptyOpConstructOpConstructListOpListOpStringOpCustomFuncOp"
+const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpCommentsOpCommentOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpFuncOpNamesOpNameOpAndOpNotOpListOpListAnyOpBindOpRefOpAnyOpSliceOpStringOpCustomFuncOp"
 
-var _Operator_index = [...]uint16{0, 9, 15, 26, 35, 43, 53, 62, 68, 73, 87, 100, 106, 112, 117, 124, 131, 137, 147, 157, 167, 181, 197, 212, 229, 245, 256, 271, 277, 285, 297}
+var _Operator_index = [...]uint8{0, 9, 15, 26, 35, 43, 53, 62, 68, 73, 87, 100, 106, 112, 119, 125, 130, 135, 141, 150, 156, 161, 166, 173, 181, 193}
 
 func (i Operator) String() string {
 	if i < 0 || i >= Operator(len(_Operator_index)-1) {

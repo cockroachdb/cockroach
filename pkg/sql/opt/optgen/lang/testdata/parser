@@ -115,24 +115,32 @@ parse
 			Comments=(Comments # This is the One rule.)
 			Name="One"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names One)
-				Args=(List)
+			Match=(Func
+				Name=(Names One)
+				Args=(Slice)
 				Src=<test.opt:3:1>
 			)
-			Replace=(Construct Name=One Args=(List) Src=<test.opt:3:10>)
+			Replace=(Func
+				Name=(Names One)
+				Args=(Slice)
+				Src=<test.opt:3:10>
+			)
 			Src=<test.opt:2:1>
 		)
 		(Rule
 			Comments=(Comments # This is the Two rule.)
 			Name="Two"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Two)
-				Args=(List)
+			Match=(Func
+				Name=(Names Two)
+				Args=(Slice)
 				Src=<test.opt:9:1>
 			)
-			Replace=(Construct Name=Two Args=(List) Src=<test.opt:9:10>)
+			Replace=(Func
+				Name=(Names Two)
+				Args=(Slice)
+				Src=<test.opt:9:10>
+			)
 			Src=<test.opt:8:1>
 		)
 	)
@@ -152,12 +160,16 @@ parse
 			Comments=(Comments)
 			Name="Tag"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names One Two)
-				Args=(List)
+			Match=(Func
+				Name=(Names One Two)
+				Args=(Slice)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=One Args=(List) Src=<test.opt:2:16>)
+			Replace=(Func
+				Name=(Names One)
+				Args=(Slice)
+				Src=<test.opt:2:16>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -173,11 +185,11 @@ parse
     "hello"       # String
     ^(SubOp)      # Negation
     *             # Any
-    [ ... * ... ] # ListAny
-    [ * ... ]     # ListFirst
-    [ ... * ]     # ListLast
-    [ * ]         # ListSingle
-    []            # ListEmpty
+    [ ... * ... ] # List
+    [ * ... ]
+    [ ... * ]
+    [ * ]
+    []
 )
 =>
 (Op)
@@ -189,33 +201,49 @@ parse
 			Comments=(Comments)
 			Name="Tag"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Match
-						Names=(Names SubOp)
-						Args=(List (MatchAny))
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Func
+						Name=(Names SubOp)
+						Args=(Slice (Any))
 						Src=<test.opt:3:5>
 					)
 					"hello"
-					(MatchNot
-						Input=(Match
-							Names=(Names SubOp)
-							Args=(List)
+					(Not
+						Input=(Func
+							Name=(Names SubOp)
+							Args=(Slice)
 							Src=<test.opt:5:6>
 						)
 						Src=<test.opt:5:5>
 					)
-					(MatchAny)
-					(MatchListAny MatchItem=(MatchAny) Src=<test.opt:7:5>)
-					(MatchListFirst MatchItem=(MatchAny) Src=<test.opt:8:5>)
-					(MatchListLast MatchItem=(MatchAny) Src=<test.opt:9:5>)
-					(MatchListSingle MatchItem=(MatchAny) Src=<test.opt:10:5>)
-					(MatchListEmpty)
+					(Any)
+					(List
+						Items=(Slice (ListAny) (Any) (ListAny))
+						Src=<test.opt:7:5>
+					)
+					(List
+						Items=(Slice (Any) (ListAny))
+						Src=<test.opt:8:5>
+					)
+					(List
+						Items=(Slice (ListAny) (Any))
+						Src=<test.opt:9:5>
+					)
+					(List
+						Items=(Slice (Any))
+						Src=<test.opt:10:5>
+					)
+					(List Items=(Slice) Src=<test.opt:11:5>)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:14:1>)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice)
+				Src=<test.opt:14:1>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -243,14 +271,14 @@ parse
 			Comments=(Comments)
 			Name="Bind"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
 					(Bind
 						Label="match"
-						Target=(Match
-							Names=(Names SubOp)
-							Args=(List (MatchAny))
+						Target=(Func
+							Name=(Names SubOp)
+							Args=(Slice (Any))
 							Src=<test.opt:3:12>
 						)
 						Src=<test.opt:3:5>
@@ -258,26 +286,33 @@ parse
 					(Bind Label="string" Target="hello" Src=<test.opt:4:5>)
 					(Bind
 						Label="not"
-						Target=(MatchNot
-							Input=(Match
-								Names=(Names SubOp)
-								Args=(List)
+						Target=(Not
+							Input=(Func
+								Name=(Names SubOp)
+								Args=(Slice)
 								Src=<test.opt:5:11>
 							)
 							Src=<test.opt:5:10>
 						)
 						Src=<test.opt:5:5>
 					)
-					(Bind Label="any" Target=(MatchAny) Src=<test.opt:6:5>)
+					(Bind Label="any" Target=(Any) Src=<test.opt:6:5>)
 					(Bind
 						Label="list"
-						Target=(MatchListAny MatchItem=(MatchAny) Src=<test.opt:7:11>)
+						Target=(List
+							Items=(Slice (ListAny) (Any) (ListAny))
+							Src=<test.opt:7:11>
+						)
 						Src=<test.opt:7:5>
 					)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:10:1>)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice)
+				Src=<test.opt:10:1>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -297,26 +332,26 @@ parse
 			Comments=(Comments)
 			Name="boolean"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names op)
-				Args=(List
-					(MatchAnd
-						Left=(MatchAny)
-						Right=(MatchAnd
-							Left=(MatchNot
-								Input=(MatchNot
-									Input=(Match
-										Names=(Names func)
-										Args=(List)
+			Match=(Func
+				Name=(Names op)
+				Args=(Slice
+					(And
+						Left=(Any)
+						Right=(And
+							Left=(Not
+								Input=(Not
+									Input=(Func
+										Name=(Names func)
+										Args=(Slice)
 										Src=<test.opt:2:11>
 									)
 									Src=<test.opt:2:10>
 								)
 								Src=<test.opt:2:9>
 							)
-							Right=(Match
-								Names=(Names func2)
-								Args=(List)
+							Right=(Func
+								Name=(Names func2)
+								Args=(Slice)
 								Src=<test.opt:2:20>
 							)
 							Src=<test.opt:2:9>
@@ -326,7 +361,11 @@ parse
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=op Args=(List) Src=<test.opt:2:32>)
+			Replace=(Func
+				Name=(Names op)
+				Args=(Slice)
+				Src=<test.opt:2:32>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -346,21 +385,21 @@ parse
 			Comments=(Comments)
 			Name="Invoke"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Bind Label="left" Target=(MatchAny) Src=<test.opt:2:5>)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind Label="left" Target=(Any) Src=<test.opt:2:5>)
 					(Bind
 						Label="right"
-						Target=(MatchAnd
-							Left=(MatchAny)
-							Right=(Match
-								Names=(Names Invoke)
-								Args=(List
+						Target=(And
+							Left=(Any)
+							Right=(Func
+								Name=(Names Invoke)
+								Args=(Slice
 									(Ref Label="right" Src=<test.opt:2:32>)
-									(Match
-										Names=(Names Invoke2)
-										Args=(List
+									(Func
+										Name=(Names Invoke2)
+										Args=(Slice
 											(Ref Label="left" Src=<test.opt:2:48>)
 											SomeOp
 										)
@@ -376,7 +415,11 @@ parse
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:2:67>)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice)
+				Src=<test.opt:2:67>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -403,38 +446,45 @@ parse
 			Comments=(Comments)
 			Name="List"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
 					(Bind
 						Label="any"
-						Target=(MatchListAny
-							MatchItem=(Bind
-								Label="first"
-								Target=(MatchAnd
-									Left=(MatchListFirst
-										MatchItem=(Bind
-											Label="item"
-											Target=(Match
-												Names=(Names SubOp)
-												Args=(List)
-												Src=<test.opt:3:31>
+						Target=(List
+							Items=(Slice
+								(ListAny)
+								(Bind
+									Label="first"
+									Target=(And
+										Left=(List
+											Items=(Slice
+												(Bind
+													Label="item"
+													Target=(Func
+														Name=(Names SubOp)
+														Args=(Slice)
+														Src=<test.opt:3:31>
+													)
+													Src=<test.opt:3:25>
+												)
+												(ListAny)
 											)
-											Src=<test.opt:3:25>
+											Src=<test.opt:3:23>
+										)
+										Right=(Func
+											Name=(Names Func)
+											Args=(Slice
+												(Ref Label="first" Src=<test.opt:3:53>)
+												(Ref Label="item" Src=<test.opt:3:60>)
+											)
+											Src=<test.opt:3:47>
 										)
 										Src=<test.opt:3:23>
 									)
-									Right=(Match
-										Names=(Names Func)
-										Args=(List
-											(Ref Label="first" Src=<test.opt:3:53>)
-											(Ref Label="item" Src=<test.opt:3:60>)
-										)
-										Src=<test.opt:3:47>
-									)
-									Src=<test.opt:3:23>
+									Src=<test.opt:3:16>
 								)
-								Src=<test.opt:3:16>
+								(ListAny)
 							)
 							Src=<test.opt:3:10>
 						)
@@ -442,24 +492,27 @@ parse
 					)
 					(Bind
 						Label="last"
-						Target=(MatchListLast
-							MatchItem=(Bind
-								Label="item"
-								Target=(MatchAnd
-									Left=(MatchAny)
-									Right=(MatchNot
-										Input=(Match
-											Names=(Names Func)
-											Args=(List
-												(Ref Label="item" Src=<test.opt:4:34>)
+						Target=(List
+							Items=(Slice
+								(ListAny)
+								(Bind
+									Label="item"
+									Target=(And
+										Left=(Any)
+										Right=(Not
+											Input=(Func
+												Name=(Names Func)
+												Args=(Slice
+													(Ref Label="item" Src=<test.opt:4:34>)
+												)
+												Src=<test.opt:4:28>
 											)
-											Src=<test.opt:4:28>
+											Src=<test.opt:4:27>
 										)
-										Src=<test.opt:4:27>
+										Src=<test.opt:4:23>
 									)
-									Src=<test.opt:4:23>
+									Src=<test.opt:4:17>
 								)
-								Src=<test.opt:4:17>
 							)
 							Src=<test.opt:4:11>
 						)
@@ -467,35 +520,45 @@ parse
 					)
 					(Bind
 						Label="single"
-						Target=(MatchListSingle
-							MatchItem=(Bind
-								Label="item"
-								Target=(MatchAnd
-									Left=(Match
-										Names=(Names SubOp)
-										Args=(List)
+						Target=(List
+							Items=(Slice
+								(Bind
+									Label="item"
+									Target=(And
+										Left=(Func
+											Name=(Names SubOp)
+											Args=(Slice)
+											Src=<test.opt:5:21>
+										)
+										Right=(Func
+											Name=(Names Func)
+											Args=(Slice
+												(Ref Label="item" Src=<test.opt:5:37>)
+											)
+											Src=<test.opt:5:31>
+										)
 										Src=<test.opt:5:21>
 									)
-									Right=(Match
-										Names=(Names Func)
-										Args=(List
-											(Ref Label="item" Src=<test.opt:5:37>)
-										)
-										Src=<test.opt:5:31>
-									)
-									Src=<test.opt:5:21>
+									Src=<test.opt:5:15>
 								)
-								Src=<test.opt:5:15>
 							)
 							Src=<test.opt:5:13>
 						)
 						Src=<test.opt:5:5>
 					)
-					(Bind Label="empty" Target=(MatchListEmpty) Src=<test.opt:6:5>)
+					(Bind
+						Label="empty"
+						Target=(List Items=(Slice) Src=<test.opt:6:12>)
+						Src=<test.opt:6:5>
+					)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:9:1>)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice)
+				Src=<test.opt:9:1>
+			)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -515,9 +578,9 @@ parse
 			Comments=(Comments)
 			Name="ConstructString"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice)
 				Src=<test.opt:2:1>
 			)
 			Replace="foo"
@@ -540,10 +603,10 @@ parse
 			Comments=(Comments)
 			Name="ConstructBound"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Bind Label="input" Target=(MatchAny) Src=<test.opt:2:5>)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind Label="input" Target=(Any) Src=<test.opt:2:5>)
 				)
 				Src=<test.opt:2:1>
 			)
@@ -567,20 +630,20 @@ parse
 			Comments=(Comments)
 			Name="Construct"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Bind Label="input" Target=(MatchAny) Src=<test.opt:2:5>)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind Label="input" Target=(Any) Src=<test.opt:2:5>)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct
-				Name=Op
-				Args=(List
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice
 					(Ref Label="input" Src=<test.opt:2:22>)
-					(Construct
-						Name=SubOp
-						Args=(List "foo" AnotherOp)
+					(Func
+						Name=(Names SubOp)
+						Args=(Slice "foo" AnotherOp)
 						Src=<test.opt:2:29>
 					)
 				)
@@ -607,24 +670,24 @@ parse
 			Comments=(Comments)
 			Name="ConstructList"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Bind Label="left" Target=(MatchAny) Src=<test.opt:2:5>)
-					(Bind Label="right" Target=(MatchAny) Src=<test.opt:2:13>)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind Label="left" Target=(Any) Src=<test.opt:2:5>)
+					(Bind Label="right" Target=(Any) Src=<test.opt:2:13>)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct
-				Name=Op
-				Args=(List
-					(ConstructList
-						Items=(List
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(List
+						Items=(Slice
 							(Ref Label="left" Src=<test.opt:4:6>)
 							"foo"
-							(ConstructList Items=(List) Src=<test.opt:4:18>)
-							(ConstructList
-								Items=(List
+							(List Items=(Slice) Src=<test.opt:4:18>)
+							(List
+								Items=(Slice
 									(Ref Label="right" Src=<test.opt:4:22>)
 								)
 								Src=<test.opt:4:21>
@@ -655,25 +718,25 @@ parse
 			Comments=(Comments)
 			Name="Construct"
 			Tags=(Tags)
-			Match=(Match
-				Names=(Names Op)
-				Args=(List
-					(Bind Label="input" Target=(MatchAny) Src=<test.opt:2:5>)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind Label="input" Target=(Any) Src=<test.opt:2:5>)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct
-				Name=(Construct
-					Name=MakeOpName
-					Args=(List
+			Replace=(Func
+				Name=(Func
+					Name=(Names MakeOpName)
+					Args=(Slice
 						(Ref Label="input" Src=<test.opt:2:31>)
 					)
 					Src=<test.opt:2:19>
 				)
-				Args=(List
-					(Construct
-						Name=SubOp
-						Args=(List
+				Args=(Slice
+					(Func
+						Name=(Names SubOp)
+						Args=(Slice
 							(Ref Label="input" Src=<test.opt:2:46>)
 						)
 						Src=<test.opt:2:39>
@@ -732,13 +795,13 @@ parse
 test.opt:2:1: expected define statement or rule, found '('
 test.opt:6:7: expected name, found '*'
 test.opt:10:6: expected label, found '*'
-test.opt:14:5: expected match pattern, found '1'
-test.opt:18:9: expected match pattern, found '$'
+test.opt:14:5: expected expression, found '1'
+test.opt:18:9: expected expression, found '$'
 test.opt:22:11: expected name, found '*'
-test.opt:26:11: expected match pattern, found '1'
-test.opt:30:16: expected ']', found ')'
-test.opt:34:13: expected ']', found ')'
-test.opt:38:7: expected match pattern, found ')'
+test.opt:26:11: expected expression, found '1'
+test.opt:30:16: expected expression, found ')'
+test.opt:34:13: expected expression, found ')'
+test.opt:38:7: expected expression, found ')'
 
 #
 # Replace error cases + recovery cases.
@@ -759,11 +822,16 @@ parse
 # Expected construct name (nested)
 [Tag]
 (Op) => ((123))
+
+# Expected replace pattern, found name
+[Tag]
+(Op) => Op
 ----
 test.opt:3:9: expected replace pattern, found '1'
-test.opt:7:10: expected construct name, found '*'
-test.opt:11:13: expected replace pattern, found '1'
-test.opt:15:11: expected construct name, found '1'
+test.opt:7:10: expected name, found '*'
+test.opt:11:13: expected expression, found '1'
+test.opt:15:11: expected name, found '1'
+test.opt:19:9: expected replace pattern, found 'Op'
 
 #
 # Replace EOF error case
