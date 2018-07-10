@@ -83,7 +83,7 @@ ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
 BUILDTARGET  := ./pkg/cmd/cockroach
-SUFFIX       :=
+SUFFIX       := $(GOEXE)
 INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
@@ -139,7 +139,6 @@ override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTY
 
 GO      ?= go
 GOFLAGS ?=
-XGO     ?= xgo
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
@@ -662,7 +661,7 @@ build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
-COCKROACH := ./cockroach$(SUFFIX)$(GOEXE)
+COCKROACH := ./cockroach$(SUFFIX)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
