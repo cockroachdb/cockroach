@@ -2609,7 +2609,8 @@ generic_set:
   {
     // We need to recognize the "set tracing" specially here; couldn't make "set
     // tracing" a different grammar rule because of ambiguity.
-    if $1.strs()[0] == "tracing" {
+    varName := $1.strs()
+    if len(varName) == 1 && varName[0] == "tracing" {
       $$.val = &tree.SetTracing{Values: $3.exprs()}
     } else {
       $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
@@ -2617,7 +2618,8 @@ generic_set:
   }
 | var_name '=' var_list
   {
-    if $1.strs()[0] == "tracing" {
+    varName := $1.strs()
+    if len(varName) == 1 && varName[0] == "tracing" {
       $$.val = &tree.SetTracing{Values: $3.exprs()}
     } else {
       $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
