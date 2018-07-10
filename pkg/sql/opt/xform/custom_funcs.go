@@ -533,11 +533,20 @@ func (c *CustomFuncs) MakeOne() memo.GroupID {
 	return c.e.f.ConstructConst(c.e.f.InternDatum(tree.NewDInt(1)))
 }
 
-// MakeAscOrderingChoiceFromColumn constructs a new OrderingChoice with
-// one element in the sequence: the columnID in the ascending direction.
-func (c *CustomFuncs) MakeAscOrderingChoiceFromColumn(col memo.PrivateID) memo.PrivateID {
+// MakeOrderingChoiceFromColumn constructs a new OrderingChoice with
+// one element in the sequence: the columnID in the order defined by
+// (MIN/MAX) operator. This function was originally created to be used
+// with the Replace(Min|Max)WithLimit exploration rules.
+func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
+	op opt.Operator, col memo.PrivateID,
+) memo.PrivateID {
 	oc := props.OrderingChoice{}
-	oc.AppendCol(c.ExtractColID(col), false /* descending */)
+	switch op {
+	case opt.MinOp:
+		oc.AppendCol(c.ExtractColID(col), false /* descending */)
+	case opt.MaxOp:
+		oc.AppendCol(c.ExtractColID(col), true /* descending */)
+	}
 	return c.e.f.InternOrderingChoice(&oc)
 }
 
