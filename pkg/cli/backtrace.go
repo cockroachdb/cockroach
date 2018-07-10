@@ -93,7 +93,7 @@ func initBacktrace(logDir string, options ...stop.Option) *stop.Stopper {
 	bcd.Register(tracer)
 
 	// Hook log.Fatal*.
-	log.SetExitFunc(func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code int) {
 		_ = bcd.Trace(tracer, fmt.Errorf("exit %d", code), nil)
 		os.Exit(code)
 	})
