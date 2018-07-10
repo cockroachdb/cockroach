@@ -194,6 +194,40 @@ func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet
 	return c.f.ConstructValues(newRows.BuildList(), c.f.InternColList(newCols))
 }
 
+// ProjectOrderingGroupBy removes any columns referenced by the Ordering inside
+// a GroupByDef which are not output columns of the given group (variant of
+// ProjectOrdering).
+func (c *CustomFuncs) ProjectOrderingGroupBy(
+	group memo.GroupID, private memo.PrivateID,
+) memo.PrivateID {
+	outCols := c.OutputCols(group)
+	def := c.f.mem.LookupPrivate(private).(*memo.GroupByDef)
+	if def.Ordering.SubsetOfCols(outCols) {
+		return private
+	}
+	defCopy := *def
+	defCopy.Ordering = defCopy.Ordering.Copy()
+	defCopy.Ordering.ProjectCols(outCols)
+	return c.f.InternGroupByDef(&defCopy)
+}
+
+// ProjectOrderingRowNumber removes any columns referenced by the Ordering inside
+// a RowNumberDef which are not output columns of the given group (variant of
+// ProjectOrdering).
+func (c *CustomFuncs) ProjectOrderingRowNumber(
+	group memo.GroupID, private memo.PrivateID,
+) memo.PrivateID {
+	outCols := c.OutputCols(group)
+	def := c.f.mem.LookupPrivate(private).(*memo.RowNumberDef)
+	if def.Ordering.SubsetOfCols(outCols) {
+		return private
+	}
+	defCopy := *def
+	defCopy.Ordering = defCopy.Ordering.Copy()
+	defCopy.Ordering.ProjectCols(outCols)
+	return c.f.InternRowNumberDef(&defCopy)
+}
+
 // filterColList removes columns not in colWhitelist from a list of groups and
 // associated column IDs. Returns the new groups and associated column IDs.
 func filterColList(
