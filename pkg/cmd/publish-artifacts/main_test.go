@@ -23,6 +23,9 @@ import (
 	"github.com/kr/pretty"
 )
 
+// Whether to run slow tests.
+var slow bool
+
 func init() {
 	if err := os.Setenv("AWS_ACCESS_KEY_ID", "testing"); err != nil {
 		panic(err)
@@ -53,7 +56,9 @@ func mockPutter(p s3putter) func() {
 }
 
 func TestMain(t *testing.T) {
-	t.Skip("only to be run manually via `./build/builder.sh go test -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+	if !slow {
+		t.Skip("only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+	}
 	r := &recorder{}
 	undo := mockPutter(r)
 	defer undo()
