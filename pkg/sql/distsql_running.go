@@ -530,7 +530,7 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // assumes that the tree is supported (see CheckSupport).
 //
 // All errors encountered are reported to the distSQLReceiver's resultWriter.
-// Additionally, if the error is a "communication error" (an error encoutered
+// Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
 // distSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
