@@ -81,6 +81,17 @@ func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	return exec.ColumnOrdinal(ord)
 }
 
+// getColumnGroupOrdinal takes a group of equivalent columns and picks one that
+// is produced by the execPlan, returning its ordinal.
+func (ep *execPlan) getColumnGroupOrdinal(cols opt.ColSet) exec.ColumnOrdinal {
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		if ord, ok := ep.outputCols.Get(i); ok {
+			return exec.ColumnOrdinal(ord)
+		}
+	}
+	panic(fmt.Sprintf("none of the columns %s in input", cols))
+}
+
 func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	var ep execPlan
 	var err error
@@ -222,7 +233,7 @@ func (b *Builder) makeSQLOrdering(
 
 	reqOrder := make(sqlbase.ColumnOrdering, len(ordering.Columns))
 	for i := range reqOrder {
-		reqOrder[i].ColIdx = int(plan.getColumnOrdinal(ordering.Columns[i].AnyID()))
+		reqOrder[i].ColIdx = int(plan.getColumnGroupOrdinal(ordering.Columns[i].Group))
 		if ordering.Columns[i].Descending {
 			reqOrder[i].Direction = encoding.Descending
 		} else {
