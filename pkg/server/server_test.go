@@ -815,8 +815,8 @@ func TestPersistHLCUpperBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var fatal bool
-	defer log.SetExitFunc(os.Exit)
-	log.SetExitFunc(func(r int) {
+	defer log.ResetExitFunc()
+	log.SetExitFunc(true /* hideStack */, func(r int) {
 		defer log.Flush()
 		if r != 0 {
 			fatal = true
