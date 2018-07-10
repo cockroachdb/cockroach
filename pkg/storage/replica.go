@@ -2585,6 +2585,20 @@ func (r *Replica) executeAdminBatch(
 	if pErr != nil {
 		return nil, pErr
 	}
+
+	if ba.Header.ReturnRangeInfo {
+		header := resp.Header()
+		lease, _ := r.GetLease()
+		desc := r.Desc()
+		header.RangeInfos = []roachpb.RangeInfo{
+			{
+				Desc:  *desc,
+				Lease: lease,
+			},
+		}
+		resp.SetHeader(header)
+	}
+
 	br := &roachpb.BatchResponse{}
 	br.Add(resp)
 	br.Txn = resp.Header().Txn
