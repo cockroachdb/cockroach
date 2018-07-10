@@ -134,6 +134,11 @@ func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) buil
 	}
 }
 
+func newDecodeError(enc string) error {
+	return pgerror.NewErrorf(pgerror.CodeCharacterNotInRepertoireError,
+		"invalid byte sequence for encoding %q", enc)
+}
+
 // builtins contains the built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
@@ -242,6 +247,34 @@ var builtins = map[string]builtinDefinition{
 				"returns `wow!great`.",
 		},
 	),
+
+	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				str := []byte(tree.MustBeDBytes(args[0]))
+				enc := strings.ToLower(string(tree.MustBeDString(args[1])))
+				switch enc {
+				case "utf8", "utf-8", "unicode", "cp65001":
+					if !utf8.Valid(str) {
+						return nil, newDecodeError("UTF8")
+					}
+					return tree.NewDString(string(str)), nil
+				case "latin1", "latin-1", "iso88591", "iso8859-1", "iso-8859-1", "cp28591":
+					var buf strings.Builder
+					for _, c := range str {
+						buf.WriteRune(rune(c))
+					}
+					return tree.NewDString(buf.String()), nil
+				}
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"invalid source encoding name %q", enc)
+			},
+			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
+				"Supports encodings 'UTF8' and 'LATIN1'.",
+		}),
 
 	"gen_random_uuid": makeBuiltin(
 		tree.FunctionProperties{
