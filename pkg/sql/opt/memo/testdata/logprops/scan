@@ -61,6 +61,7 @@ SELECT s, x FROM a WHERE x=1
 scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1]
  ├── key: ()
  └── fd: ()-->(1,3)

@@ -142,6 +142,9 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// since those are created by exploration patterns and won't ever be the
 	// basis for the logical props on a newly created memo group.
 	relational.Cardinality = props.AnyCardinality
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -185,11 +188,12 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	// Functional Dependencies
 	// -----------------------
-	// Start with copy of FuncDepSet from input, add FDs from the WHERE clause,
-	// modify with any additional not-null columns, then possibly simplify by
-	// calling ProjectCols.
+	// Start with copy of FuncDepSet from input, add FDs from the WHERE clause
+	// and outer columns, modify with any additional not-null columns, then
+	// possibly simplify by calling ProjectCols.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	relational.FuncDeps.AddFrom(&filterProps.FuncDeps)
+	b.applyOuterColConstants(relational)
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -197,6 +201,9 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// -----------
 	// Select filter can filter any or all rows.
 	relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -346,22 +353,28 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	// Start with FDs from left side, and modify based on join type.
 	relational.FuncDeps.CopyFrom(&leftProps.FuncDeps)
 
+	// Anti and semi joins only inherit FDs from left side, since right side
+	// simply acts like a filter.
 	switch ev.Operator() {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		// Add FDs from the ON predicate, which include equivalent columns and
-		// constant columns. Remove any FDs involving columns from the right side.
+		// constant columns. Any outer columns become constants as well.
 		relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+		b.applyOuterColConstants(relational)
+		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
+
+		// Call ProjectCols to remove any FDs involving columns from the right side.
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
-		fallthrough
 
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		// Inherit FDs from left side, since right side simply acts like a filter.
-		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
+		// Anti-joins inherit FDs from left input, and nothing more, since the
+		// right input is not projected, and the ON predicate doesn't filter rows
+		// in the usual way.
 
 	default:
 		// Joins are modeled as consisting of several steps:
 		//   1. Compute cartesian product of left and right inputs.
-		//   2. Apply ON predicate filter on resulting rows.
+		//   2. For inner joins, apply ON predicate filter on resulting rows.
 		//   3. For outer joins, add non-matching rows, extended with NULL values
 		//      for the null-supplying side of the join.
 		if ev.IsJoinApply() {
@@ -377,6 +390,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 			// Add FDs from the ON predicate, which include equivalent columns and
 			// constant columns.
 			relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+			b.applyOuterColConstants(relational)
 
 		case opt.RightJoinOp, opt.RightJoinApplyOp:
 			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
@@ -399,7 +413,8 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 			if !relational.OutputCols.Intersects(notNullCols) {
 				relational.FuncDeps.ClearKey()
 			}
-			relational.FuncDeps.MakeOuter(relational.OutputCols, notNullCols)
+			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
+			relational.FuncDeps.MakeOuter(rightProps.OutputCols, notNullCols)
 		}
 
 		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
@@ -415,6 +430,9 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	relational.Cardinality = b.makeJoinCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
+	if relational.FuncDeps.HasMax1Row() {
+		relational.Cardinality = relational.Cardinality.AtMost(1)
+	}
 
 	// Statistics
 	// ----------
@@ -519,6 +537,9 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 		// has. However, if the input has at least one row, then at least one row
 		// will also be returned by GroupBy.
 		relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
+		if relational.FuncDeps.HasMax1Row() {
+			relational.Cardinality = relational.Cardinality.AtMost(1)
+		}
 	}
 
 	// Statistics
@@ -931,7 +952,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	// By default, union outer cols from all children, both relational and scalar.
 	for i := 0; i < ev.ChildCount(); i++ {
 		childLogical := &ev.childGroup(i).logical
-		logical.Scalar.OuterCols.UnionWith(childLogical.OuterCols())
+		scalar.OuterCols.UnionWith(childLogical.OuterCols())
 
 		// Propagate HasCorrelatedSubquery up the scalar expression tree.
 		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
@@ -1117,4 +1138,12 @@ func (b *logicalPropsBuilder) applyNotNullConstraint(
 			relational.NotNullCols = notNullCols
 		}
 	}
+}
+
+// applyOuterColConstants adds all outer columns and columns equivalent to them
+// to the FD set in the relational properties. References to outer columns act
+// like constants, since they are the same for all rows in the inner relation.
+func (b *logicalPropsBuilder) applyOuterColConstants(relational *props.Relational) {
+	equivCols := relational.FuncDeps.ComputeEquivClosure(relational.OuterCols)
+	relational.FuncDeps.AddConstants(equivCols)
 }
