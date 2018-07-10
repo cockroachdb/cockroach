@@ -374,7 +374,9 @@ const (
 	// Don't do anything special, just note that the intent was not found in the
 	// response.
 	QueryIntentRequest_DO_NOTHING QueryIntentRequest_IfMissingBehavior = 0
-	// Return an IntentMissingError.
+	// Return an IntentMissingError. Special-cased to return a SERIALIZABLE
+	// retry error if a SERIALIZABLE transaction queries its own intent and
+	// finds it has been pushed.
 	QueryIntentRequest_RETURN_ERROR QueryIntentRequest_IfMissingBehavior = 1
 	// Prevent the intent from ever being written in the future. If set as the
 	// behavior, a response with found_intent=false implies that an intent will
@@ -1254,9 +1256,12 @@ type QueryIntentRequest struct {
 	// be committed by the provided transaction. If an intent is found at the
 	// specified key, the intent is only considered a match if it has the same ID,
 	// the same epoch, and a provisional commit timestamp that is equal to or less
-	// than that in the provided transaction. If the intent's timestamp is greater
-	// than that in the provided transaction, it would prevent the transaction
-	// from committing and is therefore not a match.
+	// than that in the provided transaction. For SERIALIZABLE transactions, if
+	// the intent's timestamp is greater than that in the provided transaction, it
+	// would prevent the transaction from committing and is therefore not a match.
+	// However, for SNAPSHOT transactions, if the intent's timestamp is greater
+	// than that in the provided transaction, it would not prevent the transaction
+	// from committing and therefore is a match.
 	//
 	// Additionally, the intent is only considered a match if its sequence number
 	// is equal to or greater than the expected txn's sequence number. The

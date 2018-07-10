@@ -38,6 +38,7 @@ func QueryIntent(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryIntentRequest)
+	h := cArgs.Header
 	reply := resp.(*roachpb.QueryIntentResponse)
 
 	// Snapshot transactions cannot be prevented using a QueryIntent command.
@@ -65,7 +66,11 @@ func QueryIntent(
 		return result.Result{}, err
 	}
 
+	// Determine if the request is querying an intent in its own transaction.
+	ownTxn := h.Txn != nil && h.Txn.ID == args.Txn.ID
+
 	var curIntent *roachpb.Intent
+	var curIntentPushed bool
 	switch len(intents) {
 	case 0:
 		reply.FoundIntent = false
@@ -75,8 +80,27 @@ func QueryIntent(
 		// comparison.
 		reply.FoundIntent = (args.Txn.ID == curIntent.Txn.ID) &&
 			(args.Txn.Epoch == curIntent.Txn.Epoch) &&
-			(!args.Txn.Timestamp.Less(curIntent.Txn.Timestamp)) &&
 			(args.Txn.Sequence <= curIntent.Txn.Sequence)
+
+		// Check whether the intent was pushed past its expected timestamp.
+		if reply.FoundIntent && args.Txn.Timestamp.Less(curIntent.Txn.Timestamp) {
+			// The intent matched but was pushed to a later timestamp.
+			curIntentPushed = true
+
+			// If the transaction is SERIALIZABLE, consider a pushed intent as a
+			// missing intent. If the transaction is SNAPSHOT, don't.
+			if args.Txn.Isolation == enginepb.SERIALIZABLE {
+				reply.FoundIntent = false
+			}
+
+			// If the request was querying an intent in its own transaction, update
+			// the response transaction.
+			if ownTxn {
+				clonedTxn := h.Txn.Clone()
+				reply.Txn = &clonedTxn
+				reply.Txn.Timestamp.Forward(curIntent.Txn.Timestamp)
+			}
+		}
 	default:
 		log.Fatalf(ctx, "more than 1 intent on single key: %v", intents)
 	}
@@ -86,6 +110,13 @@ func QueryIntent(
 		case roachpb.QueryIntentRequest_DO_NOTHING:
 			// Do nothing.
 		case roachpb.QueryIntentRequest_RETURN_ERROR:
+			if ownTxn && curIntentPushed {
+				// If the transaction's own intent was pushed, go ahead and
+				// return a TransactionRetryError immediately with an updated
+				// transaction proto. This is an optimization that can help
+				// the txn use refresh spans more effectively.
+				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE)
+			}
 			return result.Result{}, roachpb.NewIntentMissingError(curIntent)
 		case roachpb.QueryIntentRequest_PREVENT:
 			// The intent will be prevented by bumping the timestamp cache for
