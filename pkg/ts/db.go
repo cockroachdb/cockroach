@@ -29,8 +29,13 @@ import (
 )
 
 var (
-	resolution1nsDefaultPruneThreshold  = time.Second
+	resolution1nsDefaultRollupThreshold = time.Second
+	// The prune threshold for the 10s resolution was created before time series
+	// rollups were enabled. It is still used in the transition period during
+	// an upgrade before the cluster version is finalized. After the version
+	// upgrade, the rollup threshold is used instead.
 	resolution10sDefaultPruneThreshold  = 30 * 24 * time.Hour
+	resolution10sDefaultRollupThreshold = 7 * 24 * time.Hour
 	resolution30mDefaultPruneThreshold  = 365 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
 )
@@ -70,9 +75,14 @@ type DB struct {
 // NewDB creates a new DB instance.
 func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
-		Resolution10s:  func() int64 { return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds() },
+		Resolution10s: func() int64 {
+			if settings.Version.IsMinSupported(cluster.VersionColumnarTimeSeries) {
+				return resolution10sDefaultRollupThreshold.Nanoseconds()
+			}
+			return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds()
+		},
 		Resolution30m:  func() int64 { return resolution30mDefaultPruneThreshold.Nanoseconds() },
-		resolution1ns:  func() int64 { return resolution1nsDefaultPruneThreshold.Nanoseconds() },
+		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
 	return &DB{
@@ -304,5 +314,11 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {
+	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
+}
+
+// WriteRollups returns true if this DB should write rollups for resolutions
+// targeted for a rollup resolution.
+func (db *DB) WriteRollups() bool {
 	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
 }

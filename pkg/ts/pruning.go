@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -29,41 +28,6 @@ var (
 	firstTSRKey = roachpb.RKey(keys.TimeseriesPrefix)
 	lastTSRKey  = firstTSRKey.PrefixEnd()
 )
-
-// ContainsTimeSeries returns true if the given key range overlaps the
-// range of possible time series keys.
-func (tsdb *DB) ContainsTimeSeries(start, end roachpb.RKey) bool {
-	return !lastTSRKey.Less(start) && !end.Less(firstTSRKey)
-}
-
-// PruneTimeSeries prunes old data for any time series found in the supplied
-// key range.
-//
-// The snapshot should be supplied by a local store, and is used only to
-// discover the names of time series which are store in that snapshot. The KV
-// client is then used to prune old data from the discovered series.
-//
-// The snapshot is used for key discovery (as opposed to the KV client) because
-// the task of pruning time series is distributed across the cluster to the
-// individual ranges which contain that time series data. Because replicas of
-// those ranges are guaranteed to have time series data locally, we can use the
-// snapshot to quickly obtain a set of keys to be pruned with no network calls.
-func (tsdb *DB) PruneTimeSeries(
-	ctx context.Context,
-	snapshot engine.Reader,
-	start, end roachpb.RKey,
-	db *client.DB,
-	timestamp hlc.Timestamp,
-) error {
-	series, err := tsdb.findTimeSeries(snapshot, start, end, timestamp)
-	if err != nil {
-		return err
-	}
-	return tsdb.pruneTimeSeries(ctx, db, series, timestamp)
-}
-
-// Assert that DB implements the necessary interface from the storage package.
-var _ storage.TimeSeriesDataStore = (*DB)(nil)
 
 type timeSeriesResolutionInfo struct {
 	Name       string
@@ -159,7 +123,6 @@ func (tsdb *DB) pruneTimeSeries(
 	for _, timeSeries := range timeSeriesList {
 		// Time series data for a specific resolution falls in a contiguous key
 		// range, and can be deleted with a DelRange command.
-
 		// The start key is the prefix unique to this name/resolution pair.
 		start := makeDataKeySeriesPrefix(timeSeries.Name, timeSeries.Resolution)
 
