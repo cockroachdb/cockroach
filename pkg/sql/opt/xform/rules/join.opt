@@ -40,3 +40,29 @@
 (JoinNonApply $left:* $right:* $on:*)
 =>
 (ConstructMergeJoins (OpName) $left $right $on)
+
+# GenerateLookupJoin creates a LookupJoin alternative for a Join which has a
+# Scan as its right input.
+[GenerateLookupJoin, Explore]
+(InnerJoin | LeftJoin
+    $left:*
+    (Scan $scanDef:*)
+    $on:* & (CanUseLookupJoin $left $scanDef $on)
+)
+=>
+(ConstructLookupJoin (OpName) $left $scanDef $on)
+
+# GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
+# has a Select->Scan combination as its right input. The filter can get merged
+# with the ON condition (this is correct for both inner and left join).
+[GenerateLookupJoinWithFilter, Explore]
+(InnerJoin | LeftJoin 
+    $left:*
+    (Select
+        (Scan $scanDef:*)
+        $filter:*
+    )
+    $on:* & (CanUseLookupJoin $left $scanDef $on)
+)
+=>
+(ConstructLookupJoin (OpName) $left $scanDef (ConcatFilters $on $filter))

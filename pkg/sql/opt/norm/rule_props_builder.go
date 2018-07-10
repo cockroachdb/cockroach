@@ -65,9 +65,6 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		b.buildJoinProps(ev)
 
-	case opt.IndexJoinOp:
-		b.buildIndexJoinProps(ev)
-
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		b.buildSetProps(ev)
@@ -86,6 +83,13 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 
 	case opt.RowNumberOp:
 		b.buildRowNumberProps(ev)
+
+	case opt.IndexJoinOp, opt.LookupJoinOp:
+		// There is no need to prune columns projected by Index or Lookup joins,
+		// since its parent will always be an "alternate" expression in the memo.
+		// Any pruneable columns should have already been pruned at the time the
+		// IndexJoin is constructed. Additionally, there is not currently a
+		// PruneCols rule for these operators.
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		// Don't allow any columns to be pruned, since that would trigger the
@@ -142,14 +146,6 @@ func (b *rulePropsBuilder) buildJoinProps(ev memo.ExprView) {
 	}
 	relational.Rule.PruneCols.DifferenceWith(rightProps.OuterCols)
 	relational.Rule.PruneCols.DifferenceWith(onProps.OuterCols)
-}
-
-func (b *rulePropsBuilder) buildIndexJoinProps(ev memo.ExprView) {
-	// There is no need to prune columns projected by the IndexJoin, since its
-	// parent will always be an "alternate" expression in the memo. Any pruneable
-	// columns should have already been pruned at the time the IndexJoin is
-	// constructed. Additionally, there is not currently a PruneCols rule for
-	// IndexJoin.
 }
 
 func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {

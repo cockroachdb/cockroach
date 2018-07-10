@@ -250,19 +250,27 @@ func (ev ExprView) format(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	var buf bytes.Buffer
+	formatter := ev.mem.makeExprFormatter(&buf)
 
-	// Special case for merge-join: we want the type of the join to show up
-	if ev.Operator() == opt.MergeJoinOp {
+	// Special cases for merge-join and lookup-join: we want the type of the join
+	// to show up first.
+	switch ev.Operator() {
+	case opt.MergeJoinOp:
 		def := ev.Child(2).Private().(*MergeOnDef)
 		fmt.Fprintf(&buf, "%v (merge)", def.JoinType)
-	} else {
-		fmt.Fprintf(&buf, "%v", ev.op)
-	}
 
-	switch ev.Operator() {
+	case opt.LookupJoinOp:
+		def := ev.Private().(*LookupJoinDef)
+		fmt.Fprintf(&buf, "%v (lookup", def.JoinType)
+		formatter.formatPrivate(def, formatNormal)
+		buf.WriteByte(')')
+
 	case opt.ScanOp, opt.IndexJoinOp, opt.ShowTraceForSessionOp:
-		formatter := ev.mem.makeExprFormatter(&buf)
+		fmt.Fprintf(&buf, "%v", ev.op)
 		formatter.formatPrivate(ev.Private(), formatNormal)
+
+	default:
+		fmt.Fprintf(&buf, "%v", ev.op)
 	}
 
 	var physProps *props.Physical
@@ -345,8 +353,13 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	case opt.LookupJoinOp:
 		def := ev.Private().(*LookupJoinDef)
-		tp.Childf("type: %v", def.JoinType)
-		tp.Childf("key columns: %v", def.KeyCols)
+		buf.Reset()
+		idxCols := make(opt.ColList, len(def.KeyCols))
+		idx := ev.mem.metadata.Table(def.Table).Index(def.Index)
+		for i := range idxCols {
+			idxCols[i] = ev.mem.metadata.TableColumn(def.Table, idx.Column(i).Ordinal)
+		}
+		tp.Childf("key columns: %v = %v", def.KeyCols, idxCols)
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
