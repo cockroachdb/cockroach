@@ -17,7 +17,62 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Memory Usage"
+      title="CPU Time (per-node)"
+      sources={nodeSources}
+      tooltip={`CPU usage per node, in CPU seconds per second. E.g. if a node has four
+        cores all at 100%, the value will be 4.`}
+    >
+      <Axis units={AxisUnits.Count} label="cpu seconds / second">
+        {
+          _.map(nodeIDs, (nid) => {
+            return (
+              <Metric
+                name="cr.node.sys.cpu.user.percent"
+                title={nodeDisplayName(nodesSummary, nid)}
+                sources={[nid]}
+              />
+            );
+          })
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="CPU Time (aggregated)"
+      sources={nodeSources}
+      tooltip={
+        `The amount of CPU time used by CockroachDB (User)
+           and system-level operations (Sys) ${tooltipSelection}.`
+      }
+    >
+      <Axis units={AxisUnits.Duration} label="cpu time">
+        <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
+        <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Memory Usage (per-node RSS)"
+      sources={nodeSources}
+      tooltip={`Per-node Resident Set Size.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="memory usage">
+        {
+          _.map(nodeIDs, (nid) => {
+            return (
+              <Metric
+                name="cr.node.sys.rss"
+                title={nodeDisplayName(nodesSummary, nid)}
+                sources={[nid]}
+              />
+            );
+          })
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Memory Usage (aggregated)"
       sources={nodeSources}
       tooltip={(
         <div>
@@ -84,20 +139,6 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis units={AxisUnits.Duration} label="pause time">
         <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="CPU Time"
-      sources={nodeSources}
-      tooltip={
-        `The amount of CPU time used by CockroachDB (User)
-           and system-level operations (Sys) ${tooltipSelection}.`
-      }
-    >
-      <Axis units={AxisUnits.Duration} label="cpu time">
-        <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
-        <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
