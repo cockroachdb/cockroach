@@ -684,8 +684,7 @@ Takes any of the following values:
 <PRE>
 
   - all:  waits until all target nodes' replica counts have dropped to zero.
-    This is the default. Use this unless you are targeting down nodes. In the presence
-    of down nodes, this will likely wait forever.
+    This is the default.
   - none: marks the targets as decommissioning, but does not wait for the process to complete.
     Use when polling manually from an external system.
 
