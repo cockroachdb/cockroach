@@ -155,8 +155,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// like the outter one.
 	if params.p.asOfSystemTime {
 		ts := params.p.txn.OrigTimestamp()
-		tsStr := fmt.Sprintf("%d.%d", ts.WallTime, ts.Logical)
-		sql = sql + " AS OF SYSTEM TIME " + tsStr
+		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
 	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(
