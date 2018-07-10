@@ -22,6 +22,8 @@ class CTRCipherStreamCreator final : public rocksdb_utils::CipherStreamCreator {
       : key_manager_(key_mgr), env_type_(env_type) {}
   virtual ~CTRCipherStreamCreator();
 
+  // Initialize 'settings' based on the current encryption algorithm and key
+  // and assign a new cipher stream to 'result'.
   virtual rocksdb::Status InitSettingsAndCreateCipherStream(
       std::string* settings,
       std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) override;
