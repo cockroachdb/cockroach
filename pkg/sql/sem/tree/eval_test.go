@@ -1395,6 +1395,9 @@ func TestEval(t *testing.T) {
 		{`'192.168.162.1'::inet << '192.168.200.95/17'::inet`, `true`},
 		{`'192.168.2.1'::inet <<= '192.168.2.1'::inet`, `true`},
 		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
+		{`convert_from('\xE290A4'::bytea, 'utf8')`, `e'\U00002424'`},
+		{`convert_from('\x2424'::bytea, 'latin1')`, `'$$'`},
+		{`convert_from('\xaaaa'::bytea, 'latin1')`, `e'\u00AA\u00AA'`},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	// We have to manually close this account because we're doing the evaluations
@@ -1656,6 +1659,8 @@ func TestEvalError(t *testing.T) {
 		{`like_escape('abc', '%b漢', '漢')`, `LIKE pattern must not end with escape character`},
 		{`similar_to_escape('abc', '-a-b-c', '-')`, `error parsing regexp: invalid escape sequence`},
 		{`similar_to_escape('a(b)c', '%((_)_', '(')`, `error parsing regexp: unexpected )`},
+		{`convert_from('\xaaaa'::bytea, 'woo')`, `convert_from(): invalid source encoding name "woo"`},
+		{`convert_from('\xaaaa'::bytea, 'utf8')`, `convert_from(): invalid byte sequence for encoding "UTF8"`},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)
