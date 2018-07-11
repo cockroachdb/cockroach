@@ -98,43 +98,9 @@ func makeFKHelper(
 		batchToNRIdx: make([]int, 0),
 		alloc:        alloc,
 	}
-	colInfo, err := makeColTypeInfo(&writeTable, colMap)
-	if err != nil {
-		return FKHelper{}, err
+	if err := fkHelper.initializeTableInfo(writeTable, colMap, dir); err != nil {
+		return FKHelper{}, nil
 	}
-
-	fkHelper.writeTables[writeTable.ID] = writeTableInfo{
-		table:     writeTable,
-		oldRows:   NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
-		newRows:   NewRowContainer(evalCtx.Mon.MakeBoundAccount(), colInfo, len(writeTable.Columns)),
-		writeIdxs: make(writeIdxs),
-	}
-
-	for _, idx := range writeTable.AllNonDropIndexes() {
-		writeIdxInfo := fkHelper.writeTables[writeTable.ID].writeIdxs[idx.ID]
-		writeIdxInfo.idx = idx
-		writeIdxInfo.searchIdxInfo = make(map[ID]indexLookupByID)
-		fkHelper.writeTables[writeTable.ID].writeIdxs[idx.ID] = writeIdxInfo
-		if dir == CheckInserts || dir == CheckUpdates {
-			if idx.ForeignKey.IsSet() {
-				ref := idx.ForeignKey
-				if err := fkHelper.addFKRefInfo(writeTable.ID, idx, otherTables, colMap, alloc, ref); err != nil {
-					return FKHelper{}, err
-				}
-			}
-		}
-		if dir == CheckDeletes || dir == CheckUpdates {
-			for _, ref := range idx.ReferencedBy {
-				if otherTables[ref.Table].IsAdding {
-					continue
-				}
-				if err := fkHelper.addFKRefInfo(writeTable.ID, idx, otherTables, colMap, alloc, ref); err != nil {
-					return FKHelper{}, err
-				}
-			}
-		}
-	}
-
 	return fkHelper, nil
 }
 
