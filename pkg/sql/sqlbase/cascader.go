@@ -1084,10 +1084,14 @@ func (c *cascader) cascadeAll(
 				"programming error: could not find row deleter for table %d", tableID,
 			)
 		}
-		for i := 0; i < deletedRows.Len(); i++ {
+		for deletedRows.Len() > 0 {
 			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
 				return err
 			}
+			if err := rowDeleter.Fks.checker.runCheck(ctx, deletedRows.At(0), nil); err != nil {
+				return err
+			}
+			deletedRows.PopFirst()
 		}
 	}
 

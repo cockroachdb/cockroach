@@ -1117,6 +1117,9 @@ func (rd *RowDeleter) DeleteIndexRow(
 	if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
 		return err
 	}
+	if err := rd.Fks.checker.runCheck(ctx, values, nil); err != nil {
+		return err
+	}
 	secondaryIndexEntry, err := EncodeSecondaryIndex(
 		rd.Helper.TableDesc, idx, rd.FetchColIDtoRowIndex, values)
 	if err != nil {
