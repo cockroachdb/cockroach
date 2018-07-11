@@ -294,6 +294,8 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{AST: stmt.AST}
 
+	log.VEvent(ctx, 1, "heuristic planner starts")
+
 	var err error
 	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
 	if err != nil {
@@ -321,12 +323,16 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
+	log.VEvent(ctx, 1, "heuristic planner optimizes plan")
+
 	needed := allColumns(p.curPlan.plan)
 	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
 	if err != nil {
 		p.curPlan.close(ctx)
 		return err
 	}
+
+	log.VEvent(ctx, 1, "heuristic planner optimizes subqueries")
 
 	// Now do the same work for all sub-queries.
 	for i := range p.curPlan.subqueryPlans {
