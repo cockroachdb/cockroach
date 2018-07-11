@@ -144,7 +144,6 @@ define VALID_VARS
   XCC
   XCMAKE_SYSTEM_NAME
   XCXX
-  XGO
   XGOARCH
   XGOOS
   bindir
@@ -157,6 +156,7 @@ define VALID_VARS
   have-defs
   host-is-macos
   host-is-mingw
+  is-cross-compile
   langgen-package
   libroach-inputs
   logictest-package

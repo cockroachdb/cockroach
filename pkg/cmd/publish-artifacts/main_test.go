@@ -23,6 +23,9 @@ import (
 	"github.com/kr/pretty"
 )
 
+// Whether to run slow tests.
+var slow bool
+
 func init() {
 	if err := os.Setenv("AWS_ACCESS_KEY_ID", "testing"); err != nil {
 		panic(err)
@@ -53,7 +56,9 @@ func mockPutter(p s3putter) func() {
 }
 
 func TestMain(t *testing.T) {
-	t.Skip("only to be run manually via `./build/builder.sh go test -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+	if !slow {
+		t.Skip("only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+	}
 	r := &recorder{}
 	undo := mockPutter(r)
 	defer undo()
@@ -120,12 +125,73 @@ func TestMain(t *testing.T) {
 			Key:          "cockroach/cockroach.windows-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=workload." + shaStub,
+			Key:                "/cockroach/workload." + shaStub,
+		},
+		{
+			Bucket:       "cockroach",
+			CacheControl: "no-cache",
+			Key:          "cockroach/workload.LATEST",
+			WebsiteRedirectLocation: "/cockroach/workload." + shaStub,
+		},
+		{
+			Bucket: "binaries.cockroachdb.com",
+			Key:    "cockroach-v42.42.42.src.tgz",
+		},
+		{
+			Bucket:       "binaries.cockroachdb.com",
+			CacheControl: "no-cache",
+			Key:          "cockroach-latest.src.tgz",
+		},
+		{
+			Bucket: "binaries.cockroachdb.com",
+			Key:    "cockroach-v42.42.42.darwin-10.9-amd64.tgz",
+		},
+		{
+			Bucket:       "binaries.cockroachdb.com",
+			CacheControl: "no-cache",
+			Key:          "cockroach-latest.darwin-10.9-amd64.tgz",
+		},
+		{
+			Bucket: "binaries.cockroachdb.com",
+			Key:    "cockroach-v42.42.42.linux-amd64.tgz",
+		},
+		{
+			Bucket:       "binaries.cockroachdb.com",
+			CacheControl: "no-cache",
+			Key:          "cockroach-latest.linux-amd64.tgz",
+		},
+		{
+			Bucket: "binaries.cockroachdb.com",
+			Key:    "cockroach-v42.42.42.linux-musl-amd64.tgz",
+		},
+		{
+			Bucket:       "binaries.cockroachdb.com",
+			CacheControl: "no-cache",
+			Key:          "cockroach-latest.linux-musl-amd64.tgz",
+		},
+		{
+			Bucket: "binaries.cockroachdb.com",
+			Key:    "cockroach-v42.42.42.windows-6.2-amd64.zip",
+		},
+		{
+			Bucket:       "binaries.cockroachdb.com",
+			CacheControl: "no-cache",
+			Key:          "cockroach-latest.windows-6.2-amd64.zip",
+		},
 	}
 
 	if err := os.Setenv("TC_BUILD_BRANCH", "master"); err != nil {
 		t.Fatal(err)
 	}
+	main()
 
+	if err := os.Setenv("TC_BUILD_BRANCH", "v42.42.42"); err != nil {
+		t.Fatal(err)
+	}
+	*isRelease = true
 	main()
 
 	var acts []testCase

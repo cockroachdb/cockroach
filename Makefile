@@ -83,7 +83,7 @@ ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
 BUILDTARGET  := ./pkg/cmd/cockroach
-SUFFIX       :=
+SUFFIX       := $(GOEXE)
 INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
@@ -139,7 +139,6 @@ override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTY
 
 GO      ?= go
 GOFLAGS ?=
-XGO     ?= xgo
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
@@ -350,6 +349,9 @@ XCXX := $(TARGET_TRIPLE)-c++
 EXTRA_XCMAKE_FLAGS :=
 EXTRA_XCONFIGURE_FLAGS :=
 
+ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
+is-cross-compile := 1
+endif
 
 # CMAKE_TARGET_MESSAGES=OFF prevents CMake from printing progress messages
 # whenever a target is fully built to prevent spammy output from make when
@@ -367,7 +369,7 @@ xconfigure-flags := $(configure-flags) $(EXTRA_XCONFIGURE_FLAGS)
 xgo := $(GO)
 
 # If we're cross-compiling, inform Autotools and CMake.
-ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
+ifdef is-cross-compile
 xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
 xgo := GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
@@ -662,7 +664,7 @@ build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
-COCKROACH := ./cockroach$(SUFFIX)$(GOEXE)
+COCKROACH := ./cockroach$(SUFFIX)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
@@ -754,7 +756,7 @@ $(COCKROACH) go-install:
 # diagrams. When the generated files are not checked in, the breakage goes
 # unnoticed until the docs team comes along, potentially months later. Much
 # better to make the developer who introduces the breakage fix the breakage.
-build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(XHOST_TRIPLE),,$(SETTINGS_DOC_PAGE))
+build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
