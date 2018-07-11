@@ -312,9 +312,8 @@ func (w *interleavedPartitioned) Ops(
 		hists := reg.GetHandle()
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		opRand := rng.Intn(100)
-		log.Warningf(context.TODO(), "opRand = %d", opRand)
 		if opRand < w.insertPercent {
-			log.Warning(context.TODO(), "inserting")
+			log.Info(context.TODO(), "inserting")
 			start := timeutil.Now()
 			insertStatement, err := db.Prepare(insertQuery)
 			if err != nil {
@@ -416,7 +415,7 @@ func (w *interleavedPartitioned) Ops(
 			hists.Get(`insert`).Record(timeutil.Since(start))
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent { // retrieve
-			log.Warning(context.TODO(), "querying")
+			log.Info(context.TODO(), "querying")
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.retrieveLocalPercent))
 			args := []interface{}{
 				sessionID,
@@ -435,7 +434,7 @@ func (w *interleavedPartitioned) Ops(
 			hists.Get(`retrieve`).Record(timeutil.Since(start))
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // update
-			log.Warning(context.TODO(), "updating")
+			log.Info(context.TODO(), "updating")
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.updateLocalPercent))
 			args := []interface{}{
 				sessionID,
@@ -459,7 +458,7 @@ func (w *interleavedPartitioned) Ops(
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return err
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent { // delete
-			log.Warning(context.TODO(), "deleting")
+			log.Info(context.TODO(), "deleting")
 			start := timeutil.Now()
 			deleteStatement, err := db.Prepare(deleteQuery)
 			if err != nil {
@@ -486,7 +485,7 @@ func (w *interleavedPartitioned) Ops(
 func (w *interleavedPartitioned) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PreLoad: func(db *gosql.DB) error {
-			log.Warning(context.TODO(), "Preload")
+			log.Info(context.TODO(), "Preload")
 			if _, err := db.Exec(zoneLocationsStmt); err != nil {
 				return err
 			}
@@ -510,7 +509,6 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	sessionID := w.generateSessionID(rng, rowIdx)
 	w.sessionIDs = append(w.sessionIDs, sessionID)
-	log.Warningf(context.TODO(), "inserting into parent row %d, len of sessionIDs is now %d", rowIdx, len(w.sessionIDs))
 	return []interface{}{
 		sessionID,            // session_id
 		randString(rng, 100), // affiliate
@@ -528,7 +526,6 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	rngFactor int64, nPerBatch int,
 ) func(int) [][]interface{} {
 	return func(sessionRowIdx int) [][]interface{} {
-		log.Warningf(context.TODO(), "inserting into child %d, sessionRowIdx %d. len(w.sessionIDs) = %d", rngFactor, sessionRowIdx, len(w.sessionIDs))
 		sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 		sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
@@ -548,7 +545,6 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 }
 
 func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]interface{} {
-	log.Warningf(context.TODO(), "inserting into devices, sessionRowIdx %d", sessionRowIdx)
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 	sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
@@ -572,7 +568,6 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]in
 }
 
 func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]interface{} {
-	log.Warningf(context.TODO(), "inserting into queries, sessionRowIdx %d", sessionRowIdx)
 	var rows [][]interface{}
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
