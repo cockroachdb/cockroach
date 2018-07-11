@@ -2357,9 +2357,9 @@ func (r *Replica) beginCmds(
 			fn(ba, storagebase.CommandQueueBeginExecuting)
 		}
 
-		r.mu.Lock()
+		r.mu.RLock()
 		mergeCompleteCh := r.mu.mergeComplete
-		r.mu.Unlock()
+		r.mu.RUnlock()
 		if mergeCompleteCh != nil {
 			// The replica is being merged into its left-hand neighbor. This request
 			// cannot proceed until the merge completes, signaled by the closing of
