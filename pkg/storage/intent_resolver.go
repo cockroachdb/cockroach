@@ -50,12 +50,11 @@ const (
 	// (this helps avoid deadlocks during test shutdown).
 	intentResolverTimeout = 30 * time.Second
 
-	// intentResolverBatchSize is the maximum number of intents that will
-	// be resolved in a single batch. Batches that span many ranges (which
-	// is possible for the commit of a transaction that spans many ranges)
-	// will be split into many batches with NoopRequests by the
-	// DistSender, leading to high CPU overhead and quadratic memory
-	// usage.
+	// intentResolverBatchSize is the maximum number of intents that will be
+	// resolved in a single batch. Batches that span many ranges (which is
+	// possible for the commit of a transaction that spans many ranges) will be
+	// split into many batches by the DistSender, leading to high CPU overhead
+	// and quadratic memory usage.
 	intentResolverBatchSize = 100
 )
 

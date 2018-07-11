@@ -97,8 +97,6 @@ const (
 	ResolveIntent
 	// ResolveIntentRange resolves existing write intents for a key range.
 	ResolveIntentRange
-	// Noop is a no-op.
-	Noop
 	// Merge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not

@@ -385,12 +385,6 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	return nil
 }
 
-// Header implements the Request interface.
-func (*NoopRequest) Header() RequestHeader { panic("NoopRequest has no span") }
-
-// SetHeader implements the Request interface.
-func (*NoopRequest) SetHeader(_ RequestHeader) { panic("NoopRequest has no span") }
-
 // SetHeader implements the Response interface.
 func (rh *ResponseHeader) SetHeader(other ResponseHeader) {
 	*rh = other
@@ -400,12 +394,6 @@ func (rh *ResponseHeader) SetHeader(other ResponseHeader) {
 func (rh ResponseHeader) Header() ResponseHeader {
 	return rh
 }
-
-// Header implements the Response interface.
-func (*NoopResponse) Header() ResponseHeader { return ResponseHeader{} }
-
-// SetHeader implements the Response interface.
-func (*NoopResponse) SetHeader(_ ResponseHeader) {}
 
 // Verify implements the Response interface for ResopnseHeader with a
 // default noop. Individual response types should override this method
@@ -439,11 +427,6 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 			return err
 		}
 	}
-	return nil
-}
-
-// Verify implements the Response interface.
-func (*NoopResponse) Verify(_ Request) error {
 	return nil
 }
 
@@ -538,9 +521,6 @@ func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 
 // Method implements the Request interface.
 func (*ResolveIntentRangeRequest) Method() Method { return ResolveIntentRange }
-
-// Method implements the Request interface.
-func (*NoopRequest) Method() Method { return Noop }
 
 // Method implements the Request interface.
 func (*MergeRequest) Method() Method { return Merge }
@@ -728,12 +708,6 @@ func (rir *ResolveIntentRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (rirr *ResolveIntentRangeRequest) ShallowCopy() Request {
 	shallowCopy := *rirr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (nr *NoopRequest) ShallowCopy() Request {
-	shallowCopy := *nr
 	return &shallowCopy
 }
 
@@ -1047,7 +1021,6 @@ func (*QueryTxnRequest) flags() int            { return isRead | isAlone }
 func (*QueryIntentRequest) flags() int        { return isRead | isPrefix | updatesReadTSCache }
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
-func (*NoopRequest) flags() int               { return 0 }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*MergeRequest) flags() int              { return isWrite }
 

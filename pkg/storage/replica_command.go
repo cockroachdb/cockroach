@@ -56,10 +56,6 @@ func evaluateCommand(
 	reply roachpb.Response,
 ) (result.Result, *roachpb.Error) {
 
-	if _, ok := args.(*roachpb.NoopRequest); ok {
-		return result.Result{}, nil
-	}
-
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{

@@ -2113,9 +2113,9 @@ func TestReplicaCommandQueue(t *testing.T) {
 	for _, test := range testCases {
 		var addReqs []string
 		if test.cmd1Read {
-			addReqs = []string{"", "noop", "read"}
+			addReqs = []string{"", "read"}
 		} else {
-			addReqs = []string{"", "noop", "write"}
+			addReqs = []string{"", "write"}
 		}
 		for _, addReq := range addReqs {
 			for _, localKey := range []bool{false, true} {
@@ -2128,8 +2128,6 @@ func TestReplicaCommandQueue(t *testing.T) {
 					"%s-%s", readWriteLabels[test.cmd1Read], readWriteLabels[test.cmd2Read],
 				)
 				switch addReq {
-				case "noop":
-					testName += "-noop"
 				case "read":
 					testName += "-addRead"
 				case "write":
@@ -2174,11 +2172,6 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 							if header.UserPriority == blockingPriority {
 								switch addReq {
-								case "noop":
-									// Add a noop request to make sure that its empty key
-									// doesn't cause additional blocking.
-									ba.Add(&roachpb.NoopRequest{})
-
 								case "read", "write":
 									// Additional reads and writes to unique keys do not
 									// cause additional blocking; the read/write nature of
