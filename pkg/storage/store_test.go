@@ -1100,27 +1100,6 @@ func TestStoreAnnotateNow(t *testing.T) {
 	}
 }
 
-func TestStoreExecuteNoop(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
-	ba := roachpb.BatchRequest{}
-	ba.RangeID = 1
-	ba.Replica = roachpb.ReplicaDescriptor{StoreID: store.StoreID()}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
-	ba.Add(&roachpb.NoopRequest{})
-
-	br, pErr := store.Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	reply := br.Responses[1].GetInner()
-	if _, ok := reply.(*roachpb.NoopResponse); !ok {
-		t.Errorf("expected *roachpb.NoopResponse, got %T", reply)
-	}
-}
-
 // TestStoreVerifyKeys checks that key length is enforced and
 // that end keys must sort >= start.
 func TestStoreVerifyKeys(t *testing.T) {

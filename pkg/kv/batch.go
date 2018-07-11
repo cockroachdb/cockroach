@@ -142,9 +142,6 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
-		if _, ok := inner.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
@@ -213,9 +210,6 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
-		if _, ok := inner.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
