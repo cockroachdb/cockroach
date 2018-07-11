@@ -1,4 +1,5 @@
 import { NodesSummary } from "src/redux/nodes";
+import { AggregationLevel } from "src/redux/aggregationLevel";
 
 /**
  * GraphDashboardProps are the properties accepted by the renderable component
@@ -30,6 +31,8 @@ export interface GraphDashboardProps {
    * all nodes" or "on node X".
    */
   tooltipSelection: string;
+
+  aggregationLevel: AggregationLevel;
 }
 
 export function nodeDisplayName(nodesSummary: NodesSummary, nid: string) {

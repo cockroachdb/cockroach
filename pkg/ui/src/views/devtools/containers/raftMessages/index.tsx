@@ -5,6 +5,7 @@ import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
 
+import { AggregationLevel } from "src/redux/aggregationLevel";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn as hoverOnAction, hoverOff as hoverOffAction } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -124,6 +125,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       nodeSources,
       storeSources,
       tooltipSelection,
+      aggregationLevel: AggregationLevel.Cluster,
     };
 
     // Generate graphs for the current dashboard, wrapping each one in a

@@ -1,0 +1,43 @@
+@require nib
+@require "~styl/base/palette.styl"
+
+$toggle-hover-color = darken($background-color, 2.5%)
+
+.toggle
+  text-transform uppercase
+  letter-spacing 2px
+  line-height 17px
+  padding 0
+  vertical-align middle
+  border 1px solid $button-border-color
+  border-radius 4px
+  display inline-flex
+  white-space nowrap
+  color $body-color
+
+  &__option
+    color $button-border-color
+    cursor pointer
+    border-right 1px solid $button-border-color
+
+    &:hover
+      background-color $toggle-hover-color
+      color $link-color
+
+    &:first-child
+      padding 12px 24px
+      border-top-left-radius 4px
+      border-bottom-left-radius 4px
+
+    &:last-child
+      padding 12px 24px
+      border-top-right-radius 4px
+      border-bottom-right-radius 4px
+      border-right none
+
+    &--selected
+      cursor default
+      color $link-color
+
+      &:hover
+        background-color $background-color
