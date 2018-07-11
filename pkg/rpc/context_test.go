@@ -206,9 +206,18 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}()
 
+	lisNotLocalServer, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lisLocalServer, err := net.Listen("tcp", "127.0.0.2:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	clientCtx := newTestContext(clock, stopper)
-	clientCtx.Addr = "notlocalserver"
-	clientCtx.AdvertiseAddr = "localserver"
+	clientCtx.Addr = lisNotLocalServer.Addr().String()
+	clientCtx.AdvertiseAddr = lisLocalServer.Addr().String()
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
@@ -254,7 +263,11 @@ func TestHeartbeatHealth(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotHeartbeated {
+	lisNonExistentConnection, err := net.Listen("tcp", "127.0.0.3:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := clientCtx.ConnHealth(lisNonExistentConnection.Addr().String()); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
@@ -270,6 +283,9 @@ func TestHeartbeatHealth(t *testing.T) {
 	if err := clientCtx.ConnHealth(clientCtx.AdvertiseAddr); err != nil {
 		t.Error(err)
 	}
+	lisLocalServer.Close()
+	lisNonExistentConnection.Close()
+	lisNotLocalServer.Close()
 }
 
 type interceptingListener struct {
