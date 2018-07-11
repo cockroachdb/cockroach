@@ -91,4 +91,4 @@ case "${1-}" in
 esac
 
 shift
-(set -x && CGO_ENABLED=1 make "${args[@]}" "$@")
+(set -x && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
