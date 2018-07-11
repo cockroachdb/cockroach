@@ -22,7 +22,7 @@ env=(
 build/builder.sh env "${env[@]}" bash <<EOF
 set -euxo pipefail
 go install ./pkg/cmd/github-post
-make stress PKG="$PKG" TESTTIMEOUT=30m TESTFLAGS='-json' STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
+make stress PKG="$PKG" TESTTIMEOUT=30m STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
   | tee artifacts/stress.log \
-  || { github-post < artifacts/stress.log; exit 1; }
+  || { go tool test2json < artifacts/stress.log | github-post; exit 1; }
 EOF

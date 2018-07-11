@@ -1,0 +1,76 @@
+{"Action":"output","Output":"Running make with -j8\n"}
+{"Action":"output","Output":"GOPATH set to /Users/benesch/go\n"}
+{"Action":"output","Output":"go test -exec 'stress -maxruns 1 -maxfails 1 -stderr' -tags ' make x86_64_apple_darwin17.5.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"-L/usr/local/opt/readline/lib\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.1.0-alpha.20180702-414-ge057fe8ae-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=e057fe8aef399bb59557daf18751199112c7c523\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin17.5.0\"  ' -run \"TestGossipHandlesReplacedNode\"  -timeout 8m ./pkg/storage -v \n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"I180711 20:13:15.800708 1 rand.go:75  Random seed: -6688564412191548907\n"}
+{"Action":"run","Test":"TestGossipHandlesReplacedNode"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"=== RUN   TestGossipHandlesReplacedNode\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"W180711 20:13:15.808212 83 server/status/runtime.go:143  Could not parse build timestamp: parsing time \"\" as \"2006/01/02 15:04:05\": cannot parse \"\" as \"2006\"\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.814446 83 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check_enabled\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818214 83 server/config.go:545  [n?] 1 storage engine initialized\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818267 83 server/config.go:548  [n?] RocksDB cache size: 128 MiB\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818307 83 server/config.go:548  [n?] store 0: in-memory, size 0 B\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"E180711 20:13:15.826132 83 storage/replica.go:1875  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"[]\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged: []\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"goroutine 83 [running]:\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/util/log.getStacks(0xc4204e0600, 0xc4204e0660, 0x7018200, 0x12)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:965 +0xcf\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/util/log.(*loggingT).outputLogEntry(0x736fce0, 0xc400000004, 0x7018281, 0x12, 0x755, 0xc4203e4bc0, 0x3f)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:834 +0x804\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/util/log.addStructured(0x64d5540, 0xc4209a6a20, 0x4, 0x2, 0x0, 0x0, 0xc42080f5f8, 0x1, 0x1)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/util/log/structured.go:154 +0x2e5\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/util/log.logDepth(0x64d5540, 0xc4209a6a20, 0x1, 0x4, 0x0, 0x0, 0xc42080f5f8, 0x1, 0x1)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/util/log/log.go:69 +0x8c\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/util/log.Fatal(0x64d5540, 0xc4209a6a20, 0xc42080f5f8, 0x1, 0x1)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/util/log/log.go:181 +0x6c\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.(*Replica).assertStateLocked(0xc4205cb180, 0x64d5540, 0xc4209a6a20, 0x64e6400, 0xc4205f04e0)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:1877 +0x67d\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.(*Replica).initRaftMuLockedReplicaMuLocked(0xc4205cb180, 0xc4209323c0, 0xc420360050, 0x1, 0x0, 0x0)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:757 +0x6e7\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.(*Replica).init(0xc4205cb180, 0xc4209323c0, 0xc420360050, 0x0, 0x0, 0x0)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:674 +0xd9\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.NewReplica(0xc4209323c0, 0xc4200fe000, 0x0, 0x0, 0x1, 0x2a)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:664 +0x6f\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.(*Store).Start.func1(0x1, 0x73ac198, 0x0, 0x0, 0xc4202f31d0, 0x2, 0x8, 0xc4202f31f0, 0x1, 0x1, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1367 +0x10c\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.IterateRangeDescriptors.func1(0xc4203e4a48, 0x9, 0x2a, 0xc4203e4a5b, 0x17, 0x17, 0x1540699ce156693f, 0x0, 0x10, 0xc4202f31b0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1261 +0x29f\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage/engine.MVCCIterateUsingIter(0x64d5540, 0xc4209a6840, 0x64e6400, 0xc4205f04e0, 0xc4202f3190, 0x9, 0x10, 0xc4202f31b0, 0xb, 0x10, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/engine/mvcc.go:1930 +0x106\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage/engine.MVCCIterate(0x64d5540, 0xc4209a6840, 0x64e6400, 0xc4205f04e0, 0xc4202f3190, 0x9, 0x10, 0xc4202f31b0, 0xb, 0x10, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/engine/mvcc.go:1880 +0x22f\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.IterateRangeDescriptors(0x64d5540, 0xc4209a6840, 0x64e6400, 0xc4205f04e0, 0xc4203b8ea0, 0x1, 0x1)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1264 +0x271\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage.(*Store).Start(0xc4200fe000, 0x64d5540, 0xc4209a6840, 0xc420a02000, 0x2, 0x700000000)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1361 +0x533\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/server.bootstrapCluster(0x64d5540, 0xc420241d40, 0x64cf580, 0xc420292100, 0x0, 0xc4203600a0, 0x64d5540, 0xc420241d40, 0x2faf080, 0xa, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:273 +0x6f3\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/server.(*Node).bootstrap(0xc42053ec00, 0x64d5540, 0xc420241d40, 0xc42028a110, 0x1, 0x1, 0x2, 0x700000000, 0x2, 0x700000000, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:415 +0x223\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/server.(*Server).Start(0xc420413c00, 0x64d5540, 0xc420241d40, 0x0, 0x0)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:1366 +0x1ed0\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/server.(*TestServer).Start(0xc4202a0690, 0x64b0980, 0xc42037c3c0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/server/testserver.go:341 +0x137\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/testutils/serverutils.StartServerRaw(0x64b0980, 0xc42037c3c0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/testutils/serverutils/test_server_shim.go:206 +0xef\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/testutils/serverutils.StartServer(0x64fdaa0, 0xc4204c54a0, 0x64b0980, 0xc42037c3c0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/testutils/serverutils/test_server_shim.go:174 +0x55\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/testutils/testcluster.(*TestCluster).doAddServer(0xc4202a04d0, 0x64fdaa0, 0xc4204c54a0, 0x64b0980, 0xc42037c3c0, 0x0, 0x0, 0x0, 0x0, 0x0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/testutils/testcluster/testcluster.go:251 +0x108\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/testutils/testcluster.StartTestCluster(0x64fdaa0, 0xc4204c54a0, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/testutils/testcluster/testcluster.go:157 +0x557\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"github.com/cockroachdb/cockroach/pkg/storage_test.TestGossipHandlesReplacedNode(0xc4204c54a0)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/gossip_test.go:153 +0x189\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"testing.tRunner(0xc4204c54a0, 0x60f3af8)\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/usr/local/Cellar/go/1.10.2/libexec/src/testing/testing.go:777 +0xd0\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"created by testing.(*T).Run\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\t/usr/local/Cellar/go/1.10.2/libexec/src/testing/testing.go:824 +0x2e0\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"ERROR: exit status 255\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"1 runs completed, 1 failures, over 0s\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"SUCCESS\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"ok  \tgithub.com/cockroachdb/cockroach/pkg/storage\t0.133s\n"}
+{"Action":"fail","Test":"TestGossipHandlesReplacedNode"}
