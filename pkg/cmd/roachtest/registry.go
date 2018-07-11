@@ -49,6 +49,7 @@ func registerTests(r *registry) {
 	registerUpgrade(r)
 	registerVersion(r)
 	registerEncryption(r)
+	registerQueueWorkload(r)
 }
 
 func registerBenchmarks(r *registry) {
