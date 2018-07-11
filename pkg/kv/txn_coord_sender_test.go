@@ -29,7 +29,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -335,8 +334,8 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	// Check end transaction intents, which should exclude the intent at
 	// key "c" as it's merged with the cToEClosed span.
 	expIntents := []roachpb.Span{fTog1Closed, cToEClosed, a, b}
-	var sendFn rpcSendFn = func(
-		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest, _ *rpc.Context,
+	var sendFn simpleSendFn = func(
+		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		if req, ok := args.GetArg(roachpb.EndTransaction); ok {
 			if a, e := req.(*roachpb.EndTransactionRequest).IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
@@ -353,7 +352,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      s.Clock,
 			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptLegacyTransport(sendFn),
+				TransportFactory: adaptSimpleTransport(sendFn),
 			},
 			RangeDescriptorDB: descDB,
 		},
