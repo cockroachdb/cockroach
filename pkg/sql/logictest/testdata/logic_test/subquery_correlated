@@ -683,3 +683,9 @@ SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
 ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);
+
+statement error HINT: some correlated subqueries are not supported yet
+SELECT * FROM pg_class a WHERE EXISTS (SELECT * FROM pg_class b WHERE a.oid = b.oid)
+
+statement error HINT: some correlated subqueries are not supported yet
+SELECT * FROM pg_class a WHERE EXISTS (SELECT * FROM o WHERE a.oid = o.o_id::oid)
