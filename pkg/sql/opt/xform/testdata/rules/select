@@ -301,18 +301,23 @@ project
 opt
 SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
 ----
-select
+project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1,2)
- ├── scan a@u
- │    ├── columns: k:1(int!null) u:2(int)
- │    ├── limit: 1
- │    ├── key: ()
- │    └── fd: ()-->(1,2)
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── a.k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: k:1(int!null) u:2(int)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan a@u
+      │    ├── columns: k:1(int!null) u:2(int)
+      │    ├── limit: 1
+      │    ├── key: ()
+      │    └── fd: ()-->(1,2)
+      └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── a.k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
 
 # --------------------------------------------------
 # PushFilterIntoLookupJoinNoRemainder

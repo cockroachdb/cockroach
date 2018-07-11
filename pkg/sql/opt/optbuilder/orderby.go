@@ -144,22 +144,12 @@ func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, or
 	}
 }
 
-// buildOrderByProject adds any columns from orderByScope to projectionsScope
-// that are not already present in projectionsScope. buildOrderByProject also
-// sets the ordering and presentation properties on the projectionsScope.
-// These properties later become part of the required physical properties
-// returned by Build.
+// buildOrderByProject adds columns from orderByScope to the orderByCols slice
+// of projectionsScope. buildOrderByProject also sets the ordering and
+// presentation properties on the projectionsScope. These properties later
+// become part of the required physical properties returned by Build.
 func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
-	for i := range orderByScope.cols {
-		col := &orderByScope.cols[i]
-
-		// Only append order by columns that aren't already present.
-		if findColByIndex(projectionsScope.cols, col.id) == nil {
-			projectionsScope.cols = append(projectionsScope.cols, *col)
-			projectionsScope.cols[len(projectionsScope.cols)-1].hidden = true
-		}
-	}
-
+	projectionsScope.orderByCols = append(projectionsScope.orderByCols, orderByScope.cols...)
 	projectionsScope.physicalProps.Ordering = orderByScope.physicalProps.Ordering
 	projectionsScope.setPresentation()
 }
