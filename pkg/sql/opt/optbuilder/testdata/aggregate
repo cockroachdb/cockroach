@@ -2647,3 +2647,44 @@ sort
       │              └── variable: kv.v [type=int]
       └── projections
            └── const: 123 [type=int]
+
+# Check that ordering columns are projected correctly.
+build
+SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x+y)
+----
+group-by
+ ├── columns: array_agg:5(int[])
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: y:2(int) column4:4(int)
+ │    ├── ordering: +4
+ │    └── project
+ │         ├── columns: y:2(int) column4:4(int)
+ │         └── project
+ │              ├── columns: column4:4(int) x:1(int!null) y:2(int) z:3(float)
+ │              ├── scan xyz
+ │              │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── variable: xyz.x [type=int]
+ │                        └── variable: xyz.y [type=int]
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: xyz.y [type=int]
+
+build
+SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
+----
+group-by
+ ├── columns: array_agg:4(int[])
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: x:1(int!null) y:2(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int!null) y:2(int) z:3(float)
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: xyz.y [type=int]

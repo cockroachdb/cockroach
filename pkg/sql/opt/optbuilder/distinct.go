@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -39,7 +40,7 @@ func (b *Builder) buildDistinct(
 	}
 
 	outScope = inScope.replace()
-	outScope.physicalProps = inScope.physicalProps
+	outScope.copyPhysicalProps(inScope)
 
 	// Distinct is equivalent to group by without any aggregations.
 	var groupCols opt.ColSet
@@ -65,6 +66,8 @@ func (b *Builder) buildDistinct(
 		}
 	}
 
-	outScope.group = b.constructGroupBy(inScope.group, groupCols, nil /* cols */, outScope)
+	outScope.group = b.constructGroupBy(
+		inScope.group, groupCols, nil /* cols */, props.OrderingChoice{},
+	)
 	return outScope
 }

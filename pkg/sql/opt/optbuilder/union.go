@@ -33,8 +33,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 	leftScope := b.buildSelect(clause.Left, inScope)
 	rightScope := b.buildSelect(clause.Right, inScope)
 
-	// Remove any hidden columns added by any "inner" ORDER BY clauses
-	// (which will be ignored).
+	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()
 	rightScope.removeHiddenCols()
 

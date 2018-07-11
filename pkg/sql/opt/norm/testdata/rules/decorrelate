@@ -1042,36 +1042,40 @@ project
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(10)
       │    │    ├── sort
-      │    │    │    ├── columns: column9:9(string!null)
+      │    │    │    ├── columns: column8:8(int) column9:9(string!null)
       │    │    │    ├── outer: (1)
       │    │    │    ├── cardinality: [0 - 1]
       │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(9)
+      │    │    │    ├── fd: ()-->(8,9)
       │    │    │    ├── ordering: +8 opt(9)
       │    │    │    └── limit
-      │    │    │         ├── columns: column9:9(string!null)
+      │    │    │         ├── columns: column8:8(int) column9:9(string!null)
       │    │    │         ├── outer: (1)
       │    │    │         ├── cardinality: [0 - 1]
       │    │    │         ├── key: ()
-      │    │    │         ├── fd: ()-->(9)
+      │    │    │         ├── fd: ()-->(8,9)
       │    │    │         ├── select
-      │    │    │         │    ├── columns: column9:9(string!null)
+      │    │    │         │    ├── columns: column8:8(int) column9:9(string!null)
       │    │    │         │    ├── outer: (1)
       │    │    │         │    ├── fd: ()-->(9)
       │    │    │         │    ├── project
-      │    │    │         │    │    ├── columns: column9:9(string)
+      │    │    │         │    │    ├── columns: column9:9(string) column8:8(int)
       │    │    │         │    │    ├── outer: (1)
       │    │    │         │    │    ├── fd: ()-->(9)
       │    │    │         │    │    ├── select
-      │    │    │         │    │    │    ├── columns: y:7(int!null)
+      │    │    │         │    │    │    ├── columns: x:6(int!null) y:7(int!null)
       │    │    │         │    │    │    ├── outer: (1)
+      │    │    │         │    │    │    ├── key: (6)
       │    │    │         │    │    │    ├── fd: ()-->(7)
       │    │    │         │    │    │    ├── scan xy
-      │    │    │         │    │    │    │    └── columns: y:7(int)
+      │    │    │         │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │         │    │    │    │    ├── key: (6)
+      │    │    │         │    │    │    │    └── fd: (6)-->(7)
       │    │    │         │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │    │    │         │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    │    │         │    │    └── projections [outer=(7)]
-      │    │    │         │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    │         │    │    └── projections [outer=(6,7)]
+      │    │    │         │    │         ├── xy.y::STRING [type=string, outer=(7)]
+      │    │    │         │    │         └── xy.x + xy.y [type=int, outer=(6,7)]
       │    │    │         │    └── filters [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │    │    │         │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │    │    │         └── const: 1 [type=int]

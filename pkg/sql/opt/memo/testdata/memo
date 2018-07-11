@@ -366,14 +366,14 @@ memo (optimized)
  ├── G1: (group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1129.66
- ├── G2: (scan a,cols=(1)) (scan a,rev,cols=(1))
+ │         └── cost: 1139.66
+ ├── G2: (scan a) (scan a,rev)
  │    ├── ""
- │    │    ├── best: (scan a,cols=(1))
- │    │    └── cost: 1030.00
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1040.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1129.66
+ │         └── cost: 1139.66
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
