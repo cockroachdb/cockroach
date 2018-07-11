@@ -329,6 +329,10 @@ func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 func (f *fkBatchChecker) runCheck(
 	ctx context.Context, oldRow tree.Datums, newRow tree.Datums,
 ) error {
+
+	if f == nil {
+		return nil
+	}
 	if len(f.batch.Requests) == 0 {
 		return nil
 	}
