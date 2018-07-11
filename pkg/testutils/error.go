@@ -20,6 +20,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
@@ -32,7 +33,8 @@ func IsError(err error, re string) bool {
 	if err == nil || re == "" {
 		return false
 	}
-	matched, merr := regexp.MatchString(re, err.Error())
+	errString := pgerror.FullError(err)
+	matched, merr := regexp.MatchString(re, errString)
 	if merr != nil {
 		return false
 	}
