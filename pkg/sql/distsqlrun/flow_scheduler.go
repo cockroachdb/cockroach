@@ -18,13 +18,20 @@ import (
 	"container/list"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-const maxRunningFlows = 500
 const flowDoneChanSize = 8
+
+var settingMaxRunningFlows = settings.RegisterIntSetting(
+	"sql.distsql.max_running_flows",
+	"maximum number of concurrent flows that can be run on a node",
+	500,
+)
 
 // flowScheduler manages running flows and decides when to queue and when to
 // start flows. The main interface it presents is ScheduleFlows, which passes a
@@ -34,6 +41,8 @@ type flowScheduler struct {
 	stopper    *stop.Stopper
 	flowDoneCh chan *Flow
 	metrics    *DistSQLMetrics
+
+	maxRunningFlows int
 
 	mu struct {
 		syncutil.Mutex
@@ -51,22 +60,29 @@ type flowWithCtx struct {
 }
 
 func newFlowScheduler(
-	ambient log.AmbientContext, stopper *stop.Stopper, metrics *DistSQLMetrics,
+	ambient log.AmbientContext,
+	stopper *stop.Stopper,
+	settings *cluster.Settings,
+	metrics *DistSQLMetrics,
 ) *flowScheduler {
 	fs := &flowScheduler{
-		AmbientContext: ambient,
-		stopper:        stopper,
-		flowDoneCh:     make(chan *Flow, flowDoneChanSize),
-		metrics:        metrics,
+		AmbientContext:  ambient,
+		stopper:         stopper,
+		flowDoneCh:      make(chan *Flow, flowDoneChanSize),
+		metrics:         metrics,
+		maxRunningFlows: int(settingMaxRunningFlows.Get(&settings.SV)),
 	}
 	fs.mu.queue = list.New()
+	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
+		fs.maxRunningFlows = int(settingMaxRunningFlows.Get(&settings.SV))
+	})
 	return fs
 }
 
 func (fs *flowScheduler) canRunFlow(_ *Flow) bool {
 	// TODO(radu): we will have more complex resource accounting (like memory).
 	// For now we just limit the number of concurrent flows.
-	return fs.mu.numRunning < maxRunningFlows
+	return fs.mu.numRunning < fs.maxRunningFlows
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete.
