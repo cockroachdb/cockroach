@@ -1,0 +1,24 @@
+{"Action":"output","Output":"GOPATH set to /go\n"}
+{"Action":"output","Output":"Running make with -j8\n"}
+{"Action":"output","Output":"git submodule update --init\n"}
+{"Action":"output","Output":"mkdir -p ./pkg/sql/parser/gen\n"}
+{"Action":"output","Output":"awk -f ./pkg/sql/parser/help.awk \u003c pkg/sql/parser/sql.y \u003e pkg/sql/parser/help_messages.go.tmp || rm pkg/sql/parser/help_messages.go.tmp\n"}
+{"Action":"output","Output":"awk -f ./pkg/sql/parser/all_keywords.awk \u003c pkg/sql/parser/sql.y \u003e pkg/sql/lex/keywords.go.tmp || rm pkg/sql/lex/keywords.go.tmp\n"}
+{"Action":"output","Output":"set -euo pipefail; \\\n"}
+{"Action":"output","Output":"TYPES=$(awk '/func.*sqlSymUnion/ {print $(NF - 1)}' ./pkg/sql/parser/sql.y | sed -e 's/[]\\/$*.^|[]/\\\\\u0026/g' | tr '\\n' '|' | sed -E '$s/.$//'); \\\n"}
+{"Action":"output","Output":"sed -E \"s_(type|token) \u003c($TYPES)\u003e_\\1 \u003cunion\u003e /* \u003c\\2\u003e */_\" \u003c ./pkg/sql/parser/sql.y | \\\n"}
+{"Action":"output","Output":"awk -f ./pkg/sql/parser/replace_help_rules.awk \u003e pkg/sql/parser/gen/sql.y\n"}
+{"Action":"output","Output":"awk -f ./pkg/sql/parser/reserved_keywords.awk \u003c pkg/sql/parser/sql.y \u003e pkg/sql/lex/reserved_keywords.go.tmp || rm pkg/sql/lex/reserved_keywords.go.tmp\n"}
+{"Action":"output","Output":"mv -f pkg/sql/parser/help_messages.go.tmp pkg/sql/parser/help_messages.go\n"}
+{"Action":"output","Output":"mv -f pkg/sql/lex/keywords.go.tmp pkg/sql/lex/keywords.go\n"}
+{"Action":"output","Output":"mv -f pkg/sql/lex/reserved_keywords.go.tmp pkg/sql/lex/reserved_keywords.go\n"}
+{"Action":"output","Output":"gofmt -s -w pkg/sql/parser/help_messages.go\n"}
+{"Action":"output","Output":"gofmt -s -w pkg/sql/lex/keywords.go\n"}
+{"Action":"output","Output":"gofmt -s -w pkg/sql/lex/reserved_keywords.go\n"}
+{"Action":"output","Output":"mv -f pkg/sql/parser/helpmap_test.go.tmp pkg/sql/parser/helpmap_test.go\n"}
+{"Action":"output","Output":"gofmt -s -w pkg/sql/parser/helpmap_test.go\n"}
+{"Action":"output","Output":"fatal: Not a git repository: /home/agent/work/.go/src/github.com/cockroachdb/cockroach/.git/modules/c-deps/snappy\n"}
+{"Action":"output","Output":"Unable to find current revision in submodule path 'c-deps/snappy'\n"}
+{"Action":"output","Output":"Makefile:368: recipe for target 'bin/.submodules-initialized' failed\n"}
+{"Action":"output","Output":"make: *** [bin/.submodules-initialized] Error 1\n"}
+{"Action":"fail"}
