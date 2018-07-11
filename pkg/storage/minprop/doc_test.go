@@ -17,7 +17,10 @@ package minprop
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -49,7 +52,7 @@ func Example() {
 
 	fmt.Println("The system closes out a timestamp (registering 1000 as the next timestamp to close out).")
 	closed1, mlai1 := tracker.Close(hlc.Timestamp{WallTime: 1E9})
-	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "and", mlai1)
+	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "and", mlaiString(mlai1))
 	fmt.Println("Note how the items on the right have moved to the left, as they are relevant for the")
 	fmt.Println("next call to Close.")
 	fmt.Println(tracker)
@@ -57,7 +60,7 @@ func Example() {
 	fmt.Println("Nothing happens for a while until the system tries to close out the next timestamp.")
 	fmt.Println("However, the very first proposal is still tracked and blocks progress.")
 	closed2, mlai2 := tracker.Close(hlc.Timestamp{WallTime: 2E9})
-	fmt.Println("The call returns a no-op in the form", closed2, mlai2, ".")
+	fmt.Println("The call returns a no-op in the form", closed2, mlaiString(mlai2), ".")
 	fmt.Println(tracker)
 
 	ts4, done4 := tracker.Track(ctx)
@@ -73,7 +76,7 @@ func Example() {
 	fmt.Println(tracker)
 
 	closed3, mlai3 := tracker.Close(hlc.Timestamp{WallTime: 3E9})
-	fmt.Println("The next call to Close() is successful and returns:", closed3, "and", mlai3)
+	fmt.Println("The next call to Close() is successful and returns:", closed3, "and", mlaiString(mlai3))
 	fmt.Println(tracker)
 
 	// Output:
@@ -189,4 +192,27 @@ func Example() {
 	//       |            78 @        (r12)
 	//       v               v
 	// ---------------------------------------------------------> time
+}
+
+// mlaiString converts an mlai map into a string. Avoids randomized ordering of
+// map elements in string output.
+func mlaiString(mlai map[roachpb.RangeID]int64) string {
+	var rangeIDs []roachpb.RangeID
+	for rangeID := range mlai {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Slice(rangeIDs, func(i, j int) bool {
+		return rangeIDs[i] < rangeIDs[j]
+	})
+
+	var sb strings.Builder
+	sb.WriteString("map[")
+	for i, rangeID := range rangeIDs {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		fmt.Fprintf(&sb, "%d:%d", rangeID, mlai[rangeID])
+	}
+	sb.WriteString("]")
+	return sb.String()
 }
