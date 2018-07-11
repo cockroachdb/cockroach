@@ -1084,12 +1084,10 @@ func (c *cascader) cascadeAll(
 				"programming error: could not find row deleter for table %d", tableID,
 			)
 		}
-		for deletedRows.Len() > 0 {
-			// TODO(bram): Can these be batched?
+		for i := 0; i < deletedRows.Len(); i++ {
 			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
 				return err
 			}
-			deletedRows.PopFirst()
 		}
 	}
 
@@ -1167,10 +1165,10 @@ func (c *cascader) cascadeAll(
 					skipList[j] = struct{}{}
 				}
 			}
-			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), updatedRows.At(i)); err != nil {
 				return err
 			}
-			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), updatedRows.At(i)); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.
