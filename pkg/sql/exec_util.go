@@ -105,7 +105,7 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 // OptimizerClusterMode controls the cluster default for when the cost-based optimizer is used.
 var OptimizerClusterMode = settings.RegisterEnumSetting(
 	"sql.defaults.optimizer",
-	"Default cost-based optimizer mode",
+	"default cost-based optimizer mode",
 	"on",
 	map[int64]string{
 		int64(sessiondata.OptimizerLocal): "local",
@@ -117,7 +117,7 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
-	"Default distributed SQL execution mode",
+	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
 		int64(sessiondata.DistSQLOff):  "off",
