@@ -63,6 +63,9 @@ SHOW GRANTS ON t
 statement error pq: user testuser has no privileges on relation t
 SHOW COLUMNS FROM t
 
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT r FROM t
+
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
 
