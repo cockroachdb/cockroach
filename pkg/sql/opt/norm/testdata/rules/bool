@@ -431,29 +431,27 @@ select
       ├── a.s !~* 'foo' [type=bool, outer=(4)]
       └── a.s ~* 'foo' [type=bool, outer=(4)]
 
-# TODO(justin): re-enable when we support JSON ops.
-# JSON comparisons (should not be negated).
-# opt
-# SELECT * FROM a WHERE
-#   NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
-#   NOT(j ? 'foo') AND
-#   NOT(j ?| ARRAY['foo']) AND
-#   NOT(j ?& ARRAY['foo'])
-# ----
-# select
-#  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-#  ├── key: (1)
-#  ├── fd: (1)-->(2-5)
-#  ├── scan a
-#  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-#  │    ├── key: (1)
-#  │    └── fd: (1)-->(2-5)
-#  └── filters [type=bool, outer=(5)]
-#       ├── NOT ('[1, 2]' @> a.j) [type=bool, outer=(5)]
-#       ├── NOT ('[3, 4]' @> a.j) [type=bool, outer=(5)]
-#       ├── NOT (a.j ? 'foo') [type=bool, outer=(5)]
-#       ├── NOT (a.j ?| ARRAY['foo']) [type=bool, outer=(5)]
-#       └── NOT (a.j ?& ARRAY['foo']) [type=bool, outer=(5)]
+opt
+SELECT * FROM a WHERE
+  NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
+  NOT(j ? 'foo') AND
+  NOT(j ?| ARRAY['foo']) AND
+  NOT(j ?& ARRAY['foo'])
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(5)]
+      ├── NOT ('[1, 2]' @> a.j) [type=bool, outer=(5)]
+      ├── NOT ('[3, 4]' @> a.j) [type=bool, outer=(5)]
+      ├── NOT (a.j ? 'foo') [type=bool, outer=(5)]
+      ├── NOT (a.j ?| ARRAY['foo']) [type=bool, outer=(5)]
+      └── NOT (a.j ?& ARRAY['foo']) [type=bool, outer=(5)]
 
 # --------------------------------------------------
 # EliminateNot

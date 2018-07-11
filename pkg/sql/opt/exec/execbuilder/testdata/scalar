@@ -299,83 +299,83 @@ render     ·         ·          (length)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
 ----
-render     ·         ·                              (r)                                                                                     ·
- │         render 0  test.public.t.j @> '{"a": 1}'  ·                                                                                       ·
- └── scan  ·         ·                              (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                      ·                                                                                       ·
-·          spans     ALL                            ·                                                                                       ·
+render     ·         ·                (r)  ·
+ │         render 0  j @> '{"a": 1}'  ·    ·
+ └── scan  ·         ·                (j)  ·
+·          table     t@primary        ·    ·
+·          spans     ALL              ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
 ----
-render     ·         ·                              (r)                                                                                     ·
- │         render 0  '{"a": 1}' <@ test.public.t.j  ·                                                                                       ·
- └── scan  ·         ·                              (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                      ·                                                                                       ·
-·          spans     ALL                            ·                                                                                       ·
+render     ·         ·                (r)  ·
+ │         render 0  j @> '{"a": 1}'  ·    ·
+ └── scan  ·         ·                (j)  ·
+·          table     t@primary        ·    ·
+·          spans     ALL              ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
 ----
-render     ·         ·                      (r)                                                                                     ·
- │         render 0  test.public.t.j->>'a'  ·                                                                                       ·
- └── scan  ·         ·                      (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary              ·                                                                                       ·
-·          spans     ALL                    ·                                                                                       ·
+render     ·         ·          (r)  ·
+ │         render 0  j->>'a'    ·    ·
+ └── scan  ·         ·          (j)  ·
+·          table     t@primary  ·    ·
+·          spans     ALL        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
 ----
-render     ·         ·                     (r)                                                                                     ·
- │         render 0  test.public.t.j->'a'  ·                                                                                       ·
- └── scan  ·         ·                     (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary             ·                                                                                       ·
-·          spans     ALL                   ·                                                                                       ·
+render     ·         ·          (r)  ·
+ │         render 0  j->'a'     ·    ·
+ └── scan  ·         ·          (j)  ·
+·          table     t@primary  ·    ·
+·          spans     ALL        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
 ----
-render     ·         ·                      (r)                                                                                     ·
- │         render 0  test.public.t.j ? 'a'  ·                                                                                       ·
- └── scan  ·         ·                      (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary              ·                                                                                       ·
-·          spans     ALL                    ·                                                                                       ·
+render     ·         ·          (r)  ·
+ │         render 0  j ? 'a'    ·    ·
+ └── scan  ·         ·          (j)  ·
+·          table     t@primary  ·    ·
+·          spans     ALL        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-render     ·         ·                                      (r)                                                                                     ·
- │         render 0  test.public.t.j ?| ARRAY['a','b','c']  ·                                                                                       ·
- └── scan  ·         ·                                      (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                              ·                                                                                       ·
-·          spans     ALL                                    ·                                                                                       ·
+render     ·         ·                        (r)  ·
+ │         render 0  j ?| ARRAY['a','b','c']  ·    ·
+ └── scan  ·         ·                        (j)  ·
+·          table     t@primary                ·    ·
+·          spans     ALL                      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-render     ·         ·                                      (r)                                                                                     ·
- │         render 0  test.public.t.j ?& ARRAY['a','b','c']  ·                                                                                       ·
- └── scan  ·         ·                                      (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                              ·                                                                                       ·
-·          spans     ALL                                    ·                                                                                       ·
+render     ·         ·                        (r)  ·
+ │         render 0  j ?& ARRAY['a','b','c']  ·    ·
+ └── scan  ·         ·                        (j)  ·
+·          table     t@primary                ·    ·
+·          spans     ALL                      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
 ----
-render     ·         ·                            (r)                                                                                     ·
- │         render 0  test.public.t.j#>ARRAY['a']  ·                                                                                       ·
- └── scan  ·         ·                            (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                    ·                                                                                       ·
-·          spans     ALL                          ·                                                                                       ·
+render     ·         ·              (r)  ·
+ │         render 0  j#>ARRAY['a']  ·    ·
+ └── scan  ·         ·              (j)  ·
+·          table     t@primary      ·    ·
+·          spans     ALL            ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
 ----
-render     ·         ·                             (r)                                                                                     ·
- │         render 0  test.public.t.j#>>ARRAY['a']  ·                                                                                       ·
- └── scan  ·         ·                             (a[omitted], b[omitted], c[omitted], d[omitted], j, s[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·          table     t@primary                     ·                                                                                       ·
-·          spans     ALL                           ·                                                                                       ·
+render     ·         ·               (r)  ·
+ │         render 0  j#>>ARRAY['a']  ·    ·
+ └── scan  ·         ·               (j)  ·
+·          table     t@primary       ·    ·
+·          spans     ALL             ·    ·
 
 
 query TTTTT

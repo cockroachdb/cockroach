@@ -242,7 +242,11 @@ func FormatCatalogTable(tab Table, tp treeprinter.Node) {
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
 func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
-	child := tp.Childf("INDEX %s", idx.IdxName())
+	inverted := ""
+	if idx.IsInverted() {
+		inverted = "INVERTED "
+	}
+	child := tp.Childf("%sINDEX %s", inverted, idx.IdxName())
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()

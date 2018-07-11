@@ -1109,9 +1109,6 @@ func (c *indexConstraintCtx) init(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	if isInverted && len(columns) > 1 {
-		panic(fmt.Sprintf("inverted index on multiple columns"))
-	}
 	c.md = factory.Metadata()
 	c.columns = columns
 	c.notNullCols = notNullCols

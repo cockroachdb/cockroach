@@ -117,7 +117,10 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
-	idx := &Index{Name: tt.makeIndexName(def.Name, typ)}
+	idx := &Index{
+		Name:     tt.makeIndexName(def.Name, typ),
+		Inverted: def.Inverted,
+	}
 
 	// Add explicit columns and mark primary key columns as not null.
 	notNullIndex := true
