@@ -185,6 +185,8 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("#27401")
+
 	for _, colocate := range []bool{false, true} {
 		for _, retries := range []int{0, 3} {
 			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
