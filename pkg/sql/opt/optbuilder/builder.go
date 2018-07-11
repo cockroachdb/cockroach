@@ -76,6 +76,15 @@ type Builder struct {
 	// case.
 	FmtFlags tree.FmtFlags
 
+	// IsCorrelated is set to true during semantic analysis if a scalar variable was
+	// pulled from an outer scope, that is, if the query was found to be correlated.
+	IsCorrelated bool
+
+	// UsingVirtualTable is set to true during semantic analysis if a
+	// FROM clause refers to a virtual table.
+	// TODO(andyk/knz): Remove when the builder supports virtual tables.
+	UsingVirtualTable bool
+
 	factory *norm.Factory
 	stmt    tree.Statement
 

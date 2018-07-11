@@ -72,9 +72,11 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 			panic(builderError{err})
 		}
 
-		// TODO(andyk): Re-enable virtual tables when we can fully support them.
+		// TODO(andyk,knz): Remove this determination once virtual tables
+		// are fully supported by the optimizer.
+		// See corresponding code in sql.makeOptimizerPlan().
 		if tab.IsVirtualTable() {
-			panic(unimplementedf("virtual tables are not supported"))
+			b.UsingVirtualTable = true
 		}
 
 		return b.buildScan(tab, tn, inScope)
