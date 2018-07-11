@@ -32,6 +32,7 @@ func registerTests(r *registry) {
 	registerDiskUsage(r)
 	registerDrop(r)
 	registerElectionAfterRestart(r)
+	registerEncryption(r)
 	registerHotSpotSplits(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
@@ -41,6 +42,7 @@ func registerTests(r *registry) {
 	registerKVSplits(r)
 	registerKVQuiescenceDead(r)
 	registerLargeRange(r)
+	registerQueue(r)
 	registerRestore(r)
 	registerRoachmart(r)
 	registerScaleData(r)
@@ -48,7 +50,6 @@ func registerTests(r *registry) {
 	registerTPCC(r)
 	registerUpgrade(r)
 	registerVersion(r)
-	registerEncryption(r)
 }
 
 func registerBenchmarks(r *registry) {
