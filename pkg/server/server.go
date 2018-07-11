@@ -110,7 +110,7 @@ var (
 
 	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
 		"server.clock.forward_jump_check_enabled",
-		"If enabled, forward clock jumps > max_offset/2 will cause a panic.",
+		"if enabled, forward clock jumps > max_offset/2 will cause a panic.",
 		false,
 	)
 
