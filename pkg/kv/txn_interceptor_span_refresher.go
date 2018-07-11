@@ -58,8 +58,8 @@ type txnSpanRefresher struct {
 	// See TxnCoordMeta.RefreshReads and TxnCoordMeta.RefreshWrites.
 	refreshReads  []roachpb.Span
 	refreshWrites []roachpb.Span
-	// See TxnCoordMeta.RefreshValid.
-	refreshValid bool
+	// See TxnCoordMeta.RefreshInvalid.
+	refreshInvalid bool
 	// refreshSpansBytes is the total size in bytes of the spans
 	// encountered during this transaction that need to be refreshed
 	// to avoid serializable restart.
@@ -85,7 +85,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
 		et := rArgs.(*roachpb.EndTransactionRequest)
 		if ba.Txn.IsSerializable() &&
-			sr.refreshValid &&
+			!sr.refreshInvalid &&
 			len(sr.refreshReads) == 0 &&
 			len(sr.refreshWrites) == 0 {
 			et.NoRefreshSpans = true
@@ -108,7 +108,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// has serializable isolation and we haven't yet exceeded the max
 	// read key bytes.
 	if ba.Txn.IsSerializable() {
-		if sr.refreshValid {
+		if !sr.refreshInvalid {
 			ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
 			if !sr.appendRefreshSpans(ctx, ba, br) {
 				// The refresh spans are out of date, return a generic client-side retry error.
@@ -123,7 +123,7 @@ func (sr *txnSpanRefresher) SendLocked(
 			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
 			sr.refreshReads = nil
 			sr.refreshWrites = nil
-			sr.refreshValid = false
+			sr.refreshInvalid = true
 			sr.refreshSpansBytes = 0
 		}
 	}
@@ -131,7 +131,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// exhausted, return a non-retryable error indicating that the
 	// transaction is too large and should potentially be split.
 	// We do this to avoid endlessly retrying a txn likely refail.
-	if !sr.refreshValid && (br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+	if sr.refreshInvalid && (br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
 		return nil, roachpb.NewErrorWithTxn(
 			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
 		)
@@ -247,7 +247,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// we've refreshed past that timestamp.
 	sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
 
-	if !sr.refreshValid {
+	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
 		return false
 	} else if len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
@@ -329,22 +329,45 @@ func (sr *txnSpanRefresher) setWrapped(wrapped lockedSender) { sr.wrapped = wrap
 
 // populateMetaLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	meta.RefreshValid = sr.refreshValid
-	if sr.refreshValid {
+	meta.RefreshInvalid = sr.refreshInvalid
+	if !sr.refreshInvalid {
 		// Copy mutable state so access is safe for the caller.
 		meta.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
 		meta.RefreshWrites = append([]roachpb.Span(nil), sr.refreshWrites...)
 	}
+
+	// Also populate DeprecatedRefreshValid as a function of RefreshInvalid.
+	// This is required both for 2.0 nodes and so that 2.1 nodes where
+	// !IsActive(VersionTxnCoordMetaInvalidField) can tell the difference
+	// between an old node indicating that refresh spans are invalid and a new
+	// node indicating that refresh spans are valid.
+	// TODO(nvanbenschoten): Can be removed in 2.2. 2.2 binaries can never
+	// connect to nodes where !IsActive(VersionTxnCoordMetaInvalidField),
+	// so this field will never be needed.
+	meta.DeprecatedRefreshValid = !meta.RefreshInvalid
 }
 
 // augmentMetaLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+	if !sr.st.Version.IsActive(cluster.VersionTxnCoordMetaInvalidField) {
+		// If VersionTxnCoordMetaInvalidField is not active, we may be hearing
+		// from an old node that is not setting RefreshInvalid correctly. It's
+		// also possible that we're not. To decide, check whether
+		// DeprecatedRefreshValid and RefreshInvalid are being set correctly.
+		// TODO(nvanbenschoten): Can be removed in 2.2.
+		if !meta.RefreshInvalid && !meta.DeprecatedRefreshValid {
+			// This contradiction is only possible if the sender didn't know
+			// about RefreshInvalid.
+			meta.RefreshInvalid = true
+		}
+	}
+
 	// Do not modify existing span slices when copying.
-	if !meta.RefreshValid {
-		sr.refreshValid = false
+	if meta.RefreshInvalid {
+		sr.refreshInvalid = true
 		sr.refreshReads = nil
 		sr.refreshWrites = nil
-	} else if sr.refreshValid {
+	} else if !sr.refreshInvalid {
 		sr.refreshReads, _ = roachpb.MergeSpans(
 			append(append([]roachpb.Span(nil), sr.refreshReads...), meta.RefreshReads...),
 		)
@@ -366,7 +389,7 @@ func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 func (sr *txnSpanRefresher) epochBumpedLocked() {
 	sr.refreshReads = nil
 	sr.refreshWrites = nil
-	sr.refreshValid = true
+	sr.refreshInvalid = false
 	sr.refreshSpansBytes = 0
 }
 
