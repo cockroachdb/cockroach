@@ -246,6 +246,9 @@ type Index struct {
 	// index, which allows duplicate rows when at least one of the values is
 	// NULL. See the opt.Index.LaxKeyColumnCount for more details.
 	LaxKeyCount int
+
+	// Inverted is true when this index is an inverted index.
+	Inverted bool
 }
 
 // IdxName is part of the opt.Index interface.
@@ -255,7 +258,7 @@ func (ti *Index) IdxName() string {
 
 // IsInverted is part of the opt.Index interface.
 func (ti *Index) IsInverted() bool {
-	return false
+	return ti.Inverted
 }
 
 // ColumnCount is part of the opt.Index interface.

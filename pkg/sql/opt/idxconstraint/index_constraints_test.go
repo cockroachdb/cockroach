@@ -144,7 +144,6 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
 				b.AllowUnsupportedExpr = true
-				b.AllowBlacklistOps = true
 				group, err := b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
