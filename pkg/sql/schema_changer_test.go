@@ -1711,8 +1711,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	// #27033: Add a column followed by an index on the column.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN d STRING NOT NULL DEFAULT 'something'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`CREATE INDEX ON t.test (d)`); err != nil {
+		t.Fatal(err)
+	}
+
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	if e := 8; e != len(tableDesc.Mutations) {
+	if e := 10; e != len(tableDesc.Mutations) {
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
@@ -1721,7 +1729,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Wait until all the mutations have been processed.
 	var rows *gosql.Rows
-	expectedCols := []string{"k", "b"}
+	expectedCols := []string{"k", "b", "d"}
 	testutils.SucceedsSoon(t, func() error {
 		// Read table descriptor.
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -1765,7 +1773,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			continue
 		}
 		for j, v := range vals {
-			if j == 0 {
+			switch j {
+			case 0:
 				if val := *v.(*interface{}); val != nil {
 					switch k := val.(type) {
 					case int64:
@@ -1777,11 +1786,17 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 						t.Errorf("error input of type %T", k)
 					}
 				} else {
-					t.Error("received nil value for column 'k'")
+					t.Error("received NULL value for column 'k'")
 				}
-			} else {
+
+			case 1:
 				if val := *v.(*interface{}); val != nil {
 					t.Error("received non NULL value for column 'b'")
+				}
+
+			case 2:
+				if val := *v.(*interface{}); val == nil {
+					t.Error("received NULL value for column 'd'")
 				}
 			}
 		}
@@ -1818,7 +1833,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	ctx := context.TODO()
 
 	// Check that the number of k-v pairs is accurate.
-	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
