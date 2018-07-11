@@ -810,9 +810,6 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if _, ok := req.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := req.Header()
 		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
 			return roachpb.RSpan{}, errors.Errorf("end key specified for non-range operation: %s", req)
