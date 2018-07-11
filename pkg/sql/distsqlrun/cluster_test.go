@@ -252,7 +252,7 @@ func TestClusterFlow(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnMeta(metas)
+	metas = ignoreTxnCoordMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -285,12 +285,12 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 	return res
 }
 
-// ignoreTxnMeta takes a slice of metadata and returns the entries excluding
+// ignoreTxnCoordMeta takes a slice of metadata and returns the entries excluding
 // the transaction coordinator metadata.
-func ignoreTxnMeta(metas []ProducerMetadata) []ProducerMetadata {
+func ignoreTxnCoordMeta(metas []ProducerMetadata) []ProducerMetadata {
 	res := make([]ProducerMetadata, 0)
 	for _, m := range metas {
-		if m.TxnMeta == nil {
+		if m.TxnCoordMeta == nil {
 			res = append(res, m)
 		}
 	}
@@ -504,7 +504,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnMeta(metas)
+	metas = ignoreTxnCoordMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -747,7 +747,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
 						}
 						metas = ignoreMisplannedRanges(metas)
-						metas = ignoreTxnMeta(metas)
+						metas = ignoreTxnCoordMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

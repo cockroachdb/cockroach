@@ -379,14 +379,14 @@ func (r *distSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
 	if meta != nil {
-		if meta.TxnMeta != nil {
+		if meta.TxnCoordMeta != nil {
 			if r.txn != nil {
-				if r.txn.ID() == meta.TxnMeta.Txn.ID {
-					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnMeta)
+				if r.txn.ID() == meta.TxnCoordMeta.Txn.ID {
+					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnCoordMeta)
 				}
 			} else {
 				r.resultWriter.SetError(
-					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta))
+					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnCoordMeta))
 			}
 		}
 		if meta.Err != nil && r.resultWriter.Err() == nil {

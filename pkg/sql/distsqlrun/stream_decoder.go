@@ -108,8 +108,8 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 			case *RemoteProducerMetadata_TraceData_:
 				meta.TraceData = v.TraceData.CollectedSpans
 
-			case *RemoteProducerMetadata_TxnMeta:
-				meta.TxnMeta = v.TxnMeta
+			case *RemoteProducerMetadata_TxnCoordMeta:
+				meta.TxnCoordMeta = v.TxnCoordMeta
 
 			case *RemoteProducerMetadata_RowNum_:
 				meta.RowNum = v.RowNum
