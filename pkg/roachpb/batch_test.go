@@ -31,6 +31,7 @@ func TestBatchSplit(t *testing.T) {
 	dr := &DeleteRangeRequest{}
 	bt := &BeginTransactionRequest{}
 	et := &EndTransactionRequest{}
+	qi := &QueryIntentRequest{}
 	rv := &ReverseScanRequest{}
 	np := &NoopRequest{}
 	testCases := []struct {
@@ -52,11 +53,24 @@ func TestBatchSplit(t *testing.T) {
 		// have isAlone set). Could be useful if we ever want to allow executing
 		// multiple batches back-to-back.
 		{[]Request{et, scan, et}, []int{1, 2}, false},
-		// Check that Noop can mix with other requests regardless of flags.
+		{[]Request{et, et}, []int{1, 1}, false},
+		// Check that Noop can mix with other requests as long as the other
+		// requests do not include isAlone flags.
 		{[]Request{np, put, np}, []int{3}, true},
-		{[]Request{np, spl, np}, []int{3}, true},
+		{[]Request{np, spl, np}, []int{1, 1, 1}, true},
 		{[]Request{np, rv, np}, []int{3}, true},
-		{[]Request{np, np, et}, []int{3}, true}, // et does not split off
+		{[]Request{np, np, et}, []int{2, 1}, true}, // et splits off
+		{[]Request{np, np, et}, []int{3}, false},   // et does not split off
+		// QueryIntents count as headers that are always compatible with the
+		// request that follows.
+		{[]Request{get, qi, put}, []int{1, 2}, true},
+		{[]Request{get, qi, qi, qi, qi, put}, []int{1, 5}, true},
+		{[]Request{qi, get, qi, get, qi, get, qi, put, qi, put, qi, get, qi, get}, []int{6, 4, 4}, true},
+		{[]Request{qi, spl, qi, get, scan, qi, qi, spl, qi, get}, []int{1, 1, 5, 1, 2}, true},
+		{[]Request{scan, qi, qi, qi, et}, []int{4, 1}, true},
+		{[]Request{scan, qi, qi, qi, et}, []int{5}, false},
+		{[]Request{put, qi, qi, qi, et}, []int{1, 3, 1}, true},
+		{[]Request{put, qi, qi, qi, et}, []int{5}, false},
 	}
 
 	for i, test := range testCases {

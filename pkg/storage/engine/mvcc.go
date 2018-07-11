@@ -1483,8 +1483,6 @@ func mvccConditionalPutUsingIter(
 		})
 }
 
-var errInitPutValueMatchesExisting = errors.New("the value matched the existing value")
-
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
 // returns a ConditionFailedError when the write fails or if the key exists with
 // an existing value that is different from the supplied value. If
@@ -1539,23 +1537,15 @@ func mvccInitPutUsingIter(
 				// We found a tombstone and failOnTombstones is true: fail.
 				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
 			}
-			if existVal.IsPresent() {
-				if !value.EqualData(*existVal) {
-					return nil, &roachpb.ConditionFailedError{
-						ActualValue: existVal.ShallowClone(),
-					}
+			if existVal.IsPresent() && !existVal.EqualData(value) {
+				// The existing value does not match the supplied value.
+				return nil, &roachpb.ConditionFailedError{
+					ActualValue: existVal.ShallowClone(),
 				}
-				// The existing value matches the supplied value; return an error
-				// to prevent rewriting the value.
-				return nil, errInitPutValueMatchesExisting
 			}
 			return value.RawBytes, nil
 		},
 	)
-	// Dummy error to prevent an unnecessary write.
-	if err == errInitPutValueMatchesExisting {
-		err = nil
-	}
 	return err
 }
 
