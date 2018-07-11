@@ -112,23 +112,51 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
-            // Used Capacity - displays the total persisted bytes maintained by the node.
             {
-              title: "Used Capacity",
-              cell: (ns) => Bytes(BytesUsed(ns)),
-              sort: (ns) => BytesUsed(ns),
-            },
-            // Replicas - displays the total number of replicas on the node.
-            {
-              title: "Replicas",
-              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-              sort: (ns) => ns.metrics[MetricConstants.replicas],
+              title: "CPU %",
+              cell: (ns) => {
+                const sys = ns.metrics[MetricConstants.sysCPUPercent];
+                const user = ns.metrics[MetricConstants.userCPUPercent];
+                const percentage = (sys + user) * 100;
+                return `${_.round(percentage, 2)}%`;
+              },
+              sort: (ns) => ns.metrics[MetricConstants.userCPUPercent] + ns.metrics[MetricConstants.sysCPUPercent],
             },
             // Mem Usage - total memory being used on this node.
             {
               title: "Mem Usage",
               cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
               sort: (ns) => ns.metrics[MetricConstants.rss],
+            },
+            // Used Capacity - displays the total persisted bytes maintained by the node.
+            {
+              title: "Used Capacity",
+              cell: (ns) => Bytes(BytesUsed(ns)),
+              sort: (ns) => BytesUsed(ns),
+            },
+            {
+              title: "Disk IO",
+              cell: (ns) => {
+                const read = ns.metrics[MetricConstants.diskReadBytes];
+                const write = ns.metrics[MetricConstants.diskWriteBytes];
+                // TODO(vilterp): derivative
+                return Bytes(read + write);
+              },
+            },
+            {
+              title: "Net IO",
+              cell: (ns) => {
+                // TODO(vilterp): derivative
+                const read = ns.metrics[MetricConstants.netReadBytes];
+                const write = ns.metrics[MetricConstants.netWriteBytes];
+                return Bytes(read + write);
+              },
+            },
+            // Replicas - displays the total number of replicas on the node.
+            {
+              title: "Replicas",
+              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+              sort: (ns) => ns.metrics[MetricConstants.replicas],
             },
             // Version - the currently running version of cockroach.
             {
