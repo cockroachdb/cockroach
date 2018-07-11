@@ -13,9 +13,11 @@ import {
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import AggregationSelector from "src/views/shared/containers/aggregationSelector";
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
+import { AggregationLevel } from "src/redux/aggregationLevel";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
@@ -120,9 +122,10 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     }
   }
 
-  setClusterPath(nodeID: string, dashboardName: string) {
+  setClusterPath(nodeID: string, dashboardName: string, aggregationLevel: AggregationLevel) {
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push(`/metrics/${dashboardName}/cluster`);
+      const query = aggregationLevel && aggregationLevel !== AggregationLevel.Cluster ? `?agg=${aggregationLevel}` : "";
+      this.context.router.push(`/metrics/${dashboardName}/cluster${query}`);
     } else {
       this.context.router.push(`/metrics/${dashboardName}/node/${nodeID}`);
     }
@@ -133,7 +136,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   dashChange = (selected: DropdownOption) => {
-    this.setClusterPath(this.props.params[nodeIDAttr], selected.value);
+    this.setClusterPath(this.props.params[nodeIDAttr], selected.value, this.props.location.query.agg);
   }
 
   componentWillMount() {
@@ -224,6 +227,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               onChange={this.dashChange}
             />
           </PageConfigItem>
+          {
+            nodeSources ? null : (
+              <PageConfigItem>
+                <AggregationSelector aggregationLevel={AggregationLevel.Cluster} />
+              </PageConfigItem>
+            )
+          }
           <PageConfigItem>
             <TimeScaleDropdown />
           </PageConfigItem>
