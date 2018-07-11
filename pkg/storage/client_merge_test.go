@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -389,6 +391,91 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	_, pErr := client.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.KeyMin))
 	if !testutils.IsPError(pErr, "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", pErr)
+	}
+}
+
+func TestStoreRangeMergeTxnFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+
+	// Install a store filter that maybe injects retryable errors into a merge
+	// transaction before ultimately aborting the merge.
+	var retriesBeforeFailure int64
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, req := range ba.Requests {
+			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+				if atomic.AddInt64(&retriesBeforeFailure, -1) >= 0 {
+					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+				}
+				return roachpb.NewError(errors.New("injected permafail"))
+			}
+		}
+		return nil
+	}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	kvDB := store.DB()
+
+	if err := kvDB.Put(ctx, "aa", "val"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.Put(ctx, "cc", "val"); err != nil {
+		t.Fatal(err)
+	}
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verifyLHSAndRHSLive := func() {
+		t.Helper()
+		for _, tc := range []struct {
+			rangeID roachpb.RangeID
+			key     roachpb.Key
+		}{
+			{lhsDesc.RangeID, roachpb.Key("aa")},
+			{rhsDesc.RangeID, roachpb.Key("cc")},
+		} {
+			if reply, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+				RangeID: tc.rangeID,
+			}, getArgs(tc.key)); pErr != nil {
+				t.Fatal(pErr)
+			} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+				t.Fatal(err)
+			} else if !bytes.Equal(replyBytes, []byte("val")) {
+				t.Fatalf("actual value %q did not match expected value %q", replyBytes, []byte("val"))
+			}
+		}
+	}
+
+	attemptMerge := func() {
+		t.Helper()
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := client.SendWrapped(ctx, store.TestSender(), args)
+		if exp := "injected permafail"; !testutils.IsPError(pErr, exp) {
+			t.Fatalf("expected %q error, but got %q", exp, pErr)
+		}
+	}
+
+	verifyLHSAndRHSLive()
+
+	atomic.StoreInt64(&retriesBeforeFailure, 0)
+	attemptMerge()
+	verifyLHSAndRHSLive()
+	if atomic.LoadInt64(&retriesBeforeFailure) >= 0 {
+		t.Fatalf("%d retries remaining (expected less than zero)", retriesBeforeFailure)
+	}
+
+	atomic.StoreInt64(&retriesBeforeFailure, 3)
+	attemptMerge()
+	verifyLHSAndRHSLive()
+	if atomic.LoadInt64(&retriesBeforeFailure) >= 0 {
+		t.Fatalf("%d retries remaining (expected less than zero)", retriesBeforeFailure)
 	}
 }
 
