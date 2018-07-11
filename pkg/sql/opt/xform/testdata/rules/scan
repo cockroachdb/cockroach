@@ -6,8 +6,11 @@ CREATE TABLE a
     f FLOAT,
     s STRING,
     j JSON,
+    l JSON,
     INDEX s_idx (s) STORING (i, f),
-    INDEX si_idx (s DESC, i DESC) STORING (j)
+    INDEX si_idx (s DESC, i DESC) STORING (j),
+    INVERTED INDEX inv_idx_j (j),
+    INVERTED INDEX inv_idx_l (l)
 )
 ----
 TABLE a
@@ -16,6 +19,7 @@ TABLE a
  ├── f float
  ├── s string
  ├── j jsonb
+ ├── l jsonb
  ├── INDEX primary
  │    └── k int not null
  ├── INDEX s_idx
@@ -23,11 +27,17 @@ TABLE a
  │    ├── k int not null
  │    ├── i int (storing)
  │    └── f float (storing)
- └── INDEX si_idx
-      ├── s string desc
-      ├── i int desc
-      ├── k int not null
-      └── j jsonb (storing)
+ ├── INDEX si_idx
+ │    ├── s string desc
+ │    ├── i int desc
+ │    ├── k int not null
+ │    └── j jsonb (storing)
+ ├── INVERTED INDEX inv_idx_j
+ │    ├── j jsonb
+ │    └── k int not null
+ └── INVERTED INDEX inv_idx_l
+      ├── l jsonb
+      └── k int not null
 
 # --------------------------------------------------
 # GenerateIndexScans
@@ -72,17 +82,17 @@ memo (optimized)
  ├── G1: (limit G2 G7 ordering=-1) (scan a,rev,cols=(1,3),lim=10) (index-join G3 a,cols=(1,3)) (index-join G4 a,cols=(1,3))
  │    ├── "[presentation: k:1,f:3] [ordering: -1]"
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10)
- │    │    └── cost: 11.40
+ │    │    └── cost: 11.60
  │    └── ""
  │         ├── best: (scan a,rev,cols=(1,3),lim=10)
- │         └── cost: 11.40
+ │         └── cost: 11.60
  ├── G2: (scan a,cols=(1,3)) (scan a,rev,cols=(1,3)) (scan a@s_idx,cols=(1,3)) (scan a@s_idx,rev,cols=(1,3)) (index-join G5 a,cols=(1,3)) (index-join G6 a,cols=(1,3))
  │    ├── ""
  │    │    ├── best: (scan a@s_idx,cols=(1,3))
  │    │    └── cost: 1060.00
  │    └── "[ordering: -1]"
- │         ├── best: (scan a,rev,cols=(1,3))
- │         └── cost: 1140.00
+ │         ├── best: (sort G2)
+ │         └── cost: 1159.66
  ├── G3: (limit G5 G7 ordering=-1)
  │    ├── ""
  │    │    ├── best: (limit G5="[ordering: -1]" G7 ordering=-1)
@@ -117,11 +127,15 @@ memo (optimized)
 opt
 SELECT s FROM a ORDER BY k DESC
 ----
-scan a,rev
+sort
  ├── columns: s:4(string)
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── ordering: -1
+ ├── ordering: -1
+ └── scan a@s_idx
+      ├── columns: k:1(int!null) s:4(string)
+      ├── key: (1)
+      └── fd: (1)-->(4)
 
 opt
 SELECT k FROM a ORDER BY k ASC
@@ -194,7 +208,7 @@ memo (optimized)
  └── G1: (scan a,cols=(1)) (scan a,rev,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@s_idx,rev,cols=(1)) (scan a@si_idx,cols=(1)) (scan a@si_idx,rev,cols=(1))
       ├── "[presentation: k:1] [ordering: +1]"
       │    ├── best: (scan a,cols=(1))
-      │    └── cost: 1060.00
+      │    └── cost: 1070.00
       └── ""
            ├── best: (scan a@s_idx,cols=(1))
            └── cost: 1050.00
@@ -505,7 +519,7 @@ memo (optimized)
  ├── G1: (scan a,cols=(1-4)) (scan a,rev,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (scan a@s_idx,rev,cols=(1-4)) (index-join G2 a,cols=(1-4)) (index-join G3 a,cols=(1-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1]"
  │    │    ├── best: (scan a,cols=(1-4))
- │    │    └── cost: 1090.00
+ │    │    └── cost: 1100.00
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1-4))
  │         └── cost: 1080.00
@@ -605,3 +619,209 @@ memo (optimized)
  ├── G6: (ge G7 G8)
  ├── G7: (variable a.s)
  └── G8: (const 'foo')
+
+# Inverted index queries.
+# Query only the primary key with no remaining filter.
+opt
+SELECT k FROM a WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── index-join a
+      ├── columns: k:1(int!null) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      └── scan a@inv_idx_j
+           ├── columns: k:1(int!null)
+           ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+# Query only the primary key with a remaining filter.
+opt
+SELECT k FROM a WHERE j @> '{"a": "b", "c": "d"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── index-join a
+      │    ├── columns: k:1(int!null) j:5(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(5)
+      │    └── scan a@inv_idx_j
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      │         └── key: (1)
+      └── filters [type=bool, outer=(5)]
+           └── a.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(5)]
+
+# Query requiring an index join with no remaining filter.
+opt
+SELECT i, k FROM a WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: i:2(int) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── index-join a
+      ├── columns: k:1(int!null) i:2(int) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(2,5)
+      └── scan a@inv_idx_j
+           ├── columns: k:1(int!null)
+           ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+opt
+SELECT j, k FROM a WHERE j @> '{"a": "b"}'
+----
+index-join a
+ ├── columns: j:5(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ └── scan a@inv_idx_j
+      ├── columns: k:1(int!null)
+      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+opt
+SELECT * FROM a WHERE j @> '{"a": "b"}'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) l:6(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ └── scan a@inv_idx_j
+      ├── columns: k:1(int!null)
+      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+# Query requiring an index join with a remaining filter.
+# TODO(justin): push this filter into the index join.
+opt
+SELECT j, k FROM a WHERE j @> '{"a": "b", "c": "d"}'
+----
+select
+ ├── columns: j:5(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
+ │    └── scan a@inv_idx_j
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+ │         └── key: (1)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(5)]
+
+opt
+SELECT * FROM a WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) l:6(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) l:6(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-6)
+ │    └── scan a@inv_idx_j
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /5/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
+ │         └── key: (1)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(5)]
+
+memo
+SELECT * FROM a WHERE
+    l @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+  AND
+    j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+memo (optimized)
+ ├── G1: (select G2 G7) (select G3 G7) (select G4 G7) (select G5 G7) (select G6 G7) (select G8 G10) (select G9 G10)
+ │    └── "[presentation: k:1,i:2,f:3,s:4,j:5,l:6]"
+ │         ├── best: (select G3 G7)
+ │         └── cost: 7.39
+ ├── G2: (scan a) (scan a,rev) (index-join G11 a,cols=(1-6)) (index-join G12 a,cols=(1-6)) (index-join G20 a,cols=(1-6)) (index-join G21 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1120.00
+ ├── G3: (index-join G13 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G13 a,cols=(1-6))
+ │         └── cost: 7.37
+ ├── G4: (index-join G14 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G14 a,cols=(1-6))
+ │         └── cost: 7.37
+ ├── G5: (index-join G15 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G15 a,cols=(1-6))
+ │         └── cost: 7.37
+ ├── G6: (index-join G16 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G16 a,cols=(1-6))
+ │         └── cost: 7.37
+ ├── G7: (filters G19 G24)
+ ├── G8: (index-join G17 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G17 a,cols=(1-6))
+ │         └── cost: 2466.67
+ ├── G9: (index-join G18 a,cols=(1-6))
+ │    └── ""
+ │         ├── best: (index-join G18 a,cols=(1-6))
+ │         └── cost: 2546.67
+ ├── G10: (filters G19)
+ ├── G11: (scan a@s_idx,cols=(1-4))
+ │    └── ""
+ │         ├── best: (scan a@s_idx,cols=(1-4))
+ │         └── cost: 1080.00
+ ├── G12: (scan a@s_idx,rev,cols=(1-4))
+ │    └── ""
+ │         ├── best: (scan a@s_idx,rev,cols=(1-4))
+ │         └── cost: 1160.00
+ ├── G13: (scan a@inv_idx_j,cols=(1),constrained)
+ │    └── ""
+ │         ├── best: (scan a@inv_idx_j,cols=(1),constrained)
+ │         └── cost: 1.47
+ ├── G14: (scan a@inv_idx_l,cols=(1),constrained)
+ │    └── ""
+ │         ├── best: (scan a@inv_idx_l,cols=(1),constrained)
+ │         └── cost: 1.47
+ ├── G15: (scan a@inv_idx_j,cols=(1),constrained)
+ │    └── ""
+ │         ├── best: (scan a@inv_idx_j,cols=(1),constrained)
+ │         └── cost: 1.47
+ ├── G16: (scan a@inv_idx_l,cols=(1),constrained)
+ │    └── ""
+ │         ├── best: (scan a@inv_idx_l,cols=(1),constrained)
+ │         └── cost: 1.47
+ ├── G17: (select G20 G22)
+ │    └── ""
+ │         ├── best: (select G20 G22)
+ │         └── cost: 1090.00
+ ├── G18: (select G21 G22)
+ │    └── ""
+ │         ├── best: (select G21 G22)
+ │         └── cost: 1170.00
+ ├── G19: (contains G23 G26)
+ ├── G20: (scan a@si_idx,cols=(1,2,4,5))
+ │    └── ""
+ │         ├── best: (scan a@si_idx,cols=(1,2,4,5))
+ │         └── cost: 1080.00
+ ├── G21: (scan a@si_idx,rev,cols=(1,2,4,5))
+ │    └── ""
+ │         ├── best: (scan a@si_idx,rev,cols=(1,2,4,5))
+ │         └── cost: 1160.00
+ ├── G22: (filters G24)
+ ├── G23: (variable a.l)
+ ├── G24: (contains G25 G26)
+ ├── G25: (variable a.j)
+ └── G26: (const '{"a": {"b": "c", "d": "e"}, "f": "g"}')
