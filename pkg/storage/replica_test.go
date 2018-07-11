@@ -9681,7 +9681,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 			},
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
-				expTS = ts.Prev() // won't write on init put
+				expTS = ts.Next()
 				iput := iPutArgs(roachpb.Key("b-iput"), []byte("put2"))
 				ba.Add(&iput)
 				return
