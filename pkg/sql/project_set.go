@@ -115,7 +115,8 @@ func (p *planner) ProjectSet(
 	defer p.semaCtx.Properties.Restore(p.semaCtx.Properties)
 
 	// Ensure there are no aggregate or window functions in the clause.
-	p.semaCtx.Properties.Require("FROM", tree.RejectAggregates|tree.RejectWindowApplications)
+	p.semaCtx.Properties.Require("FROM",
+		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	// Analyze the provided expressions.
 	n.ivarHelper = tree.MakeIndexedVarHelper(n, len(srcCols))

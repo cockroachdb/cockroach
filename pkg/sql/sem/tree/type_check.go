@@ -104,12 +104,30 @@ type SemaRejectFlags int
 
 // Valid values for SemaRejectFlags.
 const (
-	AllowAll         SemaRejectFlags = 0
+	AllowAll SemaRejectFlags = 0
+
+	// RejectAggregates rejects min(), max(), etc.
 	RejectAggregates SemaRejectFlags = 1 << iota
+
+	// RejectWindowApplications rejects "x() over y", etc.
 	RejectWindowApplications
+
+	// RejectGenerators rejects any use of SRFs, e.g "generate_series()".
 	RejectGenerators
+
+	// RejectNestedGenerators rejects any use of SRFs inside the
+	// argument list of another function call, which can itself be a SRF
+	// (RejectGenerators notwithstanding).
+	// This is used e.g. when processing the calls inside ROWS FROM.
+	RejectNestedGenerators
+
+	// RejectImpureFunctions rejects any non-const functions like now().
 	RejectImpureFunctions
+
+	// RejectSubqueries rejects subqueries in scalar contexts.
 	RejectSubqueries
+
+	// RejectSpecial is used in common places like the LIMIT clause.
 	RejectSpecial SemaRejectFlags = RejectAggregates | RejectGenerators | RejectWindowApplications
 )
 
@@ -133,6 +151,11 @@ type ScalarProperties struct {
 	// SeenImpureFunctions is set to true if the expression originally
 	// contained an impure function.
 	SeenImpure bool
+
+	// inFuncExpr is temporarily set to true while type checking the
+	// parameters of a function. Used to process RejectNestedGenerators
+	// properly.
+	inFuncExpr bool
 }
 
 // Clear resets the scalar properties to defaults.
@@ -609,6 +632,12 @@ var (
 	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
+// NewInvalidNestedSRFError creates a rejection for a nested SRF.
+func NewInvalidNestedSRFError(context string) error {
+	return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+		"set-returning functions must appear at the top level of %s", context)
+}
+
 // NewInvalidFunctionUsageError creates a rejection for a special function.
 func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	var cat string
@@ -660,6 +689,10 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		}
 	}
 	if def.Class == GeneratorClass {
+		if sc.Properties.Derived.inFuncExpr &&
+			sc.Properties.required.rejectFlags&RejectNestedGenerators != 0 {
+			return NewInvalidNestedSRFError(sc.Properties.required.context)
+		}
 		if sc.Properties.required.rejectFlags&RejectGenerators != 0 {
 			return NewInvalidFunctionUsageError(GeneratorClass, sc.Properties.required.context)
 		}
@@ -690,7 +723,19 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	}
 
 	if err := ctx.checkFunctionUsage(expr, def); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%s()", def.Name)
+	}
+	if ctx != nil {
+		// We'll need to remember we are in a function application to
+		// generate suitable errors in checkFunctionUsage().  We cannot
+		// set ctx.inFuncExpr earlier (in particular not before the call
+		// to checkFunctionUsage() above) because the top-level FuncExpr
+		// must be acceptable even if it is a SRF and
+		// RejectNestedGenerators is set.
+		defer func(ctx *SemaContext, prev bool) {
+			ctx.Properties.Derived.inFuncExpr = prev
+		}(ctx, ctx.Properties.Derived.inFuncExpr)
+		ctx.Properties.Derived.inFuncExpr = true
 	}
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
