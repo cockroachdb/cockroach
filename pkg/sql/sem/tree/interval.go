@@ -400,7 +400,7 @@ var unitMap = func(
 	"month":       {Months: 1},
 	"year":        {Months: 12},
 }, map[string][]string{
-	"nanosecond": {"ns"},
+	"nanosecond": {"ns", "nsec", "nsecs", "nsecond", "nseconds"},
 	// Include PostgreSQL's unit keywords for compatibility; see
 	// https://github.com/postgres/postgres/blob/a01d0fa1d889cc2003e1941e8b98707c4d701ba9/src/backend/utils/adt/datetime.c#L175-L240
 	//
