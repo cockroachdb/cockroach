@@ -66,9 +66,8 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
-	// Indicate that all traffic must be blocked until the merge transaction
-	// between this range and its left neighbor completes.
-	SetMerging bool
+	// Call maybeWatchForMerge.
+	MaybeWatchForMerge bool
 
 	// Set when transaction record(s) are updated, after calls to
 	// EndTransaction or PushTxn. This is a pointer to allow the zero
@@ -76,13 +75,13 @@ type LocalResult struct {
 	UpdatedTxns *[]*roachpb.Transaction
 }
 
-// DetachSetMerging returns and falsifies the SetMerging flag from the local
-// result.
-func (lResult *LocalResult) DetachSetMerging() bool {
+// DetachMaybeWatchForMerge returns and falsifies the MaybeWatchForMerge flag
+// from the local result.
+func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
 	if lResult == nil {
 		return false
-	} else if lResult.SetMerging {
-		lResult.SetMerging = false
+	} else if lResult.MaybeWatchForMerge {
+		lResult.MaybeWatchForMerge = false
 		return true
 	}
 	return false
@@ -323,7 +322,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
-	coalesceBool(&p.Local.SetMerging, &q.Local.SetMerging)
+	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
 	if q.Local.UpdatedTxns != nil {
 		if p.Local.UpdatedTxns == nil {

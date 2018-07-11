@@ -147,6 +147,6 @@ func GetSnapshotForMerge(
 	reply.Data = snapBatch.Repr()
 
 	return result.Result{
-		Local: result.LocalResult{SetMerging: true},
+		Local: result.LocalResult{MaybeWatchForMerge: true},
 	}, nil
 }
