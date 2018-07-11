@@ -642,7 +642,7 @@ func makeRowUpdaterWithoutCascader(
 		// them, so request them all.
 		var err error
 		if ru.rd, err = makeRowDeleterWithoutCascader(
-			txn, tableDesc, fkTables, FKHelper{}, tableCols, SkipFKs, alloc,
+			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
 		); err != nil {
 			return RowUpdater{}, err
 		}
@@ -975,7 +975,7 @@ func MakeRowDeleter(
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	rowDeleter, err := makeRowDeleterWithoutCascader(
-		txn, tableDesc, fkTables, fkHelper, requestedCols, checkFKs, alloc,
+		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
 	)
 	if err != nil {
 		return RowDeleter{}, err
@@ -983,6 +983,7 @@ func MakeRowDeleter(
 	if checkFKs == CheckFKs {
 		var err error
 		rowDeleter.cascader, err = makeDeleteCascader(txn, tableDesc, fkTables, evalCtx, alloc)
+		rowDeleter.FKHelper = fkHelper
 		if err != nil {
 			return RowDeleter{}, err
 		}
@@ -996,7 +997,6 @@ func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
-	fkHelper FKHelper,
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
@@ -1043,7 +1043,6 @@ func makeRowDeleterWithoutCascader(
 
 	rd := RowDeleter{
 		Helper:               newRowHelper(tableDesc, indexes),
-		FKHelper:             fkHelper,
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}

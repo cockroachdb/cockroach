@@ -263,7 +263,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				rd, err := sqlbase.MakeRowDeleter(
-					txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+					txn, tableDesc, nil, sqlbase.FKHelper{}, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
 				)
 				if err != nil {
 					return err
@@ -758,7 +758,7 @@ func indexTruncateInTxn(
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd, err := sqlbase.MakeRowDeleter(
-			txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+			txn, tableDesc, nil, sqlbase.FKHelper{}, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
 		)
 		if err != nil {
 			return err
