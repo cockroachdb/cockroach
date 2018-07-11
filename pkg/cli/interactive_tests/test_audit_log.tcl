@@ -35,13 +35,11 @@ eexpect root@
 system "grep -q 'helloworld.*:READWRITE.*INSERT.*OK' $logfile"
 end_test
 
-# TODO(justin): re-enable this once we properly do privilege checks on
-# observing schemas.
-# start_test "Check that errors get logged too"
-# send "SELECT nonexistent FROM helloworld;\r"
-# eexpect root@
-# system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
-# end_test
+start_test "Check that errors get logged too"
+send "SELECT nonexistent FROM helloworld;\r"
+eexpect root@
+system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
+end_test
 
 # Flush and truncate the logs. The test below must not see the log entries that
 # were already generated above.

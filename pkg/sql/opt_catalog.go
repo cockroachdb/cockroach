@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -31,7 +32,7 @@ import (
 // for faster performance.
 type optCatalog struct {
 	// resolver needs to be set via a call to init before calling other methods.
-	resolver SchemaResolver
+	resolver LogicalSchema
 
 	statsCache *stats.TableStatisticsCache
 
@@ -43,7 +44,7 @@ type optCatalog struct {
 var _ opt.Catalog = &optCatalog{}
 
 // init allows the optCatalog wrapper to be inlined.
-func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver SchemaResolver) {
+func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
 }
@@ -52,6 +53,10 @@ func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver Sche
 func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
 	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /*required*/, requireTableDesc)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := oc.resolver.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 

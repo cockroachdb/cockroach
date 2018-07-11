@@ -347,6 +347,10 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+	// This will get overwritten if we successfully create a plan, but if we
+	// error we need access to the AST.
+	p.curPlan = planTop{AST: stmt.AST}
+
 	// Start with fast check to see if top-level statement is supported.
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,

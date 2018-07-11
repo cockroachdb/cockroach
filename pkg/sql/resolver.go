@@ -47,6 +47,15 @@ type SchemaResolver interface {
 
 var _ SchemaResolver = &planner{}
 
+// LogicalSchema encapsulates the interfaces needed to be able to both look up
+// schema objects and also resolve permissions on them.
+type LogicalSchema interface {
+	SchemaResolver
+	AuthorizationAccessor
+}
+
+var _ LogicalSchema = &planner{}
+
 // ResolveDatabase looks up a database name.
 func ResolveDatabase(
 	ctx context.Context, sc SchemaResolver, dbName string, required bool,
