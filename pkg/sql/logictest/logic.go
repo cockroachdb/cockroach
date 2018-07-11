@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1597,14 +1598,15 @@ func (t *logicTest) verifyError(
 		return cont, err
 	}
 	if !testutils.IsError(err, expectErr) {
-		newErr := errors.Errorf("%s: %s\nexpected %q, but found %v", pos, sql, expectErr, err)
-		if err != nil && strings.Contains(err.Error(), expectErr) {
+		errString := pgerror.FullError(err)
+		newErr := errors.Errorf("%s: %s\nexpected %q, but found %q", pos, sql, expectErr, errString)
+		if err != nil && strings.Contains(errString, expectErr) {
 			if t.subtestT != nil {
 				t.subtestT.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(err.Error()))
+					"query error %s", regexp.QuoteMeta(errString))
 			} else {
 				t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(err.Error()))
+					"query error %s", regexp.QuoteMeta(errString))
 			}
 		}
 		return (err == nil) == (expectErr == ""), newErr
