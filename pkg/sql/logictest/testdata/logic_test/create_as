@@ -86,7 +86,7 @@ CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM in
 statement error pq: unexpected type coltypes.TTuple
 CREATE TABLE foo2 (x) AS (VALUES(ROW()))
 
-statement error pq: generator functions are not allowed in VALUES
+statement error generator functions are not allowed in VALUES
 CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
 
 statement error pq: value type unknown cannot be used for table columns

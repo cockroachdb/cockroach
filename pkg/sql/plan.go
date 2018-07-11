@@ -271,6 +271,10 @@ type planTop struct {
 	// #10028 is addressed.
 	hasStar bool
 
+	// isCorrelated collects whether the query was found to be correlated.
+	// Used to produce better error messages.
+	isCorrelated bool
+
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
@@ -353,8 +357,8 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
-	// This will get overwritten if we successfully create a plan, but if we
-	// error we need access to the AST.
+	// Ensure that p.curPlan is populated in case an error occurs early,
+	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
 
 	// Start with fast check to see if top-level statement is supported.
@@ -372,8 +376,20 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	o := xform.NewOptimizer(p.EvalContext())
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
 	root, props, err := bld.Build()
+
+	// Remember whether the plan was correlated before processing the
+	// error. This way, the executor will abort early with a useful error message instead of trying
+	// the heuristic planner.
+	p.curPlan.isCorrelated = bld.IsCorrelated
+
 	if err != nil {
 		return err
+	}
+
+	// TODO(andyk): Re-enable virtual tables when we can fully support them.
+	if bld.UsingVirtualTable {
+		return pgerror.Unimplemented("virtual table",
+			"virtual tables are not supported yet by the optimizer")
 	}
 
 	ev := o.Optimize(root, props)
@@ -385,7 +401,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	}
 
 	p.curPlan = *plan.(*planTop)
+	// Since the assignment above just cleared the AST and isCorrelated
+	// field, we need to set them again.
 	p.curPlan.AST = stmt.AST
+	p.curPlan.isCorrelated = bld.IsCorrelated
 
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {

@@ -185,6 +185,10 @@ func (b *Builder) finishBuildScalar(
 func (b *Builder) finishBuildScalarRef(
 	col *scopeColumn, label string, inScope, outScope *scope,
 ) (out memo.GroupID) {
+	isOuterColumn := inScope.isOuterColumn(col.id)
+	// Remember whether the query was correlated for later.
+	b.IsCorrelated = b.IsCorrelated || isOuterColumn
+
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).
 	if outScope == nil {
@@ -193,7 +197,7 @@ func (b *Builder) finishBuildScalarRef(
 
 	// Outer columns must be wrapped in a variable expression and assigned a new
 	// column id before projection.
-	if inScope.isOuterColumn(col.id) {
+	if isOuterColumn {
 		// Avoid synthesizing a new column if possible.
 		existing := outScope.findExistingCol(col)
 		if existing == nil {
