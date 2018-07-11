@@ -89,8 +89,8 @@ func newIndexJoiner(
 			inputsToDrain: []RowSource{ij.input},
 			trailingMetaCallback: func() []ProducerMetadata {
 				ij.internalClose()
-				if txnMeta := getTxnCoordMeta(ij.flowCtx.txn); txnMeta != nil {
-					return []ProducerMetadata{{TxnMeta: txnMeta}}
+				if meta := getTxnCoordMeta(ij.flowCtx.txn); meta != nil {
+					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
 				return nil
 			},

@@ -951,9 +951,8 @@ func (tc *TxnCoordSender) IsTracking() bool {
 }
 
 // updateStateLocked updates the transaction state in both the success and error
-// cases, applying those updates to the corresponding txnMeta object when
-// adequate. It also updates retryable errors with the updated transaction for
-// use by client restarts.
+// cases. It also updates retryable errors with the updated transaction for use
+// by client restarts.
 //
 // startNS is the time when the request that's updating the state has been sent.
 // This is not used if the request is known to not be the one in charge of
