@@ -9,6 +9,7 @@ import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
+import { navigatorMiddleware } from "./navigator";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
@@ -44,7 +45,7 @@ export function createAdminUIStore() {
       login: loginReducer,
     }),
     compose(
-      applyMiddleware(thunk, sagaMiddleware, routerMiddleware(hashHistory)),
+      applyMiddleware(thunk, sagaMiddleware, navigatorMiddleware, routerMiddleware(hashHistory)),
       // Support for redux dev tools
       // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
       (window as any).devToolsExtension ? (window as any).devToolsExtension({
