@@ -17,6 +17,7 @@ package settings
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Registry contains all defined settings, their types and default values.
@@ -45,6 +46,9 @@ func register(key, desc string, s Setting) {
 	}
 	if _, ok := Registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
+	}
+	if len(desc) > 0 && desc[:1] != strings.ToLower(desc[:1]) {
+		panic(fmt.Sprintf("setting descriptions should start with a lowercase letter: %q", desc))
 	}
 	s.setDescription(desc)
 	Registry[key] = s
