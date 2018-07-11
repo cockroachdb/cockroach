@@ -1101,7 +1101,9 @@ func (rd *RowDeleter) DeleteRow(
 		}
 	}
 	if checkFKs == CheckFKs {
-		rd.Fks.addAllIdxChecks(ctx, values)
+		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+			return err
+		}
 		return rd.Fks.checker.runCheck(ctx, values, nil)
 	}
 	return nil
