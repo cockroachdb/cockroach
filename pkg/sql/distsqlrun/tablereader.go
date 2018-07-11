@@ -182,8 +182,8 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if txnMeta := getTxnCoordMeta(tr.flowCtx.txn); txnMeta != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{TxnMeta: txnMeta})
+	if meta := getTxnCoordMeta(tr.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
 	tr.internalClose()
 	return trailingMeta

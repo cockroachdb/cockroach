@@ -91,9 +91,9 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 				CollectedSpans: meta.TraceData,
 			},
 		}
-	} else if meta.TxnMeta != nil {
-		enc.Value = &RemoteProducerMetadata_TxnMeta{
-			TxnMeta: meta.TxnMeta,
+	} else if meta.TxnCoordMeta != nil {
+		enc.Value = &RemoteProducerMetadata_TxnCoordMeta{
+			TxnCoordMeta: meta.TxnCoordMeta,
 		}
 	} else if meta.RowNum != nil {
 		enc.Value = &RemoteProducerMetadata_RowNum_{

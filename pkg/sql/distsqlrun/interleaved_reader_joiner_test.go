@@ -614,7 +614,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 
 	// Check for trailing metadata.
-	var traceSeen, txnMetaSeen bool
+	var traceSeen, txnCoordMetaSeen bool
 	for {
 		row, meta := out.Next()
 		if row != nil {
@@ -626,14 +626,14 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		if meta.TraceData != nil {
 			traceSeen = true
 		}
-		if meta.TxnMeta != nil {
-			txnMetaSeen = true
+		if meta.TxnCoordMeta != nil {
+			txnCoordMetaSeen = true
 		}
 	}
 	if !traceSeen {
 		t.Fatal("missing tracing trailing metadata")
 	}
-	if !txnMetaSeen {
+	if !txnCoordMetaSeen {
 		t.Fatal("missing txn trailing metadata")
 	}
 }
