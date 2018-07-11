@@ -1,0 +1,46 @@
+{"Action":"output","Output":"Running make with -j8\n"}
+{"Action":"output","Output":"GOPATH set to /Users/benesch/go\n"}
+{"Action":"output","Output":"go test -exec 'stress -maxruns 1 -maxfails 1 -stderr' -tags ' make x86_64_apple_darwin17.5.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"-L/usr/local/opt/readline/lib\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.1.0-alpha.20180702-414-ge057fe8ae-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=e057fe8aef399bb59557daf18751199112c7c523\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin17.5.0\"  ' -run \"TestReplicateQueueRebalance\"  -timeout 8m ./pkg/storage -v\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 5s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 10s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 15s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 20s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 25s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 30s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 35s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 40s\n"}
+{"Action":"output","Output":"0 runs so far, 0 failures, over 45s\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"I180711 20:06:50.862808 1 rand.go:75  Random seed: 8794750110161340701\n"}
+{"Action":"run","Test":"TestReplicateQueueRebalance"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"=== RUN   TestReplicateQueueRebalance\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"W180711 20:06:50.873091 39 server/status/runtime.go:143  Could not parse build timestamp: parsing time \"\" as \"2006/01/02 15:04:05\": cannot parse \"\" as \"2006\"\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.883719 39 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check_enabled\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.887957 39 server/config.go:545  [n?] 1 storage engine initialized\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.887979 39 server/config.go:548  [n?] RocksDB cache size: 128 MiB\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:53.142470 3621 storage/replica.go:835  [replicaGC,n1,s1,r6/1:/{System/tse-Table/System…}] removed 8 (0+8) keys in 0ms [clear=0ms commit=0ms]\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:53.227016 3624 storage/replica_command.go:732  [replicate,n4,s4,r10/2:/Table/1{3-4}] change replicas (REMOVE_REPLICA (n3,s3):4): read existing descriptor r10:/Table/1{3-4} [(n1,s1):1, (n4,s4):2, (n5,s5):3, (n3,s3):4, next=5]\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"W180711 20:07:37.567469 2466 storage/raft_transport.go:584  [n2] while processing outgoing Raft queue to node 5: rpc error: code = Unavailable desc = transport is closing:\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"--- FAIL: TestReplicateQueueRebalance (46.72s)\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\treplicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\tgoroutine 39 [running]:\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\truntime/debug.Stack(0xa7a358200, 0xc423335f80, 0x64b11e0)\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\t\t/usr/local/Cellar/go/1.10.2/libexec/src/runtime/debug/stack.go:24 +0xa7\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\tgithub.com/cockroachdb/cockroach/pkg/testutils.SucceedsSoon(0x64fdac0, 0xc42034f3b0, 0xc422489f80)\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\t\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/testutils/soon.go:38 +0x7d\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\tgithub.com/cockroachdb/cockroach/pkg/storage_test.TestReplicateQueueRebalance(0xc42034f3b0)\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\t\t/Users/benesch/go/src/github.com/cockroachdb/cockroach/pkg/storage/replicate_queue_test.go:88 +0x433\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\ttesting.tRunner(0xc42034f3b0, 0x60f3da8)\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\t\t/usr/local/Cellar/go/1.10.2/libexec/src/testing/testing.go:777 +0xd0\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\tcreated by testing.(*T).Run\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"\t\t\t/usr/local/Cellar/go/1.10.2/libexec/src/testing/testing.go:824 +0x2e0\n"}
+{"Action":"fail","Test":"TestReplicateQueueRebalance"}
+{"Action":"output","Output":"FAIL\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"ERROR: exit status 1\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"1 runs completed, 1 failures, over 47s\n"}
+{"Action":"output","Output":"SUCCESS\n"}
+{"Action":"output","Output":"ok  \tgithub.com/cockroachdb/cockroach/pkg/storage\t46.860s\n"}
+{"Action":"fail"}
