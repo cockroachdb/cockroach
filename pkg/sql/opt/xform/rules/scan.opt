@@ -7,3 +7,13 @@
 # on the scanned table.
 [GenerateIndexScans, Explore]
 (Scan $def:* & (CanGenerateIndexScans $def)) => (GenerateIndexScans $def)
+
+# GenerateInvertedIndexScans creates alternate expressions for filters that can
+# be serviced by an inverted index.
+[GenerateInvertedIndexScans, Explore]
+(Select
+  (Scan $def:* & (CanGenerateIndexScans $def))
+  $filter:*
+)
+=>
+(GenerateInvertedIndexScans $def $filter)

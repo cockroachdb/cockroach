@@ -7,7 +7,8 @@ CREATE TABLE a
     s STRING,
     j JSON,
     INDEX s_idx (s) STORING (i, f),
-    INDEX si_idx (s DESC, i DESC) STORING (j)
+    INDEX si_idx (s DESC, i DESC) STORING (j),
+    INVERTED INDEX inv_idx_j (j)
 )
 ----
 TABLE a
@@ -23,11 +24,14 @@ TABLE a
  │    ├── k int not null
  │    ├── i int (storing)
  │    └── f float (storing)
- └── INDEX si_idx
-      ├── s string desc
-      ├── i int desc
-      ├── k int not null
-      └── j jsonb (storing)
+ ├── INDEX si_idx
+ │    ├── s string desc
+ │    ├── i int desc
+ │    ├── k int not null
+ │    └── j jsonb (storing)
+ └── INVERTED INDEX inv_idx_j
+      ├── j jsonb
+      └── k int not null
 
 # --------------------------------------------------
 # GenerateIndexScans
@@ -605,3 +609,121 @@ memo (optimized)
  ├── G6: (ge G7 G8)
  ├── G7: (variable a.s)
  └── G8: (const 'foo')
+
+# Inverted index queries.
+# Query only the primary key with no remaining filter.
+opt
+SELECT k FROM a WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── index-join a
+      ├── columns: k:1(int!null) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      └── scan a@inv_idx_j
+           ├── columns: k:1(int!null)
+           ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+# Query only the primary key with a remaining filter.
+opt
+SELECT k FROM a WHERE j @> '{"a": "b", "c": "d"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── index-join a
+      │    ├── columns: k:1(int!null) j:5(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(5)
+      │    └── scan a@inv_idx_j
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      │         └── key: (1)
+      └── filters [type=bool, outer=(5)]
+           └── a.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(5)]
+
+# Query requiring an index join with no remaining filter.
+opt
+SELECT i, k FROM a WHERE j @> '{"a": "b"}'
+----
+project
+ ├── columns: i:2(int) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── index-join a
+      ├── columns: k:1(int!null) i:2(int) j:5(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(2,5)
+      └── scan a@inv_idx_j
+           ├── columns: k:1(int!null)
+           ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           └── key: (1)
+
+opt
+SELECT j, k FROM a WHERE j @> '{"a": "b"}'
+----
+index-join a
+ ├── columns: j:5(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ └── scan a@inv_idx_j
+      ├── columns: k:1(int!null)
+      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+opt
+SELECT * FROM a WHERE j @> '{"a": "b"}'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── scan a@inv_idx_j
+      ├── columns: k:1(int!null)
+      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+# Query requiring an index join with a remaining filter.
+# TODO(justin): push this filter into the index join.
+opt
+SELECT j, k FROM a WHERE j @> '{"a": "b", "c": "d"}'
+----
+select
+ ├── columns: j:5(jsonb) k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
+ │    └── scan a@inv_idx_j
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+ │         └── key: (1)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(5)]
+
+opt
+SELECT * FROM a WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── scan a@inv_idx_j
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /5/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
+ │         └── key: (1)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(5)]
