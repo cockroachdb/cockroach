@@ -95,9 +95,11 @@ func TestFlowRegistry(t *testing.T) {
 		t.Error("looked up unregistered flow")
 	}
 
+	const flowStreamTimeout = 10 * time.Second
+
 	ctx := context.Background()
 	if err := reg.RegisterFlow(
-		ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id1, f1, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestFlowRegistry(t *testing.T) {
 	go func() {
 		time.Sleep(jiffy)
 		if err := reg.RegisterFlow(
-			ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+			ctx, id1, f1, nil /* inboundStreams */, flowStreamTimeout,
 		); err != nil {
 			t.Error(err)
 		}
@@ -152,7 +154,7 @@ func TestFlowRegistry(t *testing.T) {
 
 	time.Sleep(jiffy)
 	if err := reg.RegisterFlow(
-		ctx, id2, f2, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id2, f2, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +183,7 @@ func TestFlowRegistry(t *testing.T) {
 
 	wg1.Wait()
 	if err := reg.RegisterFlow(
-		ctx, id3, f3, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id3, f3, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +194,7 @@ func TestFlowRegistry(t *testing.T) {
 	go func() {
 		time.Sleep(jiffy)
 		if err := reg.RegisterFlow(
-			ctx, id4, f4, nil /* inboundStreams */, flowStreamDefaultTimeout,
+			ctx, id4, f4, nil /* inboundStreams */, flowStreamTimeout,
 		); err != nil {
 			t.Error(err)
 		}

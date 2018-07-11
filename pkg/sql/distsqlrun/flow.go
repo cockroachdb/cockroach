@@ -471,7 +471,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.waitGroup.Add(len(f.inboundStreams))
 
 	if err := f.flowRegistry.RegisterFlow(
-		ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
+		ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
 	); err != nil {
 		if f.syncFlowConsumer != nil {
 			// For sync flows, the error goes to the consumer.
