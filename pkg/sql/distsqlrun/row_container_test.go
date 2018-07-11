@@ -112,7 +112,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mc.InitMaxHeap()
+	mc.InitTopK()
 	// Replace some of the rows with large rows.
 	for i := 0; i < 1000; i++ {
 		err := mc.MaybeReplaceMax(ctx, makeRow(rng.Intn(10000), rng.Intn(100)))
@@ -220,18 +220,16 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	rows := makeIntRows(numRows, numCols)
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	newDiskBackedRowContainer := func() *diskBackedRowContainer {
-		rc := diskBackedRowContainer{}
-		rc.init(
-			ordering,
-			oneIntCol,
-			&evalCtx,
-			tempEngine,
-			&memoryMonitor,
-			&diskMonitor,
-		)
-		return &rc
-	}
+	rc := diskBackedRowContainer{}
+	rc.init(
+		ordering,
+		oneIntCol,
+		&evalCtx,
+		tempEngine,
+		&memoryMonitor,
+		&diskMonitor,
+	)
+	defer rc.Close(ctx)
 
 	// NormalRun adds rows to a diskBackedRowContainer, makes it spill to disk
 	// halfway through, keeps on adding rows, and then verifies that all rows
@@ -242,8 +240,11 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
 
-		rc := newDiskBackedRowContainer()
-		defer rc.Close(ctx)
+		defer func() {
+			if err := rc.UnsafeReset(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}()
 
 		mid := len(rows) / 2
 		for i := 0; i < mid; i++ {
@@ -287,8 +288,11 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
 
-		rc := newDiskBackedRowContainer()
-		defer rc.Close(ctx)
+		defer func() {
+			if err := rc.UnsafeReset(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}()
 
 		if err := rc.AddRow(ctx, rows[0]); err != nil {
 			t.Fatal(err)
@@ -309,8 +313,11 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 
-		rc := newDiskBackedRowContainer()
-		defer rc.Close(ctx)
+		defer func() {
+			if err := rc.UnsafeReset(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}()
 
 		err := rc.AddRow(ctx, rows[0])
 		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {

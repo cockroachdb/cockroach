@@ -44,6 +44,10 @@ type diskRowContainer struct {
 	// comment for more information.
 	lastReadKey []byte
 
+	// topK is set by callers through InitTopK. Since rows are kept in sorted
+	// order, topK will simply limit iterators to read the first k rows.
+	topK int
+
 	// rowID is used as a key suffix to prevent duplicate rows from overwriting
 	// each other.
 	rowID uint64
@@ -164,6 +168,29 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 // keeps the rows in sorted order.
 func (d *diskRowContainer) Sort(context.Context) {}
 
+// InitTopK limits iterators to read the first k rows.
+func (d *diskRowContainer) InitTopK() {
+	d.topK = d.Len()
+}
+
+// MaybeReplaceMax adds row to the diskRowContainer. The SortedDiskMap will
+// sort this row into the top k if applicable.
+func (d *diskRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
+	return d.AddRow(ctx, row)
+}
+
+func (d *diskRowContainer) UnsafeReset(ctx context.Context) error {
+	_ = d.bufferedRows.Close(ctx)
+	if err := d.diskMap.Clear(); err != nil {
+		return err
+	}
+	d.diskAcc.Clear(ctx)
+	d.bufferedRows = d.diskMap.NewBatchWriter()
+	d.lastReadKey = nil
+	d.rowID = 0
+	return nil
+}
+
 func (d *diskRowContainer) Close(ctx context.Context) {
 	// We can ignore the error here because the flushed data is immediately cleared
 	// in the following Close.
@@ -212,11 +239,19 @@ type diskRowIterator struct {
 
 var _ rowIterator = diskRowIterator{}
 
-func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
+func (d *diskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
 		log.Fatal(ctx, err)
 	}
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
+}
+
+func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
+	i := d.newIterator(ctx)
+	if d.topK > 0 {
+		return &diskRowTopKIterator{rowIterator: i, k: d.topK}
+	}
+	return i
 }
 
 // Row returns the current row. The returned sqlbase.EncDatumRow is only valid
@@ -251,7 +286,11 @@ var _ rowIterator = diskRowFinalIterator{}
 // and will be adding rows between iterations. New rows could sort before the
 // current row.
 func (d *diskRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
-	return diskRowFinalIterator{diskRowIterator: d.NewIterator(ctx).(diskRowIterator)}
+	i := diskRowFinalIterator{diskRowIterator: d.newIterator(ctx)}
+	if d.topK > 0 {
+		return &diskRowTopKIterator{rowIterator: i, k: d.topK}
+	}
+	return i
 }
 
 func (r diskRowFinalIterator) Rewind() {
@@ -268,4 +307,30 @@ func (r diskRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 	}
 	r.diskRowIterator.rowContainer.lastReadKey = r.Key()
 	return row, nil
+}
+
+type diskRowTopKIterator struct {
+	rowIterator
+	position int
+	// k is the limit of rows to read.
+	k int
+}
+
+var _ rowIterator = &diskRowTopKIterator{}
+
+func (d *diskRowTopKIterator) Rewind() {
+	d.rowIterator.Rewind()
+	d.position = 0
+}
+
+func (d *diskRowTopKIterator) Valid() (bool, error) {
+	if d.position >= d.k {
+		return false, nil
+	}
+	return d.rowIterator.Valid()
+}
+
+func (d *diskRowTopKIterator) Next() {
+	d.position++
+	d.rowIterator.Next()
 }

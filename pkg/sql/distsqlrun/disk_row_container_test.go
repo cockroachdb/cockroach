@@ -411,3 +411,97 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 		t.Fatalf("only read %d rows, expected %d", rowsRead, len(rows)+len(extraRows))
 	}
 }
+
+func TestDiskRowContainerUnsafeReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	monitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+
+	d := makeDiskRowContainer(&monitor, oneIntCol, nil /* ordering */, tempEngine)
+	defer d.Close(ctx)
+
+	const (
+		numCols = 1
+		numRows = 100
+	)
+	rows := makeIntRows(numRows, numCols)
+
+	const (
+		numResets            = 4
+		expectedRowsPerReset = numRows / numResets
+	)
+	for i := 0; i < numResets; i++ {
+		if err := d.UnsafeReset(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if d.Len() != 0 {
+			t.Fatalf("disk row container still contains %d row(s) after a reset", d.Len())
+		}
+		firstRow := rows[0]
+		for _, row := range rows[:len(rows)/numResets] {
+			if err := d.AddRow(ctx, row); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Verify that the first row matches up.
+		func() {
+			i := d.NewFinalIterator(ctx)
+			defer i.Close()
+			i.Rewind()
+			if ok, err := i.Valid(); err != nil || !ok {
+				t.Fatalf("unexpected i.Valid() return values: ok=%t, err=%s", ok, err)
+			}
+			row, err := i.Row()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.String(oneIntCol) != firstRow.String(oneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(oneIntCol), firstRow.String(oneIntCol))
+			}
+		}()
+
+		// diskRowFinalIterator does not actually discard rows, so Len() should
+		// still account for the row we just read.
+		if d.Len() != expectedRowsPerReset {
+			t.Fatalf("expected %d rows but got %d", expectedRowsPerReset, d.Len())
+		}
+	}
+
+	// Verify we read the expected number of rows (note that we already read one
+	// in the last iteration of the numResets loop).
+	i := d.NewFinalIterator(ctx)
+	defer i.Close()
+	rowsRead := 0
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		_, err := i.Row()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rowsRead++
+	}
+	if rowsRead != expectedRowsPerReset-1 {
+		t.Fatalf("read %d rows using a final iterator but expected %d", rowsRead, expectedRowsPerReset)
+	}
+}

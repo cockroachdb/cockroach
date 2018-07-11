@@ -38,6 +38,10 @@ type sorterBase struct {
 	// the input.
 	count int64
 
+	rows sortableRowContainer
+	i    rowIterator
+
+	// Only set if the ability to spill to disk is enabled.
 	diskMonitor *mon.BytesMonitor
 }
 
@@ -48,7 +52,6 @@ func (s *sorterBase) init(
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
-	memMonitor *mon.BytesMonitor,
 	ordering sqlbase.ColumnOrdering,
 	matchLen uint32,
 	opts procStateOpts,
@@ -66,14 +69,94 @@ func (s *sorterBase) init(
 		s.finishTrace = s.outputStatsToTrace
 	}
 
+	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
+		flowCtx.testingKnobs.MemoryLimitBytes > 0
+	var memMonitor *mon.BytesMonitor
+	if useTempStorage {
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// The processor will overflow to disk if this limit is not enough.
+		limit := flowCtx.testingKnobs.MemoryLimitBytes
+		if limit <= 0 {
+			limit = settingWorkMemBytes.Get(&flowCtx.Settings.SV)
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit(
+			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
+		)
+		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		memMonitor = &limitedMon
+	} else {
+		memMonitor = newMonitor(ctx, flowCtx.EvalCtx.Mon, "sorter-mem")
+	}
+
+	if err := s.processorBase.init(
+		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
+	); err != nil {
+		memMonitor.Stop(ctx)
+		return err
+	}
+
+	if useTempStorage {
+		s.diskMonitor = newMonitor(ctx, flowCtx.diskMonitor, "sorter-disk")
+		rc := diskBackedRowContainer{}
+		rc.init(
+			ordering,
+			input.OutputTypes(),
+			s.evalCtx,
+			flowCtx.TempStorage,
+			memMonitor,
+			s.diskMonitor,
+		)
+		s.rows = &rc
+	} else {
+		rc := memRowContainer{}
+		rc.initWithMon(ordering, input.OutputTypes(), s.evalCtx, memMonitor)
+		s.rows = &rc
+	}
+
 	s.input = input
 	s.ordering = ordering
 	s.matchLen = matchLen
 	s.count = count
-	s.diskMonitor = newMonitor(ctx, flowCtx.diskMonitor, "sorter-disk")
-	return s.processorBase.init(
-		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
-	)
+	return nil
+}
+
+// Next is part of the RowSource interface. It is extracted into sorterBase
+// because this implementation of next is shared between the sortAllProcessor
+// and the sortTopKProcessor.
+func (s *sorterBase) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	for s.state == stateRunning {
+		if ok, err := s.i.Valid(); err != nil || !ok {
+			s.moveToDraining(nil /* err */)
+			break
+		}
+
+		row, err := s.i.Row()
+		if err != nil {
+			s.moveToDraining(err)
+			break
+		}
+		s.i.Next()
+
+		if outRow := s.processRowHelper(row); outRow != nil {
+			return outRow, nil
+		}
+	}
+	return nil, s.drainHelper()
+}
+
+func (s *sorterBase) close() {
+	// We are done sorting rows, close the iterator we have open.
+	if s.internalClose() {
+		if s.i != nil {
+			s.i.Close()
+		}
+		ctx := s.evalCtx.Ctx()
+		s.rows.Close(ctx)
+		s.memMonitor.Stop(ctx)
+		if s.diskMonitor != nil {
+			s.diskMonitor.Stop(ctx)
+		}
+	}
 }
 
 var _ DistSQLSpanStats = &SorterStats{}
@@ -164,12 +247,6 @@ func newSorter(
 // This processor is intended to be used when all values need to be sorted.
 type sortAllProcessor struct {
 	sorterBase
-
-	rows sortableRowContainer
-
-	// The following variables are used by the state machine, and are used by Next()
-	// to determine where to resume emitting rows.
-	i rowIterator
 }
 
 var _ Processor = &sortAllProcessor{}
@@ -186,32 +263,9 @@ func newSortAllProcessor(
 	post *PostProcessSpec,
 	out RowReceiver,
 ) (Processor, error) {
-	ordering := convertToColumnOrdering(spec.OutputOrdering)
-	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
-		flowCtx.testingKnobs.MemoryLimitBytes > 0
-
-	var memMonitor *mon.BytesMonitor
-	if useTempStorage {
-		// We will use the sortAllProcessor in this case and potentially fall
-		// back to disk.
-		// Limit the memory use by creating a child monitor with a hard limit.
-		// The processor will overflow to disk if this limit is not enough.
-		limit := flowCtx.testingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = settingWorkMemBytes.Get(&flowCtx.Settings.SV)
-		}
-		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
-		)
-		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		memMonitor = &limitedMon
-	} else {
-		memMonitor = newMonitor(ctx, flowCtx.EvalCtx.Mon, "sortall-mem")
-	}
-
 	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, memMonitor,
+		proc, flowCtx, processorID, input, post, out,
 		convertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		procStateOpts{
@@ -223,26 +277,6 @@ func newSortAllProcessor(
 		},
 	); err != nil {
 		return nil, err
-	}
-	if useTempStorage {
-		rc := diskBackedRowContainer{}
-		rc.init(
-			ordering,
-			input.OutputTypes(),
-			proc.evalCtx,
-			flowCtx.TempStorage,
-			memMonitor,
-			proc.diskMonitor,
-		)
-		proc.rows = &rc
-	} else {
-		rc := memRowContainer{}
-		rc.init(
-			ordering,
-			input.OutputTypes(),
-			proc.evalCtx,
-		)
-		proc.rows = &rc
 	}
 	return proc, nil
 }
@@ -257,28 +291,6 @@ func (s *sortAllProcessor) Start(ctx context.Context) context.Context {
 		s.moveToDraining(err)
 	}
 	return ctx
-}
-
-// Next is part of the RowSource interface.
-func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for s.state == stateRunning {
-		if ok, err := s.i.Valid(); err != nil || !ok {
-			s.moveToDraining(err)
-			break
-		}
-
-		row, err := s.i.Row()
-		if err != nil {
-			s.moveToDraining(err)
-			break
-		}
-		s.i.Next()
-
-		if outRow := s.processRowHelper(row); outRow != nil {
-			return outRow, nil
-		}
-	}
-	return nil, s.drainHelper()
 }
 
 // fill fills s.rows with the input's rows.
@@ -316,20 +328,6 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	return true, nil
 }
 
-func (s *sortAllProcessor) close() {
-	// We are done sorting rows, close the iterators we have open. The row
-	// containers require a context, so must be called before internalClose().
-	if s.internalClose() {
-		if s.i != nil {
-			s.i.Close()
-		}
-		ctx := s.evalCtx.Ctx()
-		s.rows.Close(ctx)
-		s.memMonitor.Stop(ctx)
-		s.diskMonitor.Stop(ctx)
-	}
-}
-
 // ConsumerDone is part of the RowSource interface.
 func (s *sortAllProcessor) ConsumerDone() {
 	s.input.ConsumerDone()
@@ -358,13 +356,9 @@ func (s *sortAllProcessor) ConsumerClosed() {
 // of O(n + k*log(k)) while maintaining a worst-case space complexity of O(k).
 // For instance, the top k can be found in linear time, and then this can be
 // sorted in linearithmic time.
-//
-// TODO(asubiotto): Use diskRowContainer for these other strategies.
 type sortTopKProcessor struct {
 	sorterBase
-
-	rows memRowContainer
-	k    int64
+	k int64
 }
 
 var _ Processor = &sortTopKProcessor{}
@@ -383,9 +377,8 @@ func newSortTopKProcessor(
 ) (Processor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
-	memMonitor := newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "sorttopk-mem")
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, memMonitor,
+		proc, flowCtx, processorID, input, post, out,
 		ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
@@ -397,7 +390,6 @@ func newSortTopKProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.init(ordering, input.OutputTypes(), proc.evalCtx)
 	return proc, nil
 }
 
@@ -429,7 +421,7 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 		} else {
 			if !heapCreated {
 				// Arrange the k values into a max-heap.
-				s.rows.InitMaxHeap()
+				s.rows.InitTopK()
 				heapCreated = true
 			}
 			// Replace the max value if the new row is smaller, maintaining the
@@ -441,35 +433,9 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 		}
 	}
 	s.rows.Sort(ctx)
+	s.i = s.rows.NewFinalIterator(ctx)
+	s.i.Rewind()
 	return ctx
-}
-
-// Next is part of the RowSource interface.
-func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for s.state == stateRunning {
-		if s.rows.Len() == 0 {
-			s.moveToDraining(nil /* err */)
-			break
-		}
-
-		row := s.rows.EncRow(0)
-		s.rows.PopFirst()
-
-		if outRow := s.processRowHelper(row); outRow != nil {
-			return outRow, nil
-		}
-	}
-	return nil, s.drainHelper()
-}
-
-func (s *sortTopKProcessor) close() {
-	if s.internalClose() {
-		ctx := s.evalCtx.Ctx()
-		s.rows.Close(ctx)
-		s.input.ConsumerClosed()
-		s.memMonitor.Stop(ctx)
-		s.diskMonitor.Stop(ctx)
-	}
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -488,7 +454,6 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 type sortChunksProcessor struct {
 	sorterBase
 
-	rows  memRowContainer
 	alloc sqlbase.DatumAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
@@ -512,9 +477,8 @@ func newSortChunksProcessor(
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
-	memMonitor := newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "sortchunks-mem")
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, memMonitor, ordering, spec.OrderingMatchLen,
+		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {
@@ -525,7 +489,7 @@ func newSortChunksProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.init(ordering, input.OutputTypes(), proc.evalCtx)
+	proc.i = proc.rows.NewFinalIterator(proc.ctx)
 	return proc, nil
 }
 
@@ -534,9 +498,10 @@ func newSortChunksProcessor(
 func (s *sortChunksProcessor) chunkCompleted(
 	nextChunkRow, prefix sqlbase.EncDatumRow,
 ) (bool, error) {
+	types := s.input.OutputTypes()
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
-		cmp, err := nextChunkRow[col].Compare(&s.rows.types[col], &s.alloc, s.rows.evalCtx, &prefix[col])
+		cmp, err := nextChunkRow[col].Compare(&types[col], &s.alloc, s.evalCtx, &prefix[col])
 		if cmp != 0 || err != nil {
 			return true, err
 		}
@@ -619,9 +584,15 @@ func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
 // Next is part of the RowSource interface.
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for s.state == stateRunning {
+		ok, err := s.i.Valid()
+		if err != nil {
+			s.moveToDraining(err)
+			break
+		}
 		// If we don't have an active chunk, clear and refill it.
-		if s.rows.Len() == 0 {
-			if err := s.rows.UnsafeReset(s.rows.evalCtx.Ctx()); err != nil {
+		if !ok {
+			ctx := s.evalCtx.Ctx()
+			if err := s.rows.UnsafeReset(ctx); err != nil {
 				s.moveToDraining(err)
 				break
 			}
@@ -630,27 +601,28 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				s.moveToDraining(err)
 				break
 			}
+			s.i.Close()
+			s.i = s.rows.NewFinalIterator(ctx)
+			s.i.Rewind()
+			if ok, err := s.i.Valid(); err != nil || !ok {
+				s.moveToDraining(err)
+				break
+			}
 		}
 
 		// If we have an active chunk, get a row from it.
-		row := s.rows.EncRow(0)
-		s.rows.PopFirst()
+		row, err := s.i.Row()
+		if err != nil {
+			s.moveToDraining(err)
+			break
+		}
+		s.i.Next()
 
 		if outRow := s.processRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
 	return nil, s.drainHelper()
-}
-
-func (s *sortChunksProcessor) close() {
-	if s.internalClose() {
-		ctx := s.evalCtx.Ctx()
-		s.rows.Close(ctx)
-		s.input.ConsumerClosed()
-		s.memMonitor.Stop(ctx)
-		s.diskMonitor.Stop(ctx)
-	}
 }
 
 // ConsumerDone is part of the RowSource interface.
