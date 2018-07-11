@@ -92,16 +92,7 @@ func evaluateCommand(
 	}
 
 	if h.ReturnRangeInfo {
-		header := reply.Header()
-		lease, _ := rec.GetLease()
-		desc := rec.Desc()
-		header.RangeInfos = []roachpb.RangeInfo{
-			{
-				Desc:  *desc,
-				Lease: lease,
-			},
-		}
-		reply.SetHeader(header)
+		returnRangeInfo(reply, rec)
 	}
 
 	// TODO(peter): We'd like to assert that the hlc clock is always updated
@@ -129,6 +120,19 @@ func evaluateCommand(
 	}
 
 	return pd, pErr
+}
+
+func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
+	header := reply.Header()
+	lease, _ := rec.GetLease()
+	desc := rec.Desc()
+	header.RangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *desc,
+			Lease: lease,
+		},
+	}
+	reply.SetHeader(header)
 }
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
