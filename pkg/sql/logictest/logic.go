@@ -949,7 +949,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 
 	distSQLKnobs := &distsqlrun.TestingKnobs{
-		MetadataTestLevel: distsqlrun.Off, OverrideStallTime: true,
+		MetadataTestLevel: distsqlrun.Off, DeterministicStats: true,
 	}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
