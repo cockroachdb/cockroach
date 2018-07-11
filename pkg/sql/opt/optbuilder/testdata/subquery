@@ -1179,19 +1179,17 @@ values
 build
 SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
 ----
-project
+values
  ├── columns: a:1(int) a:1(int) column2:2(string) column2:2(string)
- └── values
-      ├── columns: column1:1(int) column2:2(string)
-      ├── tuple [type=tuple{int, string}]
-      │    ├── const: 1 [type=int]
-      │    └── const: 'one' [type=string]
-      ├── tuple [type=tuple{int, string}]
-      │    ├── const: 2 [type=int]
-      │    └── const: 'two' [type=string]
-      └── tuple [type=tuple{int, string}]
-           ├── const: 3 [type=int]
-           └── const: 'three' [type=string]
+ ├── tuple [type=tuple{int, string}]
+ │    ├── const: 1 [type=int]
+ │    └── const: 'one' [type=string]
+ ├── tuple [type=tuple{int, string}]
+ │    ├── const: 2 [type=int]
+ │    └── const: 'two' [type=string]
+ └── tuple [type=tuple{int, string}]
+      ├── const: 3 [type=int]
+      └── const: 'three' [type=string]
 
 build
 SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz WHERE x = 7)

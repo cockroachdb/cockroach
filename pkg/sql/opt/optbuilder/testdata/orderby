@@ -214,10 +214,8 @@ SELECT a, b, b FROM t ORDER BY c
 sort
  ├── columns: a:1(int!null) b:2(int) b:2(int)
  ├── ordering: +3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY (b, t.*)

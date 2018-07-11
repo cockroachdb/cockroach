@@ -49,35 +49,25 @@ intersect
  ├── right columns: v:4(int) u:3(int) rowid:5(int)
  ├── stats: [rows=1.42857143, distinct(1,2)=1.42857143]
  ├── key: (1,2)
- ├── project
+ ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=1000, distinct(1,2)=1000]
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
- └── project
+ │    └── fd: (1)-->(2)
+ └── select
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=1.42857143, distinct(3-5)=1.42857143]
+      ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3-5)=1.42857143]
       ├── key: (5)
       ├── fd: ()-->(3), (5)-->(4)
-      └── select
-           ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3-5)=1.42857143]
-           ├── key: (5)
-           ├── fd: ()-->(3), (5)-->(4)
-           ├── scan uv
-           │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
-           │    ├── key: (5)
-           │    └── fd: (5)-->(3,4)
-           └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                     ├── variable: uv.u [type=int, outer=(3)]
-                     └── const: 1 [type=int]
+      ├── scan uv
+      │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+      │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
+      │    ├── key: (5)
+      │    └── fd: (5)-->(3,4)
+      └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+           └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+                ├── variable: uv.u [type=int, outer=(3)]
+                └── const: 1 [type=int]
 
 build
 SELECT x, x, y FROM xy EXCEPT SELECT u, v, v FROM (SELECT * FROM uv WHERE u=1) uv
@@ -88,38 +78,29 @@ except
  ├── right columns: u:3(int) v:4(int) v:4(int)
  ├── stats: [rows=1000, distinct(1,2)=1000]
  ├── key: (1,2)
- ├── project
+ ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=1000, distinct(1,2)=1000]
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
+ │    └── fd: (1)-->(2)
  └── project
       ├── columns: u:3(int!null) v:4(int!null)
       ├── stats: [rows=1.42857143, distinct(3,4)=1.42857143]
       ├── fd: ()-->(3)
-      └── project
-           ├── columns: u:3(int!null) v:4(int!null)
-           ├── stats: [rows=1.42857143, distinct(3,4)=1.42857143]
-           ├── fd: ()-->(3)
-           └── select
-                ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-                ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3,4)=1.42857143]
-                ├── key: (5)
-                ├── fd: ()-->(3), (5)-->(4)
-                ├── scan uv
-                │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-                │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
-                │    ├── key: (5)
-                │    └── fd: (5)-->(3,4)
-                └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-                     └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                          ├── variable: uv.u [type=int, outer=(3)]
-                          └── const: 1 [type=int]
+      └── select
+           ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
+           ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3,4)=1.42857143]
+           ├── key: (5)
+           ├── fd: ()-->(3), (5)-->(4)
+           ├── scan uv
+           │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+           │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
+           │    ├── key: (5)
+           │    └── fd: (5)-->(3,4)
+           └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+                     ├── variable: uv.u [type=int, outer=(3)]
+                     └── const: 1 [type=int]
 
 # Propagate outer columns.
 build
