@@ -2176,67 +2176,66 @@ TABLE foo
  └── INDEX primary
       └── rowid int not null (hidden)
 
-# TODO(justin): re-enable when we support JSON ops.
-# build
-# SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
-# ----
-# project
-#  ├── columns: r:8(bool)
-#  ├── group-by
-#  │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
-#  │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
-#  │    └── project
-#  │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
-#  │         ├── inner-join
-#  │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
-#  │         │    ├── scan foo
-#  │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
-#  │         │    ├── scan foo
-#  │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
-#  │         │    └── true [type=bool]
-#  │         └── projections
-#  │              └── contains [type=bool]
-#  │                   ├── variable: foo.bar [type=jsonb]
-#  │                   └── variable: foo.baz [type=jsonb]
-#  └── projections
-#       └── and [type=bool]
-#            ├── variable: column7 [type=bool]
-#            └── contains [type=bool]
-#                 ├── variable: foo.baz [type=jsonb]
-#                 └── variable: foo.baz [type=jsonb]
+build
+SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
+----
+project
+ ├── columns: r:8(bool)
+ ├── group-by
+ │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
+ │    └── project
+ │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
+ │         ├── inner-join
+ │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    ├── scan foo
+ │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
+ │         │    ├── scan foo
+ │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    └── true [type=bool]
+ │         └── projections
+ │              └── contains [type=bool]
+ │                   ├── variable: foo.bar [type=jsonb]
+ │                   └── variable: foo.baz [type=jsonb]
+ └── projections
+      └── and [type=bool]
+           ├── variable: column7 [type=bool]
+           └── contains [type=bool]
+                ├── variable: foo.baz [type=jsonb]
+                └── variable: foo.baz [type=jsonb]
 
-# build
-# SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
-# ----
-# error (42803): column "bar" must appear in the GROUP BY clause or be used in an aggregate function
+build
+SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
+----
+error (42803): column "bar" must appear in the GROUP BY clause or be used in an aggregate function
 
-# build
-# SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
-# ----
-# project
-#  ├── columns: r:8(bool)
-#  ├── group-by
-#  │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
-#  │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
-#  │    └── project
-#  │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
-#  │         ├── inner-join
-#  │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
-#  │         │    ├── scan foo
-#  │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
-#  │         │    ├── scan foo
-#  │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
-#  │         │    └── true [type=bool]
-#  │         └── projections
-#  │              └── contains [type=bool]
-#  │                   ├── variable: foo.bar [type=jsonb]
-#  │                   └── variable: foo.baz [type=jsonb]
-#  └── projections
-#       └── and [type=bool]
-#            ├── variable: column7 [type=bool]
-#            └── contains [type=bool]
-#                 ├── variable: foo.baz [type=jsonb]
-#                 └── variable: foo.baz [type=jsonb]
+build
+SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
+----
+project
+ ├── columns: r:8(bool)
+ ├── group-by
+ │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
+ │    └── project
+ │         ├── columns: column7:7(bool) foo.baz:5(jsonb)
+ │         ├── inner-join
+ │         │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    ├── scan foo
+ │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
+ │         │    ├── scan foo
+ │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
+ │         │    └── true [type=bool]
+ │         └── projections
+ │              └── contains [type=bool]
+ │                   ├── variable: foo.bar [type=jsonb]
+ │                   └── variable: foo.baz [type=jsonb]
+ └── projections
+      └── and [type=bool]
+           ├── variable: column7 [type=bool]
+           └── contains [type=bool]
+                ├── variable: foo.baz [type=jsonb]
+                └── variable: foo.baz [type=jsonb]
 
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
