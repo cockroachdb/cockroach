@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -188,7 +189,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	t.Skip("#27401")
 
 	for _, colocate := range []bool{false, true} {
-		for _, retries := range []int{0, 3} {
+		for _, retries := range []int64{0, 3} {
 			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
 				mergeWithData(t, colocate, retries)
 			})
@@ -196,17 +197,16 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 }
 
-func mergeWithData(t *testing.T, colocate bool, retries int) {
+func mergeWithData(t *testing.T, colocate bool, retries int64) {
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
-		if retries > 0 {
-			for _, req := range ba.Requests {
-				if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
-					retries--
+		for _, req := range ba.Requests {
+			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+				if atomic.AddInt64(&retries, -1) >= 0 {
 					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
 				}
 			}
@@ -359,8 +359,8 @@ func mergeWithData(t *testing.T, colocate bool, retries int) {
 		t.Fatalf("expected get on rhs to fail after merge, but got err=%v", err)
 	}
 
-	if retries != 0 {
-		t.Fatalf("%d retries remaining (expected zero)", retries)
+	if atomic.LoadInt64(&retries) >= 0 {
+		t.Fatalf("%d retries remaining (expected less than zero)", retries)
 	}
 }
 
