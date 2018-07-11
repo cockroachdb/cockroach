@@ -44,10 +44,8 @@ scan a
 build
 SELECT a.y, a.x FROM a
 ----
-project
- ├── columns: y:2(float) x:1(int!null)
- └── scan a
-      └── columns: x:1(int!null) y:2(float)
+scan a
+ └── columns: y:2(float) x:1(int!null)
 
 build
 SELECT * FROM a

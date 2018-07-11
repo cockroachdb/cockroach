@@ -128,16 +128,11 @@ project
       ├── stats: [rows=600, distinct(2-4)=600]
       ├── key: (2-4)
       ├── fd: (3,4)~~>(2), (2-4)-->(5)
-      ├── project
+      ├── scan a
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=2000, distinct(2-4)=600]
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    └── scan a
-      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=2000, distinct(2-4)=600]
-      │         ├── key: (1)
-      │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(1)]
            └── max [type=int, outer=(1)]
                 └── variable: a.x [type=int, outer=(1)]
@@ -185,16 +180,11 @@ project
       │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
       │    ├── key: (2-4)
       │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
-      │    ├── project
+      │    ├── scan a
       │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    │    └── scan a
-      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    │         ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations [outer=(1)]
       │         └── max [type=int, outer=(1)]
       │              └── variable: a.x [type=int, outer=(1)]
@@ -209,36 +199,31 @@ project
 build
 SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
-project
+select
  ├── columns: sum:5(decimal!null) s:4(string)
- ├── stats: [rows=1]
+ ├── stats: [rows=1, distinct(5)=1]
  ├── key: (4)
  ├── fd: ()-->(5)
- └── select
-      ├── columns: s:4(string) column5:5(decimal!null)
-      ├── stats: [rows=1, distinct(5)=1]
-      ├── key: (4)
-      ├── fd: ()-->(5)
-      ├── group-by
-      │    ├── columns: s:4(string) column5:5(decimal)
-      │    ├── grouping columns: s:4(string)
-      │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
-      │    ├── key: (4)
-      │    ├── fd: (4)-->(5)
-      │    ├── project
-      │    │    ├── columns: x:1(int!null) s:4(string)
-      │    │    ├── stats: [rows=2000, distinct(4)=10]
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(4)
-      │    │    └── scan a
-      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    │         ├── stats: [rows=2000, distinct(4)=10]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    └── aggregations [outer=(1)]
-      │         └── sum [type=decimal, outer=(1)]
-      │              └── variable: a.x [type=int, outer=(1)]
-      └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-           └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
-                ├── variable: column5 [type=decimal, outer=(5)]
-                └── const: 5 [type=decimal]
+ ├── group-by
+ │    ├── columns: s:4(string) column5:5(decimal)
+ │    ├── grouping columns: s:4(string)
+ │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) s:4(string)
+ │    │    ├── stats: [rows=2000, distinct(4)=10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │         ├── stats: [rows=2000, distinct(4)=10]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── aggregations [outer=(1)]
+ │         └── sum [type=decimal, outer=(1)]
+ │              └── variable: a.x [type=int, outer=(1)]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+           ├── variable: column5 [type=decimal, outer=(5)]
+           └── const: 5 [type=decimal]
