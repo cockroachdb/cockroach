@@ -843,12 +843,6 @@ message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A NoopResponse is the return value from a no-op operation.
-message NoopResponse {}
-
-// A NoopRequest is a no-op.
-message NoopRequest {}
-
 // A MergeRequest contains arguments to the Merge() method. It
 // specifies a key and a value which should be merged into the
 // existing value at that key.
@@ -1289,7 +1283,6 @@ message RequestUnion {
     ReverseScanRequest reverse_scan = 21;
     ComputeChecksumRequest compute_checksum = 22;
     CheckConsistencyRequest check_consistency = 24;
-    NoopRequest noop = 25;
     InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
@@ -1305,7 +1298,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
   }
-  reserved 15, 23, 27;
+  reserved 15, 23, 25, 27;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1337,7 +1330,6 @@ message ResponseUnion {
     ReverseScanResponse reverse_scan = 21;
     ComputeChecksumResponse compute_checksum = 22;
     CheckConsistencyResponse check_consistency = 24;
-    NoopResponse noop = 25;
     InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
     WriteBatchResponse write_batch = 31;
@@ -1352,7 +1344,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
   }
-  reserved 15, 23, 27, 28;
+  reserved 15, 23, 25, 27, 28;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

@@ -33,7 +33,6 @@ func TestBatchSplit(t *testing.T) {
 	et := &EndTransactionRequest{}
 	qi := &QueryIntentRequest{}
 	rv := &ReverseScanRequest{}
-	np := &NoopRequest{}
 	testCases := []struct {
 		reqs       []Request
 		sizes      []int
@@ -54,13 +53,6 @@ func TestBatchSplit(t *testing.T) {
 		// multiple batches back-to-back.
 		{[]Request{et, scan, et}, []int{1, 2}, false},
 		{[]Request{et, et}, []int{1, 1}, false},
-		// Check that Noop can mix with other requests as long as the other
-		// requests do not include isAlone flags.
-		{[]Request{np, put, np}, []int{3}, true},
-		{[]Request{np, spl, np}, []int{1, 1, 1}, true},
-		{[]Request{np, rv, np}, []int{3}, true},
-		{[]Request{np, np, et}, []int{2, 1}, true}, // et splits off
-		{[]Request{np, np, et}, []int{3}, false},   // et does not split off
 		// QueryIntents count as headers that are always compatible with the
 		// request that follows.
 		{[]Request{get, qi, put}, []int{1, 2}, true},
