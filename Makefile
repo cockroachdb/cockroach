@@ -780,9 +780,9 @@ testbuild:
 testshort: override TESTFLAGS += -short
 
 testrace: ## Run tests with the Go race detector enabled.
-testrace: override GOFLAGS += -race
-testrace: export GORACE := halt_on_error=1
-testrace: TESTTIMEOUT := $(RACETIMEOUT)
+testrace stressrace: override GOFLAGS += -race
+testrace stressrace: export GORACE := halt_on_error=1
+testrace stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Directory scans in the builder image are excruciatingly slow when running
 # Docker for Mac, so we filter out the 20k+ UI dependencies that are
@@ -798,18 +798,16 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-stress: ## Run tests under stress.
-stress stressrace: override GOFLAGS += -exec 'stress $(STRESSFLAGS)'
-stress stressrace: override TESTFLAGS += -v # necessary for interactive output from `stress`
-
-stressrace: ## Run tests under stress with the race detector enabled.
-stressrace: override GOFLAGS += -race
-stressrace: TESTTIMEOUT := $(RACETIMEOUT)
-
 .PHONY: check test testshort testrace testlogic testccllogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort stress stressrace:
+check test testshort testrace bench benchshort:
 	$(xgo) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+
+.PHONY: stress stressrace
+stress: ## Run tests under stress.
+stressrace: ## Run tests under stress with the race detector enabled.
+stress stressrace:
+	$(xgo) test -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 testlogic: ## Run SQL Logic Tests.
 testlogic: bin/logictest
