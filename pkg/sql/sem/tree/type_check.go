@@ -52,6 +52,10 @@ type SemaContext struct {
 	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
 	privileged bool
 
+	// inFuncExpr is temporarily set to true while type checking the
+	// parameters of a function. Used to detect nested generators.
+	inFuncExpr bool
+
 	Properties SemaProperties
 }
 
@@ -110,6 +114,7 @@ const (
 	RejectGenerators
 	RejectImpureFunctions
 	RejectSubqueries
+	RejectNestedGenerators
 	RejectSpecial SemaRejectFlags = RejectAggregates | RejectGenerators | RejectWindowApplications
 )
 
@@ -609,6 +614,12 @@ var (
 	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
+// NewInvalidNestedSRFError creates a rejection for a nested SRF.
+func NewInvalidNestedSRFError(context string) error {
+	return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+		"set-returning functions must appear at the top level of %s", context)
+}
+
 // NewInvalidFunctionUsageError creates a rejection for a special function.
 func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	var cat string
@@ -660,6 +671,9 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		}
 	}
 	if def.Class == GeneratorClass {
+		if sc.inFuncExpr && sc.Properties.required.rejectFlags&RejectNestedGenerators != 0 {
+			return NewInvalidNestedSRFError(sc.Properties.required.context)
+		}
 		if sc.Properties.required.rejectFlags&RejectGenerators != 0 {
 			return NewInvalidFunctionUsageError(GeneratorClass, sc.Properties.required.context)
 		}
@@ -690,7 +704,13 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	}
 
 	if err := ctx.checkFunctionUsage(expr, def); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%s()", def.Name)
+	}
+	if ctx != nil {
+		// We'll need to remember we are in a function application to
+		// generate suitable errors in checkFunctionUsage().
+		defer func(ctx *SemaContext, prev bool) { ctx.inFuncExpr = prev }(ctx, ctx.inFuncExpr)
+		ctx.inFuncExpr = true
 	}
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)

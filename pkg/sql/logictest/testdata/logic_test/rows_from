@@ -67,3 +67,8 @@ x     n     generate_series
 NULL  NULL  13
 NULL  NULL  14
 NULL  NULL  15
+
+# Regression test for #27389.
+
+statement error pg_get_keywords\(\): set-returning functions must appear at the top level of FROM
+SELECT * FROM ROWS FROM(generate_series(length((pg_get_keywords()).word),10));
