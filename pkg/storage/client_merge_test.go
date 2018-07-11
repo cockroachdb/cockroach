@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -632,6 +633,126 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+// TestStoreRangeMergeRHSLeaseExpiration verifies that, if the right-hand range
+// in a merge loses its lease while a merge is in progress, the new leaseholder
+// does not incorrectly serve traffic before the merge completes.
+func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	// The synchronization in this test is tricky. The merge transaction is
+	// controlled by the AdminMerge function and normally commits quite quickly,
+	// but we need to ensure an expiration of the RHS's lease occurs while the
+	// merge transaction is open. To do so we install various hooks to observe
+	// and control requests. It's easiest to understand these hooks after you've
+	// read the meat of the test.
+
+	// Install a hook to control when the merge transaction commits.
+	mergeEndTxnReceived := make(chan struct{})
+	finishMerge := make(chan struct{})
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, r := range ba.Requests {
+			if et := r.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+				mergeEndTxnReceived <- struct{}{}
+				<-finishMerge
+			}
+		}
+		return nil
+	}
+
+	// Install a hook to observe when a get request for a special key,
+	// rhsSentinel, exits the command queue.
+	rhsSentinel := []byte("rhs-sentinel")
+	getExitedCommandQueue := make(chan struct{})
+	storeCfg.TestingKnobs.OnCommandQueueAction = func(ba *roachpb.BatchRequest, action storagebase.CommandQueueAction) {
+		if action == storagebase.CommandQueueBeginExecuting {
+			for _, r := range ba.Requests {
+				if get := r.GetGet(); get != nil && get.RequestHeader.Key.Equal(rhsSentinel) {
+					getExitedCommandQueue <- struct{}{}
+				}
+			}
+		}
+	}
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	// Create the ranges to be merged. Put the LHS on only the first store. Put
+	// the RHS on both stores and give the second store the lease. The LHS is
+	// largely irrelevant. What matters is that the RHS exists on two stores so we
+	// can transfer its lease during the merge.
+	lhsDesc, rhsDesc, err := createSplitRanges(mtc.stores[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtc.replicateRange(rhsDesc.RangeID, 1)
+	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
+
+	// Launch the merge.
+	mergeErr := make(chan error)
+	go func() {
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), args)
+		mergeErr <- err.GoError()
+	}()
+
+	// Wait for the merge transaction to send its EndTransaction request. It won't
+	// be able to complete just yet, thanks to the hook we installed above.
+	<-mergeEndTxnReceived
+
+	// Now's our chance to move the lease on the RHS from the second store to the
+	// first. This isn't entirely straightforward. The replica on the second store
+	// is aware of the merge and is refusing all traffic, so we can't just send a
+	// TransferLease request. Instead, we need to expire the second store's lease,
+	// then acquire the lease on the first store.
+
+	// Turn off liveness heartbeats on the second store, then advance the clock
+	// past the liveness expiration time. This expires all leases on all stores.
+	mtc.nodeLivenesses[1].PauseHeartbeat(true)
+	mtc.advanceClock(ctx)
+
+	// Manually heartbeat the liveness on the first store to ensure it's
+	// considered live. The automatic heartbeat might not come for a while.
+	if err := mtc.heartbeatLiveness(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send a get request directly to the first store's replica of the RHS. It
+	// should notice the second store's lease is expired and try to acquire it.
+	getErr := make(chan error)
+	go func() {
+		_, err := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
+			RangeID: rhsDesc.RangeID,
+		}, getArgs(rhsSentinel))
+		getErr <- err.GoError()
+	}()
+
+	// Wait for the get request to fall out of the command queue, which is as far
+	// as it the request can get while the merge is in progress. Then wait a
+	// little bit longer. This tests that the request really does get stuck
+	// waiting for the merge to complete without depending too heavily on
+	// implementation details.
+	<-getExitedCommandQueue
+	time.Sleep(50 * time.Millisecond)
+
+	// Finally, allow the merge to complete. It should complete successfully.
+	finishMerge <- struct{}{}
+	if err := <-mergeErr; err != nil {
+		t.Fatal(err)
+	}
+
+	// Because the merge completed successfully, r2 has ceased to exist. We
+	// therefore *must* see a RangeNotFound error. Anything else is a consistency
+	// error (or a bug in the test).
+	if err := <-getErr; !testutils.IsError(err, "r2 was not found") {
+		t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
+	}
 }
 
 func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {

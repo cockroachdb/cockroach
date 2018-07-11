@@ -827,6 +827,15 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		}
 	}
 
+	if lResult.DetachMaybeWatchForMerge() {
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			// If maybeWatchForMerge fails, we do not know whether there is an
+			// in-progress merge that would prevent us from serving traffic. We cannot
+			// safely proceed.
+			log.Fatal(ctx, err)
+		}
+	}
+
 	if (lResult != result.LocalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
