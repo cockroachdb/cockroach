@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -485,6 +486,11 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+
+		// rangeFeed is an instance of a rangefeed processor that is capable of
+		// routing rangefeed events to a set of subscribers. Will be nil if no
+		// subscribers are registered.
+		rangeFeed *rangefeed.Processor
 	}
 
 	unreachablesMu struct {
@@ -3109,6 +3115,7 @@ func (r *Replica) requestToProposal(
 		proposal.command = &storagebase.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
+			LogicalOps:           res.LogicalOps,
 		}
 		if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
 			// For backwards compatibility, tests that use TestingEvalFilter
@@ -5088,6 +5095,11 @@ func (r *Replica) processRaftCommand(
 		// before notifying a potentially waiting client.
 		r.handleEvalResultRaftMuLocked(ctx, lResult,
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
+
+		// Provide the command's corresponding logical operations to the
+		// Replica's rangefeed. If no rangefeed is running, this will be a
+		// no-op.
+		r.mu.rangeFeed.ConsumeLogicalOps(raftCmd.LogicalOps)
 	}
 
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
@@ -5544,6 +5556,13 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch.Close()
 		}
 		batch = r.store.Engine().NewBatch()
+		var opLogger *engine.MVCCOpLogWriter
+		if true /* enable cdc */ {
+			// WIP: persist rangefeed on flag. Add to ReplicaState. Only add op
+			// logger when rangefeed on.
+			opLogger = engine.NewOpLoggerBatch(batch)
+			batch = opLogger
+		}
 		if util.RaceEnabled {
 			batch = spanset.NewBatch(batch, spans)
 		}
@@ -5558,6 +5577,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
 		}
+		res.LogicalOps = opLogger.LogicalOps()
 		break
 	}
 	return

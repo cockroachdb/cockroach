@@ -145,3 +145,52 @@ message RangeAppliedState {
   // of the Raft state machine.
   MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
 }
+
+message MVCCWriteValueOp {
+  bytes key = 1;
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bytes value = 3;
+}
+
+message MVCCWriteIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes txn_key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+message MVCCUpdateIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+message MVCCCommitIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+message MVCCAbortIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+}
+
+message MVCCLogicalOp {
+  option (gogoproto.onlyone) = true;
+
+  MVCCWriteValueOp   write_value   = 1;
+  MVCCWriteIntentOp  write_intent  = 2;
+  MVCCUpdateIntentOp update_intent = 3;
+  MVCCCommitIntentOp commit_intent = 4;
+  MVCCAbortIntentOp  abort_intent  = 5;
+}

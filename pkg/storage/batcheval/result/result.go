@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -140,6 +141,7 @@ type Result struct {
 	Local      LocalResult
 	Replicated storagebase.ReplicatedEvalResult
 	WriteBatch *storagebase.WriteBatch
+	LogicalOps []enginepb.MVCCLogicalOp
 }
 
 // IsZero reports whether p is the zero value.
@@ -151,6 +153,9 @@ func (p *Result) IsZero() bool {
 		return false
 	}
 	if p.WriteBatch != nil {
+		return false
+	}
+	if p.LogicalOps != nil {
 		return false
 	}
 	return true
@@ -332,6 +337,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 	}
 	q.Local.UpdatedTxns = nil
+
+	if len(q.LogicalOps) > 0 {
+		p.LogicalOps = append(p.LogicalOps, q.LogicalOps...)
+	}
+	q.LogicalOps = nil
 
 	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))

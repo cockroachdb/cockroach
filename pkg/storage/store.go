@@ -2989,6 +2989,47 @@ func (s *Store) Send(
 	}
 }
 
+// RangeFeed ... WIP:
+func (s *Store) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) error {
+	ctx = s.AnnotateCtx(ctx)
+	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
+		return err
+	}
+
+	// Get range and add command to the range for execution.
+	repl, err := s.GetReplica(args.RangeID)
+	if err != nil {
+		return err
+	}
+	if !repl.IsInitialized() {
+		repl.mu.RLock()
+		replicaID := repl.mu.replicaID
+		repl.mu.RUnlock()
+
+		// If we have an uninitialized copy of the range, then we are
+		// probably a valid member of the range, we're just in the
+		// process of getting our snapshot. If we returned
+		// RangeNotFoundError, the client would invalidate its cache,
+		// but we can be smarter: the replica that caused our
+		// uninitialized replica to be created is most likely the
+		// leader.
+		return &roachpb.NotLeaseHolderError{
+			RangeID:     args.RangeID,
+			LeaseHolder: repl.creatingReplica,
+			// The replica doesn't have a range descriptor yet, so we have to build
+			// a ReplicaDescriptor manually.
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    repl.store.nodeDesc.NodeID,
+				StoreID:   repl.store.StoreID(),
+				ReplicaID: replicaID,
+			},
+		}
+	}
+	return repl.RangeFeed(ctx, args, stream)
+}
+
 // maybeWaitForPushee potentially diverts the incoming request to
 // the txnwait.Queue, where it will wait for updates to the target
 // transaction.
