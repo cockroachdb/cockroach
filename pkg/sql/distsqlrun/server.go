@@ -538,10 +538,9 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// OverrideStallTime instructs processors to report a stall time of 0s in
-	// reported execution statistics. This is used so that EXPLAIN ANALYZE plans
-	// stay the same across runs.
-	OverrideStallTime bool
+	// DeterministicStats overrides stats which don't have reliable values, like
+	// stall time and bytes sent. It replaces them with a zero value.
+	DeterministicStats bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
