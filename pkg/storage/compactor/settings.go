@@ -78,7 +78,7 @@ var thresholdBytes = settings.RegisterByteSizeSetting(
 // defaultThresholdBytes threshold.
 var thresholdBytesUsedFraction = settings.RegisterValidatedFloatSetting(
 	"compactor.threshold_used_fraction",
-	"Consider suggestions for at least the given percentage of the used logical space (zero to disable)",
+	"consider suggestions for at least the given percentage of the used logical space (zero to disable)",
 	0.10, // more than 10% of space will trigger
 	validateFraction,
 )
@@ -91,7 +91,7 @@ var thresholdBytesUsedFraction = settings.RegisterValidatedFloatSetting(
 // scenarios.	ThresholdBytesAvailableFraction() float64
 var thresholdBytesAvailableFraction = settings.RegisterValidatedFloatSetting(
 	"compactor.threshold_available_fraction",
-	"Consider suggestions for at least the given percentage of the available logical space (zero to disable)",
+	"consider suggestions for at least the given percentage of the available logical space (zero to disable)",
 	0.10, // more than 10% of space will trigger
 	validateFraction,
 )

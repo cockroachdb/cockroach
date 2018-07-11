@@ -33,7 +33,7 @@ import (
 
 var importBatchSize = settings.RegisterByteSizeSetting(
 	"kv.import.batch_size",
-	"",
+	"the maximum size of the payload in an AddSSTable request",
 	32<<20,
 )
 
