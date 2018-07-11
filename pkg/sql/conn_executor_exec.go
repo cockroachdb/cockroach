@@ -680,6 +680,37 @@ func (ex *connExecutor) execStmtInParallel(
 	return cols, nil
 }
 
+func enhanceErrWithCorrelation(err error, isCorrelated bool) {
+	if err == nil || !isCorrelated {
+		return
+	}
+
+	// If the query was found to be correlated by the new-gen
+	// optimizer, but the optimizer decided to give up (e.g. because
+	// of some feature it does not support), in most cases the
+	// heuristic planner will choke on the correlation with an
+	// unhelpful "table/column not defined" error.
+	//
+	// ("In most cases" because the heuristic planner does support
+	// *some* correlation, specifically that of SRFs in projections.)
+	//
+	// To help the user understand what is going on, we enhance these
+	// error message here when correlation has been found.
+	//
+	// We cannot be more assertive/definite in the text of the hint
+	// (e.g. by replacing the error entirely by "correlated queries are
+	// not supported") because perhaps there was an actual mistake in
+	// the query in addition to the unsupported correlation, and we also
+	// want to give a chance to the user to fix mistakes.
+	if pqErr, ok := err.(*pgerror.Error); ok {
+		if pqErr.Code == pgerror.CodeUndefinedColumnError ||
+			pqErr.Code == pgerror.CodeUndefinedTableError {
+			_ = pqErr.SetHintf("some correlated subqueries are not supported yet - see %s",
+				"https://github.com/cockroachdb/cockroach/issues/3288")
+		}
+	}
+}
+
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -696,8 +727,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	optimizerPlanned, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
 	if !optimizerPlanned && err == nil {
+		isCorrelated := planner.curPlan.isCorrelated
+		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
 		// Fallback if the optimizer was not enabled or used.
 		err = planner.makePlan(ctx, stmt)
+		enhanceErrWithCorrelation(err, isCorrelated)
 	}
 
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
