@@ -184,13 +184,34 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutils.RunTrueAndFalse(t, "colocate", mergeWithData)
+
+	for _, colocate := range []bool{false, true} {
+		for _, retries := range []int{0, 3} {
+			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
+				mergeWithData(t, colocate, retries)
+			})
+		}
+	}
 }
 
-func mergeWithData(t *testing.T, colocate bool) {
+func mergeWithData(t *testing.T, colocate bool, retries int) {
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
+
+	// Maybe inject some retryable errors when the merge transaction commits.
+	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if retries > 0 {
+			for _, req := range ba.Requests {
+				if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+					retries--
+					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+				}
+			}
+		}
+		return nil
+	}
+
 	mtc := &multiTestContext{storeConfig: &sc}
 
 	var store1, store2 *storage.Store
@@ -334,6 +355,10 @@ func mergeWithData(t *testing.T, colocate bool) {
 		err, `r2 was not found`,
 	) {
 		t.Fatalf("expected get on rhs to fail after merge, but got err=%v", err)
+	}
+
+	if retries != 0 {
+		t.Fatalf("%d retries remaining (expected zero)", retries)
 	}
 }
 
