@@ -59,42 +59,40 @@ build
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v),
   variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
-project
+group-by
  ├── columns: min:5(int) max:6(int) count:7(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_and:15(bool) xor_agg:17(bytes)
- └── group-by
-      ├── columns: min:5(int) max:6(int) count:7(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) xor_agg:17(bytes)
-      ├── project
-      │    ├── columns: column8:8(int!null) column14:14(bool) column16:16(bytes) v:2(int)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── projections
-      │         ├── const: 1 [type=int]
-      │         ├── eq [type=bool]
-      │         │    ├── variable: kv.v [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── cast: BYTES [type=bytes]
-      │              └── variable: kv.s [type=string]
-      └── aggregations
-           ├── min [type=int]
-           │    └── variable: kv.v [type=int]
-           ├── max [type=int]
-           │    └── variable: kv.v [type=int]
-           ├── count [type=int]
-           │    └── variable: kv.v [type=int]
-           ├── sum-int [type=int]
-           │    └── variable: column8 [type=int]
-           ├── avg [type=decimal]
-           │    └── variable: kv.v [type=int]
-           ├── sum [type=decimal]
-           │    └── variable: kv.v [type=int]
-           ├── std-dev [type=decimal]
-           │    └── variable: kv.v [type=int]
-           ├── variance [type=decimal]
-           │    └── variable: kv.v [type=int]
-           ├── bool-and [type=bool]
-           │    └── variable: column14 [type=bool]
-           └── xor-agg [type=bytes]
-                └── variable: column16 [type=bytes]
+ ├── project
+ │    ├── columns: column8:8(int!null) column14:14(bool) column16:16(bytes) v:2(int)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         ├── const: 1 [type=int]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: kv.v [type=int]
+ │         │    └── const: 1 [type=int]
+ │         └── cast: BYTES [type=bytes]
+ │              └── variable: kv.s [type=string]
+ └── aggregations
+      ├── min [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── max [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── count [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── sum-int [type=int]
+      │    └── variable: column8 [type=int]
+      ├── avg [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── sum [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── std-dev [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── variance [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── bool-and [type=bool]
+      │    └── variable: column14 [type=bool]
+      └── xor-agg [type=bytes]
+           └── variable: column16 [type=bytes]
 
 build
 SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
@@ -283,33 +281,29 @@ error (22023): unsupported comparison operator: <string> < <int>
 build
 SELECT count(*), k FROM kv GROUP BY k
 ----
-project
+group-by
  ├── columns: count:5(int) k:1(int!null)
- └── group-by
-      ├── columns: k:1(int!null) count:5(int)
-      ├── grouping columns: k:1(int!null)
-      ├── project
-      │    ├── columns: k:1(int!null)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: k:1(int!null)
+ ├── project
+ │    ├── columns: k:1(int!null)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 # GROUP BY specified using column index works.
 build
 SELECT count(*), k FROM kv GROUP BY 2
 ----
-project
+group-by
  ├── columns: count:5(int) k:1(int!null)
- └── group-by
-      ├── columns: k:1(int!null) count:5(int)
-      ├── grouping columns: k:1(int!null)
-      ├── project
-      │    ├── columns: k:1(int!null)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: k:1(int!null)
+ ├── project
+ │    ├── columns: k:1(int!null)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 build
 SELECT * FROM kv GROUP BY v, count(w)
@@ -355,113 +349,99 @@ error (42601): non-integer constant in GROUP BY: 'a'
 build
 SELECT count(*), kv.s FROM kv GROUP BY s
 ----
-project
+group-by
  ├── columns: count:5(int) s:4(string)
- └── group-by
-      ├── columns: s:4(string) count:5(int)
-      ├── grouping columns: s:4(string)
-      ├── project
-      │    ├── columns: s:4(string)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: s:4(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 build
 SELECT count(*), s FROM kv GROUP BY kv.s
 ----
-project
+group-by
  ├── columns: count:5(int) s:4(string)
- └── group-by
-      ├── columns: s:4(string) count:5(int)
-      ├── grouping columns: s:4(string)
-      ├── project
-      │    ├── columns: s:4(string)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: s:4(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 build
 SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
-project
+group-by
  ├── columns: count:5(int) s:4(string)
- └── group-by
-      ├── columns: s:4(string) count:5(int)
-      ├── grouping columns: s:4(string)
-      ├── project
-      │    ├── columns: s:4(string)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: s:4(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 build
 SELECT count(*), s FROM kv GROUP BY s
 ----
-project
+group-by
  ├── columns: count:5(int) s:4(string)
- └── group-by
-      ├── columns: s:4(string) count:5(int)
-      ├── grouping columns: s:4(string)
-      ├── project
-      │    ├── columns: s:4(string)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: s:4(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 # Grouping by more than one column works.
 build
 SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
-project
+group-by
  ├── columns: v:2(int) count:5(int) w:3(int)
- └── group-by
-      ├── columns: v:2(int) w:3(int) count:5(int)
-      ├── grouping columns: v:2(int) w:3(int)
-      ├── project
-      │    ├── columns: v:2(int) w:3(int)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: v:2(int) w:3(int)
+ ├── project
+ │    ├── columns: v:2(int) w:3(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 # Grouping by more than one column using column numbers works.
 build
 SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
-project
+group-by
  ├── columns: v:2(int) count:5(int) w:3(int)
- └── group-by
-      ├── columns: v:2(int) w:3(int) count:5(int)
-      ├── grouping columns: v:2(int) w:3(int)
-      ├── project
-      │    ├── columns: v:2(int) w:3(int)
-      │    └── scan kv
-      │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: v:2(int) w:3(int)
+ ├── project
+ │    ├── columns: v:2(int) w:3(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── count-rows [type=int]
 
 # Selecting and grouping on a function expression works.
 build
 SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
-project
+group-by
  ├── columns: count:6(int) upper:5(string)
- └── group-by
-      ├── columns: column5:5(string) count:6(int)
-      ├── grouping columns: column5:5(string)
-      ├── project
-      │    ├── columns: column5:5(string)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── projections
-      │         └── function: upper [type=string]
-      │              └── variable: kv.s [type=string]
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: column5:5(string)
+ ├── project
+ │    ├── columns: column5:5(string)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── function: upper [type=string]
+ │              └── variable: kv.s [type=string]
+ └── aggregations
+      └── count-rows [type=int]
 
 # Selecting and grouping on a constant works.
 build
@@ -528,21 +508,19 @@ error (42803): column "s" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-project
+group-by
  ├── columns: count:6(int) r:5(int)
- └── group-by
-      ├── columns: column5:5(int) count:6(int)
-      ├── grouping columns: column5:5(int)
-      ├── project
-      │    ├── columns: column5:5(int)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: kv.k [type=int]
-      │              └── variable: kv.v [type=int]
-      └── aggregations
-           └── count-rows [type=int]
+ ├── grouping columns: column5:5(int)
+ ├── project
+ │    ├── columns: column5:5(int)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: kv.k [type=int]
+ │              └── variable: kv.v [type=int]
+ └── aggregations
+      └── count-rows [type=int]
 
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
@@ -596,22 +574,20 @@ error (42803): aggregate function calls cannot be nested
 build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
-project
+group-by
  ├── columns: count_1:6(int) lx:5(int)
- └── group-by
-      ├── columns: column5:5(int) count_1:6(int)
-      ├── grouping columns: column5:5(int)
-      ├── project
-      │    ├── columns: column5:5(int) k:1(int!null)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: kv.v [type=int]
-      │              └── variable: kv.w [type=int]
-      └── aggregations
-           └── count [type=int]
-                └── variable: kv.k [type=int]
+ ├── grouping columns: column5:5(int)
+ ├── project
+ │    ├── columns: column5:5(int) k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: kv.v [type=int]
+ │              └── variable: kv.w [type=int]
+ └── aggregations
+      └── count [type=int]
+           └── variable: kv.k [type=int]
 
 build
 SELECT count(*)
@@ -1881,10 +1857,8 @@ project
  ├── group-by
  │    ├── columns: a:1(int!null) b:2(int)
  │    ├── grouping columns: a:1(int!null) b:2(int)
- │    └── project
- │         ├── columns: a:1(int!null) b:2(int)
- │         └── scan ab
- │              └── columns: a:1(int!null) b:2(int)
+ │    └── scan ab
+ │         └── columns: a:1(int!null) b:2(int)
  └── projections
       └── tuple [type=tuple{int, int}]
            ├── variable: ab.b [type=int]
@@ -2673,3 +2647,44 @@ sort
       │              └── variable: kv.v [type=int]
       └── projections
            └── const: 123 [type=int]
+
+# Check that ordering columns are projected correctly.
+build
+SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x+y)
+----
+group-by
+ ├── columns: array_agg:5(int[])
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: y:2(int) column4:4(int)
+ │    ├── ordering: +4
+ │    └── project
+ │         ├── columns: y:2(int) column4:4(int)
+ │         └── project
+ │              ├── columns: column4:4(int) x:1(int!null) y:2(int) z:3(float)
+ │              ├── scan xyz
+ │              │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── variable: xyz.x [type=int]
+ │                        └── variable: xyz.y [type=int]
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: xyz.y [type=int]
+
+build
+SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
+----
+group-by
+ ├── columns: array_agg:4(int[])
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: x:1(int!null) y:2(int)
+ │         └── scan xyz
+ │              └── columns: x:1(int!null) y:2(int) z:3(float)
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: xyz.y [type=int]

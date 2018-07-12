@@ -54,25 +54,23 @@ select
 build
 SELECT max(k), min(v) FROM kv HAVING min(v) > 2
 ----
-project
+select
  ├── columns: max:6(int) min:5(int!null)
- └── select
-      ├── columns: column5:5(int!null) max:6(int)
-      ├── group-by
-      │    ├── columns: column5:5(int) max:6(int)
-      │    ├── project
-      │    │    ├── columns: k:1(int!null) v:2(int)
-      │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── aggregations
-      │         ├── min [type=int]
-      │         │    └── variable: kv.v [type=int]
-      │         └── max [type=int]
-      │              └── variable: kv.k [type=int]
-      └── filters [type=bool]
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 2 [type=int]
+ ├── group-by
+ │    ├── columns: column5:5(int) max:6(int)
+ │    ├── project
+ │    │    ├── columns: k:1(int!null) v:2(int)
+ │    │    └── scan kv
+ │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── aggregations
+ │         ├── min [type=int]
+ │         │    └── variable: kv.v [type=int]
+ │         └── max [type=int]
+ │              └── variable: kv.k [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: column5 [type=int]
+           └── const: 2 [type=int]
 
 build
 SELECT max(k), min(v) FROM kv HAVING max(v) > 2
@@ -130,27 +128,25 @@ error (42803): column "k" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT count(*), k+w AS r FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
-project
+select
  ├── columns: count:6(int) r:5(int!null)
- └── select
-      ├── columns: column5:5(int!null) count:6(int)
-      ├── group-by
-      │    ├── columns: column5:5(int) count:6(int)
-      │    ├── grouping columns: column5:5(int)
-      │    ├── project
-      │    │    ├── columns: column5:5(int)
-      │    │    ├── scan kv
-      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    │    └── projections
-      │    │         └── plus [type=int]
-      │    │              ├── variable: kv.k [type=int]
-      │    │              └── variable: kv.w [type=int]
-      │    └── aggregations
-      │         └── count-rows [type=int]
-      └── filters [type=bool]
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 5 [type=int]
+ ├── group-by
+ │    ├── columns: column5:5(int) count:6(int)
+ │    ├── grouping columns: column5:5(int)
+ │    ├── project
+ │    │    ├── columns: column5:5(int)
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    └── projections
+ │    │         └── plus [type=int]
+ │    │              ├── variable: kv.k [type=int]
+ │    │              └── variable: kv.w [type=int]
+ │    └── aggregations
+ │         └── count-rows [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: column5 [type=int]
+           └── const: 5 [type=int]
 
 build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+v) > 5

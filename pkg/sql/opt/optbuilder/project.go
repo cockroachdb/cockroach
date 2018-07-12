@@ -30,7 +30,9 @@ func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 	if projectionsScope.hasSameColumns(inScope) {
 		projectionsScope.group = inScope.group
 	} else {
-		projectionsScope.group = b.constructProject(inScope.group, projectionsScope.cols)
+		projectionsScope.group = b.constructProject(
+			inScope.group, append(projectionsScope.cols, projectionsScope.orderByCols...),
+		)
 	}
 }
 

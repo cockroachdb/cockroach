@@ -214,10 +214,8 @@ SELECT a, b, b FROM t ORDER BY c
 sort
  ├── columns: a:1(int!null) b:2(int) b:2(int)
  ├── ordering: +3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY (b, t.*)
@@ -711,15 +709,17 @@ sort
  ├── columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           ├── scan abc
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: abc.a [type=int]
-                     └── const: 1 [type=int]
+      ├── columns: b:2(int!null) c:3(int!null)
+      └── project
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+           └── select
+                ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+                ├── scan abc
+                │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+                └── filters [type=bool]
+                     └── eq [type=bool]
+                          ├── variable: abc.a [type=int]
+                          └── const: 1 [type=int]
 
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
