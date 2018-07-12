@@ -991,15 +991,15 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 func TestRaftSSTableSideloadingUpdatedReplicaID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-
 	cleanup, cache, eng := newRocksDB(t)
-	tc.engine = eng
 	defer cleanup()
 	defer cache.Release()
 	defer eng.Close()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.engine = eng
 
 	tc.Start(t, stopper)
 	repl := tc.repl
