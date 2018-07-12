@@ -29,7 +29,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,14 +106,6 @@ type RaftMessageHandler interface {
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
 	HandleSnapshot(header *SnapshotRequest_Header, respStream SnapshotResponseStream) error
-}
-
-// GossipAddressResolver is a thin wrapper around gossip's GetNodeIDAddress
-// that allows its return value to be used as the net.Addr interface.
-func GossipAddressResolver(gossip *gossip.Gossip) nodedialer.AddressResolver {
-	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		return gossip.GetNodeIDAddress(nodeID)
-	}
 }
 
 type raftTransportStats struct {
