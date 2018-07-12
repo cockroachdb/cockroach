@@ -606,6 +606,11 @@ type StoreConfig struct {
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
 
+	// ScanMinIdleTime is the minimum time the scanner will be idle between ranges.
+	// If enabled (> 0), the scanner may complete in more than ScanInterval for
+	// stores with many ranges.
+	ScanMinIdleTime time.Duration
+
 	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
@@ -937,7 +942,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
-			cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)

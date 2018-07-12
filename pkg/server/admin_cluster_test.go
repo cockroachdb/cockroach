@@ -40,6 +40,7 @@ func TestAdminAPITableStats(t *testing.T) {
 		ReplicationMode: base.ReplicationAuto,
 		ServerArgs: base.TestServerArgs{
 			ScanInterval:    time.Millisecond,
+			ScanMinIdleTime: time.Millisecond,
 			ScanMaxIdleTime: time.Millisecond,
 		},
 	})

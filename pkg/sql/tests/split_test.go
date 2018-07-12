@@ -73,6 +73,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	// We want fast scan.
 	params.ScanInterval = time.Millisecond
+	params.ScanMinIdleTime = time.Millisecond
 	params.ScanMaxIdleTime = time.Millisecond
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
