@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -61,8 +62,9 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	txnCoordMeta := roachpb.MakeTxnCoordMeta(*txn.Proto())
 
-	req := &SetupFlowRequest{Version: Version, Txn: txn.Proto()}
+	req := &SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
 	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
@@ -100,7 +102,7 @@ func TestServer(t *testing.T) {
 		}
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
-	metas = ignoreTxnMeta(metas)
+	metas = ignoreTxnCoordMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}

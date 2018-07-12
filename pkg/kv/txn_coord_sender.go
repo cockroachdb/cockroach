@@ -386,13 +386,12 @@ func NewTxnCoordSenderFactory(
 
 // TransactionalSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) TransactionalSender(
-	typ client.TxnType, txn *roachpb.Transaction,
+	typ client.TxnType, meta roachpb.TxnCoordMeta,
 ) client.TxnSender {
 	tcs := &TxnCoordSender{
 		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
-	tcs.mu.txn = txn.Clone()
 
 	// Create a stack of request/response interceptors. All of the objects in
 	// this stack are pre-allocated on the TxnCoordSender struct, so this just
@@ -433,6 +432,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 	}
 
+	tcs.augmentMetaLocked(meta)
 	return tcs
 }
 
@@ -473,6 +473,10 @@ func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoord
 	if tc.mu.txn.ID != meta.Txn.ID {
 		return
 	}
+	tc.augmentMetaLocked(meta)
+}
+
+func (tc *TxnCoordSender) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	tc.mu.txn.Update(&meta.Txn)
 	tc.mu.commandCount += meta.CommandCount
 	for _, reqInt := range tc.interceptorStack {
@@ -951,9 +955,8 @@ func (tc *TxnCoordSender) IsTracking() bool {
 }
 
 // updateStateLocked updates the transaction state in both the success and error
-// cases, applying those updates to the corresponding txnMeta object when
-// adequate. It also updates retryable errors with the updated transaction for
-// use by client restarts.
+// cases. It also updates retryable errors with the updated transaction for use
+// by client restarts.
 //
 // startNS is the time when the request that's updating the state has been sent.
 // This is not used if the request is known to not be the one in charge of

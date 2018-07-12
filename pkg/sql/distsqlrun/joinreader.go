@@ -153,8 +153,8 @@ func newJoinReader(
 			inputsToDrain: []RowSource{jr.input},
 			trailingMetaCallback: func() []ProducerMetadata {
 				jr.internalClose()
-				if txnMeta := getTxnCoordMeta(jr.flowCtx.txn); txnMeta != nil {
-					return []ProducerMetadata{{TxnMeta: txnMeta}}
+				if meta := getTxnCoordMeta(jr.flowCtx.txn); meta != nil {
+					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
 				return nil
 			},

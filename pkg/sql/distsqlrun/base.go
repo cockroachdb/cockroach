@@ -255,7 +255,7 @@ func sendTraceData(ctx context.Context, dst RowReceiver) {
 // thing multiple times.
 func getTxnCoordMeta(txn *client.Txn) *roachpb.TxnCoordMeta {
 	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetTxnCoordMeta()
+		txnMeta := txn.GetStrippedTxnCoordMeta()
 		if txnMeta.Txn.ID != uuid.Nil {
 			return &txnMeta
 		}
@@ -364,10 +364,10 @@ type ProducerMetadata struct {
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
-	// TxnMeta contains the updated transaction coordinator metadata,
+	// TxnCoordMeta contains the updated transaction coordinator metadata,
 	// to be sent from leaf transactions to augment the root transaction,
 	// held by the flow's ultimate receiver.
-	TxnMeta *roachpb.TxnCoordMeta
+	TxnCoordMeta *roachpb.TxnCoordMeta
 	// RowNum corresponds to a row produced by a "source" processor that takes no
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.

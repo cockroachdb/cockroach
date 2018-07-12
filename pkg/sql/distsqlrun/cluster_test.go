@@ -93,6 +93,7 @@ func TestClusterFlow(t *testing.T) {
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
+	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 
 	tr1 := TableReaderSpec{
 		Table:    *desc,
@@ -115,8 +116,8 @@ func TestClusterFlow(t *testing.T) {
 	fid := FlowID{uuid.MakeV4()}
 
 	req1 := &SetupFlowRequest{
-		Version: Version,
-		Txn:     &txnProto,
+		Version:      Version,
+		TxnCoordMeta: &txnCoordMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -136,8 +137,8 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req2 := &SetupFlowRequest{
-		Version: Version,
-		Txn:     &txnProto,
+		Version:      Version,
+		TxnCoordMeta: &txnCoordMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -157,8 +158,8 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req3 := &SetupFlowRequest{
-		Version: Version,
-		Txn:     &txnProto,
+		Version:      Version,
+		TxnCoordMeta: &txnCoordMeta,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{
@@ -252,7 +253,7 @@ func TestClusterFlow(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnMeta(metas)
+	metas = ignoreTxnCoordMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -285,12 +286,12 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 	return res
 }
 
-// ignoreTxnMeta takes a slice of metadata and returns the entries excluding
+// ignoreTxnCoordMeta takes a slice of metadata and returns the entries excluding
 // the transaction coordinator metadata.
-func ignoreTxnMeta(metas []ProducerMetadata) []ProducerMetadata {
+func ignoreTxnCoordMeta(metas []ProducerMetadata) []ProducerMetadata {
 	res := make([]ProducerMetadata, 0)
 	for _, m := range metas {
-		if m.TxnMeta == nil {
+		if m.TxnCoordMeta == nil {
 			res = append(res, m)
 		}
 	}
@@ -395,10 +396,11 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		tc.Server(0).Clock().Now(),
 		0, // maxOffset
 	)
+	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 
 	req := SetupFlowRequest{
-		Version: Version,
-		Txn:     &txnProto,
+		Version:      Version,
+		TxnCoordMeta: &txnCoordMeta,
 		Flow: FlowSpec{
 			FlowID: FlowID{UUID: uuid.MakeV4()},
 			// The left-hand Values processor in the diagram above.
@@ -504,7 +506,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnMeta(metas)
+	metas = ignoreTxnCoordMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -649,10 +651,11 @@ func BenchmarkInfrastructure(b *testing.B) {
 						tc.Server(0).Clock().Now(),
 						0, // maxOffset
 					)
+					txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 					for i := range reqs {
 						reqs[i] = SetupFlowRequest{
-							Version: Version,
-							Txn:     &txnProto,
+							Version:      Version,
+							TxnCoordMeta: &txnCoordMeta,
 							Flow: FlowSpec{
 								Processors: []ProcessorSpec{{
 									Core: ProcessorCoreUnion{Values: &valSpecs[i]},
@@ -747,7 +750,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
 						}
 						metas = ignoreMisplannedRanges(metas)
-						metas = ignoreTxnMeta(metas)
+						metas = ignoreTxnCoordMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

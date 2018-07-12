@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,9 +58,10 @@ func runTestFlow(
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
+	txnCoordMeta := roachpb.MakeTxnCoordMeta(*txn.Proto())
 	req := distsqlrun.SetupFlowRequest{
-		Version: distsqlrun.Version,
-		Txn:     txn.Proto(),
+		Version:      distsqlrun.Version,
+		TxnCoordMeta: &txnCoordMeta,
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
@@ -86,7 +88,7 @@ func runTestFlow(
 	for {
 		row, meta := rowBuf.Next()
 		if meta != nil {
-			if meta.TxnMeta != nil {
+			if meta.TxnCoordMeta != nil {
 				continue
 			}
 			t.Fatalf("unexpected metadata: %v", meta)
