@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -293,4 +294,33 @@ func (vs Validators) Failures() []string {
 		f = append(f, v.Failures()...)
 	}
 	return f
+}
+
+// ParseJSONValueTimestamps returns the updated or resolved timestamp set in the
+// provided `format=json` value. Exported for acceptance testing.
+func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err error) {
+	var valueRaw struct {
+		CRDB struct {
+			Resolved string `json:"resolved"`
+			Updated  string `json:"updated"`
+		} `json:"__crdb__"`
+	}
+	if err := gojson.Unmarshal(v, &valueRaw); err != nil {
+		return hlc.Timestamp{}, hlc.Timestamp{}, err
+	}
+	if valueRaw.CRDB.Updated != `` {
+		var err error
+		updated, err = sql.ParseHLC(valueRaw.CRDB.Updated)
+		if err != nil {
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
+		}
+	}
+	if valueRaw.CRDB.Resolved != `` {
+		var err error
+		resolved, err = sql.ParseHLC(valueRaw.CRDB.Resolved)
+		if err != nil {
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
+		}
+	}
+	return updated, resolved, nil
 }

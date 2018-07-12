@@ -12,10 +12,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,17 +26,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 )
 
-func TestCDCPauseUnpause(t *testing.T) {
+func TestCDC(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
 	acceptance.RunDocker(t, func(t *testing.T) {
 		ctx := context.Background()
 		cfg := acceptance.ReadConfigFromFlags()
@@ -44,23 +54,25 @@ func TestCDCPauseUnpause(t *testing.T) {
 		c := acceptance.StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
 		log.Infof(ctx, "cluster started successfully")
 		defer c.AssertAndStop(ctx, t)
-		testCDCPauseUnpause(ctx, t, c)
+
+		// Share kafka between all the subtests because it takes forever (~20s)
+		// to start up.
+		k, err := startDockerKafka(ctx, c)
+		if err != nil {
+			t.Fatalf(`%+v`, err)
+		}
+		defer k.Close(ctx)
+
+		t.Run(`PauseUnpause`, func(t *testing.T) { testPauseUnpause(ctx, t, c, k) })
+		t.Run(`Bank`, func(t *testing.T) { testBank(ctx, t, c, k) })
 	})
 }
 
-func testCDCPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluster) {
-	k, err := startDockerKafka(ctx, c)
-	if err != nil {
-		t.Fatalf(`%+v`, err)
-	}
-	defer k.Close(ctx)
-
+func testPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {
 	defer func(prev time.Duration) { jobs.DefaultAdoptInterval = prev }(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase: "d",
-	})
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
@@ -69,25 +81,22 @@ func testCDCPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerClu
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
 
+	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=PauseUnpause_`
 	var jobID int
-	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH timestamps`, `kafka://localhost:`+k.kafkaPort).Scan(&jobID)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH timestamps`, into).Scan(&jobID)
 
-	tc, err := makeTopicsConsumer(k.consumer, `foo`)
+	tc, err := makeTopicsConsumer(k.consumer, `PauseUnpause_foo`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if err := tc.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer tc.Close()
 
 	tc.assertPayloads(t, []string{
-		`foo: [1]->{"a":1,"b":"a"}`,
-		`foo: [2]->{"a":2,"b":"b"}`,
-		`foo: [4]->{"a":4,"b":"c"}`,
-		`foo: [7]->{"a":7,"b":"d"}`,
-		`foo: [8]->{"a":8,"b":"e"}`,
+		`PauseUnpause_foo: [1]->{"a":1,"b":"a"}`,
+		`PauseUnpause_foo: [2]->{"a":2,"b":"b"}`,
+		`PauseUnpause_foo: [4]->{"a":4,"b":"c"}`,
+		`PauseUnpause_foo: [7]->{"a":7,"b":"d"}`,
+		`PauseUnpause_foo: [8]->{"a":8,"b":"e"}`,
 	})
 
 	// Wait for the highwater mark on the job to be updated after the initial
@@ -101,8 +110,107 @@ func testCDCPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerClu
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
 	tc.assertPayloads(t, []string{
-		`foo: [16]->{"a":16,"b":"f"}`,
+		`PauseUnpause_foo: [16]->{"a":16,"b":"f"}`,
 	})
+}
+
+func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "bank"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+
+	const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
+	sqlDB.Exec(t, `CREATE DATABASE bank`)
+	gen := bank.FromConfig(numRows, payloadBytes, numRanges)
+	if _, err := workload.Setup(ctx, sqlDB.DB, gen, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=Bank_`
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR bank INTO $1 WITH timestamps`, into)
+
+	var done int64
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			if atomic.LoadInt64(&done) > 0 {
+				return nil
+			}
+
+			// TODO(dan): This bit is copied from the bank workload. It's
+			// currently much easier to do this than to use the real Ops,
+			// which is silly. Fixme.
+			from := rand.Intn(numRows)
+			to := rand.Intn(numRows)
+			for from == to {
+				to = rand.Intn(numRows)
+			}
+			amount := rand.Intn(maxTransfer)
+			sqlDB.Exec(t, `UPDATE bank.bank
+				SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+				WHERE id IN ($1, $2)
+			`, from, to, amount)
+		}
+	})
+
+	tc, err := makeTopicsConsumer(k.consumer, `Bank_bank`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tc.Close()
+
+	partitionIDs, err := k.consumer.Partitions(`Bank_bank`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partitionIDs) <= 1 {
+		t.Fatal("test requires at least 2 partitions to be interesting")
+	}
+	partitions := make([]string, len(partitionIDs))
+	for i, p := range partitionIDs {
+		partitions[i] = strconv.Itoa(int(p))
+	}
+
+	const requestedResolved = 100
+	var numResolved, rowsSinceResolved int
+	v := changefeedccl.Validators{
+		changefeedccl.NewOrderValidator(`Bank_bank`),
+		changefeedccl.NewFingerprintValidator(sqlDB.DB, `bank`, `fprint`, partitions),
+	}
+	sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
+	for {
+		m := tc.nextMessage(t)
+		updated, resolved, err := changefeedccl.ParseJSONValueTimestamps(m.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		partitionStr := strconv.Itoa(int(m.Partition))
+		if len(m.Key) > 0 {
+			v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
+			rowsSinceResolved++
+		} else {
+			if err := v.NoteResolved(partitionStr, resolved); err != nil {
+				t.Fatal(err)
+			}
+			if rowsSinceResolved > 0 {
+				numResolved++
+				if numResolved > requestedResolved {
+					atomic.StoreInt64(&done, 1)
+					break
+				}
+			}
+			rowsSinceResolved = 0
+		}
+	}
+	for _, f := range v.Failures() {
+		t.Error(f)
+	}
+
+	if err := g.Wait(); err != nil {
+		t.Errorf(`%+v`, err)
+	}
 }
 
 const (
@@ -217,6 +325,7 @@ func startDockerKafka(
 			`KAFKA_ZOOKEEPER_CONNECT=` + zookeeper.Name() + `:` + k.zookeeperPort,
 			`KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1`,
 			`KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:` + k.kafkaPort,
+			`KAFKA_NUM_PARTITIONS=3`,
 		},
 	}, map[string]string{k.kafkaPort: k.kafkaPort})
 	if err != nil {
@@ -240,9 +349,6 @@ func startDockerKafka(
 		addrs := []string{`localhost:` + k.kafkaPort}
 		var err error
 		k.consumer, err = sarama.NewConsumer(addrs, sarama.NewConfig())
-		if err != nil {
-			log.Infof(ctx, "%+v", err)
-		}
 		return err
 	}); err != nil {
 		return nil, err
@@ -259,6 +365,9 @@ func (k *dockerKafka) Close(ctx context.Context) {
 		if err := c.Remove(ctx); err != nil {
 			log.Warningf(ctx, "could not remove container %s (%s)", c.Name(), c.ID())
 		}
+	}
+	if err := k.consumer.Close(); err != nil {
+		log.Infof(ctx, `failed to close consumer: %+v`, err)
 	}
 }
 
@@ -285,7 +394,7 @@ func makeTopicsConsumer(c sarama.Consumer, topics ...string) (*topicsConsumer, e
 	return t, nil
 }
 
-func (c *topicsConsumer) Close() error {
+func (c *topicsConsumer) Close() {
 	for _, pc := range c.partitionConsumers {
 		pc.AsyncClose()
 		// Drain the messages and errors as required by AsyncClose.
@@ -294,7 +403,6 @@ func (c *topicsConsumer) Close() error {
 		for range pc.Errors() {
 		}
 	}
-	return c.Consumer.Close()
 }
 
 func (c *topicsConsumer) tryNextMessage(t testing.TB) *sarama.ConsumerMessage {
@@ -338,6 +446,10 @@ func (c *topicsConsumer) assertPayloads(t testing.TB, expected []string) {
 
 		actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, value))
 	}
+	// The tests that use this aren't concerned with order, just that these are
+	// the next len(expected) messages.
+	sort.Strings(expected)
+	sort.Strings(actual)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
