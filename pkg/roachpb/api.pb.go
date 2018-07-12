@@ -1861,6 +1861,10 @@ func (*RefreshRangeResponse) Descriptor() ([]byte, []int) { return fileDescripto
 // that ensure there is no moment in time where the ranges involved in the merge
 // could both process commands for the same keys. See the comment on
 // GetSnapshotForMerge for details.
+//
+// GetSnapshotForMerge may return stale data when used outside of a merge
+// transaction. As a rule of thumb, it is incorrect to call GetSnapshotForMerge,
+// except from its carefully-chosen location within a merge transaction.
 type GetSnapshotForMergeRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The range descriptor for the left-hand side of the merge. Used by the
