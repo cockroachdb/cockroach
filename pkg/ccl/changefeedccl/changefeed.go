@@ -15,21 +15,18 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -46,15 +43,6 @@ func init() {
 const (
 	jsonMetaSentinel = `__crdb__`
 )
-
-type changedKVs struct {
-	// sst, if non-nil, is an sstable with mvcc key values as returned by
-	// ExportRequest.
-	sst []byte
-	// resolved, if non-zero, is a guarantee that all key values in subsequent
-	// changedKVs will have an equal or higher timestamp.
-	resolved hlc.Timestamp
-}
 
 type emitRow struct {
 	// row is the new value of a changed table row.
@@ -104,8 +92,9 @@ func runChangefeedFlow(
 	// easy to later make it into a DistSQL processor.
 	//
 	// TODO(dan): Make this into a DistSQL flow.
-	changedKVsFn := exportRequestPoll(execCfg, details, progress)
-	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
+	buf := makeBuffer()
+	poller := makePoller(execCfg, details, progress, buf)
+	rowsFn := kvsToRows(execCfg, details, buf.Get)
 	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {
 		return err
@@ -116,85 +105,16 @@ func runChangefeedFlow(
 		}
 	}()
 
-	for {
-		if err := emitRowsFn(ctx); err != nil {
-			return err
-		}
-	}
-}
-
-// exportRequestPoll uses ExportRequest with the `ReturnSST` to fetch every kvs
-// that changed between a set of timestamps. It returns a closure that may be
-// repeatedly called to pull new changes. The returned closure is not
-// threadsafe.
-//
-// Changes are looked up for every relevant span in a batch and buffered.
-// Whenever the returned closure is called, changed kvs are returned from the
-// buffer if it's non-empty. If the buffer is empty, then the closure blocks on
-// a synchronous fetch to fill it. After all the changed kvs for a given fetch
-// are returned, the timestamp used for the fetch is returned as resolved.
-//
-// The fetches are rate limited to be no more often than the
-// `changefeed.experimental_poll_interval` setting.
-func exportRequestPoll(
-	execCfg *sql.ExecutorConfig, details jobspb.ChangefeedDetails, progress jobspb.ChangefeedProgress,
-) func(context.Context) (changedKVs, error) {
-	sender := execCfg.DB.NonTransactionalSender()
-	var spans []roachpb.Span
-	for _, tableDesc := range details.TableDescs {
-		spans = append(spans, tableDesc.PrimaryIndexSpan())
-	}
-
-	var buffer changefeedBuffer
-	highwater := progress.Highwater
-	return func(ctx context.Context) (changedKVs, error) {
-		if ret, ok := buffer.get(); ok {
-			return ret, nil
-		}
-
-		pollDuration := changefeedPollInterval.Get(&execCfg.Settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, highwater.WallTime))
-		if pollDuration > 0 {
-			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
-			select {
-			case <-ctx.Done():
-				return changedKVs{}, ctx.Err()
-			case <-time.After(pollDuration):
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(poller.Run)
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			if err := emitRowsFn(ctx); err != nil {
+				return err
 			}
 		}
-
-		nextHighwater := execCfg.Clock.Now()
-		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
-			highwater, nextHighwater, time.Duration(nextHighwater.WallTime-highwater.WallTime))
-
-		// TODO(dan): Send these out in parallel.
-		for _, span := range spans {
-			header := roachpb.Header{Timestamp: nextHighwater}
-			req := &roachpb.ExportRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span),
-				StartTime:     highwater,
-				MVCCFilter:    roachpb.MVCCFilter_Latest,
-				ReturnSST:     true,
-			}
-			res, pErr := client.SendWrappedWith(ctx, sender, header, req)
-			if pErr != nil {
-				return changedKVs{}, errors.Wrapf(
-					pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
-			}
-			for _, file := range res.(*roachpb.ExportResponse).Files {
-				buffer.append(changedKVs{sst: file.SST})
-			}
-		}
-		log.VEventf(ctx, 2, `poll took %s`,
-			time.Duration(execCfg.Clock.Now().WallTime-nextHighwater.WallTime))
-
-		// There is guaranteed to be at least one entry in buffer because we
-		// always append the resolved timestamp.
-		highwater = nextHighwater
-		buffer.append(changedKVs{resolved: highwater})
-		ret, _ := buffer.get()
-		return ret, nil
-	}
+	})
+	return g.Wait()
 }
 
 // kvsToRows gets changed kvs from a closure and converts them into sql rows. It
@@ -203,72 +123,48 @@ func exportRequestPoll(
 func kvsToRows(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	inputFn func(context.Context) (changedKVs, error),
+	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitRow, error) {
 	rfCache := newRowFetcherCache(execCfg.LeaseManager)
 
 	var output []emitRow
 	var kvs sqlbase.SpanKVFetcher
-	var scratch bufalloc.ByteAllocator
 	return func(ctx context.Context) ([]emitRow, error) {
-		// Reuse output, kvs, scratch to save allocations.
-		output, kvs.KVs, scratch = output[:0], kvs.KVs[:0], scratch[:0]
+		// Reuse output, kvs to save allocations.
+		output, kvs.KVs = output[:0], kvs.KVs[:0]
 
 		input, err := inputFn(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if input.sst != nil {
-			it, err := engineccl.NewMemSSTIterator(input.sst, false /* verify */)
+		if input.kv.Key != nil {
+			rf, err := rfCache.RowFetcherForKey(ctx, input.kv.Key, input.kv.Value.Timestamp)
 			if err != nil {
 				return nil, err
 			}
-			defer it.Close()
-			for it.Seek(engine.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return nil, err
-				} else if !ok {
-					break
-				}
+			if log.V(3) {
+				log.Infof(ctx, "changed key %s", input.kv.Key)
+			}
+			// TODO(dan): Handle tables with multiple column families.
+			kvs.KVs = append(kvs.KVs, input.kv)
+			if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+				return nil, err
+			}
 
-				unsafeKey := it.UnsafeKey()
-				rf, err := rfCache.RowFetcherForKey(ctx, unsafeKey)
+			for {
+				var r emitRow
+				r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
 				if err != nil {
 					return nil, err
 				}
-				if log.V(3) {
-					log.Infof(ctx, "changed key %s", unsafeKey)
+				if r.row == nil {
+					break
 				}
-				var key, value []byte
-				scratch, key = scratch.Copy(unsafeKey.Key, 0 /* extraCap */)
-				scratch, value = scratch.Copy(it.UnsafeValue(), 0 /* extraCap */)
-				// TODO(dan): Handle tables with multiple column families.
-				kvs.KVs = append(kvs.KVs, roachpb.KeyValue{
-					Key: key,
-					Value: roachpb.Value{
-						Timestamp: unsafeKey.Timestamp,
-						RawBytes:  value,
-					},
-				})
-				if err := rf.StartScanFrom(ctx, &kvs); err != nil {
-					return nil, err
-				}
+				r.row = append(tree.Datums(nil), r.row...)
 
-				for {
-					var r emitRow
-					r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
-					if err != nil {
-						return nil, err
-					}
-					if r.row == nil {
-						break
-					}
-					r.row = append(tree.Datums(nil), r.row...)
-
-					r.deleted = rf.RowIsDeleted()
-					r.rowTimestamp = unsafeKey.Timestamp
-					output = append(output, r)
-				}
+				r.deleted = rf.RowIsDeleted()
+				r.rowTimestamp = input.kv.Value.Timestamp
+				output = append(output, r)
 			}
 		}
 		if input.resolved != (hlc.Timestamp{}) {
@@ -320,8 +216,6 @@ func emitRows(
 	var scratch bufalloc.ByteAllocator
 	var key, value bytes.Buffer
 	return func(ctx context.Context) error {
-		scratch = scratch[:0]
-
 		inputs, err := inputFn(ctx)
 		if err != nil {
 			return err
