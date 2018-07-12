@@ -492,6 +492,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		st,
 		s.cfg.Config,
 		s.admin,
+		&s.tsServer,
 		s.db,
 		s.gossip,
 		s.recorder,
