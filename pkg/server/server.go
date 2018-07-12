@@ -413,6 +413,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeDialer:              s.nodeDialer,
 		RPCContext:              s.rpcContext,
 		ScanInterval:            s.cfg.ScanInterval,
+		ScanMinIdleTime:         s.cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),

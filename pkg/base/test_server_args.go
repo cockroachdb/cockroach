@@ -81,6 +81,7 @@ type TestServerArgs struct {
 	RetryOptions                retry.Options
 	SocketFile                  string
 	ScanInterval                time.Duration
+	ScanMinIdleTime             time.Duration
 	ScanMaxIdleTime             time.Duration
 	SSLCertsDir                 string
 	TimeSeriesQueryWorkerMax    int

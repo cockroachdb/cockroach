@@ -197,7 +197,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	q2.setDisabled(true)
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q1, q2)
 	stopper := stop.NewStopper()
 
@@ -249,7 +249,7 @@ func TestScannerTiming(t *testing.T) {
 			q := &testQueue{}
 			mc := hlc.NewManualClock(123)
 			clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-			s := newReplicaScanner(makeAmbCtx(), clock, duration, 0, ranges)
+			s := newReplicaScanner(makeAmbCtx(), clock, duration, 0, 0, ranges)
 			s.AddQueues(q)
 			stopper := stop.NewStopper()
 			s.Start(stopper)
@@ -287,19 +287,37 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := timeutil.Now()
 		ranges := newTestRangeSet(count, t)
-		s := newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
+		s := newReplicaScanner(makeAmbCtx(), nil, duration, 0, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The range set is empty
 		ranges = newTestRangeSet(0, t)
-		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
+		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, 0, ranges)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		ranges = newTestRangeSet(count, t)
-		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
+		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, 0, ranges)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
+	}
+}
+
+// TestScannerMinMaxIdleTime verifies that the pace interval will not
+// be less than the specified min idle time or greater than the
+// specified max idle time.
+func TestScannerMinMaxIdleTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const targetInterval = 100 * time.Millisecond
+	const minIdleTime = 10 * time.Millisecond
+	const maxIdleTime = 15 * time.Millisecond
+	for count := range []int{1, 10, 20, 100} {
+		startTime := timeutil.Now()
+		ranges := newTestRangeSet(count, t)
+		s := newReplicaScanner(makeAmbCtx(), nil, targetInterval, minIdleTime, maxIdleTime, ranges)
+		if interval := s.paceInterval(startTime, startTime); interval < minIdleTime || interval > maxIdleTime {
+			t.Errorf("expected interval %s <= %s <= %s", minIdleTime, interval, maxIdleTime)
+		}
 	}
 }
 
@@ -312,7 +330,7 @@ func TestScannerDisabled(t *testing.T) {
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -362,7 +380,7 @@ func TestScannerDisabled(t *testing.T) {
 func TestScannerDisabledWithZeroInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(1, t)
-	s := newReplicaScanner(makeAmbCtx(), nil, 0*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(makeAmbCtx(), nil, 0*time.Millisecond, 0, 0, ranges)
 	if !s.GetDisabled() {
 		t.Errorf("expected scanner to be disabled")
 	}
@@ -375,7 +393,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, ranges)
+	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
