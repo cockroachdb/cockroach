@@ -1285,7 +1285,7 @@ project
       │    ├── fd: (1)-->(2-6), (1,7)-->(2-6,11,17)
       │    ├── inner-join-apply
       │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int) phone.order_id:11(int) phone.person_id:15(int) phone.order_id:16(int)
-      │    │    ├── fd: (1)-->(2-6)
+      │    │    ├── fd: (1)-->(2-6), (1,7)-->(10,11), (1)==(10), (10)==(1)
       │    │    ├── scan person
       │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
       │    │    │    ├── key: (1)
