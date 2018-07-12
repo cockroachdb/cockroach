@@ -857,7 +857,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.IndexHints> opt_index_hints
 %type <*tree.IndexHints> index_hints_param
 %type <*tree.IndexHints> index_hints_param_list
-%type <tree.Expr> a_expr b_expr c_expr a_expr_const d_expr
+%type <tree.Expr> a_expr b_expr c_expr d_expr
 %type <tree.Expr> substr_from substr_for
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
@@ -6815,11 +6815,48 @@ c_expr:
 //     |  array_subscripts
 
 d_expr:
-  column_path_with_star
+  ICONST
+  {
+    $$.val = $1.numVal()
+  }
+| FCONST
+  {
+    $$.val = $1.numVal()
+  }
+| SCONST
+  {
+    $$.val = tree.NewStrVal($1)
+  }
+| BCONST
+  {
+    $$.val = tree.NewBytesStrVal($1)
+  }
+| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
+| const_typename SCONST
+  {
+    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
+  }
+| interval
+  {
+    $$.val = $1.expr()
+  }
+| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
+| TRUE
+  {
+    $$.val = tree.MakeDBool(true)
+  }
+| FALSE
+  {
+    $$.val = tree.MakeDBool(false)
+  }
+| NULL
+  {
+    $$.val = tree.DNull
+  }
+| column_path_with_star
   {
     $$.val = tree.Expr($1.unresolvedName())
   }
-| a_expr_const
 | '@' iconst64
   {
     colNum := $2.int64()
@@ -7728,46 +7765,6 @@ name_list:
   }
 
 // Constants
-a_expr_const:
-  ICONST
-  {
-    $$.val = $1.numVal()
-  }
-| FCONST
-  {
-    $$.val = $1.numVal()
-  }
-| SCONST
-  {
-    $$.val = tree.NewStrVal($1)
-  }
-| BCONST
-  {
-    $$.val = tree.NewBytesStrVal($1)
-  }
-| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
-| const_typename SCONST
-  {
-    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
-  }
-| interval
-  {
-    $$.val = $1.expr()
-  }
-| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex, "expr_const const_interval") }
-| TRUE
-  {
-    $$.val = tree.MakeDBool(true)
-  }
-| FALSE
-  {
-    $$.val = tree.MakeDBool(false)
-  }
-| NULL
-  {
-    $$.val = tree.DNull
-  }
-
 signed_iconst:
   ICONST
 | '+' ICONST
