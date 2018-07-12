@@ -473,10 +473,15 @@ message TxnCoordMeta {
   // the transaction can continue.
   repeated Span refresh_reads = 4 [(gogoproto.nullable) = false];
   repeated Span refresh_writes = 5 [(gogoproto.nullable) = false];
-  // refresh_valid indicates that all spans encountered during the
-  // transaction which need refreshing have been collected to the
-  // refresh_reads and refresh_writes span slices. This is false if
-  // any spans were discarded or not collected (i.e. because of a dist
-  // SQL processor running a version before refreshing was introduced).
-  bool refresh_valid = 6;
+  // refresh_invalid indicates that spans were discarded or not collected
+  // (i.e. because of a dist SQL processor running a version before refreshing
+  // was introduced). This is false if all spans encountered during the 
+  // transaction which need refreshing have been collected to the refresh_reads
+  // and refresh_writes span slices.
+  bool refresh_invalid = 7;
+  // deprecated_refresh_valid is the inverse of refresh_invalid. It was
+  // deprecated in favor of refresh_invalid in order to give the struct a useful
+  // zero value.
+  // TODO(nvanbenschoten): Can be removed in 2.2.
+  bool deprecated_refresh_valid = 6;
 }
