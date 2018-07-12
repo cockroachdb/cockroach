@@ -91,6 +91,8 @@ type cliState struct {
 	continuePrompt string
 	// The current prompt, either fullPrompt or continuePrompt.
 	currentPrompt string
+	// The user can change the prompt to be custom pattarn.
+	customPromptPattern string
 
 	// State
 	//
@@ -301,6 +303,21 @@ var options = map[string]struct {
 		func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
 		func(c *cliState) error { c.smartPrompt = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
+	},
+	`PROMPT1`: {
+		"display custom prompt for (%M:Full Host, %m:Host, %>:Port, %n:User, %/:Database, %x:Transaction status)",
+		false,
+		true,
+		func(c *cliState, val string) error {
+			c.customPromptPattern = val
+			return nil
+		},
+		func(c *cliState) error {
+			c.customPromptPattern = ""
+			return nil
+		},
+
+		func(_ *cliState) string { return "%n@%M/%/>" /*defult pattern 'marc@localhost:26257/>'*/ },
 	},
 }
 
@@ -520,24 +537,42 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
+	// Default prompt is part of the connection URL. eg: "marc@localhost:26257>"
+	// continued statement prompt is: "        -> "
+	PromptPattern := "%n@%M/%/> " //defult pattern 'marc@localhost:26257/>'
 	c.fullPrompt = c.promptPrefix
 
-	if c.smartPrompt {
-		c.refreshTransactionStatus()
-		dbName, hasDbName := c.refreshDatabaseName()
-
-		dbStr := ""
-		if hasDbName {
-			dbStr = "/" + dbName
-		}
-
-		c.fullPrompt += dbStr + c.lastKnownTxnStatus
-	} else {
-		c.lastKnownTxnStatus = ""
+	if c.customPromptPattern != "" { //custom pattern
+		PromptPattern = c.customPromptPattern + " "
 	}
 
+	if parsedURL, err := url.Parse(c.conn.url); err == nil {
+		PromptPattern = strings.Replace(PromptPattern, "%M", parsedURL.Host, -1)       //full host name
+		PromptPattern = strings.Replace(PromptPattern, "%m", parsedURL.Hostname(), -1) //host
+		PromptPattern = strings.Replace(PromptPattern, "%>", parsedURL.Port(), -1)     // port
+		//user name
+		if parsedURL.User != nil {
+			username := parsedURL.User.Username()
+			PromptPattern = strings.Replace(PromptPattern, "%n", username, -1)
+		}
+	}
+
+	//get database name
+	if strings.Contains(PromptPattern, "%/") {
+		dbName, hasDbName := c.refreshDatabaseName()
+		if hasDbName {
+			PromptPattern = strings.Replace(PromptPattern, "%/", dbName, -1)
+		}
+	}
+
+	//Transaction status
+	if strings.Contains(PromptPattern, "%x") {
+		c.refreshTransactionStatus()
+		PromptPattern = strings.Replace(PromptPattern, "%x", c.lastKnownTxnStatus, -1)
+	}
+
+	c.fullPrompt = PromptPattern
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
-	c.fullPrompt += "> "
 
 	return nextState
 }
@@ -1156,7 +1191,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			state = c.doProcessFirstLine(cliRefreshPrompts, cliHandleCliCmd)
 
 		case cliHandleCliCmd:
-			state = c.doHandleCliCmd(cliReadLine, cliPrepareStatementLine)
+			state = c.doHandleCliCmd(cliRefreshPrompts, cliPrepareStatementLine)
 
 		case cliPrepareStatementLine:
 			state = c.doPrepareStatementLine(
