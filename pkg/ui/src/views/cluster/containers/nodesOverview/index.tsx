@@ -4,6 +4,7 @@ import { connect } from "react-redux";
 import moment from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
+import Long from "long";
 
 import {
   livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
@@ -16,6 +17,14 @@ import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { Bytes } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import * as protos from "ccl/src/js/protos";
+import { MilliToNano } from "src/util/convert";
+import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/metrics";
+
+import { cockroach } from "ccl/src/js/protos";
+import IQuery = cockroach.ts.tspb.IQuery;
+import TimeSeriesQueryDerivative = cockroach.ts.tspb.TimeSeriesQueryDerivative;
+import ITimeSeriesDatapoint = cockroach.ts.tspb.ITimeSeriesDatapoint;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -40,7 +49,18 @@ interface NodeCategoryListProps {
   setSort: typeof liveNodesSortSetting.set;
   statuses: INodeStatus[];
   nodesSummary: NodesSummary;
+  latestTSValues: ByNodeByMetric;
+  requestMetrics: typeof requestMetricsAction;
 }
+
+const METRICS_KEY = "live-nodes-metrics";
+
+const METRICS = [
+  "cr.node.sys.disk.read.bytes.host",
+  "cr.node.sys.disk.write.bytes.host",
+  "cr.node.sys.net.send.bytes.host",
+  "cr.node.sys.net.recv.bytes.host",
+];
 
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
@@ -48,11 +68,68 @@ interface NodeCategoryListProps {
  * statistics for these nodes.
  */
 class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
+  componentDidMount() {
+    setTimeout(
+      () => {
+        this.getData();
+      },
+      1000,
+    );
+  }
+
+  componentWillReceiveProps() {
+    console.log("componentWillReceiveProps");
+    // this.getData();
+  }
+
+  // TODO(vilterp): componentDidUpdate (???)
+  // how to make refresh?
+
+  getData() {
+    console.log("hello from getData");
+    if (this.props.nodesSummary.nodeIDs.length === 0) {
+      return;
+    }
+
+    // from metricDataProvider#current
+    let now = moment();
+    // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
+    now = moment(Math.floor(now.valueOf() / 10000) * 10000);
+    const timeInfo = {
+      start: Long.fromNumber(MilliToNano(now.clone().subtract(30, "s").valueOf())),
+      end: Long.fromNumber(MilliToNano(now.valueOf())),
+      sampleDuration: Long.fromNumber(MilliToNano(moment.duration(10, "s").asMilliseconds())),
+    };
+
+    const queries: IQuery[] = [];
+    METRICS.forEach((metricName) => {
+      this.props.nodesSummary.nodeIDs.forEach((nodeID) => {
+        queries.push({
+          name: metricName,
+          sources: [nodeID],
+          derivative: TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE,
+        });
+      });
+    });
+
+    const req = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      start_nanos: timeInfo.start,
+      end_nanos: timeInfo.end,
+      sample_nanos: timeInfo.sampleDuration,
+      queries,
+    });
+
+    this.props.requestMetrics(METRICS_KEY, req);
+  }
+
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
       return null;
     }
+    const latestTSValues = this.props.latestTSValues;
+
+    console.log("========= render ==============");
 
     return <div>
       <section className="section section--heading">
@@ -137,19 +214,27 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             {
               title: "Disk IO",
               cell: (ns) => {
-                const read = ns.metrics[MetricConstants.diskReadBytes];
-                const write = ns.metrics[MetricConstants.diskWriteBytes];
-                // TODO(vilterp): derivative
-                return Bytes(read + write);
+                if (!latestTSValues) {
+                  return null;
+                }
+                const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
+                const reads = metricsForNode["cr.node." + MetricConstants.diskReadBytes];
+                const writes = metricsForNode["cr.node." + MetricConstants.diskWriteBytes];
+                console.log("disk", reads, writes);
+                return Bytes(reads + writes);
               },
             },
             {
               title: "Net IO",
               cell: (ns) => {
-                // TODO(vilterp): derivative
-                const read = ns.metrics[MetricConstants.netReadBytes];
-                const write = ns.metrics[MetricConstants.netWriteBytes];
-                return Bytes(read + write);
+                if (!latestTSValues) {
+                  return null;
+                }
+                const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
+                const recv = metricsForNode["cr.node." + MetricConstants.netReadBytes];
+                const send = metricsForNode["cr.node." + MetricConstants.netWriteBytes];
+                console.log("net", send, recv);
+                return Bytes(recv + send);
               },
             },
             // Replicas - displays the total number of replicas on the node.
@@ -174,6 +259,13 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
       </section>
     </div>;
   }
+}
+
+function latestDataPoint(series: ITimeSeriesDatapoint[]): number {
+  if (series.length === 0) {
+    return null;
+  }
+  return series[series.length - 1].value;
 }
 
 /**
@@ -288,6 +380,34 @@ const partitionedStatuses = createSelector(
   },
 );
 
+type ByNodeByMetric = {
+  [nodeID: string]: {
+    [metric: string]: number,
+  },
+};
+
+const selectLatestTSValues = createSelector(
+  (state: AdminUIState) => state.metrics.queries[METRICS_KEY],
+  (metrics: MetricsQuery) => {
+    if (!metrics || !metrics.data) {
+      return null;
+    }
+
+    const byIDByMetric: ByNodeByMetric = {};
+
+    metrics.data.results.forEach((result) => {
+      let metricsForNode = byIDByMetric[result.query.sources[0]];
+      if (!metricsForNode) {
+        metricsForNode = {};
+        byIDByMetric[result.query.sources[0]] = metricsForNode;
+      }
+      metricsForNode[result.query.name] = latestDataPoint(result.datapoints);
+    });
+
+    return byIDByMetric;
+  },
+);
+
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
@@ -299,10 +419,12 @@ const LiveNodesConnected = connect(
       sortSetting: liveNodesSortSetting.selector(state),
       statuses: statuses.live,
       nodesSummary: nodesSummarySelector(state),
+      latestTSValues: selectLatestTSValues(state),
     };
   },
   {
     setSort: liveNodesSortSetting.set,
+    requestMetrics: requestMetricsAction,
   },
 )(LiveNodeList);
 
