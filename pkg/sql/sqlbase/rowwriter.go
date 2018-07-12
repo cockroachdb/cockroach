@@ -159,6 +159,7 @@ type RowInserter struct {
 	Helper                rowHelper
 	InsertCols            []ColumnDescriptor
 	InsertColIDtoRowIndex map[ColumnID]int
+	CheckFKs              checkFKConstraints
 	Fks                   fkInsertHelper
 
 	// For allocation avoidance.
@@ -195,6 +196,7 @@ func MakeRowInserter(
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
+		CheckFKs:              checkFKs,
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
@@ -291,7 +293,7 @@ func (ri *RowInserter) InsertRow(
 		}
 	}
 
-	if checkFKs == CheckFKs {
+	if ri.CheckFKs == CheckFKs && checkFKs == CheckFKs {
 		if err := ri.Fks.addAllIdxChecks(ctx, values); err != nil {
 			return err
 		}
@@ -817,8 +819,11 @@ func (ru *RowUpdater) UpdateRow(
 			}
 		}
 
-		if checkFKs == CheckFKs {
-			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+		if checkFKs == CheckFKs && ru.Fks.checker != nil {
+			err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
+			if err == errUpdaterNoFKs {
+				return ru.newValues, nil
+			} else if err != nil {
 				return nil, err
 			}
 			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
@@ -917,8 +922,11 @@ func (ru *RowUpdater) UpdateRow(
 		}
 	}
 
-	if checkFKs == CheckFKs {
-		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
+	if checkFKs == CheckFKs && ru.Fks.checker != nil {
+		err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
+		if err == errUpdaterNoFKs {
+			return ru.newValues, nil
+		} else if err != nil {
 			return nil, err
 		}
 		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
@@ -947,6 +955,7 @@ type RowDeleter struct {
 	FetchCols            []ColumnDescriptor
 	FetchColIDtoRowIndex map[ColumnID]int
 	Fks                  fkDeleteHelper
+	CheckFKs             checkFKConstraints
 	cascader             *cascader
 	// For allocation avoidance.
 	key roachpb.Key
@@ -1036,6 +1045,7 @@ func makeRowDeleterWithoutCascader(
 		Helper:               newRowHelper(tableDesc, indexes),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
+		CheckFKs:             checkFKs,
 	}
 	if checkFKs == CheckFKs {
 		var err error
@@ -1100,7 +1110,7 @@ func (rd *RowDeleter) DeleteRow(
 			return err
 		}
 	}
-	if checkFKs == CheckFKs {
+	if rd.CheckFKs == CheckFKs && checkFKs == CheckFKs {
 		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
 			return err
 		}
@@ -1114,11 +1124,13 @@ func (rd *RowDeleter) DeleteRow(
 func (rd *RowDeleter) DeleteIndexRow(
 	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []tree.Datum, traceKV bool,
 ) error {
-	if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
-		return err
-	}
-	if err := rd.Fks.checker.runCheck(ctx, values, nil); err != nil {
-		return err
+	if rd.CheckFKs == CheckFKs {
+		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+			return err
+		}
+		if err := rd.Fks.checker.runCheck(ctx, values, nil); err != nil {
+			return err
+		}
 	}
 	secondaryIndexEntry, err := EncodeSecondaryIndex(
 		rd.Helper.TableDesc, idx, rd.FetchColIDtoRowIndex, values)

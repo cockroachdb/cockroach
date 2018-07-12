@@ -329,13 +329,10 @@ func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 func (f *fkBatchChecker) runCheck(
 	ctx context.Context, oldRow tree.Datums, newRow tree.Datums,
 ) error {
-	if f == nil {
-		log.Warning(ctx, "fkBatchChecker is nil, exiting checks early")
-		return nil
-	}
 	if len(f.batch.Requests) == 0 {
 		return nil
 	}
+	log.Warningf(ctx, "len(f.batch.Requests) = %d", len(f.batch.Requests))
 	defer f.reset()
 
 	br, err := f.txn.Send(ctx, f.batch)
@@ -350,6 +347,7 @@ func (f *fkBatchChecker) runCheck(
 		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
 		}
+		log.Warningf(ctx, "response %d: dir %v", i, fk.dir)
 		switch fk.dir {
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
@@ -582,6 +580,8 @@ func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType Index
 	}
 }
 
+var errUpdaterNoFKs = errors.New("No inbound or outbound FKs for updated row")
+
 func (fks fkUpdateHelper) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums,
 ) error {
@@ -592,6 +592,9 @@ func (fks fkUpdateHelper) addIndexChecks(
 		if err := checkIdx(ctx, fks.checker, fks.outbound.fks, indexID, newValues); err != nil {
 			return err
 		}
+	}
+	if len(fks.inbound.fks) == 0 && len(fks.outbound.fks) == 0 {
+		return errUpdaterNoFKs
 	}
 	return nil
 }
