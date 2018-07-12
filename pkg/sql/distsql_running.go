@@ -21,10 +21,11 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,12 +41,11 @@ const numRunners = 16
 
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
-	ctx         context.Context
-	rpcContext  *rpc.Context
-	flowReq     *distsqlrun.SetupFlowRequest
-	nodeID      roachpb.NodeID
-	nodeAddress string
-	resultChan  chan<- runnerResult
+	ctx        context.Context
+	nodeDialer *nodedialer.Dialer
+	flowReq    *distsqlrun.SetupFlowRequest
+	nodeID     roachpb.NodeID
+	resultChan chan<- runnerResult
 }
 
 // runnerResult is returned by a worker (via a channel) for each received
@@ -58,7 +58,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.nodeID}
 
-	conn, err := req.rpcContext.GRPCDial(req.nodeAddress).Connect(req.ctx)
+	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
 	if err != nil {
 		res.err = err
 	} else {
@@ -167,12 +167,11 @@ func (dsp *DistSQLPlanner) Run(
 			EvalContext: evalCtxProto,
 		}
 		runReq := runnerRequest{
-			ctx:         ctx,
-			rpcContext:  dsp.rpcContext,
-			flowReq:     req,
-			nodeID:      nodeID,
-			nodeAddress: planCtx.nodeAddresses[nodeID],
-			resultChan:  resultChan,
+			ctx:        ctx,
+			nodeDialer: nodedialer.New(dsp.rpcContext, gossip.AddressResolver(dsp.gossip)),
+			flowReq:    req,
+			nodeID:     nodeID,
+			resultChan: resultChan,
 		}
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
