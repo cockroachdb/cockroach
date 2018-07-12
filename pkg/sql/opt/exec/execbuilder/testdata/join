@@ -475,6 +475,7 @@ filter          ·         ·
       └── scan  ·         ·
 ·               table     square@primary
 ·               spans     -/5/#
+·               filter    sq > 1
 
 query TTT
 SELECT "Tree", "Field", "Description" FROM [
@@ -758,7 +759,7 @@ render          ·               ·                    (x, y, u, v)        ·
       │         spans           /3-                  ·                   ·
       └── scan  ·               ·                    (x, y, v)           +x,+y
 ·               table           xyv@primary          ·                   ·
-·               spans           ALL                  ·                   ·
+·               spans           /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -775,7 +776,7 @@ render          ·               ·                    (x, y, u, v)        ·
       │         pred            (x = x) AND (y = y)  ·                   ·
       ├── scan  ·               ·                    (x, y, u)           +x,+y
       │         table           xyu@primary          ·                   ·
-      │         spans           ALL                  ·                   ·
+      │         spans           /3-                  ·                   ·
       └── scan  ·               ·                    (x, y, v)           +x,+y
 ·               table           xyv@primary          ·                   ·
 ·               spans           /3-                  ·                   ·
@@ -884,7 +885,7 @@ render          ·               ·                    (x, y, u, v)        ·
       │         spans           /3-                  ·                   ·
       └── scan  ·               ·                    (x, y, v)           +x,+y
 ·               table           xyv@primary          ·                   ·
-·               spans           ALL                  ·                   ·
+·               spans           /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
@@ -901,7 +902,7 @@ render          ·               ·                    (x, y, u, v)        ·
       │         pred            (x = x) AND (y = y)  ·                   ·
       ├── scan  ·               ·                    (x, y, u)           +x,+y
       │         table           xyu@primary          ·                   ·
-      │         spans           ALL                  ·                   ·
+      │         spans           /3-                  ·                   ·
       └── scan  ·               ·                    (x, y, v)           +x,+y
 ·               table           xyv@primary          ·                   ·
 ·               spans           /3-                  ·                   ·
@@ -980,7 +981,9 @@ render          ·               ·                    (x, y, u, v)        ·
 ·               spans           ALL                  ·                   ·
 
 
-# Regression test for #20858.
+# Regression test for #20765/27431.
+# We push a filter on an equality column to both sides of a left or right outer
+# join.
 
 statement ok
 CREATE TABLE l (a INT PRIMARY KEY)
@@ -1003,7 +1006,7 @@ render          ·               ·           (a)     ·
       │         spans           /3-/3/#     ·       ·
       └── scan  ·               ·           (a)     +a
 ·               table           r@primary   ·       ·
-·               spans           ALL         ·       ·
+·               spans           /3-/3/#     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
@@ -1018,7 +1021,7 @@ join       ·               ·           (a, a)  ·
  │         spans           /3-/3/#     ·       ·
  └── scan  ·               ·           (a)     +a
 ·          table           r@primary   ·       ·
-·          spans           ALL         ·       ·
+·          spans           /3-/3/#     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
@@ -1032,7 +1035,7 @@ render          ·               ·            (a)     ·
       │         pred            a = a        ·       ·
       ├── scan  ·               ·            (a)     +a
       │         table           l@primary    ·       ·
-      │         spans           ALL          ·       ·
+      │         spans           /3-/3/#      ·       ·
       └── scan  ·               ·            (a)     +a
 ·               table           r@primary    ·       ·
 ·               spans           /3-/3/#      ·       ·
@@ -1047,7 +1050,7 @@ join       ·               ·            (a, a)  ·
  │         pred            a = a        ·       ·
  ├── scan  ·               ·            (a)     +a
  │         table           l@primary    ·       ·
- │         spans           ALL          ·       ·
+ │         spans           /3-/3/#      ·       ·
  └── scan  ·               ·            (a)     +a
 ·          table           r@primary    ·       ·
 ·          spans           /3-/3/#      ·       ·
