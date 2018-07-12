@@ -16,15 +16,17 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -102,7 +104,7 @@ type Registry struct {
 		// started/resumed with. This should only be called by the registry when
 		// it is attempting to halt its own jobs due to liveness problems. Jobs
 		// are normally canceled on any node by the CANCEL JOB statement, which is
-		// propogated to jobs via the .Progressed call. This function should not be
+		// propagated to jobs via the .Progressed call. This function should not be
 		// used to cancel a job in that way.
 		jobs map[int64]context.CancelFunc
 	}
@@ -390,7 +392,7 @@ type Resumer interface {
 	OnSuccess(context.Context, *client.Txn, *Job) error
 	// OnTerminal is called after a job has successfully been marked as
 	// terminal. It should be used to perform optional cleanup and return final
-	// results to the user. There is no guranatee that this function is ever run
+	// results to the user. There is no guarantee that this function is ever run
 	// (for example, if a node died immediately after Success commits).
 	OnTerminal(context.Context, *Job, Status, chan<- tree.Datums)
 
@@ -447,8 +449,13 @@ func (r *Registry) resume(
 ) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
-		phs, cleanup := r.planFn("resume-job", job.Payload().Username)
+		payload := job.Payload()
+		phs, cleanup := r.planFn("resume-job", payload.Username)
 		defer cleanup()
+		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
+		var span opentracing.Span
+		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
+		defer span.Finish()
 		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
 		if resumeErr != nil && ctx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to mark the
