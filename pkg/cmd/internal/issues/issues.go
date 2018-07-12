@@ -357,6 +357,24 @@ func (p *poster) parameters() string {
 	return "\n```\n" + strings.Join(parameters, "\n") + "\n```"
 }
 
+func isInvalidAssignee(err error) bool {
+	e, ok := errors.Cause(err).(*github.ErrorResponse)
+	if !ok {
+		return false
+	}
+	if e.Response.StatusCode != 422 {
+		return false
+	}
+	for _, t := range e.Errors {
+		if t.Resource == "Issue" &&
+			t.Field == "assignee" &&
+			t.Code == "invalid" {
+			return true
+		}
+	}
+	return false
+}
+
 var defaultP struct {
 	sync.Once
 	*poster
@@ -369,7 +387,11 @@ func Post(ctx context.Context, detail, packageName, testName, message, authorEma
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	return defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+	err := defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+	if !isInvalidAssignee(err) {
+		return err
+	}
+	return defaultP.post(ctx, detail, packageName, testName, message, "tschottdorf@gmail.com")
 }
 
 // CanPost returns true if the github API token environment variable is set.
