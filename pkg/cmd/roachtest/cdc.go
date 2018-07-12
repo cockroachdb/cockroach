@@ -27,6 +27,11 @@ import (
 
 func registerCDC(r *registry) {
 	runCDC := func(ctx context.Context, t *test, c *cluster, warehouses int, initialScan bool) {
+		maxInitialScanAllowed, maxLatencyAllowed := 3*time.Minute, time.Minute
+		if initialScan {
+			maxInitialScanAllowed = 30 * time.Minute
+		}
+
 		crdbNodes := c.Range(1, c.nodes-1)
 		workloadNode := c.Node(c.nodes)
 		kafkaNode := c.Node(c.nodes)
@@ -70,14 +75,15 @@ func registerCDC(r *registry) {
 		}()
 
 		doneCh := make(chan struct{}, 1)
-		var initialScanLatency, maxLatency time.Duration
+		var initialScanLatency, maxSeenLatency time.Duration
+		latencyDroppedBelowMaxAllowed := false
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			defer func() { doneCh <- struct{}{} }()
 			c.Run(ctx, workloadNode, fmt.Sprintf(
-				`./workload run tpcc --warehouses=%d {pgurl:1-%d} --duration=10m`,
+				`./workload run tpcc --warehouses=%d {pgurl:1-%d} --duration=30m`,
 				warehouses, c.nodes-1,
 			))
 			return nil
@@ -128,28 +134,48 @@ func registerCDC(r *registry) {
 					return err
 				}
 				if nanos := progress.GetChangefeed().Highwater.WallTime; nanos > 0 {
-					if initialScan && initialScanLatency == 0 {
+					if initialScanLatency == 0 {
 						initialScanLatency = timeutil.Since(timeutil.Unix(0, nanos))
-						if maxAllowed := 3 * time.Minute; initialScanLatency > maxAllowed {
-							t.Fatalf("initial scan latency was more than allowed: %s vs %s",
-								initialScanLatency, maxAllowed)
-						}
 						l.printf("initial scan latency %s\n", initialScanLatency)
 						t.Status("finished initial scan")
 						continue
 					}
 					latency := timeutil.Since(timeutil.Unix(0, nanos))
-					if latency > maxLatency {
-						maxLatency = latency
+					if latency < maxLatencyAllowed {
+						latencyDroppedBelowMaxAllowed = true
 					}
-					l.printf("end-to-end latency %s max so far %s\n", latency, maxLatency)
+					if !latencyDroppedBelowMaxAllowed {
+						// Before we have RangeFeed, the polls just get
+						// progressively smaller after the initial one. Start
+						// tracking the max latency once we seen a latency
+						// that's less than the max allowed. Verify at the end
+						// of the test that this happens at some point.
+						l.printf("end-to-end latency %s not yet below max allowed %s\n",
+							latency, maxLatencyAllowed)
+						continue
+					}
+					if latency > maxSeenLatency {
+						maxSeenLatency = latency
+					}
+					l.printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
 				}
 			}
 		})
 		m.Wait()
 
-		if maxAllowed := time.Minute; maxLatency > maxAllowed {
-			t.Fatalf("max latency was more than allowed: %s vs %s", maxLatency, maxAllowed)
+		if initialScanLatency == 0 {
+			t.Fatalf("initial scan did not complete")
+		}
+		if initialScanLatency > maxInitialScanAllowed {
+			t.Fatalf("initial scan latency was more than allowed: %s vs %s",
+				initialScanLatency, maxInitialScanAllowed)
+		}
+		if !latencyDroppedBelowMaxAllowed {
+			t.Fatalf("latency never dropped below max allowed: %s", maxLatencyAllowed)
+		}
+		if maxSeenLatency > maxLatencyAllowed {
+			t.Fatalf("max latency was more than allowed: %s vs %s",
+				maxSeenLatency, maxLatencyAllowed)
 		}
 	}
 
@@ -162,11 +188,11 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "cdc/w=10/nodes=3/init=true",
+		Name:   "cdc/w=100/nodes=3/init=true",
 		Nodes:  nodes(4, cpu(16)),
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCDC(ctx, t, c, 10, true /* initialScan */)
+			runCDC(ctx, t, c, 100, true /* initialScan */)
 		},
 	})
 }
