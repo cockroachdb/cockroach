@@ -265,7 +265,7 @@ func (d *pgCopyReader) readFile(
 			return makeRowErr(inputName, count, "%s", err)
 		}
 		if len(row) != len(d.conv.visibleColTypes) {
-			return makeRowErr(inputName, count, "expected %d columns, found %d", len(d.conv.visibleColTypes), len(row))
+			return makeRowErr(inputName, count, "expected %d values, got %d", len(d.conv.visibleColTypes), len(row))
 		}
 		for i, s := range row {
 			if s == nil {

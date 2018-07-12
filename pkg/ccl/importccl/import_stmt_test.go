@@ -59,7 +59,7 @@ func TestImportData(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
 
 	tests := []struct {
 		name   string
@@ -166,6 +166,13 @@ d
 			typ:    "CSV",
 			data:   `\x0`,
 			err:    "odd length hex string",
+		},
+		{
+			name:   "oversample",
+			create: `i int`,
+			with:   `WITH oversample = '100'`,
+			typ:    "CSV",
+			data:   "1",
 		},
 
 		// MySQL OUTFILE
@@ -305,6 +312,20 @@ d
 			with:   `WITH max_row_size = '5B'`,
 			err:    "line too long",
 		},
+		{
+			name:   "not enough values",
+			typ:    "PGCOPY",
+			create: "a INT, b INT",
+			data:   `1`,
+			err:    "expected 2 values, got 1",
+		},
+		{
+			name:   "too many values",
+			typ:    "PGCOPY",
+			create: "a INT, b INT",
+			data:   "1\t2\t3",
+			err:    "expected 2 values, got 3",
+		},
 
 		// Postgres DUMP
 		{
@@ -354,6 +375,42 @@ d
 			data: "CREATE TABLE t (i INT);",
 			with: `WITH max_row_size = '5B'`,
 			err:  "line too long",
+		},
+		{
+			name: "not enough values",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE d.t (a INT, b INT);
+
+COPY t (a, b) FROM stdin;
+1
+\.
+			`,
+			err: "expected 2 values, got 1",
+		},
+		{
+			name: "too many values",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE d.t (a INT, b INT);
+
+COPY t (a, b) FROM stdin;
+1	2	3
+\.
+			`,
+			err: "expected 2 values, got 3",
+		},
+		{
+			name: "too many cols",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE d.t (a INT, b INT);
+
+COPY t (a, b, c) FROM stdin;
+1	2	3
+\.
+			`,
+			err: "expected 2 columns, got 3",
 		},
 
 		// Error
