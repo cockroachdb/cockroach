@@ -411,10 +411,25 @@ func (p *planner) resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
-	return resolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
 }
 
-// resolveFK looks up the tables and columns mentioned in a `REFERENCES`
+func qualifyFKColErrorWithDB(
+	ctx context.Context, txn *client.Txn, tbl *sqlbase.TableDescriptor, col string,
+) string {
+	if txn == nil {
+		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
+	}
+
+	// TODO(whomever): this ought to use a database cache.
+	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
+	if err != nil {
+		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
+	}
+	return tree.ErrString(tree.NewUnresolvedName(db.Name, tree.PublicSchema, tbl.Name, col))
+}
+
+// ResolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
 // map of other tables that need to be updated when this table is created.
@@ -432,7 +447,10 @@ func (p *planner) resolveFK(
 // If there are any FKs, the descriptor of the depended-on table must
 // be looked up uncached, and we'll allow FK dependencies on tables
 // that were just added.
-func resolveFK(
+//
+// The passed Txn is used to lookup databases to qualify names in error messages
+// but if nil, will result in unqualified names in those errors.
+func ResolveFK(
 	ctx context.Context,
 	txn *client.Txn,
 	sc SchemaResolver,
@@ -441,6 +459,16 @@ func resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
+	for _, col := range d.FromCols {
+		col, _, err := tbl.FindColumnByName(col)
+		if err != nil {
+			return err
+		}
+		if err := col.CheckCanBeFKRef(); err != nil {
+			return err
+		}
+	}
+
 	targetTable := d.Table.TableName()
 
 	target, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
@@ -528,7 +556,7 @@ func resolveFK(
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidForeignKeyError,
 				"there is no unique constraint matching given keys for referenced table %s",
-				targetTable.String(),
+				target.Name,
 			)
 		}
 	}
@@ -538,15 +566,10 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
-				// TODO(whomever): this ought to use a database cache.
-				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
-				if err != nil {
-					return err
-				}
+				col := qualifyFKColErrorWithDB(ctx, txn, tbl, sourceColumn.Name)
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
-					tree.ErrString(tree.NewUnresolvedName(
-						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
+					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
+				)
 			}
 		}
 	}
@@ -556,15 +579,10 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
 		for _, sourceColumn := range srcCols {
 			if sourceColumn.DefaultExpr == nil {
-				// TODO(whomever): this ought to use a database cache.
-				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
-				if err != nil {
-					return err
-				}
+				col := qualifyFKColErrorWithDB(ctx, txn, tbl, sourceColumn.Name)
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
-					tree.ErrString(tree.NewUnresolvedName(
-						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
+					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
+				)
 			}
 		}
 	}
@@ -1218,16 +1236,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			for _, col := range d.FromCols {
-				col, _, err := desc.FindColumnByName(col)
-				if err != nil {
-					return desc, err
-				}
-				if err := col.CheckCanBeFKRef(); err != nil {
-					return desc, err
-				}
-			}
-			if err := resolveFK(ctx, txn, fkResolver, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
+			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
 				return desc, err
 			}
 		default:
