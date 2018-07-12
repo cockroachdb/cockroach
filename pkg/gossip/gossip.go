@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,6 +187,14 @@ func (err KeyNotPresentError) Error() string {
 // NewKeyNotPresentError creates a new KeyNotPresentError.
 func NewKeyNotPresentError(key string) error {
 	return KeyNotPresentError{key: key}
+}
+
+// AddressResolver is a thin wrapper around gossip's GetNodeIDAddress
+// that allows it to be used as a nodedialer.AddressResolver
+func AddressResolver(gossip *Gossip) nodedialer.AddressResolver {
+	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+		return gossip.GetNodeIDAddress(nodeID)
+	}
 }
 
 // Storage is an interface which allows the gossip instance
