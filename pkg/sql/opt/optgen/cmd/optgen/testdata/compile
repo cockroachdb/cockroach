@@ -27,13 +27,13 @@ define Not {
 			Comments=(Comments)
 			Name="EliminateNot"
 			Tags=(Tags Normalize)
-			Match=(Match
-				Names=(Names Not)
-				Args=(List
-					(Match
-						Names=(Names Not)
-						Args=(List
-							(Bind Label="input" Target=(MatchAny) Src=<test.opt:7:11>)
+			Match=(Func
+				Name=Not
+				Args=(Slice
+					(Func
+						Name=Not
+						Args=(Slice
+							(Bind Label="input" Target=(Any) Src=<test.opt:7:11>)
 						)
 						Src=<test.opt:7:6>
 					)

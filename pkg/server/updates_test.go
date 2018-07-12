@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -147,6 +148,12 @@ func TestReportUsage(t *testing.T) {
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
 		t.Fatal(err)
 	}
+
+	telemetry.Count("test.a")
+	c := telemetry.GetCounter("test.b")
+	telemetry.Inc(c)
+	telemetry.Inc(c)
+	telemetry.Inc(c)
 
 	for _, cmd := range []struct {
 		resource string
@@ -363,6 +370,20 @@ func TestReportUsage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(r, tbl) {
 			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
+		}
+	}
+
+	if expected, actual := 2, len(r.last.FeatureUsage); expected != actual {
+		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
+	}
+	for key, expected := range map[string]int32{
+		"test.a": 1,
+		"test.b": 3,
+	} {
+		if got, ok := r.last.FeatureUsage[key]; !ok {
+			t.Fatalf("expected report of feature %q", key)
+		} else if got != expected {
+			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
 		}
 	}
 
