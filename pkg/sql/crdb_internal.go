@@ -380,6 +380,14 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
+func tsOrNull(micros int64) tree.Datum {
+	if micros == 0 {
+		return tree.DNull
+	}
+	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
+	return tree.MakeDTimestamp(ts, time.Microsecond)
+}
+
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
@@ -409,44 +417,65 @@ CREATE TABLE crdb_internal.jobs (
 
 		for _, r := range rows {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
+
+			var jobType, description, username, descriptorIDs, started,
+				finished, modified, fractionCompleted, errorStr, leaseNode = tree.DNull,
+				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+				tree.DNull, tree.DNull
+
+			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
 			if err != nil {
-				return err
+				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+			} else {
+				jobType = tree.NewDString(payload.Type().String())
+				description = tree.NewDString(payload.Description)
+				username = tree.NewDString(payload.Username)
+				descriptorIDsArr := tree.NewDArray(types.Int)
+				for _, descID := range payload.DescriptorIDs {
+					if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
+						return err
+					}
+				}
+				descriptorIDs = descriptorIDsArr
+				started = tsOrNull(payload.StartedMicros)
+				finished = tsOrNull(payload.FinishedMicros)
+				if payload.Lease != nil {
+					leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
+				}
+				errorStr = tree.NewDString(payload.Error)
 			}
+
+			// Extract data from the progress field.
 			progress, err := jobs.UnmarshalProgress(progressBytes)
 			if err != nil {
-				return err
-			}
-			tsOrNull := func(micros int64) tree.Datum {
-				if micros == 0 {
-					return tree.DNull
+				baseErr := ""
+				if s, ok := errorStr.(*tree.DString); ok {
+					baseErr = string(*s)
+					if baseErr != "" {
+						baseErr += "\n"
+					}
 				}
-				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
-				return tree.MakeDTimestamp(ts, time.Microsecond)
+				errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
+			} else {
+				fractionCompleted = tree.NewDFloat(tree.DFloat(progress.FractionCompleted))
+				modified = tsOrNull(progress.ModifiedMicros)
 			}
-			descriptorIDs := tree.NewDArray(types.Int)
-			for _, descID := range payload.DescriptorIDs {
-				if err := descriptorIDs.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
-					return err
-				}
-			}
-			leaseNode := tree.DNull
-			if payload.Lease != nil {
-				leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
-			}
+
+			// Report the data.
 			if err := addRow(
 				id,
-				tree.NewDString(payload.Type().String()),
-				tree.NewDString(payload.Description),
-				tree.NewDString(payload.Username),
+				jobType,
+				description,
+				username,
 				descriptorIDs,
 				status,
 				created,
-				tsOrNull(payload.StartedMicros),
-				tsOrNull(payload.FinishedMicros),
-				tsOrNull(progress.ModifiedMicros),
-				tree.NewDFloat(tree.DFloat(progress.FractionCompleted)),
-				tree.NewDString(payload.Error),
+				started,
+				finished,
+				modified,
+				fractionCompleted,
+				errorStr,
 				leaseNode,
 			); err != nil {
 				return err
