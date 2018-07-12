@@ -10,3 +10,27 @@
 #include "crypto_utils.h"
 
 TEST(CryptoUtils, HasAESNI) { EXPECT_TRUE(UsesAESNI()); }
+
+#ifdef _WIN32
+
+TEST(CryptoUtils, DisableCoreDumps) {
+  EXPECT_ERR(DisableCoreFile(), ".* not supported on Windows");
+}
+
+#else
+
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <sys/types.h>
+
+TEST(CryptoUtils, DisableCoreDumps) {
+  rlimit lim = {1 << 10, 2 << 10};
+  ASSERT_EQ(0, setrlimit(RLIMIT_CORE, &lim));
+
+  EXPECT_OK(DisableCoreFile());
+  ASSERT_EQ(0, getrlimit(RLIMIT_CORE, &lim));
+  EXPECT_EQ(0, lim.rlim_cur);
+  EXPECT_EQ(0, lim.rlim_max);
+}
+
+#endif
