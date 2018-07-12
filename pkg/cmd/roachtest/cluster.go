@@ -49,19 +49,20 @@ import (
 )
 
 var (
-	local       bool
-	artifacts   string
-	cockroach   string
-	encrypt     bool
-	workload    string
-	roachprod   string
-	buildTag    string
-	clusterName string
-	clusterID   string
-	clusterWipe bool
-	username    = os.Getenv("ROACHPROD_USER")
-	zonesF      string
-	teamCity    bool
+	local                 bool
+	artifacts             string
+	cockroach             string
+	encrypt               bool
+	workload              string
+	roachprod             string
+	buildTag              string
+	clusterName           string
+	clusterID             string
+	clusterWipe           bool
+	username              = os.Getenv("ROACHPROD_USER")
+	zonesF                string
+	teamCity              bool
+	testingSkipValidation bool
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -507,7 +508,7 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 			t.Fatal(err)
 			return nil
 		}
-	} else {
+	} else if !testingSkipValidation {
 		// Perform validation on the existing cluster.
 		c.status("checking that existing cluster matches spec")
 		sargs := []string{roachprod, "list", c.name, "--json"}
