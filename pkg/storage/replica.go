@@ -4327,8 +4327,20 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 	if !r.quiesceLocked() {
 		return false
 	}
-	for id := range status.Progress {
+
+	for id, prog := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			continue
+		}
+		// In common operation, we only quiesce when all followers are
+		// up-to-date. However, when we quiesce in the presence of dead
+		// nodes, a follower which is behind but considered dead may not
+		// have the log entry referenced by status.Commit and would
+		// explode if it were told to commit up to that point. So if
+		// prog.Match for a replica is not up to date with status.Commit,
+		// assume the replica is considered dead and skip the quiesce
+		// heartbeat.
+		if prog.Match < status.Commit {
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
