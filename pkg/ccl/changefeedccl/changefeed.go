@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -139,61 +138,44 @@ func runChangefeedFlow(
 func exportRequestPoll(
 	execCfg *sql.ExecutorConfig, details jobspb.ChangefeedDetails, progress jobspb.ChangefeedProgress,
 ) func(context.Context) (changedKVs, error) {
-	sender := execCfg.DB.NonTransactionalSender()
 	var spans []roachpb.Span
 	for _, tableDesc := range details.TableDescs {
 		spans = append(spans, tableDesc.PrimaryIndexSpan())
 	}
 
-	var buffer changefeedBuffer
+	var p *poller
 	highwater := progress.Highwater
 	return func(ctx context.Context) (changedKVs, error) {
-		if ret, ok := buffer.get(); ok {
-			return ret, nil
+		for {
+			changed, ok, err := p.get(ctx)
+			if err != nil {
+				return changedKVs{}, err
+			}
+			if ok {
+				return changed, nil
+			}
+
+			pollDuration := changefeedPollInterval.Get(&execCfg.Settings.SV)
+			pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, highwater.WallTime))
+			if pollDuration > 0 {
+				log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
+				select {
+				case <-ctx.Done():
+					return changedKVs{}, ctx.Err()
+				case <-time.After(pollDuration):
+				}
+			}
+
+			nextHighwater := execCfg.Clock.Now()
+			log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
+				highwater, nextHighwater, time.Duration(nextHighwater.WallTime-highwater.WallTime))
+
+			p, err = makePoller(ctx, execCfg, spans, highwater, nextHighwater)
+			if err != nil {
+				return changedKVs{}, err
+			}
+			highwater = nextHighwater
 		}
-
-		pollDuration := changefeedPollInterval.Get(&execCfg.Settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, highwater.WallTime))
-		if pollDuration > 0 {
-			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
-			select {
-			case <-ctx.Done():
-				return changedKVs{}, ctx.Err()
-			case <-time.After(pollDuration):
-			}
-		}
-
-		nextHighwater := execCfg.Clock.Now()
-		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
-			highwater, nextHighwater, time.Duration(nextHighwater.WallTime-highwater.WallTime))
-
-		// TODO(dan): Send these out in parallel.
-		for _, span := range spans {
-			header := roachpb.Header{Timestamp: nextHighwater}
-			req := &roachpb.ExportRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span),
-				StartTime:     highwater,
-				MVCCFilter:    roachpb.MVCCFilter_Latest,
-				ReturnSST:     true,
-			}
-			res, pErr := client.SendWrappedWith(ctx, sender, header, req)
-			if pErr != nil {
-				return changedKVs{}, errors.Wrapf(
-					pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
-			}
-			for _, file := range res.(*roachpb.ExportResponse).Files {
-				buffer.append(changedKVs{sst: file.SST})
-			}
-		}
-		log.VEventf(ctx, 2, `poll took %s`,
-			time.Duration(execCfg.Clock.Now().WallTime-nextHighwater.WallTime))
-
-		// There is guaranteed to be at least one entry in buffer because we
-		// always append the resolved timestamp.
-		highwater = nextHighwater
-		buffer.append(changedKVs{resolved: highwater})
-		ret, _ := buffer.get()
-		return ret, nil
 	}
 }
 

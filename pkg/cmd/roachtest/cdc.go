@@ -162,11 +162,11 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "cdc/w=10/nodes=3/init=true",
+		Name:   "cdc/w=100/nodes=3/init=true",
 		Nodes:  nodes(4, cpu(16)),
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCDC(ctx, t, c, 10, true /* initialScan */)
+			runCDC(ctx, t, c, 100, true /* initialScan */)
 		},
 	})
 }
