@@ -21,12 +21,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
+
+	grpc "google.golang.org/grpc"
 )
 
 const outboxBufRows = 16
@@ -53,7 +56,10 @@ type outbox struct {
 
 	flowCtx  *FlowCtx
 	streamID StreamID
-	addr     string
+	nodeID   roachpb.NodeID
+	// Target address, set by 2.0 nodes. Only use addr if nodeID is zero.
+	// TODO(bdarnell): remove addr after 2.1
+	addr string
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
 	stream flowStream
@@ -77,8 +83,10 @@ type outbox struct {
 var _ RowReceiver = &outbox{}
 var _ startable = &outbox{}
 
-func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
-	m := &outbox{flowCtx: flowCtx, addr: addr}
+func newOutbox(
+	flowCtx *FlowCtx, nodeID roachpb.NodeID, addr string, flowID FlowID, streamID StreamID,
+) *outbox {
+	m := &outbox{flowCtx: flowCtx, nodeID: nodeID, addr: addr}
 	m.encoder.setHeaderFields(flowID, streamID)
 	m.streamID = streamID
 	return m
@@ -197,9 +205,18 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	}
 
 	if m.stream == nil {
-		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect(ctx)
-		if err != nil {
-			return err
+		var conn *grpc.ClientConn
+		var err error
+		if m.nodeID != 0 {
+			conn, err = m.flowCtx.nodeDialer.Dial(ctx, m.nodeID)
+			if err != nil {
+				return err
+			}
+		} else {
+			conn, err = m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect(ctx)
+			if err != nil {
+				return err
+			}
 		}
 		client := NewDistSQLClient(conn)
 		if log.V(2) {

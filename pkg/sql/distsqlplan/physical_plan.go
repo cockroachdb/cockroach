@@ -717,7 +717,8 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
 		if endpoint.Type == distsqlrun.StreamEndpointSpec_REMOTE {
 			var ok bool
-			endpoint.TargetAddr, ok = nodeAddresses[p2.Node]
+			endpoint.TargetNodeID = p2.Node
+			endpoint.DeprecatedTargetAddr, ok = nodeAddresses[p2.Node]
 			if !ok {
 				panic(fmt.Sprintf("node %d not in nodeAddresses map", p2.Node))
 			}
