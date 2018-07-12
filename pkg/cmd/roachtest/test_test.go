@@ -202,6 +202,34 @@ func TestRegistryRunTimeout(t *testing.T) {
 	}
 }
 
+func TestRegistryRunClusterExpired(t *testing.T) {
+	defer func(l, v bool, n string) {
+		local, testingSkipValidation, clusterName = l, v, n
+	}(local, testingSkipValidation, clusterName)
+	local, testingSkipValidation, clusterName = true, true, "local"
+
+	var buf syncedBuffer
+	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
+
+	r := newRegistry()
+	r.out = &buf
+
+	r.Add(testSpec{
+		Name:   `expired`,
+		Stable: true,
+		Nodes:  nodes(1, nodeLifetimeOption(time.Second)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			panic("not reached")
+		},
+	})
+	r.Run([]string{"expired"})
+
+	out := buf.String()
+	if !expiredRE.MatchString(out) {
+		t.Fatalf("unable to find \"cluster expired\" message:\n%s", out)
+	}
+}
+
 func TestRegistryVerifyClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string

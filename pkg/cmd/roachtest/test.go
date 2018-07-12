@@ -745,11 +745,16 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 					}()
 
 					timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+					if timeout <= 0 {
+						t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+						return
+					}
 				}
 
 				if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
 					timeout = t.spec.Timeout
 				}
+
 				done := make(chan struct{})
 				defer func() {
 					close(done)
