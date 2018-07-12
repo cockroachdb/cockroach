@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -126,7 +127,7 @@ var stubRPCSendFn simpleSendFn = func(
 func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		opts SendOptions,
-		rpcContext *rpc.Context,
+		nodeDialer *nodedialer.Dialer,
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (Transport, error) {
@@ -1937,7 +1938,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &rpc.Context{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
+		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
