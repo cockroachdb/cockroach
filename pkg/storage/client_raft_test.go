@@ -2693,7 +2693,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 
 	for _, s := range mtc.stores {
-		if err := s.GossipStore(context.Background()); err != nil {
+		if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2729,7 +2729,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 
 			// Keep gossiping the alive stores.
 			for _, s := range mtc.stores[:3] {
-				if err := s.GossipStore(context.Background()); err != nil {
+				if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
 					t.Fatal(err)
 				}
 			}

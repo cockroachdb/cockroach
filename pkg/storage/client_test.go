@@ -163,7 +163,7 @@ func createTestStoreWithEngine(
 
 	// Connect to gossip and gossip the store's capacity.
 	<-store.Gossip().Connected
-	if err := store.GossipStore(ctx); err != nil {
+	if err := store.GossipStore(ctx, false /* useCached */); err != nil {
 		t.Fatal(err)
 	}
 	// Wait for the store's single range to have quorum before proceeding.
@@ -371,7 +371,7 @@ func (m *multiTestContext) gossipStores() {
 	timestamps := make(map[string]int64)
 	for i := 0; i < len(m.stores); i++ {
 		<-m.gossips[i].Connected
-		if err := m.stores[i].GossipStore(context.Background()); err != nil {
+		if err := m.stores[i].GossipStore(context.Background(), false /* useCached */); err != nil {
 			m.t.Fatal(err)
 		}
 		infoStatus := m.gossips[i].GetInfoStatus()
