@@ -408,9 +408,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		ri: ri,
 	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
-		st:           tcf.st,
-		knobs:        &tcf.testingKnobs,
-		refreshValid: true,
+		st:    tcf.st,
+		knobs: &tcf.testingKnobs,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,

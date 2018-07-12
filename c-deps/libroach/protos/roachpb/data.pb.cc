@@ -4588,7 +4588,8 @@ const int TxnCoordMeta::kIntentsFieldNumber;
 const int TxnCoordMeta::kCommandCountFieldNumber;
 const int TxnCoordMeta::kRefreshReadsFieldNumber;
 const int TxnCoordMeta::kRefreshWritesFieldNumber;
-const int TxnCoordMeta::kRefreshValidFieldNumber;
+const int TxnCoordMeta::kRefreshInvalidFieldNumber;
+const int TxnCoordMeta::kDeprecatedRefreshValidFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnCoordMeta::TxnCoordMeta()
@@ -4611,15 +4612,15 @@ TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
     txn_ = NULL;
   }
   ::memcpy(&command_count_, &from.command_count_,
-    static_cast<size_t>(reinterpret_cast<char*>(&refresh_valid_) -
-    reinterpret_cast<char*>(&command_count_)) + sizeof(refresh_valid_));
+    static_cast<size_t>(reinterpret_cast<char*>(&deprecated_refresh_valid_) -
+    reinterpret_cast<char*>(&command_count_)) + sizeof(deprecated_refresh_valid_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TxnCoordMeta)
 }
 
 void TxnCoordMeta::SharedCtor() {
   ::memset(&txn_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&refresh_valid_) -
-      reinterpret_cast<char*>(&txn_)) + sizeof(refresh_valid_));
+      reinterpret_cast<char*>(&deprecated_refresh_valid_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(deprecated_refresh_valid_));
 }
 
 TxnCoordMeta::~TxnCoordMeta() {
@@ -4654,8 +4655,8 @@ void TxnCoordMeta::Clear() {
   }
   txn_ = NULL;
   ::memset(&command_count_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&refresh_valid_) -
-      reinterpret_cast<char*>(&command_count_)) + sizeof(refresh_valid_));
+      reinterpret_cast<char*>(&deprecated_refresh_valid_) -
+      reinterpret_cast<char*>(&command_count_)) + sizeof(deprecated_refresh_valid_));
   _internal_metadata_.Clear();
 }
 
@@ -4733,14 +4734,28 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
         break;
       }
 
-      // bool refresh_valid = 6;
+      // bool deprecated_refresh_valid = 6;
       case 6: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(48u /* 48 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &refresh_valid_)));
+                 input, &deprecated_refresh_valid_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool refresh_invalid = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &refresh_invalid_)));
         } else {
           goto handle_unusual;
         }
@@ -4807,9 +4822,14 @@ void TxnCoordMeta::SerializeWithCachedSizes(
       output);
   }
 
-  // bool refresh_valid = 6;
-  if (this->refresh_valid() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->refresh_valid(), output);
+  // bool deprecated_refresh_valid = 6;
+  if (this->deprecated_refresh_valid() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->deprecated_refresh_valid(), output);
+  }
+
+  // bool refresh_invalid = 7;
+  if (this->refresh_invalid() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->refresh_invalid(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -4866,8 +4886,13 @@ size_t TxnCoordMeta::ByteSizeLong() const {
         this->command_count());
   }
 
-  // bool refresh_valid = 6;
-  if (this->refresh_valid() != 0) {
+  // bool refresh_invalid = 7;
+  if (this->refresh_invalid() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // bool deprecated_refresh_valid = 6;
+  if (this->deprecated_refresh_valid() != 0) {
     total_size += 1 + 1;
   }
 
@@ -4897,8 +4922,11 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   if (from.command_count() != 0) {
     set_command_count(from.command_count());
   }
-  if (from.refresh_valid() != 0) {
-    set_refresh_valid(from.refresh_valid());
+  if (from.refresh_invalid() != 0) {
+    set_refresh_invalid(from.refresh_invalid());
+  }
+  if (from.deprecated_refresh_valid() != 0) {
+    set_deprecated_refresh_valid(from.deprecated_refresh_valid());
   }
 }
 
@@ -4924,7 +4952,8 @@ void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
   CastToBase(&refresh_writes_)->InternalSwap(CastToBase(&other->refresh_writes_));
   swap(txn_, other->txn_);
   swap(command_count_, other->command_count_);
-  swap(refresh_valid_, other->refresh_valid_);
+  swap(refresh_invalid_, other->refresh_invalid_);
+  swap(deprecated_refresh_valid_, other->deprecated_refresh_valid_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

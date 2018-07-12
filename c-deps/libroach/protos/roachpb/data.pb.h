@@ -2194,11 +2194,17 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::int32 command_count() const;
   void set_command_count(::google::protobuf::int32 value);
 
-  // bool refresh_valid = 6;
-  void clear_refresh_valid();
-  static const int kRefreshValidFieldNumber = 6;
-  bool refresh_valid() const;
-  void set_refresh_valid(bool value);
+  // bool refresh_invalid = 7;
+  void clear_refresh_invalid();
+  static const int kRefreshInvalidFieldNumber = 7;
+  bool refresh_invalid() const;
+  void set_refresh_invalid(bool value);
+
+  // bool deprecated_refresh_valid = 6;
+  void clear_deprecated_refresh_valid();
+  static const int kDeprecatedRefreshValidFieldNumber = 6;
+  bool deprecated_refresh_valid() const;
+  void set_deprecated_refresh_valid(bool value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TxnCoordMeta)
  private:
@@ -2209,7 +2215,8 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 command_count_;
-  bool refresh_valid_;
+  bool refresh_invalid_;
+  bool deprecated_refresh_valid_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -4458,18 +4465,32 @@ TxnCoordMeta::refresh_writes() const {
   return refresh_writes_;
 }
 
-// bool refresh_valid = 6;
-inline void TxnCoordMeta::clear_refresh_valid() {
-  refresh_valid_ = false;
+// bool refresh_invalid = 7;
+inline void TxnCoordMeta::clear_refresh_invalid() {
+  refresh_invalid_ = false;
 }
-inline bool TxnCoordMeta::refresh_valid() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.refresh_valid)
-  return refresh_valid_;
+inline bool TxnCoordMeta::refresh_invalid() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.refresh_invalid)
+  return refresh_invalid_;
 }
-inline void TxnCoordMeta::set_refresh_valid(bool value) {
+inline void TxnCoordMeta::set_refresh_invalid(bool value) {
   
-  refresh_valid_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_valid)
+  refresh_invalid_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_invalid)
+}
+
+// bool deprecated_refresh_valid = 6;
+inline void TxnCoordMeta::clear_deprecated_refresh_valid() {
+  deprecated_refresh_valid_ = false;
+}
+inline bool TxnCoordMeta::deprecated_refresh_valid() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.deprecated_refresh_valid)
+  return deprecated_refresh_valid_;
+}
+inline void TxnCoordMeta::set_deprecated_refresh_valid(bool value) {
+  
+  deprecated_refresh_valid_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.deprecated_refresh_valid)
 }
 
 #ifdef __GNUC__
