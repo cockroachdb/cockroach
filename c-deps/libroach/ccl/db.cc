@@ -126,6 +126,17 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
               << std::endl;
   }
 
+  // Attempt to disable core dumps.
+  auto status = DisableCoreFile();
+  if (!status.ok()) {
+    // Shout loudly on standard out.
+    std::cout << std::endl
+              << "*** WARNING ***" << std::endl
+              << "Encryption requested, but could not disable core dumps" << std::endl
+              << "Keys will be leaks in code dumps!" << std::endl
+              << std::endl;
+  }
+
   // The Go code sets the "file_registry" storage version if we specified encryption flags,
   // but let's double check anyway.
   if (!db_opts.use_file_registry) {
@@ -147,7 +158,7 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   // NOTE: FileKeyManager uses the default env as the MemEnv can never have pre-populated files.
   FileKeyManager* store_key_manager = new FileKeyManager(
       rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key());
-  rocksdb::Status status = store_key_manager->LoadKeys();
+  status = store_key_manager->LoadKeys();
   if (!status.ok()) {
     delete store_key_manager;
     return status;
