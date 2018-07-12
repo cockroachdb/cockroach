@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include "file_registry.h"
+#include "env_manager.h"
 #include "fmt.h"
 #include "utils.h"
 
@@ -26,7 +27,7 @@ FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool re
       read_only_(read_only),
       registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {}
 
-rocksdb::Status FileRegistry::CheckNoRegistryFile() {
+rocksdb::Status FileRegistry::CheckNoRegistryFile() const {
   rocksdb::Status status = env_->FileExists(registry_path_);
   if (status.ok()) {
     return rocksdb::Status::InvalidArgument(
@@ -60,12 +61,12 @@ rocksdb::Status FileRegistry::Load() {
   }
 
   // Make it the active registry.
-  registry_.swap(registry);
+  registry_.reset(registry.release());
 
   return rocksdb::Status::OK();
 }
 
-std::unordered_set<int> FileRegistry::GetUsedEnvTypes() {
+std::unordered_set<int> FileRegistry::GetUsedEnvTypes() const {
   std::unordered_set<int> ret;
 
   std::unique_lock<std::mutex> l(mu_);
@@ -78,7 +79,7 @@ std::unordered_set<int> FileRegistry::GetUsedEnvTypes() {
   return ret;
 }
 
-std::string FileRegistry::TransformPath(const std::string& filename) {
+std::string FileRegistry::TransformPath(const std::string& filename) const {
   // Check for the rare case when we're referring to the db directory itself (without slash).
   if (filename == db_dir_) {
     return "";
@@ -117,8 +118,12 @@ std::string FileRegistry::TransformPath(const std::string& filename) {
   return filename.substr(prefixLength);
 }
 
+std::shared_ptr<const enginepb::FileRegistry> FileRegistry::GetFileRegistry() const {
+  std::unique_lock<std::mutex> l(mu_);
+  return registry_;
+}
 std::unique_ptr<enginepb::FileEntry> FileRegistry::GetFileEntry(const std::string& filename,
-                                                                bool relative) {
+                                                                bool relative) const {
   std::string newName =
       relative ? TransformPath(PathAppend(db_dir_, filename)) : TransformPath(filename);
 
@@ -255,9 +260,176 @@ rocksdb::Status FileRegistry::PersistRegistryLocked(std::unique_ptr<enginepb::Fi
   }
 
   // Swap registry.
-  registry_.swap(reg);
+  registry_.reset(reg.release());
 
   return rocksdb::Status::OK();
+}
+
+FileStats::FileStats(EnvManager* env_mgr)
+    : env_mgr_(env_mgr), db_dir_(env_mgr->file_registry->db_dir()) {}
+FileStats::~FileStats() {}
+
+std::string FileStats::FixRocksDBPath(const std::string& filename) {
+  return env_mgr_->file_registry->TransformPath(PathAppend(db_dir_, filename));
+}
+
+rocksdb::Status FileStats::GetFiles(rocksdb::DB* const rep) {
+  // Prevent deletions by rocksdb.
+  auto status = rep->DisableFileDeletions();
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = GetFilesInternal(rep);
+
+  // Always re-enable deletions.
+  auto status_enable = rep->EnableFileDeletions(false /* force */);
+
+  if (!status.ok()) {
+    // The bad status from GetFilesInternal takes precedence.
+    return status;
+  }
+
+  return status_enable;
+}
+
+rocksdb::Status FileStats::GetStatsForEnvAndKey(enginepb::EnvType env_type,
+                                                const std::string& active_key_id,
+                                                DBEnvStatsResult* result) {
+  uint64_t total_files = 0, total_bytes = 0, active_key_files = 0, active_key_bytes = 0;
+
+  for (const auto& it : files_) {
+    if (it.second.has_entry) {
+      if (it.second.entry.env_type() != env_type) {
+        // Different env type, don't include in total.
+        continue;
+      }
+
+      std::string key_id;
+      auto status = env_mgr_->env_stats_handler->GetFileEntryKeyID(&(it.second.entry), &key_id);
+      if (!status.ok()) {
+        return status;
+      }
+
+      if (key_id == active_key_id) {
+        active_key_files++;
+        active_key_bytes += it.second.size;
+      }
+    }
+
+    total_files++;
+    total_bytes += it.second.size;
+  }
+
+  result->total_files = total_files;
+  result->total_bytes = total_bytes;
+  result->active_key_files = active_key_files;
+  result->active_key_bytes = active_key_bytes;
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status FileStats::GetFilesInternal(rocksdb::DB* const rep) {
+  // Fetch all the information we can from RocksDB.
+  auto status = GetLiveFiles(rep);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = GetWalFiles(rep);
+  if (!status.ok()) {
+    return status;
+  }
+
+  GetLiveFilesMetadata(rep);
+
+  // Populate files list with entries from the registry.
+  status = FillRegistryEntries();
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Stat files for which we do not know the size.
+  StatFilesForSize();
+
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status FileStats::GetLiveFiles(rocksdb::DB* const rep) {
+  // List of all live files. Filename only.
+  // Contains SSTs, miscellaneous files (eg: CURRENT, MANIFEST, OPTIONS)
+  std::vector<std::string> live_files;
+  uint64_t manifest_size = 0;
+  auto status = rep->GetLiveFiles(live_files, &manifest_size, false /* flush_memtable */);
+  if (!status.ok()) {
+    return status;
+  }
+
+  for (const auto& f : live_files) {
+    files_[FixRocksDBPath(f)];
+  }
+
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status FileStats::GetWalFiles(rocksdb::DB* const rep) {
+  // List of WAL files. Filename and size.
+  // Contains log files only.
+  rocksdb::VectorLogPtr wal_files;
+  auto status = rep->GetSortedWalFiles(wal_files);
+  if (!status.ok()) {
+    return status;
+  }
+
+  for (const auto& wf : wal_files) {
+    auto path = FixRocksDBPath(wf->PathName());
+    files_[path].has_size = true;
+    files_[path].size = wf->SizeFileBytes();
+  }
+
+  return rocksdb::Status::OK();
+}
+
+void FileStats::GetLiveFilesMetadata(rocksdb::DB* const rep) {
+  // Metadata about live files. Filename and size.
+  // Contains SSTs only.
+  std::vector<rocksdb::LiveFileMetaData> live_files;
+  rep->GetLiveFilesMetaData(&live_files);
+
+  for (const auto& lf : live_files) {
+    auto path = FixRocksDBPath(lf.name);
+    files_[path].has_size = true;
+    files_[path].size = lf.size;
+  }
+}
+
+rocksdb::Status FileStats::FillRegistryEntries() {
+  auto registry = env_mgr_->file_registry->GetFileRegistry();
+  if (registry == nullptr) {
+    return rocksdb::Status::InvalidArgument("cannot compute stats, file registry not loaded yet");
+  }
+
+  for (const auto& it : registry->files()) {
+    files_[it.first].has_entry = true;
+    files_[it.first].entry = it.second;
+  }
+  return rocksdb::Status::OK();
+}
+
+void FileStats::StatFilesForSize() {
+  for (auto it = files_.begin(); it != files_.end(); ++it) {
+    if (it->second.has_size) {
+      continue;
+    }
+    // Unknown file size: stat it.
+    // Ignore all errors. We can't filter for "not found" as that returns an I/O error.
+    uint64_t size;
+    auto status =
+        env_mgr_->db_env->GetFileSize(env_mgr_->file_registry->db_dir() + "/" + it->first, &size);
+    if (status.ok()) {
+      it->second.has_size = true;
+      it->second.size = size;
+    }
+  }
 }
 
 }  // namespace cockroach
