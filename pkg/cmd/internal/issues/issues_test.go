@@ -17,6 +17,9 @@ package issues
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -264,4 +267,29 @@ func TestGetAssignee(t *testing.T) {
 		}, nil, nil
 	}
 	_, _ = getAssignee(context.Background(), "", listCommits)
+}
+
+func TestInvalidAssignee(t *testing.T) {
+	u, err := url.Parse("https://api.github.com/repos/cockroachdb/cockroach/issues")
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := &github.ErrorResponse{
+		Response: &http.Response{
+			StatusCode: 422,
+			Request: &http.Request{
+				Method: "POST",
+				URL:    u,
+			},
+		},
+		Errors: []github.Error{{
+			Resource: "Issue",
+			Field:    "assignee",
+			Code:     "invalid",
+			Message:  "",
+		}},
+	}
+	if !isInvalidAssignee(r) {
+		t.Fatalf("expected invalid assignee")
+	}
 }
