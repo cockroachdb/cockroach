@@ -179,7 +179,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get()),
-		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
+		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -487,7 +487,8 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, receiver, cleanup, err := ds.flowRegistry.ConnectInboundStream(
-		ctx, flowID, streamID, stream, flowStreamDefaultTimeout)
+		ctx, flowID, streamID, stream, settingFlowStreamTimeout.Get(&ds.Settings.SV),
+	)
 	if err != nil {
 		return err
 	}
