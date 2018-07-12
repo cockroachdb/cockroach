@@ -62,28 +62,34 @@ const METRICS = [
   "cr.node.sys.net.recv.bytes.host",
 ];
 
+interface LiveNodesState {
+  intervalID: number;
+}
+
+const METRIC_FETCH_INTERVAL_MS = 10000; // 10 sec, since that's how often we sample
+
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
  * both healthy and suspect nodes. Included is a side-bar with summary
  * statistics for these nodes.
  */
-class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
+class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState> {
   componentDidMount() {
-    setTimeout(
+    this.getData();
+    const intervalID = setInterval(
       () => {
         this.getData();
       },
-      1000,
+      METRIC_FETCH_INTERVAL_MS,
     );
+    this.setState({
+      intervalID,
+    });
   }
 
-  componentWillReceiveProps() {
-    console.log("componentWillReceiveProps");
-    // this.getData();
+  componentWillUnmount() {
+    clearInterval(this.state.intervalID);
   }
-
-  // TODO(vilterp): componentDidUpdate (???)
-  // how to make refresh?
 
   getData() {
     console.log("hello from getData");
@@ -128,8 +134,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
       return null;
     }
     const latestTSValues = this.props.latestTSValues;
-
-    console.log("========= render ==============");
 
     return <div>
       <section className="section section--heading">
@@ -220,7 +224,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
                 const reads = metricsForNode["cr.node." + MetricConstants.diskReadBytes];
                 const writes = metricsForNode["cr.node." + MetricConstants.diskWriteBytes];
-                console.log("disk", reads, writes);
                 return Bytes(reads + writes);
               },
             },
@@ -233,7 +236,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
                 const recv = metricsForNode["cr.node." + MetricConstants.netReadBytes];
                 const send = metricsForNode["cr.node." + MetricConstants.netWriteBytes];
-                console.log("net", send, recv);
                 return Bytes(recv + send);
               },
             },
