@@ -254,7 +254,7 @@ message RemoteProducerMetadata {
     RangeInfos range_info = 1;
     Error error = 2;
     TraceData trace_data = 3;
-    roachpb.TxnCoordMeta txn_meta = 4;
+    roachpb.TxnCoordMeta txn_coord_meta = 4;
     RowNum row_num = 5;
   }
 }

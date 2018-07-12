@@ -170,13 +170,23 @@ func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 func NewTxnWithProto(
 	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
 ) *Txn {
+	meta := roachpb.MakeTxnCoordMeta(proto)
+	return NewTxnWithCoordMeta(db, gatewayNodeID, typ, meta)
+}
+
+// NewTxnWithCoordMeta is like NewTxn, except it returns a new txn with the
+// provided TxnCoordMeta. This allows a client.Txn to be created with an already
+// initialized proto and TxnCoordSender.
+func NewTxnWithCoordMeta(
+	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
+) *Txn {
 	if db == nil {
-		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", proto)
+		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", meta.Txn)
 	}
-	proto.AssertInitialized(context.TODO())
+	meta.Txn.AssertInitialized(context.TODO())
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
-	txn.mu.Proto = proto
-	txn.mu.sender = db.factory.TransactionalSender(typ, &proto)
+	txn.mu.Proto = meta.Txn
+	txn.mu.sender = db.factory.TransactionalSender(typ, meta)
 	return txn
 }
 
@@ -1198,6 +1208,23 @@ func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
 	return txn.mu.sender.GetMeta()
 }
 
+// GetStrippedTxnCoordMeta is like GetTxnCoordMeta, but it strips out all
+// information that is unnecessary to communicate to other distributed
+// transaction coordinators that are all operating on the same transaction.
+func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
+	meta := txn.GetTxnCoordMeta()
+	switch txn.typ {
+	case RootTxn:
+		meta.Intents = nil
+		meta.CommandCount = 0
+		meta.RefreshReads = nil
+		meta.RefreshWrites = nil
+	case LeafTxn:
+		// Nothing yet.
+	}
+	return meta
+}
+
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
 // information with the supplied meta. For use with GetTxnCoordMeta().
 func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
@@ -1282,7 +1309,8 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		txn.mu.state = txnReadOnly
 
 		// Create a new txn sender.
-		txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, newTxn)
+		meta := roachpb.MakeTxnCoordMeta(*newTxn)
+		txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, meta)
 	} else {
 		// Update the transaction proto with the one to be used for the next
 		// attempt. The txn inside pErr was correctly prepared for this by

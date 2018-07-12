@@ -87,8 +87,9 @@ type TxnSenderFactory interface {
 	// typ specifies whether the sender is the root or one of potentially many
 	// child "leaf" nodes in a tree of transaction objects, as is created during a
 	// DistSQL flow.
-	// txn is the transaction whose requests this sender will carry.
-	TransactionalSender(typ TxnType, txn *roachpb.Transaction) TxnSender
+	// coordMeta is the TxnCoordMeta which contains the transaction whose requests
+	// this sender will carry.
+	TransactionalSender(typ TxnType, coordMeta roachpb.TxnCoordMeta) TxnSender
 	// NonTransactionalSender returns a sender to be used for non-transactional
 	// requests. Generally this is a sender that TransactionalSender() wraps.
 	NonTransactionalSender() Sender
@@ -135,7 +136,7 @@ type TxnSenderFactoryFunc func(TxnType) TxnSender
 var _ TxnSenderFactory = TxnSenderFactoryFunc(nil)
 
 // TransactionalSender is part of TxnSenderFactory.
-func (f TxnSenderFactoryFunc) TransactionalSender(typ TxnType, _ *roachpb.Transaction) TxnSender {
+func (f TxnSenderFactoryFunc) TransactionalSender(typ TxnType, _ roachpb.TxnCoordMeta) TxnSender {
 	return f(typ)
 }
 
@@ -152,7 +153,7 @@ var _ TxnSenderFactory = NonTransactionalFactoryFunc(nil)
 
 // TransactionalSender is part of the TxnSenderFactory.
 func (f NonTransactionalFactoryFunc) TransactionalSender(
-	typ TxnType, _ *roachpb.Transaction,
+	typ TxnType, _ roachpb.TxnCoordMeta,
 ) TxnSender {
 	panic("not supported ")
 }

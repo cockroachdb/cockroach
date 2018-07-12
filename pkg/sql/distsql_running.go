@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -115,9 +116,17 @@ func (dsp *DistSQLPlanner) Run(
 ) {
 	ctx := planCtx.ctx
 
-	var txnProto *roachpb.Transaction
+	var txnCoordMeta *roachpb.TxnCoordMeta
 	if txn != nil {
-		txnProto = txn.Proto()
+		meta := txn.GetStrippedTxnCoordMeta()
+		// The txn proto in the TxnCoordSender can get out of sync with the
+		// txn proto held in client.Txn. We want to make sure all of the
+		// information makes it into the TxnCoordMeta, so update the proto
+		// accordingly.
+		// TODO(andrei): Without this a few tests fail. Remove this hack
+		// once we merge the txn protos.
+		meta.Txn = *txn.Proto()
+		txnCoordMeta = &meta
 	}
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
@@ -148,6 +157,20 @@ func (dsp *DistSQLPlanner) Run(
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
+	setupReq := distsqlrun.SetupFlowRequest{
+		Version:     distsqlrun.Version,
+		EvalContext: evalCtxProto,
+	}
+	if txnCoordMeta != nil {
+		// The receiver may not know about the TxnCoordMeta field if it is
+		// an old binary. In this case, set the DeprecatedTxn field as well.
+		// TODO(nvanbenschoten): remove in 2.2.
+		if !dsp.st.Version.IsActive(cluster.VersionTxnCoordMetaInvalidField) {
+			setupReq.DeprecatedTxn = &txnCoordMeta.Txn
+		} else {
+			setupReq.TxnCoordMeta = txnCoordMeta
+		}
+	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
 	// this node).
@@ -160,16 +183,12 @@ func (dsp *DistSQLPlanner) Run(
 			// Skip this node.
 			continue
 		}
-		req := &distsqlrun.SetupFlowRequest{
-			Version:     distsqlrun.Version,
-			Txn:         txnProto,
-			Flow:        flowSpec,
-			EvalContext: evalCtxProto,
-		}
+		req := setupReq
+		req.Flow = flowSpec
 		runReq := runnerRequest{
 			ctx:         ctx,
 			rpcContext:  dsp.rpcContext,
-			flowReq:     req,
+			flowReq:     &req,
 			nodeID:      nodeID,
 			nodeAddress: planCtx.nodeAddresses[nodeID],
 			resultChan:  resultChan,
@@ -200,12 +219,8 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	// Set up the flow on this node.
-	localReq := distsqlrun.SetupFlowRequest{
-		Version:     distsqlrun.Version,
-		Txn:         txnProto,
-		Flow:        flows[thisNodeID],
-		EvalContext: evalCtxProto,
-	}
+	localReq := setupReq
+	localReq.Flow = flows[thisNodeID]
 	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
 	if err != nil {
 		recv.SetError(err)
@@ -379,14 +394,14 @@ func (r *distSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
 	if meta != nil {
-		if meta.TxnMeta != nil {
+		if meta.TxnCoordMeta != nil {
 			if r.txn != nil {
-				if r.txn.ID() == meta.TxnMeta.Txn.ID {
-					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnMeta)
+				if r.txn.ID() == meta.TxnCoordMeta.Txn.ID {
+					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnCoordMeta)
 				}
 			} else {
 				r.resultWriter.SetError(
-					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta))
+					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnCoordMeta))
 			}
 		}
 		if meta.Err != nil && r.resultWriter.Err() == nil {

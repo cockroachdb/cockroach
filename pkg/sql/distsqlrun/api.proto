@@ -28,11 +28,15 @@ import "sql/distsqlrun/processors.proto";
 message SetupFlowRequest {
   reserved 2;
 
-  // txn is the transaction in which the flow will run. If nil, the flow will
-  // not run in a transaction higher-level transaction (i.e. it is responsible
-  // for managing its own transactions, if any).
-  // Most flows expect to run in a txn, but some, like backfills, don't.
-  optional roachpb.Transaction txn = 1;
+  // TxnCoordMeta is the TxnCoordMeta for the transaction in which the flow
+  // will run. If nil, the flow will not run in a transaction higher-level 
+  // transaction (i.e. it is responsible for managing its own transactions,
+  // if any). Most flows expect to run in a txn, but some, like backfills,
+  // don't.
+  optional roachpb.TxnCoordMeta txn_coord_meta = 7;
+  // deprecated_txn used to play the role that TxnCoordMeta now plays. It
+  // can be removed in v2.2.
+  optional roachpb.Transaction deprecated_txn = 1;
 
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.
