@@ -819,7 +819,7 @@ func (ru *RowUpdater) UpdateRow(
 			}
 		}
 
-		if checkFKs == CheckFKs && ru.Fks.checker != nil {
+		if checkFKs == CheckFKs {
 			err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
 			if err == errUpdaterNoFKs {
 				return ru.newValues, nil
@@ -922,7 +922,7 @@ func (ru *RowUpdater) UpdateRow(
 		}
 	}
 
-	if checkFKs == CheckFKs && ru.Fks.checker != nil {
+	if checkFKs == CheckFKs {
 		err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
 		if err == errUpdaterNoFKs {
 			return ru.newValues, nil

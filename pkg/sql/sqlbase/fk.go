@@ -347,7 +347,7 @@ func (f *fkBatchChecker) runCheck(
 		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
 		}
-		log.Warningf(ctx, "response %d: dir %v", i, fk.dir)
+		log.Warningf(ctx, "response %d: index %s, dir %v", i, fk.writeIdx.Name, fk.dir)
 		switch fk.dir {
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
