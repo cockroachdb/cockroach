@@ -22,27 +22,34 @@ CTRCipherStreamCreator::~CTRCipherStreamCreator() {}
 rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
     std::string* settings, std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
   auto key = key_manager_->CurrentKey();
-  if (key == nullptr || key->info().encryption_type() == enginepbccl::Plaintext) {
-    // Plaintext: don't set "settings".
-    (*result) = std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>(new PlaintextStream());
-    return rocksdb::Status::OK();
-  }
 
   // Create the settings.
   enginepbccl::EncryptionSettings enc_settings;
-  enc_settings.set_encryption_type(key->info().encryption_type());
-  enc_settings.set_key_id(key->info().key_id());
 
-  // Let's get 16 random bytes. 12 for the nonce, 4 for the counter.
-  std::string random_bytes = RandomBytes(16);
-  assert(random_bytes.size() == 16);
+  if (key == nullptr || key->info().encryption_type() == enginepbccl::Plaintext) {
+    // Plaintext algorithm: only encryption_type is specified.
+    enc_settings.set_encryption_type(enginepbccl::Plaintext);
 
-  // First 12 bytes for the nonce.
-  enc_settings.set_nonce(random_bytes.substr(0, 12));
-  // Last 4 as an unsigned int32 for the counter.
-  uint32_t counter;
-  memcpy(&counter, random_bytes.data() + 12, 4);
-  enc_settings.set_counter(counter);
+    result->reset(new PlaintextStream());
+  } else {
+    // AES encryption: generate parameters and store in settings.
+    enc_settings.set_encryption_type(key->info().encryption_type());
+    enc_settings.set_key_id(key->info().key_id());
+
+    // Let's get 16 random bytes. 12 for the nonce, 4 for the counter.
+    std::string random_bytes = RandomBytes(16);
+    assert(random_bytes.size() == 16);
+
+    // First 12 bytes for the nonce.
+    enc_settings.set_nonce(random_bytes.substr(0, 12));
+    // Last 4 as an unsigned int32 for the counter.
+    uint32_t counter;
+    memcpy(&counter, random_bytes.data() + 12, 4);
+    enc_settings.set_counter(counter);
+
+    result->reset(
+        new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
+  }
 
   // Serialize enc_settings directly into the passed settings pointer. This will be ignored
   // on error.
@@ -50,7 +57,6 @@ rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
     return rocksdb::Status::InvalidArgument("failed to serialize encryption settings");
   }
 
-  result->reset(new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
   return rocksdb::Status::OK();
 }
 
@@ -58,13 +64,13 @@ rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
 rocksdb::Status CTRCipherStreamCreator::CreateCipherStreamFromSettings(
     const std::string& settings, std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
   enginepbccl::EncryptionSettings enc_settings;
-  if (!enc_settings.ParseFromString(settings)) {
+  if (settings.size() > 0 && !enc_settings.ParseFromString(settings)) {
     return rocksdb::Status::InvalidArgument("failed to parse encryption settings");
   }
 
   if (settings.size() == 0 || enc_settings.encryption_type() == enginepbccl::Plaintext) {
-    // Plaintext.
-    (*result) = std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>(new PlaintextStream());
+    // No entry (pre-registry file therefore plaintext) or plaintext algorithm.
+    result->reset(new PlaintextStream());
     return rocksdb::Status::OK();
   }
 
