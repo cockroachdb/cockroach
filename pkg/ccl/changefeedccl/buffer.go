@@ -8,36 +8,64 @@
 
 package changefeedccl
 
-import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
+import (
+	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
+
+type bufferEntry struct {
+	kv roachpb.KeyValue
+	// TODO(dan): Make this specific to a span.
+	resolved hlc.Timestamp
+}
+
+// buffer mediates between the changed data poller and the rest of the
+// changefeed pipeline (which is backpressured all the way to the sink).
+//
 // TODO(dan): Monitor memory usage and spill to disk when necessary.
-type changefeedBuffer struct {
-	syncutil.Mutex
-	buf []changedKVs
-	idx int
+type buffer struct {
+	entriesCh chan bufferEntry
 }
 
-// append adds new kvs to the buffer.
-func (b *changefeedBuffer) append(kvs changedKVs) {
-	b.Lock()
-	if b.idx >= len(b.buf) {
-		// Attempt to minimize allocations by reusing the buffer.
-		b.buf = b.buf[:0]
-		b.idx = 0
-	}
-	b.buf = append(b.buf, kvs)
-	b.Unlock()
+func makeBuffer() *buffer {
+	return &buffer{entriesCh: make(chan bufferEntry)}
 }
 
-// get returns the next kvs or false if the buffer is empty.
-func (b *changefeedBuffer) get() (changedKVs, bool) {
-	var ret changedKVs
-	var ok bool
-	b.Lock()
-	if b.idx < len(b.buf) {
-		ret, ok = b.buf[b.idx], true
-		b.idx++
+// AddKV inserts a changed kv into the buffer.
+//
+// TODO(dan): AddKV currently requires that each key is added in increasing mvcc
+// timestamp order. This will have to change when we add support for RangeFeed,
+// which starts out in a catchup state without this guarantee.
+func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue) error {
+	return b.addEntry(ctx, bufferEntry{kv: kv})
+}
+
+// AddResolved inserts a resolved timestamp notification in the buffer.
+//
+// TODO(dan): Make this specific to a span.
+func (b *buffer) AddResolved(ctx context.Context, ts hlc.Timestamp) error {
+	return b.addEntry(ctx, bufferEntry{resolved: ts})
+}
+
+func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
+	// TODO(dan): Spill to a temp rocksdb if entriesCh would block.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case b.entriesCh <- e:
+		return nil
 	}
-	b.Unlock()
-	return ret, ok
+}
+
+// Get returns an entry from the buffer. They are handed out in an order that
+// (if it is maintained all the way to the sink) meets our external guarantees.
+func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
+	select {
+	case <-ctx.Done():
+		return bufferEntry{}, ctx.Err()
+	case e := <-b.entriesCh:
+		return e, nil
+	}
 }
