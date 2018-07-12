@@ -81,6 +81,7 @@ message ImportDetails {
   roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
 
   int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
+  int64 oversample = 9;
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",

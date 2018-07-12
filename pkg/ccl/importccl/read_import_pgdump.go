@@ -372,7 +372,7 @@ func (m *pgDumpReader) readFile(
 			}
 			if conv != nil {
 				if expected, got := len(conv.visibleCols), len(i.Columns); expected != got {
-					return errors.Errorf("expected %d values, got %d", expected, got)
+					return errors.Errorf("expected %d columns, got %d", expected, got)
 				}
 				for colI, col := range i.Columns {
 					if string(col) != conv.visibleCols[colI].Name {
@@ -398,6 +398,9 @@ func (m *pgDumpReader) readFile(
 				}
 				switch row := row.(type) {
 				case copyData:
+					if expected, got := len(conv.visibleCols), len(row); expected != got {
+						return errors.Errorf("expected %d values, got %d", expected, got)
+					}
 					for i, s := range row {
 						if s == nil {
 							conv.datums[i] = tree.DNull
