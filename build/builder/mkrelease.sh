@@ -83,6 +83,7 @@ case "${1-}" in
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Windows
       TARGET_TRIPLE=x86_64-w64-mingw32
+      LDFLAGS=-static
       SUFFIX=-windows-6.2-amd64
     ) ;;
 
