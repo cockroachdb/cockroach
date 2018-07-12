@@ -58,7 +58,8 @@ const (
 	DefaultCacheSize         = 128 << 20 // 128 MB
 	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
 	defaultScanInterval      = 10 * time.Minute
-	defaultScanMaxIdleTime   = 200 * time.Millisecond
+	defaultScanMinIdleTime   = 10 * time.Millisecond
+	defaultScanMaxIdleTime   = 1 * time.Second
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
@@ -211,10 +212,14 @@ type Config struct {
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
 	ScanInterval time.Duration
 
+	// ScanMinIdleTime is the minimum time the scanner will be idle between ranges.
+	// If enabled (> 0), the scanner may complete in more than ScanInterval for large
+	// stores.
+	ScanMinIdleTime time.Duration
+
 	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
-	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
 	// TestingKnobs is used for internal test controls only.
@@ -381,6 +386,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
 		ScanInterval:                   defaultScanInterval,
+		ScanMinIdleTime:                defaultScanMinIdleTime,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: requireWebLogin,
@@ -412,6 +418,7 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
+	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
@@ -610,8 +617,6 @@ func (cfg *Config) RequireWebSession() bool {
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
-	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
-	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.

@@ -210,6 +210,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	// Set scanner timings that minimize waiting in this test.
 	tsArgs := base.TestServerArgs{
 		ScanInterval:    time.Second,
+		ScanMinIdleTime: 0,
 		ScanMaxIdleTime: 100 * time.Millisecond,
 	}
 	nodeZeroArgs := tsArgs
