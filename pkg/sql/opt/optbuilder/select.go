@@ -88,8 +88,8 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		outScope = b.buildStmt(source.Select, inScope)
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
-		// are not qualified). Remove any hidden columns added by the subquery's
-		// ORDER BY clause.
+		// are not qualified). Remove hidden columns, as they are not accessible
+		// outside the subquery.
 		outScope.setTableAlias("")
 		outScope.removeHiddenCols()
 

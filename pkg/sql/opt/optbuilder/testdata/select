@@ -97,10 +97,8 @@ select
 build
 SELECT *,* FROM abc
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
- └── scan abc
-      └── columns: a:1(int!null) b:2(int) c:3(int)
+scan abc
+ └── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT a,a,a,a FROM abc
@@ -303,10 +301,8 @@ TABLE kw
 build
 SELECT *, "from", kw."from" FROM kw
 ----
-project
- ├── columns: from:1(int!null) from:1(int!null) from:1(int!null)
- └── scan kw
-      └── columns: from:1(int!null)
+scan kw
+ └── columns: from:1(int!null) from:1(int!null) from:1(int!null)
 
 exec-ddl
 CREATE TABLE xyzw (

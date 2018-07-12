@@ -93,7 +93,5 @@ project
       └── sort
            ├── columns: x:1(int!null) x:1(int!null) y:2(int)
            ├── ordering: +2
-           └── project
-                ├── columns: x:1(int!null) y:2(int)
-                └── scan xy
-                     └── columns: x:1(int!null) y:2(int)
+           └── scan xy
+                └── columns: x:1(int!null) y:2(int)

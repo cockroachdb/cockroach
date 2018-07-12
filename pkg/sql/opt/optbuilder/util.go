@@ -328,17 +328,6 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 	return colList
 }
 
-func findColByIndex(cols []scopeColumn, id opt.ColumnID) *scopeColumn {
-	for i := range cols {
-		col := &cols[i]
-		if col.id == id {
-			return col
-		}
-	}
-
-	return nil
-}
-
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	exprTransformCtx := transform.ExprTransformContext{}
 	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {

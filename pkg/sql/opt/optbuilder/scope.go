@@ -41,6 +41,10 @@ type scope struct {
 	groupby       groupby
 	physicalProps props.Physical
 
+	// orderByCols contains all the columns specified by the ORDER BY clause.
+	// There may be some overlap with the columns in cols.
+	orderByCols []scopeColumn
+
 	// group is the memo.GroupID of the relational operator built with this scope.
 	group memo.GroupID
 
@@ -113,6 +117,26 @@ func (s *scope) appendColumn(col *scopeColumn, label string) *scopeColumn {
 		newCol.name = tree.Name(label)
 	}
 	return newCol
+}
+
+// copyPhysicalProps copies the physicalProps from the src scope to this scope.
+func (s *scope) copyPhysicalProps(src *scope) {
+	s.physicalProps.Presentation = src.physicalProps.Presentation
+	s.copyOrdering(src)
+}
+
+// copyOrdering copies the ordering and orderByCols from the src scope to this
+// scope. The groups in the new columns are reset to 0.
+func (s *scope) copyOrdering(src *scope) {
+	s.physicalProps.Ordering = src.physicalProps.Ordering
+
+	l := len(s.orderByCols)
+	s.orderByCols = append(s.orderByCols, src.orderByCols...)
+	// We want to reset the groups, as these become pass-through columns in the
+	// new scope.
+	for i := l; i < len(s.orderByCols); i++ {
+		s.orderByCols[i].group = 0
+	}
 }
 
 // setPresentation sets s.physicalProps.Presentation (if not already set).
@@ -217,18 +241,23 @@ func (s *scope) hasColumn(id opt.ColumnID) bool {
 	return false
 }
 
-// hasSameColumns returns true if this scope has the same columns
-// as the other scope (in the same order).
-func (s *scope) hasSameColumns(other *scope) bool {
-	if len(s.cols) != len(other.cols) {
-		return false
-	}
+// colSet returns a ColSet of all the columns in this scope, including
+// orderByCols.
+func (s *scope) colSet() opt.ColSet {
+	var colSet opt.ColSet
 	for i := range s.cols {
-		if s.cols[i].id != other.cols[i].id {
-			return false
-		}
+		colSet.Add(int(s.cols[i].id))
 	}
-	return true
+	for i := range s.orderByCols {
+		colSet.Add(int(s.orderByCols[i].id))
+	}
+	return colSet
+}
+
+// hasSameColumns returns true if this scope has the same columns
+// as the other scope.
+func (s *scope) hasSameColumns(other *scope) bool {
+	return s.colSet().Equals(other.colSet())
 }
 
 // removeHiddenCols removes hidden columns from the scope.
@@ -680,8 +709,8 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	outScope := s.builder.buildStmt(sub.Select, s)
 
 	// Treat the subquery result as an anonymous data source (i.e. column names
-	// are not qualified). Remove any hidden columns added by the subquery's
-	// ORDER BY clause.
+	// are not qualified). Remove hidden columns, as they are not accessible
+	// outside the subquery.
 	outScope.setTableAlias("")
 	outScope.removeHiddenCols()
 
