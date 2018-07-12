@@ -1173,13 +1173,13 @@ func (c *cascader) cascadeAll(
 				}
 			}
 
-			err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), updatedRows.At(i))
+			err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow)
 			if err == errUpdaterNoFKs {
 				continue
 			} else if err != nil {
 				return err
 			}
-			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), updatedRows.At(i)); err != nil {
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.
