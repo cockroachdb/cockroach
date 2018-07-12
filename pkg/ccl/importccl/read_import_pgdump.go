@@ -169,18 +169,25 @@ func readPostgresCreateTable(
 	// we'd have to delete the index and row and modify the column family. This
 	// is much easier and probably safer too.
 	createTbl := make(map[string]*tree.CreateTable)
+	// We need to run MakeSimpleTableDescriptor on tables in the same order as
+	// seen in the SQL file to guarantee that dependencies exist before being used
+	// (for FKs and sequences).
+	var tableOrder []string
 	ps := newPostgreStream(input, max)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*sqlbase.TableDescriptor, 0, len(createTbl))
-			for _, create := range createTbl {
+			seenDescs := make(fkResolver)
+			for _, name := range tableOrder {
+				create := createTbl[name]
 				if create != nil {
 					id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, walltime)
+					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, seenDescs, walltime)
 					if err != nil {
 						return nil, err
 					}
+					seenDescs[desc.Name] = desc
 					ret = append(ret, desc)
 				}
 			}
@@ -210,6 +217,7 @@ func readPostgresCreateTable(
 			} else {
 				createTbl[name] = stmt
 			}
+			tableOrder = append(tableOrder, name)
 		case *tree.CreateIndex:
 			name, err := getTableName(stmt.Table)
 			if err != nil {
