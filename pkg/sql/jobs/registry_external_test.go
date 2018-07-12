@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -85,11 +86,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		const cancelInterval = time.Duration(math.MaxInt64)
 		const adoptInterval = time.Nanosecond
 
+		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 		nodeID := &base.NodeIDContainer{}
 		nodeID.Reset(id)
 		r := jobs.MakeRegistry(
-			log.AmbientContext{}, clock, db,
-			s.InternalExecutor().(sqlutil.InternalExecutor),
+			ac, clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
 			nodeID, s.ClusterSettings(), jobs.FakePHS,
 		)
 		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
