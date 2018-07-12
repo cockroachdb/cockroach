@@ -1,34 +1,28 @@
 #!/usr/bin/env bash
-set -euxo pipefail
 
-export BUILDER_HIDE_GOPATH_SRC=1
+set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
+
+run export BUILDER_HIDE_GOPATH_SRC=1
+run mkdir -p artifacts
 definitely_ccache
 
-mkdir -p artifacts
+env=(
+  "GITHUB_API_TOKEN=$GITHUB_API_TOKEN"
+  "BUILD_VCS_NUMBER=$BUILD_VCS_NUMBER"
+  "TC_BUILD_ID=$TC_BUILD_ID"
+  "TC_SERVER_URL=$TC_SERVER_URL"
+  "COCKROACH_NIGHTLY_STRESS=true"
+  "PKG=$PKG"
+  "GOFLAGS=${GOFLAGS:-}"
+  "TAGS=${TAGS:-}"
+)
 
-exit_status=0
-
-build/builder.sh go install ./pkg/cmd/github-post
-
-build/builder.sh env COCKROACH_NIGHTLY_STRESS=true \
-		 make stress \
-		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
-		 TESTTIMEOUT=30m TESTFLAGS='-json' \
-		 STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
-		 2>&1 \
-    | tee artifacts/stress.log \
-    || exit_status=$?
-
-if [ $exit_status -ne 0 ]; then
-    build/builder.sh env \
-		     GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
-		     BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
-		     TC_BUILD_ID="$TC_BUILD_ID" \
-		     TC_SERVER_URL="$TC_SERVER_URL" \
-		     PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
-		     github-post < artifacts/stress.log
-fi;
-
-exit $exit_status
+build/builder.sh env "${env[@]}" bash <<EOF
+set -euxo pipefail
+go install ./pkg/cmd/github-post
+make stress PKG="$PKG" TESTTIMEOUT=30m STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
+  | tee artifacts/stress.log \
+  || { go tool test2json < artifacts/stress.log | github-post; exit 1; }
+EOF
