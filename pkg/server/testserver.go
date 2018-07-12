@@ -128,6 +128,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.ScanInterval != 0 {
 		cfg.ScanInterval = params.ScanInterval
 	}
+	if params.ScanMinIdleTime != 0 {
+		cfg.ScanMinIdleTime = params.ScanMinIdleTime
+	}
 	if params.ScanMaxIdleTime != 0 {
 		cfg.ScanMaxIdleTime = params.ScanMaxIdleTime
 	}

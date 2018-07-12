@@ -65,8 +65,9 @@ type replicaScanner struct {
 	clock *hlc.Clock
 
 	targetInterval time.Duration  // Target duration interval for scan loop
+	minIdleTime    time.Duration  // Min idle time for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
-	waitTimer      timeutil.Timer // Shared timer to avoid allocations.
+	waitTimer      timeutil.Timer // Shared timer to avoid allocations
 	replicas       replicaSet     // Replicas to be scanned
 	queues         []replicaQueue // Replica queues managed by this scanner
 	removed        chan *Replica  // Replicas to remove from queues
@@ -90,7 +91,7 @@ type replicaScanner struct {
 func newReplicaScanner(
 	ambient log.AmbientContext,
 	clock *hlc.Clock,
-	targetInterval, maxIdleTime time.Duration,
+	targetInterval, minIdleTime, maxIdleTime time.Duration,
 	replicas replicaSet,
 ) *replicaScanner {
 	if targetInterval < 0 {
@@ -100,6 +101,7 @@ func newReplicaScanner(
 		AmbientContext: ambient,
 		clock:          clock,
 		targetInterval: targetInterval,
+		minIdleTime:    minIdleTime,
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
 		removed:        make(chan *Replica, 10),
@@ -190,6 +192,9 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 		count = 1
 	}
 	interval := time.Duration(remainingNanos / int64(count))
+	if rs.minIdleTime > 0 && interval < rs.minIdleTime {
+		interval = rs.minIdleTime
+	}
 	if rs.maxIdleTime > 0 && interval > rs.maxIdleTime {
 		interval = rs.maxIdleTime
 	}
