@@ -83,7 +83,7 @@ type ruleGen struct {
 	// innerExploreMatch is the innermost match expression in an explore rule.
 	// Match expressions in an explore rule generate nested "for" loops, and
 	// the innermost loop can skip over previously explored expressions.
-	innerExploreMatch *lang.MatchExpr
+	innerExploreMatch *lang.FuncExpr
 }
 
 func (g *ruleGen) init(compiled *lang.CompiledExpr, w *matchWriter) {
@@ -94,7 +94,7 @@ func (g *ruleGen) init(compiled *lang.CompiledExpr, w *matchWriter) {
 // genRule generates match and replace code for one rule within the scope of
 // a particular op construction method.
 func (g *ruleGen) genRule(rule *lang.RuleExpr) {
-	matchName := string(rule.Match.Names[0])
+	matchName := rule.Match.SingleName()
 	define := g.compiled.LookupDefine(matchName)
 
 	// Determine whether the rule is a normalization or exploration rule and
@@ -192,20 +192,20 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 // support generating code when noMatch is true.
 func (g *ruleGen) genMatch(match lang.Expr, contextName string, noMatch bool) {
 	switch t := match.(type) {
-	case *lang.MatchExpr:
+	case *lang.FuncExpr:
 		g.genMatchNameAndChildren(t, contextName, noMatch)
 
 	case *lang.CustomFuncExpr:
 		g.genMatchCustom(t, noMatch)
 
-	case *lang.MatchAndExpr:
+	case *lang.AndExpr:
 		if noMatch {
 			panic("noMatch is not yet supported by the and match op")
 		}
 		g.genMatch(t.Left, contextName, noMatch)
 		g.genMatch(t.Right, contextName, noMatch)
 
-	case *lang.MatchNotExpr:
+	case *lang.NotExpr:
 		// Flip the noMatch flag so that the input expression will test for the
 		// inverse. No code needs to be generated here because each matcher is
 		// responsible for handling the noMatch flag (or not).
@@ -224,74 +224,105 @@ func (g *ruleGen) genMatch(match lang.Expr, contextName string, noMatch bool) {
 			g.w.nestIndent("if %s == m.mem.InternPrivate(%s) {\n", contextName, t)
 		}
 
-	case *lang.MatchAnyExpr:
+	case *lang.AnyExpr:
 		if noMatch {
 			g.w.nestIndent("if false {\n")
 		}
 
-	case *lang.MatchListAnyExpr, *lang.MatchListFirstExpr, *lang.MatchListLastExpr,
-		*lang.MatchListSingleExpr, *lang.MatchListEmptyExpr:
+	case *lang.ListExpr:
 		// Handle all list matchers.
-		g.genMatchList(match, contextName, noMatch)
+		g.genMatchList(t, contextName, noMatch)
 
 	default:
 		panic(fmt.Sprintf("unrecognized match expression: %v", match))
 	}
 }
 
-func (g *ruleGen) genMatchList(match lang.Expr, contextName string, noMatch bool) {
-	switch t := match.(type) {
-	case *lang.MatchListAnyExpr:
-		if noMatch {
-			panic("noMatch is not yet supported by the list match any op")
+// genMatchList generates code for the Optgen list operator. This operator
+// has any number of ListAnyOp children (produced by '...' syntax) arranged
+// around at most one non-ListAnyOp child. The following variants are possible:
+//
+//   match child in any position  : [ ... <child> ... ]
+//   match child in first position: [ <child> ... ]
+//   match child in last position : [ ... <child> ]
+//   match singleton list         : [ <child> ]
+//   match empty list             : [ ]
+//   match any  list              : [ ... ]
+//
+func (g *ruleGen) genMatchList(match *lang.ListExpr, contextName string, noMatch bool) {
+	matchItem := lang.Expr(nil)
+	isFirst := false
+	isLast := false
+	for i, item := range match.Items {
+		if item.Op() != lang.ListAnyOp {
+			matchItem = item
+			if i == 0 {
+				isFirst = true
+			}
+			if i == len(match.Items)-1 {
+				isLast = true
+			}
 		}
-		g.w.nestIndent("for _, _item := range %s.mem.LookupList(%s) {\n", g.thisVar, contextName)
-		g.genMatch(t.MatchItem, "_item", noMatch)
+	}
 
-	case *lang.MatchListFirstExpr:
-		if noMatch {
-			panic("noMatch is not yet supported by the list match first op")
+	if matchItem == nil {
+		// Empty list [] or no-op list [ ... ] case.
+		if len(match.Items) == 0 {
+			if noMatch {
+				g.w.nestIndent("if %s.Length != 0 {\n", contextName)
+			} else {
+				g.w.nestIndent("if %s.Length == 0 {\n", contextName)
+			}
 		}
-		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
-		g.w.writeIndent("_item := %s.mem.LookupList(%s)[0]\n", g.thisVar, contextName)
-		g.genMatch(t.MatchItem, "_item", noMatch)
+		return
+	}
 
-	case *lang.MatchListLastExpr:
+	switch {
+	case isFirst && isLast:
+		// Match single item.
 		if noMatch {
-			panic("noMatch is not yet supported by the list match last op")
-		}
-		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
-		format := "_item := %s.mem.LookupList(%s)[%s.Length-1]\n"
-		g.w.writeIndent(format, g.thisVar, contextName, contextName)
-		g.genMatch(t.MatchItem, "_item", noMatch)
-
-	case *lang.MatchListSingleExpr:
-		if noMatch {
-			if t.MatchItem.Op() != lang.MatchAnyOp {
+			if matchItem.Op() != lang.AnyOp {
 				panic("noMatch is not yet fully supported by the list match single op")
 			}
 			g.w.nestIndent("if %s.Length != 1 {\n", contextName)
 		} else {
 			g.w.nestIndent("if %s.Length == 1 {\n", contextName)
 			g.w.writeIndent("_item := %s.mem.LookupList(%s)[0]\n", g.thisVar, contextName)
-			g.genMatch(t.MatchItem, "_item", noMatch)
+			g.genMatch(matchItem, "_item", noMatch)
 		}
 
-	case *lang.MatchListEmptyExpr:
+	case isFirst && !isLast:
+		// Match first item in list.
 		if noMatch {
-			g.w.nestIndent("if %s.Length != 0 {\n", contextName)
-		} else {
-			g.w.nestIndent("if %s.Length == 0 {\n", contextName)
+			panic("noMatch is not yet supported by the list match first op")
 		}
+		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
+		g.w.writeIndent("_item := %s.mem.LookupList(%s)[0]\n", g.thisVar, contextName)
+		g.genMatch(matchItem, "_item", noMatch)
 
-	default:
-		panic(fmt.Sprintf("unrecognized list match expression: %v", match))
+	case !isFirst && isLast:
+		// Match last item in list.
+		if noMatch {
+			panic("noMatch is not yet supported by the list match last op")
+		}
+		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
+		format := "_item := %s.mem.LookupList(%s)[%s.Length-1]\n"
+		g.w.writeIndent(format, g.thisVar, contextName, contextName)
+		g.genMatch(matchItem, "_item", noMatch)
+
+	case !isFirst && !isLast:
+		// Match any item in list.
+		if noMatch {
+			panic("noMatch is not yet supported by the list match any op")
+		}
+		g.w.nestIndent("for _, _item := range %s.mem.LookupList(%s) {\n", g.thisVar, contextName)
+		g.genMatch(matchItem, "_item", noMatch)
 	}
 }
 
 // genMatchNameAndChildren generates code to match the opname and children of
 // the context expression.
-func (g *ruleGen) genMatchNameAndChildren(match *lang.MatchExpr, contextName string, noMatch bool) {
+func (g *ruleGen) genMatchNameAndChildren(match *lang.FuncExpr, contextName string, noMatch bool) {
 	// The name/child matcher can match multiple parts of the context
 	// expression, including its name and zero or more of its children. If
 	// noMatch is false, then all of these parts must match in order for the
@@ -358,7 +389,7 @@ func (g *ruleGen) genMatchNameAndChildren(match *lang.MatchExpr, contextName str
 		// If matching only scalar expressions, then don't need to loop over all
 		// expressions in the group, since scalar groups have at most one
 		// normalized expression.
-		if g.onlyScalarMatchNames(match.Names) {
+		if g.onlyScalarMatchNames(match) {
 			g.w.writeIndent("_eid := memo.MakeNormExprID(%s)\n", contextName)
 		} else {
 			// Ensure child group is explored before matching its expressions. If
@@ -395,12 +426,13 @@ func (g *ruleGen) genMatchNameAndChildren(match *lang.MatchExpr, contextName str
 
 	// If the match expression matches more than one name, or if it matches a
 	// tag name, then more dynamic code must be generated.
-	matchName := string(match.Names[0])
-	isDynamicMatch := len(match.Names) > 1 || g.compiled.LookupDefine(matchName) == nil
+	names := match.NameChoice()
+	matchName := string(names[0])
+	isDynamicMatch := len(names) > 1 || g.compiled.LookupDefine(matchName) == nil
 
 	// Match expression name.
 	if isDynamicMatch {
-		g.genDynamicMatch(match, match.Names, contextName, noMatch)
+		g.genDynamicMatch(match, names, contextName, noMatch)
 	} else {
 		g.genConstantMatch(match, matchName, contextName, noMatch)
 	}
@@ -416,13 +448,13 @@ func (g *ruleGen) genMatchNameAndChildren(match *lang.MatchExpr, contextName str
 // findInnerExploreMatch walks the match expression and returns the match
 // expression that will generate the innermost for loop. See comments on the
 // ruleGen struct for more details.
-func (g *ruleGen) findInnerExploreMatch(match *lang.MatchExpr) *lang.MatchExpr {
+func (g *ruleGen) findInnerExploreMatch(match *lang.FuncExpr) *lang.FuncExpr {
 	inner := match
 
 	var visitFunc lang.VisitFunc
 	visitFunc = func(e lang.Expr) lang.Expr {
-		if m, ok := e.(*lang.MatchExpr); ok {
-			if !g.onlyScalarMatchNames(m.Names) {
+		if m, ok := e.(*lang.FuncExpr); ok {
+			if !g.onlyScalarMatchNames(m) {
 				inner = m
 			}
 		}
@@ -436,8 +468,8 @@ func (g *ruleGen) findInnerExploreMatch(match *lang.MatchExpr) *lang.MatchExpr {
 // onlyScalarMatchNames returns true if all the names are either:
 //   1. The name of a define having the Scalar tag.
 //   2. Or a tag that is only used by defines having the Scalar tag.
-func (g *ruleGen) onlyScalarMatchNames(names lang.NamesExpr) bool {
-	for _, name := range names {
+func (g *ruleGen) onlyScalarMatchNames(match *lang.FuncExpr) bool {
+	for _, name := range match.NameChoice() {
 		define := g.compiled.LookupDefine(string(name))
 		if define != nil {
 			if !define.Tags.Contains("Scalar") {
@@ -461,7 +493,7 @@ func (g *ruleGen) onlyScalarMatchNames(names lang.NamesExpr) bool {
 // is statically known, and so the generated code can directly manipulate
 // strongly-typed expression structs (e.g. SelectExpr, InnerJoinExpr, etc).
 func (g *ruleGen) genConstantMatch(
-	match *lang.MatchExpr, opName string, contextName string, noMatch bool,
+	match *lang.FuncExpr, opName string, contextName string, noMatch bool,
 ) {
 	exprName := g.uniquifier.makeUnique(fmt.Sprintf("_%sExpr", unTitle(opName)))
 
@@ -496,7 +528,7 @@ func (g *ruleGen) genConstantMatch(
 // is matching multiple names. It matches expression children by dynamically
 // getting children by index, without knowing the specific type of operator.
 func (g *ruleGen) genDynamicMatch(
-	match *lang.MatchExpr, names lang.NamesExpr, contextName string, noMatch bool,
+	match *lang.FuncExpr, names lang.NamesExpr, contextName string, noMatch bool,
 ) {
 	exprName := g.uniquifier.makeUnique("_expr")
 	g.w.writeIndent("%s := %s.mem.%s(%s)\n", exprName, g.thisVar, g.exprLookup, contextName)
@@ -540,6 +572,8 @@ func (g *ruleGen) genDynamicMatch(
 
 // genMatchCustom generates code to invoke a custom matching function.
 func (g *ruleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool) {
+	g.genBoundStatements(matchCustom)
+
 	if noMatch {
 		g.w.nestIndent("if !")
 	} else {
@@ -577,6 +611,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 		g.w.writeIndent("_f.ruleCycles[%s.Fingerprint()] = true\n", exprName)
 	}
 
+	g.genBoundStatements(rule.Replace)
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()
@@ -624,11 +659,12 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	g.w.nestIndent("if _e.o.matchedRule == nil || _e.o.matchedRule(opt.%s) {\n", rule.Name)
 
 	switch t := rule.Replace.(type) {
-	case *lang.ConstructExpr:
+	case *lang.FuncExpr:
 		name, ok := t.Name.(*lang.NameExpr)
 		if !ok {
 			panic("exploration pattern with dynamic replace name not yet supported")
 		}
+		g.genBoundStatements(t)
 		g.w.nestIndent("_expr := memo.Make%sExpr(\n", *name)
 		for _, arg := range t.Args {
 			g.w.writeIndent("")
@@ -642,6 +678,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	case *lang.CustomFuncExpr:
 		// Top-level custom function returns a memo.Expr slice, so iterate
 		// through that and memoize each expression.
+		g.genBoundStatements(rule.Replace)
 		g.w.writeIndent("_exprs := ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
@@ -663,18 +700,54 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	g.w.unnest("}\n")
 }
 
-// genNestedExpr recursively generates an Optgen expression as one large Go
-// expression.
+// genBoundStatements is called before genNestedExpr in order to generate zero
+// or more statements that construct subtrees of the given expression that are
+// bound to variables. Those variables can be used when constructing other parts
+// of the result tree. For example:
+//
+//   (InnerJoin $left:* $right:* $on:*)
+//   =>
+//   (InnerJoin
+//     $varname:(SomeFunc $left)
+//     $varname2:(Select $varname (SomeOtherFunc $right))
+//     (MakeOn $varname $varname2)
+//   )
+//
+//   varname := _f.funcs.SomeFunc(left)
+//   varname2 := _f.ConstructSelect(varname, _f.funcs.SomeOtherFunc(right))
+//
+func (g *ruleGen) genBoundStatements(e lang.Expr) {
+	var visitFunc lang.VisitFunc
+	visitFunc = func(e lang.Expr) lang.Expr {
+		// Post-order traversal so that all descendants are generated before
+		// generating ancestor.
+		e.Visit(visitFunc)
+		if be, ok := e.(*lang.BindExpr); ok {
+			g.w.writeIndent("%s := ", be.Label)
+			g.genNestedExpr(be.Target)
+			g.w.newline()
+		}
+		return e
+	}
+	visitFunc(e)
+}
+
+// genNestedExpr recursively generates an Optgen expression. Bound expressions
+// should have already been generated as statements by genBoundStatements, so
+// that genNestedExpr can generate references to those statements.
 func (g *ruleGen) genNestedExpr(e lang.Expr) {
 	switch t := e.(type) {
-	case *lang.ConstructExpr:
+	case *lang.FuncExpr:
 		g.genConstruct(t)
 
-	case *lang.ConstructListExpr:
+	case *lang.ListExpr:
 		g.genConstructList(t)
 
 	case *lang.CustomFuncExpr:
 		g.genCustomFunc(t)
+
+	case *lang.BindExpr:
+		g.w.write(string(t.Label))
 
 	case *lang.RefExpr:
 		g.w.write(string(t.Label))
@@ -695,7 +768,7 @@ func (g *ruleGen) genNestedExpr(e lang.Expr) {
 
 // genConstruct generates code to invoke an op construction function or a user-
 // defined custom function.
-func (g *ruleGen) genConstruct(construct *lang.ConstructExpr) {
+func (g *ruleGen) genConstruct(construct *lang.FuncExpr) {
 	var factoryVar string
 	if g.normalize {
 		factoryVar = "_f"
@@ -754,7 +827,7 @@ func (g *ruleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 }
 
 // genConstructList generates code to construct an interned list of items.
-func (g *ruleGen) genConstructList(list *lang.ConstructListExpr) {
+func (g *ruleGen) genConstructList(list *lang.ListExpr) {
 	g.w.write("%s.mem.InternList([]memo.GroupID{", g.thisVar)
 	for i, item := range list.Items {
 		if i != 0 {

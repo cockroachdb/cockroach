@@ -21,7 +21,7 @@
 #          example, []*DefineExpr and []TagExpr. Slice definitions are marked
 #          with a "Slice" tag, and have an Element field that specifies the
 #          type of slice elements. For example:
-#            [Slice] define List { Element Expr }
+#            [Slice] define Slice { Element Expr }
 
 
 # Root expression is always the top-most node in the AST.
@@ -88,22 +88,13 @@ define Rule {
     Comments Comments
     Name     String
     Tags     Tags
-    Match    Match
+    Match    Func
     Replace  Expr
 }
 
-define Bind {
-    Label  String
-    Target Expr
-}
-
-define Ref {
-    Label String
-}
-
-define Match {
-    Names Names
-    Args  List
+define Func {
+    Name Expr
+    Args Slice
 }
 
 # type NamesExpr []NameExpr
@@ -118,49 +109,37 @@ define Name {
     Value string
 }
 
-define MatchAnd {
+define And {
     Left  Expr
     Right Expr
 }
 
-define MatchNot {
+define Not {
     Input Expr
 }
 
-define MatchAny {
-}
-
-define MatchListAny {
-    MatchItem Expr
-}
-
-define MatchListFirst {
-    MatchItem Expr
-}
-
-define MatchListLast {
-    MatchItem Expr
-}
-
-define MatchListSingle {
-    MatchItem Expr
-}
-
-define MatchListEmpty {
-}
-
-define Construct {
-    Name Expr
-    Args List
-}
-
-define ConstructList {
-    Items List
-}
-
-# type ListExpr []Expr
-[Slice]
 define List {
+    Items Slice
+}
+
+define ListAny {
+}
+
+define Bind {
+    Label  String
+    Target Expr
+}
+
+define Ref {
+    Label String
+}
+
+define Any {
+}
+
+# type SliceExpr []Expr
+[Slice]
+define Slice {
     Element Expr
 }
 
@@ -177,5 +156,5 @@ define String {
 
 define CustomFunc {
     Name Name
-    Args List
+    Args Slice
 }
