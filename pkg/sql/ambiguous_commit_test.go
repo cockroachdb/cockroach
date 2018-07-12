@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -85,8 +85,8 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		params.Knobs.KVClient = &kv.ClientTestingKnobs{
-			TransportFactory: func(opts kv.SendOptions, rpcContext *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest) (kv.Transport, error) {
-				transport, err := kv.GRPCTransportFactory(opts, rpcContext, replicas, args)
+			TransportFactory: func(opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice, args roachpb.BatchRequest) (kv.Transport, error) {
+				transport, err := kv.GRPCTransportFactory(opts, nodeDialer, replicas, args)
 				return &interceptingTransport{
 					Transport: transport,
 					sendNext: func(ctx context.Context) (*roachpb.BatchResponse, error) {
