@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type createSequenceNode struct {
@@ -132,8 +134,20 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	id sqlbase.ID,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, sequenceName,
-		params.p.txn.CommitTimestamp(), privileges)
+	return MakeSequenceTableDesc(sequenceName, n.n.Options, parentID, id, params.p.txn.CommitTimestamp(), privileges, params.EvalContext().Settings)
+}
+
+// MakeSequenceTableDesc creates a sequence descriptor.
+func MakeSequenceTableDesc(
+	sequenceName string,
+	sequenceOptions tree.SequenceOptions,
+	parentID sqlbase.ID,
+	id sqlbase.ID,
+	creationTime hlc.Timestamp,
+	privileges *sqlbase.PrivilegeDescriptor,
+	settings *cluster.Settings,
+) (sqlbase.TableDescriptor, error) {
+	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
 
 	// Mimic a table with one column, "value".
 	desc.Columns = []sqlbase.ColumnDescriptor{
@@ -166,11 +180,11 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)
+	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */)
 	if err != nil {
 		return desc, err
 	}
 	desc.SequenceOpts = opts
 
-	return desc, desc.ValidateTable(params.EvalContext().Settings)
+	return desc, desc.ValidateTable(settings)
 }

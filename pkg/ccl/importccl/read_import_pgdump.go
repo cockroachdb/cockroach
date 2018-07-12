@@ -17,10 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -129,7 +132,10 @@ func (p *postgreStream) Next() (interface{}, error) {
 var (
 	ignoreComments   = regexp.MustCompile(`^\s*(--.*)`)
 	ignoreStatements = []*regexp.Regexp{
+		regexp.MustCompile("(?i)^alter sequence .* owned by"),
 		regexp.MustCompile("(?i)^alter table .* owner to"),
+		regexp.MustCompile("(?i)^comment on"),
+		regexp.MustCompile("(?i)^create extension"),
 	}
 )
 
@@ -149,6 +155,46 @@ func isIgnoredStatement(s string) bool {
 		}
 	}
 	return false
+}
+
+type regclassRewriter struct{}
+
+var _ tree.Visitor = regclassRewriter{}
+
+func (regclassRewriter) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	switch t := expr.(type) {
+	case *tree.FuncExpr:
+		switch t.Func.String() {
+		case "nextval":
+			if len(t.Exprs) > 0 {
+				switch e := t.Exprs[0].(type) {
+				case *tree.CastExpr:
+					if e.Type == coltypes.RegClass {
+						// tree.Visitor says we should make a copy, but since copyNode is unexported
+						// and there's no planner here, I think it's safe to directly modify the
+						// statement here.
+						t.Exprs[0] = e.Expr
+					}
+				}
+			}
+		}
+	}
+	return true, expr
+}
+
+func (regclassRewriter) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// removeDefaultRegclass removes `::regclass` casts from sequence operations
+// (i.e., nextval) in DEFAULT column expressions.
+func removeDefaultRegclass(create *tree.CreateTable) {
+	for _, def := range create.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			if def.DefaultExpr.Expr != nil {
+				def.DefaultExpr.Expr, _ = tree.WalkExpr(regclassRewriter{}, def.DefaultExpr.Expr)
+			}
+		}
+	}
 }
 
 // readPostgresCreateTable returns table descriptors for all tables or the
@@ -174,14 +220,33 @@ func readPostgresCreateTable(
 	// seen in the SQL file to guarantee that dependencies exist before being used
 	// (for FKs and sequences).
 	var tableOrder []string
+	createSeq := make(map[string]*tree.CreateSequence)
 	ps := newPostgreStream(input, max)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*sqlbase.TableDescriptor, 0, len(createTbl))
+			for name, seq := range createSeq {
+				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
+				desc, err := sql.MakeSequenceTableDesc(
+					name,
+					seq.Options,
+					parentID,
+					id,
+					hlc.Timestamp{WallTime: walltime},
+					sqlbase.NewDefaultPrivilegeDescriptor(),
+					settings,
+				)
+				if err != nil {
+					return nil, err
+				}
+				fks.resolver[desc.Name] = &desc
+				ret = append(ret, &desc)
+			}
 			for _, name := range tableOrder {
 				create := createTbl[name]
 				if create != nil {
+					removeDefaultRegclass(create)
 					id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
 					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
 					if err != nil {
@@ -253,9 +318,26 @@ func readPostgresCreateTable(
 				case *tree.AlterTableAddConstraint:
 					create.Defs = append(create.Defs, cmd.ConstraintDef)
 					continue
+				case *tree.AlterTableSetDefault:
+					for i, def := range create.Defs {
+						def, ok := def.(*tree.ColumnTableDef)
+						if !ok || def.Name != cmd.Column {
+							continue
+						}
+						def.DefaultExpr.Expr = cmd.Default
+						create.Defs[i] = def
+					}
 				default:
 					return nil, errors.Errorf("unsupported statement: %s", stmt)
 				}
+			}
+		case *tree.CreateSequence:
+			name, err := getTableName(stmt.Name)
+			if err != nil {
+				return nil, err
+			}
+			if match == "" || match == name {
+				createSeq[name] = stmt
 			}
 		}
 	}
@@ -271,6 +353,7 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 
 type pgDumpReader struct {
 	tables map[string]*rowConverter
+	descs  map[string]*sqlbase.TableDescriptor
 	kvCh   chan kvBatch
 	opts   roachpb.PgDumpOptions
 }
@@ -281,20 +364,23 @@ var _ inputConverter = &pgDumpReader{}
 func newPgDumpReader(
 	kvCh chan kvBatch,
 	opts roachpb.PgDumpOptions,
-	tables map[string]*sqlbase.TableDescriptor,
+	descs map[string]*sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
-	converters := make(map[string]*rowConverter, len(tables))
-	for name, table := range tables {
-		conv, err := newRowConverter(table, evalCtx, kvCh)
-		if err != nil {
-			return nil, err
+	converters := make(map[string]*rowConverter, len(descs))
+	for name, desc := range descs {
+		if desc.IsTable() {
+			conv, err := newRowConverter(desc, evalCtx, kvCh)
+			if err != nil {
+				return nil, err
+			}
+			converters[name] = conv
 		}
-		converters[name] = conv
 	}
 	return &pgDumpReader{
 		kvCh:   kvCh,
 		tables: converters,
+		descs:  descs,
 		opts:   opts,
 	}, nil
 }
@@ -427,6 +513,60 @@ func (m *pgDumpReader) readFile(
 					return makeRowErr(inputName, count, "unexpected: %v", row)
 				}
 			}
+		case *tree.Select:
+			// Look for something of the form "SELECT pg_catalog.setval(...)". Any error
+			// or unexpected value silently breaks out of this branch. We are silent
+			// instead of returning an error because we expect input to be well-formatted
+			// by pg_dump, and thus if it isn't, we don't try to figure out what to do.
+			sc, ok := i.Select.(*tree.SelectClause)
+			if !ok {
+				break
+			}
+			if len(sc.Exprs) != 1 {
+				break
+			}
+			fn, ok := sc.Exprs[0].Expr.(*tree.FuncExpr)
+			if !ok || len(fn.Exprs) < 2 {
+				break
+			}
+			if name := strings.ToLower(fn.Func.String()); name != "setval" && name != "pg_catalog.setval" {
+				break
+			}
+			seqname, ok := fn.Exprs[0].(*tree.StrVal)
+			if !ok {
+				break
+			}
+			seqval, ok := fn.Exprs[1].(*tree.NumVal)
+			if !ok {
+				break
+			}
+			val, err := seqval.AsInt64()
+			if err != nil {
+				break
+			}
+			isCalled := false
+			if len(fn.Exprs) > 2 {
+				called, ok := fn.Exprs[2].(*tree.DBool)
+				if !ok {
+					break
+				}
+				isCalled = bool(*called)
+			}
+			name, err := parser.ParseTableName(seqname.RawString())
+			if err != nil {
+				break
+			}
+			seq := m.descs[name.Table()]
+			if seq == nil {
+				break
+			}
+			key, val, err := sql.MakeSequenceKeyVal(seq, val, isCalled)
+			if err != nil {
+				return makeRowErr(inputName, count, "%s", err)
+			}
+			kv := roachpb.KeyValue{Key: key}
+			kv.Value.SetInt(val)
+			m.kvCh <- []roachpb.KeyValue{kv}
 		default:
 			if log.V(3) {
 				log.Infof(ctx, "ignoring %T stmt: %v", i, i)
