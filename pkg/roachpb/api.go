@@ -1061,7 +1061,7 @@ func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange
 func (*RefreshRequest) flags() int      { return isRead | isTxn | updatesReadTSCache }
 func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | updatesReadTSCache }
 
-func (*GetSnapshotForMergeRequest) flags() int { return isRead | updatesReadTSCache }
+func (*GetSnapshotForMergeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {

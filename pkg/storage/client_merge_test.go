@@ -186,8 +186,6 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#27401")
-
 	for _, colocate := range []bool{false, true} {
 		for _, retries := range []int64{0, 3} {
 			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
@@ -203,6 +201,7 @@ func mergeWithData(t *testing.T, colocate bool, retries int64) {
 	sc.TestingKnobs.DisableReplicateQueue = true
 
 	// Maybe inject some retryable errors when the merge transaction commits.
+	var mtc *multiTestContext
 	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
@@ -210,11 +209,18 @@ func mergeWithData(t *testing.T, colocate bool, retries int64) {
 					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
 				}
 			}
+			if req.GetGetSnapshotForMerge() != nil {
+				// Introduce targeted chaos by forcing a lease acquisition before
+				// GetSnapshotForMerge can execute. This triggers an unusual code path
+				// where the lease acquisition, not GetSnapshotForMerge, notices the
+				// merge and installs a mergeComplete channel on the replica.
+				mtc.advanceClock(ctx)
+			}
 		}
 		return nil
 	}
 
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc = &multiTestContext{storeConfig: &sc}
 
 	var store1, store2 *storage.Store
 	if colocate {
