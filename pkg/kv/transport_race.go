@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -53,12 +53,12 @@ func jitter(avgInterval time.Duration) time.Duration {
 // intercepts all BatchRequests, reading them in a tight loop. This allows the
 // race detector to catch any mutations of a batch passed to the transport.
 func GRPCTransportFactory(
-	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		// NB: We can't use Stopper.RunWorker because doing so would race with
 		// calling Stopper.Stop.
-		if err := rpcContext.Stopper.RunAsyncTask(
+		if err := nodeDialer.Stopper().RunAsyncTask(
 			context.TODO(), "transport racer", func(ctx context.Context) {
 				var iters int
 				var curIdx int
@@ -94,7 +94,7 @@ func GRPCTransportFactory(
 					// then access everything we have.
 					for {
 						select {
-						case <-rpcContext.Stopper.ShouldQuiesce():
+						case <-nodeDialer.Stopper().ShouldQuiesce():
 							return
 						case ba := <-incoming:
 							bas[curIdx%size] = ba
@@ -118,5 +118,5 @@ func GRPCTransportFactory(
 	default:
 		// Avoid slowing down the tests if we're backed up.
 	}
-	return grpcTransportFactoryImpl(opts, rpcContext, replicas, args)
+	return grpcTransportFactoryImpl(opts, nodeDialer, replicas, args)
 }
