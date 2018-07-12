@@ -2360,7 +2360,7 @@ func (r *Replica) beginCmds(
 		r.mu.RLock()
 		mergeCompleteCh := r.mu.mergeComplete
 		r.mu.RUnlock()
-		if mergeCompleteCh != nil {
+		if mergeCompleteCh != nil && !ba.IsSingleGetSnapshotForMergeRequest() {
 			// The replica is being merged into its left-hand neighbor. This request
 			// cannot proceed until the merge completes, signaled by the closing of
 			// the channel.
@@ -2370,6 +2370,34 @@ func (r *Replica) beginCmds(
 			// guaranteed that we're not racing with a GetSnapshotForMerge command.
 			// (GetSnapshotForMerge commands declare a conflict with all other
 			// commands.)
+			//
+			// Note that GetSnapshotForMerge commands are exempt from waiting on the
+			// mergeComplete channel. This is necessary to avoid deadlock. While
+			// normally a GetSnapshotForMerge request will trigger the installation of
+			// a mergeComplete channel after it is executed, it may sometimes execute
+			// after the mergeComplete channel has been installed. Consider the case
+			// where the RHS replica acquires a new lease after the merge transaction
+			// deletes its local range descriptor but before the GetSnapshotForMerge
+			// command is sent. The lease acquisition request will notice the intent
+			// on the local range descriptor and install a mergeComplete channel. If
+			// the forthcoming GetSnapshotForMerge blocked on that channel, the merge
+			// transaction would deadlock.
+			//
+			// This exclusion admits a small race condition. If a GetSnapshotForMerge
+			// request is sent to the right-hand side of a merge, outside of a merge
+			// transaction, after the merge has committed but before the RHS has
+			// noticed that the merge has committed, the request may return stale
+			// data. Since the merge has committed, the LHS may have processed writes
+			// to the keyspace previously owned by the RHS that the RHS is unaware of.
+			// This window closes quickly, as the RHS will soon notice the merge
+			// transaction has committed and mark itself as destroyed, which prevents
+			// it from serving all traffic, including GetSnapshotForMerge requests.
+			//
+			// In our current, careful usage of GetSnapshotForMerge, this race
+			// condition is irrelevant. GetSnapshotForMerge is only sent from within a
+			// merge transaction, and merge transactions read the RHS descriptor at
+			// the beginning of the transaction to verify that it has not already been
+			// merged away.
 			select {
 			case <-mergeCompleteCh:
 				// Merge complete. Carry on.
@@ -2696,10 +2724,11 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	mergeCompleteCh := make(chan struct{})
 	r.mu.Lock()
 	if r.mu.mergeComplete != nil {
-		// TODO(benesch): Is there a way this could legitimately happen? If so,
-		// what to do? Return and assume there's another goroutine that's doing
-		// the watching?
-		log.Fatalf(ctx, "maybeWatchForMerge called twice for the same merge")
+		// Another request already noticed the merge, installed a mergeComplete
+		// channel, and launched a goroutine to watch for the merge's completion.
+		// Nothing more to do.
+		r.mu.Unlock()
+		return nil
 	}
 	r.mu.mergeComplete = mergeCompleteCh
 	r.mu.Unlock()
