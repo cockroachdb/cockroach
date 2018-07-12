@@ -81,7 +81,7 @@ type testSenderFactory struct {
 }
 
 func (f *testSenderFactory) TransactionalSender(
-	typ client.TxnType, _ *roachpb.Transaction,
+	typ client.TxnType, _ roachpb.TxnCoordMeta,
 ) client.TxnSender {
 	return &testSender{store: f.store}
 }

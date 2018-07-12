@@ -1030,7 +1030,8 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
 			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
-			tc := factory.TransactionalSender(client.RootTxn, &txn)
+			meta := roachpb.MakeTxnCoordMeta(txn)
+			tc := factory.TransactionalSender(client.RootTxn, meta)
 			defer teardownHeartbeat(tc.(*TxnCoordSender))
 			ba.Txn = &txn
 			_, pErr := tc.Send(context.Background(), ba)
@@ -1701,7 +1702,8 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 		clock.Now(),
 		clock.MaxOffset().Nanoseconds(),
 	)
-	tcs := factory.TransactionalSender(client.RootTxn, &txn)
+	meta := roachpb.MakeTxnCoordMeta(txn)
+	tcs := factory.TransactionalSender(client.RootTxn, meta)
 	txnHeader := roachpb.Header{
 		Txn: &txn,
 	}
