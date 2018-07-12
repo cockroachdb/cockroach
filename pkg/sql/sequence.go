@@ -136,23 +136,36 @@ func (p *planner) SetSequenceValue(
 		return err
 	}
 
-	opts := descriptor.SequenceOpts
-	if newVal > opts.MaxValue || newVal < opts.MinValue {
-		return pgerror.NewErrorf(
-			pgerror.CodeNumericValueOutOfRangeError,
-			`value %d is out of bounds for sequence "%s" (%d..%d)`,
-			newVal, descriptor.Name, opts.MinValue, opts.MaxValue,
-		)
-	}
-	if !isCalled {
-		newVal = newVal - descriptor.SequenceOpts.Increment
+	seqValueKey, newVal, err := MakeSequenceKeyVal(descriptor, newVal, isCalled)
+	if err != nil {
+		return err
 	}
 
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
 	return p.txn.Put(ctx, seqValueKey, newVal)
+}
+
+// MakeSequenceKeyVal returns the key and value of a sequence being set
+// with newVal.
+func MakeSequenceKeyVal(
+	sequence *TableDescriptor, newVal int64, isCalled bool,
+) ([]byte, int64, error) {
+	opts := sequence.SequenceOpts
+	if newVal > opts.MaxValue || newVal < opts.MinValue {
+		return nil, 0, pgerror.NewErrorf(
+			pgerror.CodeNumericValueOutOfRangeError,
+			`value %d is out of bounds for sequence "%s" (%d..%d)`,
+			newVal, sequence.Name, opts.MinValue, opts.MaxValue,
+		)
+	}
+	if !isCalled {
+		newVal = newVal - sequence.SequenceOpts.Increment
+	}
+
+	seqValueKey := keys.MakeSequenceKey(uint32(sequence.ID))
+	return seqValueKey, newVal, nil
 }
 
 // GetSequenceValue returns the current value of the sequence.

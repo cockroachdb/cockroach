@@ -235,7 +235,7 @@ type importSequenceOperators struct {
 func (so *importSequenceOperators) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	return nil, errSequenceOperators
+	return parser.ParseTableName(sql)
 }
 
 // Implements the tree.EvalDatabase interface.
@@ -763,27 +763,19 @@ func importPlanHook(
 			// restoring. We do this last because we want to avoid calling
 			// GenerateUniqueDescID if there's any kind of error above.
 			// Reserving a table ID now means we can avoid the rekey work during restore.
-			tableRewrites := make(map[sqlbase.ID]sqlbase.ID)
+			tableRewrites := make(backupccl.TableRewriteMap)
 			for _, tableDesc := range tableDescs {
-				tableRewrites[tableDesc.ID], err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 				if err != nil {
 					return err
 				}
-			}
-			// Now that we have all the new table IDs rewrite them along with FKs.
-			for _, tableDesc := range tableDescs {
-				tableDesc.ID = tableRewrites[tableDesc.ID]
-				if err := tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
-					if idx.ForeignKey.IsSet() {
-						idx.ForeignKey.Table = tableRewrites[idx.ForeignKey.Table]
-					}
-					for i, fk := range idx.ReferencedBy {
-						idx.ReferencedBy[i].Table = tableRewrites[fk.Table]
-					}
-					return nil
-				}); err != nil {
-					return err
+				tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
+					TableID:  id,
+					ParentID: parentID,
 				}
+			}
+			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
+				return err
 			}
 		}
 
