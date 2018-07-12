@@ -1318,6 +1318,8 @@ TryDecorrelateProjectSelect
   - │    │    │    │    │    └── true [type=bool]
   + │    │    │    │    │    └── left-join-apply
   + │    │    │    │    │         ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
+  + │    │    │    │    │         ├── key: (1,3)
+  + │    │    │    │    │         ├── fd: (1,3)-->(9)
   + │    │    │    │    │         ├── scan xy
   + │    │    │    │    │         │    ├── columns: x:1(int!null)
   + │    │    │    │    │         │    └── key: (1)
@@ -1369,7 +1371,8 @@ DecorrelateJoin
   - │    │    │    │    │    └── left-join-apply
   + │    │    │    │    │    └── left-join
     │    │    │    │    │         ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
-  + │    │    │    │    │         ├── key: (1,3)
+    │    │    │    │    │         ├── key: (1,3)
+  - │    │    │    │    │         ├── fd: (1,3)-->(9)
   + │    │    │    │    │         ├── fd: (3)-->(9)
     │    │    │    │    │         ├── scan xy
     │    │    │    │    │         │    ├── columns: x:1(int!null)
