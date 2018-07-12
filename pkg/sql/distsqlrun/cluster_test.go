@@ -128,7 +128,7 @@ func TestClusterFlow(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetAddr: tc.Server(2).ServingAddr()},
+						{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
 			}},
@@ -149,7 +149,7 @@ func TestClusterFlow(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetAddr: tc.Server(2).ServingAddr()},
+						{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
 			}},
@@ -659,7 +659,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 									Output: []OutputRouterSpec{{
 										Type: OutputRouterSpec_PASS_THROUGH,
 										Streams: []StreamEndpointSpec{
-											{Type: streamType(i), StreamID: StreamID(i), TargetAddr: tc.Server(0).ServingAddr()},
+											{Type: streamType(i), StreamID: StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
 										},
 									}},
 								}},
