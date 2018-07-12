@@ -802,3 +802,83 @@ func TestShowJobs(t *testing.T) {
 		t.Fatalf("in job did not match out job:\n%s", diff)
 	}
 }
+
+func TestShowJobsWithError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create at least 4 row, ensuring the last 3 rows are corrupted.
+	if _, err := sqlDB.Exec(`
+     -- Ensure there is at least one row in system.jobs.
+     CREATE TABLE foo(x INT); ALTER TABLE foo ADD COLUMN y INT;
+     -- Create a corrupted payload field from the first row.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs ORDER BY id LIMIT 1;
+     -- Create a corrupted progress field.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     -- Corrupt both fields.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Extract the last 4 rows from the query.
+	rows, err := sqlDB.Query(`
+  WITH a AS (SELECT id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY id DESC LIMIT 4)
+  SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY id ASC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	var desc, frac, errStr string
+
+	if !rows.Next() {
+		t.Fatal("too few rows")
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc == "NULL" || errStr != "NULL" || frac[0] == '-' {
+		t.Fatal("invalid row")
+	}
+
+	if !rows.Next() {
+		t.Fatal("too few rows")
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc != "NULL" || !strings.HasPrefix(errStr, "error decoding payload") || frac[0] == '-' {
+		t.Fatal("invalid row")
+	}
+
+	if !rows.Next() {
+		t.Fatal("too few rows")
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
+		t.Fatal("invalid row")
+	}
+
+	if !rows.Next() {
+		t.Fatal("too few rows")
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		!strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatal("invalid row")
+	}
+}
