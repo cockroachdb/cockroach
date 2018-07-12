@@ -255,7 +255,7 @@ func sendTraceData(ctx context.Context, dst RowReceiver) {
 // thing multiple times.
 func getTxnCoordMeta(txn *client.Txn) *roachpb.TxnCoordMeta {
 	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetTxnCoordMeta()
+		txnMeta := txn.GetStrippedTxnCoordMeta()
 		if txnMeta.Txn.ID != uuid.Nil {
 			return &txnMeta
 		}
