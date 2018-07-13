@@ -107,6 +107,8 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 func (b *rulePropsBuilder) buildScanProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
+	// Column Pruning
+	// --------------
 	// All columns can potentially be pruned from the Scan.
 	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
 }
@@ -117,6 +119,8 @@ func (b *rulePropsBuilder) buildSelectProps(ev memo.ExprView) {
 	inputProps := ev.Child(0).Logical().Relational
 	filterProps := ev.Child(1).Logical().Scalar
 
+	// Column Pruning
+	// --------------
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used by the filter.
 	relational.Rule.PruneCols = inputProps.Rule.PruneCols.Difference(filterProps.OuterCols)
@@ -125,6 +129,8 @@ func (b *rulePropsBuilder) buildSelectProps(ev memo.ExprView) {
 func (b *rulePropsBuilder) buildProjectProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
+	// Column Pruning
+	// --------------
 	// All columns can potentially be pruned from the Project, if they're never
 	// used in a higher-level expression.
 	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
@@ -137,6 +143,8 @@ func (b *rulePropsBuilder) buildJoinProps(ev memo.ExprView) {
 	rightProps := ev.Child(1).Logical().Relational
 	onProps := ev.Child(2).Logical().Scalar
 
+	// Column Pruning
+	// --------------
 	// Any pruneable columns from projected inputs can potentially be pruned, as
 	// long as they're not used by the right input (i.e. in Apply case) or by
 	// the join filter.
@@ -149,6 +157,31 @@ func (b *rulePropsBuilder) buildJoinProps(ev memo.ExprView) {
 	}
 	relational.Rule.PruneCols.DifferenceWith(rightProps.OuterCols)
 	relational.Rule.PruneCols.DifferenceWith(onProps.OuterCols)
+
+	// Null Rejection
+	// --------------
+	switch ev.Operator() {
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		// Pass through null-rejection columns from both inputs.
+		relational.Rule.RejectNullCols = leftProps.Rule.RejectNullCols
+		relational.Rule.RejectNullCols.UnionWith(rightProps.Rule.RejectNullCols)
+
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		// Pass through null-rejection columns from left input, and request null-
+		// rejection on right columns.
+		relational.Rule.RejectNullCols = leftProps.Rule.RejectNullCols
+		relational.Rule.RejectNullCols.UnionWith(rightProps.OutputCols)
+
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		// Pass through null-rejection columns from right input, and request null-
+		// rejection on left columns.
+		relational.Rule.RejectNullCols = leftProps.OutputCols
+		relational.Rule.RejectNullCols.UnionWith(rightProps.Rule.RejectNullCols)
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		// Request null-rejection on all output columns.
+		relational.Rule.RejectNullCols = relational.OutputCols
+	}
 }
 
 func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {
@@ -156,6 +189,8 @@ func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {
 
 	groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols
 
+	// Column Pruning
+	// --------------
 	// Grouping columns can't be pruned, because they were used to group rows.
 	// However, aggregation columns can potentially be pruned.
 	if groupingColSet.Empty() {
@@ -163,9 +198,15 @@ func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {
 	} else {
 		relational.Rule.PruneCols = relational.OutputCols.Difference(groupingColSet)
 	}
+
+	// Null Rejection
+	// --------------
+	relational.Rule.RejectNullCols = deriveGroupByRejectNullCols(ev)
 }
 
 func (b *rulePropsBuilder) buildSetProps(ev memo.ExprView) {
+	// Column Pruning
+	// --------------
 	// Don't allow any columns to be pruned, since that would trigger the
 	// creation of a wrapper Project around the set operator, since there's not
 	// yet a PruneCols rule for set operators.
@@ -174,6 +215,8 @@ func (b *rulePropsBuilder) buildSetProps(ev memo.ExprView) {
 func (b *rulePropsBuilder) buildValuesProps(ev memo.ExprView) {
 	relational := ev.Logical().Relational
 
+	// Column Pruning
+	// --------------
 	// All columns can potentially be pruned from the Values operator.
 	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
 }
@@ -184,6 +227,8 @@ func (b *rulePropsBuilder) buildLimitProps(ev memo.ExprView) {
 	inputProps := ev.Child(0).Logical().Relational
 	ordering := ev.Private().(*props.OrderingChoice).ColSet()
 
+	// Column Pruning
+	// --------------
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used as an ordering column.
 	relational.Rule.PruneCols = inputProps.Rule.PruneCols.Difference(ordering)
@@ -195,12 +240,16 @@ func (b *rulePropsBuilder) buildOffsetProps(ev memo.ExprView) {
 	inputProps := ev.Child(0).Logical().Relational
 	ordering := ev.Private().(*props.OrderingChoice).ColSet()
 
+	// Column Pruning
+	// --------------
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used as an ordering column.
 	relational.Rule.PruneCols = inputProps.Rule.PruneCols.Difference(ordering)
 }
 
 func (b *rulePropsBuilder) buildMax1RowProps(ev memo.ExprView) {
+	// Column Pruning
+	// --------------
 	// Don't allow any columns to be pruned, since that would trigger the
 	// creation of a wrapper Project around the Max1Row, since there's not
 	// a PruneCols rule for Max1Row.
@@ -212,6 +261,8 @@ func (b *rulePropsBuilder) buildRowNumberProps(ev memo.ExprView) {
 	inputProps := ev.Child(0).Logical().Relational
 	ordering := ev.Private().(*memo.RowNumberDef).Ordering.ColSet()
 
+	// Column Pruning
+	// --------------
 	// Any pruneable input columns can potentially be pruned, as long as they're
 	// not used as an ordering column. The new row number column cannot be pruned
 	// without adding an additional Project operator, so don't add it to the set.
@@ -222,4 +273,80 @@ func (b *rulePropsBuilder) buildZipProps(ev memo.ExprView) {
 	// Don't allow any columns to be pruned, since that would trigger the
 	// creation of a wrapper Project around the Zip, and there's not yet a
 	// PruneCols rule for Zip.
+}
+
+// deriveGroupByRejectNullCols returns the set of GroupBy columns that are
+// eligible for null rejection. If an aggregate input column has requested null
+// rejection, then pass along its request if the following criteria are met:
+//
+//   1. The aggregate function ignores null values, meaning that its value
+//      would not change if input null values are filtered.
+//   2. The aggregate function returns null if its input is empty. And since
+//      by #1, the presence of nulls does not alter the result, the aggregate
+//      function would return null if its input contains only null values.
+//   3. The aggregate function is not AnyNotNull. While the AnyNotNull aggregate
+//      does qualify according to #1 and #2, it is only generated as a side-
+//      effect of other rules, and is difficult to test. Therefore, for now
+//      it will never qualify for null rejection, though it may be ignored
+//      according to criteria #4.
+//   4. No other input columns are referenced by other aggregate functions in
+//      the GroupBy (all functions must refer to the same column), with the
+//      possible exception of AnyNotNull. An AnyNotNull aggregate can be
+//      ignored if its input column is functionally determined by the grouping
+//      columns (use the input operator's FD set to check that). If true, then
+//      input rows in each group must have the same value for this column
+//      (i.e. the column is constant per group). In that case, it doesn't
+//      matter which rows are filtered.
+//
+func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
+	inputProps := ev.Child(0).Logical().Relational
+	aggs := ev.Child(1)
+	aggColList := aggs.Private().(opt.ColList)
+	groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols
+
+	var rejectNullCols, anyNotNullCols opt.ColSet
+	var savedInColID opt.ColumnID
+	for i, end := 0, aggs.ChildCount(); i < end; i++ {
+		agg := aggs.Child(i)
+		aggOp := agg.Operator()
+
+		// Criteria #1 and #2.
+		if !opt.AggregateIgnoresNulls(aggOp) || !opt.AggregateIsNullOnEmpty(aggOp) {
+			// Can't reject nulls for the aggregate.
+			return opt.ColSet{}
+		}
+
+		// Get column ID of aggregate's Variable operator input.
+		inColID := agg.Child(0).Private().(opt.ColumnID)
+
+		// Criteria #3 (and AnyNotNull check for criteria #4).
+		if aggOp == opt.AnyNotNullOp {
+			anyNotNullCols.Add(int(inColID))
+			if !inputProps.FuncDeps.InClosureOf(anyNotNullCols, groupingColSet) {
+				// Column is not functionally determined by grouping columns, so
+				// can't reject any nulls.
+				return opt.ColSet{}
+			}
+			continue
+		}
+
+		// Criteria #4.
+		if savedInColID != 0 && savedInColID != inColID {
+			// Multiple columns used by aggregate functions, so can't reject nulls
+			// for any of them.
+			return opt.ColSet{}
+		}
+		savedInColID = inColID
+
+		if !inputProps.Rule.RejectNullCols.Contains(int(inColID)) {
+			// Input has not requested null rejection on the input column.
+			return opt.ColSet{}
+		}
+
+		// Can possibly reject column, but keep searching, since if
+		// multiple columns are used by aggregate functions, then nulls
+		// can't be rejected on any column.
+		rejectNullCols.Add(int(aggColList[i]))
+	}
+	return rejectNullCols
 }

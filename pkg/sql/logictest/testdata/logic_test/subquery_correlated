@@ -249,6 +249,37 @@ SELECT * FROM c WHERE (SELECT count(ship) FROM o WHERE o.c_id=c.c_id) > 1;
 1  CA
 2  TX
 
+# For each customer, orders shipped to lowest state (alphabetically).
+query IIT rowsort
+SELECT c.c_id, o.o_id, o.ship
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);
+----
+1  20  CA
+2  40  CA
+4  70  WY
+1  10  CA
+6  90  WA
+1  30  CA
+
+# Customers who have shipped more orders to a particular state than all other
+# customers have shipped to that state, combined.
+query ITI rowsort
+SELECT c.c_id, o.ship, count(*)
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+WHERE
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id = o.c_id) >
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> o.c_id)
+GROUP BY c.c_id, o.ship;
+----
+1  CA  3
+2  TX  1
+4  WY  1
+6  WA  1
+
 # Customers with more than one order and with the highest state = 'CA'.
 query IT rowsort
 SELECT *
@@ -633,6 +664,24 @@ TX    3
 WA    1
 WY    1
 
+# Customer orders grouped by ship state, compared with count of all orders
+# shipped to that state by all other customers combined.
+query ITII rowsort
+SELECT c.c_id, o.ship, count(*) AS cust,
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> c.c_id) AS other
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+GROUP BY c.c_id, o.ship;
+----
+2  TX    1  0
+4  NULL  1  0
+6  WA    1  0
+2  NULL  1  0
+4  WY    1  0
+1  CA    3  1
+2  CA    1  3
+
 # ConcatAgg prevents decorrelation.
 statement error could not decorrelate subquery
 SELECT (SELECT concat_agg(ship || ' ') FROM o WHERE o.c_id=c.c_id)
@@ -682,7 +731,7 @@ statement error could not decorrelate subquery
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
-ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);
+ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
 
 statement error HINT: some correlated subqueries are not supported yet
 SELECT * FROM pg_class a WHERE EXISTS (SELECT * FROM pg_class b WHERE a.oid = b.oid)
