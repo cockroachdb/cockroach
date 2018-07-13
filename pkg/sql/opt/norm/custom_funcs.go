@@ -222,6 +222,34 @@ func (c *CustomFuncs) HasCorrelatedSubquery(group memo.GroupID) bool {
 
 // ----------------------------------------------------------------------
 //
+// Ordering functions
+//   General custom match and replace functions related to orderings.
+//
+// ----------------------------------------------------------------------
+
+// HasColsInOrdering returns true if all columns that appear in an ordering are
+// output columns of the given group.
+func (c *CustomFuncs) HasColsInOrdering(group memo.GroupID, ordering memo.PrivateID) bool {
+	outCols := c.OutputCols(group)
+	return c.ExtractOrdering(ordering).CanProject(outCols)
+}
+
+// ProjectOrdering removes any columns referenced by an OrderingChoice that are
+// not output columns of the given group. Can only be called if
+// HasColsInOrdering is true.
+func (c *CustomFuncs) ProjectOrdering(group memo.GroupID, ordering memo.PrivateID) memo.PrivateID {
+	outCols := c.OutputCols(group)
+	ord := c.ExtractOrdering(ordering)
+	if ord.SubsetOfCols(outCols) {
+		return ordering
+	}
+	ordCopy := ord.Copy()
+	ordCopy.ProjectCols(outCols)
+	return c.f.InternOrderingChoice(&ordCopy)
+}
+
+// ----------------------------------------------------------------------
+//
 // Projection construction functions
 //   General helper functions to construct Projections.
 //

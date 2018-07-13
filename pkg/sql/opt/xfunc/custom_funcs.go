@@ -277,10 +277,3 @@ func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool)
 func (c *CustomFuncs) IsColNotNull(col memo.PrivateID, input memo.GroupID) bool {
 	return c.LookupLogical(input).Relational.NotNullCols.Contains(int(c.ExtractColID(col)))
 }
-
-// HasColsInOrdering returns true if all columns that appear in an ordering are
-// output columns of the given group.
-func (c *CustomFuncs) HasColsInOrdering(group memo.GroupID, ordering memo.PrivateID) bool {
-	outCols := c.OutputCols(group)
-	return c.ExtractOrdering(ordering).SubsetOfCols(outCols)
-}
