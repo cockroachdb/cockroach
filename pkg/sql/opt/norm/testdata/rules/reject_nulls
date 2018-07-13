@@ -1,0 +1,204 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+# ----------------------------------------------------------
+# RejectNullsLeftJoin + RejectNullsRightJoin
+# ----------------------------------------------------------
+
+opt
+SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
+----
+left-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── true [type=bool]
+
+opt
+SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
+----
+right-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── constraint: /5: [/6 - ]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── true [type=bool]
+
+opt
+SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── constraint: /5: [/6 - ]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── true [type=bool]
+
+opt
+SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
+----
+inner-join (merge)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    └── ordering: +5
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +5
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+opt
+SELECT * FROM a RIGHT JOIN xy ON true WHERE a.k > xy.y
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int!null)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── a.k > xy.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+# ----------------------------------------------------------
+# RejectNullsGroupBy
+# ----------------------------------------------------------
+opt
+SELECT min(x), max(x)
+FROM a
+LEFT JOIN xy
+ON True
+GROUP BY k
+HAVING min(x)=1
+----
+project
+ ├── columns: min:7(int!null) max:8(int)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(8)
+      ├── group-by
+      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) x:5(int!null)
+      │    │    ├── key: (1,5)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    └── key: (5)
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(5)]
+      │         ├── min [type=int, outer=(5)]
+      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         └── max [type=int, outer=(5)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+opt
+SELECT * FROM a WHERE (SELECT sum(x) FROM xy WHERE x=k)>i
+----
+project
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) sum:7(decimal!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4,7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) sum:7(decimal)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4,7)
+      │    ├── inner-join (merge)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null)
+      │    │    ├── key: (5)
+      │    │    ├── fd: (1)-->(2-4), (1)==(5), (5)==(1)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4)
+      │    │    │    └── ordering: +1
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    └── ordering: +5
+      │    │    └── merge-on
+      │    │         ├── left ordering: +1
+      │    │         ├── right ordering: +5
+      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │              └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── aggregations [outer=(2-5)]
+      │         ├── sum [type=decimal, outer=(5)]
+      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         ├── any-not-null [type=int, outer=(2)]
+      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         ├── any-not-null [type=float, outer=(3)]
+      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         └── any-not-null [type=string, outer=(4)]
+      │              └── variable: a.s [type=string, outer=(4)]
+      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           └── a.i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]

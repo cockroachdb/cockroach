@@ -516,6 +516,12 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// InClosureOf returns true if the given columns are functionally determined by
+// the "in" column set.
+func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
+	return f.inClosureOf(cols, in, true /* strict */)
+}
+
 // ComputeClosure returns the strict closure of the given columns. The closure
 // includes the input columns plus all columns that are functionally dependent
 // on those columns, either directly or indirectly. Consider this set of FD's:

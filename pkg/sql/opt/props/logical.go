@@ -152,6 +152,23 @@ type Relational struct {
 		// their columns to this set.
 		PruneCols opt.ColSet
 
+		// RejectNullCols is the subset of nullable output columns that can
+		// potentially be made not-null by one of the RejectNull normalization
+		// rules. Those rules work in concert with the predicate pushdown rules
+		// to synthesize a "col IS NOT NULL" filter and push it down the tree.
+		// See the header comments for the reject_nulls.opt file for more
+		// information and an example.
+		//
+		// RejectNullCols is built bottom-up by rulePropsBuilder, and only contains
+		// nullable outer join columns that can be simplified. The columns can be
+		// propagated up through multiple operators, giving higher levels of the
+		// tree a window into the structure of the tree several layers down. In
+		// particular, the null rejection rules use this property to determine when
+		// it's advantageous to synthesize a new "IS NOT NULL" filter. Without this
+		// information, the rules can clutter the tree with extraneous and
+		// marginally useful null filters.
+		RejectNullCols opt.ColSet
+
 		// InterestingOrderings is a list of orderings that potentially could be
 		// provided by the operator without sorting. Interesting orderings normally
 		// come from scans (index orders) and are bubbled up through some operators.
