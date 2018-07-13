@@ -231,13 +231,13 @@ func (c *CustomFuncs) HasCorrelatedSubquery(group memo.GroupID) bool {
 // output columns of the given group.
 func (c *CustomFuncs) HasColsInOrdering(group memo.GroupID, ordering memo.PrivateID) bool {
 	outCols := c.OutputCols(group)
-	return c.ExtractOrdering(ordering).CanProject(outCols)
+	return c.ExtractOrdering(ordering).CanProjectCols(outCols)
 }
 
-// ProjectOrdering removes any columns referenced by an OrderingChoice that are
+// PruneOrdering removes any columns referenced by an OrderingChoice that are
 // not output columns of the given group. Can only be called if
 // HasColsInOrdering is true.
-func (c *CustomFuncs) ProjectOrdering(group memo.GroupID, ordering memo.PrivateID) memo.PrivateID {
+func (c *CustomFuncs) PruneOrdering(group memo.GroupID, ordering memo.PrivateID) memo.PrivateID {
 	outCols := c.OutputCols(group)
 	ord := c.ExtractOrdering(ordering)
 	if ord.SubsetOfCols(outCols) {
