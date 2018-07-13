@@ -122,6 +122,37 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 		{s: "", cs: util.MakeFastIntSet(1), expected: true},
 		{s: "+1", cs: util.MakeFastIntSet(1), expected: true},
 		{s: "-1", cs: util.MakeFastIntSet(1, 2), expected: true},
+		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1), expected: false},
+		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1, 2), expected: true},
+		{s: "+(1|2)", cs: util.MakeFastIntSet(1, 2, 3), expected: true},
+		{s: "+(1|2)", cs: util.MakeFastIntSet(2), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 3, 4), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3, 4), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3, 4, 5), expected: true},
+	}
+
+	for _, tc := range testcases {
+		choice := props.ParseOrderingChoice(tc.s)
+		if choice.SubsetOfCols(tc.cs) != tc.expected {
+			if tc.expected {
+				t.Errorf("%s: expected cols to be subset of %s", tc.s, tc.cs)
+			} else {
+				t.Errorf("%s: expected cols to not be subset of %s", tc.s, tc.cs)
+			}
+		}
+	}
+}
+
+func TestOrderingChoice_CanProject(t *testing.T) {
+	testcases := []struct {
+		s        string
+		cs       opt.ColSet
+		expected bool
+	}{
+		{s: "", cs: util.MakeFastIntSet(), expected: true},
+		{s: "", cs: util.MakeFastIntSet(1), expected: true},
+		{s: "+1", cs: util.MakeFastIntSet(1), expected: true},
+		{s: "-1", cs: util.MakeFastIntSet(1, 2), expected: true},
 		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1), expected: true},
 		{s: "+(1|2)", cs: util.MakeFastIntSet(1), expected: true},
 		{s: "+(1|2)", cs: util.MakeFastIntSet(2), expected: true},
@@ -134,11 +165,11 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 
 	for _, tc := range testcases {
 		choice := props.ParseOrderingChoice(tc.s)
-		if choice.SubsetOfCols(tc.cs) != tc.expected {
+		if choice.CanProject(tc.cs) != tc.expected {
 			if tc.expected {
-				t.Errorf("%s: expected cols to be subset of %s", tc.s, tc.cs)
+				t.Errorf("%s: expected CanProject(%s)", tc.s, tc.cs)
 			} else {
-				t.Errorf("%s: expected cols to not be subset of %s", tc.s, tc.cs)
+				t.Errorf("%s: expected !CanProject(%s)", tc.s, tc.cs)
 			}
 		}
 	}
@@ -300,6 +331,29 @@ func TestOrderingChoice_Truncate(t *testing.T) {
 		choice.Truncate(tc.n)
 		if choice.String() != tc.expected {
 			t.Errorf("%s: n=%d, expected: %s, actual: %s", tc.s, tc.n, tc.expected, choice.String())
+		}
+	}
+}
+
+func TestOrderingChoice_ProjectCols(t *testing.T) {
+	testcases := []struct {
+		s        string
+		cols     []int
+		expected string
+	}{
+		{s: "", cols: []int{}, expected: ""},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 3, 4, 5, 6}, expected: "+1,+(2|3),-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4, 5, 6}, expected: "+1,+2,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 3, 4, 5, 6}, expected: "+1,+3,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4, 5}, expected: "+1,+2,-4 opt(5)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4}, expected: "+1,+2,-4"},
+	}
+
+	for _, tc := range testcases {
+		choice := props.ParseOrderingChoice(tc.s)
+		choice.ProjectCols(util.MakeFastIntSet(tc.cols...))
+		if choice.String() != tc.expected {
+			t.Errorf("%s: cols=%v, expected: %s, actual: %s", tc.s, tc.cols, tc.expected, choice.String())
 		}
 	}
 }

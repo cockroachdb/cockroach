@@ -268,12 +268,26 @@ func (oc *OrderingChoice) SubsetOf(other *OrderingChoice) bool {
 	}
 }
 
-// SubsetOfCols is true if at least one column in each ordering column group is
+// SubsetOfCols is true if the OrderingChoice only references columns in the
+// given set.
+func (oc *OrderingChoice) SubsetOfCols(cs opt.ColSet) bool {
+	if !oc.Optional.SubsetOf(cs) {
+		return false
+	}
+	for i := range oc.Columns {
+		if !oc.Columns[i].Group.SubsetOf(cs) {
+			return false
+		}
+	}
+	return true
+}
+
+// CanProject is true if at least one column in each ordering column group is
 // part of the given column set. For example, if the OrderingChoice is:
 //
 //   +1,-(2|3) opt(4,5)
 //
-// then SubsetOfCols will behave as follows for these input sets:
+// then CanProject will behave as follows for these input sets:
 //
 //   (1,2)   => true
 //   (1,3)   => true
@@ -281,7 +295,7 @@ func (oc *OrderingChoice) SubsetOf(other *OrderingChoice) bool {
 //   (1)     => false
 //   (3,4)   => false
 //
-func (oc *OrderingChoice) SubsetOfCols(cs opt.ColSet) bool {
+func (oc *OrderingChoice) CanProject(cs opt.ColSet) bool {
 	for i := range oc.Columns {
 		if !oc.Columns[i].Group.Intersects(cs) {
 			return false
@@ -448,6 +462,23 @@ func (oc *OrderingChoice) Truncate(prefix int) {
 		if len(oc.Columns) == 0 {
 			// Normalize Any case by dropping any optional columns.
 			oc.Optional = opt.ColSet{}
+		}
+	}
+}
+
+// ProjectCols removes any references to columns that are not in the given
+// set. This method can only be used when the OrderingChoice can be expressed
+// with the given columns; i.e. all groups have at least one column in the set.
+func (oc *OrderingChoice) ProjectCols(cols opt.ColSet) {
+	if !oc.Optional.SubsetOf(cols) {
+		oc.Optional = oc.Optional.Intersection(cols)
+	}
+	for i := range oc.Columns {
+		if !oc.Columns[i].Group.SubsetOf(cols) {
+			oc.Columns[i].Group = oc.Columns[i].Group.Intersection(cols)
+			if oc.Columns[i].Group.Empty() {
+				panic("no columns left from group")
+			}
 		}
 	}
 }

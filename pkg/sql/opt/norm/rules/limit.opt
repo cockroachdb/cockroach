@@ -25,7 +25,7 @@ $input
 )
 =>
 (Project
-    (Limit $input $limit $ordering)
+    (Limit $input $limit (ProjectOrdering $input $ordering))
     $projections
 )
 
@@ -40,6 +40,6 @@ $input
 )
 =>
 (Project
-    (Offset $input $offset $ordering)
+    (Offset $input $offset (ProjectOrdering $input $ordering))
     $projections
 )
