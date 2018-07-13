@@ -242,7 +242,7 @@
   branch = "master"
   name = "github.com/cockroachdb/crlfmt"
   packages = ["."]
-  revision = "ea27cb9045ae7c4e7e63926df6300454e3d6f3d8"
+  revision = "5895607e5ea790fcbb640260129a12d277b34e46"
 
 [[projects]]
   branch = "master"
