@@ -138,6 +138,11 @@ func (c *CustomFuncs) BoolType() memo.PrivateID {
 	return c.f.InternType(types.Bool)
 }
 
+// AnyType returns the private ID of the wildcard Any type.
+func (c *CustomFuncs) AnyType() memo.PrivateID {
+	return c.f.InternType(types.Any)
+}
+
 // CanConstructBinary returns true if (op left right) has a valid binary op
 // overload and is therefore legal to construct. For example, while
 // (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
@@ -338,20 +343,6 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 		lb.AddItem(right)
 	}
 	return c.f.ConstructFilters(lb.BuildList())
-}
-
-// HasNullRejectingFilter returns true if the filter causes some of the columns
-// of input to be non-null. If the input contains columns (x, z), filters such
-// as x < 5, x = y, and z IS NOT NULL all satisfy this property.
-func (c *CustomFuncs) HasNullRejectingFilter(filter, input memo.GroupID) bool {
-	filterConstraints := c.LookupLogical(filter).Scalar.Constraints
-	if filterConstraints == nil {
-		return false
-	}
-
-	notNullFilterCols := filterConstraints.ExtractNotNullCols(c.f.evalCtx)
-	inputCols := c.LookupLogical(input).Relational.OutputCols
-	return notNullFilterCols.Intersects(inputCols)
 }
 
 // ----------------------------------------------------------------------
