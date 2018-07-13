@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -193,8 +195,6 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("#27442")
 
 	for _, colocate := range []bool{false, true} {
 		for _, retries := range []int64{0, 3} {
@@ -880,6 +880,116 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// error (or a bug in the test).
 	if err := <-getErr; !testutils.IsError(err, "r2 was not found") {
 		t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
+	}
+}
+
+// TestStoreRangeMergeConcurrentRequests tests merging ranges that are serving
+// other traffic concurrently.
+func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	var mtc *multiTestContext
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.IsSingleGetSnapshotForMergeRequest() && rand.Int()%4 == 0 {
+			// Before every few GetSnapshotForMerge requests, expire all range leases.
+			// This makes the following sequence of events quite likely:
+			//
+			//     1. The merge transaction begins and lays down deletion intents for
+			//        the meta2 and local copies of the RHS range descriptor.
+			//     2. The RHS replica loses its lease, thanks to the following call to
+			//        mtc.advanceClock.
+			//     3. A Get request arrives at the RHS replica and triggers a
+			//        synchronous lease acquisition. The lease acquisition notices
+			//        that a merge is in progress and installs a mergeComplete
+			//        channel.
+			//     4. The Get request blocks on the newly installed mergeComplete
+			//        channel.
+			//     5. The GetSnapshotForMerge request arrives.
+			//
+			// This scenario previously caused deadlock. The merge was not able to
+			// complete until the GetSnapshotForMerge request completed, but the
+			// GetSnapshotForMerge request was stuck in the command queue until the
+			// Get request finished, which was itself waiting for the merge to
+			// complete. Whoops!
+			mtc.advanceClock(ctx)
+		}
+		return nil
+	}
+
+	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
+
+	keys := []roachpb.Key{
+		roachpb.Key("a1"), roachpb.Key("a2"), roachpb.Key("a3"),
+		roachpb.Key("c1"), roachpb.Key("c2"), roachpb.Key("c3"),
+	}
+
+	for _, k := range keys {
+		if err := store.DB().Put(ctx, k, "val"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Failures in this test often present as a deadlock. Set a short timeout to
+	// limit the damage.
+	ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
+
+	const numGetWorkers = 16
+	const numMerges = 16
+
+	var numGets int64
+	doneCh := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	for i := 0; i < numGetWorkers; i++ {
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-doneCh:
+					return nil
+				default:
+				}
+				key := keys[rand.Intn(len(keys))]
+				if kv, err := store.DB().Get(ctx, key); err != nil {
+					return err
+				} else if v := string(kv.ValueBytes()); v != "val" {
+					return fmt.Errorf(`expected "val", but got %q`, v)
+				}
+				atomic.AddInt64(&numGets, 1)
+			}
+		})
+	}
+
+	for i := 0; i < numMerges; i++ {
+		lhsDesc, _, err := createSplitRanges(ctx, store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	close(doneCh)
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect that each worker was able to issue one at least one get request
+	// during every split/merge cycle. Empirical evidence suggests that this a
+	// very conservative estimate that is unlikely to be flaky.
+	if n := atomic.LoadInt64(&numGets); n < numGetWorkers*numMerges {
+		t.Fatalf("suspiciously low numGets (expected at least %d): %d", numGetWorkers*numMerges, n)
 	}
 }
 
