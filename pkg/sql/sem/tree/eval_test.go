@@ -1231,6 +1231,15 @@ func TestEval(t *testing.T) {
 		{`extract(microsecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)`, `123456`},
 		{`extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)`, `1263125594`},
 		// Extract from intervals.
+		{`extract(hour from '123m')`, `2`},
+		{`extract(hour from '123m'::interval)`, `2`},
+		{`extract(minute from '123m10s'::interval)`, `123`},
+		{`extract(second from '10m20s30ms'::interval)`, `620`},
+		{`extract(millisecond from '20s30ms40µs'::interval)`, `20030`},
+		{`extract(microsecond from '12345ns'::interval)`, `12`},
+		// Obsolete forms of extract from interval.
+		// Deprecated in 2.1.
+		// TODO(knz): Remove in 2.2.
 		{`extract_duration(hour from '123m')`, `2`},
 		{`extract_duration(hour from '123m'::interval)`, `2`},
 		{`extract_duration(minute from '123m10s'::interval)`, `123`},
@@ -1666,6 +1675,8 @@ func TestEvalError(t *testing.T) {
 		{`convert_from('\xaaaa'::bytea, 'utf8')`, `convert_from(): invalid byte sequence for encoding "UTF8"`},
 		{`convert_to('abc', 'woo')`, `convert_to(): invalid destination encoding name "woo"`},
 		{`convert_to('漢', 'latin1')`, `convert_to(): character '漢' has no representation in encoding "LATIN1"`},
+		{`extract(hour from '123')`, `sdfsdf`},   // should be ambiguous TIMESTAMP vs INTERVAL
+		{`extract(hour from '10:23')`, `sdfsdf`}, // should be ambiguous TIME vs INTERVAL
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)

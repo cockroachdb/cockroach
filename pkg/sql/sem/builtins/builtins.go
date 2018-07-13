@@ -1746,106 +1746,11 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
-	"extract": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				date := args[1].(*tree.DDate)
-				fromTSTZ := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
-				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTSTZ := args[1].(*tree.DTimestampTZ)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTime := args[1].(*tree.DTime)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTime(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTimeTZ := args[1].(*tree.DTimeTZ)
-				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTime(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-		},
-	),
-
-	"extract_duration": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromInterval := *args[1].(*tree.DInterval)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				switch timeSpan {
-				case "hour", "hours":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Hour))), nil
-
-				case "minute", "minutes":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Minute))), nil
-
-				case "second", "seconds":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Second))), nil
-
-				case "millisecond", "milliseconds":
-					// This a PG extension not supported in MySQL.
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
-
-				case "microsecond", "microseconds":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
-
-				default:
-					return nil, pgerror.NewErrorf(
-						pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
-				}
-			},
-			Info: "Extracts `element` from `input`.\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond.",
-		},
-	),
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT
+	"extract": makeBuiltin(tree.FunctionProperties{Category: categoryDateAndTime},
+		append(extractCommonImpls, extractIntervalImpl)...),
+	"extract_duration": makeBuiltin(tree.FunctionProperties{Category: categoryDateAndTime},
+		extractIntervalImpl),
 
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC
 	//
@@ -2858,6 +2763,103 @@ may increase either contention or retry errors, or both.`,
 				"Incorrect use can severely impact performance.",
 		},
 	),
+}
+
+var extractCommonImpls = []tree.Overload{
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			// extract timeSpan fromTime.
+			fromTS := args[1].(*tree.DTimestamp)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			date := args[1].(*tree.DDate)
+			fromTSTZ := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+			return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTSTZ := args[1].(*tree.DTimestampTZ)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTime := args[1].(*tree.DTime)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractStringFromTime(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTimeTZ := args[1].(*tree.DTimeTZ)
+			fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractStringFromTime(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+	},
+}
+
+var extractIntervalImpl = tree.Overload{
+	Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		// extract timeSpan fromTime.
+		fromInterval := *args[1].(*tree.DInterval)
+		timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+		switch timeSpan {
+		case "hour", "hours":
+			return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Hour))), nil
+
+		case "minute", "minutes":
+			return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Minute))), nil
+
+		case "second", "seconds":
+			return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Second))), nil
+
+		case "millisecond", "milliseconds":
+			// This a PG extension not supported in MySQL.
+			return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
+
+		case "microsecond", "microseconds":
+			return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
+
+		default:
+			return nil, pgerror.NewErrorf(
+				pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+		}
+	},
+	Info: "Extracts `element` from `input`.\n" +
+		"Compatible elements: hour, minute, second, millisecond, microsecond.",
 }
 
 var lengthImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},

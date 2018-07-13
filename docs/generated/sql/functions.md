@@ -326,6 +326,9 @@ millisecond, microsecond.</p>
 <p>Compatible elements: year, quarter, month, week, dayofweek, dayofyear,
 hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
+<tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
+Compatible elements: hour, minute, second, millisecond, microsecond.</p>
+</span></td></tr>
 <tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
