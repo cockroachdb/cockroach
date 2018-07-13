@@ -241,6 +241,16 @@ func (s *scope) hasColumn(id opt.ColumnID) bool {
 	return false
 }
 
+// canBeProjectedColSet returns a ColSet of all the columns in this scope that can
+// be projected (i.e., excluding orderByCols).
+func (s *scope) canBeProjectedColSet() opt.ColSet {
+	var colSet opt.ColSet
+	for i := range s.cols {
+		colSet.Add(int(s.cols[i].id))
+	}
+	return colSet
+}
+
 // colSet returns a ColSet of all the columns in this scope, including
 // orderByCols.
 func (s *scope) colSet() opt.ColSet {
@@ -724,6 +734,14 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 				"subquery must return %d columns, found %d", desiredColumns, n)})
 		}
+	}
+
+	if outScope.colSet().Len() != outScope.canBeProjectedColSet().Len() {
+		// We need to add a projection to remove the ORDER BY columns.
+		projScope := outScope.push()
+		projScope.appendColumns(outScope)
+		projScope.group = s.builder.constructProject(outScope.group, projScope.cols)
+		outScope = projScope
 	}
 
 	return &subquery{
