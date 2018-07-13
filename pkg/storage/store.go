@@ -3038,6 +3038,24 @@ func (s *Store) Send(
 				}
 				// We've resolved the write intent; retry command.
 			}
+
+		case *roachpb.MergeInProgressError:
+			// A merge was in progress. We need to retry the command after the merge
+			// completes, as signaled by the closing of the replica's mergeComplete
+			// channel. Note that the merge may have already completed, in which case
+			// its mergeComplete channel will be nil.
+			mergeCompleteCh := repl.getMergeCompleteCh()
+			if mergeCompleteCh != nil {
+				select {
+				case <-mergeCompleteCh:
+					// Merge complete. Retry the command.
+				case <-ctx.Done():
+					return nil, roachpb.NewError(ctx.Err())
+				case <-s.stopper.ShouldQuiesce():
+					return nil, roachpb.NewError(&roachpb.NodeUnavailableError{})
+				}
+			}
+			pErr = nil
 		}
 
 		if pErr != nil {
