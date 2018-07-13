@@ -46,6 +46,7 @@ func TestPrettyData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := tree.DefaultPrettyCfg()
 	for _, m := range matches {
 		m := m
 		t.Run(filepath.Base(m), func(t *testing.T) {
@@ -71,7 +72,9 @@ func TestPrettyData(t *testing.T) {
 			g, _ := errgroup.WithContext(context.Background())
 			worker := func() error {
 				for i := range work {
-					res[i-1] = tree.PrettyWithOpts(stmt, i, true, 4, true)
+					thisCfg := cfg
+					thisCfg.LineWidth = i
+					res[i-1] = thisCfg.Pretty(stmt)
 				}
 				return nil
 			}
@@ -106,7 +109,7 @@ func TestPrettyData(t *testing.T) {
 				t.Fatal(err)
 			}
 			if string(expect) != got {
-				t.Fatalf("unexpected:\n%s", got)
+				t.Fatalf("expected:\n%s\ngot:\n%s", expect, got)
 			}
 
 			sqlutils.VerifyStatementPrettyRoundtrip(t, string(sql))
@@ -141,7 +144,7 @@ func BenchmarkPrettyData(b *testing.B) {
 		b.Fatal(err)
 	}
 	var docs []pretty.Doc
-	cfg := tree.PrettyCfg{IndentWidth: 4}
+	cfg := tree.DefaultPrettyCfg()
 	for _, m := range matches {
 		sql, err := ioutil.ReadFile(m)
 		if err != nil {

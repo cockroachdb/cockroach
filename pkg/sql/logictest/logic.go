@@ -359,7 +359,8 @@ var (
 			"beware! some tests INTEND to use non-formatted SQL queries (e.g. case sensitivity). "+
 			"do not bluntly apply!",
 	)
-	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyWidth, "target line length when using -rewrite-sql")
+	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
+		"target line length when using -rewrite-sql")
 )
 
 type testClusterConfig struct {
@@ -527,13 +528,15 @@ func (ls *logicStatement) readSQL(
 					return "", errors.Wrapf(err, "%s: error while parsing SQL for reformat:\n%s", ls.pos, ls.sql)
 				}
 				var newSyntax bytes.Buffer
+				pcfg := tree.DefaultPrettyCfg()
+				pcfg.LineWidth = *sqlfmtLen
+				pcfg.Simplify = false
+				pcfg.UseTabs = false
 				for i, s := range stmtList {
 					if i > 0 {
 						fmt.Fprintln(&newSyntax, ";")
 					}
-					fmt.Fprint(&newSyntax,
-						tree.PrettyWithOpts(s,
-							*sqlfmtLen, false /* useTabs */, 4 /* tab width */, false /* simplify */))
+					fmt.Fprint(&newSyntax, pcfg.Pretty(s))
 				}
 				return newSyntax.String(), nil
 			}(ls.sql)
