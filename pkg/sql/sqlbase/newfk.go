@@ -43,6 +43,7 @@ type fkInfo struct {
 	writeIdxID    IndexID
 	searchTableID ID
 	searchIndexID IndexID
+	dir           FKCheck
 }
 
 type writeIdxInfo struct {
@@ -70,7 +71,6 @@ type FKHelper struct {
 	//writeIdxs   map[IndexID]writeIdxInfo
 
 	Tables          TableLookupsByID
-	dir             FKCheck
 	batch           roachpb.BatchRequest
 	batchToORIdx    []int
 	batchToNRIdx    []int
@@ -93,7 +93,6 @@ func makeFKHelper(
 		txn:          txn,
 		Tables:       otherTables,
 		writeTables:  make(writeTables),
-		dir:          dir,
 		batchToORIdx: make([]int, 0),
 		batchToNRIdx: make([]int, 0),
 		alloc:        alloc,
@@ -168,56 +167,6 @@ func (fk *FKHelper) addFKRefInfo(writeTableID ID, idx IndexDescriptor, otherTabl
 	return nil
 }
 
-func (fk *FKHelper) getSpans(row tree.Datums, tableID ID) ([]roachpb.Span, []fkInfo, error) {
-	var spans []roachpb.Span
-	var indexesInfo []fkInfo
-	for _, tableInfo := range fk.writeTables {
-		for writeIdxID, writeIdxInfo := range tableInfo.writeIdxs {
-			for id, info := range writeIdxInfo.searchIdxInfo {
-				for indexID, searchIdxLookup := range info {
-
-					searchIdx := searchIdxLookup.idx
-
-					nulls := true
-					for _, colID := range searchIdx.ColumnIDs[:searchIdxLookup.prefixLen] {
-						found, ok := searchIdxLookup.colIDToRowIdx[colID]
-						if !ok {
-							panic(fmt.Sprintf("fk ids (%v) missing column id %d", searchIdxLookup.colIDToRowIdx, colID))
-						}
-						if row[found] != tree.DNull {
-							nulls = false
-							break
-						}
-					}
-					if nulls {
-						continue
-					}
-
-					var key roachpb.Key
-					if row != nil {
-						keyBytes, _, err := EncodePartialIndexKey(fk.Tables[id].Table, searchIdxLookup.idx, searchIdxLookup.prefixLen, searchIdxLookup.colIDToRowIdx, row, searchIdxLookup.searchPrefix)
-						if err != nil {
-							return spans, indexesInfo, err
-						}
-						key = roachpb.Key(keyBytes)
-					} else {
-						key = roachpb.Key(searchIdxLookup.searchPrefix)
-					}
-					spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
-					indexesInfo = append(indexesInfo,
-						fkInfo{
-							writeTableID:  tableID,
-							writeIdxID:    writeIdxID,
-							searchTableID: id,
-							searchIndexID: indexID,
-						})
-				}
-			}
-		}
-	}
-	return spans, indexesInfo, nil
-}
-
 func (fk *FKHelper) initializeTableInfo(writeTable TableDescriptor, colMap map[ColumnID]int, dir FKCheck) error {
 	tableID := writeTable.ID
 	if _, ok := fk.writeTables[tableID]; !ok {
@@ -261,13 +210,62 @@ func (fk *FKHelper) initializeTableInfo(writeTable TableDescriptor, colMap map[C
 	return nil
 }
 
+func (fk *FKHelper) getSpans(row tree.Datums, tableID ID, dir FKCheck) ([]roachpb.Span, []fkInfo, error) {
+	var spans []roachpb.Span
+	var indexesInfo []fkInfo
+	for _, tableInfo := range fk.writeTables {
+		for writeIdxID, writeIdxInfo := range tableInfo.writeIdxs {
+			for id, info := range writeIdxInfo.searchIdxInfo {
+				for indexID, searchIdxLookup := range info {
+
+					searchIdx := searchIdxLookup.idx
+
+					nulls := true
+					for _, colID := range searchIdx.ColumnIDs[:searchIdxLookup.prefixLen] {
+						found, ok := searchIdxLookup.colIDToRowIdx[colID]
+						if !ok {
+							panic(fmt.Sprintf("fk ids (%v) missing column id %d", searchIdxLookup.colIDToRowIdx, colID))
+						}
+						if row[found] != tree.DNull {
+							nulls = false
+							break
+						}
+					}
+					if nulls {
+						continue
+					}
+
+					var key roachpb.Key
+					if row != nil {
+						keyBytes, _, err := EncodePartialIndexKey(fk.Tables[id].Table, searchIdxLookup.idx, searchIdxLookup.prefixLen, searchIdxLookup.colIDToRowIdx, row, searchIdxLookup.searchPrefix)
+						if err != nil {
+							return spans, indexesInfo, err
+						}
+						key = roachpb.Key(keyBytes)
+					} else {
+						key = roachpb.Key(searchIdxLookup.searchPrefix)
+					}
+					spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
+					indexesInfo = append(indexesInfo,
+						fkInfo{
+							writeTableID:  tableID,
+							writeIdxID:    writeIdxID,
+							searchTableID: id,
+							searchIndexID: indexID,
+							dir:           dir,
+						})
+				}
+			}
+		}
+	}
+	return spans, indexesInfo, nil
+}
+
 // AddChecks prepares all the checks for a particular row.
 func (fk *FKHelper) AddChecks(ctx context.Context, table TableDescriptor, colMap map[ColumnID]int, dir FKCheck, oldRow tree.Datums, newRow tree.Datums) error {
 
 	tableID := table.ID
-	if _, ok := fk.writeTables[tableID]; !ok {
-		fk.initializeTableInfo(table, colMap, dir)
-	}
+	fk.initializeTableInfo(table, colMap, dir)
 
 	oldRowIdx := -1
 	newRowIdx := -1
@@ -280,7 +278,7 @@ func (fk *FKHelper) AddChecks(ctx context.Context, table TableDescriptor, colMap
 		fk.writeTables[tableID].newRows.AddRow(ctx, oldRow)
 		newRowIdx = fk.writeTables[tableID].newRows.Len() - 1
 	}
-	spans, indexesInfo, err := fk.getSpans(oldRow, table.ID)
+	spans, indexesInfo, err := fk.getSpans(oldRow, table.ID, dir)
 	if err != nil {
 		return err
 	}
@@ -340,6 +338,7 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 		writeIdxID := fk.batchToCheckIdx[i].writeIdxID
 		tableID := fk.batchToCheckIdx[i].searchTableID
 		indexID := fk.batchToCheckIdx[i].searchIndexID
+		dir := fk.batchToCheckIdx[i].dir
 
 		indexLookup := fk.writeTables[writeTableID].writeIdxs[writeIdxID].searchIdxInfo[tableID][indexID]
 		writeIdx := fk.writeTables[writeTableID].writeIdxs[writeIdxID].idx
@@ -352,7 +351,7 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 		if err := rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
 		}
-		switch fk.dir {
+		switch dir {
 		case CheckInserts:
 			if rf.kvEnd {
 				newRow := fk.writeTables[writeTableID].newRows.At(fk.batchToNRIdx[i])
@@ -382,7 +381,7 @@ func (fk *FKHelper) RunChecks(ctx context.Context) error {
 			}
 
 		default:
-			log.Fatalf(ctx, "impossible case: FKHelper has dir=%v", fk.dir)
+			log.Fatalf(ctx, "impossible case: fk check has dir=%v", dir)
 		}
 
 	}
