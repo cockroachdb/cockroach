@@ -408,6 +408,9 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if !r.PruneCols.Empty() {
 			tp.Childf("prune: %s", r.PruneCols.String())
 		}
+		if !r.RejectNullCols.Empty() {
+			tp.Childf("reject-nulls: %s", r.RejectNullCols.String())
+		}
 		if len(r.InterestingOrderings) > 0 {
 			tp.Childf("interesting orderings: %s", r.InterestingOrderings.String())
 		}

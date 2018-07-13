@@ -1,0 +1,608 @@
+# Tests for RejectNulls property
+
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
+----
+TABLE uv
+ ├── u int not null
+ ├── v int
+ └── INDEX primary
+      └── u int not null
+
+# --------------------------------------------------
+# Join operators.
+# --------------------------------------------------
+
+# Inner-join operator.
+build
+SELECT *
+FROM (SELECT * FROM a LEFT JOIN uv ON True)
+INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True)
+ON True
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int) v:6(int) k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int) v:12(int)
+ ├── key: (1,5,7,11)
+ ├── fd: (1)-->(2-4), (5)-->(6), (7)-->(8-10), (11)-->(12)
+ ├── prune: (1-12)
+ ├── reject-nulls: (5,6,11,12)
+ ├── interesting orderings: (+1) (+5) (+7) (+11)
+ ├── left-join
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) uv.u:5(int) uv.v:6(int)
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2-4), (5)-->(6)
+ │    ├── prune: (1-6)
+ │    ├── reject-nulls: (5,6)
+ │    ├── interesting orderings: (+1) (+5)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    └── interesting orderings: (+1)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:5(int!null) uv.v:6(int)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── prune: (5,6)
+ │    │    └── interesting orderings: (+5)
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
+ ├── left-join
+ │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string) uv.u:11(int) uv.v:12(int)
+ │    ├── key: (7,11)
+ │    ├── fd: (7)-->(8-10), (11)-->(12)
+ │    ├── prune: (7-12)
+ │    ├── reject-nulls: (11,12)
+ │    ├── interesting orderings: (+7) (+11)
+ │    ├── scan a
+ │    │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float) a.s:10(string)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10)
+ │    │    ├── prune: (7-10)
+ │    │    └── interesting orderings: (+7)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:11(int!null) uv.v:12(int)
+ │    │    ├── key: (11)
+ │    │    ├── fd: (11)-->(12)
+ │    │    ├── prune: (11,12)
+ │    │    └── interesting orderings: (+11)
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# Inner-join-apply operator.
+opt
+SELECT *
+FROM (SELECT * FROM a FULL JOIN xy ON True)
+WHERE (SELECT u FROM uv WHERE v=k)=1
+----
+project
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── prune: (1-6)
+ ├── interesting orderings: (+1) (+5)
+ └── inner-join-apply
+      ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int) u:7(int!null)
+      ├── key: (1,5)
+      ├── fd: (1)-->(2-4), (5)-->(6), (1,5)-->(7)
+      ├── prune: (2-6)
+      ├── reject-nulls: (1-6)
+      ├── interesting orderings: (+1) (+5)
+      ├── full-join
+      │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+      │    ├── key: (1,5)
+      │    ├── fd: (1)-->(2-4), (5)-->(6)
+      │    ├── prune: (1-6)
+      │    ├── reject-nulls: (1-6)
+      │    ├── interesting orderings: (+1) (+5)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── prune: (1-4)
+      │    │    └── interesting orderings: (+1)
+      │    ├── scan xy
+      │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    ├── key: (5)
+      │    │    ├── fd: (5)-->(6)
+      │    │    ├── prune: (5,6)
+      │    │    └── interesting orderings: (+5)
+      │    └── true [type=bool]
+      ├── select
+      │    ├── columns: u:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: u:7(int!null)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7)
+      │    │    └── project
+      │    │         ├── columns: u:7(int!null)
+      │    │         ├── outer: (1)
+      │    │         ├── key: (7)
+      │    │         ├── prune: (7)
+      │    │         ├── interesting orderings: (+7)
+      │    │         └── select
+      │    │              ├── columns: u:7(int!null) v:8(int!null)
+      │    │              ├── outer: (1)
+      │    │              ├── key: (7)
+      │    │              ├── fd: ()-->(8)
+      │    │              ├── prune: (7)
+      │    │              ├── interesting orderings: (+7)
+      │    │              ├── scan uv
+      │    │              │    ├── columns: u:7(int!null) v:8(int)
+      │    │              │    ├── key: (7)
+      │    │              │    ├── fd: (7)-->(8)
+      │    │              │    ├── prune: (7,8)
+      │    │              │    └── interesting orderings: (+7)
+      │    │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │                   └── uv.v = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │         └── uv.u = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      └── true [type=bool]
+
+# Left-join operator.
+build
+SELECT *
+FROM (SELECT * FROM a LEFT JOIN uv ON True)
+LEFT JOIN xy
+ON True
+----
+left-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int) v:6(int) x:7(int) y:8(int)
+ ├── key: (1,5,7)
+ ├── fd: (1)-->(2-4), (5)-->(6), (7)-->(8)
+ ├── prune: (1-8)
+ ├── reject-nulls: (5-8)
+ ├── interesting orderings: (+1) (+5) (+7)
+ ├── left-join
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int) v:6(int)
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2-4), (5)-->(6)
+ │    ├── prune: (1-6)
+ │    ├── reject-nulls: (5,6)
+ │    ├── interesting orderings: (+1) (+5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    └── interesting orderings: (+1)
+ │    ├── scan uv
+ │    │    ├── columns: u:5(int!null) v:6(int)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── prune: (5,6)
+ │    │    └── interesting orderings: (+5)
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
+ ├── scan xy
+ │    ├── columns: x:7(int!null) y:8(int)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8)
+ │    ├── prune: (7,8)
+ │    └── interesting orderings: (+7)
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# Right-join operator.
+build
+SELECT *
+FROM a
+RIGHT JOIN (SELECT * FROM xy RIGHT JOIN uv ON True)
+ON True
+----
+right-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int) u:7(int!null) v:8(int)
+ ├── key: (1,5,7)
+ ├── fd: (1)-->(2-4), (5)-->(6), (7)-->(8)
+ ├── prune: (1-8)
+ ├── reject-nulls: (1-6)
+ ├── interesting orderings: (+1) (+5) (+7)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── right-join
+ │    ├── columns: x:5(int) y:6(int) u:7(int!null) v:8(int)
+ │    ├── key: (5,7)
+ │    ├── fd: (5)-->(6), (7)-->(8)
+ │    ├── prune: (5-8)
+ │    ├── reject-nulls: (5,6)
+ │    ├── interesting orderings: (+5) (+7)
+ │    ├── scan xy
+ │    │    ├── columns: x:5(int!null) y:6(int)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── prune: (5,6)
+ │    │    └── interesting orderings: (+5)
+ │    ├── scan uv
+ │    │    ├── columns: u:7(int!null) v:8(int)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8)
+ │    │    ├── prune: (7,8)
+ │    │    └── interesting orderings: (+7)
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# Full-join operator.
+build
+SELECT *
+FROM a
+FULL JOIN xy
+ON True
+----
+full-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── prune: (1-6)
+ ├── reject-nulls: (1-6)
+ ├── interesting orderings: (+1) (+5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── scan xy
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    ├── prune: (5,6)
+ │    └── interesting orderings: (+5)
+ └── filters [type=bool]
+      └── true [type=bool]
+
+# --------------------------------------------------
+# GroupBy operator.
+# --------------------------------------------------
+
+# Single max aggregate function.
+build
+SELECT max(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+GROUP BY k
+HAVING max(x)=1
+----
+project
+ ├── columns: max:7(int!null)
+ ├── fd: ()-->(7)
+ ├── prune: (7)
+ └── select
+      ├── columns: k:1(int!null) column7:7(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── interesting orderings: (+1)
+      ├── group-by
+      │    ├── columns: k:1(int!null) column7:7(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── prune: (7)
+      │    ├── reject-nulls: (7)
+      │    ├── interesting orderings: (+1)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── prune: (1,5)
+      │    │    ├── reject-nulls: (5)
+      │    │    ├── interesting orderings: (+1) (+5)
+      │    │    ├── project
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── prune: (1)
+      │    │    │    ├── interesting orderings: (+1)
+      │    │    │    └── scan a
+      │    │    │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2-4)
+      │    │    │         ├── prune: (1-4)
+      │    │    │         └── interesting orderings: (+1)
+      │    │    ├── project
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── prune: (5)
+      │    │    │    ├── interesting orderings: (+5)
+      │    │    │    └── scan xy
+      │    │    │         ├── columns: x:5(int!null) y:6(int)
+      │    │    │         ├── key: (5)
+      │    │    │         ├── fd: (5)-->(6)
+      │    │    │         ├── prune: (5,6)
+      │    │    │         └── interesting orderings: (+5)
+      │    │    └── filters [type=bool]
+      │    │         └── true [type=bool]
+      │    └── aggregations [outer=(5)]
+      │         └── max [type=int, outer=(5)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+# Multiple aggregate functions on same column.
+build
+SELECT max(x), min(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+GROUP BY k
+HAVING max(x)=1
+----
+project
+ ├── columns: max:7(int!null) min:8(int)
+ ├── fd: ()-->(7)
+ ├── prune: (7,8)
+ └── select
+      ├── columns: k:1(int!null) column7:7(int!null) min:8(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(8)
+      ├── prune: (8)
+      ├── interesting orderings: (+1)
+      ├── group-by
+      │    ├── columns: k:1(int!null) column7:7(int) min:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── prune: (7,8)
+      │    ├── reject-nulls: (7,8)
+      │    ├── interesting orderings: (+1)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── prune: (1,5)
+      │    │    ├── reject-nulls: (5)
+      │    │    ├── interesting orderings: (+1) (+5)
+      │    │    ├── project
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── prune: (1)
+      │    │    │    ├── interesting orderings: (+1)
+      │    │    │    └── scan a
+      │    │    │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2-4)
+      │    │    │         ├── prune: (1-4)
+      │    │    │         └── interesting orderings: (+1)
+      │    │    ├── project
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── prune: (5)
+      │    │    │    ├── interesting orderings: (+5)
+      │    │    │    └── scan xy
+      │    │    │         ├── columns: x:5(int!null) y:6(int)
+      │    │    │         ├── key: (5)
+      │    │    │         ├── fd: (5)-->(6)
+      │    │    │         ├── prune: (5,6)
+      │    │    │         └── interesting orderings: (+5)
+      │    │    └── filters [type=bool]
+      │    │         └── true [type=bool]
+      │    └── aggregations [outer=(5)]
+      │         ├── max [type=int, outer=(5)]
+      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         └── min [type=int, outer=(5)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+# Ignore AnyNotNull aggregates on other columns. "opt" command is needed to
+# decorrelate and trigger creation of AnyNotNull aggregates. The LeftJoin should
+# have been turned into InnerJoin by the RejectNullsLeftJoin rule.
+opt
+SELECT *
+FROM a
+WHERE (SELECT min(y) FROM xy WHERE x=k)=i
+----
+project
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── prune: (1-4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) min:7(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4,7), (2)==(7), (7)==(2)
+      ├── prune: (3,4)
+      ├── group-by
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) min:7(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4,7)
+      │    ├── prune: (2-4,7)
+      │    ├── inner-join (merge)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int!null)
+      │    │    ├── key: (5)
+      │    │    ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
+      │    │    ├── prune: (2-4)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4)
+      │    │    │    ├── ordering: +1
+      │    │    │    ├── prune: (1-4)
+      │    │    │    └── interesting orderings: (+1)
+      │    │    ├── select
+      │    │    │    ├── columns: x:5(int!null) y:6(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: (5)-->(6)
+      │    │    │    ├── ordering: +5
+      │    │    │    ├── prune: (5)
+      │    │    │    ├── interesting orderings: (+5)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    │    ├── key: (5)
+      │    │    │    │    ├── fd: (5)-->(6)
+      │    │    │    │    ├── ordering: +5
+      │    │    │    │    ├── prune: (5,6)
+      │    │    │    │    └── interesting orderings: (+5)
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── merge-on
+      │    │         ├── left ordering: +1
+      │    │         ├── right ordering: +5
+      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │              └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── aggregations [outer=(2-4,6)]
+      │         ├── min [type=int, outer=(6)]
+      │         │    └── variable: xy.y [type=int, outer=(6)]
+      │         ├── any-not-null [type=int, outer=(2)]
+      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         ├── any-not-null [type=float, outer=(3)]
+      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         └── any-not-null [type=string, outer=(4)]
+      │              └── variable: a.s [type=string, outer=(4)]
+      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── a.i = min [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+
+# Don't reject nulls when multiple columns are used.
+build
+SELECT min(x), max(y)
+FROM (select k from a)
+LEFT JOIN (select x, y from xy)
+ON True
+GROUP BY k
+HAVING min(x)=1
+----
+project
+ ├── columns: min:7(int!null) max:8(int)
+ ├── fd: ()-->(7)
+ ├── prune: (7,8)
+ └── select
+      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(8)
+      ├── prune: (8)
+      ├── interesting orderings: (+1)
+      ├── group-by
+      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── prune: (7,8)
+      │    ├── interesting orderings: (+1)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int) y:6(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── fd: (5)-->(6)
+      │    │    ├── prune: (1,5,6)
+      │    │    ├── reject-nulls: (5,6)
+      │    │    ├── interesting orderings: (+1) (+5)
+      │    │    ├── project
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── prune: (1)
+      │    │    │    ├── interesting orderings: (+1)
+      │    │    │    └── scan a
+      │    │    │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2-4)
+      │    │    │         ├── prune: (1-4)
+      │    │    │         └── interesting orderings: (+1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: (5)-->(6)
+      │    │    │    ├── prune: (5,6)
+      │    │    │    └── interesting orderings: (+5)
+      │    │    └── filters [type=bool]
+      │    │         └── true [type=bool]
+      │    └── aggregations [outer=(5,6)]
+      │         ├── min [type=int, outer=(5)]
+      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         └── max [type=int, outer=(6)]
+      │              └── variable: xy.y [type=int, outer=(6)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+# Don't reject column when count function is used (it doesn't return nil when
+# input is empty).
+build
+SELECT count(x)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT x FROM xy)
+ON True
+GROUP BY k
+HAVING count(x)=1
+----
+project
+ ├── columns: count:7(int!null)
+ ├── fd: ()-->(7)
+ ├── prune: (7)
+ └── select
+      ├── columns: k:1(int!null) column7:7(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── interesting orderings: (+1)
+      ├── group-by
+      │    ├── columns: k:1(int!null) column7:7(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── prune: (7)
+      │    ├── interesting orderings: (+1)
+      │    ├── left-join
+      │    │    ├── columns: k:1(int!null) x:5(int)
+      │    │    ├── key: (1,5)
+      │    │    ├── prune: (1,5)
+      │    │    ├── reject-nulls: (5)
+      │    │    ├── interesting orderings: (+1) (+5)
+      │    │    ├── project
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── prune: (1)
+      │    │    │    ├── interesting orderings: (+1)
+      │    │    │    └── scan a
+      │    │    │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2-4)
+      │    │    │         ├── prune: (1-4)
+      │    │    │         └── interesting orderings: (+1)
+      │    │    ├── project
+      │    │    │    ├── columns: x:5(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── prune: (5)
+      │    │    │    ├── interesting orderings: (+5)
+      │    │    │    └── scan xy
+      │    │    │         ├── columns: x:5(int!null) y:6(int)
+      │    │    │         ├── key: (5)
+      │    │    │         ├── fd: (5)-->(6)
+      │    │    │         ├── prune: (5,6)
+      │    │    │         └── interesting orderings: (+5)
+      │    │    └── filters [type=bool]
+      │    │         └── true [type=bool]
+      │    └── aggregations [outer=(5)]
+      │         └── count [type=int, outer=(5)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
