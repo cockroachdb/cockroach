@@ -1726,6 +1726,13 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
+func (r *Replica) getMergeCompleteCh() chan struct{} {
+	r.mu.RLock()
+	mergeCompleteCh := r.mu.mergeComplete
+	r.mu.RUnlock()
+	return mergeCompleteCh
+}
+
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -2361,10 +2368,7 @@ func (r *Replica) beginCmds(
 			fn(ba, storagebase.CommandQueueBeginExecuting)
 		}
 
-		r.mu.RLock()
-		mergeCompleteCh := r.mu.mergeComplete
-		r.mu.RUnlock()
-		if mergeCompleteCh != nil && !ba.IsSingleGetSnapshotForMergeRequest() {
+		if r.getMergeCompleteCh() != nil && !ba.IsSingleGetSnapshotForMergeRequest() {
 			// The replica is being merged into its left-hand neighbor. This request
 			// cannot proceed until the merge completes, signaled by the closing of
 			// the channel.
@@ -2402,14 +2406,17 @@ func (r *Replica) beginCmds(
 			// merge transaction, and merge transactions read the RHS descriptor at
 			// the beginning of the transaction to verify that it has not already been
 			// merged away.
-			select {
-			case <-mergeCompleteCh:
-				// Merge complete. Carry on.
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-r.store.stopper.ShouldQuiesce():
-				return nil, &roachpb.NodeUnavailableError{}
-			}
+			//
+			// We can't wait for the merge to complete here, though. The replica might
+			// need to respond to a GetSnapshotForMerge request in order for the merge
+			// to complete, and blocking here would force that GetSnapshotForMerge
+			// request to sit in the command queue forever, deadlocking the merge.
+			// Instead, we remove the commands from the command queue and return a
+			// MergeInProgressError. The store will catch that error and resubmit the
+			// request after mergeCompleteCh closes. See #27442 for the full context.
+			log.Event(ctx, "waiting on in-progress merge")
+			r.removeCmdsFromCommandQueue(newCmds)
+			return nil, &roachpb.MergeInProgressError{}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
