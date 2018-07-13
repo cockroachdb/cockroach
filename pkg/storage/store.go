@@ -529,6 +529,10 @@ type Store struct {
 
 	scheduler *raftScheduler
 
+	// livenessMap is a map from nodeID to a bool indicating
+	// liveness. It is updated periodically in raftTickLoop().
+	livenessMap atomic.Value
+
 	// cachedCapacity caches information on store capacity to prevent
 	// expensive recomputations in case leases or replicas are rapidly
 	// rebalancing.
@@ -1427,6 +1431,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Start Raft processing goroutines.
 	s.cfg.Transport.Listen(s.StoreID(), s)
 	s.processRaft(ctx)
+
+	// Register a callback to unquiesce any ranges with replicas on a
+	// node transitioning from non-live to live.
+	if s.cfg.NodeLiveness != nil {
+		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
+	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
@@ -3704,15 +3714,39 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
+	livenessMap, _ := s.livenessMap.Load().(map[roachpb.NodeID]bool)
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
-	exists, err := r.tick()
+	exists, err := r.tick(livenessMap)
 	if err != nil {
 		log.Error(ctx, err)
 	}
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	return exists // ready
+}
+
+// nodeIsLiveCallback is invoked when a node transitions from non-live
+// to live. Iterate through all replicas and find any which belong to
+// ranges containing the implicated node. Unquiesce if currently
+// quiesced. Note that this mechanism can race with concurrent
+// invocations of processTick, which may have a copy of the previous
+// livenessMap where the now-live node is down. Those instances should
+// be rare, however, and we expect the newly live node to eventually
+// unquiesce the range.
+func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
+	// Update the liveness map.
+	s.livenessMap.Store(s.cfg.NodeLiveness.GetIsLiveMap())
+
+	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+		r := (*Replica)(v)
+		for _, rep := range r.Desc().Replicas {
+			if rep.NodeID == nodeID {
+				r.unquiesce()
+			}
+		}
+		return true
+	})
 }
 
 func (s *Store) processRaft(ctx context.Context) {
@@ -3741,6 +3775,10 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
+			// Update the liveness map.
+			if s.cfg.NodeLiveness != nil {
+				s.livenessMap.Store(s.cfg.NodeLiveness.GetIsLiveMap())
+			}
 
 			s.unquiescedReplicas.Lock()
 			// Why do we bother to ever queue a Replica on the Raft scheduler for
