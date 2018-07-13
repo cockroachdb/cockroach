@@ -166,6 +166,101 @@
     (ConcatFilters $on $filter)
 )
 
+# PushSelectCondLeftIntoJoinLeftAndRight applies to the case when a condition
+# bound by the left side of a join can be mapped to the right side using
+# equality columns from the ON condition of the join. It pushes the original
+# filter to the left side, and the mapped filter to the right side.
+# For example, consider this query:
+#
+#   SELECT * FROM l LEFT JOIN r ON l.x = r.x WHERE l.x = 5;
+#
+# This can safely be converted to:
+#
+#   SELECT * FROM (SELECT * FROM l WHERE l.x = 5)
+#   LEFT JOIN (SELECT * FROM r WHERE r.x = 5) ON l.x = r.x;
+#
+# It's not normally correct to push filters from the SELECT clause to
+# the right side of a LEFT JOIN, since those rows might still show up
+# in the output as NULL-extended rows from the left side. In this case,
+# however, for any rows removed from the right side, the matching rows are
+# also removed from the left side (and thus removed from the output).
+# To ensure that this is the case, it's important that the filter only refers
+# to columns on the left side that have corresponding equivalent columns on
+# the right side.
+[PushSelectCondLeftIntoJoinLeftAndRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    (Filters
+        $list:[
+            ...
+            $condition:* &
+                (IsBoundBy $condition $left) &
+                (CanMap $on $condition $right)
+            ...
+        ]
+    )
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (Filters [$condition])
+        )
+        (Select
+            $right
+            (Filters [(Map $on $condition $right)])
+        )
+        $on
+    )
+    (Filters (RemoveListItem $list $condition))
+)
+
+# PushSelectCondRightIntoJoinLeftAndRight is symmetric with
+# PushSelectCondLeftIntoJoinLeftAndRight. It applies to the case when a
+# condition bound by the right side of a join can be mapped to the left side
+# using equality columns from the ON condition of the join. It pushes the
+# original filter to the right side, and the mapped filter to the left side.
+# See the comments above PushSelectCondLeftIntoJoinLeftAndRight for more
+# details.
+[PushSelectCondRightIntoJoinLeftAndRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    (Filters
+        $list:[
+            ...
+            $condition:* &
+                (IsBoundBy $condition $right) &
+                (CanMap $on $condition $left)
+            ...
+        ]
+    )
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (Filters [(Map $on $condition $left)])
+        )
+        (Select
+            $right
+            (Filters [$condition])
+        )
+        $on
+    )
+    (Filters (RemoveListItem $list $condition))
+)
+
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
 # an input Join. This is possible in the case of InnerJoin, LeftJoin, SemiJoin,
 # and AntiJoin, as long as the condition has no dependencies on the right side
