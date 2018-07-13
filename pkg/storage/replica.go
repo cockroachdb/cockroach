@@ -543,6 +543,16 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
+		// Add the replica to the store's unquiesced map, now that the
+		// Raft group is initialized. Note that the range is assumed
+		// quiescent when the raft group is initialized. Adding it to the
+		// unquiesced relicas map will cause it to be ticked at least
+		// once; if it's meant to stay quiescent, it will be removed from
+		// this map immediately.
+		r.store.unquiescedReplicas.Lock()
+		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+		r.store.unquiescedReplicas.Unlock()
+
 		if mayCampaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
@@ -3620,7 +3630,7 @@ func (r *Replica) quiesceLocked() bool {
 	}
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(ctx, "quiescing")
+			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
 
@@ -3637,7 +3647,7 @@ func (r *Replica) unquiesceLocked() {
 	if r.mu.quiescent {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing")
+			log.Infof(ctx, "unquiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()
@@ -3652,7 +3662,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	if r.mu.quiescent {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing: waking leader")
+			log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()

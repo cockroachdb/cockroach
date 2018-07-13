@@ -2388,11 +2388,9 @@ func (s *Store) MergeRange(
 // this store. addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized range %s", repl)
+		return errors.Errorf("attempted to add uninitialized replica %s", repl)
 	}
 
-	// TODO(spencer): will need to determine which range is
-	// newer, and keep that one.
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		return err
 	}
@@ -2466,9 +2464,6 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
-	s.unquiescedReplicas.Lock()
-	s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
-	s.unquiescedReplicas.Unlock()
 	return nil
 }
 
