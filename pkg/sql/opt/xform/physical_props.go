@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // canProvidePhysicalProps returns true if the given expression can provide the
@@ -144,7 +145,11 @@ func (o *Optimizer) buildChildPhysicalProps(
 
 	// Ordering property.
 	switch mexpr.Operator() {
-	case opt.ProjectOp, opt.SelectOp, opt.IndexJoinOp, opt.LookupJoinOp:
+	case opt.SelectOp:
+		if nth == 0 {
+			childProps.Ordering = parentProps.Ordering
+		}
+	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		if nth == 0 {
 			childProps.Ordering = parentProps.Ordering
 			if mexpr.Operator() == opt.ProjectOp {
@@ -198,7 +203,9 @@ func (o *Optimizer) buildChildPhysicalProps(
 		// ************************* WARNING *************************
 	}
 
-	if !childProps.Ordering.Any() {
+	// RaceEnabled ensures that checks are run on every change (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if util.RaceEnabled && !childProps.Ordering.Any() {
 		props := o.mem.GroupProperties(mexpr.ChildGroup(o.mem, nth))
 		if !childProps.Ordering.SubsetOfCols(props.Relational.OutputCols) {
 			panic(fmt.Sprintf("OrderingChoice refers to non-output columns (op: %s)", mexpr.Operator()))
@@ -217,7 +224,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 // in ordering.
 func (o *Optimizer) isOrderingBoundBy(ordering *props.OrderingChoice, input memo.GroupID) bool {
 	inputCols := o.mem.GroupProperties(input).Relational.OutputCols
-	return ordering.CanProject(inputCols)
+	return ordering.CanProjectCols(inputCols)
 }
 
 func (o *Optimizer) optimizeProjectOrdering(project *memo.ProjectExpr, physical *props.Physical) {
