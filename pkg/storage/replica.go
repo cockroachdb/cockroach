@@ -555,6 +555,16 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
+		// Add the replica to the store's unquiesced map, now that the
+		// Raft group is initialized. Note that the range is assumed
+		// quiescent when the raft group is initialized. Adding it to the
+		// unquiesced relicas map will cause it to be ticked at least
+		// once; if it's meant to stay quiescent, it will be removed from
+		// this map immediately.
+		r.store.unquiescedReplicas.Lock()
+		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+		r.store.unquiescedReplicas.Unlock()
+
 		if mayCampaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
@@ -4256,6 +4266,12 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 
 	// If the raft group is uninitialized, do not initialize on tick.
 	if r.mu.internalRaftGroup == nil {
+		// If there's no raft group, remove replica from unquiesced map to
+		// avoid senselessly ticking. When the raft group is initialized,
+		// it will be added back into the unquiesced map.
+		r.store.unquiescedReplicas.Lock()
+		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		r.store.unquiescedReplicas.Unlock()
 		return false, nil
 	}
 
