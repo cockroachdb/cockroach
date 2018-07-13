@@ -116,10 +116,11 @@ func initCLIDefaults() {
 	nodeCtx.statusShowAll = false
 	nodeCtx.statusShowDecommission = false
 
-	sqlfmtCtx.len = tree.DefaultPrettyWidth
-	sqlfmtCtx.useSpaces = false
-	sqlfmtCtx.tabWidth = 4
-	sqlfmtCtx.noSimplify = false
+	cfg := tree.DefaultPrettyCfg()
+	sqlfmtCtx.len = cfg.LineWidth
+	sqlfmtCtx.useSpaces = !cfg.UseTabs
+	sqlfmtCtx.tabWidth = cfg.IndentWidth
+	sqlfmtCtx.noSimplify = !cfg.Simplify
 	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
