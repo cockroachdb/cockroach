@@ -68,8 +68,14 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	cfg := tree.DefaultPrettyCfg()
+	cfg.UseTabs = !sqlfmtCtx.useSpaces
+	cfg.LineWidth = sqlfmtCtx.len
+	cfg.IndentWidth = sqlfmtCtx.tabWidth
+	cfg.Simplify = !sqlfmtCtx.noSimplify
+
 	for _, s := range sl {
-		fmt.Print(tree.PrettyWithOpts(s, sqlfmtCtx.len, !sqlfmtCtx.useSpaces, sqlfmtCtx.tabWidth, !sqlfmtCtx.noSimplify))
+		fmt.Print(cfg.Pretty(s))
 		if len(sl) > 1 {
 			fmt.Print(";")
 		}
