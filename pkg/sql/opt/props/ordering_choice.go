@@ -282,12 +282,12 @@ func (oc *OrderingChoice) SubsetOfCols(cs opt.ColSet) bool {
 	return true
 }
 
-// CanProject is true if at least one column in each ordering column group is
+// CanProjectCols is true if at least one column in each ordering column group is
 // part of the given column set. For example, if the OrderingChoice is:
 //
 //   +1,-(2|3) opt(4,5)
 //
-// then CanProject will behave as follows for these input sets:
+// then CanProjectCols will behave as follows for these input sets:
 //
 //   (1,2)   => true
 //   (1,3)   => true
@@ -295,7 +295,7 @@ func (oc *OrderingChoice) SubsetOfCols(cs opt.ColSet) bool {
 //   (1)     => false
 //   (3,4)   => false
 //
-func (oc *OrderingChoice) CanProject(cs opt.ColSet) bool {
+func (oc *OrderingChoice) CanProjectCols(cs opt.ColSet) bool {
 	for i := range oc.Columns {
 		if !oc.Columns[i].Group.Intersects(cs) {
 			return false
