@@ -632,6 +632,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	}
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
+	r.mu.quiescent = true
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -3624,10 +3625,9 @@ func (r *Replica) quiesceLocked() bool {
 	}
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(ctx, "quiescing")
+			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
-
 		r.store.unquiescedReplicas.Lock()
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
@@ -3644,10 +3644,10 @@ func (r *Replica) unquiesce() {
 }
 
 func (r *Replica) unquiesceLocked() {
-	if r.mu.quiescent {
+	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing")
+			log.Infof(ctx, "unquiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()
@@ -3659,10 +3659,10 @@ func (r *Replica) unquiesceLocked() {
 }
 
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
-	if r.mu.quiescent {
+	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing: waking leader")
+			log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()
@@ -4119,8 +4119,8 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 	log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
 }
 
-// tick the Raft group, returning any error and true if the raft group exists
-// and false otherwise.
+// tick the Raft group, returning true if the raft group exists and is
+// unquiesced; false otherwise.
 func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
@@ -4132,8 +4132,7 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// If the raft group is uninitialized, do not initialize raft groups on
-	// tick.
+	// If the raft group is uninitialized, do not initialize on tick.
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
