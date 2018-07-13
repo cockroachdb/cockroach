@@ -43,6 +43,7 @@ var (
 	count         = 1
 	debug         = false
 	dryrun        = false
+	postIssues    = true
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
@@ -667,7 +668,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 					}
 
 					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
-					if issues.CanPost() {
+					if postIssues && issues.CanPost() {
 						authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
 						branch := "<unknown branch>"
 						if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
