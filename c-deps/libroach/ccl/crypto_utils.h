@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <rocksdb/status.h>
 #include <string>
 #include "../rocksdbutils/env_encryption.h"
 #include "ccl/storageccl/engineccl/enginepbccl/key_registry.pb.h"
@@ -32,3 +33,7 @@ rocksdb_utils::BlockCipher* NewAESEncryptCipher(const enginepbccl::SecretKey* ke
 
 // Returns true if CryptoPP is using AES-NI.
 bool UsesAESNI();
+
+// DisableCoreFile sets the maximum size of a core file to 0. Returns success
+// if successfully called.
+rocksdb::Status DisableCoreFile();
