@@ -118,6 +118,9 @@ func listFailures(
 			return errors.Wrap(err, "failed to post issue")
 		}
 	} else {
+		for id := range failures {
+			log.Printf("failed test: %s", id.Test)
+		}
 		for id, tes := range failures {
 			authorEmail, err := getAuthorEmail(ctx, id.Package, id.Test)
 			if err != nil {
