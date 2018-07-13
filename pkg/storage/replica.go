@@ -3220,6 +3220,17 @@ func (r *Replica) evaluateProposal(
 	// replication is not necessary.
 	res.Local.Reply = br
 
+	// Assert that successful write requests result in intents. This is
+	// important for transactional pipelining and the parallel commit proposal
+	// because both use the presence of an intent to indicate that a write
+	// succeeded. This check may have false negatives but will never have false
+	// positives.
+	if br.Txn != nil && br.Txn.Status != roachpb.ABORTED {
+		if ba.IsTransactionWrite() && !ba.IsRange() && batch.Empty() {
+			log.Fatalf(ctx, "successful transaction point write batch %v resulted in no-op", ba)
+		}
+	}
+
 	// needConsensus determines if the result needs to be replicated and
 	// proposed through Raft. This is necessary if at least one of the
 	// following conditions is true:
@@ -3377,6 +3388,10 @@ func (r *Replica) propose(
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
 	log.Event(proposal.ctx, "evaluated request")
 
+	// Pull out proposal channel to return. proposal.doneCh may be set to
+	// nil if it is signaled in this function.
+	proposalCh := proposal.doneCh
+
 	// There are two cases where request evaluation does not lead to a Raft
 	// proposal:
 	// 1. proposal.command == nil indicates that the evaluation was a no-op
@@ -3395,7 +3410,35 @@ func (r *Replica) propose(
 			EndTxns: endTxns,
 		}
 		proposal.finishApplication(pr)
-		return proposal.doneCh, func() bool { return false }, nil
+		return proposalCh, func() bool { return false }, nil
+	}
+
+	// If the request requested that Raft consensus be performed asynchronously,
+	// return a proposal result immediately on the proposal's done channel.
+	// The channel's capacity will be large enough to accommodate this.
+	if ba.AsyncConsensus {
+		if ets := proposal.Local.DetachEndTxns(false /* alwaysOnly */); len(ets) != 0 {
+			// Disallow async consensus for commands with EndTxnIntents because
+			// any !Always EndTxnIntent can't be cleaned up until after the
+			// command succeeds.
+			return nil, nil, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+				"proposal with EndTxnIntents=%v; %v", ets, ba)
+		}
+
+		// Fork the proposal's context span so that the proposal's context
+		// can outlive the original proposer's context.
+		proposal.ctx, proposal.sp = tracing.ForkCtxSpan(ctx, "async consensus")
+
+		// Signal the proposal's response channel immediately.
+		reply := *proposal.Local.Reply
+		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+		pr := proposalResult{
+			Reply:   &reply,
+			Intents: proposal.Local.DetachIntents(),
+		}
+		proposal.signalProposalResult(pr)
+
+		// Continue with proposal...
 	}
 
 	// TODO(irfansharif): This int cast indicates that if someone configures a
@@ -3479,6 +3522,7 @@ func (r *Replica) propose(
 	} else if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}
+
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
@@ -3498,7 +3542,7 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return proposal.doneCh, tryAbandon, nil
+	return proposalCh, tryAbandon, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.

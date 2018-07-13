@@ -83,6 +83,16 @@ func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterNonNegativeIntSetting defines a new setting with type int.
+func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
+		}
+		return nil
+	})
+}
+
 // RegisterValidatedIntSetting defines a new setting with type int with a
 // validation function.
 func RegisterValidatedIntSetting(

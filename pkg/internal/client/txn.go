@@ -1220,7 +1220,7 @@ func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
 		meta.RefreshReads = nil
 		meta.RefreshWrites = nil
 	case LeafTxn:
-		// Nothing yet.
+		meta.OutstandingWrites = nil
 	}
 	return meta
 }
