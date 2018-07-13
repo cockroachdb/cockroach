@@ -68,18 +68,13 @@ func listFailures(
 		Output string
 	}
 
-	type ID struct {
-		Package string
-		Test    string
-	}
-
 	packageName, ok := os.LookupEnv(pkgEnv)
 	if !ok {
 		return errors.Errorf("package name environment variable %s is not set", pkgEnv)
 	}
 
 	var packageOutput bytes.Buffer
-	failures := make(map[ID][]TestEvent)
+	failures := make(map[string][]TestEvent)
 
 	for {
 		var te TestEvent
@@ -91,15 +86,11 @@ func listFailures(
 
 		// Events for the overall package test do not set Test.
 		if len(te.Test) > 0 {
-			id := ID{
-				Package: packageName,
-				Test:    te.Test,
-			}
 			switch te.Action {
 			case "output":
-				failures[id] = append(failures[id], te)
+				failures[te.Test] = append(failures[te.Test], te)
 			case "pass", "skip":
-				delete(failures, id)
+				delete(failures, te.Test)
 			}
 		} else if te.Action == "output" {
 			// Output was outside the context of a test. This consists mostly of the
@@ -118,17 +109,20 @@ func listFailures(
 			return errors.Wrap(err, "failed to post issue")
 		}
 	} else {
-		for id, tes := range failures {
-			authorEmail, err := getAuthorEmail(ctx, id.Package, id.Test)
+		for test := range failures {
+			log.Printf("failed test: %s", test)
+		}
+		for test, testEvents := range failures {
+			authorEmail, err := getAuthorEmail(ctx, packageName, test)
 			if err != nil {
 				log.Printf("unable to determine test author email: %s\n", err)
 			}
 			var outputs []string
-			for _, te := range tes {
-				outputs = append(outputs, te.Output)
+			for _, testEvent := range testEvents {
+				outputs = append(outputs, testEvent.Output)
 			}
 			message := strings.Join(outputs, "")
-			if err := f(ctx, id.Package, id.Test, message, authorEmail); err != nil {
+			if err := f(ctx, packageName, test, message, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		}

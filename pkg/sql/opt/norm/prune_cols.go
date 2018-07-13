@@ -194,10 +194,10 @@ func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet
 	return c.f.ConstructValues(newRows.BuildList(), c.f.InternColList(newCols))
 }
 
-// ProjectOrderingGroupBy removes any columns referenced by the Ordering inside
+// PruneOrderingGroupBy removes any columns referenced by the Ordering inside
 // a GroupByDef which are not output columns of the given group (variant of
-// ProjectOrdering).
-func (c *CustomFuncs) ProjectOrderingGroupBy(
+// PruneOrdering).
+func (c *CustomFuncs) PruneOrderingGroupBy(
 	group memo.GroupID, private memo.PrivateID,
 ) memo.PrivateID {
 	outCols := c.OutputCols(group)
@@ -211,10 +211,10 @@ func (c *CustomFuncs) ProjectOrderingGroupBy(
 	return c.f.InternGroupByDef(&defCopy)
 }
 
-// ProjectOrderingRowNumber removes any columns referenced by the Ordering inside
+// PruneOrderingRowNumber removes any columns referenced by the Ordering inside
 // a RowNumberDef which are not output columns of the given group (variant of
-// ProjectOrdering).
-func (c *CustomFuncs) ProjectOrderingRowNumber(
+// PruneOrdering).
+func (c *CustomFuncs) PruneOrderingRowNumber(
 	group memo.GroupID, private memo.PrivateID,
 ) memo.PrivateID {
 	outCols := c.OutputCols(group)

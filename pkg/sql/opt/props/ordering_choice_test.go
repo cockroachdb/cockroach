@@ -143,7 +143,7 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 	}
 }
 
-func TestOrderingChoice_CanProject(t *testing.T) {
+func TestOrderingChoice_CanProjectCols(t *testing.T) {
 	testcases := []struct {
 		s        string
 		cs       opt.ColSet
@@ -165,7 +165,7 @@ func TestOrderingChoice_CanProject(t *testing.T) {
 
 	for _, tc := range testcases {
 		choice := props.ParseOrderingChoice(tc.s)
-		if choice.CanProject(tc.cs) != tc.expected {
+		if choice.CanProjectCols(tc.cs) != tc.expected {
 			if tc.expected {
 				t.Errorf("%s: expected CanProject(%s)", tc.s, tc.cs)
 			} else {
