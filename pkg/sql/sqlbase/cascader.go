@@ -1132,11 +1132,11 @@ func (c *cascader) cascadeAll(
 			// If there's only a single change, which is quite often the case, there
 			// is no need to worry about intermediate states.  Just run the check and
 			// avoid a bunch of allocations.
-			err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0))
-			if err == errUpdaterNoFKs {
-				continue
-			} else if err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
 				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
 			}
 			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
 				return err
@@ -1173,11 +1173,11 @@ func (c *cascader) cascadeAll(
 				}
 			}
 
-			err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow)
-			if err == errUpdaterNoFKs {
-				continue
-			} else if err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
 			}
 			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), finalRow); err != nil {
 				return err

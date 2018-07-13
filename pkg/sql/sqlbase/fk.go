@@ -580,8 +580,6 @@ func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType Index
 	}
 }
 
-var errUpdaterNoFKs = errors.New("No inbound or outbound FKs for updated row")
-
 func (fks fkUpdateHelper) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums,
 ) error {
@@ -593,10 +591,11 @@ func (fks fkUpdateHelper) addIndexChecks(
 			return err
 		}
 	}
-	if len(fks.inbound.fks) == 0 && len(fks.outbound.fks) == 0 {
-		return errUpdaterNoFKs
-	}
 	return nil
+}
+
+func (fks fkUpdateHelper) hasFKs() bool {
+	return len(fks.inbound.fks) > 0 || len(fks.outbound.fks) > 0
 }
 
 // CollectSpans implements the FkSpanCollector interface.

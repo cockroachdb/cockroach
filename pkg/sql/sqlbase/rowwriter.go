@@ -820,11 +820,11 @@ func (ru *RowUpdater) UpdateRow(
 		}
 
 		if checkFKs == CheckFKs {
-			err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
-			if err == errUpdaterNoFKs {
-				return ru.newValues, nil
-			} else if err != nil {
+			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 				return nil, err
+			}
+			if !ru.Fks.hasFKs() {
+				return ru.newValues, nil
 			}
 			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 				return nil, err
@@ -923,11 +923,11 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if checkFKs == CheckFKs {
-		err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues)
-		if err == errUpdaterNoFKs {
-			return ru.newValues, nil
-		} else if err != nil {
+		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
+		}
+		if !ru.Fks.hasFKs() {
+			return ru.newValues, nil
 		}
 		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
