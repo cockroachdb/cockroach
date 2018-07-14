@@ -46,6 +46,10 @@ type PrettyCfg struct {
 	UseTabs bool
 	// Simplify, when set, removes extraneous parentheses.
 	Simplify bool
+	// Align, when set, uses alignment for some constructs as a first
+	// choice. If not set or if the line width is insufficient, nesting
+	// is used instead.
+	Align bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -56,6 +60,7 @@ func DefaultPrettyCfg() PrettyCfg {
 		Simplify:  true,
 		TabWidth:  4,
 		UseTabs:   true,
+		Align:     false, // TODO(knz): I really want this to be true!
 	}
 }
 
@@ -87,10 +92,16 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
+	if p.Align {
+		return pretty.AlignUnder(a, b)
+	}
 	return pretty.NestUnder(a, b)
 }
 
 func (p *PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
+	if p.Align {
+		return pretty.JoinGroupAligned(name, divider, d...)
+	}
 	return pretty.JoinGroup(name, divider, d...)
 }
 

@@ -1,0 +1,280 @@
+1:
+-
+WITH
+	t
+		(
+			x
+		)
+		AS (
+			WITH
+				t
+					(
+						x
+					)
+					AS (
+						SELECT
+							1
+					)
+			SELECT
+				x
+				* 10
+			FROM
+				t
+		)
+SELECT
+	x
+	+ 2
+FROM
+	t
+
+5:
+-----
+WITH
+	t
+		(
+			x
+		) AS (
+		WITH
+			t
+				(
+					x
+				)
+				AS (
+					SELECT
+						1
+				)
+		SELECT
+			x
+			* 10
+		FROM
+			t
+	  )
+SELECT
+	x
+	+ 2
+FROM
+	t
+
+6:
+------
+WITH t
+		(
+			x
+		) AS (
+	WITH
+		t
+			(
+				x
+			)
+			AS (
+				SELECT
+					1
+			)
+	SELECT
+		x
+		* 10
+	FROM
+		t
+  )
+SELECT
+	x
+	+ 2
+FROM t
+
+8:
+--------
+WITH t (
+		x
+       ) AS (
+			WITH
+				t
+					(
+						x
+					)
+					AS (
+						SELECT
+							1
+					)
+			SELECT
+				x
+				* 10
+			FROM
+				t
+         )
+SELECT x
+       + 2
+FROM t
+
+12:
+------------
+WITH t (
+		x
+       ) AS (
+			WITH
+				t
+					(
+						x
+					)
+					AS (
+						SELECT
+							1
+					)
+			SELECT
+				x
+				* 10
+			FROM
+				t
+         )
+SELECT x + 2
+FROM t
+
+15:
+---------------
+WITH t (x) AS (
+			WITH
+				t
+					(
+						x
+					)
+					AS (
+						SELECT
+							1
+					)
+			SELECT
+				x
+				* 10
+			FROM
+				t
+           )
+SELECT x + 2
+FROM t
+
+17:
+-----------------
+WITH t (x) AS (
+			WITH
+				t
+					(
+						x
+					) AS (
+					SELECT
+						1
+				  )
+			SELECT
+				x
+				* 10
+			FROM
+				t
+           )
+SELECT x + 2
+FROM t
+
+18:
+------------------
+WITH t (x) AS (
+			WITH t
+					(
+						x
+					) AS (
+				SELECT
+					1
+			  )
+			SELECT
+				x
+				* 10
+			FROM t
+           )
+SELECT x + 2
+FROM t
+
+19:
+-------------------
+WITH t (x) AS (
+			WITH t
+					(
+						x
+					) AS (
+				SELECT
+					1
+			  )
+			SELECT
+				x
+				* 10
+			FROM t
+           )
+SELECT x + 2 FROM t
+
+20:
+--------------------
+WITH t (x) AS (
+			WITH t (
+					x
+			       ) AS (
+						SELECT
+							1
+			         )
+			SELECT x
+			       * 10
+			FROM t
+           )
+SELECT x + 2 FROM t
+
+25:
+-------------------------
+WITH t (x) AS (
+			WITH t (
+					x
+			       ) AS (
+						SELECT
+							1
+			         )
+			SELECT x * 10
+			FROM t
+           )
+SELECT x + 2 FROM t
+
+27:
+---------------------------
+WITH t (x) AS (
+			WITH t (x) AS (
+						SELECT
+							1
+			           )
+			SELECT x * 10
+			FROM t
+           )
+SELECT x + 2 FROM t
+
+32:
+--------------------------------
+WITH t (x) AS (
+			WITH t (x) AS (
+						SELECT 1
+			           )
+			SELECT x * 10 FROM t
+           )
+SELECT x + 2 FROM t
+
+36:
+------------------------------------
+WITH t (x) AS (
+			WITH t (x) AS (SELECT 1)
+			SELECT x * 10 FROM t
+           )
+SELECT x + 2 FROM t
+
+57:
+---------------------------------------------------------
+WITH t (x) AS (
+			WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t
+           )
+SELECT x + 2 FROM t
+
+61:
+-------------------------------------------------------------
+WITH t (x) AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t)
+SELECT x + 2 FROM t
+
+81:
+---------------------------------------------------------------------------------
+WITH t (x) AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
