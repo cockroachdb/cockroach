@@ -53,6 +53,8 @@ func (concat) isDoc()    {}
 func (nestt) isDoc()     {}
 func (nests) isDoc()     {}
 func (union) isDoc()     {}
+func (*scolumn) isDoc()  {}
+func (*snesting) isDoc() {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -171,7 +173,51 @@ func flatten(d Doc) Doc {
 		return Nil
 	case union:
 		return flatten(t.x)
+	case *scolumn:
+		return &scolumn{f: func(c int16) Doc { return flatten(t.f(c)) }}
+	case *snesting:
+		return &snesting{f: func(i int16) Doc { return flatten(t.f(i)) }}
 	default:
 		panic(fmt.Errorf("unknown type: %T", d))
+	}
+}
+
+// scolumn is a special document which is replaced during rendering by
+// another document depending on the current relative column on the
+// rendering line (tab prefix excluded).
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code. See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type scolumn struct {
+	f func(int16) Doc
+}
+
+// snesting is a special document which is replaced during rendering
+// by another document depending on the current space-based nesting
+// level (the one added by NestS).
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type snesting struct {
+	f func(int16) Doc
+}
+
+// Align renders document d with the space-based nesting level set to
+// the current column.
+func Align(d Doc) Doc {
+	return &scolumn{
+		f: func(k int16) Doc {
+			return &snesting{
+				f: func(i int16) Doc {
+					return nests{k - i, d}
+				},
+			}
+		},
 	}
 }
