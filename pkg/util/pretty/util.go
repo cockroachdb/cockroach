@@ -96,6 +96,11 @@ func JoinGroup(head, divider string, d ...Doc) Doc {
 	return NestUnder(Text(head), Join(divider, d...))
 }
 
+// JoinGroupAligned nests joined d with divider under head.
+func JoinGroupAligned(head, divider string, d ...Doc) Doc {
+	return AlignUnder(Text(head), Join(divider, d...))
+}
+
 // NestUnder nests nested under head.
 func NestUnder(head, nested Doc) Doc {
 	return Group(Concat(
@@ -105,6 +110,15 @@ func NestUnder(head, nested Doc) Doc {
 			Group(nested),
 		)),
 	))
+}
+
+// AlignUnder aligns nested to the right of head, and, if
+// this does not fit on the line, nests nested under head.
+func AlignUnder(head, nested Doc) Doc {
+	g := Group(nested)
+	a := ConcatSpace(head, Align(g))
+	b := Concat(head, NestT(Concat(Line, g)))
+	return Group(union{a, b})
 }
 
 // Fold applies f recursively to all Docs in d.
