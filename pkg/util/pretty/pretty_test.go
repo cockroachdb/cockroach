@@ -20,6 +20,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
 
+// Example_align demonstrates alignment.
+func Example_align() {
+	doc := pretty.JoinGroupAligned("SELECT", ",",
+		pretty.Text("aaa"),
+		pretty.Text("bbb"),
+		pretty.Text("ccc"))
+	for _, n := range []int{1, 15, 30, 80} {
+		p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/)
+		fmt.Printf("%d:\n%s\n\n", n, p)
+	}
+
+	// Output:
+	// 1:
+	// SELECT
+	// 	aaa,
+	// 	bbb,
+	// 	ccc
+	//
+	// 15:
+	// SELECT aaa,
+	//        bbb,
+	//        ccc
+	//
+	// 30:
+	// SELECT aaa, bbb, ccc
+	//
+	// 80:
+	// SELECT aaa, bbb, ccc
+}
+
 // ExampleTree demonstrates the Tree example from the paper.
 func Example_tree() {
 	type Tree struct {
@@ -107,22 +137,23 @@ func Example_tree() {
 	// Output:
 	// 1:
 	// aaa[bbbbb[ccc,
-	//         dd,
-	//         ee(some
-	//           * another[2a,
-	//                 2b]
-	//           * final)],
+	//             dd,
+	//             ee(some
+	//               * another[2a,
+	//                         2b]
+	//               * final)],
 	//     eee,
 	//     ffff[gg,
-	//         hhh,
-	//         ii]]
+	//             hhh,
+	//             ii]]
 	//
 	// 30:
 	// aaa[bbbbb[ccc,
-	//         dd,
-	//         ee(some
-	//           * another[2a, 2b]
-	//           * final)],
+	//             dd,
+	//             ee(some
+	//               * another[2a,
+	//                         2b]
+	//               * final)],
 	//     eee,
 	//     ffff[gg, hhh, ii]]
 	//

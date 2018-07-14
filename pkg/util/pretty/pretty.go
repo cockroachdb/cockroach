@@ -127,7 +127,7 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	case nests:
 		res = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
 	case nestt:
-		res = b.be(k, b.iDoc(docPos{d.i.tabs + 1, 0}, t.d, z))
+		res = b.be(k, b.iDoc(docPos{d.i.tabs + 1 + d.i.spaces/b.tabWidth, 0}, t.d, z))
 	case text:
 		res = b.newDocBest(docBest{
 			tag: textB,
@@ -148,6 +148,10 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
+	case *scolumn:
+		res = b.be(k, b.iDoc(d.i, t.f(k.spaces), z))
+	case *snesting:
+		res = b.be(k, b.iDoc(d.i, t.f(d.i.spaces), z))
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}
