@@ -50,7 +50,8 @@ func (line) isDoc()      {}
 func (softbreak) isDoc() {}
 func (nilDoc) isDoc()    {}
 func (concat) isDoc()    {}
-func (nest) isDoc()      {}
+func (nestt) isDoc()     {}
+func (nests) isDoc()     {}
 func (union) isDoc()     {}
 
 //
@@ -106,16 +107,29 @@ func Concat(a, b Doc) Doc {
 	return simplifyNil(a, b, func(a, b Doc) Doc { return concat{a, b} })
 }
 
-// nest represents (NEST Int DOC) :: DOC -- nesting a doc "under" another.
-// NEST indents d at effective length n.
-type nest struct {
-	n int
+// nests represents (NESTS Int DOC) :: DOC -- nesting a doc "under" another.
+// NESTS indents d with n spaces.
+// This is more or less exactly the NEST operator in Wadler's printer.
+type nests struct {
+	n int16
 	d Doc
 }
 
-// Nest is the NEST constructor.
-func Nest(n int, d Doc) Doc {
-	return nest{n, d}
+// NestS is the NESTS constructor.
+func NestS(n int16, d Doc) Doc {
+	return nests{n, d}
+}
+
+// nestt represents (NESTT DOC) :: DOC -- nesting a doc "under" another
+// NESTT indents d with a tab character.
+// This is a variant of the NEST operator in Wadler's printer.
+type nestt struct {
+	d Doc
+}
+
+// NestT is the NESTT constructor.
+func NestT(d Doc) Doc {
+	return nestt{d}
 }
 
 // union represents (DOC <|> DOC) :: DOC -- the union of two docs.
@@ -145,8 +159,10 @@ func flatten(d Doc) Doc {
 		return Nil
 	case concat:
 		return Concat(flatten(t.a), flatten(t.b))
-	case nest:
-		return Nest(t.n, flatten(t.d))
+	case nestt:
+		return NestT(flatten(t.d))
+	case nests:
+		return NestS(t.n, flatten(t.d))
 	case text:
 		return d
 	case line:
