@@ -42,14 +42,14 @@ type PrettyCfg struct {
 	// TabWidth is the amount of spaces to use for tabs when UseTabs is
 	// false.
 	TabWidth int
+	// Align, when set to another value than PrettyNoAlign, uses
+	// alignment for some constructs as a first choice. If not set or if
+	// the line width is insufficient, nesting is used instead.
+	Align PrettyAlignMode
 	// UseTabs indicates whether to use tab chars to signal indentation.
 	UseTabs bool
 	// Simplify, when set, removes extraneous parentheses.
 	Simplify bool
-	// Align, when set, uses alignment for some constructs as a first
-	// choice. If not set or if the line width is insufficient, nesting
-	// is used instead.
-	Align bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -60,9 +60,31 @@ func DefaultPrettyCfg() PrettyCfg {
 		Simplify:  true,
 		TabWidth:  4,
 		UseTabs:   true,
-		Align:     false, // TODO(knz): I really want this to be true!
+		Align:     PrettyNoAlign, // TODO(knz): I really want this to be AlignAndDeindent
 	}
 }
+
+// PrettyAlignMode directs which alignment mode to use.
+//
+// TODO(knz/mjibson): this variety of options currently exists so as
+// to enable comparisons and gauging individual preferences. We should
+// aim to remove some or all of these options in the future.
+type PrettyAlignMode int
+
+const (
+	// PrettyNoAlign disables alignment.
+	PrettyNoAlign PrettyAlignMode = 0
+	// PrettyAlignOnly aligns sub-clauses only and preserves the
+	// hierarchy of logical operators.
+	PrettyAlignOnly = 1
+	// PrettyAlignAndDeindent does the work of PrettyAlignOnly and also
+	// de-indents AND and OR operators.
+	PrettyAlignAndDeindent = 2
+	// PrettyAlignAndExtraIndent does the work of PrettyAlignOnly and
+	// also extra indents the operands of AND and OR operators so
+	// that they appear aligned but also indented.
+	PrettyAlignAndExtraIndent = 3
+)
 
 // Pretty pretty prints stmt with default options.
 func Pretty(stmt NodeFormatter) string {
@@ -92,21 +114,21 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
-	if p.Align {
+	if p.Align != PrettyNoAlign {
 		return pretty.AlignUnder(a, b)
 	}
 	return pretty.NestUnder(a, b)
 }
 
 func (p *PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
-	if p.Align {
+	if p.Align != PrettyNoAlign {
 		return pretty.JoinGroupAligned(name, divider, d...)
 	}
 	return pretty.JoinGroup(name, divider, d...)
 }
 
 func (p *PrettyCfg) rlTable(rows ...pretty.RLTableRow) pretty.Doc {
-	if p.Align {
+	if p.Align != PrettyNoAlign {
 		return pretty.RLTable(rows...)
 	}
 	items := make([]pretty.Doc, len(rows))
@@ -136,10 +158,21 @@ func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
 	if len(d) == 0 {
 		return pretty.Nil
 	}
-	if p.Align {
+	switch p.Align {
+	case PrettyAlignAndDeindent:
 		return pretty.JoinNestedOuter(lbl, d...)
+	case PrettyAlignAndExtraIndent:
+		items := make([]pretty.RLTableRow, len(d))
+		for i, dd := range d {
+			if i > 0 {
+				items[i].Label = lbl
+			}
+			items[i].Doc = dd
+		}
+		return pretty.RLTable(items...)
+	default:
+		return pretty.JoinNestedRight(pretty.Text(lbl), d...)
 	}
-	return pretty.JoinNestedRight(pretty.Text(lbl), d...)
 }
 
 // docer is implemented by nodes that can convert themselves into

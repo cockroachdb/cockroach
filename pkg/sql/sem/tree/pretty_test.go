@@ -47,12 +47,17 @@ func TestPrettyData(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := tree.DefaultPrettyCfg()
+	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
 		runTestPrettyData(t, "ref", cfg, matches)
 	})
-	cfg.Align = true
+	cfg.Align = tree.PrettyAlignAndDeindent
 	t.Run("align", func(t *testing.T) {
 		runTestPrettyData(t, "align", cfg, matches)
+	})
+	cfg.Align = tree.PrettyAlignOnly
+	t.Run("align", func(t *testing.T) {
+		runTestPrettyData(t, "align2", cfg, matches)
 	})
 }
 
