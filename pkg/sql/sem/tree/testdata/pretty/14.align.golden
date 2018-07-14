@@ -67,8 +67,8 @@ SET (
       )
 WHERE a
       = 2
-      AND b
-		= c
+  AND b
+      = c
 ORDER BY
 	v
 		DESC
@@ -91,8 +91,8 @@ SET (
       )
 WHERE a
       = 2
-      AND b
-		= c
+  AND b
+      = c
 ORDER BY v
 			DESC
 LIMIT 1
@@ -112,8 +112,7 @@ SET (
 		9
       )
 WHERE a = 2
-      AND b
-		= c
+  AND b = c
 ORDER BY v
 			DESC
 LIMIT 1
@@ -130,8 +129,7 @@ SET (b, c) = (
 			9
            )
 WHERE a = 2
-      AND b
-		= c
+  AND b = c
 ORDER BY v
 			DESC
 LIMIT 1
@@ -148,7 +146,7 @@ SET (b, c) = (
 			9
            )
 WHERE a = 2
-      AND b = c
+  AND b = c
 ORDER BY v DESC
 LIMIT 1
 RETURNING
@@ -164,7 +162,7 @@ SET (b, c) = (
 			9
            )
 WHERE a = 2
-      AND b = c
+  AND b = c
 ORDER BY v DESC
 LIMIT 1
 RETURNING abc.b,
@@ -176,7 +174,7 @@ RETURNING abc.b,
 UPDATE abc
 SET (b, c) = (8, 9)
 WHERE a = 2
-      AND b = c
+  AND b = c
 ORDER BY v DESC
 LIMIT 1
 RETURNING abc.b,
