@@ -117,9 +117,6 @@ SELECT count(*) FILTER (WHERE v>10) FROM t
 query error pq: views and sequences are not supported
 SELECT * FROM tview
 
-query error pq: virtual tables are not supported
-SELECT id FROM crdb_internal.jobs
-
 query error pq: not yet implemented: table expr: \*tree\.RowsFromExpr
 SELECT * FROM generate_series(1, 3)
 

@@ -226,6 +226,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	case opt.ScanOp:
 		return sb.colStatScan(colSet)
 
+	case opt.VirtualScanOp:
+		return sb.colStatVirtualScan(colSet)
+
 	case opt.SelectOp:
 		return sb.colStatSelect(colSet)
 
@@ -348,6 +351,28 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	if def.HardLimit > 0 && float64(def.HardLimit) < sb.s.RowCount {
 		colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
 	}
+
+	return colStat
+}
+
+// VirtualScan
+// -----------
+
+func (sb *statisticsBuilder) buildVirtualScan(def *VirtualScanOpDef) {
+	s := sb.makeTableStatistics(def.Table)
+	sb.applySelectivity(s.RowCount)
+}
+
+func (sb *statisticsBuilder) colStatVirtualScan(colSet opt.ColSet) *props.ColumnStatistic {
+	def := sb.ev.Private().(*VirtualScanOpDef)
+
+	inputStatsBuilder := statisticsBuilder{
+		s:      sb.makeTableStatistics(def.Table),
+		props:  sb.props,
+		keyBuf: sb.keyBuf,
+	}
+	colStat := sb.copyColStat(&inputStatsBuilder, colSet)
+	sb.applySelectivityToColStat(colStat, inputStatsBuilder.s.RowCount)
 
 	return colStat
 }

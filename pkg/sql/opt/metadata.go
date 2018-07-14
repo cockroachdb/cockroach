@@ -183,7 +183,7 @@ func (md *Metadata) AddTable(tab Table) TableID {
 func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
 	tabID := TableID(md.NumColumns() + 1)
 	if tabName == "" {
-		tabName = string(tab.TabName())
+		tabName = string(tab.TabName().TableName)
 	}
 
 	for i := 0; i < tab.ColumnCount(); i++ {
