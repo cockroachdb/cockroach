@@ -386,15 +386,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	// TODO(andyk): Re-enable virtual tables when we can fully support them.
-	if bld.UsingVirtualTable {
-		return pgerror.Unimplemented("virtual table",
-			"virtual tables are not supported yet by the optimizer")
-	}
-
 	ev := o.Optimize(root, props)
 
-	factory := makeExecFactory(p)
+	factory := makeExecFactory(ctx, p)
 	plan, err := execbuilder.New(&factory, ev).Build()
 	if err != nil {
 		return err

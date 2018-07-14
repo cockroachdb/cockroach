@@ -91,9 +91,9 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 		// IndexJoin is constructed. Additionally, there is not currently a
 		// PruneCols rule for these operators.
 
-	case opt.ExplainOp, opt.ShowTraceForSessionOp:
+	case opt.VirtualScanOp, opt.ExplainOp, opt.ShowTraceForSessionOp:
 		// Don't allow any columns to be pruned, since that would trigger the
-		// creation of a wrapper Project around the Explain (it's not capable
+		// creation of a wrapper Project around the operator (they're not capable
 		// of pruning columns or of passing through Project operators).
 
 	default:
@@ -106,6 +106,12 @@ func (b *rulePropsBuilder) buildScanProps(ev memo.ExprView) {
 
 	// All columns can potentially be pruned from the Scan.
 	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
+}
+
+func (b *rulePropsBuilder) buildVirtualScanProps(ev memo.ExprView) {
+	// Don't allow any columns to be pruned, since that would trigger the
+	// creation of a wrapper Project around the set operator, since there's not
+	// yet a PruneCols rule for set operators.
 }
 
 func (b *rulePropsBuilder) buildSelectProps(ev memo.ExprView) {

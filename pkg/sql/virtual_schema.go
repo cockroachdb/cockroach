@@ -103,9 +103,7 @@ var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo(
-	ctx context.Context,
-) (sqlbase.ResultColumns, virtualTableConstructor) {
+func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, sqlbase.ResultColumn{

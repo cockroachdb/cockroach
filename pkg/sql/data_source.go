@@ -79,7 +79,7 @@ func (p *planner) getVirtualDataSource(
 		return planDataSource{}, err
 	}
 
-	columns, constructor := virtual.getPlanInfo(ctx)
+	columns, constructor := virtual.getPlanInfo()
 
 	// Define the name of the source visible in EXPLAIN(NOEXPAND).
 	sourceName := tree.MakeTableNameWithSchema(
