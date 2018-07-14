@@ -124,27 +124,6 @@ WITH
 SELECT x + 2
 FROM t
 
-19:
--------------------
-WITH
-	t (x)
-		AS (
-			WITH
-				t
-					(
-						x
-					)
-					AS (
-						SELECT
-							1
-					)
-			SELECT
-				x
-				* 10
-			FROM t
-		)
-SELECT x + 2 FROM t
-
 21:
 ---------------------
 WITH
@@ -161,7 +140,8 @@ WITH
 				* 10
 			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 22:
 ----------------------
@@ -178,7 +158,8 @@ WITH
 				x * 10
 			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 25:
 -------------------------
@@ -194,7 +175,8 @@ WITH
 			SELECT x * 10
 			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 32:
 --------------------------------
@@ -206,9 +188,11 @@ WITH
 					AS (
 						SELECT 1
 					)
-			SELECT x * 10 FROM t
+			SELECT x * 10
+			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 33:
 ---------------------------------
@@ -218,9 +202,11 @@ WITH
 			WITH
 				t (x)
 					AS (SELECT 1)
-			SELECT x * 10 FROM t
+			SELECT x * 10
+			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 35:
 -----------------------------------
@@ -229,9 +215,11 @@ WITH
 		AS (
 			WITH
 				t (x) AS (SELECT 1)
-			SELECT x * 10 FROM t
+			SELECT x * 10
+			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 36:
 ------------------------------------
@@ -239,9 +227,11 @@ WITH
 	t (x)
 		AS (
 			WITH t (x) AS (SELECT 1)
-			SELECT x * 10 FROM t
+			SELECT x * 10
+			FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 57:
 ---------------------------------------------------------
@@ -250,25 +240,29 @@ WITH
 		AS (
 			WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t
 		)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 58:
 ----------------------------------------------------------
 WITH
 	t (x)
 		AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 60:
 ------------------------------------------------------------
 WITH
 	t (x) AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 61:
 -------------------------------------------------------------
 WITH t (x) AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t)
-SELECT x + 2 FROM t
+SELECT x + 2
+FROM t
 
 81:
 ---------------------------------------------------------------------------------

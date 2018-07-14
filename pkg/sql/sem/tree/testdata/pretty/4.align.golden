@@ -60,127 +60,6 @@ WHERE
 			= calls3_.phone_id
 	)
 
-10:
-----------
-SELECT
-	phone0_.id
-		AS id1_6_0_,
-	person1_.id
-		AS id1_4_1_,
-	phone0_.phone_number
-		AS phone_nu2_6_0_,
-	phone0_.person_id
-		AS person_i4_6_0_,
-	phone0_.phone_type
-		AS phone_ty3_6_0_,
-	addresses2_.person_id
-		AS person_i1_5_0__,
-	addresses2_.addresses
-		AS addresse2_5_0__,
-	addresses2_.addresses_key
-		AS addresse3_0__,
-	person1_.address
-		AS address2_4_1_,
-	person1_.createdon
-		AS createdo3_4_1_,
-	person1_.name
-		AS name4_4_1_,
-	person1_.nickname
-		AS nickname5_4_1_,
-	person1_.version
-		AS version6_4_1_,
-	addresses2_.person_id
-		AS person_i1_5_0__,
-	addresses2_.addresses
-		AS addresse2_5_0__,
-	addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone
-		AS phone0_
-     INNER JOIN
-		person
-			AS person1_
-     ON
-		phone0_.person_id
-		= person1_.id
-     INNER JOIN
-		person_addresses
-			AS addresses2_
-     ON
-		person1_.id
-		= addresses2_.person_id
-WHERE
-	EXISTS(
-		SELECT
-			calls3_.id
-		FROM
-			phone_call
-				AS calls3_
-		WHERE
-			phone0_.id
-			= calls3_.phone_id
-	)
-
-13:
--------------
-SELECT
-	phone0_.id
-		AS id1_6_0_,
-	person1_.id
-		AS id1_4_1_,
-	phone0_.phone_number
-		AS phone_nu2_6_0_,
-	phone0_.person_id
-		AS person_i4_6_0_,
-	phone0_.phone_type
-		AS phone_ty3_6_0_,
-	addresses2_.person_id
-		AS person_i1_5_0__,
-	addresses2_.addresses
-		AS addresse2_5_0__,
-	addresses2_.addresses_key
-		AS addresse3_0__,
-	person1_.address
-		AS address2_4_1_,
-	person1_.createdon
-		AS createdo3_4_1_,
-	person1_.name
-		AS name4_4_1_,
-	person1_.nickname
-		AS nickname5_4_1_,
-	person1_.version
-		AS version6_4_1_,
-	addresses2_.person_id
-		AS person_i1_5_0__,
-	addresses2_.addresses
-		AS addresse2_5_0__,
-	addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone
-		AS phone0_
-     INNER JOIN
-		person
-			AS person1_
-     ON
-		phone0_.person_id
-		= person1_.id
-     INNER JOIN
-		person_addresses
-			AS addresses2_
-     ON
-		person1_.id
-		= addresses2_.person_id
-WHERE EXISTS(
-		SELECT
-			calls3_.id
-		FROM
-			phone_call
-				AS calls3_
-		WHERE
-			phone0_.id
-			= calls3_.phone_id
-      )
-
 17:
 -----------------
 SELECT phone0_.id
@@ -215,21 +94,21 @@ SELECT phone0_.id
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone
+  FROM phone
 		AS phone0_
-     INNER JOIN
+       INNER JOIN
 		person
 			AS person1_
-     ON
+       ON
 		phone0_.person_id
 		= person1_.id
-     INNER JOIN
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON
+       ON
 		person1_.id
 		= addresses2_.person_id
-WHERE EXISTS(
+ WHERE EXISTS(
 		SELECT
 			calls3_.id
 		FROM
@@ -238,65 +117,7 @@ WHERE EXISTS(
 		WHERE
 			phone0_.id
 			= calls3_.phone_id
-      )
-
-19:
--------------------
-SELECT phone0_.id
-		AS id1_6_0_,
-       person1_.id
-		AS id1_4_1_,
-       phone0_.phone_number
-		AS phone_nu2_6_0_,
-       phone0_.person_id
-		AS person_i4_6_0_,
-       phone0_.phone_type
-		AS phone_ty3_6_0_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__,
-       person1_.address
-		AS address2_4_1_,
-       person1_.createdon
-		AS createdo3_4_1_,
-       person1_.name
-		AS name4_4_1_,
-       person1_.nickname
-		AS nickname5_4_1_,
-       person1_.version
-		AS version6_4_1_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone
-		AS phone0_
-     INNER JOIN
-		person
-			AS person1_
-     ON
-		phone0_.person_id
-		= person1_.id
-     INNER JOIN
-		person_addresses
-			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
-		SELECT
-			calls3_.id
-		FROM
-			phone_call
-				AS calls3_
-		WHERE
-			phone0_.id
-			= calls3_.phone_id
-      )
+       )
 
 21:
 ---------------------
@@ -332,19 +153,20 @@ SELECT phone0_.id
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN
+  FROM phone
+		AS phone0_
+       INNER JOIN
 		person
 			AS person1_
-     ON
+       ON
 		phone0_.person_id
 		= person1_.id
-     INNER JOIN
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT
 			calls3_.id
 		FROM
@@ -353,63 +175,7 @@ WHERE EXISTS(
 		WHERE
 			phone0_.id
 			= calls3_.phone_id
-      )
-
-22:
-----------------------
-SELECT phone0_.id
-		AS id1_6_0_,
-       person1_.id
-		AS id1_4_1_,
-       phone0_.phone_number
-		AS phone_nu2_6_0_,
-       phone0_.person_id
-		AS person_i4_6_0_,
-       phone0_.phone_type
-		AS phone_ty3_6_0_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__,
-       person1_.address
-		AS address2_4_1_,
-       person1_.createdon
-		AS createdo3_4_1_,
-       person1_.name
-		AS name4_4_1_,
-       person1_.nickname
-		AS nickname5_4_1_,
-       person1_.version
-		AS version6_4_1_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
-					AS person1_
-     ON
-		phone0_.person_id
-		= person1_.id
-     INNER JOIN
-		person_addresses
-			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
-		SELECT
-			calls3_.id
-		FROM
-			phone_call
-				AS calls3_
-		WHERE
-			phone0_.id
-			= calls3_.phone_id
-      )
+       )
 
 23:
 -----------------------
@@ -445,26 +211,28 @@ SELECT phone0_.id
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
-					AS person1_
-     ON
+  FROM phone AS phone0_
+       INNER JOIN
+		person
+			AS person1_
+       ON
 		phone0_.person_id
 		= person1_.id
-     INNER JOIN
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT
 			calls3_.id
-		FROM phone_call
+		FROM
+			phone_call
 				AS calls3_
 		WHERE
 			phone0_.id
 			= calls3_.phone_id
-      )
+       )
 
 24:
 ------------------------
@@ -500,25 +268,27 @@ SELECT phone0_.id
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
+  FROM phone AS phone0_
+       INNER JOIN person
 					AS person1_
-     ON
+       ON
 		phone0_.person_id
 		= person1_.id
-     INNER JOIN
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT
 			calls3_.id
-		FROM phone_call
+		FROM
+			phone_call
 				AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		WHERE
+			phone0_.id
+			= calls3_.phone_id
+       )
 
 25:
 -------------------------
@@ -554,23 +324,76 @@ SELECT phone0_.id
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
+  FROM phone AS phone0_
+       INNER JOIN person
 					AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN
+       ON
+		phone0_.person_id
+		= person1_.id
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call
+		  FROM phone_call
 				AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
+
+27:
+---------------------------
+SELECT phone0_.id
+		AS id1_6_0_,
+       person1_.id
+		AS id1_4_1_,
+       phone0_.phone_number
+		AS phone_nu2_6_0_,
+       phone0_.person_id
+		AS person_i4_6_0_,
+       phone0_.phone_type
+		AS phone_ty3_6_0_,
+       addresses2_.person_id
+		AS person_i1_5_0__,
+       addresses2_.addresses
+		AS addresse2_5_0__,
+       addresses2_.addresses_key
+		AS addresse3_0__,
+       person1_.address
+		AS address2_4_1_,
+       person1_.createdon
+		AS createdo3_4_1_,
+       person1_.name
+		AS name4_4_1_,
+       person1_.nickname
+		AS nickname5_4_1_,
+       person1_.version
+		AS version6_4_1_,
+       addresses2_.person_id
+		AS person_i1_5_0__,
+       addresses2_.addresses
+		AS addresse2_5_0__,
+       addresses2_.addresses_key
+		AS addresse3_0__
+  FROM phone AS phone0_
+       INNER JOIN person
+					AS person1_
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN
+		person_addresses
+			AS addresses2_
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
+		SELECT calls3_.id
+		  FROM phone_call
+				AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 30:
 ------------------------------
@@ -605,23 +428,23 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
+  FROM phone AS phone0_
+       INNER JOIN person
 					AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call
+		  FROM phone_call
 				AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 31:
 -------------------------------
@@ -655,72 +478,23 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
+  FROM phone AS phone0_
+       INNER JOIN person
 					AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN
 		person_addresses
 			AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call
+		  FROM phone_call
 				AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
-
-32:
---------------------------------
-SELECT phone0_.id AS id1_6_0_,
-       person1_.id AS id1_4_1_,
-       phone0_.phone_number
-		AS phone_nu2_6_0_,
-       phone0_.person_id
-		AS person_i4_6_0_,
-       phone0_.phone_type
-		AS phone_ty3_6_0_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__,
-       person1_.address
-		AS address2_4_1_,
-       person1_.createdon
-		AS createdo3_4_1_,
-       person1_.name
-		AS name4_4_1_,
-       person1_.nickname
-		AS nickname5_4_1_,
-       person1_.version
-		AS version6_4_1_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person
-					AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN person_addresses
-					AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
-		SELECT calls3_.id
-		FROM phone_call
-				AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 34:
 ----------------------------------
@@ -754,20 +528,22 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person
+					AS person1_
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		  FROM phone_call
+				AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 35:
 -----------------------------------
@@ -800,23 +576,25 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id
-        = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person
+					AS person1_
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		  FROM phone_call
+				AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
-39:
----------------------------------------
+36:
+------------------------------------
 SELECT phone0_.id AS id1_6_0_,
        person1_.id AS id1_4_1_,
        phone0_.phone_number
@@ -846,19 +624,20 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id
+          = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 41:
 -----------------------------------------
@@ -889,19 +668,19 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id
-        = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id
-		      = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 43:
 -------------------------------------------
@@ -930,17 +709,19 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id
+		       = calls3_.phone_id
+       )
 
 44:
 --------------------------------------------
@@ -967,17 +748,55 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id
+          = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
+
+45:
+---------------------------------------------
+SELECT phone0_.id AS id1_6_0_,
+       person1_.id AS id1_4_1_,
+       phone0_.phone_number
+		AS phone_nu2_6_0_,
+       phone0_.person_id AS person_i4_6_0_,
+       phone0_.phone_type AS phone_ty3_6_0_,
+       addresses2_.person_id
+		AS person_i1_5_0__,
+       addresses2_.addresses
+		AS addresse2_5_0__,
+       addresses2_.addresses_key
+		AS addresse3_0__,
+       person1_.address AS address2_4_1_,
+       person1_.createdon AS createdo3_4_1_,
+       person1_.name AS name4_4_1_,
+       person1_.nickname AS nickname5_4_1_,
+       person1_.version AS version6_4_1_,
+       addresses2_.person_id
+		AS person_i1_5_0__,
+       addresses2_.addresses
+		AS addresse2_5_0__,
+       addresses2_.addresses_key
+		AS addresse3_0__
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
+					AS addresses2_
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
+		SELECT calls3_.id
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
 46:
 ----------------------------------------------
@@ -1003,52 +822,17 @@ SELECT phone0_.id AS id1_6_0_,
 		AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
 					AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
-
-47:
------------------------------------------------
-SELECT phone0_.id AS id1_6_0_,
-       person1_.id AS id1_4_1_,
-       phone0_.phone_number AS phone_nu2_6_0_,
-       phone0_.person_id AS person_i4_6_0_,
-       phone0_.phone_type AS phone_ty3_6_0_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__,
-       person1_.address AS address2_4_1_,
-       person1_.createdon AS createdo3_4_1_,
-       person1_.name AS name4_4_1_,
-       person1_.nickname AS nickname5_4_1_,
-       person1_.version AS version6_4_1_,
-       addresses2_.person_id
-		AS person_i1_5_0__,
-       addresses2_.addresses
-		AS addresse2_5_0__,
-       addresses2_.addresses_key
-		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
-		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
 48:
 ------------------------------------------------
@@ -1070,16 +854,17 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key
 		AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses
+					AS addresses2_
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
 49:
 -------------------------------------------------
@@ -1100,16 +885,16 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses AS addresses2_
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
 50:
 --------------------------------------------------
@@ -1129,19 +914,19 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_
-     ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_
+       ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses AS addresses2_
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
-69:
----------------------------------------------------------------------
+71:
+-----------------------------------------------------------------------
 SELECT phone0_.id AS id1_6_0_,
        person1_.id AS id1_4_1_,
        phone0_.phone_number AS phone_nu2_6_0_,
@@ -1158,42 +943,15 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_
-     ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses AS addresses2_
+       ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
-
-86:
---------------------------------------------------------------------------------------
-SELECT phone0_.id AS id1_6_0_,
-       person1_.id AS id1_4_1_,
-       phone0_.phone_number AS phone_nu2_6_0_,
-       phone0_.person_id AS person_i4_6_0_,
-       phone0_.phone_type AS phone_ty3_6_0_,
-       addresses2_.person_id AS person_i1_5_0__,
-       addresses2_.addresses AS addresse2_5_0__,
-       addresses2_.addresses_key AS addresse3_0__,
-       person1_.address AS address2_4_1_,
-       person1_.createdon AS createdo3_4_1_,
-       person1_.name AS name4_4_1_,
-       person1_.nickname AS nickname5_4_1_,
-       person1_.version AS version6_4_1_,
-       addresses2_.person_id AS person_i1_5_0__,
-       addresses2_.addresses AS addresse2_5_0__,
-       addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
-		SELECT calls3_.id
-		FROM phone_call AS calls3_
-		WHERE phone0_.id = calls3_.phone_id
-      )
+		  FROM phone_call AS calls3_
+		 WHERE phone0_.id = calls3_.phone_id
+       )
 
 88:
 ----------------------------------------------------------------------------------------
@@ -1213,15 +971,15 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
-WHERE EXISTS(
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(
 		SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id
-      )
+       )
 
-94:
-----------------------------------------------------------------------------------------------
+95:
+-----------------------------------------------------------------------------------------------
 SELECT phone0_.id AS id1_6_0_,
        person1_.id AS id1_4_1_,
        phone0_.phone_number AS phone_nu2_6_0_,
@@ -1238,13 +996,13 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_
-     INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
-     INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
-WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
+  FROM phone AS phone0_
+       INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id
+       INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
 
-168:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+170:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT phone0_.id AS id1_6_0_,
        person1_.id AS id1_4_1_,
        phone0_.phone_number AS phone_nu2_6_0_,
@@ -1261,14 +1019,14 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.person_id AS person_i1_5_0__,
        addresses2_.addresses AS addresse2_5_0__,
        addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_ INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
-WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
+  FROM phone AS phone0_ INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
 
 599:
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT phone0_.id AS id1_6_0_, person1_.id AS id1_4_1_, phone0_.phone_number AS phone_nu2_6_0_, phone0_.person_id AS person_i4_6_0_, phone0_.phone_type AS phone_ty3_6_0_, addresses2_.person_id AS person_i1_5_0__, addresses2_.addresses AS addresse2_5_0__, addresses2_.addresses_key AS addresse3_0__, person1_.address AS address2_4_1_, person1_.createdon AS createdo3_4_1_, person1_.name AS name4_4_1_, person1_.nickname AS nickname5_4_1_, person1_.version AS version6_4_1_, addresses2_.person_id AS person_i1_5_0__, addresses2_.addresses AS addresse2_5_0__, addresses2_.addresses_key AS addresse3_0__
-FROM phone AS phone0_ INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
-WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
+  FROM phone AS phone0_ INNER JOIN person AS person1_ ON phone0_.person_id = person1_.id INNER JOIN person_addresses AS addresses2_ ON person1_.id = addresses2_.person_id
+ WHERE EXISTS(SELECT calls3_.id FROM phone_call AS calls3_ WHERE phone0_.id = calls3_.phone_id)
 
 863:
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

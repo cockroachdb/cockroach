@@ -14,27 +14,12 @@ UNION ALL
 	FROM
 		y
 
-6:
-------
-SELECT
-	a,
-	b,
-	c
-FROM x
-UNION ALL
-	SELECT
-		d,
-		e,
-		f
-	FROM
-		y
-
 9:
 ---------
 SELECT a,
        b,
        c
-FROM x
+  FROM x
 UNION ALL
 	SELECT
 		d,
@@ -42,60 +27,48 @@ UNION ALL
 		f
 	FROM
 		y
-
-10:
-----------
-SELECT a,
-       b,
-       c
-FROM x
-UNION ALL
-	SELECT
-		d,
-		e,
-		f
-	FROM y
 
 13:
 -------------
 SELECT a,
        b,
        c
-FROM x
+  FROM x
 UNION ALL
 	SELECT d,
 	       e,
 	       f
-	FROM y
+	  FROM y
 
 14:
 --------------
 SELECT a, b, c
-FROM x
+  FROM x
 UNION ALL
 	SELECT d,
 	       e,
 	       f
-	FROM y
+	  FROM y
 
 16:
 ----------------
 SELECT a, b, c
-FROM x
+  FROM x
 UNION ALL SELECT
 			d,
 			e,
 			f
-          FROM y
+          FROM
+			y
 
 19:
 -------------------
 SELECT a, b, c
-FROM x
+  FROM x
 UNION ALL SELECT d,
                  e,
                  f
-          FROM y
+            FROM y
 
 21:
 ---------------------
@@ -103,13 +76,13 @@ SELECT a, b, c FROM x
 UNION ALL SELECT d,
                  e,
                  f
-          FROM y
+            FROM y
 
 24:
 ------------------------
 SELECT a, b, c FROM x
 UNION ALL SELECT d, e, f
-          FROM y
+            FROM y
 
 31:
 -------------------------------
