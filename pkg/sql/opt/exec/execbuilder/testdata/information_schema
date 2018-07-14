@@ -1,0 +1,14 @@
+# LogicTest: local-opt
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
+----
+values  ·     ·                  (catalog_name, schema_name, default_character_set_name, sql_path)  ·
+·       size  4 columns, 4 rows  ·                                                                  ·
+
+query TTT
+EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
+----
+filter       ·     ·
+ └── values  ·     ·
+·            size  6 columns, 102 rows

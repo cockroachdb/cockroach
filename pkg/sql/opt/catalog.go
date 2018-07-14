@@ -31,9 +31,6 @@ import (
 // ColumnName is the type of a column name.
 type ColumnName string
 
-// TableName is the type of a table name.
-type TableName string
-
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
@@ -181,8 +178,10 @@ type TableStatistic interface {
 // Table is an interface to a database table, exposing only the information
 // needed by the query optimizer.
 type Table interface {
-	// TabName returns the name of the table.
-	TabName() TableName
+	// TabName returns the fully normalized, fully qualified, and fully resolved
+	// name of the table. The ExplicitCatalog and ExplicitSchema fields will
+	// always be true, since both names are always specified.
+	TabName() *tree.TableName
 
 	// IsVirtualTable returns true if this table is a special system table that
 	// constructs its rows "on the fly" when it's queried. An example is the
@@ -225,7 +224,7 @@ type Catalog interface {
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
 func FormatCatalogTable(tab Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tab.TabName())
+	child := tp.Childf("TABLE %s", tab.TabName().TableName)
 
 	var buf bytes.Buffer
 	for i := 0; i < tab.ColumnCount(); i++ {

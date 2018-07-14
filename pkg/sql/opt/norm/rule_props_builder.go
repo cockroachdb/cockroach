@@ -91,9 +91,9 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 		// IndexJoin is constructed. Additionally, there is not currently a
 		// PruneCols rule for these operators.
 
-	case opt.ExplainOp, opt.ShowTraceForSessionOp:
+	case opt.VirtualScanOp, opt.ExplainOp, opt.ShowTraceForSessionOp:
 		// Don't allow any columns to be pruned, since that would trigger the
-		// creation of a wrapper Project around the Explain (it's not capable
+		// creation of a wrapper Project around the operator (they're not capable
 		// of pruning columns or of passing through Project operators).
 
 	default:

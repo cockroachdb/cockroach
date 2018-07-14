@@ -68,7 +68,7 @@ eexpect root@
 # Disable query distribution to force in-memory computation.
 send "set distsql=off;\r"
 eexpect SET
-send "select * from information_schema.columns as a, information_schema.columns as b,  information_schema.columns as c,  information_schema.columns as d limit 10;\r"
+send "select * from information_schema.columns as a, information_schema.columns as b order by a.column_name, b.column_name limit 10;\r"
 
 # Check that the query crashed the server
 set spawn_id $shell_spawn_id
@@ -100,7 +100,7 @@ send "select 1;\r"
 eexpect root@
 send "set database=system;\r"
 eexpect root@
-send "select * from  information_schema.columns as a,  information_schema.columns as b,  information_schema.columns as c,  information_schema.columns as d limit 10;\r"
+send "select * from information_schema.columns as a, information_schema.columns as b order by a.column_name, b.column_name limit 10;;\r"
 eexpect "memory budget exceeded"
 eexpect root@
 
