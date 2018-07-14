@@ -1,0 +1,50 @@
+1:
+-
+INSERT
+INTO
+	t
+		(
+			a,
+			b
+		)
+VALUES
+	(
+		1,
+		2
+	)
+
+6:
+------
+INSERT
+INTO t
+		(
+			a,
+			b
+		)
+VALUES
+	(
+		1,
+		2
+	)
+
+8:
+--------
+INSERT
+INTO t (
+		a,
+		b
+       )
+VALUES (
+		1,
+		2
+       )
+
+13:
+-------------
+INSERT
+INTO t (a, b)
+VALUES (1, 2)
+
+34:
+----------------------------------
+INSERT INTO t (a, b) VALUES (1, 2)
