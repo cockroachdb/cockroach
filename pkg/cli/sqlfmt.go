@@ -73,6 +73,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	cfg.LineWidth = sqlfmtCtx.len
 	cfg.TabWidth = sqlfmtCtx.tabWidth
 	cfg.Simplify = !sqlfmtCtx.noSimplify
+	cfg.Align = sqlfmtCtx.align
 
 	for _, s := range sl {
 		fmt.Print(cfg.Pretty(s))
