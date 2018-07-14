@@ -226,6 +226,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	case opt.ScanOp:
 		return sb.colStatScan(colSet)
 
+	case opt.VirtualScanOp:
+		return sb.colStatVirtualScan(colSet)
+
 	case opt.SelectOp:
 		return sb.colStatSelect(colSet)
 
@@ -352,6 +355,24 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	}
 
 	return colStat
+}
+
+// VirtualScan
+// -----------
+
+func (sb *statisticsBuilder) buildVirtualScan(def *VirtualScanOpDef) {
+	s := sb.makeTableStatistics(def.Table)
+	sb.s.RowCount = s.RowCount
+}
+
+func (sb *statisticsBuilder) colStatVirtualScan(colSet opt.ColSet) *props.ColumnStatistic {
+	def := sb.ev.Private().(*VirtualScanOpDef)
+	inputStatsBuilder := statisticsBuilder{
+		s:      sb.makeTableStatistics(def.Table),
+		props:  sb.props,
+		keyBuf: sb.keyBuf,
+	}
+	return sb.copyColStat(&inputStatsBuilder, colSet)
 }
 
 // Select

@@ -165,10 +165,11 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 
 // Table implements the opt.Table interface for testing purposes.
 type Table struct {
-	Name    tree.TableName
-	Columns []*Column
-	Indexes []*Index
-	Stats   TableStats
+	Name      tree.TableName
+	Columns   []*Column
+	Indexes   []*Index
+	Stats     TableStats
+	IsVirtual bool
 }
 
 var _ opt.Table = &Table{}
@@ -180,13 +181,13 @@ func (tt *Table) String() string {
 }
 
 // TabName is part of the opt.Table interface.
-func (tt *Table) TabName() opt.TableName {
-	return opt.TableName(tt.Name.TableName)
+func (tt *Table) TabName() *tree.TableName {
+	return &tt.Name
 }
 
 // IsVirtualTable is part of the opt.Table interface.
 func (tt *Table) IsVirtualTable() bool {
-	return false
+	return tt.IsVirtual
 }
 
 // ColumnCount is part of the opt.Table interface.

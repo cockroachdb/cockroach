@@ -62,6 +62,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.ProjectionsOpDef"
 	case "ScanOpDef":
 		return "*memo.ScanOpDef"
+	case "VirtualScanOpDef":
+		return "*memo.VirtualScanOpDef"
 	case "GroupByDef":
 		return "*memo.GroupByDef"
 	case "IndexJoinDef":
