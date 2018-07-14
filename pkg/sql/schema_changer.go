@@ -348,26 +348,27 @@ func (sc *SchemaChanger) truncateTable(
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// ClearRange requests lays down RocksDB range deletion tombstones that have
-	// serious performance implications (#24029). It is crucial that a single
-	// store never has more than a few dozen tombstones. The logic below attempts
-	// to bound the number of tombstones in one store by sending the ClearRange
-	// requests to each range in the table in small, sequential batches every 5s
-	// rather than letting DistSender send them all in parallel, to hopefully give
-	// the compaction queue time to compact the range tombstones away in between
+	// serious performance implications (#24029). The logic below attempts to
+	// bound the number of tombstones in one store by sending the ClearRange
+	// requests to each range in the table in small, sequential batches rather
+	// than letting DistSender send them all in parallel, to hopefully give the
+	// compaction queue time to compact the range tombstones away in between
 	// requests.
 	//
 	// As written, this approach has several deficiencies. It does not actually
-	// wait for the compaction queue to compact the tombstones away before sending
-	// the next request. It is likely insufficient if multiple DROP TABLEs are in
-	// flight at once. It does not save its progress in case the coordinator goes
-	// down. These deficiences could be addressed, but this code is only a
-	// stopgap: we expect that RocksDB tombstones can be made cheap enough that we
-	// won't need to rate limit ClearRange commands in the near future.
+	// wait for the compaction queue to compact the tombstones away before
+	// sending the next request. It is likely insufficient if multiple DROP
+	// TABLEs are in flight at once. It does not save its progress in case the
+	// coordinator goes down. These deficiences could be addressed, but this code
+	// was originally a stopgap to avoid the range tombstone performance hit. The
+	// RocksDB range tombstone implementation has since been improved and the
+	// performance implications of many range tombstones has been reduced
+	// dramatically making this simplistic throttling sufficient.
 
 	// These numbers were chosen empirically for the clearrange roachtest and
 	// could certainly use more tuning.
-	const batchSize = 20
-	const waitTime = time.Second
+	const batchSize = 100
+	const waitTime = 500 * time.Millisecond
 
 	var n int
 	lastKey := tableSpan.Key
