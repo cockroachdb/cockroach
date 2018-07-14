@@ -2,9 +2,11 @@
 
 # This script builds a CockroachDB release binary, potentially cross compiling
 # for a different platform. It must be run in the cockroachdb/builder docker
-# image, as it depends on cross-compilation toolchains available there.
+# image, as it depends on cross-compilation toolchains available there. Usage:
 #
-# Possible targets:
+#   mkrelease [CONFIGURATION] [MAKE-GOALS...]
+#
+# Possible configurations:
 #
 #   - amd64-linux-gnu:      amd64, Linux 2.6.32, dynamically link glibc 2.12.2
 #   - amd64-linux-musl:     amd64, Linux 2.6.32, statically link musl 1.1.16
@@ -13,12 +15,16 @@
 #   - amd64-darwin:         amd64, macOS 10.9
 #   - amd64-windows:        amd64, Windows 8, statically link all non-Windows libraries
 #
-# When specifying targets on the command line, the architecture prefix and/or
-# the ABI suffix can be omitted, in which case a suitable default will be
-# selected.
+# When specifying configurations on the command line, the architecture prefix
+# and/or the ABI suffix can be omitted, in which case a suitable default will
+# be selected. If no release arguments are specified, the configuration
+# amd64-linux-gnu is used (this is the default linux binary).
 #
-# Note to maintainers: these targets must be kept in sync with the crosstool-ng
-# toolchains installed in the Dockerfile.
+# In order to specify MAKE-GOALS, a configuration must be explicitly
+# specified.
+#
+# Note to maintainers: these configurations must be kept in sync with the
+# crosstool-ng toolchains installed in the Dockerfile.
 
 set -euo pipefail
 shopt -s extglob
@@ -27,7 +33,7 @@ cd "$(dirname "$(readlink -f "$0")")/../.."
 source build/shlib.sh
 
 case "${1-}" in
-  ?(amd64-)linux?(-gnu))
+  ""|?(amd64-)linux?(-gnu))
     args=(
       XGOOS=linux
       XGOARCH=amd64
@@ -87,9 +93,11 @@ case "${1-}" in
       SUFFIX=-windows-6.2-amd64
     ) ;;
 
-  "") die "usage: $0 RELEASE-CONFIGURATION [MAKE-GOALS...]" ;;
   *)  die "unknown release configuration: $1" ;;
 esac
 
-shift
+if [ $# -ge 1 ]; then
+    shift
+fi
+
 (set -x && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
