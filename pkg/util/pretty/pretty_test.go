@@ -75,7 +75,7 @@ func Example_tree() {
 		}
 		return pretty.Fold(pretty.Concat,
 			pretty.Text("["),
-			pretty.Nest(1, showTrees(ts)),
+			pretty.NestT(showTrees(ts)),
 			pretty.Text("]"),
 		)
 	}
@@ -88,7 +88,7 @@ func Example_tree() {
 			}
 			doc = pretty.Fold(pretty.Concat,
 				pretty.Text("("),
-				pretty.JoinNestedRight(len(t.s),
+				pretty.JoinNestedRight(
 					pretty.Text(t.op), operands...),
 				pretty.Text(")"),
 			)
@@ -97,7 +97,7 @@ func Example_tree() {
 		}
 		return pretty.Group(pretty.Concat(
 			pretty.Text(t.s),
-			pretty.Nest(len(t.s), doc),
+			pretty.NestS(int16(len(t.s)), doc),
 		))
 	}
 	for _, n := range []int{1, 30, 80} {
@@ -107,22 +107,23 @@ func Example_tree() {
 	// Output:
 	// 1:
 	// aaa[bbbbb[ccc,
-	// 		  dd,
-	// 		  ee(some
-	// 			* another[2a,
-	// 					  2b]
-	// 			* final)],
+	// 			dd,
+	// 			ee(some
+	// 			  * another[2a,
+	// 						2b]
+	// 			  * final)],
 	// 	eee,
 	// 	ffff[gg,
-	// 		 hhh,
-	// 		 ii]]
+	// 			hhh,
+	// 			ii]]
 	//
 	// 30:
 	// aaa[bbbbb[ccc,
-	// 		  dd,
-	// 		  ee(some
-	// 			* another[2a, 2b]
-	// 			* final)],
+	// 			dd,
+	// 			ee(some
+	// 			  * another[2a,
+	// 						2b]
+	// 			  * final)],
 	// 	eee,
 	// 	ffff[gg, hhh, ii]]
 	//

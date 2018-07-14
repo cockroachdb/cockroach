@@ -71,7 +71,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	cfg := tree.DefaultPrettyCfg()
 	cfg.UseTabs = !sqlfmtCtx.useSpaces
 	cfg.LineWidth = sqlfmtCtx.len
-	cfg.IndentWidth = sqlfmtCtx.tabWidth
+	cfg.TabWidth = sqlfmtCtx.tabWidth
 	cfg.Simplify = !sqlfmtCtx.noSimplify
 
 	for _, s := range sl {

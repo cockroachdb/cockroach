@@ -45,7 +45,7 @@ func JoinDoc(s Doc, d ...Doc) Doc {
 //       bbb
 // <sep> ccc
 //       ccc
-func JoinNestedRight(n int, sep Doc, nested ...Doc) Doc {
+func JoinNestedRight(sep Doc, nested ...Doc) Doc {
 	switch len(nested) {
 	case 0:
 		return Nil
@@ -55,7 +55,7 @@ func JoinNestedRight(n int, sep Doc, nested ...Doc) Doc {
 		return Concat(
 			nested[0],
 			FoldMap(Concat,
-				func(a Doc) Doc { return Concat(Line, ConcatSpace(sep, Nest(n, Group(a)))) },
+				func(a Doc) Doc { return Concat(Line, ConcatSpace(sep, NestT(Group(a)))) },
 				nested[1:]...))
 	}
 }
@@ -92,15 +92,15 @@ func Stack(d ...Doc) Doc {
 }
 
 // JoinGroup nests joined d with divider under head.
-func JoinGroup(n int, head, divider string, d ...Doc) Doc {
-	return NestUnder(n, Text(head), Join(divider, d...))
+func JoinGroup(head, divider string, d ...Doc) Doc {
+	return NestUnder(Text(head), Join(divider, d...))
 }
 
 // NestUnder nests nested under head.
-func NestUnder(n int, head, nested Doc) Doc {
+func NestUnder(head, nested Doc) Doc {
 	return Group(Concat(
 		head,
-		Nest(n, Concat(
+		NestT(Concat(
 			Line,
 			Group(nested),
 		)),
@@ -135,10 +135,10 @@ func FoldMap(f func(a, b Doc) Doc, g func(Doc) Doc, d ...Doc) Doc {
 // We use the "soft break" special document here so that
 // the flattened version (when grouped) does not insert
 // spaces between the parentheses and their content.
-func Bracket(n int, l string, x Doc, r string) Doc {
+func Bracket(l string, x Doc, r string) Doc {
 	return Group(Fold(Concat,
 		Text(l),
-		Nest(n, Concat(SoftBreak, x)),
+		NestT(Concat(SoftBreak, x)),
 		SoftBreak,
 		Text(r),
 	))
