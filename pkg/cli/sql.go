@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -530,6 +531,9 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
+//regexpattern : available keys compile with regex expression one time
+var regexpattern = regexp.MustCompile("(%%M)|(%M)|(%%m)|(%m)|(%%>)|(%>)|(%%n)|(%n)|(%%/)|(%/)|(%%x)|(%x)")
+
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
@@ -546,32 +550,47 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		PromptPattern = c.customPromptPattern + " "
 	}
 
-	if parsedURL, err := url.Parse(c.conn.url); err == nil {
-		PromptPattern = strings.Replace(PromptPattern, "%M", parsedURL.Host, -1)       //full host name
-		PromptPattern = strings.Replace(PromptPattern, "%m", parsedURL.Hostname(), -1) //host
-		PromptPattern = strings.Replace(PromptPattern, "%>", parsedURL.Port(), -1)     // port
-		//user name
-		if parsedURL.User != nil {
-			username := parsedURL.User.Username()
-			PromptPattern = strings.Replace(PromptPattern, "%n", username, -1)
+	parsedURL, err := url.Parse(c.conn.url)
+	if err != nil {
+		return nextState
+	}
+
+	c.fullPrompt = regexpattern.ReplaceAllStringFunc(PromptPattern, func(m string) string {
+		switch m {
+		case "%%M": // full host name
+			return "%M"
+		case "%M":
+			return parsedURL.Host
+		case "%%m": // host name
+			return "%m"
+		case "%m":
+			return parsedURL.Hostname()
+		case "%%>": // port
+			return "%>"
+		case "%>":
+			return parsedURL.Port()
+		case "%%n": //user name
+			return "%n"
+		case "%n":
+			if parsedURL.User != nil {
+				return parsedURL.User.Username()
+			}
+		case "%%/": //database name
+			return "%/"
+		case "%/":
+			dbName, hasDbName := c.refreshDatabaseName()
+			if hasDbName {
+				return dbName
+			}
+		case "%%x": // trasnation status
+			return "%x"
+		case "%x":
+			c.refreshTransactionStatus()
+			return c.lastKnownTxnStatus
 		}
-	}
+		return ""
+	})
 
-	//get database name
-	if strings.Contains(PromptPattern, "%/") {
-		dbName, hasDbName := c.refreshDatabaseName()
-		if hasDbName {
-			PromptPattern = strings.Replace(PromptPattern, "%/", dbName, -1)
-		}
-	}
-
-	//Transaction status
-	if strings.Contains(PromptPattern, "%x") {
-		c.refreshTransactionStatus()
-		PromptPattern = strings.Replace(PromptPattern, "%x", c.lastKnownTxnStatus, -1)
-	}
-
-	c.fullPrompt = PromptPattern
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
 
 	return nextState
