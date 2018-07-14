@@ -1,0 +1,32 @@
+1:
+-
+SELECT
+	CASE
+	WHEN 1
+	THEN 2
+	WHEN 3
+	THEN 4
+	ELSE NULL
+	END
+
+11:
+-----------
+SELECT CASE
+       WHEN 1
+       THEN 2
+       WHEN 3
+       THEN 4
+       ELSE NULL
+       END
+
+20:
+--------------------
+SELECT CASE
+       WHEN 1 THEN 2
+       WHEN 3 THEN 4
+       ELSE NULL
+       END
+
+53:
+-----------------------------------------------------
+SELECT CASE WHEN 1 THEN 2 WHEN 3 THEN 4 ELSE NULL END

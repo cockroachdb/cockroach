@@ -121,7 +121,7 @@ func initCLIDefaults() {
 	sqlfmtCtx.useSpaces = !cfg.UseTabs
 	sqlfmtCtx.tabWidth = cfg.TabWidth
 	sqlfmtCtx.noSimplify = !cfg.Simplify
-	sqlfmtCtx.align = cfg.Align
+	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
 	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
