@@ -21,13 +21,29 @@
 #             step in some important transformations (like eliminating
 #             subqueries).
 
-# Scan returns a result set containing every row in the specified table, by
-# scanning one of the table's indexes according to its ordering. The private
-# Def field is an *opt.ScanOpDef that identifies the table and index to scan,
-# as well as the subset of columns to project from it.
+# Scan returns a result set containing every row in a table by scanning one of
+# the table's indexes according to its ordering. The private Def field is an
+# *opt.ScanOpDef that identifies the table and index to scan, as well as the
+# subset of columns to project from it.
 [Relational]
 define Scan {
     Def ScanOpDef
+}
+
+# VirtualScan returns a result set containing every row in a virtual table.
+# Virtual tables are system tables that are populated "on the fly" with rows
+# synthesized from system metadata and other state. An example is the
+# "information_schema.tables" virtual table which returns one row for each
+# accessible system or user table.
+#
+# VirtualScan has many of the same characteristics as the Scan operator.
+# However, virtual tables do not have indexes or keys, and the physical operator
+# used to scan virtual tables does not support limits or constraints. Therefore,
+# nearly all the rules that apply to Scan do not apply to VirtualScan, so it
+# makes sense to have a separate operator.
+[Relational]
+define VirtualScan {
+    Def VirtualScanOpDef
 }
 
 # Values returns a manufactured result set containing a constant number of rows.

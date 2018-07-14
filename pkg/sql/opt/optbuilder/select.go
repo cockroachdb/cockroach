@@ -71,14 +71,6 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 			panic(builderError{err})
 		}
-
-		// TODO(andyk,knz): Remove this determination once virtual tables
-		// are fully supported by the optimizer.
-		// See corresponding code in sql.makeOptimizerPlan().
-		if tab.IsVirtualTable() {
-			b.UsingVirtualTable = true
-		}
-
 		return b.buildScan(tab, tn, inScope)
 
 	case *tree.ParenTableExpr:
@@ -153,16 +145,16 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	}
 }
 
-// buildScan builds a memo group for a scanOp expression on the given table
-// with the given table name.
+// buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
+// given table with the given table name.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (outScope *scope) {
 	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
 	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
-	scanOpDef := memo.ScanOpDef{Table: tabID}
 
+	var tabCols opt.ColSet
 	outScope = inScope.push()
 	for i := 0; i < tab.ColumnCount(); i++ {
 		col := tab.Column(i)
@@ -177,12 +169,18 @@ func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (
 			hidden:   col.IsHidden(),
 		}
 
-		scanOpDef.Cols.Add(int(colID))
+		tabCols.Add(int(colID))
 		b.colMap = append(b.colMap, colProps)
 		outScope.cols = append(outScope.cols, colProps)
 	}
 
-	outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef))
+	if tab.IsVirtualTable() {
+		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
+	} else {
+		def := memo.ScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
+	}
 	return outScope
 }
 
