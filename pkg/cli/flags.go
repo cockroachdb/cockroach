@@ -372,7 +372,7 @@ func init() {
 	cfg := tree.DefaultPrettyCfg()
 	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
 	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.IndentWidth)
+	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
 	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
 
 	// Debug commands.
