@@ -26,7 +26,7 @@ shopt -s extglob
 cd "$(dirname "$(readlink -f "$0")")/../.."
 source build/shlib.sh
 
-case "${1-}" in
+case "${1-linux-gnu}" in
   ?(amd64-)linux?(-gnu))
     args=(
       XGOOS=linux
@@ -91,5 +91,8 @@ case "${1-}" in
   *)  die "unknown release configuration: $1" ;;
 esac
 
-shift
+if [ $# -ge 1 ]; then
+    shift
+fi
+
 (set -x && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
