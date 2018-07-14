@@ -86,11 +86,13 @@ func registerClearRange(r *registry) {
 					return err
 				}
 
-				// Spend a few minutes reading data with a timeout to make sure the DROP
-				// above didn't brick the cluster.
+				// Spend a few minutes reading data with a timeout to make sure the
+				// DROP above didn't brick the cluster. At the time of writing,
+				// clearing all of the table data takes ~6min. We run for 2.5x that
+				// time to verify that nothing has gone wonky on the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 60
+				const minutes = 15
 				t.WorkerStatus("repeatedly running count(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
