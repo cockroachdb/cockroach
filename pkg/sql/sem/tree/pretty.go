@@ -132,6 +132,16 @@ func (p *PrettyCfg) unrow(r pretty.RLTableRow) pretty.Doc {
 	return p.nestUnder(pretty.Text(r.Label), r.Doc)
 }
 
+func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
+	if len(d) == 0 {
+		return pretty.Nil
+	}
+	if p.Align {
+		return pretty.JoinNestedOuter(lbl, d...)
+	}
+	return pretty.JoinNestedRight(pretty.Text(lbl), d...)
+}
+
 // docer is implemented by nodes that can convert themselves into
 // pretty.Docs. If nodes cannot, node.Format is used instead as a Text Doc.
 type docer interface {
@@ -259,8 +269,7 @@ func (node *AndExpr) doc(p *PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(
-		pretty.Text("AND"), operands...)
+	return p.joinNestedOuter("AND", operands...)
 }
 
 func (node *OrExpr) doc(p *PrettyCfg) pretty.Doc {
@@ -277,8 +286,7 @@ func (node *OrExpr) doc(p *PrettyCfg) pretty.Doc {
 	}
 	operands := p.flattenOp(node.Left, pred, formatOperand, nil)
 	operands = p.flattenOp(node.Right, pred, formatOperand, operands)
-	return pretty.JoinNestedRight(
-		pretty.Text("OR"), operands...)
+	return p.joinNestedOuter("OR", operands...)
 }
 
 func (node *Exprs) doc(p *PrettyCfg) pretty.Doc {

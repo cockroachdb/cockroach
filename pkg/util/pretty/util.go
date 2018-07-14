@@ -176,6 +176,37 @@ func simplifyNil(a, b Doc, fn func(Doc, Doc) Doc) Doc {
 	return fn(a, b)
 }
 
+// JoinNestedOuter attempts to de-indent the items after the first so
+// that the operator appears in the right margin. This replacement is
+// only done if there are enough "simple spaces" (as per previous uses
+// of Align) to de-indent. No attempt is made to de-indent hard tabs,
+// otherwise alignment may break on output devices with a different
+// physical tab width.
+func JoinNestedOuter(lbl string, d ...Doc) Doc {
+	sep := Text(lbl)
+	return &snesting{
+		f: func(k int16) Doc {
+			if k < int16(len(lbl)+1) {
+				// If there is not enough space, don't even try. Just use a
+				// regular nested section.
+				return JoinNestedRight(sep, d...)
+			}
+			// If there is enough space, on the other hand, we can de-indent
+			// every line after the first.
+			return Concat(d[0],
+				NestS(int16(-len(lbl)-1),
+					FoldMap(
+						Concat,
+						func(x Doc) Doc {
+							return Concat(
+								Line,
+								ConcatSpace(sep, Align(Group(x))))
+						},
+						d[1:]...)))
+		},
+	}
+}
+
 // RLTableRow is the data for one row of a RLTable (see below).
 type RLTableRow struct {
 	Label string

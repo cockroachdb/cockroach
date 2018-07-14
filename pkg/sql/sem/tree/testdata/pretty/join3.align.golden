@@ -424,10 +424,10 @@ ORDER BY
 			ci.relam
 			= am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname
+         = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -528,10 +528,10 @@ ORDER BY non_unique,
 			ci.relam
 			= am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname
+         = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -630,10 +630,10 @@ ORDER BY non_unique,
 			ci.relam
 			= am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname
+         = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -731,10 +731,10 @@ ORDER BY non_unique,
          ON ci.relam
             = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname
+         = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -831,10 +831,10 @@ ORDER BY non_unique,
          ON ci.relam
             = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname
+         = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -930,10 +930,9 @@ ORDER BY non_unique,
          ON ci.relam
             = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1025,10 +1024,9 @@ ORDER BY non_unique,
          ON ci.relam
             = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname
-			= 'j'
+     AND n.nspname
+         = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1119,9 +1117,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1209,9 +1206,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1298,9 +1294,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1386,9 +1381,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname
-			= 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1471,8 +1465,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1551,8 +1545,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1630,8 +1624,8 @@ ORDER BY non_unique,
 				AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1706,8 +1700,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1780,8 +1774,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1853,8 +1847,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1925,8 +1919,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -1996,8 +1990,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -2066,8 +2060,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -2135,8 +2129,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -2203,8 +2197,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique,
          type,
          index_name,
@@ -2271,8 +2265,8 @@ ORDER BY non_unique,
          JOIN pg_catalog.pg_am AS am
          ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique, type, index_name, ordinal_position
 
 57:
@@ -2335,8 +2329,8 @@ ORDER BY non_unique, type, index_name, ordinal_position
          ON ci.oid = i.indexrelid
          JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique, type, index_name, ordinal_position
 
 58:
@@ -2395,8 +2389,8 @@ ORDER BY non_unique, type, index_name, ordinal_position
          ON ci.oid = i.indexrelid
          JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
    WHERE true
-         AND n.nspname = 'public'
-         AND ct.relname = 'j'
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
 ORDER BY non_unique, type, index_name, ordinal_position
 
 59:
