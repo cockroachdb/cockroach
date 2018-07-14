@@ -40,21 +40,10 @@ ORDER BY
 	"foo.bar"
 		ASC
 
-15:
----------------
-SELECT * FROM a
-ORDER BY
-	INDEX abc2@ba
-		DESC,
-	INDEX abc2@ba,
-	PRIMARY KEY abc2
-		DESC,
-	"foo.bar"
-		ASC
-
 17:
 -----------------
-SELECT * FROM a
+SELECT *
+FROM a
 ORDER BY
 	INDEX abc2@ba
 		DESC,
@@ -65,7 +54,8 @@ ORDER BY
 
 23:
 -----------------------
-SELECT * FROM a
+SELECT *
+FROM a
 ORDER BY
 	INDEX abc2@ba DESC,
 	INDEX abc2@ba,
@@ -75,7 +65,8 @@ ORDER BY
 
 26:
 --------------------------
-SELECT * FROM a
+SELECT *
+FROM a
 ORDER BY
 	INDEX abc2@ba DESC,
 	INDEX abc2@ba,
@@ -84,13 +75,15 @@ ORDER BY
 
 75:
 ---------------------------------------------------------------------------
-SELECT * FROM a
+SELECT *
+FROM a
 ORDER BY
 	INDEX abc2@ba DESC, INDEX abc2@ba, PRIMARY KEY abc2 DESC, "foo.bar" ASC
 
 80:
 --------------------------------------------------------------------------------
-SELECT * FROM a
+SELECT *
+FROM a
 ORDER BY INDEX abc2@ba DESC, INDEX abc2@ba, PRIMARY KEY abc2 DESC, "foo.bar" ASC
 
 96:
