@@ -121,6 +121,7 @@ func initCLIDefaults() {
 	sqlfmtCtx.useSpaces = !cfg.UseTabs
 	sqlfmtCtx.tabWidth = cfg.TabWidth
 	sqlfmtCtx.noSimplify = !cfg.Simplify
+	sqlfmtCtx.align = cfg.Align
 	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
@@ -249,5 +250,6 @@ var sqlfmtCtx struct {
 	useSpaces  bool
 	tabWidth   int
 	noSimplify bool
+	align      bool
 	execStmts  statementsValue
 }

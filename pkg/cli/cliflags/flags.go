@@ -739,4 +739,9 @@ in the history of the cluster.`,
 		Name:        "no-simplify",
 		Description: `Don't simplify output.`,
 	}
+
+	SQLFmtAlign = FlagInfo{
+		Name:        "align",
+		Description: `Align the output.`,
+	}
 )
