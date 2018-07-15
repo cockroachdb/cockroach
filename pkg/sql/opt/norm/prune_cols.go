@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // NeededCols returns the set of columns needed by the given group. It is an
@@ -176,19 +177,25 @@ func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet
 	newElems := xfunc.MakeListBuilder(&c.CustomFuncs)
 
 	for _, row := range existingRows {
-		existingElems := c.f.mem.LookupList(c.f.mem.NormExpr(row).AsTuple().Elems())
+		tuple := c.f.mem.NormExpr(row).AsTuple()
+		existingElems := c.f.mem.LookupList(tuple.Elems())
+		typ := c.ExtractType(tuple.Typ()).(types.TTuple)
 
 		n := 0
 		for i, elem := range existingElems {
 			if !neededCols.Contains(int(existingCols[i])) {
 				continue
 			}
+			if i != n {
+				typ.Types[n] = typ.Types[i]
+			}
 
 			newElems.AddItem(elem)
 			n++
 		}
+		typ.Types = typ.Types[:n]
 
-		newRows.AddItem(c.f.ConstructTuple(newElems.BuildList()))
+		newRows.AddItem(c.f.ConstructTuple(newElems.BuildList(), c.f.InternType(typ)))
 	}
 
 	return c.f.ConstructValues(newRows.BuildList(), c.f.InternColList(newCols))

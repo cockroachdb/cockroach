@@ -621,7 +621,7 @@ project
  │    ├── stats: [rows=1]
  │    ├── cost: 0.01
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: 1 [type=int]
 

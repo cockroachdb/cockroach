@@ -83,6 +83,9 @@ func (ps *privateStorage) lookup(id PrivateID) interface{} {
 	return ps.privates[id]
 }
 
+// EmptyTupleType represents an empty types.TTuple.
+var EmptyTupleType types.TTuple
+
 // internColumnID adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internColumnID always

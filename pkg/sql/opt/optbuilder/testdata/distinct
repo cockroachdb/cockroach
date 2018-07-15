@@ -285,7 +285,7 @@ group-by
  └── project
       ├── columns: r:1(int!null)
       ├── values
-      │    └── tuple [type=tuple{}]
+      │    └── tuple [type=tuple]
       └── projections
            └── const: 3 [type=int]
 

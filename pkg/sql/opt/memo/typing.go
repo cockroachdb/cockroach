@@ -113,7 +113,7 @@ func init() {
 		opt.NullOp:            typeAsPrivate,
 		opt.PlaceholderOp:     typeAsTypedExpr,
 		opt.UnsupportedExprOp: typeAsTypedExpr,
-		opt.TupleOp:           typeAsTuple,
+		opt.TupleOp:           typeAsPrivate,
 		opt.ProjectionsOp:     typeAsAny,
 		opt.AggregationsOp:    typeAsAny,
 		opt.MergeOnOp:         typeAsAny,
@@ -186,17 +186,6 @@ func typeAsBool(_ ExprView) types.T {
 // typeAsFirstArg returns the type of the expression's 0th argument.
 func typeAsFirstArg(ev ExprView) types.T {
 	return ev.Child(0).Logical().Scalar.Type
-}
-
-// typeAsTuple constructs a tuple type that is composed of the types of all the
-// expression's children.
-func typeAsTuple(ev ExprView) types.T {
-	types := types.TTuple{Types: make([]types.T, ev.ChildCount())}
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		types.Types[i] = child.Logical().Scalar.Type
-	}
-	return types
 }
 
 // typeAsTypedExpr returns the resolved type of the private field, with the

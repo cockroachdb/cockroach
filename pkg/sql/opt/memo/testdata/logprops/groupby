@@ -245,5 +245,5 @@ group-by
       │    └── const: 2 [type=int]
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
-      └── tuple [type=tuple{unknown}]
+      └── tuple [type=tuple{int}]
            └── null [type=unknown]

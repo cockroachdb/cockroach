@@ -591,7 +591,7 @@ build-scalar vars=(int[])
 ----
 eq [type=bool]
  ├── variable: @1 [type=int[]]
- └── array: int[] [type=int[]]
+ └── array: [type=int[]]
       ├── const: 1 [type=int]
       ├── const: 2 [type=int]
       └── const: 3 [type=int]
@@ -601,7 +601,7 @@ build-scalar vars=(int[])
 ----
 eq [type=bool]
  ├── variable: @1 [type=int[]]
- └── array: int[] [type=int[]]
+ └── array: [type=int[]]
       ├── const: 1 [type=int]
       ├── const: 1 [type=int]
       └── const: 1 [type=int]
@@ -611,7 +611,7 @@ build-scalar vars=(float[])
 ----
 eq [type=bool]
  ├── variable: @1 [type=float[]]
- └── array: float[] [type=float[]]
+ └── array: [type=float[]]
       ├── const: 1.0 [type=float]
       ├── const: 1.1 [type=float]
       └── const: 1.123 [type=float]
@@ -621,14 +621,14 @@ build-scalar vars=(int[])
 ----
 eq [type=bool]
  ├── variable: @1 [type=int[]]
- └── array: int[] [type=int[]]
+ └── array: [type=int[]]
 
 build-scalar vars=(string[])
 @1 = ARRAY['foo', 'bar', 'baz']
 ----
 eq [type=bool]
  ├── variable: @1 [type=string[]]
- └── array: string[] [type=string[]]
+ └── array: [type=string[]]
       ├── const: 'foo' [type=string]
       ├── const: 'bar' [type=string]
       └── const: 'baz' [type=string]
@@ -693,7 +693,7 @@ build-scalar
 ARRAY[1, 2] || NULL
 ----
 concat [type=int[]]
- ├── array: int[] [type=int[]]
+ ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
  └── cast: INT[] [type=int[]]
@@ -705,7 +705,7 @@ NULL || ARRAY[1, 2]
 concat [type=int[]]
  ├── cast: INT[] [type=int[]]
  │    └── null [type=unknown]
- └── array: int[] [type=int[]]
+ └── array: [type=int[]]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
 
@@ -713,7 +713,7 @@ build-scalar
 ARRAY[1, 2] || NULL::smallint
 ----
 concat [type=int[]]
- ├── array: int[] [type=int[]]
+ ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
  └── cast: SMALLINT [type=int]
@@ -725,7 +725,7 @@ NULL::oid || ARRAY[1, 2]
 concat [type=oid[]]
  ├── cast: OID [type=oid]
  │    └── null [type=unknown]
- └── array: oid[] [type=oid[]]
+ └── array: [type=oid[]]
       ├── const: 1 [type=oid]
       └── const: 2 [type=oid]
 
@@ -745,7 +745,7 @@ SELECT -((-9223372036854775808):::int)
 project
  ├── columns: "?column?":1(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
