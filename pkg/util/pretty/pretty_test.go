@@ -27,7 +27,7 @@ func Example_align() {
 			pretty.Text("aaa"),
 			pretty.Text("bbb"),
 			pretty.Text("ccc")),
-		pretty.RLTable(
+		pretty.RLTable(true,
 			pretty.RLTableRow{Label: "SELECT",
 				Doc: pretty.Join(",",
 					pretty.Text("aaa"),
@@ -40,7 +40,7 @@ func Example_align() {
 					pretty.Text("u"),
 					pretty.Text("v")),
 			}),
-		pretty.RLTable(
+		pretty.RLTable(true,
 			pretty.RLTableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
 			pretty.RLTableRow{Label: "", Doc: pretty.Nil},
 			pretty.RLTableRow{Label: "KEY", Doc: pretty.Text("VALUE")},

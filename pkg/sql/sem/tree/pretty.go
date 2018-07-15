@@ -128,17 +128,7 @@ func (p *PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc 
 }
 
 func (p *PrettyCfg) rlTable(rows ...pretty.RLTableRow) pretty.Doc {
-	if p.Align != PrettyNoAlign {
-		return pretty.RLTable(rows...)
-	}
-	items := make([]pretty.Doc, len(rows))
-	for i, row := range rows {
-		if row.Doc == nil {
-			continue
-		}
-		items[i] = pretty.NestUnder(pretty.Text(row.Label), row.Doc)
-	}
-	return pretty.Group(pretty.Stack(items...))
+	return pretty.RLTable(p.Align != PrettyNoAlign, rows...)
 }
 
 func (p *PrettyCfg) row(lbl string, d pretty.Doc) pretty.RLTableRow {
@@ -169,7 +159,7 @@ func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
 			}
 			items[i].Doc = dd
 		}
-		return pretty.RLTable(items...)
+		return pretty.RLTable(true, items...)
 	default:
 		return pretty.JoinNestedRight(pretty.Text(lbl), d...)
 	}
