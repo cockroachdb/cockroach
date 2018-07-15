@@ -232,7 +232,7 @@ type RLTableRow struct {
 // For convenience, the function also skips over rows with a nil
 // pointer as doc.
 func RLTable(rows ...RLTableRow) Doc {
-	items := make([]Doc, len(rows))
+	items := make([]Doc, 0, len(rows))
 
 	// We'll compute the aligned formatting first. For this we first
 	// need the left column width.
@@ -246,23 +246,32 @@ func RLTable(rows ...RLTableRow) Doc {
 		}
 	}
 	// Now convert the rows.
-	for i, r := range rows {
+	for _, r := range rows {
 		if r.Doc == nil {
 			continue
 		}
-		items[i] = Concat(pad{int16(leftwidth - len(r.Label))},
-			ConcatSpace(Text(r.Label), Align(Group(r.Doc))))
+		if r.Label != "" {
+			items = append(items, Concat(pad{int16(leftwidth - len(r.Label))},
+				ConcatSpace(Text(r.Label), Align(Group(r.Doc)))))
+		} else {
+			items = append(items, Concat(pad{int16(leftwidth + 1)}, Align(Group(r.Doc))))
+		}
 	}
 	alignedTable := Stack(items...)
 
 	// Then compute the nested formatting in "sections". It's simpler.
 	// Note that we do not use NestUnder() because we are not grouping
 	// at this level (the group is done for the final form below).
-	for i, r := range rows {
+	items = items[:0]
+	for _, r := range rows {
 		if r.Doc == nil {
 			continue
 		}
-		items[i] = Concat(Text(r.Label), NestT(Concat(Line, Group(r.Doc))))
+		if r.Label == "" {
+			items = append(items, Group(r.Doc))
+		} else {
+			items = append(items, Concat(Text(r.Label), NestT(Concat(Line, Group(r.Doc)))))
+		}
 	}
 	nestedSections := Stack(items...)
 
