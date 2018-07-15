@@ -79,20 +79,14 @@ type cliState struct {
 	errExit bool
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
-	// smartPrompt indicates whether to update the prompt using queries
-	// to the server. See the state cliRefreshPrompt and
-	// doRefreshPrompt() below.
-	smartPrompt bool
 
-	// The prefix at the start of a prompt.
-	promptPrefix string
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
 	// The prompt on a continuation line in a multi-line entry.
 	continuePrompt string
 	// The current prompt, either fullPrompt or continuePrompt.
 	currentPrompt string
-	// The user can change the prompt to be custom pattarn.
+	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
 
 	// State
@@ -246,7 +240,8 @@ var options = map[string]struct {
 	validDuringMultilineEntry bool
 	set                       func(c *cliState, val string) error
 	reset                     func(c *cliState) error
-	display                   func(c *cliState) string
+	// display method is used to retrieve the current value
+	display func(c *cliState) string
 }{
 	`display_format`: {
 		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
@@ -297,16 +292,8 @@ var options = map[string]struct {
 		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
 	},
-	`smart_prompt`: {
-		"print connection and session metadata in the prompt",
-		true,
-		true,
-		func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
-		func(c *cliState) error { c.smartPrompt = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
-	},
-	`PROMPT1`: {
-		"display custom prompt for (%M:Full Host, %m:Host, %>:Port, %n:User, %/:Database, %x:Transaction status)",
+	`prompt1`: {
+		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
 		false,
 		true,
 		func(c *cliState, val string) error {
@@ -314,11 +301,10 @@ var options = map[string]struct {
 			return nil
 		},
 		func(c *cliState) error {
-			c.customPromptPattern = ""
+			c.customPromptPattern = "%n@%M/%/>"
 			return nil
 		},
-
-		func(_ *cliState) string { return "%n@%M/%/>" /*defult pattern 'marc@localhost:26257/>'*/ },
+		func(c *cliState) string { return c.customPromptPattern /*current value of customPromptPattern*/ },
 	},
 }
 
@@ -531,8 +517,8 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
-//regexpattern : available keys compile with regex expression one time
-var regexpattern = regexp.MustCompile("(%%M)|(%M)|(%%m)|(%m)|(%%>)|(%>)|(%%n)|(%n)|(%%/)|(%/)|(%%x)|(%x)")
+// regexpattern : available keys compile with regex expression one time
+var regexpattern = regexp.MustCompile("%(.)")
 
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
@@ -541,57 +527,49 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	// Default prompt is part of the connection URL. eg: "marc@localhost:26257>"
-	// continued statement prompt is: "        -> "
-	PromptPattern := "%n@%M/%/> " //defult pattern 'marc@localhost:26257/>'
-	c.fullPrompt = c.promptPrefix
-
-	if c.customPromptPattern != "" { //custom pattern
-		PromptPattern = c.customPromptPattern + " "
-	}
-
-	parsedURL, err := url.Parse(c.conn.url)
+	c.fullPrompt = c.conn.url
+	parsedURL, err := url.Parse(c.fullPrompt)
 	if err != nil {
+		// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
+		// is the important part.
+		c.fullPrompt += "> "
+		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		return nextState
 	}
 
-	c.fullPrompt = regexpattern.ReplaceAllStringFunc(PromptPattern, func(m string) string {
+	c.fullPrompt = regexpattern.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
 		switch m {
-		case "%%M": // full host name
-			return "%M"
 		case "%M":
-			return parsedURL.Host
-		case "%%m": // host name
-			return "%m"
+			return parsedURL.Host // full host name
 		case "%m":
-			return parsedURL.Hostname()
-		case "%%>": // port
-			return "%>"
+			return parsedURL.Hostname() // host name
 		case "%>":
-			return parsedURL.Port()
-		case "%%n": //user name
-			return "%n"
+			return parsedURL.Port() // port
 		case "%n":
-			if parsedURL.User != nil {
+			if parsedURL.User != nil { // user name
 				return parsedURL.User.Username()
 			}
-		case "%%/": //database name
-			return "%/"
 		case "%/":
-			dbName, hasDbName := c.refreshDatabaseName()
+			dbName, hasDbName := c.refreshDatabaseName() // database name
 			if hasDbName {
 				return dbName
 			}
-		case "%%x": // trasnation status
-			return "%x"
-		case "%x":
+		case "%x": // txn status
 			c.refreshTransactionStatus()
 			return c.lastKnownTxnStatus
+		case "%%":
+			return "%"
 		}
-		return ""
+		return m
 	})
 
-	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
+	c.fullPrompt += " "
+	if len(c.fullPrompt) == 2 {
+		c.continuePrompt = "> "
+	} else {
+		// continued statement prompt is: "        -> "
+		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
+	}
 
 	return nextState
 }
@@ -653,32 +631,6 @@ func (c *cliState) refreshDatabaseName() (string, bool) {
 	c.conn.dbName = dbName
 
 	return dbName, true
-}
-
-// preparePrompts computes a full and short prompt for the interactive
-// CLI.
-func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
-	// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
-	// is the important part.
-	promptPrefix = dbURL
-	if parsedURL, err := url.Parse(dbURL); err == nil {
-		username := ""
-		if parsedURL.User != nil {
-			username = parsedURL.User.Username()
-		}
-		promptPrefix = fmt.Sprintf("%s@%s", username, parsedURL.Host)
-	}
-
-	if len(promptPrefix) == 0 {
-		promptPrefix = " "
-	}
-
-	// Default prompt is part of the connection URL. eg: "marc@localhost>"
-	// continued statement prompt is: "        -> "
-	continuePrompt = strings.Repeat(" ", len(promptPrefix)-1) + "-> "
-	fullPrompt = promptPrefix + "> "
-
-	return promptPrefix, fullPrompt, continuePrompt
 }
 
 // endsWithIncompleteTxn returns true if and only if its
@@ -750,8 +702,8 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		// memory when e.g. piping a large SQL script through the
 		// command-line client.
 
-		c.smartPrompt = true // enquire the db in between statements
-		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
+		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>"
+		c.customPromptPattern = "%n@%M/%/>"
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
