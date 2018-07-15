@@ -18,32 +18,19 @@ SELECT
 	x,
 	y,
 	z
-FROM xyz
+FROM
+	xyz
 ORDER BY
 	x, y
-
-13:
--------------
-SELECT
-	DISTINCT ON (pk1, pk2, x, y)
-	x,
-	y,
-	z
-FROM xyz
-ORDER BY x, y
 
 40:
 ----------------------------------------
 SELECT
 	DISTINCT ON (pk1, pk2, x, y) x, y, z
-FROM xyz
-ORDER BY x, y
-
-43:
--------------------------------------------
-SELECT DISTINCT ON (pk1, pk2, x, y) x, y, z
-FROM xyz
-ORDER BY x, y
+FROM
+	xyz
+ORDER BY
+	x, y
 
 66:
 ------------------------------------------------------------------

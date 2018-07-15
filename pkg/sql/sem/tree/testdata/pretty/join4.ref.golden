@@ -20,7 +20,8 @@ WHERE
 
 8:
 --------
-SELECT *
+SELECT
+	*
 FROM
 	a
 	JOIN
@@ -38,7 +39,8 @@ WHERE
 
 10:
 ----------
-SELECT *
+SELECT
+	*
 FROM
 	a
 	JOIN b
@@ -49,11 +51,13 @@ FROM
 	a
 	JOIN b
 	ON c
-WHERE true
+WHERE
+	true
 
 15:
 ---------------
-SELECT *
+SELECT
+	*
 FROM
 	a
 	JOIN b
@@ -63,11 +67,13 @@ FROM
 		b,
 	a
 	JOIN b ON c
-WHERE true
+WHERE
+	true
 
 19:
 -------------------
-SELECT *
+SELECT
+	*
 FROM
 	a
 	JOIN b
@@ -76,11 +82,13 @@ FROM
 	NATURAL JOIN b,
 	a
 	JOIN b ON c
-WHERE true
+WHERE
+	true
 
 21:
 ---------------------
-SELECT *
+SELECT
+	*
 FROM
 	a
 	JOIN b USING (c),
@@ -88,20 +96,17 @@ FROM
 	NATURAL JOIN b,
 	a
 	JOIN b ON c
-WHERE true
+WHERE
+	true
 
 55:
 -------------------------------------------------------
-SELECT *
+SELECT
+	*
 FROM
 	a JOIN b USING (c), a NATURAL JOIN b, a JOIN b ON c
-WHERE true
-
-56:
---------------------------------------------------------
-SELECT *
-FROM a JOIN b USING (c), a NATURAL JOIN b, a JOIN b ON c
-WHERE true
+WHERE
+	true
 
 76:
 ----------------------------------------------------------------------------

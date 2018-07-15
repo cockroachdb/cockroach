@@ -751,7 +751,8 @@ WHERE
 	true
 	AND ct.relname = 'j'
 	AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+ORDER BY
+	table_name, pk_name, key_seq
 
 40:
 ----------------------------------------
@@ -791,46 +792,8 @@ WHERE
 	true
 	AND ct.relname = 'j'
 	AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
-
-41:
------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	a.attname AS column_name,
-	(i.keys).n AS key_seq,
-	ci.relname AS pk_name
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_attribute AS a
-	ON ct.oid = a.attrelid
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT
-				i.indexrelid,
-				i.indrelid,
-				i.indisprimary,
-				information_schema._pg_expandarray(
-					i.indkey
-				)
-					AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON
-		a.attnum = (i.keys).x
-		AND a.attrelid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
-WHERE
-	true
-	AND ct.relname = 'j'
-	AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+ORDER BY
+	table_name, pk_name, key_seq
 
 48:
 ------------------------------------------------
@@ -857,7 +820,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON
@@ -867,43 +831,8 @@ FROM
 	ON ci.oid = i.indexrelid
 WHERE
 	true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
-
-50:
---------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	a.attname AS column_name,
-	(i.keys).n AS key_seq,
-	ci.relname AS pk_name
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_attribute AS a
-	ON ct.oid = a.attrelid
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT
-				i.indexrelid,
-				i.indrelid,
-				i.indisprimary,
-				information_schema._pg_expandarray(
-					i.indkey
-				)
-					AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON
-		a.attnum = (i.keys).x
-		AND a.attrelid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+ORDER BY
+	table_name, pk_name, key_seq
 
 56:
 --------------------------------------------------------
@@ -930,14 +859,17 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci
 	ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 59:
 -----------------------------------------------------------
@@ -964,13 +896,16 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 60:
 ------------------------------------------------------------
@@ -994,13 +929,16 @@ FROM
 				i.indisprimary,
 				information_schema._pg_expandarray(i.indkey)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 64:
 ----------------------------------------------------------------
@@ -1023,13 +961,16 @@ FROM
 				i.indisprimary,
 				information_schema._pg_expandarray(i.indkey)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 68:
 --------------------------------------------------------------------
@@ -1051,13 +992,16 @@ FROM
 				i.indrelid,
 				i.indisprimary,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 110:
 --------------------------------------------------------------------------------------------------------------
@@ -1076,37 +1020,16 @@ FROM
 		(
 			SELECT
 				i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
-
-113:
------------------------------------------------------------------------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	a.attname AS column_name,
-	(i.keys).n AS key_seq,
-	ci.relname AS pk_name
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_attribute AS a ON ct.oid = a.attrelid
-	JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 141:
 ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -1126,8 +1049,10 @@ FROM
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 145:
 -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1142,8 +1067,10 @@ FROM
 			AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 146:
 --------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1157,8 +1084,10 @@ FROM
 		(SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 147:
 ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1171,48 +1100,36 @@ FROM
 	JOIN (SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i
 	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
-
-148:
-----------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_attribute AS a ON ct.oid = a.attrelid
-	JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid
-	JOIN (SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i
-	ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 200:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
+SELECT
+	NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
 FROM
 	pg_catalog.pg_class AS ct
 	JOIN pg_catalog.pg_attribute AS a ON ct.oid = a.attrelid
 	JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid
 	JOIN (SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 400:
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
+SELECT
+	NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
 FROM
 	pg_catalog.pg_class AS ct JOIN pg_catalog.pg_attribute AS a ON ct.oid = a.attrelid JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
-
-401:
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, a.attname AS column_name, (i.keys).n AS key_seq, ci.relname AS pk_name
-FROM pg_catalog.pg_class AS ct JOIN pg_catalog.pg_attribute AS a ON ct.oid = a.attrelid JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indisprimary, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON a.attnum = (i.keys).x AND a.attrelid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-WHERE true AND ct.relname = 'j' AND i.indisprimary
-ORDER BY table_name, pk_name, key_seq
+WHERE
+	true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY
+	table_name, pk_name, key_seq
 
 639:
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

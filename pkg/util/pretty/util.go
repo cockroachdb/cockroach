@@ -91,11 +91,6 @@ func Stack(d ...Doc) Doc {
 	return Fold(ConcatLine, d...)
 }
 
-// JoinGroup nests joined d with divider under head.
-func JoinGroup(head, divider string, d ...Doc) Doc {
-	return NestUnder(Text(head), Join(divider, d...))
-}
-
 // JoinGroupAligned nests joined d with divider under head.
 func JoinGroupAligned(head, divider string, d ...Doc) Doc {
 	return AlignUnder(Text(head), Join(divider, d...))

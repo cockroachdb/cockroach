@@ -16,24 +16,23 @@ VALUES
 6:
 ------
 INSERT
-INTO t
+  INTO t
 		(
 			a,
 			b
 		)
-VALUES
-	(
+VALUES (
 		1,
 		2
-	)
-
-8:
---------
-INSERT
-INTO t (
-		a,
-		b
        )
+
+10:
+----------
+INSERT
+  INTO t (
+			a,
+			b
+         )
 VALUES (
 		1,
 		2
@@ -42,7 +41,16 @@ VALUES (
 13:
 -------------
 INSERT
-INTO t (a, b)
+  INTO t (
+			a,
+			b
+         )
+VALUES (1, 2)
+
+15:
+---------------
+INSERT
+  INTO t (a, b)
 VALUES (1, 2)
 
 34:

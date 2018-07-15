@@ -1704,86 +1704,6 @@ ORDER BY
 	index_name,
 	ordinal_position
 
-41:
------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	NOT i.indisunique AS non_unique,
-	NULL AS index_qualifier,
-	ci.relname AS index_name,
-	CASE i.indisclustered
-	WHEN true THEN 1
-	ELSE CASE am.amname
-	WHEN 'hash' THEN 2
-	ELSE 3
-	END
-	END
-		AS type,
-	(i.keys).n AS ordinal_position,
-	btrim(
-		pg_catalog.pg_get_indexdef(
-			ci.oid,
-			(i.keys).n,
-			false
-		),
-		'"'
-	)
-		AS column_name,
-	CASE am.amcanorder
-	WHEN true
-	THEN CASE i.indoption[(i.keys).n - 1]
-	& 1
-	WHEN 1 THEN 'D'
-	ELSE 'A'
-	END
-	ELSE NULL
-	END
-		AS asc_or_desc,
-	ci.reltuples AS cardinality,
-	ci.relpages AS pages,
-	pg_catalog.pg_get_expr(
-		i.indpred,
-		i.indrelid
-	)
-		AS filter_condition
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT
-				i.indexrelid,
-				i.indrelid,
-				i.indoption,
-				i.indisunique,
-				i.indisclustered,
-				i.indpred,
-				i.indexprs,
-				information_schema._pg_expandarray(
-					i.indkey
-				)
-					AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON ct.oid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
-	JOIN pg_catalog.pg_am AS am
-	ON ci.relam = am.oid
-WHERE
-	true
-	AND n.nspname = 'public'
-	AND ct.relname = 'j'
-ORDER BY
-	non_unique,
-	type,
-	index_name,
-	ordinal_position
-
 45:
 ---------------------------------------------
 SELECT
@@ -1845,7 +1765,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -1921,7 +1842,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -1997,7 +1919,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -2070,7 +1993,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -2139,7 +2063,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -2208,7 +2133,8 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
@@ -2219,137 +2145,6 @@ WHERE
 	true AND n.nspname = 'public' AND ct.relname = 'j'
 ORDER BY
 	non_unique, type, index_name, ordinal_position
-
-55:
--------------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	NOT i.indisunique AS non_unique,
-	NULL AS index_qualifier,
-	ci.relname AS index_name,
-	CASE i.indisclustered
-	WHEN true THEN 1
-	ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END
-	END
-		AS type,
-	(i.keys).n AS ordinal_position,
-	btrim(
-		pg_catalog.pg_get_indexdef(
-			ci.oid,
-			(i.keys).n,
-			false
-		),
-		'"'
-	)
-		AS column_name,
-	CASE am.amcanorder
-	WHEN true
-	THEN CASE i.indoption[(i.keys).n - 1] & 1
-	WHEN 1 THEN 'D'
-	ELSE 'A'
-	END
-	ELSE NULL
-	END
-		AS asc_or_desc,
-	ci.reltuples AS cardinality,
-	ci.relpages AS pages,
-	pg_catalog.pg_get_expr(i.indpred, i.indrelid)
-		AS filter_condition
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT
-				i.indexrelid,
-				i.indrelid,
-				i.indoption,
-				i.indisunique,
-				i.indisclustered,
-				i.indpred,
-				i.indexprs,
-				information_schema._pg_expandarray(
-					i.indkey
-				)
-					AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON ct.oid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
-	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE
-	true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
-
-56:
---------------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	NOT i.indisunique AS non_unique,
-	NULL AS index_qualifier,
-	ci.relname AS index_name,
-	CASE i.indisclustered
-	WHEN true THEN 1
-	ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END
-	END
-		AS type,
-	(i.keys).n AS ordinal_position,
-	btrim(
-		pg_catalog.pg_get_indexdef(
-			ci.oid,
-			(i.keys).n,
-			false
-		),
-		'"'
-	)
-		AS column_name,
-	CASE am.amcanorder
-	WHEN true
-	THEN CASE i.indoption[(i.keys).n - 1] & 1
-	WHEN 1 THEN 'D'
-	ELSE 'A'
-	END
-	ELSE NULL
-	END
-		AS asc_or_desc,
-	ci.reltuples AS cardinality,
-	ci.relpages AS pages,
-	pg_catalog.pg_get_expr(i.indpred, i.indrelid)
-		AS filter_condition
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT
-				i.indexrelid,
-				i.indrelid,
-				i.indoption,
-				i.indisunique,
-				i.indisclustered,
-				i.indpred,
-				i.indexprs,
-				information_schema._pg_expandarray(
-					i.indkey
-				)
-					AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON ct.oid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
-	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
 
 59:
 -----------------------------------------------------------
@@ -2406,14 +2201,17 @@ FROM
 					i.indkey
 				)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 60:
 ------------------------------------------------------------
@@ -2468,14 +2266,17 @@ FROM
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 62:
 --------------------------------------------------------------
@@ -2526,14 +2327,17 @@ FROM
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 64:
 ----------------------------------------------------------------
@@ -2583,14 +2387,17 @@ FROM
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey)
 					AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 68:
 --------------------------------------------------------------------
@@ -2639,14 +2446,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 69:
 ---------------------------------------------------------------------
@@ -2691,14 +2501,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 74:
 --------------------------------------------------------------------------
@@ -2740,14 +2553,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 84:
 ------------------------------------------------------------------------------------
@@ -2788,14 +2604,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 85:
 -------------------------------------------------------------------------------------
@@ -2835,14 +2654,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 105:
 ---------------------------------------------------------------------------------------------------------
@@ -2878,14 +2700,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 133:
 -------------------------------------------------------------------------------------------------------------------------------------
@@ -2917,14 +2742,17 @@ FROM
 				i.indpred,
 				i.indexprs,
 				information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 163:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2949,45 +2777,17 @@ FROM
 		(
 			SELECT
 				i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
+			FROM
+				pg_catalog.pg_index AS i
 		)
 			AS i
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
-
-166:
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	NOT i.indisunique AS non_unique,
-	NULL AS index_qualifier,
-	ci.relname AS index_name,
-	CASE i.indisclustered WHEN true THEN 1 ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END END AS type,
-	(i.keys).n AS ordinal_position,
-	btrim(pg_catalog.pg_get_indexdef(ci.oid, (i.keys).n, false), '"') AS column_name,
-	CASE am.amcanorder WHEN true THEN CASE i.indoption[(i.keys).n - 1] & 1 WHEN 1 THEN 'D' ELSE 'A' END ELSE NULL END AS asc_or_desc,
-	ci.reltuples AS cardinality,
-	ci.relpages AS pages,
-	pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
-FROM
-	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid
-	JOIN
-		(
-			SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys
-			FROM pg_catalog.pg_index AS i
-		)
-			AS i
-	ON ct.oid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
-	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 194:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3014,8 +2814,10 @@ FROM
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 199:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3041,8 +2843,10 @@ FROM
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 200:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3067,8 +2871,10 @@ FROM
 	ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 223:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3092,8 +2898,10 @@ FROM
 	JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid
 	JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid
 	JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 415:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3113,43 +2921,21 @@ SELECT
 	pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
 FROM
 	pg_catalog.pg_class AS ct JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
-
-416:
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT
-	NULL AS table_cat,
-	n.nspname AS table_schem,
-	ct.relname AS table_name,
-	NOT i.indisunique AS non_unique,
-	NULL AS index_qualifier,
-	ci.relname AS index_name,
-	CASE i.indisclustered WHEN true THEN 1 ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END END AS type,
-	(i.keys).n AS ordinal_position,
-	btrim(pg_catalog.pg_get_indexdef(ci.oid, (i.keys).n, false), '"') AS column_name,
-	CASE am.amcanorder WHEN true THEN CASE i.indoption[(i.keys).n - 1] & 1 WHEN 1 THEN 'D' ELSE 'A' END ELSE NULL END AS asc_or_desc,
-	ci.reltuples AS cardinality,
-	ci.relpages AS pages,
-	pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
-FROM pg_catalog.pg_class AS ct JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 621:
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SELECT
 	NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, NOT i.indisunique AS non_unique, NULL AS index_qualifier, ci.relname AS index_name, CASE i.indisclustered WHEN true THEN 1 ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END END AS type, (i.keys).n AS ordinal_position, btrim(pg_catalog.pg_get_indexdef(ci.oid, (i.keys).n, false), '"') AS column_name, CASE am.amcanorder WHEN true THEN CASE i.indoption[(i.keys).n - 1] & 1 WHEN 1 THEN 'D' ELSE 'A' END ELSE NULL END AS asc_or_desc, ci.reltuples AS cardinality, ci.relpages AS pages, pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
-FROM pg_catalog.pg_class AS ct JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
-
-624:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL AS table_cat, n.nspname AS table_schem, ct.relname AS table_name, NOT i.indisunique AS non_unique, NULL AS index_qualifier, ci.relname AS index_name, CASE i.indisclustered WHEN true THEN 1 ELSE CASE am.amname WHEN 'hash' THEN 2 ELSE 3 END END AS type, (i.keys).n AS ordinal_position, btrim(pg_catalog.pg_get_indexdef(ci.oid, (i.keys).n, false), '"') AS column_name, CASE am.amcanorder WHEN true THEN CASE i.indoption[(i.keys).n - 1] & 1 WHEN 1 THEN 'D' ELSE 'A' END ELSE NULL END AS asc_or_desc, ci.reltuples AS cardinality, ci.relpages AS pages, pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS filter_condition
-FROM pg_catalog.pg_class AS ct JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
-WHERE true AND n.nspname = 'public' AND ct.relname = 'j'
-ORDER BY non_unique, type, index_name, ordinal_position
+FROM
+	pg_catalog.pg_class AS ct JOIN pg_catalog.pg_namespace AS n ON ct.relnamespace = n.oid JOIN (SELECT i.indexrelid, i.indrelid, i.indoption, i.indisunique, i.indisclustered, i.indpred, i.indexprs, information_schema._pg_expandarray(i.indkey) AS keys FROM pg_catalog.pg_index AS i) AS i ON ct.oid = i.indrelid JOIN pg_catalog.pg_class AS ci ON ci.oid = i.indexrelid JOIN pg_catalog.pg_am AS am ON ci.relam = am.oid
+WHERE
+	true AND n.nspname = 'public' AND ct.relname = 'j'
+ORDER BY
+	non_unique, type, index_name, ordinal_position
 
 1154:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

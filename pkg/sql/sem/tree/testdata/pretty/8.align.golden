@@ -6,8 +6,7 @@ SELECT
 	)
 FROM
 	[
-		DELETE
-		FROM
+		DELETE FROM
 			unindexed
 		LIMIT
 			5
@@ -21,8 +20,7 @@ SELECT
 	count(*)
 FROM
 	[
-		DELETE
-		FROM
+		DELETE FROM
 			unindexed
 		LIMIT
 			5
@@ -36,8 +34,7 @@ SELECT count(
 		*
        )
   FROM [
-		DELETE
-		FROM
+		DELETE FROM
 			unindexed
 		LIMIT
 			5
@@ -49,33 +46,21 @@ SELECT count(
 ---------------
 SELECT count(*)
   FROM [
-		DELETE
-		FROM
+		DELETE FROM
 			unindexed
-		LIMIT 5
+		LIMIT
+			5
 		RETURNING
 			v
        ]
 
-19:
--------------------
+29:
+-----------------------------
 SELECT count(*)
   FROM [
-		DELETE
-		FROM
-			unindexed
-		LIMIT 5
-		RETURNING v
-       ]
-
-22:
-----------------------
-SELECT count(*)
-  FROM [
-		DELETE
-		FROM unindexed
-		LIMIT 5
-		RETURNING v
+		DELETE FROM unindexed
+		      LIMIT 5
+		  RETURNING v
        ]
 
 49:
