@@ -95,3 +95,17 @@ scan  ·       ·                      (a, b, c)  ·
 
 statement ok
 DROP TABLE abc
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+# Regression test for #27398.
+# Check that tuple type includes labels.
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+render     ·         ·                                                                                   (x tuple{int AS a, int AS b, int AS c})  ·
+ │         render 0  ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
+ └── scan  ·         ·                                                                                   (v int)                                  ·
+·          table     kv@primary                                                                          ·                                        ·
+·          spans     ALL                                                                                 ·                                        ·

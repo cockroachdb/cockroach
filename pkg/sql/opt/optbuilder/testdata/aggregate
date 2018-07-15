@@ -781,7 +781,7 @@ group-by
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
- │         └── tuple [type=tuple{int, int, int, string}]
+ │         └── tuple [type=tuple{int AS k, int AS v, int AS w, string AS s}]
  │              ├── variable: kv.k [type=int]
  │              ├── variable: kv.v [type=int]
  │              ├── variable: kv.w [type=int]

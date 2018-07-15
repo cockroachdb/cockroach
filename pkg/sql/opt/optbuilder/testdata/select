@@ -227,7 +227,7 @@ project
  ├── scan kv
  │    └── columns: k:1(string!null) v:2(string)
  └── projections
-      └── tuple [type=tuple{string, string}]
+      └── tuple [type=tuple{string AS k, string AS v}]
            ├── variable: kv.k [type=string]
            └── variable: kv.v [type=string]
 
@@ -616,7 +616,7 @@ project
  └── projections
       └── in [type=bool]
            ├── const: 1 [type=int]
-           └── tuple [type=tuple{unknown, int}]
+           └── tuple [type=tuple{int, int}]
                 ├── null [type=unknown]
                 └── const: 2 [type=int]
 
@@ -629,7 +629,7 @@ project
  │    └── tuple [type=tuple{}]
  └── projections
       └── in [type=bool]
-           ├── tuple [type=tuple{int, unknown}]
+           ├── tuple [type=tuple{int, int}]
            │    ├── const: 1 [type=int]
            │    └── null [type=unknown]
            └── tuple [type=tuple{tuple{int, int}}]
@@ -671,7 +671,7 @@ project
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 1 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: column1 [type=int]
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
@@ -714,7 +714,7 @@ project
                 │    │         ├── const: 1 [type=int]
                 │    │         └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -768,7 +768,7 @@ project
            │    │              ├── variable: column1 [type=int]
            │    │              └── const: 1 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: column1 [type=int]
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
@@ -823,7 +823,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -878,7 +878,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -933,7 +933,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]

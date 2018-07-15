@@ -200,7 +200,7 @@ func (b *Builder) buildSubqueryProjection(
 		}
 
 		texpr := tree.NewTypedTuple(typ, cols)
-		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups))
+		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups), b.factory.InternType(typ))
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})
 	}

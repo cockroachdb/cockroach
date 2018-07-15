@@ -104,7 +104,7 @@ project
            │    │         ├── const: 2 [type=int]
            │    │         └── const: 3 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b, int AS c}]
            │              ├── variable: a [type=int]
            │              ├── variable: b [type=int]
            │              └── variable: c [type=int]
@@ -140,7 +140,7 @@ project
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -172,7 +172,7 @@ project
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -200,7 +200,7 @@ project
            │              │         ├── const: 2 [type=int]
            │              │         └── const: 3 [type=int]
            │              └── projections
-           │                   └── tuple [type=tuple{int, int, int}]
+           │                   └── tuple [type=tuple{int AS x, int AS y, int AS z}]
            │                        ├── variable: x [type=int]
            │                        ├── variable: y [type=int]
            │                        └── variable: z [type=int]
@@ -218,7 +218,7 @@ project
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -298,7 +298,7 @@ project
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS c, int AS d}]
            │              ├── variable: c [type=int]
            │              └── variable: d [type=int]
            └── subquery [type=tuple{int AS a, int AS b}]
@@ -314,7 +314,7 @@ project
                           │         ├── const: 1 [type=int]
                           │         └── const: 2 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b}]
                                     ├── variable: a [type=int]
                                     └── variable: b [type=int]
 
@@ -344,10 +344,10 @@ project
            │              │         ├── const: 1 [type=int]
            │              │         └── const: 2 [type=int]
            │              └── projections
-           │                   └── tuple [type=tuple{int, int}]
+           │                   └── tuple [type=tuple{int AS a, int AS b}]
            │                        ├── variable: a [type=int]
            │                        └── variable: b [type=int]
-           └── tuple [type=tuple{tuple{int, int}}]
+           └── tuple [type=tuple{tuple{int AS a, int AS b}}]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
                      └── const: 2 [type=int]
@@ -375,7 +375,7 @@ project
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS b, int AS c}]
            │              ├── variable: b [type=int]
            │              └── variable: c [type=int]
            └── subquery [type=tuple{int, int}]
@@ -449,7 +449,7 @@ project
                           │         ├── const: 1 [type=int]
                           │         └── const: 2 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b}]
                                     ├── variable: a [type=int]
                                     └── variable: b [type=int]
 
@@ -518,7 +518,7 @@ project
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: a [type=int]
            │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -561,7 +561,7 @@ project
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: a [type=int]
            │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -606,7 +606,7 @@ project
                 │    │         ├── const: 1 [type=int]
                 │    │         └── const: 2 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: a [type=int]
                 │              └── variable: b [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -659,7 +659,7 @@ project
            │    │    └── scan abc
            │    │         └── columns: a:1(int!null) b:2(int) c:3(int)
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: abc.a [type=int]
            │              └── variable: abc.b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -686,7 +686,7 @@ project
            │    │         └── filters [type=bool]
            │    │              └── false [type=bool]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: abc.a [type=int]
            │              └── variable: abc.b [type=int]
            └── tuple [type=tuple{int, int}]

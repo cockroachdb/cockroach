@@ -400,7 +400,7 @@ memo (optimized)
  │         ├── best: (values G7)
  │         └── cost: 0.01
  ├── G6: (projections G8)
- ├── G7: (tuple)
+ ├── G7: (tuple tuple{})
  └── G8: (const 123)
 
 memo
