@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -351,7 +352,8 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			fmt.Fprintf(f.buf, " ordering=%s", t)
 		}
 
-	case *SetOpColMap:
+	case *SetOpColMap, types.T:
+		// Don't show anything, because it's mostly redundant.
 
 	default:
 		fmt.Fprintf(f.buf, " %v", private)

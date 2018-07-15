@@ -105,7 +105,7 @@ project
  │    ├── project
  │    │    ├── columns: column1:1(int!null) column12:12(bool!null) column15:15(bytes!null)
  │    │    ├── values
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── projections
  │    │         ├── const: 1 [type=int]
  │    │         ├── true [type=bool]
@@ -177,7 +177,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int!null)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
@@ -231,7 +231,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(string)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── cast: TEXT [type=string]
  │              └── null [type=unknown]
@@ -245,7 +245,7 @@ SELECT (SELECT COALESCE(max(1), 0) FROM kv)
 project
  ├── columns: coalesce:8(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -595,7 +595,7 @@ SELECT count(*)
 group-by
  ├── columns: count:1(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── aggregations
       └── count-rows [type=int]
 
@@ -620,7 +620,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int!null)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
@@ -781,7 +781,7 @@ group-by
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
- │         └── tuple [type=tuple{int, int, int, string}]
+ │         └── tuple [type=tuple{int AS k, int AS v, int AS w, string AS s}]
  │              ├── variable: kv.k [type=int]
  │              ├── variable: kv.v [type=int]
  │              ├── variable: kv.w [type=int]
@@ -859,7 +859,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int) column3:3(tuple{unknown, unknown})
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── null [type=unknown]
@@ -1474,7 +1474,7 @@ project
  │    ├── project
  │    │    ├── columns: column1:1(int) column4:4(float) column7:7(decimal)
  │    │    ├── values
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── projections
  │    │         ├── cast: INT [type=int]
  │    │         │    └── const: 1 [type=int]
@@ -1505,7 +1505,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 2 [type=int]
@@ -1529,7 +1529,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
@@ -1553,7 +1553,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
@@ -1577,7 +1577,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
@@ -1614,7 +1614,7 @@ limit
  │                             ├── project
  │                             │    ├── columns: column4:4(int!null)
  │                             │    ├── values
- │                             │    │    └── tuple [type=tuple{}]
+ │                             │    │    └── tuple [type=tuple]
  │                             │    └── projections
  │                             │         └── const: 0 [type=int]
  │                             └── aggregations
@@ -1767,7 +1767,7 @@ group-by
  ├── project
  │    ├── columns: column1:1(bool!null)
  │    ├── values
- │    │    └── tuple [type=tuple{}]
+ │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── true [type=bool]
  └── aggregations

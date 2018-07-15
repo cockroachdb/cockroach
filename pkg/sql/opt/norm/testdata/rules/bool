@@ -58,7 +58,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── false [type=bool]
 

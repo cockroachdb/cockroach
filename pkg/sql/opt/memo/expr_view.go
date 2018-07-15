@@ -502,7 +502,7 @@ func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
 
 func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
 	switch ev.op {
-	case opt.NullOp:
+	case opt.NullOp, opt.TupleOp:
 		// Private is redundant with logical type property.
 		private = nil
 

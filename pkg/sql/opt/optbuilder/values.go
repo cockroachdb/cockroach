@@ -67,7 +67,9 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 			}
 		}
 
-		rows = append(rows, b.factory.ConstructTuple(b.factory.InternList(elems)))
+		rows = append(rows, b.factory.ConstructTuple(
+			b.factory.InternList(elems), b.factory.InternType(types.TTuple{Types: colTypes})),
+		)
 	}
 
 	outScope = inScope.push()
