@@ -65,7 +65,7 @@ func (pad) isDoc()       {}
 type nilDoc struct{}
 
 // Nil is the NIL constructor.
-var Nil nilDoc
+var Nil Doc = nilDoc{}
 
 // text represents (TEXT s) :: DOC -- a simple text string.
 type text string
@@ -79,7 +79,7 @@ func Text(s string) Doc {
 type line struct{}
 
 // Line is the LINE constructor.
-var Line line
+var Line Doc = line{}
 
 // softbreak represents SOFTBREAK :: DOC -- an invisible space between
 // words that tries to break the text across lines.
@@ -96,7 +96,7 @@ var Line line
 type softbreak struct{}
 
 // SoftBreak is the softbreak constructor.
-var SoftBreak softbreak
+var SoftBreak Doc = softbreak{}
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {

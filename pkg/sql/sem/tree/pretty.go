@@ -428,7 +428,7 @@ func (node *ParenTableExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Limit) doc(p *PrettyCfg) pretty.Doc {
-	var res pretty.Doc = pretty.Nil
+	res := pretty.Nil
 	for i, r := range node.docRow(p) {
 		if r.Doc != nil {
 			if i > 0 {
