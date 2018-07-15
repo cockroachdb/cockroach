@@ -61,10 +61,10 @@ VALUES
 		+ 4.6
 	)
 
-8:
---------
+6:
+------
 INSERT
-INTO kv2
+  INTO kv2
 		(
 			k,
 			v
@@ -122,13 +122,13 @@ VALUES (
 		+ 4.6
        )
 
-10:
-----------
+12:
+------------
 INSERT
-INTO kv2 (
+  INTO kv2 (
 			k,
 			v
-         )
+           )
 VALUES (
 		'a',
 		'b'
@@ -185,10 +185,10 @@ VALUES (
 13:
 -------------
 INSERT
-INTO kv2 (
+  INTO kv2 (
 			k,
 			v
-         )
+           )
 VALUES (
 		'a',
 		'b'
@@ -242,7 +242,10 @@ VALUES (
 15:
 ---------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (
+			k,
+			v
+           )
 VALUES (
 		'a',
 		'b'
@@ -295,7 +298,7 @@ VALUES (
 17:
 -----------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES (
 		'a',
 		'b'
@@ -347,7 +350,7 @@ VALUES (
 18:
 ------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -385,7 +388,7 @@ VALUES ('a', 'b'),
 21:
 ---------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -422,7 +425,7 @@ VALUES ('a', 'b'),
 23:
 -----------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -457,7 +460,7 @@ VALUES ('a', 'b'),
 24:
 ------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -490,7 +493,7 @@ VALUES ('a', 'b'),
 26:
 --------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -521,7 +524,7 @@ VALUES ('a', 'b'),
 27:
 ---------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -546,7 +549,7 @@ VALUES ('a', 'b'),
 29:
 -----------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -567,7 +570,7 @@ VALUES ('a', 'b'),
 35:
 -----------------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -585,7 +588,7 @@ VALUES ('a', 'b'),
 37:
 -------------------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'),
        ('c', 'd'),
        ('e', 'f'),
@@ -601,7 +604,7 @@ VALUES ('a', 'b'),
 187:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 INSERT
-INTO kv2 (k, v)
+  INTO kv2 (k, v)
 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g'), (ARRAY[NULL::INT]), (ARRAY[NULL::INT, 1]), (ARRAY[1, NULL::INT]), (ARRAY[NULL::INT, NULL::INT]), (9 / 3 * 1 / 3), (2.0), (2.4 + 4.6)
 
 210:

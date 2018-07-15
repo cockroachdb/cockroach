@@ -15,6 +15,8 @@
 package tree
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -120,13 +122,6 @@ func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
 	return pretty.NestUnder(a, b)
 }
 
-func (p *PrettyCfg) joinGroup(name, divider string, d ...pretty.Doc) pretty.Doc {
-	if p.Align != PrettyNoAlign {
-		return pretty.JoinGroupAligned(name, divider, d...)
-	}
-	return pretty.JoinGroup(name, divider, d...)
-}
-
 func (p *PrettyCfg) rlTable(rows ...pretty.RLTableRow) pretty.Doc {
 	return pretty.RLTable(p.Align != PrettyNoAlign, rows...)
 }
@@ -140,6 +135,9 @@ var emptyRow = pretty.RLTableRow{}
 func (p *PrettyCfg) unrow(r pretty.RLTableRow) pretty.Doc {
 	if r.Doc == nil {
 		return pretty.Nil
+	}
+	if r.Label == "" {
+		return r.Doc
 	}
 	return p.nestUnder(pretty.Text(r.Label), r.Doc)
 }
@@ -169,6 +167,12 @@ func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
 // pretty.Docs. If nodes cannot, node.Format is used instead as a Text Doc.
 type docer interface {
 	doc(*PrettyCfg) pretty.Doc
+}
+
+// tableDocer is implemented by nodes that can convert themselves
+// into []pretty.RLTableRow, i.e. a table.
+type tableDocer interface {
+	docTable(*PrettyCfg) []pretty.RLTableRow
 }
 
 func (node SelectExprs) doc(p *PrettyCfg) pretty.Doc {
@@ -419,7 +423,7 @@ func (node *ParenTableExpr) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *Limit) doc(p *PrettyCfg) pretty.Doc {
 	res := pretty.Nil
-	for i, r := range node.docRow(p) {
+	for i, r := range node.docTable(p) {
 		if r.Doc != nil {
 			if i > 0 {
 				res = pretty.Concat(res, pretty.Line)
@@ -430,7 +434,7 @@ func (node *Limit) doc(p *PrettyCfg) pretty.Doc {
 	return res
 }
 
-func (node *Limit) docRow(p *PrettyCfg) []pretty.RLTableRow {
+func (node *Limit) docTable(p *PrettyCfg) []pretty.RLTableRow {
 	if node == nil {
 		return nil
 	}
@@ -470,22 +474,20 @@ func (node *OrderBy) docRow(p *PrettyCfg) pretty.RLTableRow {
 }
 
 func (node *Select) doc(p *PrettyCfg) pretty.Doc {
-	if s, ok := node.Select.(*SelectClause); ok {
-		tb := s.docTable(p)
-		items := make([]pretty.RLTableRow, 0, len(tb)+3)
-		items = append(items, node.With.docRow(p))
-		items = append(items, tb...)
-		items = append(items, node.OrderBy.docRow(p))
-		items = append(items, node.Limit.docRow(p)...)
-		return p.rlTable(items...)
-	}
+	return p.rlTable(node.docTable(p)...)
+}
 
-	return pretty.Group(pretty.Stack(
-		node.With.doc(p),
-		p.Doc(node.Select),
-		node.OrderBy.doc(p),
-		node.Limit.doc(p),
-	))
+func (node *Select) docTable(p *PrettyCfg) []pretty.RLTableRow {
+	items := make([]pretty.RLTableRow, 0, 9)
+	items = append(items, node.With.docRow(p))
+	if s, ok := node.Select.(tableDocer); ok {
+		items = append(items, s.docTable(p)...)
+	} else {
+		items = append(items, p.row("", p.Doc(node.Select)))
+	}
+	items = append(items, node.OrderBy.docRow(p))
+	items = append(items, node.Limit.docTable(p)...)
+	return items
 }
 
 func (node *SelectClause) doc(p *PrettyCfg) pretty.Doc {
@@ -723,46 +725,46 @@ func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
-	var d []pretty.Doc
-	if node.With != nil {
-		d = append(d, p.Doc(node.With))
-	}
+	items := make([]pretty.RLTableRow, 8)
+	items = append(items, node.With.docRow(p))
+	kw := "INSERT"
 	if node.OnConflict.IsUpsertAlias() {
-		d = append(d, pretty.Text("UPSERT"))
-	} else {
-		d = append(d, pretty.Text("INSERT"))
+		kw = "UPSERT"
 	}
+	items = append(items, p.row(kw, pretty.Nil))
+
 	into := p.Doc(node.Table)
 	if node.Columns != nil {
 		into = p.nestUnder(into, pretty.Bracket("(", p.Doc(&node.Columns), ")"))
 	}
-	d = append(d, p.nestUnder(pretty.Text("INTO"), into))
+	items = append(items, p.row("INTO", into))
+
 	if node.DefaultValues() {
-		d = append(d, pretty.Text("DEFAULT VALUES"))
+		items = append(items, p.row("", pretty.Text("DEFAULT VALUES")))
 	} else {
-		d = append(d, p.Doc(node.Rows))
+		items = append(items, node.Rows.docTable(p)...)
 	}
+
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
-		d = append(d, pretty.Text("ON CONFLICT"))
+		cond := pretty.Nil
 		if len(node.OnConflict.Columns) > 0 {
-			d = append(d, pretty.Bracket("(", p.Doc(&node.OnConflict.Columns), ")"))
+			cond = pretty.Bracket("(", p.Doc(&node.OnConflict.Columns), ")")
 		}
+		items = append(items, p.row("ON CONFLICT", cond))
+
 		if node.OnConflict.DoNothing {
-			d = append(d, pretty.Text("DO NOTHING"))
+			items = append(items, p.row("DO", pretty.Text("NOTHING")))
 		} else {
-			d = append(d,
-				pretty.Text("DO UPDATE SET"),
-				p.Doc(&node.OnConflict.Exprs),
-			)
+			items = append(items, p.row("DO",
+				p.nestUnder(pretty.Text("UPDATE SET"), p.Doc(&node.OnConflict.Exprs))))
 			if node.OnConflict.Where != nil {
-				d = append(d, p.Doc(node.OnConflict.Where))
+				items = append(items, node.OnConflict.Where.docRow(p))
 			}
 		}
 	}
-	if r := p.Doc(node.Returning); r != pretty.Nil {
-		d = append(d, r)
-	}
-	return pretty.Group(pretty.Stack(d...))
+
+	items = append(items, p.docReturning(node.Returning))
+	return p.rlTable(items...)
 }
 
 func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
@@ -814,11 +816,15 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *ValuesClause) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *ValuesClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
 	d := make([]pretty.Doc, len(node.Tuples))
 	for i, n := range node.Tuples {
 		d[i] = p.Doc(n)
 	}
-	return p.joinGroup("VALUES", ",", d...)
+	return []pretty.RLTableRow{p.row("VALUES", pretty.Join(",", d...))}
 }
 
 func (node *StatementSource) doc(p *PrettyCfg) pretty.Doc {
@@ -855,10 +861,6 @@ func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
 	return d
 }
 
-func (node *ReturningExprs) doc(p *PrettyCfg) pretty.Doc {
-	return p.nestUnder(pretty.Text("RETURNING"), p.Doc((*SelectExprs)(node)))
-}
-
 func (node *UpdateExprs) doc(p *PrettyCfg) pretty.Doc {
 	d := make([]pretty.Doc, len(*node))
 	for i, n := range *node {
@@ -875,27 +877,41 @@ func (p *PrettyCfg) exprDocWithParen(e Expr) pretty.Doc {
 }
 
 func (node *Update) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Group(pretty.Stack(
-		p.Doc(node.With),
-		p.nestUnder(pretty.Text("UPDATE"), p.Doc(node.Table)),
-		p.nestUnder(pretty.Text("SET"), p.Doc(&node.Exprs)),
-		p.Doc(node.Where),
-		p.Doc(&node.OrderBy),
-		p.Doc(node.Limit),
-		p.Doc(node.Returning),
-	))
+	items := make([]pretty.RLTableRow, 8)
+	items = append(items,
+		node.With.docRow(p),
+		p.row("UPDATE", p.Doc(node.Table)),
+		p.row("SET", p.Doc(&node.Exprs)),
+		node.Where.docRow(p),
+		node.OrderBy.docRow(p))
+	items = append(items, node.Limit.docTable(p)...)
+	items = append(items, p.docReturning(node.Returning))
+	return p.rlTable(items...)
 }
 
 func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Group(pretty.Stack(
-		p.Doc(node.With),
-		pretty.Text("DELETE"),
-		p.nestUnder(pretty.Text("FROM"), p.Doc(node.Table)),
-		p.Doc(node.Where),
-		p.Doc(&node.OrderBy),
-		p.Doc(node.Limit),
-		p.Doc(node.Returning),
-	))
+	items := make([]pretty.RLTableRow, 6)
+	items = append(items,
+		node.With.docRow(p),
+		p.row("DELETE FROM", p.Doc(node.Table)),
+		node.Where.docRow(p),
+		node.OrderBy.docRow(p))
+	items = append(items, node.Limit.docTable(p)...)
+	items = append(items, p.docReturning(node.Returning))
+	return p.rlTable(items...)
+}
+
+func (p *PrettyCfg) docReturning(node ReturningClause) pretty.RLTableRow {
+	switch r := node.(type) {
+	case *NoReturningClause:
+		return p.row("", nil)
+	case *ReturningNothing:
+		return p.row("RETURNING", pretty.Text("NOTHING"))
+	case *ReturningExprs:
+		return p.row("RETURNING", p.Doc((*SelectExprs)(r)))
+	default:
+		panic(fmt.Sprintf("unhandled case: %T", node))
+	}
 }
 
 func (node *Order) doc(p *PrettyCfg) pretty.Doc {
@@ -985,7 +1001,7 @@ func (node *TableDefs) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CaseExpr) doc(p *PrettyCfg) pretty.Doc {
-	var d []pretty.Doc
+	d := make([]pretty.Doc, 0, len(node.Whens)+3)
 	c := pretty.Text("CASE")
 	if node.Expr != nil {
 		c = pretty.Group(pretty.ConcatSpace(c, p.Doc(node.Expr)))
@@ -1024,6 +1040,3 @@ func (node *UnionClause) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return pretty.Stack(p.Doc(node.Left), p.nestUnder(pretty.Text(op), p.Doc(node.Right)))
 }
-
-func (node *NoReturningClause) doc(*PrettyCfg) pretty.Doc { return pretty.Nil }
-func (node *ReturningNothing) doc(*PrettyCfg) pretty.Doc  { return pretty.Text("RETURNING NOTHING") }

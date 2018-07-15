@@ -14,13 +14,29 @@ UNION ALL
 	FROM
 		y
 
-9:
----------
-SELECT a,
-       b,
-       c
-  FROM x
-UNION ALL
+7:
+-------
+ SELECT
+	a,
+	b,
+	c
+ FROM
+	x
+ UNION ALL
+	SELECT
+		d,
+		e,
+		f
+	FROM
+		y
+
+10:
+----------
+ SELECT a,
+        b,
+        c
+   FROM x
+ UNION ALL
 	SELECT
 		d,
 		e,
@@ -30,64 +46,73 @@ UNION ALL
 
 13:
 -------------
-SELECT a,
-       b,
-       c
-  FROM x
-UNION ALL
+ SELECT a,
+        b,
+        c
+   FROM x
+ UNION ALL
 	SELECT d,
 	       e,
 	       f
 	  FROM y
 
-14:
---------------
-SELECT a, b, c
-  FROM x
-UNION ALL
+15:
+---------------
+ SELECT a, b, c
+   FROM x
+ UNION ALL
 	SELECT d,
 	       e,
 	       f
 	  FROM y
 
-16:
-----------------
-SELECT a, b, c
-  FROM x
-UNION ALL SELECT
+17:
+-----------------
+ SELECT a, b, c
+   FROM x
+ UNION ALL SELECT
 			d,
 			e,
 			f
-          FROM
+           FROM
 			y
 
 19:
 -------------------
-SELECT a, b, c
-  FROM x
-UNION ALL SELECT d,
-                 e,
-                 f
-            FROM y
+ SELECT a, b, c
+   FROM x
+ UNION ALL SELECT
+			d, e, f
+           FROM
+			y
 
-21:
----------------------
-SELECT a, b, c FROM x
-UNION ALL SELECT d,
-                 e,
-                 f
-            FROM y
+20:
+--------------------
+ SELECT a, b, c
+   FROM x
+ UNION ALL SELECT d,
+                  e,
+                  f
+             FROM y
 
-24:
-------------------------
-SELECT a, b, c FROM x
-UNION ALL SELECT d, e, f
-            FROM y
+22:
+----------------------
+ SELECT a, b, c FROM x
+ UNION ALL SELECT d,
+                  e,
+                  f
+             FROM y
 
-31:
--------------------------------
-SELECT a, b, c FROM x
-UNION ALL SELECT d, e, f FROM y
+25:
+-------------------------
+ SELECT a, b, c FROM x
+ UNION ALL SELECT d, e, f
+             FROM y
+
+32:
+--------------------------------
+ SELECT a, b, c FROM x
+ UNION ALL SELECT d, e, f FROM y
 
 53:
 -----------------------------------------------------

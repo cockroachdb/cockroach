@@ -33,12 +33,6 @@ INTO
 VALUES
 	(1, 2)
 
-13:
--------------
-INSERT
-INTO t (a, b)
-VALUES (1, 2)
-
 34:
 ----------------------------------
 INSERT INTO t (a, b) VALUES (1, 2)
