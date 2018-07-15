@@ -42,8 +42,10 @@ func Example_align() {
 			}),
 		pretty.RLTable(
 			pretty.RLTableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
+			pretty.RLTableRow{Label: "", Doc: pretty.Nil},
 			pretty.RLTableRow{Label: "KEY", Doc: pretty.Text("VALUE")},
 			pretty.RLTableRow{Label: "", Doc: pretty.Text("OTHERVALUE")},
+			pretty.RLTableRow{Label: "AAA", Doc: pretty.Nil}, // check no extra space is added
 		),
 	}
 	for _, n := range []int{1, 15, 30, 80} {
@@ -73,6 +75,7 @@ func Example_align() {
 	// KEY
 	// 	VALUE
 	// OTHERVALUE
+	// AAA
 	//
 	// 15:
 	// SELECT aaa,
@@ -86,6 +89,7 @@ func Example_align() {
 	//
 	// KEY VALUE
 	//     OTHERVALUE
+	// AAA
 	//
 	// 30:
 	// SELECT aaa, bbb, ccc
@@ -93,14 +97,14 @@ func Example_align() {
 	// SELECT aaa, bbb, ccc
 	//   FROM t, u, v
 	//
-	// KEY VALUE OTHERVALUE
+	// KEY VALUE OTHERVALUE AAA
 	//
 	// 80:
 	// SELECT aaa, bbb, ccc
 	//
 	// SELECT aaa, bbb, ccc FROM t, u, v
 	//
-	// KEY VALUE OTHERVALUE
+	// KEY VALUE OTHERVALUE AAA
 }
 
 // ExampleTree demonstrates the Tree example from the paper.
