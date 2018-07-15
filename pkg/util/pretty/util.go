@@ -247,12 +247,15 @@ func RLTable(rows ...RLTableRow) Doc {
 	}
 	// Now convert the rows.
 	for _, r := range rows {
-		if r.Doc == nil {
+		if r.Doc == nil || (r.Label == "" && r.Doc == Nil) {
 			continue
 		}
 		if r.Label != "" {
-			items = append(items, Concat(pad{int16(leftwidth - len(r.Label))},
-				ConcatSpace(Text(r.Label), Align(Group(r.Doc)))))
+			d := simplifyNil(Text(r.Label), r.Doc,
+				func(a, b Doc) Doc {
+					return ConcatSpace(a, Align(Group(b)))
+				})
+			items = append(items, Concat(pad{int16(leftwidth - len(r.Label))}, d))
 		} else {
 			items = append(items, Concat(pad{int16(leftwidth + 1)}, Align(Group(r.Doc))))
 		}
@@ -264,13 +267,17 @@ func RLTable(rows ...RLTableRow) Doc {
 	// at this level (the group is done for the final form below).
 	items = items[:0]
 	for _, r := range rows {
-		if r.Doc == nil {
+		if r.Doc == nil || (r.Label == "" && r.Doc == Nil) {
 			continue
 		}
-		if r.Label == "" {
-			items = append(items, Group(r.Doc))
+		if r.Label != "" {
+			d := simplifyNil(Text(r.Label), r.Doc,
+				func(a, b Doc) Doc {
+					return Concat(a, NestT(Concat(Line, Group(b))))
+				})
+			items = append(items, d)
 		} else {
-			items = append(items, Concat(Text(r.Label), NestT(Concat(Line, Group(r.Doc)))))
+			items = append(items, Group(r.Doc))
 		}
 	}
 	nestedSections := Stack(items...)
