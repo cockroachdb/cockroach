@@ -40,11 +40,17 @@ func Example_align() {
 					pretty.Text("u"),
 					pretty.Text("v")),
 			}),
+		pretty.RLTable(
+			pretty.RLTableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
+			pretty.RLTableRow{Label: "KEY", Doc: pretty.Text("VALUE")},
+			pretty.RLTableRow{Label: "", Doc: pretty.Text("OTHERVALUE")},
+		),
 	}
 	for _, n := range []int{1, 15, 30, 80} {
+		fmt.Printf("%d:\n", n)
 		for _, doc := range testData {
 			p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/)
-			fmt.Printf("%d:\n%s\n\n", n, p)
+			fmt.Printf("%s\n\n", p)
 		}
 	}
 
@@ -55,7 +61,6 @@ func Example_align() {
 	// 	bbb,
 	// 	ccc
 	//
-	// 1:
 	// SELECT
 	// 	aaa,
 	// 	bbb,
@@ -65,29 +70,37 @@ func Example_align() {
 	// 	u,
 	// 	v
 	//
-	// 15:
-	// SELECT aaa,
-	//        bbb,
-	//        ccc
+	// KEY
+	// 	VALUE
+	// OTHERVALUE
 	//
 	// 15:
 	// SELECT aaa,
 	//        bbb,
 	//        ccc
+	//
+	// SELECT aaa,
+	//        bbb,
+	//        ccc
 	//   FROM t, u, v
+	//
+	// KEY VALUE
+	//     OTHERVALUE
 	//
 	// 30:
 	// SELECT aaa, bbb, ccc
 	//
-	// 30:
 	// SELECT aaa, bbb, ccc
 	//   FROM t, u, v
 	//
+	// KEY VALUE OTHERVALUE
+	//
 	// 80:
 	// SELECT aaa, bbb, ccc
 	//
-	// 80:
 	// SELECT aaa, bbb, ccc FROM t, u, v
+	//
+	// KEY VALUE OTHERVALUE
 }
 
 // ExampleTree demonstrates the Tree example from the paper.
