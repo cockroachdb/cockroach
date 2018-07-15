@@ -1,0 +1,189 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package ctstorage
+
+import (
+	"bytes"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/olekukonko/tablewriter"
+)
+
+type memStorage struct {
+	mu struct {
+		syncutil.RWMutex
+		buckets []ctpb.Entry
+		scale   time.Duration
+	}
+}
+
+var _ SingleStorage = (*memStorage)(nil)
+
+// NewMemStorage initializes a SingleStorage backed by an in-memory slice.
+func NewMemStorage(scale time.Duration, buckets int) SingleStorage {
+	m := &memStorage{}
+	m.mu.buckets = make([]ctpb.Entry, buckets)
+	m.mu.scale = scale
+	return m
+}
+
+func (m *memStorage) String() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var buf bytes.Buffer
+	tw := tablewriter.NewWriter(&buf)
+
+	header := make([]string, 1+len(m.mu.buckets))
+	header[0] = ""
+	align := make([]int, 1+len(m.mu.buckets))
+	align[0] = tablewriter.ALIGN_LEFT
+
+	for i := range m.mu.buckets {
+		header[1+i] = m.mu.buckets[i].ClosedTimestamp.String() + "\nage=" + time.Duration(
+			m.mu.buckets[0].ClosedTimestamp.WallTime-m.mu.buckets[i].ClosedTimestamp.WallTime,
+		).String() + " (target ≤" + m.bucketMaxAge(i).String() + ")"
+		align[1+i] = tablewriter.ALIGN_RIGHT
+	}
+	tw.SetAutoFormatHeaders(false)
+	tw.SetColumnAlignment(align)
+	tw.SetHeader(header)
+	tw.SetHeaderLine(true)
+	tw.SetRowLine(false)
+	tw.SetColumnSeparator(" ")
+	tw.SetBorder(true)
+
+	rangeIDs := make([]roachpb.RangeID, 0, len(m.mu.buckets[0].MLAI))
+	for rangeID := range m.mu.buckets[0].MLAI {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Slice(rangeIDs, func(i, j int) bool {
+		return rangeIDs[i] < rangeIDs[j]
+	})
+
+	row := make([]string, 1+len(m.mu.buckets))
+	for _, rangeID := range rangeIDs {
+		row[0] = "r" + strconv.FormatInt(int64(rangeID), 10)
+		for i, entry := range m.mu.buckets {
+			lai, ok := entry.MLAI[rangeID]
+			if ok {
+				row[1+i] = strconv.FormatInt(lai, 10)
+			} else {
+				row[1+i] = ""
+			}
+		}
+		tw.Append(row)
+	}
+
+	tw.Render()
+
+	// It's apparently impossible to write passing Example tests when
+	// intermediate lines have trailing whitespace (💩), so remove all of
+	// that.
+	//
+	// See https://github.com/golang/go/issues/6416.
+	s := strings.Split(buf.String(), "\n")
+	for i := range s {
+		s[i] = strings.TrimRight(s[i], " ")
+	}
+	return strings.Join(s, "\n")
+
+}
+
+func (m *memStorage) bucketMaxAge(index int) time.Duration {
+	if index == 0 {
+		return 0
+	}
+	return (1 << uint(index-1)) * m.mu.scale
+}
+
+func (m *memStorage) Check(readTS hlc.Timestamp, rangeID roachpb.RangeID, lai int64) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, e := range m.mu.buckets {
+		if !e.ClosedTimestamp.Less(readTS) && e.MLAI[rangeID] <= lai {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *memStorage) Add(e ctpb.Entry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := e.ClosedTimestamp.WallTime
+
+	for i := 0; i < len(m.mu.buckets); i++ {
+		if time.Duration(now-m.mu.buckets[i].ClosedTimestamp.WallTime) <= m.bucketMaxAge(i) {
+			break
+		}
+		mergedEntry := merge(m.mu.buckets[i], e)
+		e = m.mu.buckets[i]
+		m.mu.buckets[i] = mergedEntry
+	}
+}
+
+func (m *memStorage) VisitAscending(f func(ctpb.Entry) (done bool)) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for i := len(m.mu.buckets) - 1; i >= 0; i-- {
+		if f(m.mu.buckets[i]) {
+			return
+		}
+	}
+}
+
+func merge(e, ee ctpb.Entry) ctpb.Entry {
+	// TODO(tschottdorf): if either of these hit, check that what we're
+	// returning has Full set. If we make it past, check that either of
+	// them has it set. The first Entry the Storage sees for an epoch must have it
+	// set, so the assertions should never fire.
+	if e.Epoch < ee.Epoch {
+		return ee
+	} else if e.Epoch > ee.Epoch {
+		return e
+	}
+
+	// Epochs match, so we can actually update.
+
+	// Initialize re as a deep copy of e.
+	re := e
+	re.MLAI = map[roachpb.RangeID]int64{}
+	for rangeID, mlai := range e.MLAI {
+		re.MLAI[rangeID] = mlai
+	}
+	// The result is full if either operand is.
+	re.Full = e.Full || ee.Full
+
+	// Use the larger of both timestamps with the union of the MLAIs.
+	re.ClosedTimestamp.Forward(ee.ClosedTimestamp)
+	for rangeID, mlai := range ee.MLAI {
+		if re.MLAI[rangeID] < mlai {
+			re.MLAI[rangeID] = mlai
+		}
+	}
+
+	return re
+}

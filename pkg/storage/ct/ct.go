@@ -1,0 +1,161 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+// Package ct houses the interfaces and basic definitions used by the various
+// components of the closed timestamp subsystems.
+//
+// The following diagram illustates how these components fit together. In
+// running operation, the components are grouped in a ctconfig.Container
+// (intended as a pass-around per-instance Singleton).
+// Replicas proposing commands talk to the Tracker; replicas trying to serve
+// follower reads talk to the Provider, which receives closed timestamp updates
+// for the local node and its peers.
+//
+//                             Node 1 | Node 2
+//                                    |
+// +---------+  Close  +-----------+  |  +-----------+
+// | Tracker |<--------|           |  |  |           |
+// +-----+---+         | +-------+ |  |  | +-------+ |  CanServe
+//       ^             | |Storage| |  |  | |Storage| |<---------+
+//       |             | --------+ |  |  | +-------+ |          |
+//       |Track        |           |  |  |           |     +----+----+
+//       |             | Provider  |  |  | Provider  |     | Follower|
+//       |             +-----------+  |  +-----------+     | Replica |
+//       |                 ^                  ^            +----+----+
+//       |                 |Subscribe         |Notify           |
+//       |                 |                  |                 |
+// +---------+             |      Request     |                 |
+// |Proposing| Refresh +---+----+ <------ +---+-----+  Request  |
+// | Replica |<--------| Server |         | Clients |<----------+
+// +---------+         +--------+ ------> +---------+  EnsureClient
+//                                  CT
+package ct
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
+
+// A Storage holds the closed timestamps and associated MLAIs for each node. It
+// additionally provides historical information about past state that it
+// "compacts" regularly, and which can be introspected via the VisitAscending
+// method.
+type Storage interface {
+	fmt.Stringer
+	// VisitAscending visits the historical states contained within the Storage
+	// in ascending closed timestamp order. Each state (Entry) is full, i.e.
+	// non-incremental. The iteration stops when all states have been visited
+	// or the visitor returns true.
+	VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))
+	// Add merges the given Entry into the state for the given NodeID. The first
+	// Entry passed in for any given Entry.Epoch must have Entry.Full set.
+	Add(roachpb.NodeID, ctpb.Entry)
+}
+
+// A Notifyee is a sink for closed timestamp updates.
+type Notifyee interface {
+	Notify(roachpb.NodeID) chan<- ctpb.Entry
+}
+
+// A Producer is a source of closed timestamp updates about the local node.
+type Producer interface {
+	// The Subscribe method blocks and, until the context cancels, writes a
+	// stream of updates to the provided channel the aggregate of which is
+	// guaranteed to represent a valid (i.e. gapless) state.
+	Subscribe(context.Context, chan<- ctpb.Entry)
+}
+
+// EpochT is a wrapper around int64 which helps avoid confusing it with other
+// int64s used for different purposes.
+type EpochT struct {
+	int64
+}
+
+// Epoch returns the given int64 as an EpochT.
+func Epoch(epo int64) EpochT {
+	return EpochT{epo}
+}
+
+// V unwraps the EpochT, returning an int64.
+func (e EpochT) V() int64 {
+	return e.int64
+}
+
+// LAIT (read: lease applied index type) is a wrapper similar to EpochT.
+type LAIT struct {
+	int64
+}
+
+// V unwraps the MLAIT, returning an int64.
+func (l LAIT) V() int64 {
+	return l.int64
+}
+
+// LAI wraps a lease applied index as a LAIT.
+func LAI(lai int64) LAIT {
+	return LAIT{lai}
+}
+
+// Provider is the central coordinator in the closed timestamp subsystem and the
+// gatekeeper for the closed timestamp state for both local and remote nodes.
+//
+// For the local node, a Provider periodically closes out new timestamp updates
+// and relays them to subscribers (corresponding to remote nodes). Entries
+// received from remote nodes are similarly collected and managed. Both source
+// of information are combined and callers can check if they they CanServe()
+// follower reads.
+type Provider interface {
+	Producer
+	Notifyee
+	Start()
+	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, EpochT, LAIT) bool
+}
+
+// A PeerRegistry is the client component of the follower reads subsystem. It
+// contacts other nodes and requests a continuous stream of closed timestamp
+// updates which it relays to the Provider.
+type PeerRegistry interface {
+	// Request asks the peer node to produce an update for the supplied RangeID.
+	Request(roachpb.NodeID, roachpb.RangeID)
+	// EnsureClient makes sure that the supplied node is contacted.
+	EnsureClient(roachpb.NodeID)
+}
+
+// CloseFn is periodically called by Producers to close out new timestamps.
+// Outside of tests, it corresponds to (*Tracker).Close.
+type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64)
+
+// LiveClockFn supplies a current HLC timestamp from the local node with the
+// extra constraints that the local node is live for the returned timestamp at
+// the given epoch.
+type LiveClockFn func() (liveNow hlc.Timestamp, liveEpoch int64, _ error)
+
+// RefreshFn is called by the Producer when it is asked to manually create (and
+// emit) an update for a number of its replicas. The closed timestamp subsystem
+// intentionally knows as little about the outside world as possible, and this
+// function, injected from the outside, provides the minimal glue. Its job is
+// to register a proposal for the current lease applied indexes of the replicas
+// with the Tracker, so that updates for them are emitted soon thereafter.
+type RefreshFn func(...roachpb.RangeID)
+
+// A Dialer opens closed timestamp connections to receive updates from remote
+// nodes.
+type Dialer interface {
+	Dial(context.Context, roachpb.NodeID) (ctpb.Client, error)
+	Ready(roachpb.NodeID) bool // if false, Dial is likely to fail
+}
