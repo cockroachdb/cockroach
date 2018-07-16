@@ -18,27 +18,6 @@ eexpect "\n> select 1;\r\n"
 eexpect root@
 end_test
 
-start_test "Check prompt update statements are disabled when smart_prompt is not set"
-send "\r"
-eexpect "> SHOW TRANSACTION STATUS"
-eexpect root@
-send "\\unset smart_prompt\r"
-send "set application_name=test;\r"
-eexpect "> set application_name=test;"
-eexpect "SET"
-expect {
-    "SHOW" {
-	report "unexpected SHOW"
-	exit 1
-    }
-    root@ {}
-}
-
-# reset settings for later tests
-send "\\unset echo\r"
-send "\\set smart_prompt\r"
-end_test
-
 start_test "Check database prompt."
 send "CREATE DATABASE IF NOT EXISTS testdb;\r"
 eexpect "\nCREATE DATABASE\r\n"

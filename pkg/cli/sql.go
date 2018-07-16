@@ -53,6 +53,8 @@ const (
 `
 )
 
+const defaultPromptPattern = "%n@%M/%?%x>"
+
 // sqlShellCmd opens a sql shell.
 var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
@@ -240,8 +242,9 @@ var options = map[string]struct {
 	validDuringMultilineEntry bool
 	set                       func(c *cliState, val string) error
 	reset                     func(c *cliState) error
-	// display method is used to retrieve the current value
-	display func(c *cliState) string
+	// display is used to retrieve the current value.
+	display   func(c *cliState) string
+	nextState cliStateEnum
 }{
 	`display_format`: {
 		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
@@ -259,6 +262,7 @@ var options = map[string]struct {
 			return nil
 		},
 		func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
+		0,
 	},
 	`echo`: {
 		"show SQL queries before they are sent to the server",
@@ -267,6 +271,7 @@ var options = map[string]struct {
 		func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
 		func(_ *cliState) error { sqlCtx.echo = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
+		0,
 	},
 	`errexit`: {
 		"exit the shell upon a query error",
@@ -275,6 +280,7 @@ var options = map[string]struct {
 		func(c *cliState, _ string) error { c.errExit = true; return nil },
 		func(c *cliState) error { c.errExit = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.errExit) },
+		0,
 	},
 	`check_syntax`: {
 		"check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
@@ -283,6 +289,7 @@ var options = map[string]struct {
 		func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
 		func(c *cliState) error { c.checkSyntax = false; return nil },
 		func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
+		0,
 	},
 	`show_times`: {
 		"display the execution time after each query",
@@ -291,9 +298,10 @@ var options = map[string]struct {
 		func(_ *cliState, _ string) error { cliCtx.showTimes = true; return nil },
 		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
+		0,
 	},
 	`prompt1`: {
-		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
+		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %? database, %x txn status)",
 		false,
 		true,
 		func(c *cliState, val string) error {
@@ -301,10 +309,11 @@ var options = map[string]struct {
 			return nil
 		},
 		func(c *cliState) error {
-			c.customPromptPattern = "%n@%M/%/>"
+			c.customPromptPattern = defaultPromptPattern
 			return nil
 		},
-		func(c *cliState) string { return c.customPromptPattern /*current value of customPromptPattern*/ },
+		func(c *cliState) string { return c.customPromptPattern },
+		cliRefreshPrompts,
 	},
 }
 
@@ -379,6 +388,11 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		fmt.Fprintf(stderr, "\\set %s: %v\n", strings.Join(args, " "), err)
 		return errState
 	}
+
+	if opt.nextState != 0 {
+		return opt.nextState
+	}
+
 	return nextState
 }
 
@@ -397,6 +411,9 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	if err := opt.reset(c); err != nil {
 		fmt.Fprintf(stderr, "\\unset %s: %v\n", args[0], err)
 		return errState
+	}
+	if opt.nextState != 0 {
+		return opt.nextState
 	}
 	return nextState
 }
@@ -517,8 +534,8 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
-// regexpattern : available keys compile with regex expression one time
-var regexpattern = regexp.MustCompile("%(.)")
+// rePromptFmt: available keys compile with regex expression one time.
+var rePromptFmt = regexp.MustCompile("%(.)")
 
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
@@ -527,47 +544,53 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	c.fullPrompt = c.conn.url
-	parsedURL, err := url.Parse(c.fullPrompt)
+	parsedURL, err := url.Parse(c.conn.url)
 	if err != nil {
 		// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
 		// is the important part.
-		c.fullPrompt += "> "
+		c.fullPrompt = c.conn.url + "> "
 		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		return nextState
 	}
 
-	c.fullPrompt = regexpattern.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
+	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
 		switch m {
 		case "%M":
-			return parsedURL.Host // full host name
+			return parsedURL.Host // full host name.
 		case "%m":
-			return parsedURL.Hostname() // host name
+			return parsedURL.Hostname() // host name.
 		case "%>":
-			return parsedURL.Port() // port
+			return parsedURL.Port() // port.
 		case "%n":
-			if parsedURL.User != nil { // user name
-				return parsedURL.User.Username()
+			userName := ""
+			if parsedURL.User != nil { // user name.
+				userName = parsedURL.User.Username()
 			}
-		case "%/":
-			dbName, hasDbName := c.refreshDatabaseName() // database name
+			return userName
+		case "%?":
+			dbName, hasDbName := c.refreshDatabaseName() // database name.
 			if hasDbName {
 				return dbName
 			}
-		case "%x": // txn status
+		case "%x": // txn status.
 			c.refreshTransactionStatus()
 			return c.lastKnownTxnStatus
 		case "%%":
 			return "%"
+			// default:
+			// 	err = fmt.Errorf("unrecognized format code in prompt: %q", m)
+			// 	return err.Error()
 		}
+
 		return m
 	})
 
 	c.fullPrompt += " "
-	if len(c.fullPrompt) == 2 {
+
+	if len(c.fullPrompt) < 3 {
 		c.continuePrompt = "> "
 	} else {
-		// continued statement prompt is: "        -> "
+		// continued statement prompt is: "        -> ".
 		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 	}
 
@@ -702,8 +725,8 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		// memory when e.g. piping a large SQL script through the
 		// command-line client.
 
-		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>"
-		c.customPromptPattern = "%n@%M/%/>"
+		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
+		c.customPromptPattern = defaultPromptPattern
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
@@ -1162,7 +1185,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			state = c.doProcessFirstLine(cliRefreshPrompts, cliHandleCliCmd)
 
 		case cliHandleCliCmd:
-			state = c.doHandleCliCmd(cliRefreshPrompts, cliPrepareStatementLine)
+			state = c.doHandleCliCmd(cliReadLine, cliPrepareStatementLine)
 
 		case cliPrepareStatementLine:
 			state = c.doPrepareStatementLine(
