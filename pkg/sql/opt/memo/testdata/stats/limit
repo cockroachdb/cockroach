@@ -106,7 +106,7 @@ limit
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1]
                 │    ├── key: ()
-                │    └── tuple [type=tuple{}]
+                │    └── tuple [type=tuple]
                 └── projections
                      └── const: 5 [type=int]
 

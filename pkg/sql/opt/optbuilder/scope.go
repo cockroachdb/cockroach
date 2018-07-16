@@ -241,9 +241,19 @@ func (s *scope) hasColumn(id opt.ColumnID) bool {
 	return false
 }
 
-// colSet returns a ColSet of all the columns in this scope, including
-// orderByCols.
+// colSet returns a ColSet of all the columns in this scope,
+// excluding orderByCols.
 func (s *scope) colSet() opt.ColSet {
+	var colSet opt.ColSet
+	for i := range s.cols {
+		colSet.Add(int(s.cols[i].id))
+	}
+	return colSet
+}
+
+// colSetWithOrderBy returns a ColSet of all the columns in this scope,
+// including orderByCols.
+func (s *scope) colSetWithOrderBy() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range s.cols {
 		colSet.Add(int(s.cols[i].id))
@@ -256,8 +266,28 @@ func (s *scope) colSet() opt.ColSet {
 
 // hasSameColumns returns true if this scope has the same columns
 // as the other scope.
+//
+// NOTE: This function is currently only called by
+// Builder.constructProjectForScope, which uses it to determine whether or not
+// to construct a projection. Since the projection includes all the order by
+// columns, this check is sufficient to determine whether or not the projection
+// is necessary. Be careful if using this function for another purpose.
 func (s *scope) hasSameColumns(other *scope) bool {
-	return s.colSet().Equals(other.colSet())
+	return s.colSetWithOrderBy().Equals(other.colSetWithOrderBy())
+}
+
+// hasExtraOrderByCols returns true if there are some ORDER BY columns in
+// s.orderByCols that are not included in s.cols.
+func (s *scope) hasExtraOrderByCols() bool {
+	if len(s.orderByCols) > 0 {
+		cols := s.colSet()
+		for _, c := range s.orderByCols {
+			if !cols.Contains(int(c.id)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // removeHiddenCols removes hidden columns from the scope.
@@ -724,6 +754,14 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 				"subquery must return %d columns, found %d", desiredColumns, n)})
 		}
+	}
+
+	if outScope.hasExtraOrderByCols() {
+		// We need to add a projection to remove the ORDER BY columns.
+		projScope := outScope.push()
+		projScope.appendColumns(outScope)
+		projScope.group = s.builder.constructProject(outScope.group, projScope.cols)
+		outScope = projScope
 	}
 
 	return &subquery{

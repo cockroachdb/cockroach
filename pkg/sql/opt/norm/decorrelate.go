@@ -358,7 +358,9 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right memo.GroupID)
 // columns.
 func (c *CustomFuncs) constructNoColsRow() memo.GroupID {
 	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	lb.AddItem(c.f.ConstructTuple(c.f.InternList(nil)))
+	lb.AddItem(c.f.ConstructTuple(
+		c.f.InternList(nil), c.f.InternType(memo.EmptyTupleType),
+	))
 	return c.f.ConstructValues(lb.BuildList(), c.f.InternColList(opt.ColList{}))
 }
 

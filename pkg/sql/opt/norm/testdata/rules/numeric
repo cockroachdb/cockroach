@@ -145,7 +145,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: -1 [type=int]
 
@@ -160,7 +160,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: -1.0 [type=float]
 
@@ -182,7 +182,7 @@ project
  │    ├── stats: [rows=1]
  │    ├── cost: 0.01
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
@@ -203,7 +203,7 @@ project
  │    ├── stats: [rows=1]
  │    ├── cost: 0.01
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: -1 [type=decimal]
 
@@ -223,7 +223,7 @@ project
  │    ├── stats: [rows=1]
  │    ├── cost: 0.01
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: '1d' [type=interval]
 
@@ -240,6 +240,6 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: '-9223372036854775808d' [type=interval]

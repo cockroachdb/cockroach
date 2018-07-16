@@ -45,7 +45,7 @@ project
       │    ├── project
       │    │    ├── columns: x:1(int!null)
       │    │    ├── values
-      │    │    │    └── tuple [type=tuple{}]
+      │    │    │    └── tuple [type=tuple]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
       │    ├── scan onecolumn
@@ -3074,7 +3074,7 @@ project
       ├── project
       │    ├── columns: k:5(int!null)
       │    ├── values
-      │    │    └── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple]
       │    └── projections
       │         └── const: 1 [type=int]
       └── true [type=bool]
@@ -3089,13 +3089,13 @@ select
  │    ├── project
  │    │    ├── columns: k:1(int!null)
  │    │    ├── values
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── projections
  │    │         └── const: 1 [type=int]
  │    ├── project
  │    │    ├── columns: k:2(int!null)
  │    │    ├── values
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── projections
  │    │         └── const: 2 [type=int]
  │    └── true [type=bool]

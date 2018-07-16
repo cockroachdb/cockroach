@@ -288,7 +288,7 @@ func (b *Builder) buildScalarHelper(
 		for i := range t.D {
 			list[i] = b.buildScalarHelper(t.D[i], "", inScope, nil)
 		}
-		out = b.factory.ConstructTuple(b.factory.InternList(list))
+		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
 
 	case *tree.FuncExpr:
 		return b.buildFunction(t, label, inScope, outScope)
@@ -339,7 +339,7 @@ func (b *Builder) buildScalarHelper(
 		for i := range t.Exprs {
 			list[i] = b.buildScalarHelper(t.Exprs[i].(tree.TypedExpr), "", inScope, nil)
 		}
-		out = b.factory.ConstructTuple(b.factory.InternList(list))
+		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
 
 	case *tree.UnaryExpr:
 		out = b.buildScalarHelper(t.TypedInnerExpr(), "", inScope, nil)

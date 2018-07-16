@@ -8,7 +8,7 @@ SELECT (SELECT 1 a) AS r
 project
  ├── columns: r:2(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -16,7 +16,7 @@ project
                 └── project
                      ├── columns: a:1(int!null)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── const: 1 [type=int]
 
@@ -26,13 +26,13 @@ SELECT 1 IN (SELECT 1 a) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: a:1(int!null)
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── const: 1 [type=int]
@@ -43,13 +43,13 @@ SELECT 1 IN ((((SELECT 1 a)))) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: a:1(int!null)
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── const: 1 [type=int]
@@ -65,7 +65,7 @@ SELECT 1 + (SELECT 1 a) AS r
 project
  ├── columns: r:2(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── plus [type=int]
            ├── const: 1 [type=int]
@@ -75,7 +75,7 @@ project
                      └── project
                           ├── columns: a:1(int!null)
                           ├── values
-                          │    └── tuple [type=tuple{}]
+                          │    └── tuple [type=tuple]
                           └── projections
                                └── const: 1 [type=int]
 
@@ -90,7 +90,7 @@ SELECT (1, 2, 3) IN (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -98,13 +98,13 @@ project
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
            │    │    ├── values
-           │    │    │    └── tuple [type=tuple{}]
+           │    │    │    └── tuple [type=tuple]
            │    │    └── projections
            │    │         ├── const: 1 [type=int]
            │    │         ├── const: 2 [type=int]
            │    │         └── const: 3 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b, int AS c}]
            │              ├── variable: a [type=int]
            │              ├── variable: b [type=int]
            │              └── variable: c [type=int]
@@ -119,7 +119,7 @@ SELECT (1, 2, 3) = (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── eq [type=bool]
            ├── tuple [type=tuple{int, int, int}]
@@ -134,13 +134,13 @@ project
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
-                          │    │    └── tuple [type=tuple{}]
+                          │    │    └── tuple [type=tuple]
                           │    └── projections
                           │         ├── const: 1 [type=int]
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -151,7 +151,7 @@ SELECT (1, 2, 3) != (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── ne [type=bool]
            ├── tuple [type=tuple{int, int, int}]
@@ -166,13 +166,13 @@ project
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
-                          │    │    └── tuple [type=tuple{}]
+                          │    │    └── tuple [type=tuple]
                           │    └── projections
                           │         ├── const: 1 [type=int]
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -183,7 +183,7 @@ SELECT (SELECT 1 AS x, 2 AS y, 3 AS z) = (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
 project
  ├── columns: r:9(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── eq [type=bool]
            ├── subquery [type=tuple{int AS x, int AS y, int AS z}]
@@ -194,13 +194,13 @@ project
            │              ├── project
            │              │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
            │              │    ├── values
-           │              │    │    └── tuple [type=tuple{}]
+           │              │    │    └── tuple [type=tuple]
            │              │    └── projections
            │              │         ├── const: 1 [type=int]
            │              │         ├── const: 2 [type=int]
            │              │         └── const: 3 [type=int]
            │              └── projections
-           │                   └── tuple [type=tuple{int, int, int}]
+           │                   └── tuple [type=tuple{int AS x, int AS y, int AS z}]
            │                        ├── variable: x [type=int]
            │                        ├── variable: y [type=int]
            │                        └── variable: z [type=int]
@@ -212,13 +212,13 @@ project
                           ├── project
                           │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
                           │    ├── values
-                          │    │    └── tuple [type=tuple{}]
+                          │    │    └── tuple [type=tuple]
                           │    └── projections
                           │         ├── const: 1 [type=int]
                           │         ├── const: 2 [type=int]
                           │         └── const: 3 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b, int AS c}]
                                     ├── variable: a [type=int]
                                     ├── variable: b [type=int]
                                     └── variable: c [type=int]
@@ -229,13 +229,13 @@ SELECT (SELECT 1 x) IN (SELECT 1 y) AS z
 project
  ├── columns: z:3(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: y:1(int!null)
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── subquery [type=int]
@@ -244,7 +244,7 @@ project
                      └── project
                           ├── columns: x:2(int!null)
                           ├── values
-                          │    └── tuple [type=tuple{}]
+                          │    └── tuple [type=tuple]
                           └── projections
                                └── const: 1 [type=int]
 
@@ -254,7 +254,7 @@ SELECT (SELECT 1 a) IN (1) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── in [type=bool]
            ├── subquery [type=int]
@@ -263,7 +263,7 @@ project
            │         └── project
            │              ├── columns: a:1(int!null)
            │              ├── values
-           │              │    └── tuple [type=tuple{}]
+           │              │    └── tuple [type=tuple]
            │              └── projections
            │                   └── const: 1 [type=int]
            └── tuple [type=tuple{int}]
@@ -285,7 +285,7 @@ SELECT (SELECT 1 AS a, 2 AS b) IN (SELECT 1 AS c, 2 AS d) AS r
 project
  ├── columns: r:7(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -293,12 +293,12 @@ project
            │    ├── project
            │    │    ├── columns: c:1(int!null) d:2(int!null)
            │    │    ├── values
-           │    │    │    └── tuple [type=tuple{}]
+           │    │    │    └── tuple [type=tuple]
            │    │    └── projections
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS c, int AS d}]
            │              ├── variable: c [type=int]
            │              └── variable: d [type=int]
            └── subquery [type=tuple{int AS a, int AS b}]
@@ -309,12 +309,12 @@ project
                           ├── project
                           │    ├── columns: a:3(int!null) b:4(int!null)
                           │    ├── values
-                          │    │    └── tuple [type=tuple{}]
+                          │    │    └── tuple [type=tuple]
                           │    └── projections
                           │         ├── const: 1 [type=int]
                           │         └── const: 2 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b}]
                                     ├── variable: a [type=int]
                                     └── variable: b [type=int]
 
@@ -328,7 +328,7 @@ SELECT (SELECT 1 AS a, 2 AS b) IN ((1, 2)) AS r
 project
  ├── columns: r:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── in [type=bool]
            ├── subquery [type=tuple{int AS a, int AS b}]
@@ -339,15 +339,15 @@ project
            │              ├── project
            │              │    ├── columns: a:1(int!null) b:2(int!null)
            │              │    ├── values
-           │              │    │    └── tuple [type=tuple{}]
+           │              │    │    └── tuple [type=tuple]
            │              │    └── projections
            │              │         ├── const: 1 [type=int]
            │              │         └── const: 2 [type=int]
            │              └── projections
-           │                   └── tuple [type=tuple{int, int}]
+           │                   └── tuple [type=tuple{int AS a, int AS b}]
            │                        ├── variable: a [type=int]
            │                        └── variable: b [type=int]
-           └── tuple [type=tuple{tuple{int, int}}]
+           └── tuple [type=tuple{tuple{int AS a, int AS b}}]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
                      └── const: 2 [type=int]
@@ -362,7 +362,7 @@ SELECT (SELECT (1, 2) AS a) IN (SELECT 1 AS b, 2 AS c) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -370,12 +370,12 @@ project
            │    ├── project
            │    │    ├── columns: b:1(int!null) c:2(int!null)
            │    │    ├── values
-           │    │    │    └── tuple [type=tuple{}]
+           │    │    │    └── tuple [type=tuple]
            │    │    └── projections
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS b, int AS c}]
            │              ├── variable: b [type=int]
            │              └── variable: c [type=int]
            └── subquery [type=tuple{int, int}]
@@ -384,7 +384,7 @@ project
                      └── project
                           ├── columns: a:3(tuple{int, int})
                           ├── values
-                          │    └── tuple [type=tuple{}]
+                          │    └── tuple [type=tuple]
                           └── projections
                                └── tuple [type=tuple{int, int}]
                                     ├── const: 1 [type=int]
@@ -396,7 +396,7 @@ SELECT (SELECT (1, 2) a) IN ((1, 2)) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── in [type=bool]
            ├── subquery [type=tuple{int, int}]
@@ -405,7 +405,7 @@ project
            │         └── project
            │              ├── columns: a:1(tuple{int, int})
            │              ├── values
-           │              │    └── tuple [type=tuple{}]
+           │              │    └── tuple [type=tuple]
            │              └── projections
            │                   └── tuple [type=tuple{int, int}]
            │                        ├── const: 1 [type=int]
@@ -425,13 +425,13 @@ SELECT (SELECT 1 AS a, 2 AS b) IN (SELECT (1, 2) AS c) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: c:1(tuple{int, int})
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
            │              ├── const: 1 [type=int]
@@ -444,12 +444,12 @@ project
                           ├── project
                           │    ├── columns: a:2(int!null) b:3(int!null)
                           │    ├── values
-                          │    │    └── tuple [type=tuple{}]
+                          │    │    └── tuple [type=tuple]
                           │    └── projections
                           │         ├── const: 1 [type=int]
                           │         └── const: 2 [type=int]
                           └── projections
-                               └── tuple [type=tuple{int, int}]
+                               └── tuple [type=tuple{int AS a, int AS b}]
                                     ├── variable: a [type=int]
                                     └── variable: b [type=int]
 
@@ -459,13 +459,13 @@ SELECT (SELECT (1, 2) a) IN (SELECT (1, 2) b) AS r
 project
  ├── columns: r:3(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: b:1(tuple{int, int})
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
            │              ├── const: 1 [type=int]
@@ -476,7 +476,7 @@ project
                      └── project
                           ├── columns: a:2(tuple{int, int})
                           ├── values
-                          │    └── tuple [type=tuple{}]
+                          │    └── tuple [type=tuple]
                           └── projections
                                └── tuple [type=tuple{int, int}]
                                     ├── const: 1 [type=int]
@@ -488,13 +488,13 @@ SELECT 1 = ANY(SELECT 1 a) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: a:1(int!null)
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── const: 1 [type=int]
@@ -505,7 +505,7 @@ SELECT (1, 2) = ANY(SELECT 1 AS a, 2 AS b) AS r
 project
  ├── columns: r:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -513,12 +513,12 @@ project
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
-           │    │    │    └── tuple [type=tuple{}]
+           │    │    │    └── tuple [type=tuple]
            │    │    └── projections
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: a [type=int]
            │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -531,13 +531,13 @@ SELECT 1 = SOME(SELECT 1 a) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: a:1(int!null)
            │    ├── values
-           │    │    └── tuple [type=tuple{}]
+           │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── const: 1 [type=int]
@@ -548,7 +548,7 @@ SELECT (1, 2) = SOME(SELECT 1 AS a, 2 AS b) AS r
 project
  ├── columns: r:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -556,12 +556,12 @@ project
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
-           │    │    │    └── tuple [type=tuple{}]
+           │    │    │    └── tuple [type=tuple]
            │    │    └── projections
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: a [type=int]
            │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -574,14 +574,14 @@ SELECT 1 = ALL(SELECT 1 a) AS r
 project
  ├── columns: r:2(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── not [type=bool]
            └── any: ne [type=bool]
                 ├── project
                 │    ├── columns: a:1(int!null)
                 │    ├── values
-                │    │    └── tuple [type=tuple{}]
+                │    │    └── tuple [type=tuple]
                 │    └── projections
                 │         └── const: 1 [type=int]
                 └── const: 1 [type=int]
@@ -592,7 +592,7 @@ SELECT (1, 2) = ALL(SELECT 1 AS a, 2 AS b) AS r
 project
  ├── columns: r:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── not [type=bool]
            └── any: ne [type=bool]
@@ -601,12 +601,12 @@ project
                 │    ├── project
                 │    │    ├── columns: a:1(int!null) b:2(int!null)
                 │    │    ├── values
-                │    │    │    └── tuple [type=tuple{}]
+                │    │    │    └── tuple [type=tuple]
                 │    │    └── projections
                 │    │         ├── const: 1 [type=int]
                 │    │         └── const: 2 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int, int}]
+                │         └── tuple [type=tuple{int AS a, int AS b}]
                 │              ├── variable: a [type=int]
                 │              └── variable: b [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -649,7 +649,7 @@ SELECT (1, 2) IN (SELECT a, b FROM abc) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -659,7 +659,7 @@ project
            │    │    └── scan abc
            │    │         └── columns: a:1(int!null) b:2(int) c:3(int)
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: abc.a [type=int]
            │              └── variable: abc.b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -672,7 +672,7 @@ SELECT (1, 2) IN (SELECT a, b FROM abc WHERE false) AS r
 project
  ├── columns: r:5(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -686,7 +686,7 @@ project
            │    │         └── filters [type=bool]
            │    │              └── false [type=bool]
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS a, int AS b}]
            │              ├── variable: abc.a [type=int]
            │              └── variable: abc.b [type=int]
            └── tuple [type=tuple{int, int}]
@@ -704,7 +704,7 @@ SELECT (SELECT a FROM abc)
 project
  ├── columns: a:4(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -720,7 +720,7 @@ SELECT EXISTS (SELECT a FROM abc)
 project
  ├── columns: exists:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── exists [type=bool]
            └── project
@@ -734,7 +734,7 @@ SELECT (SELECT a FROM abc WHERE false)
 project
  ├── columns: a:4(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -775,7 +775,7 @@ values
                 └── project
                      ├── columns: a:1(int!null)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── const: 2 [type=int]
 
@@ -813,7 +813,7 @@ SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC) AS r
 project
  ├── columns: r:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── any: eq [type=bool]
            ├── project
@@ -916,7 +916,7 @@ SELECT EXISTS(SELECT 1 r FROM kv AS x WHERE x.k = 1)
 project
  ├── columns: exists:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── exists [type=bool]
            └── project
@@ -938,7 +938,7 @@ SELECT EXISTS(SELECT 1 r FROM kv WHERE k = 2)
 project
  ├── columns: exists:4(bool)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── exists [type=bool]
            └── project
@@ -1356,7 +1356,7 @@ SELECT (SELECT 1 a), (SELECT 2 b)
 project
  ├── columns: a:2(int) b:4(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── subquery [type=int]
       │    └── max1-row
@@ -1364,7 +1364,7 @@ project
       │         └── project
       │              ├── columns: a:1(int!null)
       │              ├── values
-      │              │    └── tuple [type=tuple{}]
+      │              │    └── tuple [type=tuple]
       │              └── projections
       │                   └── const: 1 [type=int]
       └── subquery [type=int]
@@ -1373,7 +1373,7 @@ project
                 └── project
                      ├── columns: b:3(int!null)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── const: 2 [type=int]
 
@@ -1384,7 +1384,7 @@ SELECT (SELECT 1 a), (SELECT a FROM abc), (SELECT 1 a), (SELECT a FROM abc)
 project
  ├── columns: a:2(int) a:6(int) a:2(int) a:6(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── subquery [type=int]
       │    └── max1-row
@@ -1392,7 +1392,7 @@ project
       │         └── project
       │              ├── columns: a:1(int!null)
       │              ├── values
-      │              │    └── tuple [type=tuple{}]
+      │              │    └── tuple [type=tuple]
       │              └── projections
       │                   └── const: 1 [type=int]
       └── subquery [type=int]
@@ -1410,7 +1410,7 @@ SELECT (SELECT (SELECT 1 AS x) AS  a) AS r, (SELECT (SELECT 1 AS x) AS a) AS s, 
 project
  ├── columns: r:3(int) s:3(int) t:7(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── subquery [type=int]
       │    └── max1-row
@@ -1418,7 +1418,7 @@ project
       │         └── project
       │              ├── columns: a:2(int)
       │              ├── values
-      │              │    └── tuple [type=tuple{}]
+      │              │    └── tuple [type=tuple]
       │              └── projections
       │                   └── subquery [type=int]
       │                        └── max1-row
@@ -1426,7 +1426,7 @@ project
       │                             └── project
       │                                  ├── columns: x:1(int!null)
       │                                  ├── values
-      │                                  │    └── tuple [type=tuple{}]
+      │                                  │    └── tuple [type=tuple]
       │                                  └── projections
       │                                       └── const: 1 [type=int]
       └── subquery [type=int]
@@ -1435,7 +1435,7 @@ project
                 └── project
                      ├── columns: x:6(int!null)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── const: 1 [type=int]
 
@@ -1454,7 +1454,7 @@ project
                 └── project
                      ├── columns: k:3(int)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── variable: kv.k [type=int]
 
@@ -1486,7 +1486,7 @@ project
                 └── project
                      ├── columns: k:5(int)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── variable: t.public.kv.k [type=int]
 
@@ -1521,7 +1521,7 @@ project
                 └── project
                      ├── columns: k:5(int)
                      ├── values
-                     │    └── tuple [type=tuple{}]
+                     │    └── tuple [type=tuple]
                      └── projections
                           └── variable: db1.public.kv.k [type=int]
 
@@ -1566,7 +1566,7 @@ project
                                     └── project
                                          ├── columns: r:5(int)
                                          ├── values
-                                         │    └── tuple [type=tuple{}]
+                                         │    └── tuple [type=tuple]
                                          └── projections
                                               └── plus [type=int]
                                                    ├── variable: t.public.kv.k [type=int]
@@ -1578,13 +1578,15 @@ SELECT (SELECT k FROM kv ORDER BY v)
 project
  ├── columns: k:3(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: kv.k:1(int!null) v:2(string)
-                └── scan kv
-                     └── columns: kv.k:1(int!null) v:2(string)
+                ├── columns: kv.k:1(int!null)
+                └── project
+                     ├── columns: kv.k:1(int!null)
+                     └── scan kv
+                          └── columns: kv.k:1(int!null) v:2(string)
 
 exec-ddl
 CREATE TABLE t1 (a INT)
@@ -1810,7 +1812,7 @@ project
                      │              ├── variable: a [type=int]
                      │              └── const: 5 [type=int]
                      └── projections
-                          └── array: int[] [type=int[]]
+                          └── array: [type=int[]]
                                ├── variable: column6 [type=int]
                                ├── variable: t1.a [type=int]
                                └── variable: a [type=int]
@@ -1855,3 +1857,51 @@ project
                                               └── div [type=decimal]
                                                    ├── variable: column9 [type=int]
                                                    └── variable: column10 [type=int]
+
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+# Regression test for #27330. Ensure that the subquery only returns one column
+# and is correctly typed.
+build
+SELECT *
+FROM a
+WHERE 'bar'=(SELECT max(s) FROM a GROUP BY i ORDER BY i LIMIT 1)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── const: 'bar' [type=string]
+           └── subquery [type=string]
+                └── max1-row
+                     ├── columns: max:11(string)
+                     └── project
+                          ├── columns: max:11(string)
+                          └── limit
+                               ├── columns: a.i:7(int) max:11(string)
+                               ├── sort
+                               │    ├── columns: a.i:7(int) max:11(string)
+                               │    ├── ordering: +7
+                               │    └── group-by
+                               │         ├── columns: a.i:7(int) max:11(string)
+                               │         ├── grouping columns: a.i:7(int)
+                               │         ├── project
+                               │         │    ├── columns: a.i:7(int) a.s:9(string)
+                               │         │    └── scan a
+                               │         │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+                               │         └── aggregations
+                               │              └── max [type=string]
+                               │                   └── variable: a.s [type=string]
+                               └── const: 1 [type=int]
