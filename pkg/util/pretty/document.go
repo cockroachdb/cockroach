@@ -50,8 +50,12 @@ func (line) isDoc()      {}
 func (softbreak) isDoc() {}
 func (nilDoc) isDoc()    {}
 func (concat) isDoc()    {}
-func (nest) isDoc()      {}
+func (nestt) isDoc()     {}
+func (nests) isDoc()     {}
 func (union) isDoc()     {}
+func (*scolumn) isDoc()  {}
+func (*snesting) isDoc() {}
+func (pad) isDoc()       {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -61,7 +65,7 @@ func (union) isDoc()     {}
 type nilDoc struct{}
 
 // Nil is the NIL constructor.
-var Nil nilDoc
+var Nil Doc = nilDoc{}
 
 // text represents (TEXT s) :: DOC -- a simple text string.
 type text string
@@ -75,7 +79,7 @@ func Text(s string) Doc {
 type line struct{}
 
 // Line is the LINE constructor.
-var Line line
+var Line Doc = line{}
 
 // softbreak represents SOFTBREAK :: DOC -- an invisible space between
 // words that tries to break the text across lines.
@@ -92,7 +96,7 @@ var Line line
 type softbreak struct{}
 
 // SoftBreak is the softbreak constructor.
-var SoftBreak softbreak
+var SoftBreak Doc = softbreak{}
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
@@ -106,16 +110,29 @@ func Concat(a, b Doc) Doc {
 	return simplifyNil(a, b, func(a, b Doc) Doc { return concat{a, b} })
 }
 
-// nest represents (NEST Int DOC) :: DOC -- nesting a doc "under" another.
-// NEST indents d at effective length n.
-type nest struct {
-	n int
+// nests represents (NESTS Int DOC) :: DOC -- nesting a doc "under" another.
+// NESTS indents d with n spaces.
+// This is more or less exactly the NEST operator in Wadler's printer.
+type nests struct {
+	n int16
 	d Doc
 }
 
-// Nest is the NEST constructor.
-func Nest(n int, d Doc) Doc {
-	return nest{n, d}
+// NestS is the NESTS constructor.
+func NestS(n int16, d Doc) Doc {
+	return nests{n, d}
+}
+
+// nestt represents (NESTT DOC) :: DOC -- nesting a doc "under" another
+// NESTT indents d with a tab character.
+// This is a variant of the NEST operator in Wadler's printer.
+type nestt struct {
+	d Doc
+}
+
+// NestT is the NESTT constructor.
+func NestT(d Doc) Doc {
+	return nestt{d}
 }
 
 // union represents (DOC <|> DOC) :: DOC -- the union of two docs.
@@ -145,8 +162,10 @@ func flatten(d Doc) Doc {
 		return Nil
 	case concat:
 		return Concat(flatten(t.a), flatten(t.b))
-	case nest:
-		return Nest(t.n, flatten(t.d))
+	case nestt:
+		return NestT(flatten(t.d))
+	case nests:
+		return NestS(t.n, flatten(t.d))
 	case text:
 		return d
 	case line:
@@ -155,7 +174,76 @@ func flatten(d Doc) Doc {
 		return Nil
 	case union:
 		return flatten(t.x)
+	case *scolumn:
+		return &scolumn{f: func(c int16) Doc { return flatten(t.f(c)) }}
+	case *snesting:
+		return &snesting{f: func(i int16) Doc { return flatten(t.f(i)) }}
+	case pad:
+		return Nil
 	default:
 		panic(fmt.Errorf("unknown type: %T", d))
 	}
+}
+
+// scolumn is a special document which is replaced during rendering by
+// another document depending on the current relative column on the
+// rendering line (tab prefix excluded).
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code. See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type scolumn struct {
+	f func(int16) Doc
+}
+
+// snesting is a special document which is replaced during rendering
+// by another document depending on the current space-based nesting
+// level (the one added by NestS).
+//
+// It is an extension to the Wadler printer commonly found in
+// derivative code.  See e.g. use by Daniel Mendler in
+// https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
+//
+// This type is not exposed, see the Align() operator below instead.
+type snesting struct {
+	f func(int16) Doc
+}
+
+// Align renders document d with the space-based nesting level set to
+// the current column.
+func Align(d Doc) Doc {
+	return &scolumn{
+		f: func(k int16) Doc {
+			return &snesting{
+				f: func(i int16) Doc {
+					return nests{k - i, d}
+				},
+			}
+		},
+	}
+}
+
+// pad is a special document which is replaced during rendering by
+// the specified amount of whitespace. However it is flattened
+// to an empty document during grouping.
+//
+// This is an extension to Wadler's printer first prototyped in
+// https://github.com/knz/prettier.
+//
+// Note that this special document must be handled especially
+// carefully with anything that produces a union (<|>) (e.g. Group),
+// so as to preserve the invariant of unions: "no first line of a
+// document in x is shorter than some first line of a document in y;
+// or, equivalently, every first line in x is at least as long as
+// every first line in y".
+//
+// The operator RLTable, defined in util.go, is properly careful about
+// this.
+//
+// This document type is not exposed publicly because of the risk
+// described above.
+type pad struct {
+	n int16
 }

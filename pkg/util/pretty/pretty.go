@@ -29,7 +29,7 @@ import (
 // selection.
 type docBest struct {
 	tag docBestType
-	i   int
+	i   docPos
 	s   string
 	d   *docBest
 }
@@ -39,25 +39,27 @@ type docBestType int
 const (
 	textB docBestType = iota
 	lineB
+	spacesB
 )
 
 // Pretty returns a pretty-printed string for the Doc d at line length
 // n and tab width t.
 func Pretty(d Doc, n int, useTabs bool, tabWidth int) string {
 	var sb strings.Builder
-	b := best(n, d)
-	layout(&sb, useTabs, tabWidth, b)
+	b := beExec{
+		w:        int16(n),
+		tabWidth: int16(tabWidth),
+		memoBe:   make(map[beArgs]*docBest),
+		memoiDoc: make(map[iDoc]*iDoc),
+	}
+	ldoc := b.best(d)
+	b.layout(&sb, useTabs, ldoc)
 	return sb.String()
 }
 
 // w is the max line width.
-func best(w int, x Doc) *docBest {
-	b := beExec{
-		w:        w,
-		memoBe:   make(map[beArgs]*docBest),
-		memoiDoc: make(map[iDoc]*iDoc),
-	}
-	return b.be(0, &iDoc{0, x, nil})
+func (b *beExec) best(x Doc) *docBest {
+	return b.be(docPos{0, 0}, b.iDoc(docPos{0, 0}, x, nil))
 }
 
 // iDoc represents the type [(Int,DOC)] in the paper,
@@ -65,14 +67,21 @@ func best(w int, x Doc) *docBest {
 // We'll use linked lists because this makes the
 // recursion more efficient than slices.
 type iDoc struct {
-	i    int
 	d    Doc
 	next *iDoc
+	i    docPos
+}
+
+type docPos struct {
+	tabs   int16
+	spaces int16
 }
 
 type beExec struct {
 	// w is the available line width.
-	w int
+	w int16
+	// tabWidth is the virtual tab width.
+	tabWidth int16
 
 	// memoBe internalizes the results of the be function, so that the
 	// same value is not computed multiple times.
@@ -91,7 +100,7 @@ type beExec struct {
 	idocAlloc []iDoc
 }
 
-func (b *beExec) be(k int, xlist *iDoc) *docBest {
+func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	// Shortcut: be k [] = Nil
 	if xlist == nil {
 		return nil
@@ -116,13 +125,15 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 		res = b.be(k, z)
 	case concat:
 		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
-	case nest:
-		res = b.be(k, b.iDoc(d.i+t.n, t.d, z))
+	case nests:
+		res = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
+	case nestt:
+		res = b.be(k, b.iDoc(docPos{d.i.tabs + 1 + d.i.spaces/b.tabWidth, 0}, t.d, z))
 	case text:
 		res = b.newDocBest(docBest{
 			tag: textB,
 			s:   string(t),
-			d:   b.be(k+len(t), z),
+			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
 		})
 	case line, softbreak:
 		res = b.newDocBest(docBest{
@@ -131,13 +142,23 @@ func (b *beExec) be(k int, xlist *iDoc) *docBest {
 			d:   b.be(d.i, z),
 		})
 	case union:
-		res = better(b.w, k,
+		res = b.better(k,
 			b.be(k, b.iDoc(d.i, t.x, z)),
 			// We eta-lift the second argument to avoid eager evaluation.
 			func() *docBest {
 				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
+	case *scolumn:
+		res = b.be(k, b.iDoc(d.i, t.f(k.spaces), z))
+	case *snesting:
+		res = b.be(k, b.iDoc(d.i, t.f(d.i.spaces), z))
+	case pad:
+		res = b.newDocBest(docBest{
+			tag: spacesB,
+			i:   docPos{spaces: t.n},
+			d:   b.be(docPos{k.tabs, k.spaces + t.n}, z),
+		})
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
 	}
@@ -167,8 +188,8 @@ func (b *beExec) newDocBest(d docBest) *docBest {
 //
 // The results of this function guarantee that the pointer addresses
 // are equal if the arguments used to construct the value were equal.
-func (b *beExec) iDoc(i int, d Doc, z *iDoc) *iDoc {
-	idoc := iDoc{i, d, z}
+func (b *beExec) iDoc(i docPos, d Doc, z *iDoc) *iDoc {
+	idoc := iDoc{i: i, d: d, next: z}
 	if m, ok := b.memoiDoc[idoc]; ok {
 		return m
 	}
@@ -192,18 +213,19 @@ func (b *beExec) newiDoc(d iDoc) *iDoc {
 }
 
 type beArgs struct {
-	k int
 	d *iDoc
+	k docPos
 }
 
-func better(w, k int, x *docBest, y func() *docBest) *docBest {
-	if fits(w-k, x) {
+func (b *beExec) better(k docPos, x *docBest, y func() *docBest) *docBest {
+	remainder := b.w - k.spaces - k.tabs*b.tabWidth
+	if fits(remainder, x) {
 		return x
 	}
 	return y()
 }
 
-func fits(w int, x *docBest) bool {
+func fits(w int16, x *docBest) bool {
 	if w < 0 {
 		return false
 	}
@@ -213,29 +235,38 @@ func fits(w int, x *docBest) bool {
 	}
 	switch x.tag {
 	case textB:
-		return fits(w-len(x.s), x.d)
+		return fits(w-int16(len(x.s)), x.d)
 	case lineB:
 		return true
+	case spacesB:
+		return fits(w-x.i.spaces, x.d)
 	default:
 		panic(fmt.Errorf("unknown type: %d", x.tag))
 	}
 }
 
-func layout(sb *strings.Builder, useTabs bool, tabWidth int, d *docBest) {
+func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 	for ; d != nil; d = d.d {
 		switch d.tag {
 		case textB:
 			sb.WriteString(d.s)
 		case lineB:
 			sb.WriteByte('\n')
-			// Fill as many blanks with tabs, then the rest with spaces.
-			c := 0
+			// Fill the tabs first.
+			padTabs := d.i.tabs * b.tabWidth
 			if useTabs {
-				for ; c+tabWidth <= d.i; c += tabWidth {
+				for i := int16(0); i < d.i.tabs; i++ {
 					sb.WriteByte('\t')
 				}
+				padTabs = 0
 			}
-			for ; c < d.i; c++ {
+
+			// Fill the remaining spaces.
+			for i := int16(0); i < padTabs+d.i.spaces; i++ {
+				sb.WriteByte(' ')
+			}
+		case spacesB:
+			for i := int16(0); i < d.i.spaces; i++ {
 				sb.WriteByte(' ')
 			}
 		default:

@@ -119,8 +119,9 @@ func initCLIDefaults() {
 	cfg := tree.DefaultPrettyCfg()
 	sqlfmtCtx.len = cfg.LineWidth
 	sqlfmtCtx.useSpaces = !cfg.UseTabs
-	sqlfmtCtx.tabWidth = cfg.IndentWidth
+	sqlfmtCtx.tabWidth = cfg.TabWidth
 	sqlfmtCtx.noSimplify = !cfg.Simplify
+	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
 	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
@@ -249,5 +250,6 @@ var sqlfmtCtx struct {
 	useSpaces  bool
 	tabWidth   int
 	noSimplify bool
+	align      bool
 	execStmts  statementsValue
 }
