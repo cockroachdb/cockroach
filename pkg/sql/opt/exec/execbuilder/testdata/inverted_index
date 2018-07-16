@@ -90,22 +90,40 @@ scan  ·       ·          (a, b)  ·
 ·     filter  b @> '{}'  ·       ·
 
 
-# TODO(justin): support these as well.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
-scan  ·       ·                 (a, b)  ·
-·     table   d@primary         ·       ·
-·     spans   ALL               ·       ·
-·     filter  (b->'a') = '"b"'  ·       ·
+index-join  ·      ·                            (a, b)  ·
+ ├── scan   ·      ·                            (a)     ·
+ │          table  d@foo_inv                    ·       ·
+ │          spans  /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+ └── scan   ·      ·                            (a, b)  ·
+·           table  d@primary                    ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
+----
+index-join  ·      ·                                    (a, b)  ·
+ ├── scan   ·      ·                                    (a)     ·
+ │          table  d@foo_inv                            ·       ·
+ │          spans  /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
+ └── scan   ·      ·                                    (a, b)  ·
+·           table  d@primary                            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
+----
+norows  ·  ·  (a, b)  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
-scan  ·       ·                 (a, b)  ·
-·     table   d@primary         ·       ·
-·     spans   ALL               ·       ·
-·     filter  (b->'a') = '"b"'  ·       ·
+index-join  ·      ·                            (a, b)  ·
+ ├── scan   ·      ·                            (a)     ·
+ │          table  d@foo_inv                    ·       ·
+ │          spans  /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+ └── scan   ·      ·                            (a, b)  ·
+·           table  d@primary                    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
