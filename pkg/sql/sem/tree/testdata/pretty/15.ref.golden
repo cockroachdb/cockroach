@@ -1,0 +1,37 @@
+1:
+-
+SELECT
+	DISTINCT ON (pk1, pk2, x, y)
+	x,
+	y,
+	z
+FROM
+	xyz
+ORDER BY
+	x,
+	y
+
+8:
+--------
+SELECT
+	DISTINCT ON (pk1, pk2, x, y)
+	x,
+	y,
+	z
+FROM
+	xyz
+ORDER BY
+	x, y
+
+40:
+----------------------------------------
+SELECT
+	DISTINCT ON (pk1, pk2, x, y) x, y, z
+FROM
+	xyz
+ORDER BY
+	x, y
+
+66:
+------------------------------------------------------------------
+SELECT DISTINCT ON (pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y

@@ -2398,6 +2398,7 @@ func Example_sqlfmt() {
 	c.RunWithArgs([]string{"sqlfmt", "-e", "delete from t"})
 	c.RunWithArgs([]string{"sqlfmt", "-e", "delete from t", "-e", "update t set a = 1"})
 	c.RunWithArgs([]string{"sqlfmt", "--print-width=10", "-e", "select 1,2,3 from a,b,c;;;select 4"})
+	c.RunWithArgs([]string{"sqlfmt", "--print-width=10", "--align", "-e", "select 1,2,3 from a,b,c;;;select 4"})
 	c.RunWithArgs([]string{"sqlfmt", "--print-width=10", "--tab-width=2", "--use-spaces", "-e", "select 1,2,3 from a,b,c;;;select 4"})
 	c.RunWithArgs([]string{"sqlfmt", "-e", "select (1+2)+3"})
 	c.RunWithArgs([]string{"sqlfmt", "--no-simplify", "-e", "select (1+2)+3"})
@@ -2418,6 +2419,14 @@ func Example_sqlfmt() {
 	// 	a,
 	// 	b,
 	// 	c;
+	// SELECT 4;
+	// sqlfmt --print-width=10 --align -e select 1,2,3 from a,b,c;;;select 4
+	// SELECT 1,
+	//        2,
+	//        3
+	//   FROM a,
+	//        b,
+	//        c;
 	// SELECT 4;
 	// sqlfmt --print-width=10 --tab-width=2 --use-spaces -e select 1,2,3 from a,b,c;;;select 4
 	// SELECT

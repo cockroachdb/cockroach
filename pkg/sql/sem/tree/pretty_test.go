@@ -47,6 +47,21 @@ func TestPrettyData(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := tree.DefaultPrettyCfg()
+	cfg.Align = tree.PrettyNoAlign
+	t.Run("ref", func(t *testing.T) {
+		runTestPrettyData(t, "ref", cfg, matches)
+	})
+	cfg.Align = tree.PrettyAlignAndDeindent
+	t.Run("align-deindent", func(t *testing.T) {
+		runTestPrettyData(t, "align-deindent", cfg, matches)
+	})
+	cfg.Align = tree.PrettyAlignOnly
+	t.Run("align-only", func(t *testing.T) {
+		runTestPrettyData(t, "align-only", cfg, matches)
+	})
+}
+
+func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches []string) {
 	for _, m := range matches {
 		m := m
 		t.Run(filepath.Base(m), func(t *testing.T) {
@@ -95,7 +110,7 @@ func TestPrettyData(t *testing.T) {
 			got := strings.TrimSpace(sb.String()) + "\n"
 
 			ext := filepath.Ext(m)
-			outfile := m[:len(m)-len(ext)] + ".golden"
+			outfile := m[:len(m)-len(ext)] + "." + prefix + ".golden"
 
 			if *flagWritePretty {
 				if err := ioutil.WriteFile(outfile, []byte(got), 0666); err != nil {
