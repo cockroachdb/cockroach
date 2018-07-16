@@ -85,7 +85,7 @@ func (m *memStorage) String() string {
 		for i, entry := range m.mu.buckets {
 			lai, ok := entry.MLAI[rangeID]
 			if ok {
-				row[1+i] = strconv.FormatInt(lai, 10)
+				row[1+i] = strconv.FormatInt(int64(lai), 10)
 			} else {
 				row[1+i] = ""
 			}
@@ -157,7 +157,7 @@ func merge(e, ee ctpb.Entry) ctpb.Entry {
 
 	// Initialize re as a deep copy of e.
 	re := e
-	re.MLAI = map[roachpb.RangeID]int64{}
+	re.MLAI = map[roachpb.RangeID]ctpb.LAI{}
 	for rangeID, mlai := range e.MLAI {
 		re.MLAI[rangeID] = mlai
 	}
