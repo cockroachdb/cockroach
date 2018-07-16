@@ -87,19 +87,6 @@ func (p *planner) Delete(
 		return nil, err
 	}
 
-	// Determine what are the foreign key tables that are involved in the deletion.
-	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx,
-		*desc,
-		sqlbase.CheckDeletes,
-		p.lookupFKTable,
-		p.CheckPrivilege,
-		p.analyzeExpr,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	// rowsNeeded will help determine whether we can use the fast path
 	// in startExec.
 	rowsNeeded := resultsNeeded(n.Returning)
@@ -118,9 +105,66 @@ func (p *planner) Delete(
 		requestedCols = desc.Columns
 	}
 
+	indexes := desc.Indexes
+	for _, m := range desc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			indexes = append(indexes, *index)
+		}
+	}
+
+	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
+	fetchColIDtoRowIndex := sqlbase.ColIDtoRowIndexFromCols(fetchCols)
+
+	maybeAddCol := func(colID sqlbase.ColumnID) error {
+		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+			col, err := desc.FindColumnByID(colID)
+			if err != nil {
+				return err
+			}
+			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
+			fetchCols = append(fetchCols, *col)
+		}
+		return nil
+	}
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		if err := maybeAddCol(colID); err != nil {
+			return nil, err
+		}
+	}
+	for _, index := range indexes {
+		for _, colID := range index.ColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return nil, err
+			}
+		}
+		// The extra columns are needed to fix #14601.
+		for _, colID := range index.ExtraColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Determine what are the foreign key tables that are involved in the deletion.
+	fkHelper, err := sqlbase.TablesNeededForFKsNew(
+		ctx,
+		p.EvalContext(),
+		p.Txn(),
+		*desc,
+		sqlbase.CheckDeletes,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+		fetchColIDtoRowIndex,
+		&p.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the table deleter, which does the bulk of the work.
 	rd, err := sqlbase.MakeRowDeleter(
-		p.txn, desc, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+		p.txn, desc, fkHelper.Tables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -153,7 +197,7 @@ func (p *planner) Delete(
 		source:  rows,
 		columns: columns,
 		run: deleteRun{
-			td:         tableDeleter{rd: rd, alloc: &p.alloc},
+			td:         tableDeleter{rd: rd, alloc: &p.alloc, fkHelper: fkHelper},
 			rowsNeeded: rowsNeeded,
 		},
 	}

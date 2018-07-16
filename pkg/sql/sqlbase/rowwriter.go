@@ -1091,9 +1091,9 @@ func (rd *RowDeleter) DeleteRow(
 			return err
 		}
 	}
-	if checkFKs == CheckFKs {
-		return rd.Fks.checkAll(ctx, values)
-	}
+	// if checkFKs == CheckFKs {
+	// 	return rd.Fks.checkAll(ctx, values)
+	// }
 	return nil
 }
 
