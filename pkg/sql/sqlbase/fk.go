@@ -425,7 +425,7 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
+func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -434,7 +434,7 @@ func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
 			return err
 		}
 	}
-	return h.checker.runCheck(ctx, nil, row)
+	return nil
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -521,7 +521,7 @@ func makeFKDeleteHelper(
 	return h, nil
 }
 
-func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
+func (h fkDeleteHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -530,7 +530,7 @@ func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
 			return err
 		}
 	}
-	return h.checker.runCheck(ctx, row, nil /* newRow */)
+	return nil
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -578,7 +578,7 @@ func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType Index
 	}
 }
 
-func (fks fkUpdateHelper) runIndexChecks(
+func (fks fkUpdateHelper) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums,
 ) error {
 	for indexID := range fks.indexIDsToCheck {
@@ -589,10 +589,11 @@ func (fks fkUpdateHelper) runIndexChecks(
 			return err
 		}
 	}
-	if len(fks.inbound.fks) == 0 && len(fks.outbound.fks) == 0 {
-		return nil
-	}
-	return fks.checker.runCheck(ctx, oldValues, newValues)
+	return nil
+}
+
+func (fks fkUpdateHelper) hasFKs() bool {
+	return len(fks.inbound.fks) > 0 || len(fks.outbound.fks) > 0
 }
 
 // CollectSpans implements the FkSpanCollector interface.

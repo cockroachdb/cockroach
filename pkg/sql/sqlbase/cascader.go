@@ -1085,8 +1085,10 @@ func (c *cascader) cascadeAll(
 			)
 		}
 		for deletedRows.Len() > 0 {
-			// TODO(bram): Can these be batched?
-			if err := rowDeleter.Fks.checkAll(ctx, deletedRows.At(0)); err != nil {
+			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
+				return err
+			}
+			if err := rowDeleter.Fks.checker.runCheck(ctx, deletedRows.At(0), nil); err != nil {
 				return err
 			}
 			deletedRows.PopFirst()
@@ -1130,7 +1132,13 @@ func (c *cascader) cascadeAll(
 			// If there's only a single change, which is quite often the case, there
 			// is no need to worry about intermediate states.  Just run the check and
 			// avoid a bunch of allocations.
-			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
+			}
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.
@@ -1164,7 +1172,14 @@ func (c *cascader) cascadeAll(
 					skipList[j] = struct{}{}
 				}
 			}
-			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
+			}
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.
