@@ -178,15 +178,26 @@ func (w *aggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalConte
 	w.agg.Close(ctx)
 }
 
+// ShouldReset sets shouldReset to true if w is framableAggregateWindowFunc.
+func ShouldReset(w tree.WindowFunc) {
+	if f, ok := w.(*framableAggregateWindowFunc); ok {
+		f.shouldReset = true
+	}
+}
+
 // framableAggregateWindowFunc is a wrapper around aggregateWindowFunc that allows
 // to reset the aggregate by creating a new instance via a provided constructor.
+// shouldReset indicates whether the resetting behavior is desired.
 type framableAggregateWindowFunc struct {
 	agg            *aggregateWindowFunc
 	aggConstructor func(*tree.EvalContext) tree.AggregateFunc
+	shouldReset    bool
 }
 
-func newFramableAggregateWindow(agg tree.AggregateFunc) tree.WindowFunc {
-	return &framableAggregateWindowFunc{agg: &aggregateWindowFunc{agg: agg}}
+func newFramableAggregateWindow(
+	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext) tree.AggregateFunc,
+) tree.WindowFunc {
+	return &framableAggregateWindowFunc{agg: &aggregateWindowFunc{agg: agg}, aggConstructor: aggConstructor}
 }
 
 func (w *framableAggregateWindowFunc) Compute(
@@ -195,12 +206,12 @@ func (w *framableAggregateWindowFunc) Compute(
 	if !wfr.FirstInPeerGroup() {
 		return w.agg.peerRes, nil
 	}
-	if w.aggConstructor == nil {
-		// No constructor is given, so we use default approach.
+	if !w.shouldReset {
+		// We should not reset, so we will use the same aggregateWindowFunc.
 		return w.agg.Compute(ctx, evalCtx, wfr)
 	}
 
-	// When aggConstructor is provided, we want to dispose of the old aggregate function
+	// We should reset the aggregate, so we dispose of the old aggregate function
 	// and construct a new one for the computation.
 	w.agg.Close(ctx, evalCtx)
 	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx), tree.DNull}
@@ -229,18 +240,6 @@ func (w *framableAggregateWindowFunc) Compute(
 
 func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
 	w.agg.Close(ctx, evalCtx)
-}
-
-// AddAggregateConstructorToFramableAggregate adds provided constructor to framableAggregateWindowFunc
-// so that aggregates can be 'reset' when computing values over a window frame.
-func AddAggregateConstructorToFramableAggregate(
-	windowFunc tree.WindowFunc, aggConstructor func(*tree.EvalContext) tree.AggregateFunc,
-) {
-	// We only want to add aggConstructor to framableAggregateWindowFunc's since
-	// all non-aggregates builtins specific to window functions support framing "natively".
-	if framableAgg, ok := windowFunc.(*framableAggregateWindowFunc); ok {
-		framableAgg.aggConstructor = aggConstructor
-	}
 }
 
 // rowNumberWindow computes the number of the current row within its partition,

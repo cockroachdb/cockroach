@@ -156,7 +156,9 @@ var aggregates = map[string]builtinDefinition{
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
 			WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
-				return newFramableAggregateWindow(newCountRowsAggregate(params, evalCtx))
+				return newFramableAggregateWindow(newCountRowsAggregate(params, evalCtx), func(evalCtx *tree.EvalContext) tree.AggregateFunc {
+					return newCountRowsAggregate(params, evalCtx)
+				})
 			},
 			Info: "Calculates the number of rows.",
 		},
@@ -318,7 +320,36 @@ func makeAggOverloadWithReturnType(
 		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
-			return newFramableAggregateWindow(f(params, evalCtx))
+			aggWindowFunc := f(params, evalCtx)
+			switch w := aggWindowFunc.(type) {
+			case *MinAggregate:
+				min := &slidingWindowFunc{}
+				min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+					return -a.Compare(evalCtx, b)
+				})
+				return min
+			case *MaxAggregate:
+				max := &slidingWindowFunc{}
+				max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+					return a.Compare(evalCtx, b)
+				})
+				return max
+			case *intSumAggregate:
+				return &slidingWindowSumFunc{agg: aggWindowFunc}
+			case *decimalSumAggregate:
+				return &slidingWindowSumFunc{agg: aggWindowFunc}
+			case *floatSumAggregate:
+				return &slidingWindowSumFunc{agg: aggWindowFunc}
+			case *intervalSumAggregate:
+				return &slidingWindowSumFunc{agg: aggWindowFunc}
+			case *avgAggregate:
+				// w.agg is a sum aggregate.
+				return &avgWindowFunc{sum: slidingWindowSumFunc{agg: w.agg}}
+			}
+
+			return newFramableAggregateWindow(aggWindowFunc, func(evalCtx *tree.EvalContext) tree.AggregateFunc {
+				return f(params, evalCtx)
+			})
 		},
 		Info: info,
 	}

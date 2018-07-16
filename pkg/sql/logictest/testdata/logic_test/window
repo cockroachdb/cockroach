@@ -1708,7 +1708,6 @@ Tablet      iPad              700.00  NULL
 Tablet      Kindle Fire       150.00  NULL
 Tablet      Samsung           200.00  NULL
 
-
 query TRRR
 SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS max_over_partition FROM products ORDER BY group_id;
 ----
@@ -1723,3 +1722,48 @@ Dell             800.00   700.00  1200.00
 iPad             700.00   150.00  700.00
 Kindle Fire      150.00   150.00  700.00
 Samsung          200.00   150.00  700.00
+
+query TTRT
+SELECT group_name, product_name, price, min(price) OVER (PARTITION BY group_name ROWS CURRENT ROW) AS min_over_single_row FROM products ORDER BY group_id;
+----
+Smartphone  Microsoft Lumia   200.00               200.00
+Smartphone  HTC One           400.00               400.00
+Smartphone  Nexus             500.00               500.00
+Smartphone  iPhone            900.00               900.00
+Laptop      HP Elite         1200.00              1200.00
+Laptop      Lenovo Thinkpad   700.00               700.00
+Laptop      Sony VAIO         700.00               700.00
+Laptop      Dell              800.00               800.00
+Tablet      iPad              700.00               700.00
+Tablet      Kindle Fire       150.00               150.00
+Tablet      Samsung           200.00               200.00
+
+query TTRR
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS running_avg FROM products ORDER BY group_id;
+----
+Smartphone  Microsoft Lumia   200.00  600.00
+Smartphone  HTC One           400.00  700.00
+Smartphone  Nexus             500.00  900.00
+Smartphone  iPhone            900.00  NULL
+Laptop      HP Elite         1200.00  733.33333333333333333
+Laptop      Lenovo Thinkpad   700.00  750.00
+Laptop      Sony VAIO         700.00  800.00
+Laptop      Dell              800.00  NULL
+Tablet      iPad              700.00  175.00
+Tablet      Kindle Fire       150.00  200.00
+Tablet      Samsung           200.00  NULL
+
+query TRRRRR
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS UNBOUNDED PRECEDING), max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING), sum(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING), avg(price) OVER (PARTITION BY group_name ROWS CURRENT ROW) FROM products ORDER BY group_id;
+----
+Microsoft Lumia  200.00   200.00   400.00   2000.00  200.00
+HTC One          400.00   200.00   500.00   2000.00  400.00
+Nexus            500.00   200.00   900.00   1800.00  500.00
+iPhone           900.00   200.00   900.00   1400.00  900.00
+HP Elite         1200.00  1200.00  1200.00  3400.00  1200.00
+Lenovo Thinkpad  700.00   700.00   1200.00  3400.00  700.00
+Sony VAIO        700.00   700.00   1200.00  2200.00  700.00
+Dell             800.00   700.00   1200.00  1500.00  800.00
+iPad             700.00   700.00   700.00   1050.00  700.00
+Kindle Fire      150.00   150.00   700.00   1050.00  150.00
+Samsung          200.00   150.00   700.00   350.00   200.00
