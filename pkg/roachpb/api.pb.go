@@ -153,6 +153,7 @@
 		MixedSuccessError
 		BatchTimestampBeforeGCError
 		IntentMissingError
+		MergeInProgressError
 		ErrorDetail
 		ErrPosition
 		Error

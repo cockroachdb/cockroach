@@ -394,6 +394,15 @@ message IntentMissingError {
   optional Intent wrong_intent = 1;
 }
 
+// A MergeInProgressError indicates that the request could not be completed
+// because the replica is being merged into its left-hand neighbor. The request
+// should be resubmitted after the merge completes.
+//
+// This error is handled by the Store and should not escape to higher levels.
+message MergeInProgressError {
+  option (gogoproto.equal) = true;
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -435,6 +444,7 @@ message ErrorDetail {
   optional BatchTimestampBeforeGCError timestamp_before = 34;
   optional TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
   optional IntentMissingError intent_missing = 36;
+  optional MergeInProgressError merge_in_progress = 37;
 }
 
 // TransactionRestart indicates how an error should be handled in a
