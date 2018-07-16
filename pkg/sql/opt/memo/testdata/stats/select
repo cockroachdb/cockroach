@@ -403,3 +403,53 @@ project
                 │    ├── variable: tab0.col0 [type=int, outer=(2)]
                 │    └── const: 1 [type=int]
                 └── variable: case [type=bool, outer=(27)]
+
+# Test enforceFDOnDistinctCounts.
+# Since x is not (fd) dependent on y, the distinct count of
+# y does not affect x.
+opt
+SELECT x,y FROM a WHERE y=1 AND x > 0 AND x <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=0.014, distinct(1)=0.014, distinct(2)=0.014]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /7]
+ │    ├── stats: [rows=5.6, distinct(1)=5.6]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# Test enforceFDOnDistinctCounts.
+# x is a primary key, and thus this equality constraint
+# has one distinct value. Since y is a (fd) dependent of x,
+# the distinct count on x needs to be pushed onto y.
+opt
+SELECT x,y FROM a WHERE x=1 AND y > 0 AND y <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=0.002, distinct(1)=0.002, distinct(2)=0.002]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=0.8, distinct(1)=0.8]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /7]; tight)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 0 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /7]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 7 [type=int]
