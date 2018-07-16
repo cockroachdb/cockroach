@@ -168,13 +168,24 @@ var blacklistedUsernames = map[string]struct{}{
 
 // NormalizeAndValidateUsername case folds the specified username and verifies
 // it validates according to the usernameRE regular expression.
+// It rejects reserved user names.
 func NormalizeAndValidateUsername(username string) (string, error) {
-	username = tree.Name(username).Normalize()
-	if !usernameRE.MatchString(username) {
-		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
+	username, err := NormalizeAndValidateUsernameNoBlacklist(username)
+	if err != nil {
+		return "", err
 	}
 	if _, ok := blacklistedUsernames[username]; ok {
 		return "", errors.Errorf("username %q reserved", username)
+	}
+	return username, nil
+}
+
+// NormalizeAndValidateUsernameNoBlacklist case folds the specified username and verifies
+// it validates according to the usernameRE regular expression.
+func NormalizeAndValidateUsernameNoBlacklist(username string) (string, error) {
+	username = tree.Name(username).Normalize()
+	if !usernameRE.MatchString(username) {
+		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
 	}
 	return username, nil
 }

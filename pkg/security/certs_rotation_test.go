@@ -52,7 +52,7 @@ func TestRotateCerts(t *testing.T) {
 		}
 	}()
 
-	if err := generateAllCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +102,7 @@ func TestRotateCerts(t *testing.T) {
 	if err := os.RemoveAll(certsDir); err != nil {
 		t.Fatal(err)
 	}
-	if err := generateAllCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -149,7 +149,7 @@ func TestRotateCerts(t *testing.T) {
 	if err := os.Remove(filepath.Join(certsDir, security.EmbeddedCAKey)); err != nil {
 		t.Fatal(err)
 	}
-	if err := generateAllCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
 	}
 
