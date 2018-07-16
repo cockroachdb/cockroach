@@ -218,7 +218,6 @@ func TestTablesNeededForFKs(t *testing.T) {
 
 // BenchmarkMultiRowFKChecks does a benchmark on a multi-row insert statement that has to check foreign keys.
 func BenchmarkMultiRowFKChecks(b *testing.B) {
-
 	schema1 := `
 CREATE TABLE IF NOT EXISTS example1(
   foo INT PRIMARY KEY,
@@ -232,7 +231,6 @@ CREATE TABLE IF NOT EXISTS example2(
   FOREIGN KEY(foo) REFERENCES example1(foo) ON UPDATE CASCADE ON DELETE CASCADE
 )
 `
-
 	schema3 := `
 CREATE TABLE IF NOT EXISTS self_referential(
 	id INT PRIMARY KEY,
@@ -241,23 +239,37 @@ CREATE TABLE IF NOT EXISTS self_referential(
 )
 `
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	drop := func() {
+		tables := [...]string{"example2", "example1", "self_referential"}
+		for _, tableName := range tables {
+			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 
-	setupStatements := []string{schema1, schema2, schema3}
-	for _, s := range setupStatements {
-		if _, err := db.Exec(s); err != nil {
+	setup := func() {
+		setupStatements := []string{schema1, schema2, schema3}
+		for _, s := range setupStatements {
+			if _, err := db.Exec(s); err != nil {
+				b.Fatal(err)
+			}
+		}
+		run1 := `
+INSERT INTO example1(foo) VALUES(1)
+`
+		if _, err := db.Exec(run1); err != nil {
 			b.Fatal(err)
 		}
 	}
 
-	run1 := `
-INSERT INTO example1(foo) VALUES(1)
-`
-	if _, err := db.Exec(run1); err != nil {
-		b.Fatal(err)
-	}
+	drop()
 
 	const numFKRows = 10000
 	b.Run("10KRows_NoFK", func(b *testing.B) {
+		setup()
+		defer drop()
+		b.ResetTimer()
 		var run bytes.Buffer
 		run.WriteString(`INSERT INTO example2(baz) VALUES `)
 
@@ -274,6 +286,9 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 	})
 	b.Run("10KRows_IdenticalFK", func(b *testing.B) {
+		setup()
+		defer drop()
+		b.ResetTimer()
 		var run bytes.Buffer
 
 		run.WriteString(`INSERT INTO example2(baz, foo) VALUES `)
@@ -301,6 +316,8 @@ INSERT INTO example1(foo) VALUES(1)
 
 	const numSRRows = 10000
 	b.Run("SR_No_FK_Delete", func(b *testing.B) {
+		setup()
+		defer drop()
 		var insert bytes.Buffer
 		insert.WriteString(`INSERT INTO self_referential(id) VALUES `)
 		for i := 1; i <= numSRRows; i++ {
@@ -319,8 +336,12 @@ INSERT INTO example1(foo) VALUES(1)
 		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
 			b.Fatal(err)
 		}
+		b.StopTimer()
 	})
+
 	b.Run("SelfReferential_Delete", func(b *testing.B) {
+		setup()
+		defer drop()
 		run3 := `INSERT INTO self_referential(id) VALUES (1)`
 		if _, err := db.Exec(run3); err != nil {
 			b.Fatal(err)
@@ -338,6 +359,6 @@ INSERT INTO example1(foo) VALUES(1)
 		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
 			b.Fatal(err)
 		}
+		b.StopTimer()
 	})
-
 }
