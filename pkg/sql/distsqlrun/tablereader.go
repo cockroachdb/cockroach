@@ -121,6 +121,9 @@ func newTableReader(
 type rowFetcherWrapper struct {
 	ctx context.Context
 	*sqlbase.RowFetcher
+
+	lastDesc  *sqlbase.TableDescriptor
+	lastIndex *sqlbase.IndexDescriptor
 }
 
 var _ RowSource = &rowFetcherWrapper{}
@@ -134,7 +137,9 @@ func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
 // Next() calls NextRow() on the underlying RowFetcher. If the returned
 // ProducerMetadata is not nil, only its Err field will be set.
 func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	row, _, _, err := w.NextRow(w.ctx)
+	row, desc, index, err := w.NextRow(w.ctx)
+	w.lastDesc = desc
+	w.lastIndex = index
 	if err != nil {
 		return row, &ProducerMetadata{Err: err}
 	}
