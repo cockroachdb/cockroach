@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/ct"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,6 +77,8 @@ type Tracker struct {
 		leftRef, rightRef   int
 	}
 }
+
+var _ ct.CloseFn = (&Tracker{}).CloseFn()
 
 // NewTracker returns a Tracker initialized to a closed timestamp of zero and
 // a next closed timestamp of one logical tick past zero.
@@ -264,4 +267,11 @@ func (t *Tracker) Track(
 	}
 
 	return minProp, release
+}
+
+// CloseFn returns this Tracker's Close method as a CloseFn.
+func (t *Tracker) CloseFn() ct.CloseFn {
+	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64) {
+		return t.Close(next)
+	}
 }

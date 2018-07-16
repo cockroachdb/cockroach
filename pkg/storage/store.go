@@ -68,6 +68,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct"             // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/ctconfig"    // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"        // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/ctstorage"   // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/cttransport" // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/minprop"     // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/ct/provider"    // silence lint
 )
 
 const (
