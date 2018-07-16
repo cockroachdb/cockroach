@@ -706,3 +706,13 @@ func (e *IntentMissingError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &IntentMissingError{}
+
+func (e *MergeInProgressError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MergeInProgressError) message(_ *Error) string {
+	return "merge in progress"
+}
+
+var _ ErrorDetailInterface = &MergeInProgressError{}
