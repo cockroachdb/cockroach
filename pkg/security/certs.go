@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -68,13 +69,41 @@ func writeKeyToFile(keyFilePath string, key crypto.PrivateKey, overwrite bool) e
 	return WritePEMToFile(keyFilePath, keyFileMode, overwrite, keyBlock)
 }
 
-// CreateCAPair creates a CA key and a CA certificate.
+// CreateCAPair creates a general CA certificate and associated key.
+func CreateCAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, CAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
+// CreateClientCAPair creates a client CA certificate and associated key.
+func CreateClientCAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, ClientCAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
+// createCACertAndKey creates a CA key and a CA certificate.
 // If the certs directory does not exist, it is created.
 // If the key does not exist, it is created.
 // The certificate is written to the certs directory. If the file already exists,
 // we append the original certificates to the new certificate.
-func CreateCAPair(
+//
+// The filename of the certificate file must be specified.
+// It should be one of:
+// - ca.crt: the general CA certificate
+// - ca-client.crt: the CA certificate to verify client certificates
+func createCACertAndKey(
 	certsDir, caKeyPath string,
+	caType PemUsage,
 	keySize int,
 	lifetime time.Duration,
 	allowKeyReuse bool,
@@ -85,6 +114,10 @@ func CreateCAPair(
 	}
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
+	}
+	if caType != CAPem && caType != ClientCAPem {
+		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), got: %d",
+			CAPem, ClientCAPem, caType)
 	}
 
 	// The certificate manager expands the env for the certs directory.
@@ -139,7 +172,14 @@ func CreateCAPair(
 		return errors.Errorf("could not generate CA certificate: %v", err)
 	}
 
-	certPath := cm.CACertPath()
+	var certPath string
+	// We've already checked the caType value at the beginning of this function.
+	switch caType {
+	case CAPem:
+		certPath = cm.CACertPath()
+	case ClientCAPem:
+		certPath = cm.ClientCACertPath()
+	}
 
 	var existingCertificates []*pem.Block
 	if _, err := os.Stat(certPath); err == nil {
@@ -230,6 +270,7 @@ func CreateNodePair(
 // CreateClientPair creates a node key and certificate.
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
+// If a client CA exists, this is used instead.
 func CreateClientPair(
 	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, user string,
 ) error {
@@ -250,8 +291,17 @@ func CreateClientPair(
 		return err
 	}
 
+	var caCertPath string
+	// Check to see if we are using a client CA.
+	// We only check for its presence, not whether it has errors.
+	if cm.ClientCACert() != nil {
+		caCertPath = cm.ClientCACertPath()
+	} else {
+		caCertPath = cm.CACertPath()
+	}
+
 	// Load the CA pair.
-	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
+	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
 	if err != nil {
 		return err
 	}

@@ -30,6 +30,8 @@ const (
 	EmbeddedCertsDir     = "test_certs"
 	EmbeddedCACert       = "ca.crt"
 	EmbeddedCAKey        = "ca.key"
+	EmbeddedClientCACert = "ca-client.crt"
+	EmbeddedClientCAKey  = "ca-client.key"
 	EmbeddedNodeCert     = "node.crt"
 	EmbeddedNodeKey      = "node.key"
 	EmbeddedRootCert     = "client.root.crt"
@@ -41,10 +43,12 @@ const (
 // LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
 // The following paths must be passed:
 // - sslCA: path to the CA certificate
+// - sslClientCA: path to the CA certificate to verify client certificates,
+//                can be the same as sslCA
 // - sslCert: path to the server certificate
 // - sslCertKey: path to the server key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
+func LoadServerTLSConfig(sslCA, sslClientCA, sslCert, sslCertKey string) (*tls.Config, error) {
 	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
 	if err != nil {
 		return nil, err
@@ -57,20 +61,36 @@ func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error)
 	if err != nil {
 		return nil, err
 	}
-	return newServerTLSConfig(certPEM, keyPEM, caPEM)
+	clientCAPEM, err := assetLoaderImpl.ReadFile(sslClientCA)
+	if err != nil {
+		return nil, err
+	}
+	return newServerTLSConfig(certPEM, keyPEM, caPEM, clientCAPEM)
 }
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.
-// - the certificate of the cluster CA,
-func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+// - the certificate of the cluster CA, used to verify other server certificates
+// - the certificate of the client CA, used to verify client certificates
+//
+// caClientPEM can be equal to caPEM (shared CA) or nil (use system CA pool).
+func newServerTLSConfig(certPEM, keyPEM, caPEM, caClientPEM []byte) (*tls.Config, error) {
 	cfg, err := newBaseTLSConfig(certPEM, keyPEM, caPEM)
 	if err != nil {
 		return nil, err
 	}
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
-	cfg.ClientCAs = cfg.RootCAs
+
+	if caClientPEM != nil {
+		certPool := x509.NewCertPool()
+
+		if !certPool.AppendCertsFromPEM(caClientPEM) {
+			return nil, errors.Errorf("failed to parse client CA PEM data to pool")
+		}
+		cfg.ClientCAs = certPool
+	}
+
 	// Use the default cipher suite from golang (RC4 is going away in 1.5).
 	// Prefer the server-specified suite.
 	cfg.PreferServerCipherSuites = true
