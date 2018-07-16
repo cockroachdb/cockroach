@@ -272,9 +272,6 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", sb.ev.op))
 }
 
-// Metadata
-// --------
-
 // colStatMetadata updates the statistics in the metadata to include an
 // estimated column statistic for the given column set.
 func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnStatistic {
@@ -333,6 +330,7 @@ func (sb *statisticsBuilder) buildScan(def *ScanOpDef) {
 			colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
 		}
 	}
+	sb.enforceFDOnDistinctCounts()
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatistic {
@@ -345,12 +343,12 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	}
 	colStat := sb.copyColStat(&inputStatsBuilder, colSet)
 	sb.applySelectivityToColStat(colStat, inputStatsBuilder.s.RowCount)
-
 	// Cap distinct count at limit, if it exists.
 	if def.HardLimit > 0 && float64(def.HardLimit) < sb.s.RowCount {
 		colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
 	}
 
+	sb.mutateDistinctCountEnforceFD(colStat)
 	return colStat
 }
 
@@ -414,7 +412,6 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 			sel(constraintSet, tight)
 		}
 	}
-
 	sb.applySelectivity(inputStats.RowCount)
 }
 
@@ -424,6 +421,7 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet) *props.ColumnStati
 
 	colStat := sb.copyColStat(&inputStatsBuilder, colSet)
 	sb.applySelectivityToColStat(colStat, inputStats.RowCount)
+	sb.mutateDistinctCountEnforceFD(colStat)
 	return colStat
 }
 
@@ -1081,7 +1079,34 @@ func (sb *statisticsBuilder) applyConstraint(
 		return unknownFilterSelectivity
 	}
 
+	sb.enforceFDOnDistinctCounts()
+
 	return sb.selectivityFromDistinctCounts(inputStatsBuilder)
+}
+
+func (sb *statisticsBuilder) mutateDistinctCountEnforceFD(colStat *props.ColumnStatistic) {
+	fd := sb.props.FuncDeps
+	for _, fdStat := range sb.s.ColStats {
+		if colStat.DistinctCount > fdStat.DistinctCount {
+			if fd.InClosureOf(colStat.Cols, fdStat.Cols, false) {
+				colStat.DistinctCount = fdStat.DistinctCount
+			}
+		} else if colStat.DistinctCount < fdStat.DistinctCount {
+			// This else branch is necessary for when the function is called
+			// outside a loop iterating over all ColStats in a StatisticsBuilder.
+			// A priori, it's unknown whether the colStat passed refers to a column
+			// which is a determinant or dependent (if at all) in an FD.
+			if fd.InClosureOf(fdStat.Cols, colStat.Cols, false) {
+				fdStat.DistinctCount = colStat.DistinctCount
+			}
+		}
+	}
+}
+
+func (sb *statisticsBuilder) enforceFDOnDistinctCounts() {
+	for _, depStat := range sb.s.ColStats {
+		sb.mutateDistinctCountEnforceFD(depStat)
+	}
 }
 
 func (sb *statisticsBuilder) applyConstraintSet(
@@ -1108,6 +1133,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		}
 	}
 
+	sb.enforceFDOnDistinctCounts()
 	selectivity = sb.selectivityFromDistinctCounts(inputStatsBuilder)
 	return selectivity * adjustedSelectivity
 }

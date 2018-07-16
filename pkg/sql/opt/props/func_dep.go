@@ -506,7 +506,7 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
 		cols.Remove(i)
 		removed.Add(i)
-		if !f.inClosureOf(removed, cols, true /* strict */) {
+		if !f.InClosureOf(removed, cols, true /* strict */) {
 			// The column is not functionally determined by the other columns, so
 			// retain it in the set.
 			cols.Add(i)
@@ -1218,13 +1218,13 @@ func (f *FuncDepSet) colsAreKey(cols opt.ColSet, strict bool) bool {
 	//   cols  = (b,c)
 	//
 	// and yet both column sets form keys for the relation.
-	return f.inClosureOf(f.key, cols, strict)
+	return f.InClosureOf(f.key, cols, strict)
 }
 
-// inClosureOf computes the strict or lax closure of the "in" column set, and
+// InClosureOf computes the strict or lax closure of the "in" column set, and
 // returns true if the "cols" columns are all contained in the resulting
 // closure.
-func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
+func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet, strict bool) bool {
 	// Short-circuit if the "in" set already contains all the columns.
 	if cols.SubsetOf(in) {
 		return true
