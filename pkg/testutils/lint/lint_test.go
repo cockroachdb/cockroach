@@ -64,6 +64,37 @@ func dirCmd(
 	return cmd, stderr, stream.ReadLines(stdout), nil
 }
 
+// TestLint runs a suite of linters on the codebase. This file is
+// organized into two sections. First are the global linters, which
+// run on the entire repo every time. Second are the package-scoped
+// linters, which can be restricted to a specific package with the PKG
+// makefile variable. Linters that require anything more than a `git
+// grep` should preferably be added to the latter group (and within
+// that group, adding to Megacheck is better than creating a new
+// test).
+//
+// Linters may be skipped for two reasons: The "short" flag (i.e.
+// `make lintshort`), which skips the most expensive linters (more for
+// memory than for CPU usage), and the PKG variable. Some linters in
+// the global group may be skipped if the PKG flag is set regardless
+// of the short flag since they cannot be restricted to the package.
+// It should be reasonable to run `make lintshort` and `make lint
+// PKG=some/modified/pkg` locally and rely on CI for the more
+// expensive linters.
+//
+// Linters which run in a single process without internal
+// parallelization, and which have reasonable memory consumption
+// should be marked with t.Parallel(). As a rule of thumb anything
+// that requires type-checking the go code needs too much memory to
+// parallelize here (although it's fine for such tests to run multiple
+// goroutines internally using a shared loader object).
+//
+// Performance notes: This needs a lot of memory and CPU time. As of
+// 2018-07-13, the largest consumers of memory are
+// TestMegacheck/staticcheck (9GB) and TestUnused (6GB). Memory
+// consumption of staticcheck could be reduced by running it on a
+// subset of the packages at a time, although this comes at the
+// expense of increased running time.
 func TestLint(t *testing.T) {
 	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
@@ -71,10 +102,9 @@ func TestLint(t *testing.T) {
 	}
 	pkgDir := filepath.Join(crdb.Dir, "pkg")
 
+	pkgVar, pkgSpecified := os.LookupEnv("PKG")
+
 	t.Run("TestLowercaseFunctionNames", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
 		reSkipCasedFunction, err := regexp.Compile(`^(Binary file.*|[^:]+:\d+:(` +
 			`query error .*` + // OK when in logic tests
 			`|` +
@@ -644,6 +674,9 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestMisspell", func(t *testing.T) {
 		t.Parallel()
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files")
 		if err != nil {
 			t.Fatal(err)
@@ -681,6 +714,9 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
 		t.Parallel()
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
 
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*")
 		if err != nil {
@@ -718,6 +754,9 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
 		ignore := `\.(pb(\.gw)?)|(\.og)\.go|/testdata/`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
@@ -783,11 +822,14 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestMegacheck", func(t *testing.T) {
+	t.Run("TestUnused", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
-		t.Parallel()
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
+		// This test uses 6GB of RAM (as of 2018-07-13), so it should not be parallelized.
 
 		ctx := gotool.DefaultContext
 		releaseTags := ctx.BuildContext.ReleaseTags
@@ -797,8 +839,11 @@ func TestLint(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
-		// produces many false positives unless it inspects all our packages.
+		// Detecting unused exported fields/functions requires analyzing
+		// the whole program (and all its tests) at once. Therefore, we
+		// must load all packages instead of restricting the test to
+		// pkgScope (that's why this is separate from Megacheck, even
+		// though it is possible to combine them).
 		paths := ctx.ImportPaths([]string{cockroachDB + "/pkg/..."})
 		conf := loader.Config{
 			Build:      &ctx.BuildContext,
@@ -816,81 +861,10 @@ func TestLint(t *testing.T) {
 		unusedChecker := unused.NewChecker(unused.CheckAll)
 		unusedChecker.WholeProgram = true
 
-		for checker, ignores := range map[lint.Checker][]lint.Ignore{
-			&miscChecker{}:  nil,
-			&timerChecker{}: nil,
-			simple.NewChecker(): {
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
-			},
-			staticcheck.NewChecker(): {
-				// The generated parser is full of `case` arms such as:
-				//
-				// case 1:
-				// 	sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-				// 	//line sql.y:781
-				// 	{
-				// 		sqllex.(*Scanner).stmts = sqlDollar[1].union.stmts()
-				// 	}
-				//
-				// where the code in braces is generated from the grammar action; if
-				// the action does not make use of the matched expression, sqlDollar
-				// will be assigned but not used. This is expected and intentional.
-				//
-				// Concretely, the grammar:
-				//
-				// stmt:
-				//   alter_table_stmt
-				// | backup_stmt
-				// | copy_from_stmt
-				// | create_stmt
-				// | delete_stmt
-				// | drop_stmt
-				// | explain_stmt
-				// | help_stmt
-				// | prepare_stmt
-				// | execute_stmt
-				// | deallocate_stmt
-				// | grant_stmt
-				// | insert_stmt
-				// | rename_stmt
-				// | revoke_stmt
-				// | savepoint_stmt
-				// | select_stmt
-				//   {
-				//     $$.val = $1.slct()
-				//   }
-				// | set_stmt
-				// | show_stmt
-				// | split_stmt
-				// | transaction_stmt
-				// | release_stmt
-				// | truncate_stmt
-				// | update_stmt
-				// | /* EMPTY */
-				//   {
-				//     $$.val = Statement(nil)
-				//   }
-				//
-				// is compiled into the `case` arm:
-				//
-				// case 28:
-				// 	sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-				// 	//line sql.y:830
-				// 	{
-				// 		sqlVAL.union.val = Statement(nil)
-				// 	}
-				//
-				// which results in the unused warning:
-				//
-				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"SA4006"}},
-				// Files generated by github.com/grpc-ecosystem/grpc-gateway use a
-				// deprecated logging method (SA1019). Ignore such errors until they
-				// fix it and we update to using a newer SHA.
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/*/*/*.pb.gw.go", Checks: []string{"SA1019"}},
-			},
-			unused.NewLintChecker(unusedChecker): {
+		linter := lint.Linter{
+			Checker:   unused.NewLintChecker(unusedChecker),
+			GoVersion: goVersion,
+			Ignores: []lint.Ignore{
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
 				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
@@ -900,17 +874,9 @@ func TestLint(t *testing.T) {
 				// Generated file containing many unused postgres error codes.
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
 			},
-		} {
-			t.Run(checker.Name(), func(t *testing.T) {
-				linter := lint.Linter{
-					Checker:   checker,
-					Ignores:   ignores,
-					GoVersion: goVersion,
-				}
-				for _, p := range linter.Lint(lprog, &conf) {
-					t.Errorf("%s: %s", p.Position, &p)
-				}
-			})
+		}
+		for _, p := range linter.Lint(lprog, &conf) {
+			t.Errorf("%s: %s", p.Position, &p)
 		}
 	})
 
@@ -963,6 +929,9 @@ func TestLint(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
 
 		t.Parallel()
 		var buf bytes.Buffer
@@ -978,8 +947,8 @@ func TestLint(t *testing.T) {
 	})
 
 	// Things that are packaged scoped are below here.
-	pkgScope, ok := os.LookupEnv("PKG")
-	if !ok {
+	pkgScope := pkgVar
+	if !pkgSpecified {
 		pkgScope = "./pkg/..."
 	}
 
@@ -1156,7 +1125,7 @@ func TestLint(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
+		// errcheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,
 			"errcheck",
@@ -1189,7 +1158,7 @@ func TestLint(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
-		// returncheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
+		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
 		if err != nil {
 			t.Fatal(err)
@@ -1241,6 +1210,123 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TestMegacheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+		// This test uses 9GB of RAM (as of 2018-07-13), so it should not be parallelized.
+
+		ctx := gotool.DefaultContext
+		releaseTags := ctx.BuildContext.ReleaseTags
+		lastTag := releaseTags[len(releaseTags)-1]
+		dotIdx := strings.IndexByte(lastTag, '.')
+		goVersion, err := strconv.Atoi(lastTag[dotIdx+1:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths := ctx.ImportPaths([]string{filepath.Join(cockroachDB, pkgScope)})
+		conf := loader.Config{
+			Build:      &ctx.BuildContext,
+			ParserMode: parser.ParseComments,
+			ImportPkgs: make(map[string]bool, len(paths)),
+		}
+		for _, path := range paths {
+			conf.ImportPkgs[path] = true
+		}
+		lprog, err := conf.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for checker, ignores := range map[lint.Checker][]lint.Ignore{
+			&miscChecker{}:  nil,
+			&timerChecker{}: nil,
+			simple.NewChecker(): {
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
+			},
+			staticcheck.NewChecker(): {
+				// The generated parser is full of `case` arms such as:
+				//
+				// case 1:
+				// 	sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
+				// 	//line sql.y:781
+				// 	{
+				// 		sqllex.(*Scanner).stmts = sqlDollar[1].union.stmts()
+				// 	}
+				//
+				// where the code in braces is generated from the grammar action; if
+				// the action does not make use of the matched expression, sqlDollar
+				// will be assigned but not used. This is expected and intentional.
+				//
+				// Concretely, the grammar:
+				//
+				// stmt:
+				//   alter_table_stmt
+				// | backup_stmt
+				// | copy_from_stmt
+				// | create_stmt
+				// | delete_stmt
+				// | drop_stmt
+				// | explain_stmt
+				// | help_stmt
+				// | prepare_stmt
+				// | execute_stmt
+				// | deallocate_stmt
+				// | grant_stmt
+				// | insert_stmt
+				// | rename_stmt
+				// | revoke_stmt
+				// | savepoint_stmt
+				// | select_stmt
+				//   {
+				//     $$.val = $1.slct()
+				//   }
+				// | set_stmt
+				// | show_stmt
+				// | split_stmt
+				// | transaction_stmt
+				// | release_stmt
+				// | truncate_stmt
+				// | update_stmt
+				// | /* EMPTY */
+				//   {
+				//     $$.val = Statement(nil)
+				//   }
+				//
+				// is compiled into the `case` arm:
+				//
+				// case 28:
+				// 	sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
+				// 	//line sql.y:830
+				// 	{
+				// 		sqlVAL.union.val = Statement(nil)
+				// 	}
+				//
+				// which results in the unused warning:
+				//
+				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"SA4006"}},
+				// Files generated by github.com/grpc-ecosystem/grpc-gateway use a
+				// deprecated logging method (SA1019). Ignore such errors until they
+				// fix it and we update to using a newer SHA.
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/*/*/*.pb.gw.go", Checks: []string{"SA1019"}},
+			},
+		} {
+			t.Run(checker.Name(), func(t *testing.T) {
+				linter := lint.Linter{
+					Checker:   checker,
+					Ignores:   ignores,
+					GoVersion: goVersion,
+				}
+				for _, p := range linter.Lint(lprog, &conf) {
+					t.Errorf("%s: %s", p.Position, &p)
+				}
+			})
+		}
+	})
+
 }
 
 type miscChecker struct{}
