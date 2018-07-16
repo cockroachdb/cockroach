@@ -40,21 +40,6 @@ type TableLookup struct {
 	Table       *TableDescriptor
 	IsAdding    bool
 	CheckHelper *CheckHelper
-
-	updatedRows *RowContainer
-	deletedRows *RowContainer
-}
-
-func (tl *TableLookup) initRowContainers(evalCtx *tree.EvalContext) error {
-	// t.updatedRows = NewRowContainer(
-
-	// )
-
-	// t.deletedRows = NewRowContainer(
-
-	// )
-
-	return nil
 }
 
 // TableLookupFunction is the function type used by TablesNeededForFKs that will
@@ -190,13 +175,12 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
 	table TableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
 	analyzeExpr AnalyzeExprFunction,
-) (baseFKHelper, error) {
+) (TableLookupsByID, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
 		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
@@ -506,7 +490,6 @@ func makeFKDeleteHelper(
 	otherTables TableLookupsByID,
 	colMap map[ColumnID]int,
 	alloc *DatumAlloc,
-	evalCtx *tree.EvalContext,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
 		otherTables: otherTables,
@@ -634,9 +617,8 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 }
 
 type baseFKHelper struct {
-	evalCtx *tree.EvalContext
-	txn     *client.Txn
-	rf      RowFetcher
+	txn *client.Txn
+	rf  RowFetcher
 
 	tables  TableLookupsByID
 	indexes map[ID][]IndexID
@@ -651,7 +633,6 @@ type baseFKHelper struct {
 }
 
 func makeBaseFKHelper(
-	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	otherTables TableLookupsByID,
 	writeIdx IndexDescriptor,
@@ -661,7 +642,6 @@ func makeBaseFKHelper(
 	dir FKCheck,
 ) (baseFKHelper, error) {
 	b := baseFKHelper{
-		evalCtx:     evalCtx,
 		txn:         txn,
 		tables:      otherTables,
 		writeIdx:    writeIdx,
