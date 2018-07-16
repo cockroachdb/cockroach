@@ -1040,7 +1040,27 @@ func (sb *statisticsBuilder) applyConstraint(
 		return unknownFilterSelectivity
 	}
 
+	sb.enforceFDOnDistinctCounts(inputStatsBuilder)
+
 	return sb.selectivityFromDistinctCounts(inputStatsBuilder)
+}
+
+func (sb *statisticsBuilder) enforceFDOnDistinctCounts(inputStatsBuilder *statisticsBuilder) {
+	fd := inputStatsBuilder.props.FuncDeps
+	outputCols := inputStatsBuilder.props.OutputCols
+	outputCols.ForEach(func(det int) {
+		closure := fd.ComputeClosure(util.MakeFastIntSet(det))
+		closure.ForEach(func(dep int) {
+			if detStats, okDet := sb.s.ColStats[opt.ColumnID(det)]; okDet {
+				if depStats, okDep := sb.s.ColStats[opt.ColumnID(dep)]; okDep {
+					if depStats.DistinctCount > detStats.DistinctCount {
+						// Update distinct count for column.
+						sb.ensureColStat(opt.ColumnID(dep), detStats.DistinctCount, inputStatsBuilder)
+					}
+				}
+			}
+		})
+	})
 }
 
 func (sb *statisticsBuilder) applyConstraintSet(
@@ -1067,6 +1087,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		}
 	}
 
+	sb.enforceFDOnDistinctCounts(inputStatsBuilder)
 	selectivity = sb.selectivityFromDistinctCounts(inputStatsBuilder)
 	return selectivity * adjustedSelectivity
 }

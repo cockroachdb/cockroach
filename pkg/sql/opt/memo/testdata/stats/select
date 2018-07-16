@@ -403,3 +403,284 @@ project
                 │    ├── variable: tab0.col0 [type=int, outer=(2)]
                 │    └── const: 1 [type=int]
                 └── variable: case [type=bool, outer=(27)]
+
+# Test enforceFDOnDistinctCounts.
+# Since x is not (fd) dependent on y, the distinct count of
+# y does not affect x.
+opt
+SELECT x,y FROM a WHERE y=1 AND x > 0 AND x <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=0.014, distinct(1)=0.014, distinct(2)=0.014]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /7]
+ │    ├── stats: [rows=5.6, distinct(1)=5.6]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# Test enforceFDOnDistinctCounts.
+# x is a primary key, and thus this equality constraint
+# has one distinct value. Since y is a (fd) dependent of x,
+# the distinct count on x needs to be pushed onto y.
+opt
+SELECT x,y FROM a WHERE x=1 AND y > 0 AND y <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=0.002, distinct(1)=0.002, distinct(2)=0.002]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=0.8, distinct(1)=0.8]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /7]; tight)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 0 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /7]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 7 [type=int]
+
+
+
+exec-ddl
+CREATE TABLE c (x INT PRIMARY KEY, y INT, z INT, w INT)
+----
+TABLE c
+ ├── x int not null
+ ├── y int
+ ├── z int
+ ├── w int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE d (x INT PRIMARY KEY, y INT, s INT, t INT, UNIQUE (s DESC, t))
+----
+TABLE d
+ ├── x int not null
+ ├── y int
+ ├── s int
+ ├── t int
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s int desc
+      ├── t int
+      └── x int not null (storing)
+
+opt
+SELECT s FROM d WHERE y < 10 and x > 10
+----
+project
+ ├── columns: s:3(int)
+ ├── stats: [rows=111.111111]
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) s:3(int)
+      ├── stats: [rows=111.111111]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan d
+      │    ├── columns: x:1(int!null) y:2(int) s:3(int)
+      │    ├── constraint: /1: [/11 - ]
+      │    ├── stats: [rows=333.333333]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+           └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+                ├── variable: d.y [type=int, outer=(2)]
+                └── const: 10 [type=int]
+
+opt
+SELECT s FROM d WHERE y < 10
+----
+project
+ ├── columns: s:3(int)
+ ├── stats: [rows=333.333333]
+ └── select
+      ├── columns: y:2(int!null) s:3(int)
+      ├── stats: [rows=333.333333]
+      ├── scan d
+      │    ├── columns: y:2(int) s:3(int)
+      │    └── stats: [rows=1000]
+      └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+           └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+                ├── variable: d.y [type=int, outer=(2)]
+                └── const: 10 [type=int]
+
+opt
+SELECT y,t FROM d WHERE s > 10
+----
+project
+ ├── columns: y:2(int) t:4(int)
+ ├── stats: [rows=333.333333]
+ └── select
+      ├── columns: y:2(int) s:3(int!null) t:4(int)
+      ├── stats: [rows=333.333333]
+      ├── fd: (3,4)~~>(2)
+      ├── scan d
+      │    ├── columns: y:2(int) s:3(int) t:4(int)
+      │    ├── stats: [rows=1000]
+      │    └── fd: (3,4)~~>(2)
+      └── filters [type=bool, outer=(3), constraints=(/3: [/11 - ]; tight)]
+           └── gt [type=bool, outer=(3), constraints=(/3: [/11 - ]; tight)]
+                ├── variable: d.s [type=int, outer=(3)]
+                └── const: 10 [type=int]
+
+opt
+SELECT y,t FROM d WHERE s = 10
+----
+project
+ ├── columns: y:2(int) t:4(int)
+ ├── stats: [rows=1.42857143]
+ └── index-join d
+      ├── columns: y:2(int) s:3(int!null) t:4(int)
+      ├── stats: [rows=1.42857143, distinct(3)=1]
+      ├── fd: ()-->(3), (3,4)~~>(2)
+      └── scan d@secondary
+           ├── columns: x:1(int!null) s:3(int!null) t:4(int)
+           ├── constraint: /-3/4: [/10 - /10]
+           ├── stats: [rows=1.42857143, distinct(3)=1]
+           ├── key: (1)
+           └── fd: ()-->(3), (1)-->(4), (3,4)~~>(1)
+
+opt
+SELECT s,t FROM d WHERE y > -10 AND y < 10
+----
+project
+ ├── columns: s:3(int) t:4(int)
+ ├── stats: [rows=27.1428571]
+ └── select
+      ├── columns: y:2(int!null) s:3(int) t:4(int)
+      ├── stats: [rows=27.1428571, distinct(2)=19]
+      ├── fd: (3,4)~~>(2)
+      ├── scan d
+      │    ├── columns: y:2(int) s:3(int) t:4(int)
+      │    ├── stats: [rows=1000, distinct(2)=700]
+      │    └── fd: (3,4)~~>(2)
+      └── filters [type=bool, outer=(2), constraints=(/2: [/-9 - /9]; tight)]
+           ├── gt [type=bool, outer=(2), constraints=(/2: [/-9 - ]; tight)]
+           │    ├── variable: d.y [type=int, outer=(2)]
+           │    └── const: -10 [type=int]
+           └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+                ├── variable: d.y [type=int, outer=(2)]
+                └── const: 10 [type=int]
+
+opt
+SELECT s,t FROM d WHERE y > 0 AND y < 1000 and s > 0 and s < 600
+----
+project
+ ├── columns: s:3(int!null) t:4(int)
+ ├── stats: [rows=855.714286]
+ └── select
+      ├── columns: y:2(int!null) s:3(int!null) t:4(int)
+      ├── stats: [rows=855.714286, distinct(2)=700, distinct(3)=599]
+      ├── fd: (3,4)~~>(2)
+      ├── scan d
+      │    ├── columns: y:2(int) s:3(int) t:4(int)
+      │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
+      │    └── fd: (3,4)~~>(2)
+      └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /999]; /3: [/1 - /599]; tight)]
+           ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+           │    ├── variable: d.y [type=int, outer=(2)]
+           │    └── const: 0 [type=int]
+           ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /999]; tight)]
+           │    ├── variable: d.y [type=int, outer=(2)]
+           │    └── const: 1000 [type=int]
+           ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+           │    ├── variable: d.s [type=int, outer=(3)]
+           │    └── const: 0 [type=int]
+           └── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /599]; tight)]
+                ├── variable: d.s [type=int, outer=(3)]
+                └── const: 600 [type=int]
+
+opt
+SELECT y,t FROM d WHERE s < 1000 AND s > 500 AND t > 20 AND t < 500
+----
+project
+ ├── columns: y:2(int) t:4(int!null)
+ ├── stats: [rows=487.797959]
+ └── select
+      ├── columns: y:2(int) s:3(int!null) t:4(int!null)
+      ├── stats: [rows=487.797959, distinct(3)=487.797959, distinct(4)=479]
+      ├── fd: (3,4)-->(2)
+      ├── scan d
+      │    ├── columns: y:2(int) s:3(int) t:4(int)
+      │    ├── stats: [rows=1000, distinct(3)=700, distinct(4)=700]
+      │    └── fd: (3,4)~~>(2)
+      └── filters [type=bool, outer=(3,4), constraints=(/3: [/501 - /999]; /4: [/21 - /499]; tight)]
+           ├── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /999]; tight)]
+           │    ├── variable: d.s [type=int, outer=(3)]
+           │    └── const: 1000 [type=int]
+           ├── gt [type=bool, outer=(3), constraints=(/3: [/501 - ]; tight)]
+           │    ├── variable: d.s [type=int, outer=(3)]
+           │    └── const: 500 [type=int]
+           ├── gt [type=bool, outer=(4), constraints=(/4: [/21 - ]; tight)]
+           │    ├── variable: d.t [type=int, outer=(4)]
+           │    └── const: 20 [type=int]
+           └── lt [type=bool, outer=(4), constraints=(/4: (/NULL - /499]; tight)]
+                ├── variable: d.t [type=int, outer=(4)]
+                └── const: 500 [type=int]
+
+opt
+SELECT y,t FROM d WHERE s < 1000 AND s > 5 AND x> 10 AND x < 1000
+----
+project
+ ├── columns: y:2(int) t:4(int)
+ ├── stats: [rows=989]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(int!null) t:4(int)
+      ├── stats: [rows=989, distinct(1)=989, distinct(3)=700]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── scan d
+      │    ├── columns: x:1(int!null) y:2(int) s:3(int) t:4(int)
+      │    ├── constraint: /1: [/11 - /999]
+      │    ├── stats: [rows=989, distinct(1)=989]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      └── filters [type=bool, outer=(3), constraints=(/3: [/6 - /999]; tight)]
+           ├── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /999]; tight)]
+           │    ├── variable: d.s [type=int, outer=(3)]
+           │    └── const: 1000 [type=int]
+           └── gt [type=bool, outer=(3), constraints=(/3: [/6 - ]; tight)]
+                ├── variable: d.s [type=int, outer=(3)]
+                └── const: 5 [type=int]
+
+opt
+SELECT y,t FROM d WHERE s < 1000 AND s > 0 AND x > 301 AND x < 1000
+----
+project
+ ├── columns: y:2(int) t:4(int)
+ ├── stats: [rows=696.005714]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(int!null) t:4(int)
+      ├── stats: [rows=696.005714, distinct(1)=696.005714, distinct(3)=696.005714]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── scan d
+      │    ├── columns: x:1(int!null) y:2(int) s:3(int) t:4(int)
+      │    ├── constraint: /1: [/302 - /999]
+      │    ├── stats: [rows=698, distinct(1)=698]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /999]; tight)]
+           ├── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /999]; tight)]
+           │    ├── variable: d.s [type=int, outer=(3)]
+           │    └── const: 1000 [type=int]
+           └── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+                ├── variable: d.s [type=int, outer=(3)]
+                └── const: 0 [type=int]
