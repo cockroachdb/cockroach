@@ -32,7 +32,7 @@ func ExampleSingleStorage() {
 	e1 := ctpb.Entry{
 		Full:            true,
 		ClosedTimestamp: hlc.Timestamp{WallTime: 123E9},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1000,
 			9: 2000,
 		},
@@ -46,7 +46,7 @@ func ExampleSingleStorage() {
 	fmt.Println("A new update comes in only two seconds later:")
 	e2 := ctpb.Entry{
 		ClosedTimestamp: hlc.Timestamp{WallTime: 125E9},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1001,
 			7: 12,
 		},
@@ -62,7 +62,7 @@ func ExampleSingleStorage() {
 	fmt.Println("Another update, another eight seconds later:")
 	e3 := ctpb.Entry{
 		ClosedTimestamp: hlc.Timestamp{WallTime: 133E9},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			9: 2020,
 			1: 999,
 		},
@@ -77,7 +77,7 @@ func ExampleSingleStorage() {
 	fmt.Println("Half a second later, with the next update, it will rotate:")
 	e4 := ctpb.Entry{
 		ClosedTimestamp: hlc.Timestamp{WallTime: 133E9 + 1E9/2},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			7: 17,
 			8: 711,
 		},
@@ -90,7 +90,7 @@ func ExampleSingleStorage() {
 	fmt.Println("Next update arrives a whopping 46.5s later (why not).")
 	e5 := ctpb.Entry{
 		ClosedTimestamp: hlc.Timestamp{WallTime: 180E9},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1004,
 			7: 19,
 			2: 929922,
@@ -106,7 +106,7 @@ func ExampleSingleStorage() {
 	fmt.Println("Another five seconds later, another update:")
 	e6 := ctpb.Entry{
 		ClosedTimestamp: hlc.Timestamp{WallTime: 185E9},
-		MLAI: map[roachpb.RangeID]int64{
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			3: 1771,
 		},
 	}

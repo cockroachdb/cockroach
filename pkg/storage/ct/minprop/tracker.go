@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/ct"
+	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -73,7 +74,7 @@ type Tracker struct {
 		// `rightRef`.
 
 		next                hlc.Timestamp
-		leftMLAI, rightMLAI map[roachpb.RangeID]int64
+		leftMLAI, rightMLAI map[roachpb.RangeID]ctpb.LAI
 		leftRef, rightRef   int
 	}
 }
@@ -85,8 +86,8 @@ var _ ct.CloseFn = (&Tracker{}).CloseFn()
 func NewTracker() *Tracker {
 	t := &Tracker{}
 	t.mu.next = hlc.Timestamp{Logical: 1}
-	t.mu.leftMLAI = map[roachpb.RangeID]int64{}
-	t.mu.rightMLAI = map[roachpb.RangeID]int64{}
+	t.mu.leftMLAI = map[roachpb.RangeID]ctpb.LAI{}
+	t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
 
 	return t
 }
@@ -100,7 +101,7 @@ func (t *Tracker) String() string {
 
 	type item struct {
 		rangeID roachpb.RangeID
-		mlai    int64
+		mlai    ctpb.LAI
 		left    bool
 	}
 
@@ -156,12 +157,12 @@ func (t *Tracker) String() string {
 // like a successful call that happens to not return any new information).
 // Similarly, failure to provide a timestamp strictly larger than that to be
 // closed out next results in the same "idempotent" return values.
-func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64) {
+func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	var closed hlc.Timestamp
-	var mlai map[roachpb.RangeID]int64
+	var mlai map[roachpb.RangeID]ctpb.LAI
 	if log.V(3) {
 		log.Infof(context.TODO(), "close: leftRef=%d rightRef=%d next=%s closed=%s new=%s", t.mu.leftRef, t.mu.rightRef, t.mu.next, t.mu.closed, next)
 	}
@@ -184,7 +185,7 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
 		// everything that's in-flight).
 		t.mu.leftMLAI = t.mu.rightMLAI
 		t.mu.leftRef = t.mu.rightRef
-		t.mu.rightMLAI = map[roachpb.RangeID]int64{}
+		t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
 		t.mu.rightRef = 0
 
 		t.mu.next = next
@@ -207,7 +208,7 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
 // arguments once after a regular call.
 func (t *Tracker) Track(
 	ctx context.Context,
-) (hlc.Timestamp, func(context.Context, roachpb.RangeID, int64)) {
+) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI)) {
 	shouldLog := log.V(3)
 
 	t.mu.Lock()
@@ -220,7 +221,7 @@ func (t *Tracker) Track(
 	}
 
 	var calls int
-	release := func(ctx context.Context, rangeID roachpb.RangeID, lai int64) {
+	release := func(ctx context.Context, rangeID roachpb.RangeID, lai ctpb.LAI) {
 		calls++
 		if calls != 1 {
 			if lai != 0 || rangeID != 0 || calls > 2 {
@@ -271,7 +272,7 @@ func (t *Tracker) Track(
 
 // CloseFn returns this Tracker's Close method as a CloseFn.
 func (t *Tracker) CloseFn() ct.CloseFn {
-	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64) {
+	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
 		return t.Close(next)
 	}
 }

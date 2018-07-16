@@ -69,6 +69,11 @@ type Storage interface {
 
 // A Notifyee is a sink for closed timestamp updates.
 type Notifyee interface {
+	// Notify returns a channel into which updates are written. As a special
+	// case, the local node is addressed via NodeID zero (this helps avoid
+	// complications regarding the late initialization of the NodeID).
+	//
+	// In practice, the Notifyee will be a Provider.
 	Notify(roachpb.NodeID) chan<- ctpb.Entry
 }
 
@@ -78,37 +83,6 @@ type Producer interface {
 	// stream of updates to the provided channel the aggregate of which is
 	// guaranteed to represent a valid (i.e. gapless) state.
 	Subscribe(context.Context, chan<- ctpb.Entry)
-}
-
-// EpochT is a wrapper around int64 which helps avoid confusing it with other
-// int64s used for different purposes.
-type EpochT struct {
-	int64
-}
-
-// Epoch returns the given int64 as an EpochT.
-func Epoch(epo int64) EpochT {
-	return EpochT{epo}
-}
-
-// V unwraps the EpochT, returning an int64.
-func (e EpochT) V() int64 {
-	return e.int64
-}
-
-// LAIT (read: lease applied index type) is a wrapper similar to EpochT.
-type LAIT struct {
-	int64
-}
-
-// V unwraps the MLAIT, returning an int64.
-func (l LAIT) V() int64 {
-	return l.int64
-}
-
-// LAI wraps a lease applied index as a LAIT.
-func LAI(lai int64) LAIT {
-	return LAIT{lai}
 }
 
 // Provider is the central coordinator in the closed timestamp subsystem and the
@@ -123,7 +97,7 @@ type Provider interface {
 	Producer
 	Notifyee
 	Start()
-	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, EpochT, LAIT) bool
+	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) bool
 }
 
 // A PeerRegistry is the client component of the follower reads subsystem. It
@@ -138,12 +112,12 @@ type PeerRegistry interface {
 
 // CloseFn is periodically called by Producers to close out new timestamps.
 // Outside of tests, it corresponds to (*Tracker).Close.
-type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64)
+type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
 
 // LiveClockFn supplies a current HLC timestamp from the local node with the
 // extra constraints that the local node is live for the returned timestamp at
 // the given epoch.
-type LiveClockFn func() (liveNow hlc.Timestamp, liveEpoch int64, _ error)
+type LiveClockFn func() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error)
 
 // RefreshFn is called by the Producer when it is asked to manually create (and
 // emit) an update for a number of its replicas. The closed timestamp subsystem

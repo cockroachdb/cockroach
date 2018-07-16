@@ -213,15 +213,15 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 
 // CanServe implements ct.Provider.
 func (p *Provider) CanServe(
-	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ct.EpochT, lai ct.LAIT,
+	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
 ) bool {
 	var ok bool
 	// TODO(tschottdorf): add and use VisitDescending.
 	p.cfg.Storage.VisitAscending(nodeID, func(entry ctpb.Entry) bool {
 		mlai, found := entry.MLAI[rangeID]
 		ok = found &&
-			mlai <= lai.V() &&
-			entry.Epoch == epoch.V() &&
+			mlai <= lai &&
+			entry.Epoch == epoch &&
 			!entry.ClosedTimestamp.Less(ts)
 		return ok // done when ok == true
 	})
