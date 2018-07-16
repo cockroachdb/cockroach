@@ -411,3 +411,78 @@ select
       └── exists [type=bool]
            └── scan a
                 └── columns: a.i:8(int) a.s:10(string)
+
+# --------------------------------------------------
+# NormalizeJSONFieldAccess
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE j->'a' = '"b"'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": "b"}' [type=bool, outer=(5)]
+
+opt
+SELECT * FROM a WHERE j->'a' @> '{"x": "b"}'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
+
+opt
+SELECT * FROM a WHERE j->'a'->'x' = '"b"'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── a.j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
+
+# The transformation is not valid in this case.
+opt
+SELECT * FROM a WHERE j->2 = '"b"'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── (a.j->2) = '"b"' [type=bool, outer=(5)]
+
+# The transformation is not valid in this case, since j->'a' could be an array.
+opt
+SELECT * FROM a WHERE j->'a' @> '"b"'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── (a.j->'a') @> '"b"' [type=bool, outer=(5)]
