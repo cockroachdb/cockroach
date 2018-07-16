@@ -22,6 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+// Epoch is an int64 with its own type to avoid mix-ups in positional arguments.
+type Epoch int64
+
+// LAI is an int64 denoting a lease applied index with its own type to avoid
+// mix-ups in positional arguments.
+type LAI int64
+
 // String formats Entry for human consumption as well as testing (by avoiding
 // randomness in the output caused by map iteraton order).
 func (e Entry) String() string {

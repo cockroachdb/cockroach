@@ -24,10 +24,12 @@ import "util/hlc/timestamp.proto";
 message Entry {
   option (gogoproto.goproto_stringer) = false;
 
-  int64 epoch = 1;
+  int64 epoch = 1 [(gogoproto.casttype) = "Epoch"];
   util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
   bool full = 3;
-  map<int32, int64> mlai = 4 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID", (gogoproto.customname) = "MLAI"];
+  map<int32, int64> mlai = 4 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.castvalue) = "LAI",
+    (gogoproto.customname) = "MLAI"];
 }
 
 message Reaction {

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
 	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,11 +52,11 @@ func TestContainer(t *testing.T) {
 	rawClock := hlc.NewClock(hlc.NewManualClock(1E9).UnixNano, 500*time.Millisecond)
 	epoch, live := int64(1), int32(1) // atomically
 
-	clock := func() (liveNow hlc.Timestamp, liveEpoch int64, _ error) {
+	clock := func() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error) {
 		if atomic.LoadInt32(&live) != 1 {
 			return hlc.Timestamp{}, 0, errors.New("not live")
 		}
-		return rawClock.Now(), atomic.LoadInt64(&epoch), nil
+		return rawClock.Now(), ctpb.Epoch(atomic.LoadInt64(&epoch)), nil
 	}
 
 	var refreshed struct {
@@ -94,6 +93,6 @@ func TestContainer(t *testing.T) {
 	c.Start()
 
 	// Silence unused warnings.
-	var _, _ = ct.Epoch(0), ct.LAI(0)
+	var _, _ = ctpb.Epoch(0), ctpb.LAI(0)
 	var _ = ctconfig.DialerAdapter(nil)
 }
