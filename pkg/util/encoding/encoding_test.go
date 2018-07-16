@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -788,6 +789,96 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeTimeTZ(t *testing.T) {
+	zeroTime := timeutil.Unix(0, 0)
+
+	// test cases are negative, increasing, duration offsets from the
+	// zeroTime. The positive, increasing, duration offsets are automatically
+	// genarated below.
+	type testCase struct {
+		t string
+		o int
+	}
+	testCases := []testCase{
+		{"-25h45m34s234ms", 0},
+		{"-23h45m35s", 0},
+		{"-23h45m34s999999999ns", 0},
+		{"-23h45m34s234ms", 0},
+		{"-23h45m34s101ms", 0},
+		{"-23h45m34s1ns", 0},
+		{"-23h45m34s", 0},
+		{"-23h45m33s901ms", 0},
+		{"-23h45m", 0},
+		{"-23h", 0},
+		{"-23612ms", 0},
+		{"-345ms", 0},
+		{"-1ms", 0},
+		{"-201us", 0},
+		{"-1us", 0},
+		{"-201ns", 0},
+		{"-1ns", 0},
+		{"0", 0},
+	}
+
+	// Append all the positive values in ascending order, excluding zero.
+	for i := len(testCases) - 2; i >= 0; i-- {
+		testCases = append(testCases, testCase{t: testCases[i].t[1:], o: testCases[i].o})
+	}
+
+	var last timeofday.TimeOfDay
+	var lastEncoded []byte
+	for _, dir := range []Direction{Ascending, Descending} {
+		for i := range testCases {
+			d, err := time.ParseDuration(testCases[i].t)
+			if err != nil {
+				t.Fatal(err)
+			}
+			current := timeofday.FromTime(zeroTime.Add(d))
+			currentOffset := testCases[i].o
+			var b []byte
+			var decodedCurrent timeofday.TimeOfDay
+			var decodedOffset int
+			if last != 0 {
+				if dir == Ascending {
+					b = EncodeTimeTZAscending(b, current, currentOffset)
+					_, decodedCurrent, decodedOffset, err = DecodeTimeTZAscending(b)
+				} else {
+					b = EncodeTimeTZDescending(b, current, currentOffset)
+					_, decodedCurrent, decodedOffset, err = DecodeTimeTZDescending(b)
+				}
+				if err != nil {
+					t.Error(err)
+					continue
+				}
+				if decodedCurrent != current || decodedOffset != currentOffset {
+					t.Fatalf("lossy transport: before (%v,%v) vs after (%v,%v)",
+						current, decodedCurrent,
+						currentOffset, decodedOffset)
+				}
+				testPeekLength(t, b)
+				if i > 0 {
+					if bytes.Compare(lastEncoded, b) >= 0 && dir == Ascending {
+						t.Fatalf("encodings %+v, %+v not increasing", testCases[i-1], testCases[i])
+					}
+					if bytes.Compare(lastEncoded, b) <= 0 && dir == Descending {
+						t.Fatalf("encodings %+v, %+v not decreasing", testCases[i-1], testCases[i])
+					}
+				}
+			}
+			last = current
+			lastEncoded = b
+		}
+
+		// Check that the encoding hasn't changed.
+		if dir == Ascending {
+			a, e := lastEncoded, []byte("\x14\xfa\x01 \xbc\x0e\xae\xf9\r\xf2\x8e\x80")
+			if !bytes.Equal(a, e) {
+				t.Errorf("encoding has changed:\nexpected [% x]\nactual   [% x]", e, a)
+			}
+		}
+	}
+}
+
 type testCaseDuration struct {
 	value  duration.Duration
 	expEnc []byte
@@ -885,6 +976,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
+		{EncodeTimeTZAscending(nil, timeofday.FromTime(timeutil.Now()), 123), TimeTZ},
+		{EncodeTimeTZDescending(nil, timeofday.FromTime(timeutil.Now()), 123), TimeTZ},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
 	}
@@ -910,6 +1003,18 @@ func (rd randData) decimal() *apd.Decimal {
 
 func (rd randData) time() time.Time {
 	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+}
+
+type tzVal struct {
+	t   timeofday.TimeOfDay
+	off int
+}
+
+func (rd randData) timetz() tzVal {
+	return tzVal{
+		t:   timeofday.FromTime(rd.time()),
+		off: int(30000 - rd.Int31n(60000)),
+	}
 }
 
 func (rd randData) duration() duration.Duration {
@@ -1390,6 +1495,25 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeTimeTZ(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]tzVal, 1000)
+	for i := range tests {
+		tests[i] = rd.timetz()
+	}
+	for _, test := range tests {
+		buf := EncodeTimeTZValue(nil, NoColumnID, test.t, test.off)
+		_, x, y, err := DecodeTimeTZValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test.t || y != test.off {
+			t.Errorf("seed %d: expected %v,%v got %v,%v", seed, test.t, test.off, x, y)
+		}
+	}
+}
+
 func TestValueEncodeDecodeDuration(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
@@ -1602,6 +1726,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Time:
 		x := rd.time()
 		return EncodeTimeValue(buf, colID, x), x, true
+	case TimeTZ:
+		x := rd.timetz()
+		return EncodeTimeTZValue(buf, colID, x.t, x.off), x, true
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
@@ -1737,7 +1864,7 @@ func TestValueEncodingRand(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var decoded interface{}
+		var decoded, decoded2 interface{}
 		switch typ {
 		case Null:
 			buf = buf[dataOffset:]
@@ -1755,6 +1882,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeBytesValue(buf)
 		case Time:
 			buf, decoded, err = DecodeTimeValue(buf)
+		case TimeTZ:
+			buf, decoded, decoded2, err = DecodeTimeTZValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
 		case IPAddr:
@@ -1783,6 +1912,13 @@ func TestValueEncodingRand(t *testing.T) {
 			if !d.Equal(&val) {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
+		case TimeTZ:
+			exp := value.(tzVal)
+			tm := decoded.(timeofday.TimeOfDay)
+			off := decoded2.(int)
+			if exp.t != tm || exp.off != off {
+				t.Fatalf("seed %d: %s got %v,%v expected %v,%v", seed, typ, decoded, decoded2, exp.t, exp.off)
+			}
 		default:
 			if decoded != value {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
@@ -1807,6 +1943,7 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 		{colID: 0, typ: Decimal, size: -1},
 		{colID: 0, typ: Decimal, width: 100, size: 69},
 		{colID: 0, typ: Time, size: 19},
+		{colID: 0, typ: TimeTZ, size: 20},
 		{colID: 0, typ: Duration, size: 28},
 		{colID: 0, typ: Bytes, size: -1},
 		{colID: 0, typ: Bytes, width: 100, size: 110},
@@ -1854,6 +1991,8 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeDecimalValue(nil, NoColumnID, apd.New(628, -2)), "6.28"},
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
+		{EncodeTimeTZValue(nil, NoColumnID,
+			timeofday.FromTime(time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), 123), "16:02:50/+123s"},
 		{EncodeDurationValue(nil, NoColumnID,
 			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "0x01020fff"},
