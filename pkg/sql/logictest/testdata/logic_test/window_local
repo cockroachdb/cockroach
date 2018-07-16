@@ -1,0 +1,458 @@
+# LogicTest: local local-opt local-parallel-stmts
+
+statement ok
+CREATE TABLE kv (
+  -- don't add column "a"
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
+)
+
+statement OK
+INSERT INTO kv VALUES
+(1, 2, 3, 1.0, 1, 'a', true),
+(3, 4, 5, 2, 8, 'a', true),
+(5, NULL, 5, 9.9, -321, NULL, false),
+(6, 2, 3, 4.4, 4.4, 'b', true),
+(7, 2, 2, 6, 7.9, 'b', true),
+(8, 4, 2, 3, 3, 'A', false)
+
+query IT
+SELECT k, concat_agg(s) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  bab
+3  Aa
+5  NULL
+6  bab
+7  b
+8  A
+
+statement OK
+INSERT INTO kv VALUES
+(9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),
+(10, 4, 9, .2, DEFAULT, DEFAULT, DEFAULT),
+(11, NULL, 9, .3, DEFAULT, DEFAULT, DEFAULT)
+
+query II
+SELECT k, row_number() OVER () FROM kv ORDER BY 1
+----
+1   1
+3   2
+5   3
+6   4
+7   5
+8   6
+9   7
+10  8
+11  9
+
+query III
+SELECT k, v, row_number() OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+1   2     1
+3   4     1
+5   NULL  1
+6   2     2
+7   2     3
+8   4     2
+9   2     4
+10  4     3
+11  NULL  2
+
+query IIII
+SELECT k, v, w, row_number() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   2     3  2
+3   4     5  2
+5   NULL  5  1
+6   2     3  3
+7   2     2  1
+8   4     2  1
+9   2     9  4
+10  4     9  3
+11  NULL  9  2
+
+query IIII
+SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   2     3  3
+3   4     5  3
+5   NULL  5  NULL
+6   2     3  4
+7   2     2  3
+8   4     2  5
+9   2     9  -1
+10  4     9  0
+11  NULL  9  NULL
+
+query II
+SELECT k, ntile(4) OVER () FROM kv ORDER BY 1
+----
+1   1
+3   1
+5   1
+6   2
+7   2
+8   3
+9   3
+10  4
+11  4
+
+query II
+SELECT k, ntile(20) OVER () FROM kv ORDER BY 1
+----
+1   1
+3   2
+5   3
+6   4
+7   5
+8   6
+9   7
+10  8
+11  9
+
+# The value of 'w' in the first row will be 3.
+query II
+SELECT k, ntile(w) OVER () FROM kv ORDER BY 1
+----
+1   1
+3   1
+5   1
+6   2
+7   2
+8   2
+9   3
+10  3
+11  3
+
+query III
+SELECT k, v, ntile(3) OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+1   2     1
+3   4     1
+5   NULL  1
+6   2     1
+7   2     2
+8   4     2
+9   2     3
+10  4     3
+11  NULL  2
+
+query IIII
+SELECT k, v, w, ntile(6) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   2     3  2
+3   4     5  2
+5   NULL  5  1
+6   2     3  3
+7   2     2  1
+8   4     2  1
+9   2     9  4
+10  4     9  3
+11  NULL  9  2
+
+query II
+SELECT k, lag(9) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   9
+5   9
+6   9
+7   9
+8   9
+9   9
+10  9
+11  9
+
+query II
+SELECT k, lead(9) OVER () FROM kv ORDER BY 1
+----
+1   9
+3   9
+5   9
+6   9
+7   9
+8   9
+9   9
+10  9
+11  NULL
+
+query II
+SELECT k, lag(k) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   1
+5   3
+6   5
+7   6
+8   7
+9   8
+10  9
+11  10
+
+query II
+SELECT k, lag(k) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   7
+3   8
+5   NULL
+6   1
+7   NULL
+8   NULL
+9   6
+10  3
+11  5
+
+query II
+SELECT k, lead(k) OVER () FROM kv ORDER BY 1
+----
+1   3
+3   5
+5   6
+6   7
+7   8
+8   9
+9   10
+10  11
+11  NULL
+
+query II
+SELECT k, lead(k) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   6
+3   10
+5   11
+6   9
+7   1
+8   3
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lag(k, 3) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   1
+7   3
+8   5
+9   6
+10  7
+11  8
+
+query II
+SELECT k, lead(k, 3) OVER () FROM kv ORDER BY 1
+----
+1   6
+3   7
+5   8
+6   9
+7   10
+8   11
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lag(k, -5) OVER () FROM kv ORDER BY 1
+----
+1   8
+3   9
+5   10
+6   11
+7   NULL
+8   NULL
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lead(k, -5) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   NULL
+8   1
+9   3
+10  5
+11  6
+
+query II
+SELECT k, lag(k, w) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   1
+7   5
+8   6
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lag(k, w) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   NULL
+8   NULL
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lead(k, w) OVER () FROM kv ORDER BY 1
+----
+1   6
+3   9
+5   10
+6   9
+7   9
+8   10
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lead(k, w) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   6
+8   10
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, lag(k, 3, -99) OVER () FROM kv ORDER BY 1
+----
+1   -99
+3   -99
+5   -99
+6   1
+7   3
+8   5
+9   6
+10  7
+11  8
+
+query II
+SELECT k, lead(k, 3, -99) OVER () FROM kv ORDER BY 1
+----
+1   6
+3   7
+5   8
+6   9
+7   10
+8   11
+9   -99
+10  -99
+11  -99
+
+query II
+SELECT k, lag(k, 3, v) OVER () FROM kv ORDER BY 1
+----
+1   2
+3   4
+5   NULL
+6   1
+7   3
+8   5
+9   6
+10  7
+11  8
+
+query II
+SELECT k, lead(k, 3, v) OVER () FROM kv ORDER BY 1
+----
+1   6
+3   7
+5   8
+6   9
+7   10
+8   11
+9   2
+10  4
+11  NULL
+
+query II
+SELECT k, first_value(v) OVER () FROM kv ORDER BY 1
+----
+1   2
+3   2
+5   2
+6   2
+7   2
+8   2
+9   2
+10  2
+11  2
+
+query II
+SELECT k, last_value(v) OVER () FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   NULL
+8   NULL
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, nth_value(v, 8) OVER () FROM kv ORDER BY 1
+----
+1   4
+3   4
+5   4
+6   4
+7   4
+8   4
+9   4
+10  4
+11  4
+
+query II
+SELECT k, nth_value(v, k) OVER () FROM kv ORDER BY 1
+----
+1   2
+3   NULL
+5   2
+6   4
+7   2
+8   4
+9   NULL
+10  NULL
+11  NULL
+
+query II
+SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
+----
+1   4
+3   2
+5   NULL
+6   4
+7   4
+8   2
+9   4
+10  2
+11  NULL
