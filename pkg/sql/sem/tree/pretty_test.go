@@ -52,12 +52,12 @@ func TestPrettyData(t *testing.T) {
 		runTestPrettyData(t, "ref", cfg, matches)
 	})
 	cfg.Align = tree.PrettyAlignAndDeindent
-	t.Run("align", func(t *testing.T) {
-		runTestPrettyData(t, "align", cfg, matches)
+	t.Run("align-deindent", func(t *testing.T) {
+		runTestPrettyData(t, "align-deindent", cfg, matches)
 	})
 	cfg.Align = tree.PrettyAlignOnly
-	t.Run("align", func(t *testing.T) {
-		runTestPrettyData(t, "align2", cfg, matches)
+	t.Run("align-only", func(t *testing.T) {
+		runTestPrettyData(t, "align-only", cfg, matches)
 	})
 }
 
