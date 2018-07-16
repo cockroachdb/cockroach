@@ -37,6 +37,57 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+func TestCertNomenclature(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're just testing nomenclature parsing, all files exist and contain a valid PEM block.
+
+	testCases := []struct {
+		filename      string
+		expectedError string
+		usage         security.PemUsage
+		name          string
+	}{
+		// Test valid names.
+		{"ca.crt", "", security.CAPem, ""},
+		{"ca.client.crt", "", security.ClientCAPem, ""},
+		{"node.crt", "", security.NodePem, ""},
+		{"client.root.crt", "", security.ClientPem, "root"},
+		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
+		{"client....foo.bar.baz.how.many.dots.do.you.need...really....crt", "", security.ClientPem, "...foo.bar.baz.how.many.dots.do.you.need...really..."},
+
+		// Bad names. This function is only called on filenames ending with '.crt'.
+		{"crt", "not enough parts found", 0, ""},
+		{".crt", "unknown prefix", 0, ""},
+		{"ca2.crt", "unknown prefix \"ca2\"", 0, ""},
+		{"ca.foo.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
+		{"ca.clients.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
+		{"ca.ui.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
+		{"node2.crt", "unknown prefix \"node2\"", 0, ""},
+		{"node.foo.crt", "node certificate filename should match node.crt", 0, ""},
+		{"client2.crt", "unknown prefix \"client2\"", 0, ""},
+		{"client.crt", "client certificate filename should match client.<user>.crt", 0, ""},
+		{"root.crt", "unknown prefix \"root\"", 0, ""},
+	}
+
+	for i, tc := range testCases {
+		ci, err := security.CertInfoFromFilename(tc.filename)
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		if ci.FileUsage != tc.usage {
+			t.Errorf("#%d: expected file usage %v, got %v", i, tc.usage, ci.FileUsage)
+		}
+		if ci.Name != tc.name {
+			t.Errorf("#%d: expected name %v, got %v", i, tc.name, ci.Name)
+		}
+	}
+}
+
 func TestLoadEmbeddedCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cl := security.NewCertificateLoader(security.EmbeddedCertsDir)

@@ -470,6 +470,8 @@ func (s *statusServer) Certificates(
 		switch cert.FileUsage {
 		case security.CAPem:
 			details.Type = serverpb.CertificateDetails_CA
+		case security.ClientCAPem:
+			details.Type = serverpb.CertificateDetails_CLIENT_CA
 		case security.NodePem:
 			details.Type = serverpb.CertificateDetails_NODE
 		case security.ClientPem:

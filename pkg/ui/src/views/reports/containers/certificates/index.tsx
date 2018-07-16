@@ -117,6 +117,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
       case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.NODE:
         certType = "Node";
         break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT_CA:
+        certType = "Client Certificate Authority";
+        break;
       default:
         certType = "Unknown";
     }
