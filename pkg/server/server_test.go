@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -164,15 +166,36 @@ func TestPlainHTTPServer(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.TODO())
 
+	// First, make sure that the TestServer's built-in client interface
+	// still works in insecure mode.
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
 		return getStatusJSONProto(s, "metrics/local", &data)
 	})
 
-	ctx := s.RPCContext()
-	ctx.Insecure = false
-	if err := getStatusJSONProto(s, "metrics/local", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
-		t.Fatalf("unexpected error %v", err)
+	// Now make a couple of direct requests using both http and https.
+	// They won't succeed because we're not jumping through
+	// authentication hoops, but they verify that the server is using
+	// the correct protocol.
+	url := s.AdminURL()
+	if !strings.HasPrefix(url, "http://") {
+		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
+	}
+	if resp, err := http.Get(url); err != nil {
+		t.Error(err)
+	} else {
+		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+			t.Error(err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Attempting to connect to the insecure server with HTTPS doesn't work.
+	secureURL := strings.Replace(url, "http://", "https://", 1)
+	if _, err := http.Get(secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+		t.Error(err)
 	}
 }
 
