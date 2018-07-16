@@ -79,7 +79,7 @@ memo (optimized)
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
  ├── G12: (variable abc.b)
- └── G13: (null anyelement)
+ └── G13: (null)
 
 opt
 SELECT min(a) FROM abc
@@ -584,7 +584,7 @@ memo (optimized)
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
  ├── G12: (variable abc.b)
- └── G13: (null anyelement)
+ └── G13: (null)
 
 memo
 SELECT max(a) FROM abc
@@ -646,4 +646,4 @@ memo (optimized)
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
  ├── G12: (variable abc.b)
- └── G13: (null anyelement)
+ └── G13: (null)

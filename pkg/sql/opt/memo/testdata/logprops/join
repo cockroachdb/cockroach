@@ -620,7 +620,7 @@ select
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
                 │    │    ├── key: ()
-                │    │    └── tuple [type=tuple{}]
+                │    │    └── tuple [type=tuple]
                 │    └── projections [outer=(1)]
                 │         └── variable: xysd.x [type=int, outer=(1)]
                 ├── project
@@ -634,7 +634,7 @@ select
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
                 │    │    ├── key: ()
-                │    │    └── tuple [type=tuple{}]
+                │    │    └── tuple [type=tuple]
                 │    └── projections [outer=(2)]
                 │         └── variable: xysd.y [type=int, outer=(2)]
                 └── filters [type=bool, outer=(3,5)]

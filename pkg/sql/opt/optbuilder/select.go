@@ -337,7 +337,9 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	if outScope == nil {
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
-		rows := []memo.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
+		rows := []memo.GroupID{b.factory.ConstructTuple(
+			b.factory.InternList(nil), b.factory.InternType(memo.EmptyTupleType),
+		)}
 		outScope = inScope.push()
 		outScope.group = b.factory.ConstructValues(
 			b.factory.InternList(rows),

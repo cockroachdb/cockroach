@@ -162,7 +162,7 @@ select
            │              │         └── projections [outer=(2,8)]
            │              │              └── variable: xy.y [type=int, outer=(2)]
            │              └── projections [outer=(11,12)]
-           │                   └── tuple [type=tuple{int, int}, outer=(11,12)]
+           │                   └── tuple [type=tuple{int AS x, int AS u}, outer=(11,12)]
            │                        ├── variable: x [type=int, outer=(11)]
            │                        └── variable: u [type=int, outer=(12)]
            └── tuple [type=tuple{int, int}]

@@ -82,7 +82,7 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 	f := norm.NewFactory(&evalCtx)
 
 	null := f.ConstructNull(f.InternType(types.Unknown))
-	empty := f.ConstructTuple(memo.EmptyList)
+	empty := f.ConstructTuple(memo.EmptyList, f.InternType(memo.EmptyTupleType))
 	in := f.ConstructIn(null, empty)
 	ev := memo.MakeNormExprView(f.Memo(), in)
 	if ev.Operator() != opt.FalseOp {

@@ -743,8 +743,9 @@ type Tuple struct {
 // NewTypedTuple returns a new Tuple that is verified to be well-typed.
 func NewTypedTuple(typ types.TTuple, typedExprs Exprs) *Tuple {
 	return &Tuple{
-		Exprs: typedExprs,
-		typ:   typ,
+		Exprs:  typedExprs,
+		Labels: typ.Labels,
+		typ:    typ,
 	}
 }
 

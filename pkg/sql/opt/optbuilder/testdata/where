@@ -80,7 +80,7 @@ select
            │    ├── scan kv
            │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
            │    └── projections
-           │         └── tuple [type=tuple{int, int}]
+           │         └── tuple [type=tuple{int AS k, int AS v}]
            │              ├── variable: kv.k [type=int]
            │              └── variable: kv.v [type=int]
            └── tuple [type=tuple{int, int}]
@@ -215,7 +215,7 @@ project
       └── filters [type=bool]
            └── in [type=bool]
                 ├── variable: ab.a [type=int]
-                └── tuple [type=tuple{int, int, int, unknown}]
+                └── tuple [type=tuple{int, int, int, int}]
                      ├── const: 1 [type=int]
                      ├── const: 3 [type=int]
                      ├── const: 4 [type=int]
@@ -260,14 +260,14 @@ project
                 ├── tuple [type=tuple{int, int}]
                 │    ├── variable: ab.a [type=int]
                 │    └── variable: ab.b [type=int]
-                └── tuple [type=tuple{tuple{int, int}, tuple{int, unknown}, tuple{unknown, int}}]
+                └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                      ├── tuple [type=tuple{int, int}]
                      │    ├── const: 1 [type=int]
                      │    └── const: 10 [type=int]
-                     ├── tuple [type=tuple{int, unknown}]
+                     ├── tuple [type=tuple{int, int}]
                      │    ├── const: 4 [type=int]
                      │    └── null [type=unknown]
-                     └── tuple [type=tuple{unknown, int}]
+                     └── tuple [type=tuple{int, int}]
                           ├── null [type=unknown]
                           └── const: 50 [type=int]
 

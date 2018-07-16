@@ -179,6 +179,6 @@ project
            ├── values
            │    ├── cardinality: [1 - 1]
            │    ├── key: ()
-           │    └── tuple [type=tuple{}]
+           │    └── tuple [type=tuple]
            └── projections
                 └── const: 123 [type=int]

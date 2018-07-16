@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // CustomFuncs contains all the custom match and replace functions that are
@@ -68,7 +69,7 @@ func (c *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
 // ConstructSortedUniqueList sorts the given list and removes duplicates, and
 // returns the resulting list. See the comment for listSorter.compare for
 // comparison rule details.
-func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
+func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) (memo.ListID, memo.PrivateID) {
 	// Make a copy of the list, since it needs to stay immutable.
 	lb := MakeListBuilder(c)
 	lb.AddItems(c.mem.LookupList(list))
@@ -86,7 +87,14 @@ func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) memo.ListID {
 		}
 	}
 	lb.setLength(n)
-	return lb.BuildList()
+
+	// Construct the type of the tuple.
+	typ := types.TTuple{Types: make([]types.T, n)}
+	for i := 0; i < n; i++ {
+		typ.Types[i] = c.mem.GroupProperties(lb.items[i]).Scalar.Type
+	}
+
+	return lb.BuildList(), c.mem.InternType(typ)
 }
 
 // -----------------------------------------------------------------------
@@ -193,6 +201,11 @@ func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) *props.OrderingCho
 // private.
 func (c *CustomFuncs) ExtractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
 	return c.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
+}
+
+// ExtractType extracts a types.T from the given private.
+func (c *CustomFuncs) ExtractType(private memo.PrivateID) types.T {
+	return c.mem.LookupPrivate(private).(types.T)
 }
 
 // ----------------------------------------------------------------------

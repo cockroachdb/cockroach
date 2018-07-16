@@ -276,7 +276,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── true [type=bool]
 
@@ -294,7 +294,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── false [type=bool]
 
@@ -312,7 +312,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── false [type=bool]
       └── true [type=bool]
@@ -352,7 +352,7 @@ project
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── true [type=bool]
       └── false [type=bool]

@@ -41,7 +41,7 @@ SELECT 1 AS a, TRUE AS b, FALSE AS c, NULL AS d
 project
  ├── columns: a:1(int!null) b:2(bool!null) c:3(bool!null) d:4(unknown)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       ├── const: 1 [type=int]
       ├── true [type=bool]
@@ -285,7 +285,7 @@ SELECT length('text')
 project
  ├── columns: length:1(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── length('text') [type=int]
 
@@ -296,7 +296,7 @@ SELECT div(1.0, 2.0)
 project
  ├── columns: div:1(decimal)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── div(1.0, 2.0) [type=decimal]
 
@@ -313,7 +313,7 @@ SELECT greatest(1, 2, 3, 4)
 project
  ├── columns: greatest:1(int)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── greatest(1, 2, 3, 4) [type=int]
 

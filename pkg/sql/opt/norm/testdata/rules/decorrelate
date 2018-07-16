@@ -2263,7 +2263,7 @@ project
  │    │              │    ├── values
  │    │              │    │    ├── cardinality: [1 - 1]
  │    │              │    │    ├── key: ()
- │    │              │    │    └── tuple [type=tuple{}]
+ │    │              │    │    └── tuple [type=tuple]
  │    │              │    └── projections [outer=(1,2)]
  │    │              │         ├── a.k + 1 [type=int, outer=(1)]
  │    │              │         └── a.i + 1 [type=int, outer=(2)]
@@ -2327,7 +2327,7 @@ project
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
@@ -2402,7 +2402,7 @@ project
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
