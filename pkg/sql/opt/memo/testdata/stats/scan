@@ -130,3 +130,46 @@ group-by
  └── scan a
       ├── columns: y:2(int) s:3(string)
       └── stats: [rows=3000, distinct(2,3)=1000]
+
+opt
+SELECT x,y FROM a where y=1 AND x > 0 AND x <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=0.021, distinct(1)=0.021, distinct(2)=0.021]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /7]
+ │    ├── stats: [rows=10.5, distinct(1)=7]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# Test enforceFDOnDistinctCounts
+opt
+SELECT x,y FROM a where x=1 AND y > 0 AND y <= 7
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=0.003, distinct(1)=0.003, distinct(2)=0.003]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── stats: [rows=1.5, distinct(1)=1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /7]; tight)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 0 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /7]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 7 [type=int]
+
