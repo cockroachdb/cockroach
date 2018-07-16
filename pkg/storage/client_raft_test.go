@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2586,7 +2587,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// there are two (this one and the one actually used by the store).
 	fromTransport := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
-		nodedialer.New(mtc.rpcContext, storage.GossipAddressResolver(fromStore.Gossip())),
+		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
 		mtc.transportStopper,
 	)
@@ -2994,7 +2995,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// there are two (this one and the one actually used by the store).
 	transport0 := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
-		nodedialer.New(mtc.rpcContext, storage.GossipAddressResolver(mtc.gossips[0])),
+		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
 		nil, /* grpcServer */
 		mtc.transportStopper,
 	)
