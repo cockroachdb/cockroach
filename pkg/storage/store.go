@@ -3795,7 +3795,24 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			rangeIDs = rangeIDs[:0]
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
-				s.livenessMap.Store(s.cfg.NodeLiveness.GetIsLiveMap())
+				nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
+				for nodeID := range nextMap {
+					if nextMap[nodeID] {
+						continue
+					}
+					// Liveness claims that this node is down, but ConnHealth gets the last say
+					// because we'd rather quiesce a range too few than one too many.
+					//
+					// NB: This has false negatives. If a node doesn't have a conn open to it
+					// when ConnHealth is called, then ConnHealth will return
+					// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
+					// said, for the nodes that matter, we're likely talking to them via the
+					// Raft transport, so ConnHealth should usually indicate a real problem if
+					// it gives us an error back.
+					nextMap[nodeID] = (s.cfg.NodeDialer.ConnHealth(nodeID) == nil)
+				}
+				log.Warningf(ctx, "TSX liveness map %v", nextMap)
+				s.livenessMap.Store(nextMap)
 			}
 
 			s.unquiescedReplicas.Lock()
