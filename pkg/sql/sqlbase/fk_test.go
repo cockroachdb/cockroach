@@ -238,9 +238,16 @@ CREATE TABLE IF NOT EXISTS self_referential(
 	FOREIGN KEY(pid) REFERENCES self_referential(id) ON UPDATE CASCADE ON DELETE CASCADE
 )
 `
+	schema4 := `
+CREATE TABLE IF NOT EXISTS self_referential_setnull(
+	id INT PRIMARY KEY,
+	pid INT,
+	FOREIGN KEY(pid) REFERENCES self_referential_setnull(id) ON UPDATE CASCADE ON DELETE SET NULL
+)
+`
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	drop := func() {
-		tables := [...]string{"example2", "example1", "self_referential"}
+		tables := [...]string{"example2", "example1", "self_referential", "self_referential_setnull"}
 		for _, tableName := range tables {
 			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)); err != nil {
 				b.Fatal(err)
@@ -249,7 +256,7 @@ CREATE TABLE IF NOT EXISTS self_referential(
 	}
 
 	setup := func() {
-		setupStatements := []string{schema1, schema2, schema3}
+		setupStatements := []string{schema1, schema2, schema3, schema4}
 		for _, s := range setupStatements {
 			if _, err := db.Exec(s); err != nil {
 				b.Fatal(err)
@@ -315,7 +322,7 @@ INSERT INTO example1(foo) VALUES(1)
 	})
 
 	const numSRRows = 10000
-	b.Run("SR_No_FK_Delete", func(b *testing.B) {
+	b.Run("SelfReferential_No_FK_Delete", func(b *testing.B) {
 		setup()
 		defer drop()
 		var insert bytes.Buffer
@@ -339,7 +346,7 @@ INSERT INTO example1(foo) VALUES(1)
 		b.StopTimer()
 	})
 
-	b.Run("SelfReferential_Delete", func(b *testing.B) {
+	b.Run("SelfReferential_FK_Delete", func(b *testing.B) {
 		setup()
 		defer drop()
 		run3 := `INSERT INTO self_referential(id) VALUES (1)`
@@ -357,6 +364,51 @@ INSERT INTO example1(foo) VALUES(1)
 		b.ResetTimer()
 
 		if _, err := db.Exec(`DELETE FROM self_referential`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("SelfReferential_SetNull_NoFK_Delete", func(b *testing.B) {
+		setup()
+		defer drop()
+		var insert bytes.Buffer
+		insert.WriteString(`INSERT INTO self_referential_setnull(id) VALUES `)
+		for i := 1; i <= numSRRows; i++ {
+			insert.WriteString(fmt.Sprintf(`(%d)`, i))
+			if i != numSRRows {
+				insert.WriteString(`, `)
+			}
+		}
+
+		if _, err := db.Exec(insert.String()); err != nil {
+			b.Fatal(err)
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential_setnull`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+	b.Run("SelfReferential_SetNull_FK_Delete", func(b *testing.B) {
+		setup()
+		defer drop()
+		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
+		if _, err := db.Exec(run3); err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 2; i <= numSRRows; i++ {
+			insert := fmt.Sprintf(`INSERT INTO self_referential_setnull(id, pid) VALUES (%d, %d)`, i, i-1)
+			if _, err := db.Exec(insert); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		if _, err := db.Exec(`DELETE FROM self_referential_setnull`); err != nil {
 			b.Fatal(err)
 		}
 		b.StopTimer()
