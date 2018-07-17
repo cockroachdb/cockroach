@@ -151,15 +151,43 @@ SELECT session_id, key, key, session_id, created, value, updated
 FROM variants
 WHERE session_id = $1
 `
+	retrieveQuery7 = `
+SELECT d.session_id AS device_session_id,
+	d.created AS device_created,
+	d.device_id AS device_id,
+	d.make AS make,
+	d.model AS model,
+	d.name AS name,
+	d.serialno AS name,
+	d.updated AS device_updated,
+	s.session_id AS session_id,
+	s.affiliate AS affiliate,
+	s.channel AS channel,
+	s.created AS session_created,
+	s.language AS language,
+	s.platform AS platform,
+	s.query_id AS query_id,
+	s.status AS status,
+	s.updated AS session_updated
+FROM devices AS d LEFT JOIN sessions AS s
+ON d.session_id = s.session_id
+WHERE d.session_id = $1
+`
 	updateQuery = `
 UPDATE sessions
-SET affiliate = $1, updated = now()
+SET query_id = $1, updated = now()
+WHERE session_id = $2
+`
+	updateQuery2 = `
+UPDATE sessions
+SET status = $1, updated = now()
 WHERE session_id = $2
 `
 )
 
 var (
-	retrieveQueries = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery3, retrieveQuery4, retrieveQuery5, retrieveQuery6}
+	retrieveQueries = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery3, retrieveQuery4, retrieveQuery5, retrieveQuery6, retrieveQuery7}
+	updateQueries   = []string{updateQuery, updateQuery2}
 )
 
 func init() {
@@ -436,7 +464,7 @@ func (w *interleavedPartitioned) Ops(
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // update
 			log.Info(context.TODO(), "updating")
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.updateLocalPercent))
-			args := []interface{}{
+			retrieveArgs := []interface{}{
 				sessionID,
 			}
 			start := timeutil.Now()
@@ -445,16 +473,21 @@ func (w *interleavedPartitioned) Ops(
 				if err != nil {
 					return err
 				}
-				_, err = retrieveStatement.ExecContext(ctx, args...)
+				_, err = retrieveStatement.ExecContext(ctx, retrieveArgs...)
 				if err != nil {
 					return err
 				}
 			}
-			updateStatement, err := db.Prepare(updateQuery)
+			updateStatement1, err := db.Prepare(updateQuery)
 			if err != nil {
 				return err
 			}
-			_, err = updateStatement.ExecContext(ctx, randString(rng, 20), sessionID)
+			_, err = updateStatement1.ExecContext(ctx, randString(rng, 100), sessionID)
+			updateStatement2, err := db.Prepare(updateQuery)
+			if err != nil {
+				return err
+			}
+			_, err = updateStatement2.ExecContext(ctx, randString(rng, 20), sessionID)
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return err
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent { // delete
