@@ -419,7 +419,7 @@ func (b *Builder) buildFunction(
 	}
 
 	// TODO(andyk): Re-enable impure functions once we can properly handle them.
-	if def.Impure && !b.AllowImpureFuncs {
+	if def.Impure && !isGenerator(def) && !b.AllowImpureFuncs {
 		panic(unimplementedf("impure functions are not supported"))
 	}
 
@@ -432,6 +432,10 @@ func (b *Builder) buildFunction(
 	out = b.factory.ConstructFunction(
 		b.factory.InternList(argList), b.factory.InternFuncOpDef(&funcDef),
 	)
+
+	if isGenerator(def) {
+		return b.finishBuildGeneratorFunction(f, out, inScope, outScope)
+	}
 
 	return b.finishBuildScalar(f, out, label, inScope, outScope)
 }

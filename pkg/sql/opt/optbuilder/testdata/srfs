@@ -5,27 +5,57 @@
 build
 SELECT * FROM generate_series(1, 3)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: generate_series:1(int)
+ └── function: generate_series [type=tuple{int AS generate_series}]
+      ├── const: 1 [type=int]
+      └── const: 3 [type=int]
 
 build
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+inner-join
+ ├── columns: generate_series:1(int) generate_series:2(int)
+ ├── zip
+ │    ├── columns: generate_series:1(int)
+ │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 2 [type=int]
+ ├── zip
+ │    ├── columns: generate_series:2(int)
+ │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 2 [type=int]
+ └── true [type=bool]
 
 build
 SELECT * FROM pg_catalog.generate_series(1, 3)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: generate_series:1(int)
+ └── function: generate_series [type=tuple{int AS generate_series}]
+      ├── const: 1 [type=int]
+      └── const: 3 [type=int]
 
 build
 SELECT * FROM generate_series(1, 1) AS c(x)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: x:1(int)
+ └── function: generate_series [type=tuple{int AS generate_series}]
+      ├── const: 1 [type=int]
+      └── const: 1 [type=int]
 
 build
 SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+row-number
+ ├── columns: x:1(int) y:2(int!null)
+ └── zip
+      ├── columns: generate_series:1(int)
+      └── function: generate_series [type=tuple{int AS generate_series}]
+           ├── const: 1 [type=int]
+           └── const: 1 [type=int]
 
 build
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
@@ -60,12 +90,46 @@ TABLE u
 build
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+project
+ ├── columns: a:1(string) b:3(string) a:5(int) b:6(int)
+ └── inner-join
+      ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null) generate_series:5(int) generate_series:6(int)
+      ├── inner-join
+      │    ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null) generate_series:5(int)
+      │    ├── inner-join
+      │    │    ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null)
+      │    │    ├── scan t
+      │    │    │    └── columns: a:1(string) t.rowid:2(int!null)
+      │    │    ├── scan u
+      │    │    │    └── columns: b:3(string) u.rowid:4(int!null)
+      │    │    └── true [type=bool]
+      │    ├── zip
+      │    │    ├── columns: generate_series:5(int)
+      │    │    └── function: generate_series [type=tuple{int AS generate_series}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── true [type=bool]
+      ├── zip
+      │    ├── columns: generate_series:6(int)
+      │    └── function: generate_series [type=tuple{int AS generate_series}]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      └── true [type=bool]
 
 build
 SELECT 3 + x FROM generate_series(1,2) AS a(x)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+project
+ ├── columns: "?column?":2(int)
+ ├── zip
+ │    ├── columns: generate_series:1(int)
+ │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 2 [type=int]
+ └── projections
+      └── plus [type=int]
+           ├── const: 3 [type=int]
+           └── variable: generate_series [type=int]
 
 build
 SELECT 3 + (3 * generate_series(1,3))
@@ -77,7 +141,12 @@ error (0A000): generator functions are not supported
 build
 SELECT * from unnest(ARRAY[1,2])
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: unnest:1(int)
+ └── function: unnest [type=tuple{int AS unnest}]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           └── const: 2 [type=int]
 
 build
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
@@ -123,7 +192,18 @@ error (42703): column "generate_series" does not exist
 build
 SELECT * from generate_series(1, (select * from generate_series(1, 0)))
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: generate_series:2(int)
+ └── function: generate_series [type=tuple{int AS generate_series}]
+      ├── const: 1 [type=int]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: generate_series:1(int)
+                └── zip
+                     ├── columns: generate_series:1(int)
+                     └── function: generate_series [type=tuple{int AS generate_series}]
+                          ├── const: 1 [type=int]
+                          └── const: 0 [type=int]
 
 # The following query is designed to produce a null array argument to unnest
 # in a way that the type system can't detect before evaluation.
@@ -138,14 +218,50 @@ error (0A000): generator functions are not supported
 build
 SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+sort
+ ├── columns: word:1(string!null) catcode:2(string) catdesc:3(string)
+ ├── ordering: +1
+ └── select
+      ├── columns: word:1(string!null) catcode:2(string) catdesc:3(string)
+      ├── zip
+      │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
+      │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+      └── filters [type=bool]
+           └── in [type=bool]
+                ├── variable: word [type=string]
+                └── tuple [type=tuple{string, string, string, string}]
+                     ├── const: 'alter' [type=string]
+                     ├── const: 'and' [type=string]
+                     ├── const: 'between' [type=string]
+                     └── const: 'cross' [type=string]
 
 # Postgres enables renaming both the source and the column name for
 # single-column generators, but not for multi-column generators.
 build
 SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+limit
+ ├── columns: a:1(int) b:2(int) word:3(string) catcode:4(string) catdesc:5(string)
+ ├── inner-join
+ │    ├── columns: generate_series:1(int) unnest:2(int) word:3(string) catcode:4(string) catdesc:5(string)
+ │    ├── inner-join
+ │    │    ├── columns: generate_series:1(int) unnest:2(int)
+ │    │    ├── zip
+ │    │    │    ├── columns: generate_series:1(int)
+ │    │    │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │    │    │         ├── const: 1 [type=int]
+ │    │    │         └── const: 1 [type=int]
+ │    │    ├── zip
+ │    │    │    ├── columns: unnest:2(int)
+ │    │    │    └── function: unnest [type=tuple{int AS unnest}]
+ │    │    │         └── array: [type=int[]]
+ │    │    │              └── const: 1 [type=int]
+ │    │    └── true [type=bool]
+ │    ├── zip
+ │    │    ├── columns: word:3(string) catcode:4(string) catdesc:5(string)
+ │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+ │    └── true [type=bool]
+ └── const: 0 [type=int]
 
 # Beware of multi-valued SRFs in render position (#19149)
 build
@@ -171,14 +287,21 @@ error (0A000): generator functions are not supported
 build
 SELECT * FROM upper('abc')
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: upper:1(string)
+ └── function: upper [type=string]
+      └── const: 'abc' [type=string]
 
 # current_schema
 
 build
 SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+row-number
+ ├── columns: b:1(string) ordinality:2(int!null)
+ └── zip
+      ├── columns: current_schema:1(string)
+      └── function: current_schema [type=string]
 
 # expandArray
 
@@ -190,7 +313,12 @@ error (0A000): generator functions are not supported
 build
 SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: x:1(string) n:2(int)
+ └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+      └── array: [type=string[]]
+           ├── const: 'b' [type=string]
+           └── const: 'a' [type=string]
 
 # srf_accessor
 
@@ -227,21 +355,108 @@ error (0A000): generator functions are not supported
 build
 SELECT temp.n from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+project
+ ├── columns: n:2(int)
+ └── zip
+      ├── columns: x:1(string) n:2(int)
+      └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+           └── array: [type=string[]]
+                ├── const: 'c' [type=string]
+                ├── const: 'b' [type=string]
+                └── const: 'a' [type=string]
 
 build
 SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: x:1(string) n:2(int)
+ └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+      └── array: [type=string[]]
+           ├── const: 'c' [type=string]
+           ├── const: 'b' [type=string]
+           └── const: 'a' [type=string]
 
 build
 SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: x:1(string) n:2(int)
+ └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+      └── array: [type=string[]]
+           ├── const: 'c' [type=string]
+           ├── const: 'b' [type=string]
+           └── const: 'a' [type=string]
 
 # generate_subscripts
 
 build
 SELECT * FROM generate_subscripts(ARRAY[3,2,1])
 ----
-error (0A000): not yet implemented: table expr: *tree.RowsFromExpr
+zip
+ ├── columns: generate_subscripts:1(int)
+ └── function: generate_subscripts [type=tuple{int AS generate_subscripts}]
+      └── array: [type=int[]]
+           ├── const: 3 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 1 [type=int]
+
+# Zip with multiple SRFs.
+build
+SELECT * FROM
+ROWS FROM (generate_series(0, 1), generate_series(1, 3), pg_get_keywords(), unnest(ARRAY['a', 'b', 'c']))
+----
+zip
+ ├── columns: generate_series:1(int) generate_series:2(int) word:3(string) catcode:4(string) catdesc:5(string) unnest:6(string)
+ ├── function: generate_series [type=tuple{int AS generate_series}]
+ │    ├── const: 0 [type=int]
+ │    └── const: 1 [type=int]
+ ├── function: generate_series [type=tuple{int AS generate_series}]
+ │    ├── const: 1 [type=int]
+ │    └── const: 3 [type=int]
+ ├── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+ └── function: unnest [type=tuple{string AS unnest}]
+      └── array: [type=string[]]
+           ├── const: 'a' [type=string]
+           ├── const: 'b' [type=string]
+           └── const: 'c' [type=string]
+
+# Don't rename columns if the zip contains two functions.
+build
+SELECT a.*, b.*, c.* FROM upper('abc') a
+JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
+JOIN generate_series(1, 4) c ON true
+----
+inner-join
+ ├── columns: a:1(string) upper:2(string) generate_series:3(int) c:4(int)
+ ├── inner-join
+ │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
+ │    ├── zip
+ │    │    ├── columns: upper:1(string)
+ │    │    └── function: upper [type=string]
+ │    │         └── const: 'abc' [type=string]
+ │    ├── zip
+ │    │    ├── columns: upper:2(string) generate_series:3(int)
+ │    │    ├── function: upper [type=string]
+ │    │    │    └── const: 'def' [type=string]
+ │    │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 3 [type=int]
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
+ ├── zip
+ │    ├── columns: generate_series:4(int)
+ │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 4 [type=int]
+ └── filters [type=bool]
+      └── true [type=bool]
+
+build
+SELECT * FROM ROWS FROM (generate_series(generate_series(1,2),3))
+----
+error (0A000): generator functions are not supported
+
+build
+SELECT * FROM ROWS FROM (generate_series((generate_series(1,2)).generate_series,3))
+----
+error (0A000): generator functions are not supported
