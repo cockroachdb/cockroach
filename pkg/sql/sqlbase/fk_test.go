@@ -216,8 +216,16 @@ func TestTablesNeededForFKs(t *testing.T) {
 	})
 }
 
-// BenchmarkMultiRowFKChecks does a benchmark on a multi-row insert statement that has to check foreign keys.
+// BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
+// TODO
 func BenchmarkMultiRowFKChecks(b *testing.B) {
+	// Throughout the course of testing there are four tables that are set up at the beginning of each sub-benchmark and
+	// torn down at the end of each sub-benchmark.
+	// `example2` has a foreign key that references `example1`.
+	// `self_referential` is a table which has a foreign key reference to itself (parent-child relationship) with
+	// 		cascading updates and deletes
+	// `self_referential_setnull` has an identical schema to `self_referential` except that instead of cascading
+	// 		on delete, it sets the reference field to null.
 	schema1 := `
 CREATE TABLE IF NOT EXISTS example1(
   foo INT PRIMARY KEY,
@@ -246,15 +254,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 )
 `
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	drop := func() {
-		tables := [...]string{"example2", "example1", "self_referential", "self_referential_setnull"}
-		for _, tableName := range tables {
-			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)); err != nil {
-				b.Fatal(err)
-			}
-		}
-	}
 
+	// This function is to be called at the beginning of each sub-benchmark to set up the necessary tables.
 	setup := func() {
 		setupStatements := []string{schema1, schema2, schema3, schema4}
 		for _, s := range setupStatements {
@@ -270,8 +271,22 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 	}
 
+	// This function tears down all the tables and is meant to be called at the end of each sub-benchmark.
+	drop := func() {
+		tables := [...]string{"example2", "example1", "self_referential", "self_referential_setnull"}
+		for _, tableName := range tables {
+			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 	drop()
 
+	// In the following two sub-benchmarks, 10,000 rows are inserted into the `example2` table.
+	// All of the rows are inserted in a single statement and deleted in a second statement.
+	// In the first test, the rows have no foreign key references to rows in `example1`.
+	// In the second, the rows all have references to a particular row in `example1`.
+	// The benchmarks primarily measure how insert performance changes when foreign key checks are present.
 	const numFKRows = 10000
 	b.Run("10KRows_NoFK", func(b *testing.B) {
 		setup()
@@ -321,6 +336,9 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 	})
 
+	// For the self-referential table benchmarks, 10,000 rows are inserted and there is again a contrast between
+	// rows with foreign key references and those without.
+	// This measures the performance of cascading deletes.
 	const numSRRows = 10000
 	b.Run("SelfReferential_No_FK_Delete", func(b *testing.B) {
 		setup()
@@ -368,6 +386,9 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 		b.StopTimer()
 	})
+
+	// The SelfReferential_SetNull tests perform the same delete tests as the SelfReferential tests, but because of the
+	// differing schemas, the deletes do not cascade.
 	b.Run("SelfReferential_SetNull_NoFK_Delete", func(b *testing.B) {
 		setup()
 		defer drop()
