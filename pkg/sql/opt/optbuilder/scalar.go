@@ -255,6 +255,12 @@ func (b *Builder) buildScalarHelper(
 		}
 		out = b.factory.ConstructCoalesce(b.factory.InternList(args))
 
+	case *tree.ColumnAccessExpr:
+		input := b.buildScalarHelper(inScope.resolveType(t.Expr, types.Any), "", inScope, nil)
+		out = b.factory.ConstructColumnAccess(
+			input, b.factory.InternTupleOrdinal(memo.TupleOrdinal(t.ColIndex)),
+		)
+
 	case *tree.ComparisonExpr:
 		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
 			out, _ = b.buildMultiRowSubquery(t, inScope)
