@@ -262,6 +262,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	case opt.RowNumberOp:
 		return sb.colStatRowNumber(colSet)
 
+	case opt.ZipOp:
+		return sb.colStatZip(colSet)
+
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		return sb.colStatMetadata(colSet)
 	}
@@ -292,7 +295,6 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 	}
 
 	if colSet.Len() == 1 {
-		// Cast to int64 and then to uint64 to make the linter happy.
 		colStat.DistinctCount = unknownDistinctCountRatio * sb.s.RowCount
 	} else {
 		distinctCount := 1.0
@@ -825,6 +827,42 @@ func (sb *statisticsBuilder) colStatRowNumber(colSet opt.ColSet) *props.ColumnSt
 	return colStat
 }
 
+// Zip
+// ---
+
+func (sb *statisticsBuilder) buildZip() {
+	// The row count of a zip operation is equal to the maximum row count of its
+	// children.
+	for i := 0; i < sb.ev.ChildCount(); i++ {
+		child := sb.ev.Child(i)
+		if child.Operator() == opt.FunctionOp {
+			def := child.Private().(*FuncOpDef)
+			if def.Overload.Generator != nil {
+				// TODO(rytaft): We may want to estimate the number of rows based on
+				// the type of generator function and its parameters.
+				sb.s.RowCount = unknownRowCount
+				break
+			}
+		}
+
+		// A scalar function generates one row.
+		sb.s.RowCount = 1
+	}
+}
+
+func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet) *props.ColumnStatistic {
+	colStat := sb.makeColStat(colSet)
+	// TODO(rytaft): We may want to determine which generator function the
+	// columns in colSet correspond to, and estimate the distinct count based on
+	// the type of generator function and its parameters.
+	if sb.s.RowCount == 1 {
+		colStat.DistinctCount = 1
+	} else {
+		colStat.DistinctCount = sb.s.RowCount * unknownDistinctCountRatio
+	}
+	return colStat
+}
+
 /////////////////////////////////////////////////
 // General helper functions for building stats //
 /////////////////////////////////////////////////
@@ -902,7 +940,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	stats = &props.Statistics{}
 	if tab.StatisticCount() == 0 {
 		// No statistics.
-		stats.RowCount = 1000
+		stats.RowCount = unknownRowCount
 	} else {
 		// Get the RowCount from the most recent statistic. Stats are ordered
 		// with most recent first.
@@ -1013,6 +1051,9 @@ const (
 	unknownFilterSelectivity = 1.0 / 3.0
 
 	// TODO(rytaft): Add other selectivities for other types of predicates.
+
+	// This is an arbitrary row count used in the absence of any real statistics.
+	unknownRowCount = 1000
 
 	// This is the ratio of distinct column values to number of rows, which is
 	// used in the absence of any real statistics for non-key columns.

@@ -125,6 +125,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.MergeJoinOp:
 		ep, err = b.buildMergeJoin(ev)
 
+	case opt.ZipOp:
+		ep, err = b.buildZip(ev)
+
 	default:
 		if ev.IsJoinNonApply() {
 			ep, err = b.buildHashJoin(ev)
@@ -664,6 +667,49 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 		}
 	}
 	return res, nil
+}
+
+func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
+	exprs := make(tree.TypedExprs, ev.ChildCount())
+	var err error
+	scalarCtx := buildScalarCtx{}
+	for i := range exprs {
+		exprs[i], err = b.buildScalar(&scalarCtx, ev.Child(i))
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	md := ev.Metadata()
+	cols := ev.Private().(opt.ColList)
+	resultCols := make(sqlbase.ResultColumns, len(cols))
+	for i, col := range cols {
+		resultCols[i].Name = md.ColumnLabel(col)
+		resultCols[i].Typ = md.ColumnType(col)
+	}
+
+	// TODO(rytaft): We currently construct a ProjectSet with an empty Values
+	// node as input, which is correct when the SRFs and/or scalar functions in
+	// this Zip expression were originally in the FROM clause. Once we support
+	// SRFs in the SELECT list, the Zip may be on the right hand side of an
+	// InnerJoinApply operator. In this case, we will need to pass the left hand
+	// side of the join as input to ConstructProjectSet.
+	input, err := b.factory.ConstructValues([][]tree.TypedExpr{{}}, nil)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	node, err := b.factory.ConstructProjectSet(input, exprs, resultCols)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	ep := execPlan{root: node}
+	for i, col := range cols {
+		ep.outputCols.Set(int(col), i)
+	}
+
+	return ep, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan

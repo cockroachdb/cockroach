@@ -84,6 +84,9 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 	case *tree.ParenTableExpr:
 		return b.buildTable(source.Expr, inScope)
 
+	case *tree.RowsFromExpr:
+		return b.buildZip(source.Items, inScope)
+
 	case *tree.Subquery:
 		outScope = b.buildStmt(source.Select, inScope)
 
@@ -110,8 +113,20 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	colAlias := as.Cols
 
 	if as.Alias != "" {
-		// TODO(rytaft): Handle anonymous tables such as set-generating
-		// functions with just one column.
+		// Special case for Postgres compatibility: if a data source does not
+		// currently have a name, and it is a set-generating function or a scalar
+		// function with just one column, and the AS clause doesn't specify column
+		// names, then use the specified table name both as the column name and
+		// table name.
+		noColNameSpecified := len(colAlias) == 0
+		if scope.isAnonymousTable() && noColNameSpecified {
+			// SRFs and scalar functions used as a data source are always wrapped in
+			// a Zip operation.
+			ev := memo.MakeNormExprView(b.factory.Memo(), scope.group)
+			if ev.Operator() == opt.ZipOp && ev.Logical().Relational.OutputCols.Len() == 1 {
+				colAlias = tree.NameList{as.Alias}
+			}
+		}
 
 		// If an alias was specified, use that to qualify the column names.
 		tableAlias = tree.MakeUnqualifiedTableName(as.Alias)

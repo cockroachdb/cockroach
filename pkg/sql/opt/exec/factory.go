@@ -131,6 +131,11 @@ type Factory interface {
 	// set to nil.
 	ConstructLimit(input Node, limit, offset tree.TypedExpr) (Node, error)
 
+	// ConstructProjectSet returns a node that performs a lateral cross join
+	// between the output of the given node and the functional zip of the given
+	// expressions.
+	ConstructProjectSet(n Node, exprs tree.TypedExprs, cols sqlbase.ResultColumns) (Node, error)
+
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
 

@@ -94,6 +94,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 
 	case opt.RowNumberOp:
 		return b.buildRowNumberProps(ev)
+
+	case opt.ZipOp:
+		return b.buildZipProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -919,6 +922,43 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 	// ----------
 	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildRowNumber(&inputProps.Stats)
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
+
+	// Output Columns
+	// --------------
+	// Output columns are stored in the definition.
+	relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// Union outer columns from all input expressions.
+	for i := 0; i < ev.ChildCount(); i++ {
+		relational.OuterCols.UnionWith(ev.childGroup(i).logical.OuterCols())
+	}
+
+	// Functional Dependencies
+	// -----------------------
+	// Zip operator has an empty FD set.
+
+	// Cardinality
+	// -----------
+	// Don't make any assumptions about cardinality of output.
+	relational.Cardinality = props.AnyCardinality
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
+	b.sb.buildZip()
 
 	return logical
 }
