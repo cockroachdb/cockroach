@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -85,13 +86,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	return sq
 }
 
-// shouldQueue determines whether a range should be queued for
-// splitting. This is true if the range is intersected by a zone config
-// prefix or if the range's size in bytes exceeds the limit for the zone.
-func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+func shouldSplitRange(
+	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	desc := repl.Desc()
 	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
@@ -100,11 +97,20 @@ func (sq *splitQueue) shouldQueue(
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	if ratio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMaxBytes()); ratio > 1 {
+	if ratio := float64(ms.Total()) / float64(maxBytes); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}
 	return
+}
+
+// shouldQueue determines whether a range should be queued for
+// splitting. This is true if the range is intersected by a zone config
+// prefix or if the range's size in bytes exceeds the limit for the zone.
+func (sq *splitQueue) shouldQueue(
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+) (shouldQ bool, priority float64) {
+	return shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), sysCfg)
 }
 
 // unsplittableRangeError indicates that a split attempt failed because a no
