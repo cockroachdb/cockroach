@@ -13,7 +13,7 @@ query BT colnames
 EXPLAIN (DISTSQL) VALUES (1)
 ----
 automatic  url
-true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+false       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
@@ -146,3 +146,9 @@ query T
 SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(kw.w) FROM kv JOIN kw ON kv.k = kw.w ORDER BY kw.w]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyck8FunDAQhu99CmtOrWppMZCLpUoo6qFppaZKe6s4uHi6sQIYzZgmUbTvXmEipbCBLnuD3_PBN_b4CVpv8atpkEH_BAWlhI58hcyehmgsuLIPoBMJru36MMSlhMoTgn6C4EKNoOGH-VXjDRqLtEtAgsVgXB0_25FrDD0Wd39AAvl7FoTGaqFAAgdT1yK4BrVIGCRc90GLQkF5kOD78PJDDmaPoNVBnielFqTuT5ZKF6XSRakXl771ZJHQTjzKgfxfySudfTJ8-9m7FmmXThur8Xd4W6h3H8jtb-MTyBiKWZcxO2o1UvPSMTyq5eAJrWBnUYtYAxIa8yAabDw9ip7RapEm4ou7fF6xju-e80RcnrC12Zbz_u4pIO2y6Y4U6v0JZ3zkrVa8l2zzLbYfHQfXVmGXz32HfRknId6FM-TXJC-2SN4gd75lnE_tq19OhlFFu8dx9Nn3VOE38lX8zfh6HbkYWOQwrqbjy1Ubl-Id_xdWG-B0DqercDaBkzmcrcL5OpyvwhczuDy8-RsAAP__mE7PKQ==
+
+# This query verifies support for zeroNode in DistSQL.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE]
+----
+true
