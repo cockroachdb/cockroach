@@ -737,9 +737,7 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: build buildoss buildshort go-install
-build: ## Build the CockroachDB binary.
-buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
+.PHONY: go-install
 $(COCKROACH) go-install:
 	 $(xgo) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
@@ -756,6 +754,9 @@ $(COCKROACH) go-install:
 # diagrams. When the generated files are not checked in, the breakage goes
 # unnoticed until the docs team comes along, potentially months later. Much
 # better to make the developer who introduces the breakage fix the breakage.
+.PHONY: build buildoss buildshort
+build: ## Build the CockroachDB binary.
+buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
 
 .PHONY: install
