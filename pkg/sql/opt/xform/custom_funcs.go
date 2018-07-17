@@ -49,6 +49,7 @@ func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	return scanOpDef.Index == opt.PrimaryIndex &&
 		scanOpDef.Constraint == nil &&
+		!scanOpDef.Reverse &&
 		scanOpDef.HardLimit == 0
 }
 
