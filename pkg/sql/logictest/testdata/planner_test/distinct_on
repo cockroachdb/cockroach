@@ -272,6 +272,7 @@ render                    ·            ·                  (max)               
       └── group           ·            ·                  (max, max)                                      ·
            │              aggregate 0  max(x)             ·                                               ·
            │              aggregate 1  max(y)             ·                                               ·
+           │              scalar       ·                  ·                                               ·
            └── render     ·            ·                  (x, y)                                          ·
                 │         render 0     test.public.xyz.x  ·                                               ·
                 │         render 1     test.public.xyz.y  ·                                               ·
@@ -291,6 +292,7 @@ render               ·            ·              (max)                 ·
            │         aggregate 1  min(a)         ·                     ·
            │         aggregate 2  max(b)         ·                     ·
            │         aggregate 3  min(c)         ·                     ·
+           │         scalar       ·              ·                     ·
            └── scan  ·            ·              (a, b, c)             a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 ·                    table        abc@primary    ·                     ·
 ·                    spans        ALL            ·                     ·
