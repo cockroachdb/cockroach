@@ -371,6 +371,8 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.Timestamp
+		// Min bytes before merge.
+		minBytes int64
 		// Max bytes before split.
 		maxBytes int64
 		// proposals stores the Raft in-flight commands which
@@ -1196,17 +1198,25 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 }
 
-// GetMaxBytes gets the range maximum byte limit.
+// GetMinBytes gets the replica's minimum byte threshold.
+func (r *Replica) GetMinBytes() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.minBytes
+}
+
+// GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.maxBytes
 }
 
-// SetMaxBytes sets the maximum byte limit before split.
-func (r *Replica) SetMaxBytes(maxBytes int64) {
+// SetByteThresholds sets the minimum and maximum byte thresholds.
+func (r *Replica) SetByteThresholds(minBytes, maxBytes int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.mu.minBytes = minBytes
 	r.mu.maxBytes = maxBytes
 }
 

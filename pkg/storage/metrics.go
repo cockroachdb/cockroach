@@ -588,6 +588,36 @@ var (
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaMergeQueueSuccesses = metric.Metadata{
+		Name:        "queue.merge.process.success",
+		Help:        "Number of replicas successfully processed by the merge queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMergeQueueFailures = metric.Metadata{
+		Name:        "queue.merge.process.failure",
+		Help:        "Number of replicas which failed processing in the merge queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMergeQueuePending = metric.Metadata{
+		Name:        "queue.merge.pending",
+		Help:        "Number of pending replicas in the merge queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMergeQueueProcessingNanos = metric.Metadata{
+		Name:        "queue.merge.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the merge queue",
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaMergeQueuePurgatory = metric.Metadata{
+		Name:        "queue.merge.purgatory",
+		Help:        "Number of replicas in the merge queue's purgatory, waiting to become mergeable",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftLogQueueSuccesses = metric.Metadata{
 		Name:        "queue.raftlog.process.success",
 		Help:        "Number of replicas successfully processed by the Raft log queue",
@@ -1035,6 +1065,11 @@ type StoreMetrics struct {
 	GCQueueFailures                           *metric.Counter
 	GCQueuePending                            *metric.Gauge
 	GCQueueProcessingNanos                    *metric.Counter
+	MergeQueueSuccesses                       *metric.Counter
+	MergeQueueFailures                        *metric.Counter
+	MergeQueuePending                         *metric.Gauge
+	MergeQueueProcessingNanos                 *metric.Counter
+	MergeQueuePurgatory                       *metric.Gauge
 	RaftLogQueueSuccesses                     *metric.Counter
 	RaftLogQueueFailures                      *metric.Counter
 	RaftLogQueuePending                       *metric.Gauge
@@ -1226,6 +1261,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCQueueFailures:                           metric.NewCounter(metaGCQueueFailures),
 		GCQueuePending:                            metric.NewGauge(metaGCQueuePending),
 		GCQueueProcessingNanos:                    metric.NewCounter(metaGCQueueProcessingNanos),
+		MergeQueueSuccesses:                       metric.NewCounter(metaMergeQueueSuccesses),
+		MergeQueueFailures:                        metric.NewCounter(metaMergeQueueFailures),
+		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),
+		MergeQueueProcessingNanos:                 metric.NewCounter(metaMergeQueueProcessingNanos),
+		MergeQueuePurgatory:                       metric.NewGauge(metaMergeQueuePurgatory),
 		RaftLogQueueSuccesses:                     metric.NewCounter(metaRaftLogQueueSuccesses),
 		RaftLogQueueFailures:                      metric.NewCounter(metaRaftLogQueueFailures),
 		RaftLogQueuePending:                       metric.NewGauge(metaRaftLogQueuePending),
