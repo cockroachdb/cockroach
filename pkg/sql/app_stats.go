@@ -107,12 +107,6 @@ func (a *appStats) recordStatement(
 		return
 	}
 
-	// Some statements like SET, SHOW etc are not useful to collect
-	// stats about. Ignore them.
-	if _, ok := stmt.AST.(tree.HiddenFromStats); ok {
-		return
-	}
-
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
