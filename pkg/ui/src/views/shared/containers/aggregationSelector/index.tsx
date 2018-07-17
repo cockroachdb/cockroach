@@ -8,8 +8,8 @@ import { AggregationLevel, selectAggregationLevel, setAggregationLevel } from "s
 import "./toggle.styl";
 
 interface AggregationSelectorProps {
-  aggregationLevel: AggregationLevel,
-  setAggregationLevel: typeof setAggregationLevel,
+  aggregationLevel: AggregationLevel;
+  setAggregationLevel: typeof setAggregationLevel;
 }
 
 /**

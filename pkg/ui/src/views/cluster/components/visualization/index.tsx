@@ -26,7 +26,7 @@ interface VisualizationProps {
  * charts). It surrounds a visual element with some standard information, such
  * as a title and a tooltip icon.
  */
-export default class extends React.Component<VisualizationProps, {}> {
+export default class Visualization extends React.Component<VisualizationProps, {}> {
   render() {
     const { title, tooltip, stale } = this.props;
     const vizClasses = classNames(
