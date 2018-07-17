@@ -337,7 +337,7 @@ func (f *Flow) makeProcessor(
 		copier := o.(*copyingRowReceiver)
 		switch o := copier.RowReceiver.(type) {
 		case router:
-			o.init(&f.FlowCtx, types)
+			o.init(ctx, &f.FlowCtx, types)
 		case *outbox:
 			o.init(types)
 		}

@@ -673,7 +673,7 @@ func extractStatsFromSpans(
 			if err != nil {
 				continue
 			}
-			stats[i] = dss.StatsForQueryPlan()
+			stats[i] = append(stats[i], dss.StatsForQueryPlan()...)
 		}
 	}
 	return processorStats, streamStats

@@ -68,6 +68,7 @@
 		SorterStats
 		JoinReaderStats
 		OutboxStats
+		RouterOutputStats
 */
 package distsqlrun
 
