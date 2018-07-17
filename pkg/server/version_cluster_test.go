@@ -455,6 +455,46 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	}
 }
 
+func TestClusterVersionPersistedOnJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var newVersion = roachpb.Version{Major: 2, Minor: 0, Patch: 0}
+	var oldVersion = roachpb.Version{Major: 1, Minor: 0, Patch: 0}
+
+	// Starts 3 nodes that have cluster versions set to be oldVersion and
+	// self-declared binary version set to be newVersion with a cluster
+	// running at the new version (i.e. a very regular setup). Want to check
+	// that after joining the cluster, the second two servers persist the
+	// new version (and not the old one).
+	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+
+	bootstrapVersion := cluster.ClusterVersion{
+		UseVersion:     newVersion,
+		MinimumVersion: newVersion,
+	}
+
+	ctx := context.Background()
+	dir, finish := testutils.TempDir(t)
+	defer finish()
+	tc := setupMixedCluster(t, bootstrapVersion, versions, dir)
+	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	for i := 0; i < len(tc.TestCluster.Servers); i++ {
+		testutils.SucceedsSoon(t, func() error {
+			for _, engine := range tc.TestCluster.Servers[i].Engines() {
+				cv, err := storage.ReadClusterVersion(ctx, engine)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cv.MinimumVersion != newVersion {
+					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+				}
+			}
+			return nil
+		})
+	}
+}
+
 func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
