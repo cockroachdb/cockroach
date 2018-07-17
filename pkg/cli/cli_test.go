@@ -806,7 +806,7 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// Database
+	// database_name
 	// defaultdb
 	// postgres
 	// system
@@ -832,7 +832,7 @@ func Example_sql() {
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// > SHOW USERS
-	// username
+	// user_name
 	// root
 	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// pq: column "nonexistent" does not exist
@@ -911,18 +911,18 @@ thenshort`,
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0, 0)
 	// INSERT 1
 	// sql -e show columns from t.u
-	// Field	Type	Null	Default	Indices
-	// "f""oo"	INT	true	NULL	{}
-	// f'oo	INT	true	NULL	{}
-	// f\oo	INT	true	NULL	{}
+	// column_name	data_type	is_nullable	column_default	generation_expression	indices
+	// "f""oo"	INT	true	NULL		{}
+	// f'oo	INT	true	NULL		{}
+	// f\oo	INT	true	NULL		{}
 	// "short
 	// very very long
-	// not much"	INT	true	NULL	{}
+	// not much"	INT	true	NULL		{}
 	// "very very long
-	// thenshort"	INT	true	NULL	{}
-	// κόσμε	INT	true	NULL	{}
-	// a|b	INT	true	NULL	{}
-	// ܈85	INT	true	NULL	{}
+	// thenshort"	INT	true	NULL		{}
+	// κόσμε	INT	true	NULL		{}
+	// a|b	INT	true	NULL		{}
+	// ܈85	INT	true	NULL		{}
 	// sql -e select * from t.u
 	// "f""oo"	f'oo	f\oo	"short
 	// very very long
@@ -930,24 +930,24 @@ thenshort`,
 	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
 	// sql --format=pretty -e show columns from t.u
-	// +----------------+------+------+---------+---------+
-	// |     Field      | Type | Null | Default | Indices |
-	// +----------------+------+------+---------+---------+
-	// | f"oo           | INT  | true | NULL    | {}      |
-	// | f'oo           | INT  | true | NULL    | {}      |
-	// | f\oo           | INT  | true | NULL    | {}      |
-	// | short          | INT  | true | NULL    | {}      |
-	// |                |      |      |         |         |
-	// | very very long |      |      |         |         |
-	// |                |      |      |         |         |
-	// | not much       |      |      |         |         |
-	// | very very long | INT  | true | NULL    | {}      |
-	// |                |      |      |         |         |
-	// | thenshort      |      |      |         |         |
-	// | κόσμε          | INT  | true | NULL    | {}      |
-	// | a|b            | INT  | true | NULL    | {}      |
-	// | ܈85            | INT  | true | NULL    | {}      |
-	// +----------------+------+------+---------+---------+
+	// +----------------+-----------+-------------+----------------+-----------------------+---------+
+	// |  column_name   | data_type | is_nullable | column_default | generation_expression | indices |
+	// +----------------+-----------+-------------+----------------+-----------------------+---------+
+	// | f"oo           | INT       |    true     | NULL           |                       | {}      |
+	// | f'oo           | INT       |    true     | NULL           |                       | {}      |
+	// | f\oo           | INT       |    true     | NULL           |                       | {}      |
+	// | short          | INT       |    true     | NULL           |                       | {}      |
+	// |                |           |             |                |                       |         |
+	// | very very long |           |             |                |                       |         |
+	// |                |           |             |                |                       |         |
+	// | not much       |           |             |                |                       |         |
+	// | very very long | INT       |    true     | NULL           |                       | {}      |
+	// |                |           |             |                |                       |         |
+	// | thenshort      |           |             |                |                       |         |
+	// | κόσμε          | INT       |    true     | NULL           |                       | {}      |
+	// | a|b            | INT       |    true     | NULL           |                       | {}      |
+	// | ܈85            | INT       |    true     | NULL           |                       | {}      |
+	// +----------------+-----------+-------------+----------------+-----------------------+---------+
 	// (8 rows)
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------+----------------+----------------+-------+-----+-----+
@@ -1624,7 +1624,7 @@ func Example_misc_pretty() {
 	// (1 row)
 	// sql --format=pretty -e explain select s, 'foo' from t.t
 	// +-----------+-------+-------------+
-	// |   Tree    | Field | Description |
+	// |   tree    | field | description |
 	// +-----------+-------+-------------+
 	// | render    |       |             |
 	// |  └── scan |       |             |
@@ -1670,17 +1670,17 @@ func Example_user() {
 
 	// Output:
 	// user ls
-	// username
+	// user_name
 	// root
 	// user ls --format=pretty
-	// +----------+
-	// | username |
-	// +----------+
-	// | root     |
-	// +----------+
+	// +-----------+
+	// | user_name |
+	// +-----------+
+	// | root      |
+	// +-----------+
 	// (1 row)
 	// user ls --format=tsv
-	// username
+	// user_name
 	// root
 	// user set FOO
 	// CREATE USER 1
@@ -1724,7 +1724,7 @@ func Example_user() {
 	// CREATE USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
-	// |                            username                             |
+	// |                            user_name                            |
 	// +-----------------------------------------------------------------+
 	// | _foo                                                            |
 	// | and                                                             |
@@ -1743,7 +1743,7 @@ func Example_user() {
 	// DROP USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
-	// |                            username                             |
+	// |                            user_name                            |
 	// +-----------------------------------------------------------------+
 	// | _foo                                                            |
 	// | and                                                             |

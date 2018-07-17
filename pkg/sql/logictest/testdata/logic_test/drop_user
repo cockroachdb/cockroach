@@ -6,7 +6,7 @@ CREATE USER user1
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 user1
@@ -17,7 +17,7 @@ DROP USER user1
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 
@@ -27,7 +27,7 @@ CREATE USER user1
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 user1
@@ -38,7 +38,7 @@ DROP USER USEr1
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 
@@ -72,7 +72,7 @@ CREATE USER user4
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 user1
@@ -86,7 +86,7 @@ DROP USER user1,user2
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 user3
@@ -98,7 +98,7 @@ DROP USER user1,user3
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 user3
@@ -130,7 +130,7 @@ PREPARE du AS DROP USER $1;
 query T colnames
 SHOW USERS
 ----
-username
+user_name
 root
 testuser
 

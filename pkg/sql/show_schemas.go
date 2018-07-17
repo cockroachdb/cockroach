@@ -38,7 +38,7 @@ func (p *planner) ShowSchemas(ctx context.Context, n *tree.ShowSchemas) (planNod
 	}
 
 	const getSchemasQuery = `
-				SELECT schema_name AS "Schema"
+				SELECT schema_name
 				FROM %[1]s.information_schema.schemata
 				WHERE catalog_name = %[2]s
 				ORDER BY schema_name`

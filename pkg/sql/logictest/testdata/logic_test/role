@@ -3,42 +3,42 @@
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR root
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin FOR root
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser
 ----
-role  member  isAdmin
+role_name  member  is_admin
 
 query TTB colnames
 SHOW GRANTS ON ROLE testuser,admin FOR testuser,admin
 ----
-role  member  isAdmin
+role_name  member  is_admin
 
 # Test the "public" pseudo-role.
 
@@ -77,22 +77,19 @@ GRANT GRANT,SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query T colnames
+query T
 SHOW DATABASES
 ----
-Database
 publicdb
 
-query T colnames
+query T
 SHOW TABLES FROM publicdb
 ----
-Table
 publictable
 
-query T colnames
+query T
 SHOW TABLES FROM privatedb
 ----
-Table
 publictable
 
 statement ok
@@ -127,7 +124,6 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query T colnames
+query T
 SHOW TABLES FROM publicdb
 ----
-Table

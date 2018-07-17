@@ -1,0 +1,2 @@
+show_create_stmt ::=
+	'SHOW' 'CREATE' object_name

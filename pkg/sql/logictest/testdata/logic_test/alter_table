@@ -18,19 +18,19 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM t
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary","t_f_idx"}
-f     INT  true  NULL    {"t_f_idx"}
-b     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        false        NULL            ·                      {"primary","t_f_idx"}
+f            INT        true         NULL            ·                      {"t_f_idx"}
+b            INT        true         NULL            ·                      {}
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -46,12 +46,12 @@ ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
-t      foo      true    1    b       ASC        false    false
-t      foo      true    2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
+t           foo         false       1             b            ASC        false    false
+t           foo         false       2             a            ASC        false    true
 
 query III
 SELECT * FROM t
@@ -69,7 +69,7 @@ ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
 query TTTTRT
-SELECT type, description, username, status, fraction_completed::decimal(10,2), error
+SELECT job_type, description, user_name, status, fraction_completed::decimal(10,2), error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
@@ -88,11 +88,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table  name            type         details                               validated
-t      check_a         CHECK        CHECK (a > 0)                         true
-t      fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t      foo             UNIQUE       UNIQUE (b ASC)                        true
-t      primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+table_name  constraint_name  constraint_type  details                               validated
+t           check_a          CHECK            CHECK (a > 0)                         true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other (b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                        true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                   true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -179,7 +179,7 @@ statement ok
 DROP INDEX foo CASCADE
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -189,10 +189,10 @@ SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -262,7 +262,7 @@ statement ok
 DROP INDEX t@t_f_idx
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -401,15 +401,15 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM tt
 ----
-Field  Type     Null   Default       Indices
-a      INT      false  NULL          {"primary","tt_s_key","tt_t_key"}
-q      DECIMAL  false  NULL          {}
-r      DECIMAL  true   NULL          {}
-s      DECIMAL  false  NULL          {"tt_s_key"}
-t      DECIMAL  true   4.0:::DECIMAL {"tt_t_key"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}
+q            DECIMAL    false        NULL            ·                      {}
+r            DECIMAL    true         NULL            ·                      {}
+s            DECIMAL    false        NULL            ·                      {"tt_s_key"}
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -595,12 +595,12 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM privs
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary"}
-b     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        false        NULL            ·                      {"primary"}
+b            INT        true         NULL            ·                      {}
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -613,13 +613,13 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM privs
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary","foo"}
-b     INT  true  NULL    {"foo"}
-c     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        false        NULL            ·                      {"primary","foo"}
+b            INT        true         NULL            ·                      {"foo"}
+c            INT        true         NULL            ·                      {}
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)

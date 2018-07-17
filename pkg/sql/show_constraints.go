@@ -27,15 +27,15 @@ import (
 func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) (planNode, error) {
 	const getConstraintsQuery = `
      SELECT
-        t.relname AS table,
-        c.conname AS name,
+        t.relname AS table_name,
+        c.conname AS constraint_name,
         CASE c.contype
            WHEN 'p' THEN 'PRIMARY KEY'
            WHEN 'u' THEN 'UNIQUE'
            WHEN 'c' THEN 'CHECK'
            WHEN 'f' THEN 'FOREIGN KEY'
            ELSE c.contype
-        END AS type,
+        END AS constraint_type,
         c.condef AS details,
         c.convalidated AS validated
     FROM

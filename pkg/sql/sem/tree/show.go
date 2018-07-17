@@ -255,37 +255,15 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowCreateTable represents a SHOW CREATE TABLE statement.
-type ShowCreateTable struct {
-	Table NormalizableTableName
+// ShowCreate represents a SHOW CREATE statement.
+type ShowCreate struct {
+	Name NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowCreateTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE TABLE ")
-	ctx.FormatNode(&node.Table)
-}
-
-// ShowCreateView represents a SHOW CREATE VIEW statement.
-type ShowCreateView struct {
-	View NormalizableTableName
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateView) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE VIEW ")
-	ctx.FormatNode(&node.View)
-}
-
-// ShowCreateSequence represents a SHOW CREATE SEQUENCE statement.
-type ShowCreateSequence struct {
-	Sequence NormalizableTableName
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateSequence) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE SEQUENCE ")
-	ctx.FormatNode(&node.Sequence)
+func (node *ShowCreate) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ")
+	ctx.FormatNode(&node.Name)
 }
 
 // ShowSyntax represents a SHOW SYNTAX statement.

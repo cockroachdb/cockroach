@@ -2,9 +2,7 @@ show_stmt ::=
 	show_backup_stmt
 	| show_columns_stmt
 	| show_constraints_stmt
-	| show_create_table_stmt
-	| show_create_view_stmt
-	| show_create_sequence_stmt
+	| show_create_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_grants_stmt

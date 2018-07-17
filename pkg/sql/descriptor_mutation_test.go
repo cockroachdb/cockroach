@@ -872,9 +872,9 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.CheckQueryResults(t,
 		"SHOW INDEXES FROM t.test",
 		[][]string{
-			{"test", "primary", "true", "1", "a", "ASC", "false", "false"},
-			{"test", "ufo", "false", "1", "d", "ASC", "false", "false"},
-			{"test", "ufo", "false", "2", "a", "ASC", "false", "true"},
+			{"test", "primary", "false", "1", "a", "ASC", "false", "false"},
+			{"test", "ufo", "true", "1", "d", "ASC", "false", "false"},
+			{"test", "ufo", "true", "2", "a", "ASC", "false", "true"},
 		},
 	)
 
@@ -896,9 +896,9 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.CheckQueryResults(t,
 		"SHOW COLUMNS FROM t.test",
 		[][]string{
-			{"a", "STRING", "false", "NULL", "{\"primary\",\"ufo\"}"},
-			{"d", "STRING", "true", "NULL", "{\"ufo\"}"},
-			{"e", "STRING", "true", "NULL", "{}"},
+			{"a", "STRING", "false", "NULL", "", "{\"primary\",\"ufo\"}"},
+			{"d", "STRING", "true", "NULL", "", "{\"ufo\"}"},
+			{"e", "STRING", "true", "NULL", "", "{}"},
 		},
 	)
 

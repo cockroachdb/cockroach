@@ -22,9 +22,9 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
-Start Key  End Key  Replicas  Lease Holder
+start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
 /1         /2       {2}       2
 /2         /3       {3}       3
@@ -40,35 +40,38 @@ statement ok
 CREATE STATISTICS s1 ON a FROM data
 
 query TTIII colnames
-SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT table_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
-name  columns  row_count  distinct_count  null_count
-s1    {"a"}    10000      10              0
+table_name  column_names  row_count  distinct_count  null_count
+s1          {"a"}         10000      10              0
 
 let $hist_id_1
-SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE name = 's1'
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE table_name = 's1'
 
 query TII colnames
 SHOW HISTOGRAM $hist_id_1
 ----
-upper_bound  num_range  num_eq
-1            0          1000
-2            0          1000
-3            0          1000 4            0          1000 5            0          1000 6            0          1000
-7            0          1000
-8            0          1000
-9            0          1000
-10           0          1000
+upper_bound  range_rows  equal_rows
+1            0           1000
+2            0           1000
+3            0           1000
+4            0           1000
+5            0           1000
+6            0           1000
+7            0           1000
+8            0           1000
+9            0           1000
+10           0           1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
 
 query TTIII colnames
-SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT table_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
-name  columns  row_count  distinct_count  null_count
-s1    {"a"}    10000      10              0
-NULL  {"b"}    10000      10              0
+table_name  column_names  row_count  distinct_count  null_count
+s1          {"a"}         10000      10              0
+NULL        {"b"}         10000      10              0
 
 # Verify that we can package statistics into a json object and later restore them.
 let $json_stats
@@ -81,30 +84,30 @@ statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
 query TTIII colnames
-SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT table_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
-name  columns  row_count  distinct_count  null_count
-s1    {"a"}    10000      10              0
-NULL  {"b"}    10000      10              0
+table_name  column_names  row_count  distinct_count  null_count
+s1          {"a"}         10000      10              0
+NULL        {"b"}         10000      10              0
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
 CREATE STATISTICS s3 ON c FROM data
 
 query TTIII colnames
-SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT table_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
-name  columns  row_count  distinct_count  null_count
-s1    {"a"}    10000      10              0
-NULL  {"b"}    10000      10              0
-s3    {"c"}    10000      10              0
+table_name  column_names  row_count  distinct_count  null_count
+s1          {"a"}         10000      10              0
+NULL        {"b"}         10000      10              0
+s3          {"c"}         10000      10              0
 
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
 query TTIII colnames
-SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+SELECT table_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
-name  columns  row_count  distinct_count  null_count
-s1    {"a"}    10000      10              0
-NULL  {"b"}    10000      10              0
+table_name  column_names  row_count  distinct_count  null_count
+s1          {"a"}         10000      10              0
+NULL        {"b"}         10000      10              0

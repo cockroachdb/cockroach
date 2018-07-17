@@ -27,9 +27,9 @@ ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[5], 5)
 
 query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
+SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /2       1         {1}       1
 /2         /3       2         {2}       2
 /3         /4       3         {3}       3

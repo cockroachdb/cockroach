@@ -120,38 +120,38 @@ pg_views
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
 ----
-Table                    CreateTable
+table_name               create_statement
 pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
-                             oid OID NULL,
-                             nspname NAME NOT NULL,
-                             nspowner OID NULL,
-                             nspacl STRING[] NULL
+                         oid OID NULL,
+                         nspname NAME NOT NULL,
+                         nspowner OID NULL,
+                         nspacl STRING[] NULL
 )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-Field     Type      Null   Default Indices
-oid       OID       true   NULL    {}
-nspname   NAME      false  NULL    {}
-nspowner  OID       true   NULL    {}
-nspacl    STRING[]  true   NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+oid          OID        true         NULL            ·                      {}
+nspname      NAME       false        NULL            ·                      {}
+nspowner     OID        true         NULL            ·                      {}
+nspacl       STRING[]   true         NULL            ·                      {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
 ----
-Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 
 query TTTTB colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
-table  name  type  details  validated
+table_name  constraint_name  constraint_type  details  validated
 
 query TTTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
-Database  Schema      Table         User    Privileges
-test      pg_catalog  pg_namespace  public  SELECT
+database_name  schema_name  table_name    grantee  privilege_type
+test           pg_catalog   pg_namespace  public   SELECT
 
 
 # Verify selecting from pg_catalog.
@@ -1169,29 +1169,29 @@ SELECT * FROM pg_catalog.pg_stat_activity
 ----
 datid  datname  pid  usesysid  username  application_name  client_addr  client_hostname  client_port  backend_start  xact_start  query_start  state_change  wait_event_type  wait_event  state  backend_xid  backend_xmin  query
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 ----
-Field             Type                      Null  Default  Indices
-datid             OID                       true  NULL     {}
-datname           NAME                      true  NULL     {}
-pid               INTEGER                   true  NULL     {}
-usesysid          OID                       true  NULL     {}
-username          NAME                      true  NULL     {}
-application_name  STRING                    true  NULL     {}
-client_addr       INET                      true  NULL     {}
-client_hostname   STRING                    true  NULL     {}
-client_port       INTEGER                   true  NULL     {}
-backend_start     TIMESTAMP WITH TIME ZONE  true  NULL     {}
-xact_start        TIMESTAMP WITH TIME ZONE  true  NULL     {}
-query_start       TIMESTAMP WITH TIME ZONE  true  NULL     {}
-state_change      TIMESTAMP WITH TIME ZONE  true  NULL     {}
-wait_event_type   STRING                    true  NULL     {}
-wait_event        STRING                    true  NULL     {}
-state             STRING                    true  NULL     {}
-backend_xid       INTEGER                   true  NULL     {}
-backend_xmin      INTEGER                   true  NULL     {}
-query             STRING                    true  NULL     {}
+column_name       data_type                 is_nullable  column_default  generation_expression  indices
+datid             OID                       true         NULL            ·                      {}
+datname           NAME                      true         NULL            ·                      {}
+pid               INTEGER                   true         NULL            ·                      {}
+usesysid          OID                       true         NULL            ·                      {}
+username          NAME                      true         NULL            ·                      {}
+application_name  STRING                    true         NULL            ·                      {}
+client_addr       INET                      true         NULL            ·                      {}
+client_hostname   STRING                    true         NULL            ·                      {}
+client_port       INTEGER                   true         NULL            ·                      {}
+backend_start     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+xact_start        TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+query_start       TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+state_change      TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+wait_event_type   STRING                    true         NULL            ·                      {}
+wait_event        STRING                    true         NULL            ·                      {}
+state             STRING                    true         NULL            ·                      {}
+backend_xid       INTEGER                   true         NULL            ·                      {}
+backend_xmin      INTEGER                   true         NULL            ·                      {}
+query             STRING                    true         NULL            ·                      {}
 
 
 ## pg_catalog.pg_settings

@@ -3,30 +3,30 @@
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-Tree         Field  Description
+tree         field  description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-Tree         Field  Description
+tree         field  description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
-Tree       Field  Description
+tree       field  description
 render     ·      ·
-└── scan  ·      ·
+ └── scan  ·      ·
 ·          table  jobs@primary
 ·          spans  ALL
 
 query TTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a)      a=CONST
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
@@ -34,7 +34,7 @@ render         ·         ·            (a)      a=CONST
 query TTTTT colnames
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a)      a=CONST
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
@@ -51,7 +51,7 @@ output row: [1]
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a int)  a=CONST
  │             render 0  (1)[int]     ·        ·
  └── emptyrow  ·         ·            ()       ·
@@ -71,7 +71,7 @@ EXPLAIN (TYPES) SELECT $1
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT $1::INT
 ----
-Tree           Field     Description               Columns      Ordering
+tree           field     description               columns      ordering
 render         ·         ·                         ("int" int)  "int"=CONST
  │             render 0  (($1)[string]::INT)[int]  ·            ·
  └── emptyrow  ·         ·                         ()           ·
@@ -128,7 +128,7 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 alter table  ·  ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
 ----
 split        ·              ·
  └── values  ·              ·
@@ -144,9 +144,9 @@ query TTT
 EXPLAIN SHOW DATABASES
 ----
 distinct               ·          ·
- │                     order key  Database
+ │                     order key  database_name
  └── sort              ·          ·
-      │                order      +"Database"
+      │                order      +database_name
       └── render       ·          ·
            └── values  ·          ·
 ·                      size       4 columns, 20 rows
@@ -155,7 +155,7 @@ query TTT
 EXPLAIN SHOW TABLES
 ----
 sort                   ·      ·
- │                     order  +table_schema,+"Table"
+ │                     order  +table_schema,+table_name
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
@@ -212,9 +212,10 @@ sort                                       ·            ·
            │                               aggregate 1  data_type
            │                               aggregate 2  is_nullable
            │                               aggregate 3  column_default
-           │                               aggregate 4  ordinal_position
-           │                               aggregate 5  array_agg(index_name)
-           │                               group by     @1-@5
+           │                               aggregate 4  generation_expression
+           │                               aggregate 5  ordinal_position
+           │                               aggregate 6  array_agg(index_name)
+           │                               group by     @1-@6
            └── render                      ·            ·
                 └── join                   ·            ·
                      │                     type         left outer
@@ -232,7 +233,7 @@ query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 sort                   ·      ·
- │                     order  +"Database",+"Schema",+"Table",+"User"
+ │                     order  +database_name,+schema_name,+table_name,+grantee
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
@@ -251,7 +252,7 @@ query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
 sort                             ·         ·
- │                               order     +"table",+name
+ │                               order     +table_name,+constraint_name
  └── render                      ·         ·
       └── join                   ·         ·
            │                     type      inner
@@ -282,7 +283,7 @@ CREATE SEQUENCE select_test
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
-Tree             Field  Description  Columns                           Ordering
+tree             field  description  columns                           ordering
 sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
 
 statement ok
@@ -301,7 +302,7 @@ count             ·     ·
 ·                 size  2 columns, 1 row
 
 query I
-SELECT max("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
+SELECT max(level) FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
 ----
 2
 
@@ -350,7 +351,7 @@ values  ·     ·
 ·       size  1 column, 1 row
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
 limit            ·       ·
  │               count   1
@@ -371,7 +372,7 @@ distinct        ·      ·
 ·               spans  ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 limit                ·         ·
  │                   count     1
@@ -389,7 +390,7 @@ statement ok
 PREPARE x AS SELECT DISTINCT v from t LIMIT $1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
 ----
 limit                ·         ·
  │                   count     3
@@ -401,7 +402,7 @@ limit                ·         ·
 ·                    spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
 ]
 ----
@@ -435,7 +436,7 @@ sort                  ·         ·                 (a, b)                      
 query TTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-Tree              Field          Description       Columns                     Ordering
+tree              field          description       columns                     ordering
 count             ·              ·                 ()                          ·
  └── insert       ·              ·                 ()                          ·
       │           into           t(k, v)           ·                           ·

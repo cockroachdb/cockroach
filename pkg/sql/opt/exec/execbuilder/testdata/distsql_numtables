@@ -24,15 +24,15 @@ ALTER TABLE NumToStr EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToSquare]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToSquare]
 ----
-Start Key  End Key  Replicas  Lease Holder
+start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
 
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToStr]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToStr]
 ----
-Start Key  End Key  Replicas  Lease Holder
+start_key  end_key  replicas  lease_holder
 NULL       /2000    {1}       1
 /2000      /4000    {2}       2
 /4000      /6000    {3}       3
@@ -46,25 +46,25 @@ NULL       /2000    {1}       1
 # Query with a restricted span.
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFrwzAQhff-ivDWCGKZdtHk1Uta3GzFg2odwWDrzOkMLcH_vdga0hRS2k33Tu97j7sgcqCjHynBvcGiNZiEO0qJZZXyhzp8wBUGfZxmXeXWoGMhuAu014HgcPLvAzXkA8mhgEEg9f2wYSfpRy-fVZxH5aQCg4ZiIHG7J-dcfTyZXWX35fVtdlWJdjHgWa-RSf2Z4Oxi_l7rlUVJDva2UfW4v4sv_4NvKE0cE93g75GLpTWgcKZ82cSzdPQi3G0xeXzefJsQKGne2jzUMa_Wgt_N9ldz-cPcLg9fAQAA___0cqP4
 
 # Query which requires a full table scan.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlMtq8zAQhff_U5iBH1qiEku2cxEUvCpkk5Y0u-KFaw3B4FhGkqEl5N2LL5A6JLJJuvBOtzPn8I2YA-RS4Dreowb-ARQIMCDgAQEfCAQQESiUTFBrqaonjWAlvoC7BNK8KE11HBFIpELgBzCpyRA4bOPPDDcYC1RTFwgINHGa1TaFSvex-g7zcm-kNgoIvKSZQcWdh5A6_x3qui7nfLXePjrPTrsEAhvMRfUqaE6IE9IJO62JEzKIjgRkaU7BtIl3CJweyfDw71IZVNOgmzv0J1fLs6vlT1WlEqhQXCp6IcNaPsliSrvsrtl7HXs6vDV0dK3pCd-2ZnZra9hwNmx0bHrCt2zmt7LxhrPxRsemJ3zLZnErG384G390bHrCt2yWfzHuLpTfoC5krnHQJHOrWYhih83s1LJUCb4pmdQ2zfa11tUHArVpbmmzWeXNVRXwt5haxawjpudiZnfusfasat8u9u_JHVjFM7vz7B7nuVW8sDsv7nFe2nvl9nwT-yc7946O_34CAAD__12t7jY=
 
 # Query with a restricted span + filter.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAUhPf-CnMQsghqd9SUpS2mJSlutqJBtR5BYEvm6Qlagv57sTWUDoWMd590d--KEB0d7UwJ-gMdjMLCcaSUIq9WfdC7L-hWwYcly2obhTEyQV8hXiaCxtl-TjSQdcT3LRQcifXTFruwny1_H0KeJSZhKDz5SYh1c3hoXvuXx2a_o91ea_1-HvrjMxROWVYKUxRilt_eJPZC0F1Rt28bKC0xJPoz67_kthgFcheq96eYeaQ3juNWU-Vp-7cZjpJU2lXRh4qKKXc_AQAA___YHXLQ
 
 # Query which requires a full table scan.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlE2rm0AYhff9FcOBkIROiTOaLgYKFvqBtJiSZldcWOclCMaRmRFagv-9RKG5Xm7u9ZKNO-fj4Zxn4PWM2mhK8xM5qF8Q4JDgCMERgWOLjKOxpiDnjL1cGYBE_4EKOMq6af1lO-MojCWoM3zpK4LCIf9d0Z5yTXYTgEOTz8uqj2lsecrt37huT944b8Hxpaw8WcVWq1iwBRNBECilkvSwZh_Y_8-P6Se2iiX7nnz7zJaLcrFUSv087JP06xocu9YrFkseC2Qdh2n9tZ7z-ZGgRMdvKFybG6vJkh53juVbZN0Tnql5Z5rNdnT7VrocpYvpDyhm-oByuoKcqUI4XSGcqUI0XSGaqcILP5M9ucbUjiZNWXAZU9JHGsbamdYW9MOaoo8Zlrue6zc0OT-cimGR1P1RX_AhLJ6F34_g4DEs70kO74Gje-Dtq-Cse_MvAAD__yjQ8xE=
 
@@ -73,7 +73,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlE2rm0AYhff9FcOBkIROiT
 #
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc9q20AQh-99ijCnBLZYs5LiWFDQsekhKaG3ooNiTW2BrVV3V9AQ_O5FVsGV7M5KXayj_nw7M98PZt-hUgU95XsykHwHBAESBIQgIAIBMWQCaq3WZIzS7S8d8Fj8giQQUFZ1Y9vXmYC10gTJO9jS7ggS-Ja_7uiF8oL0IgABBdm83B3L1Lrc5_otrZq9VeZnk2uC7CBANfbPeadjXt9utrnZ9g9IJWSHTICx-YYgwYP4v76Q68vqiU1hryn5z6ZO5zSV0gVpKnonZS3p-uXCZJ9zs_2iyor04r7f2o5-2NtU3n3S5WZrb1O8AwHPjU1uUhRpNJjzNEPoMcOFBp_UR1UvEIfTXqwd9Wrj-FDlbKHivKEurxGqHC82nE2snFfswzXEhuPFRrOJDecVu7qG2Gi82Hg2sdG8YjG49oK_UP-FTK0qQ6PWd9BOQMWGOiNGNXpNX7VaH8t0j89H7rhHCzK2-yq7h8eq-9Q2OB6OfeClD7zygRF5GicYk9Pg2Ade-sArH3hg7IyWQzr4mw553SELY993MKQjn7B42BEWDzvC4mFHWDzsCiv2CeveRzcPO3TzsEM3Dzt087BL99JH94OPbh526OZhh24edujmYZfulY9unHJZnu_QKbflVNq1_Kfcl1Npl3M8uz1Y6dnhw-8AAAD__3ZSr0E=
 
@@ -99,7 +99,7 @@ render          ·               ·                    (x, str)     ·
 ·               filter          (y % 2) = 0          ·            ·
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlUFr2zAUx-_7FOLBoKUasWSnaQQBnwYZLB2lt-GDG78lhsTKJBlWSr77sL2R2ckkuwKTWxzr56f3-wu9Nyhkhqt0jxrEd2BAgQOFEChEQGEKCYWDkmvUWqpqSQMss18gAgp5cShN9XdCYS0VgngDk5sdgoDn9GWHT5hmqCYBUMjQpPmuLnNQ-T5Vr3FR7o3UP8tUIVD4nO8MKkFuYkY-Ei6EWK6eb8mCBM1PoPBYGkFiBsmRgizNn-Knmi-vZJvqbbtavT6hoE26QRDsSN_XBLM1YVSfDnz2zf-779N3ykKqDBVmrS8lFfl3yaUFELO7pla3_6-oNvhF5gWqyX2b2eEPcxOzu9uFyjfb5mcV0YrEjCxIzE950TjstH5qK_Ro68KGV_KTPEwY6wq4WDtq1Wb9jwK_pqPAxj8KsxGOAu8fR3hNcfDx43gYIY6wfxzRNcURjh_HfIQ4ov5xTK8pjmj8OFgw8uC6sJ8n1AdZaOw1loKqI8w22EjSslRr_Kbkui7TPD7WXH35Z6hN85Y3D8uieVVtsD889YFnPvDcB2bMTrMBxvgweOoDz3zguQ_cMXZG8y4d_EuHdt2hFWZt30GXjnzCssOOsOywIyw77AjLDrvCmvqEde-j2w47dNthh2477NBth126Zz66H3x022GHbjvs0G2HHbrtsEv33Ec3GzIsz-_QIdNyKO26_IfMy6G0yzk7mx5W6cnxw-8AAAD__1z29JU=
 
@@ -109,19 +109,19 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlUFr2zAUx-_7FOLBoKUasW
 
 # Sum the numbers in the NumToStr table.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT sum(y) FROM NumToStr]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(y) FROM NumToStr]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE1vozAQhu_7K1bvaVeyFAzki1P2mMM2VdqeKg4uHiGkBCPbSK0i_nsFHAJRYqjgaJt3nnmMNRfkStKTOJNB9A4OBh8MARhCMCwRMxRaJWSM0vUnbWAvPxF5DFlelLbejhkSpQnRBTazJ0KEV_FxoiMJSXrhgUGSFdmpwRQ6Owv9tcvLs1XGajAcShv93nHEFYMq7bWssSIlRLxi49H_0lRTKqzSi2Wf_PL2_8-O_32I8R9irtXLXGlJmmSvdFy5G-HezzoJep3w8XfNZ77rAXRHcTXlrv3xhv7MhgPojuF6imEw3jCY2XAA3THcTDEMxxuGMxsOoDuG27kmwh3MkUyhckM3k-F-Za-eGCRTaseLUaVO6FmrpMG0y0OTazYkGdue8naxz9ujusFumDvDfi_Mb8O-mzyADpzp0B0Op_S9dIZXbvJqCnntDG_c5M0U8tb9r7yBZ-J-ZLfsuPr1HQAA__8CqbEl
 
 # Count the rows in the NumToStr table.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE2LszAQx-_Pp3iYUxcCNWrfPHXZUw-rS1_YwyLFNYMIbSJJhF2K331RD1Vpo6DHJP7zm98Y5gZcMPSjKyrwvoACARsIOEDABQILCAlkUsSolJDlJ3Vgx37AswikPMt1uR0SiIVE8G6gU31B8OAYfV9wjxFDObeAAEMdpZcKk8n0GsnfLc-vWigtgUCQa--_LzhCWBAQub5frHSUIHi0IMPhr0kiMYm0kPNFm_0WnPzjeR98HmYvT1n2U9YdkXMhGUpkrfvDwlwN7bTicHo_7_zjbEufV-O0qqHD204nb3sPvCG6HN12e7ioPbloD7whuhot6gwXdSYX7YE3RNejRd3hou7koj3whuhm0onxgLVHlQmusDM5Ht9slRMFWYL1-FEilzF-SBFXmHoZVLlqg6HS9SmtFzteH5UFNsPUGLZbYdoN22ZyD9oxpl1z2B1T98IYXprJyzHklTG8NpPXY8gb87-yep6J-ZF12WHx7y8AAP__2avBCw==
 
 # Count how many numbers contain the digit 5.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%']
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%']
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF2LnDAUhu_7K4YDy24hsBN1ZmdzNaW0RdpqcVx6UWSx5lQEx0gSS8vify_qxarMRMGCl368eV6eE84LFIKjF59RAfsBFAhYQMAGAg4Q2EFEoJQiQaWEbH7pAi7_A2xLICvKSjevIwKJkAjsBXSmcwQGYfwzxwBjjvJ-CwQ46jjLW0wps3Ms_x6L6qyF0hIIfMxyjZJtjtbmi_v5w-b25lf2G29uGWOnMHC9T0DAr3TzA0Q1AVHpV7TScYrAaE3m13uXphLTWAt5vxu2e-8_eeFz4H8_3b29yrKusl4RVSEkR4l8cH5Um9vQkazT09dn1wvvjvR6G3vQhs4fDF1hMBP1eir2iwdjzVdhraBiol5PxcNiFfZ8FfYKKibq9VQcFqtw5qtwVlAxUa-n4vG_bq4LrABVKQqFow12-eRts9mQp9itQSUqmeA3KZIW0z36ba59wVHp7ivtHtyi-9QU7IepMWwNwnQctszkCbRtTDvmsLOk984Y3pvJ-yXkB2P4YCYflpAfzbPaTlwT8yUbs6P6zb8AAAD__x4t7Hs=
 
@@ -130,18 +130,18 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF2LnDAUhu_7K4YDy24hsB
 #
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFLBEEMhXt_xfHqgLuFzVTXHognh51sMe6EY2B3siQZUI7573I7hVgIlu-95H3JDUUSv8SVDeEdIybCpjKzmejd6gOn9IkwEHLZqt_tiTCLMsINnn1hBLzFj4UvHBPr4wBCYo952Ws3zWvUr2Opq4u5gnCuHg7HEYTnvGY_PGFqBKn-AzCPV0YYG_3_iAvbJsX4F_-v5qFNBE5X7o-aVJ35VWXeMV2e973dSGze07GLU-lRm9rDdwAAAP__KwVtCg==
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFLBEEMhXt_xfHqgLuFzVTXHognh51sMe6EY2B3siQZUI7573I7hVgIlu-95H3JDUUSv8SVDeEdIybCpjKzmejd6gOn9IkwEHLZqt_tiTCLMsINnn1hBLzFj4UvHBPr4wBCYo952Ws3zWvUr2Opq4u5gnCuHg7HEYTnvGY_PGFqBKn-AzCPV0YYG_3_iAvbJsX4F_-v5qFNBE5X7o-aVJ35VWXeMV2e973dSGze07GLU-lRm9rDdwAAAP__KwVtCg==
 
 # Test that the correct node is chosen in a reverse scan with multiple spans.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkDFrwzAQhff-ivBmldiBLJqyBkpSQrfiQbWOILB9QneCluD_XmQNTQpNM967-57e0wUTezq4kQT2HS0MtugMYuKeRDgVuR7t_SdsYxCmmLXInUHPiWAv0KADweLAzxzXxcWTujAsZ7MBZ_2BRN2ZYDezuTJu7xu_uY-BTuQ8pXVzY4-YwujS127Ko7JogsExq13tSoyXMAZdbfFXiPYmxD_tTiSRJ6GH6jVzZ0D-TPUHhXPq6TVxvzxTx-PCLYIn0brd1GE_1VUJeA23d-HmF9zNT98BAAD___cAnxU=
 
@@ -155,7 +155,7 @@ scan  ·      ·                    (x)  ·
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqxDAQRPt8RZhaELtVde01uXCkCyoUazgMtuTsriDh0L8HW0VIEUg5M9J77B25JD7HlQr_hhHBYZMyUbXIXvUH5_QJPzjMeau218FhKkL4O2y2hfB4je8Lr4yJ8jTAIdHivBzYTeY1ytcp19WKftQohMOlmn88jQjNoVT7IavFG-HH5v5vv1K3kpW_xH-RhxYcmG7sF2qpMvFFynRoerwc_44iUa2vYw_n3KcW2sN3AAAA___R0mt-
 
@@ -197,6 +197,6 @@ render                    ·         ·                  (y, str, res)          
 
 # Regression test for #20481.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFKxDAQhu8-hcxJMbBN99bTiqcF2Up3xYMUic1QAm2nTiagLH13aXPQCi3ucf7J93-BOUNHFg-mRQ_ZK2goFfRMFXpPPEbxwd5-QpYocF0fZIxLBRUxQnYGcdIgZHAy7w0WaCzyJgEFFsW4Zqrt2bWGv3ZdaIX8RzCMUA4KKMhPnxdTI2R6UP93HokFeaPnul16BwoeXevkWieLpvQS031dM9ZGiDfp3PaQPx9Ob0X-cry5XXRtL3EV6HvqPM48S83JUCpAW2O8lqfAFT4xVZMmjvnETYFFL3Gr47Dv4mr84G9Yr8LpOpyuwts_cDlcfQcAAP__-WfWZA==

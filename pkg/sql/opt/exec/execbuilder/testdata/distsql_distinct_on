@@ -46,9 +46,9 @@
 #   (ARRAY[5], '3', '4', '5')
 # 
 # query TTITI colnames
-# SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
+# SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
 # ----
-# Start Key  End Key  Range ID  Replicas  Lease Holder
+# start_key end_key range_id replicas lease_holder
 # NULL       /2       1         {1}       1
 # /2         /4       2         {2}       2
 # /4         /6       3         {3}       3
@@ -56,7 +56,7 @@
 # /7         NULL     5         {5}       5
 # 
 # query TTITI colnames
-# SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
+# SHOW EXPERIMENTAL_RANGES FROM TABLE abc
 # ----
 # Start Key        End Key          Range ID  Replicas  Lease Holder
 # NULL             /NULL/NULL/NULL  5         {5}       5
@@ -80,7 +80,7 @@
 # ·               spans        ALL                ·                       ·
 # 
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
+# SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE2LqzAUhvf3V1zedaAm2i9XLu6mm9uhzG5w4ZhDEVojSYR2iv99UMGOpY0Oukzie57zxHBuyJWk_8mZDMIPcDAIMPhgCMCwRMxQaJWSMUrXn7SBnbwg9BiyvChtvR0zpEoTwhtsZk-EEO_J54kOlEjSCw8MkmySnRpMobNzoq_R5foFhn1pw7-RYJHPogBxxaBKe69rbHIkhLxi49n_MmOzPLWLZR8ccdaAXlLES8q9eJkrLUmT7NWOK1cf3PtlI36vET7-qvncVz3A7hRXk65ajDcUcxsOsDvD9SRDf7yhP7fhALsz3EwyDMYbBnMbDrA7w-1sA-EJ5UCmULmhh8HwvLJXDwySR2qni1GlTulNq7TBtMt9k2s2JBnbnvJ2scvbo7rBn2HuDItemD-GhZs8gPad6cAdDqb0vXSGV27yagp57Qxv3OTNFPLW_a-8gWfifmSP7Lj68x0AAP__pp2oBA==
 # 
@@ -102,7 +102,7 @@
 # ·                    spans        ALL                ·                       ·
 # 
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
+# SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lb9u2zAQh_c-RXBrCdhH0o6tSUOXLE2Rdis8qOIhEOCIBkkBSQO_e6E_gCo3OsqyOkry777jdwf6HUpr6Gv2Qh6Sn4AgQIIABQI0CNjAQcDJ2Zy8t67-SRt4MK-QrAUU5akK9euDgNw6guQdQhGOBAn8yH4d6YkyQ261BgGGQlYcG8zJFS-Ze0tf336DgMcqJHepFKkSqYbDWYCtQl_Xh-yZIMGzmM7-bl0gt9oMsSl-Hi0vryn_pfChKPOwwvUlQTQHqU_lDDkyyV2Ko1A1Cu1Ztq3z0UnYzv45-1Wd6UFnOH3SuPSkI-xu0tu5k46U733igpOW033KpX1G2J3P-7k-I-V7n3JBn2q6T7W0zwi787mb6zNSvvepFvSpp_vUS_uMsDuf-7k-I-V7n_o_3ewfQJ_In2zpaUAcq7yur30yz9T-TXhbuZy-OZs3mPbxsck1Lwz50H7F9uGhbD_VDf4dRjYs-bBkw2oQxsuw4tve8mjNpjd8eMOGI-TtLYe-Z8M7nrxjw3s-vL-lbYzsWGzJ-C3DyJrhTXuGkUXTETi_aRhZNeR37bL3w_nTnwAAAP__eVbBtQ==
 # 
@@ -124,7 +124,7 @@
 # ·                    spans        ALL                ·                                ·
 # 
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
+# SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html?eJyslb9u2zAQh_c-RXFrCNhHyo6tSUOXLE2Rdis0qOIhEOCIAkkBSQO_e6E_gCq3OioQR0n-8bv77kC_Q200fS1eyEH6ExAESBCgQEACAg6QC2isKck5Y7ufDIEH_QrpXkBVN63vXucCSmMJ0nfwlb8QpPCj-HWhJyo02d0eBGjyRXXpMY2tXgr7lr2-_QYBj61PP2dSZAryqwDT-ulQ54tnghSvYj34u7Ge7O4wZ2byTmR4t4iQH0F8qZyv6tLvcH9L6RqymizprqlFnFrETRQznLPUB1vXP92vrCuZ1YXrR4xRRxwAjyM-bhlxADGpxCgjlutVyqgqA-BR5f0WlQHEpFJGUanWq1RRVQbAo8rTFpUBxKRSRVGZrFeZRFUZAI8qz1tUBhCTyiT6Hf4f3BO5xtSOZqylk_fd5U76mYY_BGdaW9I3a8oeMzw-9rn-hSbnh684PDzUw6euwL_DyIYlH5ZsWM3CeBtWfNlHHp2w6QMfPrDhAPm4pel7NnziySc2fObD5y1lY2DHQkvGbxkG1gw37RkGFi0JwPlNw8CqIb9rt7Xn109_AgAA__8Zbbvp
 # 
@@ -137,7 +137,7 @@
 # ·     spans  ALL          ·          ·
 # 
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
+# SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html?eJyskj1rwzAQhvf-jHdWiT87eOqaJS2hW_GgWEcwOD5zkqEl-L8Xy0Pq4BYVdZTunnvu4L2iZ0MHfSGL6h0pFDIo5FAooFCiVhiEG7KWZW5ZgL35QJUotP0wuvm7VmhYCNUVrnUdocKbPnV0JG1IdvNcQ063ndcM0l60fD7rU4N6UuDR3eZYp8-EKp3UD66bYuxZDAmZ1fh62tjmwI887Mq7xm11tlKn4WdmsWdm4a481pWHu4pYVxHuSv4zKhuuI9mBe0tBSUjmKJE505I7y6M09CrceM3yfPGc_zBk3VJNl8e-9yW_4Hc4_RV-WsHJPZzFmPMYuIiByz_B9fTwFQAA__97QoeT
 # 
@@ -154,6 +154,6 @@
 # ·               spans        ALL          ·          ·
 # 
 # query T
-# SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
+# SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lM-LqzAQx-_vr3jMtQM10f7y5OFdenldyt4WD9YMRWiNJBF2Kf7vi2axa9lGwezRxO985sOEuUEpBf3PrqQhfgMGCBwQQkCIAGEFKUKlZE5aS9X-YgN78Q5xgFCUVW3a4xQhl4ogvoEpzIUghtfsdKEjZYLUsq0ryGTFpcNUqrhm6iPJTjkgHGoT_00YJhyTENIGQdbmXleb7EwQswans_8V2hRlbpbrIbijtEglSJH4wj5l8qfMO0raUo-cBSZ8gUm4gLRxNciCWR2Ggw7Z9Ilw3xMZYffCG48T4dN9Q9--I-zed-vRN5zuG_n2HWH3vjuPvtF038C37wi791390ob5gXkkXclS04D4rHLQrh0SZ7LrSsta5fSiZN5h7Oehy3UHgrSxt8x-7Et71Tb4PcycYT4Is8cwd5NH0KEzHbnD0Zy-V87w2k1ezyFvnOGtm7ydQ965ZxWMPBP3I3tkp82fzwAAAP__G57AJg==

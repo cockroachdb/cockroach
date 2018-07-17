@@ -107,11 +107,11 @@ GRANT SELECT ON t TO testuser
 
 user testuser
 
-query TTBTT
+query TTBTTT
 SHOW COLUMNS FROM t
 ----
-k INT false NULL {"primary"}
-v INT true  NULL {}
+k  INT  false  NULL  ·  {"primary"}
+v  INT  true   NULL  ·  {}
 
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar

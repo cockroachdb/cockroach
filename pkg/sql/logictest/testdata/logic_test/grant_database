@@ -6,15 +6,15 @@ CREATE DATABASE a
 query TTTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-Database  Schema              User   Privileges
-a         crdb_internal       admin  ALL
-a         crdb_internal       root   ALL
-a         information_schema  admin  ALL
-a         information_schema  root   ALL
-a         pg_catalog          admin  ALL
-a         pg_catalog          root   ALL
-a         public              admin  ALL
-a         public              root   ALL
+database_name  schema_name         grantee  privilege_type
+a              crdb_internal       admin    ALL
+a              crdb_internal       root     ALL
+a              information_schema  admin    ALL
+a              information_schema  root     ALL
+a              pg_catalog          admin    ALL
+a              pg_catalog          root     ALL
+a              public              admin    ALL
+a              public              root     ALL
 
 statement error user root must have exactly ALL privileges on system object with ID=.*
 REVOKE SELECT ON DATABASE a FROM root
@@ -67,11 +67,11 @@ CREATE TABLE a.t (id INT PRIMARY KEY)
 query TTTTT colnames
 SHOW GRANTS ON a.t
 ----
-Database  Schema  Table  User       Privileges
-a         public  t      admin      ALL
-a         public  t      readwrite  ALL
-a         public  t      root       ALL
-a         public  t      test-user  ALL
+database_name  schema_name  table_name  grantee    privilege_type
+a              public       t           admin      ALL
+a              public       t           readwrite  ALL
+a              public       t           root       ALL
+a              public       t           test-user  ALL
 
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -285,8 +285,8 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 query TTTTT colnames
 SHOW GRANTS ON a.t
 ----
-Database  Schema  Table  User       Privileges
-a         public  t      admin      ALL
-a         public  t      readwrite  ALL
-a         public  t      root       ALL
-a         public  t      test-user  ALL
+database_name  schema_name  table_name  grantee    privilege_type
+a              public       t           admin      ALL
+a              public       t           readwrite  ALL
+a              public       t           root       ALL
+a              public       t           test-user  ALL

@@ -790,8 +790,8 @@ func TestShowJobs(t *testing.T) {
 
 	var out row
 	sqlDB.QueryRow(t, `
-      SELECT id, type, status, created, description, started, finished, modified,
-             fraction_completed, username, ifnull(error, ''), coordinator_id
+      SELECT job_id, job_type, status, created, description, started, finished, modified,
+             fraction_completed, user_name, ifnull(error, ''), coordinator_id
         FROM crdb_internal.jobs`).Scan(
 		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
 		&out.finished, &out.modified, &out.fractionCompleted, &out.username,
@@ -828,8 +828,8 @@ func TestShowJobsWithError(t *testing.T) {
 
 	// Extract the last 4 rows from the query.
 	rows, err := sqlDB.Query(`
-  WITH a AS (SELECT id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY id DESC LIMIT 6)
-  SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY id ASC`)
+  WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 6)
+  SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)
 	if err != nil {
 		t.Fatal(err)
 	}

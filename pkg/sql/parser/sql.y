@@ -698,9 +698,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_backup_stmt
 %type <tree.Statement> show_columns_stmt
 %type <tree.Statement> show_constraints_stmt
-%type <tree.Statement> show_create_table_stmt
-%type <tree.Statement> show_create_view_stmt
-%type <tree.Statement> show_create_sequence_stmt
+%type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_fingerprints_stmt
@@ -2782,16 +2780,14 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
-// SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW CREATE SEQUENCE, SHOW USERS,
+// SHOW CONSTRAINTS, SHOW CREATE, SHOW USERS,
 // SHOW TRANSACTION, SHOW BACKUP, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW SYNTAX,
 // SHOW TRACE
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
-| show_create_table_stmt    // EXTEND WITH HELP: SHOW CREATE TABLE
-| show_create_view_stmt     // EXTEND WITH HELP: SHOW CREATE VIEW
-| show_create_sequence_stmt // EXTEND WITH HELP: SHOW CREATE SEQUENCE
+| show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
 | show_fingerprints_stmt
@@ -3160,37 +3156,26 @@ show_transaction_stmt:
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
 
-// %Help: SHOW CREATE TABLE - display the CREATE TABLE statement for a table
+// %Help: SHOW CREATE - display the CREATE statement for a table, sequence or view
 // %Category: DDL
-// %Text: SHOW CREATE TABLE <tablename>
+// %Text: SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
 // %SeeAlso: WEBDOCS/show-create-table.html
-show_create_table_stmt:
-  SHOW CREATE TABLE table_name
+show_create_stmt:
+  SHOW CREATE table_name
   {
-    $$.val = &tree.ShowCreateTable{Table: $4.normalizableTableNameFromUnresolvedName()}
+    $$.val = &tree.ShowCreate{Name: $3.normalizableTableNameFromUnresolvedName()}
   }
-| SHOW CREATE TABLE error // SHOW HELP: SHOW CREATE TABLE
+| SHOW CREATE create_kw table_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Name: $4.normalizableTableNameFromUnresolvedName()}
+  }
+| SHOW CREATE error // SHOW HELP: SHOW CREATE
 
-// %Help: SHOW CREATE VIEW - display the CREATE VIEW statement for a view
-// %Category: DDL
-// %Text: SHOW CREATE VIEW <viewname>
-// %SeeAlso: WEBDOCS/show-create-view.html
-show_create_view_stmt:
-  SHOW CREATE VIEW view_name
-  {
-    $$.val = &tree.ShowCreateView{View: $4.normalizableTableNameFromUnresolvedName()}
-  }
-| SHOW CREATE VIEW error // SHOW HELP: SHOW CREATE VIEW
-
-// %Help: SHOW CREATE SEQUENCE - display the CREATE SEQUENCE statement for a sequence
-// %Category: DDL
-// %Text: SHOW CREATE SEQUENCE <seqname>
-show_create_sequence_stmt:
-  SHOW CREATE SEQUENCE sequence_name
-  {
-    $$.val = &tree.ShowCreateSequence{Sequence: $4.normalizableTableNameFromUnresolvedName()}
-  }
-| SHOW CREATE SEQUENCE error // SHOW HELP: SHOW CREATE SEQUENCE
+create_kw:
+  TABLE
+| VIEW
+| SEQUENCE
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
@@ -3547,7 +3532,7 @@ pause_stmt:
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
-// %SeeAlso: SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
+// %SeeAlso: SHOW TABLES, CREATE VIEW, SHOW CREATE,
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
@@ -4176,7 +4161,7 @@ create_role_stmt:
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
 // %Text: CREATE VIEW <viewname> [( <colnames...> )] AS <source>
-// %SeeAlso: CREATE TABLE, SHOW CREATE VIEW, WEBDOCS/create-view.html
+// %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
   CREATE VIEW view_name opt_column_list AS select_stmt
   {
@@ -4200,7 +4185,7 @@ create_view_stmt:
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
-// %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
+// %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
   CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
