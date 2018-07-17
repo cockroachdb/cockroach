@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/coreos/etcd/raft"
@@ -57,6 +58,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -119,6 +122,7 @@ type statusServer struct {
 	st              *cluster.Settings
 	cfg             *base.Config
 	admin           *adminServer
+	tsServer        *ts.Server
 	db              *client.DB
 	gossip          *gossip.Gossip
 	metricSource    metricMarshaler
@@ -135,6 +139,7 @@ func newStatusServer(
 	st *cluster.Settings,
 	cfg *base.Config,
 	adminServer *adminServer,
+	tsServer *ts.Server,
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
@@ -150,6 +155,7 @@ func newStatusServer(
 		st:              st,
 		cfg:             cfg,
 		admin:           adminServer,
+		tsServer:        tsServer,
 		db:              db,
 		gossip:          gossip,
 		metricSource:    metricSource,
@@ -823,6 +829,13 @@ func (s *statusServer) Profile(
 	}
 }
 
+var IoMetrics = []string{
+	"sys.disk.read.bytes.host",
+	"sys.disk.write.bytes.host",
+	"sys.net.send.bytes.host",
+	"sys.net.recv.bytes.host",
+}
+
 // Nodes returns all node statuses.
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
@@ -849,6 +862,44 @@ func (s *statusServer) Nodes(
 			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 	}
+
+	// get the derivatives here?
+	var queries []tspb.Query
+	for _, nodeStatus := range resp.Nodes {
+		for _, metric := range IoMetrics {
+			deriv := tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE
+			query := tspb.Query{
+				Name:       "cr.node." + metric,
+				Sources:    []string{nodeStatus.Desc.NodeID.String()},
+				Derivative: &deriv,
+			}
+			queries = append(queries, query)
+		}
+	}
+	now := time.Now().UnixNano()
+	tsReq := tspb.TimeSeriesQueryRequest{
+		EndNanos:    now,
+		StartNanos:  now - int64(40*time.Second),
+		SampleNanos: int64(10 * time.Second),
+		Queries:     queries,
+	}
+	tsResp, err := s.tsServer.Query(ctx, &tsReq)
+	if err != nil {
+		return nil, nil
+	}
+	for resIdx, tsResult := range tsResp.Results {
+		if len(tsResult.Datapoints) == 0 {
+			continue
+		}
+		nodeIdx := resIdx / len(IoMetrics)
+		metricIdx := resIdx % len(IoMetrics)
+		node := resp.Nodes[nodeIdx]
+		latestDataPoint := tsResult.Datapoints[len(tsResult.Datapoints)-1]
+		key := fmt.Sprintf("%s-deriv", IoMetrics[metricIdx])
+
+		node.Metrics[key] = latestDataPoint.Value
+	}
+
 	return &resp, nil
 }
 
