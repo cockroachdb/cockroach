@@ -19,7 +19,7 @@ env=(
   "TAGS=${TAGS:-}"
 )
 
-build/builder.sh env "${env[@]}" bash <<EOF
+build/builder.sh env "${env[@]}" bash <<'EOF'
 set -euxo pipefail
 go install ./pkg/cmd/github-post
 make stress PKG="$PKG" TESTTIMEOUT=30m STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
