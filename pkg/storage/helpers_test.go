@@ -97,6 +97,12 @@ func (s *Store) ForceReplicaGCScanAndProcess() {
 	forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
 }
 
+// ForceMergeScanAndProcess iterates over all ranges and enqueues any that
+// may need to be GC'd.
+func (s *Store) ForceMergeScanAndProcess() {
+	forceScanAndProcess(s, s.mergeQueue.baseQueue)
+}
+
 // ForceSplitScanAndProcess iterates over all ranges and enqueues any that
 // may need to be split.
 func (s *Store) ForceSplitScanAndProcess() {
