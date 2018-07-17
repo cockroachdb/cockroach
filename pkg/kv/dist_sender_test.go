@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -104,70 +105,66 @@ var (
 
 var testAddress = util.NewUnresolvedAddr("tcp", "node1")
 
-// rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(
+// simpleSendFn is the function type used to dispatch RPC calls in simpleTransportAdapter
+type simpleSendFn func(
 	context.Context,
 	SendOptions,
 	ReplicaSlice,
 	roachpb.BatchRequest,
-	*rpc.Context,
 ) (*roachpb.BatchResponse, error)
 
 // stubRPCSendFn is an rpcSendFn that simply creates a reply for the
 // BatchRequest without performing an RPC call or triggering any
 // test instrumentation.
-var stubRPCSendFn rpcSendFn = func(
-	_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest, _ *rpc.Context,
+var stubRPCSendFn simpleSendFn = func(
+	_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	return args.CreateReply(), nil
 }
 
-// adaptLegacyTransport converts the RPCSend functions used in these
+// adaptSimpleTransport converts the RPCSend functions used in these
 // tests to the newer transport interface.
-//
-// TODO(bdarnell): phase out this interface.
-func adaptLegacyTransport(fn rpcSendFn) TransportFactory {
+func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		opts SendOptions,
-		rpcContext *rpc.Context,
+		nodeDialer *nodedialer.Dialer,
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (Transport, error) {
-		return &legacyTransportAdapter{fn, opts, rpcContext, replicas, args, false}, nil
+		return &simpleTransportAdapter{fn, opts, replicas, args, false}, nil
 	}
 }
 
-type legacyTransportAdapter struct {
-	fn         rpcSendFn
-	opts       SendOptions
-	rpcContext *rpc.Context
-	replicas   ReplicaSlice
-	args       roachpb.BatchRequest
+type simpleTransportAdapter struct {
+	fn       simpleSendFn
+	opts     SendOptions
+	replicas ReplicaSlice
+	args     roachpb.BatchRequest
 
 	called bool
 }
 
-func (l *legacyTransportAdapter) IsExhausted() bool {
+func (l *simpleTransportAdapter) IsExhausted() bool {
 	return l.called
 }
 
-func (l *legacyTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
+func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (l *legacyTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
+func (l *simpleTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
 	l.called = true
-	return l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
+	return l.fn(ctx, l.opts, l.replicas, l.args)
 }
 
-func (l *legacyTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
+func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{}
 }
 
-func (*legacyTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
+func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
-func (*legacyTransportAdapter) Close() {
+func (*simpleTransportAdapter) Close() {
 }
 
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
@@ -308,12 +305,11 @@ func TestSendRPCOrder(t *testing.T) {
 	// Stub to be changed in each test case.
 	var verifyCall func(SendOptions, ReplicaSlice) error
 
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		opts SendOptions,
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		if err := verifyCall(opts, replicas); err != nil {
 			return nil, err
@@ -325,7 +321,7 @@ func TestSendRPCOrder(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 	}
@@ -471,12 +467,11 @@ func TestImmutableBatchArgs(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		reply := args.CreateReply()
 		txnClone := args.Txn.Clone()
@@ -489,7 +484,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
@@ -532,12 +527,11 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
@@ -553,7 +547,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
@@ -592,7 +586,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
+			TransportFactory: adaptSimpleTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 			// Don't return an error on the FirstRange lookup.
@@ -770,12 +764,11 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.TODO())
 
-		var testFn rpcSendFn = func(
+		var testFn simpleSendFn = func(
 			ctx context.Context,
 			_ SendOptions,
 			_ ReplicaSlice,
 			args roachpb.BatchRequest,
-			_ *rpc.Context,
 		) (*roachpb.BatchResponse, error) {
 			if !first {
 				return args.CreateReply(), nil
@@ -803,7 +796,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptLegacyTransport(testFn),
+				TransportFactory: adaptSimpleTransport(testFn),
 			},
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		}
@@ -846,12 +839,11 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	}
 
 	var count int32
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		var err error
 		switch count {
@@ -872,7 +864,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 	}
@@ -908,12 +900,11 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.EndKey = badEndKey
 	descStale := true
 
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
@@ -970,7 +961,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 	}
 	ds := NewDistSender(cfg, g)
@@ -1002,12 +993,11 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	badRangeDescriptor.RangeID++
 	firstLookup := true
 
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
@@ -1062,7 +1052,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 	}
 	ds := NewDistSender(cfg, g)
@@ -1156,12 +1146,11 @@ func TestSendRPCRetry(t *testing.T) {
 		descriptor,
 	)
 
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
@@ -1173,7 +1162,7 @@ func TestSendRPCRetry(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: descDB,
 	}
@@ -1339,12 +1328,11 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
@@ -1370,7 +1358,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 			if key.Less(testMetaRangeDescriptor.EndKey) {
@@ -1412,7 +1400,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
+			TransportFactory: adaptSimpleTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 			if !key.Equal(roachpb.KeyMin) && !useReverseScan {
@@ -1550,7 +1538,6 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
@@ -1574,7 +1561,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(sendStub),
+			TransportFactory: adaptSimpleTransport(sendStub),
 		},
 		RangeDescriptorDB: descDB,
 	}
@@ -1676,7 +1663,6 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		h := ba.Requests[0].GetInner().Header()
 		if h.Key.Equal(keys.RangeDescriptorKey(roachpb.RKey("a"))) && h.EndKey.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("b"))) {
@@ -1699,7 +1685,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(sendStub),
+			TransportFactory: adaptSimpleTransport(sendStub),
 		},
 		RangeDescriptorDB: descDB,
 	}
@@ -1821,11 +1807,10 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 	for i, test := range testCases {
 		var mu syncutil.Mutex
 		act := batchMethodsSlice{}
-		var testFn rpcSendFn = func(
+		var testFn simpleSendFn = func(
 			_ context.Context,
 			_ SendOptions,
 			_ ReplicaSlice, ba roachpb.BatchRequest,
-			_ *rpc.Context,
 		) (*roachpb.BatchResponse, error) {
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
@@ -1841,7 +1826,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptLegacyTransport(testFn),
+				TransportFactory: adaptSimpleTransport(testFn),
 			},
 			RangeDescriptorDB: descDB,
 		}
@@ -1908,7 +1893,7 @@ func TestCountRanges(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
+			TransportFactory: adaptSimpleTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: descDB,
 	}
@@ -1953,7 +1938,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &rpc.Context{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
+		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1987,12 +1972,11 @@ func TestGatewayNodeID(t *testing.T) {
 	}
 
 	var observedNodeID roachpb.NodeID
-	var testFn rpcSendFn = func(
+	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
-		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
 		observedNodeID = ba.Header.GatewayNodeID
 		return ba.CreateReply(), nil
@@ -2002,7 +1986,7 @@ func TestGatewayNodeID(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
@@ -2102,12 +2086,11 @@ func TestErrorIndexAlignment(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			nthRequest := 0
 
-			var testFn rpcSendFn = func(
+			var testFn simpleSendFn = func(
 				_ context.Context,
 				_ SendOptions,
 				_ ReplicaSlice,
 				ba roachpb.BatchRequest,
-				_ *rpc.Context,
 			) (*roachpb.BatchResponse, error) {
 				reply := ba.CreateReply()
 				if nthRequest == tc.nthPartialBatch {
@@ -2126,7 +2109,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 				Clock:      clock,
 				TestingKnobs: ClientTestingKnobs{
-					TransportFactory: adaptLegacyTransport(testFn),
+					TransportFactory: adaptSimpleTransport(testFn),
 				},
 				RangeDescriptorDB: descDB,
 			}

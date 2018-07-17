@@ -26,8 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,12 +41,12 @@ type SendOptions struct {
 }
 
 type batchClient struct {
-	remoteAddr string
-	args       roachpb.BatchRequest
-	healthy    bool
-	pending    bool
-	retryable  bool
-	deadline   time.Time
+	nodeID    roachpb.NodeID
+	args      roachpb.BatchRequest
+	healthy   bool
+	pending   bool
+	retryable bool
+	deadline  time.Time
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -62,7 +61,7 @@ type batchClient struct {
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
 type TransportFactory func(
-	SendOptions, *rpc.Context, ReplicaSlice, roachpb.BatchRequest,
+	SendOptions, *nodedialer.Dialer, ReplicaSlice, roachpb.BatchRequest,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -104,18 +103,17 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
-		remoteAddr := replica.NodeDesc.Address.String()
-		healthy := rpcContext.ConnHealth(remoteAddr) == nil
+		healthy := nodeDialer.ConnHealth(replica.NodeID) == nil
 		clients = append(clients, batchClient{
-			remoteAddr: remoteAddr,
-			args:       argsCopy,
-			healthy:    healthy,
+			nodeID:  replica.NodeID,
+			args:    argsCopy,
+			healthy: healthy,
 		})
 	}
 
@@ -124,14 +122,14 @@ func grpcTransportFactoryImpl(
 
 	return &grpcTransport{
 		opts:           opts,
-		rpcContext:     rpcContext,
+		nodeDialer:     nodeDialer,
 		orderedClients: clients,
 	}, nil
 }
 
 type grpcTransport struct {
 	opts            SendOptions
-	rpcContext      *rpc.Context
+	nodeDialer      *nodedialer.Dialer
 	clientIndex     int
 	orderedClients  []batchClient
 	clientPendingMu syncutil.Mutex // protects access to all batchClient pending flags
@@ -211,27 +209,19 @@ func (gt *grpcTransport) send(
 		}
 
 		gt.opts.metrics.SentCount.Inc(1)
-		if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
-			log.VEvent(ctx, 2, "sending request to local server")
-
-			// Create a new context from the existing one with the "local request" field set.
-			// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-			localCtx := grpcutil.NewLocalRequestContext(ctx)
-
-			gt.opts.metrics.LocalSentCount.Inc(1)
-			return localServer.Batch(localCtx, &client.args)
-		}
-
-		log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-		conn, err := gt.rpcContext.GRPCDial(client.remoteAddr).Connect(ctx)
+		var iface roachpb.InternalServer
+		var err error
+		ctx, iface, err = gt.nodeDialer.DialInternalServer(ctx, client.nodeID)
 		if err != nil {
 			return nil, err
 		}
-		if err := grpcutil.ConnectionReady(conn); err != nil {
-			return nil, err
+		if nodedialer.IsLocal(iface) {
+			gt.opts.metrics.LocalSentCount.Inc(1)
 		}
-		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
-		if reply != nil {
+		reply, err := iface.Batch(ctx, &client.args)
+		// If we queried a remote node, perform extra validation and
+		// import trace spans.
+		if reply != nil && !nodedialer.IsLocal(iface) {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
 					log.Error(ctx, err)
@@ -357,7 +347,7 @@ func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
+		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice, args roachpb.BatchRequest,
 	) (Transport, error) {
 		// Always send to the first replica.
 		args.Replica = replicas[0].ReplicaDescriptor

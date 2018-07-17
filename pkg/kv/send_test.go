@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -67,8 +68,11 @@ func TestSendToOneClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	nodeDialer := nodedialer.New(rpcContext, func(roachpb.NodeID) (net.Addr, error) {
+		return ln.Addr(), nil
+	})
 
-	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, rpcContext)
+	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, nodeDialer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +132,7 @@ func TestComplexScenarios(t *testing.T) {
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	nodeDialer := nodedialer.New(nodeContext, nil)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
 	// Rework this test to incorporate application-level errors carried in
@@ -160,7 +165,7 @@ func TestComplexScenarios(t *testing.T) {
 			context.Background(),
 			func(
 				_ SendOptions,
-				_ *rpc.Context,
+				_ *nodedialer.Dialer,
 				replicas ReplicaSlice,
 				args roachpb.BatchRequest,
 			) (Transport, error) {
@@ -171,7 +176,7 @@ func TestComplexScenarios(t *testing.T) {
 				}, nil
 			},
 			serverAddrs,
-			nodeContext,
+			nodeDialer,
 		)
 		if test.success {
 			if err != nil {
@@ -201,40 +206,40 @@ func TestSplitHealthy(t *testing.T) {
 		{nil, nil, 0},
 		{
 			[]batchClient{
-				{remoteAddr: "1", healthy: false},
-				{remoteAddr: "2", healthy: false},
-				{remoteAddr: "3", healthy: true},
+				{nodeID: 1, healthy: false},
+				{nodeID: 2, healthy: false},
+				{nodeID: 3, healthy: true},
 			},
 			[]batchClient{
-				{remoteAddr: "3", healthy: true},
-				{remoteAddr: "1", healthy: false},
-				{remoteAddr: "2", healthy: false},
+				{nodeID: 3, healthy: true},
+				{nodeID: 1, healthy: false},
+				{nodeID: 2, healthy: false},
 			},
 			1,
 		},
 		{
 			[]batchClient{
-				{remoteAddr: "1", healthy: true},
-				{remoteAddr: "2", healthy: false},
-				{remoteAddr: "3", healthy: true},
+				{nodeID: 1, healthy: true},
+				{nodeID: 2, healthy: false},
+				{nodeID: 3, healthy: true},
 			},
 			[]batchClient{
-				{remoteAddr: "1", healthy: true},
-				{remoteAddr: "3", healthy: true},
-				{remoteAddr: "2", healthy: false},
+				{nodeID: 1, healthy: true},
+				{nodeID: 3, healthy: true},
+				{nodeID: 2, healthy: false},
 			},
 			2,
 		},
 		{
 			[]batchClient{
-				{remoteAddr: "1", healthy: true},
-				{remoteAddr: "2", healthy: true},
-				{remoteAddr: "3", healthy: true},
+				{nodeID: 1, healthy: true},
+				{nodeID: 2, healthy: true},
+				{nodeID: 3, healthy: true},
 			},
 			[]batchClient{
-				{remoteAddr: "1", healthy: true},
-				{remoteAddr: "2", healthy: true},
-				{remoteAddr: "3", healthy: true},
+				{nodeID: 1, healthy: true},
+				{nodeID: 2, healthy: true},
+				{nodeID: 3, healthy: true},
 			},
 			3,
 		},
@@ -263,7 +268,10 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 
 // sendBatch sends Batch requests to specified addresses using send.
 func sendBatch(
-	ctx context.Context, transportFactory TransportFactory, addrs []net.Addr, rpcContext *rpc.Context,
+	ctx context.Context,
+	transportFactory TransportFactory,
+	addrs []net.Addr,
+	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -271,5 +279,5 @@ func sendBatch(
 			TransportFactory: transportFactory,
 		},
 	}, nil)
-	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
+	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, nodeDialer)
 }
