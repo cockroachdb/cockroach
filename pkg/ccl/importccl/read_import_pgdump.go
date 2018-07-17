@@ -160,6 +160,7 @@ func readPostgresCreateTable(
 	match string,
 	parentID sqlbase.ID,
 	walltime int64,
+	fks fkHandler,
 	max int,
 ) ([]*sqlbase.TableDescriptor, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
@@ -178,16 +179,15 @@ func readPostgresCreateTable(
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*sqlbase.TableDescriptor, 0, len(createTbl))
-			seenDescs := make(fkResolver)
 			for _, name := range tableOrder {
 				create := createTbl[name]
 				if create != nil {
 					id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, seenDescs, walltime)
+					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
 					if err != nil {
 						return nil, err
 					}
-					seenDescs[desc.Name] = desc
+					fks.resolver[desc.Name] = desc
 					ret = append(ret, desc)
 				}
 			}

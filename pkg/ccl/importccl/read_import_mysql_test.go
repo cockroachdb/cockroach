@@ -39,7 +39,7 @@ func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.T
 		t.Fatal(err)
 	}
 	stmt := parsed.(*tree.CreateTable)
-	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, nil, testEvalCtx.StmtTimestamp.UnixNano())
+	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, NoFKs, testEvalCtx.StmtTimestamp.UnixNano())
 	if err != nil {
 		t.Fatal(err)
 	}
