@@ -533,7 +533,11 @@ func (expr *TupleStar) ResolvedType() types.T {
 
 // TypeCheck implements the Expr interface.
 func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	subExpr, err := expr.Expr.TypeCheck(ctx, desired)
+	// If the context requires types T, we need to ask "Any tuple with
+	// at least this label and the element type T for this label" from
+	// the sub-expression. Of course, our type system does not support
+	// this. So drop the type constraint instead.
+	subExpr, err := expr.Expr.TypeCheck(ctx, types.Any)
 	if err != nil {
 		return nil, err
 	}
