@@ -81,7 +81,6 @@ GOFLAGS      :=
 TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
-BUILDMODE    := install
 BUILDTARGET  := ./pkg/cmd/cockroach
 SUFFIX       := $(GOEXE)
 INSTALL      := install
@@ -664,7 +663,9 @@ build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
-COCKROACH := ./cockroach$(SUFFIX)
+COCKROACH      := ./cockroach$(SUFFIX)
+COCKROACHOSS   := ./cockroachoss$(SUFFIX)
+COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
@@ -687,14 +688,14 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name_string.go
 
 go-targets-ccl := \
-	$(COCKROACH) build buildshort go-install \
+	$(COCKROACH) $(COCKROACHSHORT) go-install \
 	bench benchshort \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
 	generate \
 	lint lintshort
 
-go-targets := $(go-targets-ccl) buildoss
+go-targets := $(go-targets-ccl) $(COCKROACHOSS)
 
 .DEFAULT_GOAL := all
 all: build
@@ -702,14 +703,20 @@ all: build
 .PHONY: c-deps
 c-deps: $(C_LIBS_CCL)
 
-$(COCKROACH) build buildoss buildshort: BUILDMODE = build -o $(COCKROACH)
+build-mode = build -o $(build-output)
 
-$(COCKROACH) build go-install generate: pkg/ui/distccl/bindata.go
+go-install: build-mode = install
 
-buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
-buildoss: $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
+$(COCKROACH): build-output = $(COCKROACH)
+$(COCKROACHOSS): build-output = $(COCKROACHOSS)
+$(COCKROACHSHORT): build-output = $(COCKROACHSHORT)
 
-buildshort: BUILDTARGET = ./pkg/cmd/cockroach-short
+$(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
+
+$(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
+$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
+
+$(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 
 $(go-targets-ccl): $(C_LIBS_CCL)
 
@@ -728,7 +735,7 @@ $(go-targets): override LINKFLAGS += \
 # The build.utcTime format must remain in sync with TimeFormat in
 # pkg/build/info.go. It is not installed in tests to avoid busting the cache on
 # every rebuild.
-$(COCKROACH) build buildoss buildshort go-install: override LINKFLAGS += \
+$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
@@ -738,8 +745,8 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: go-install
-$(COCKROACH) go-install:
-	 $(xgo) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install:
+	 $(xgo) $(build-mode) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
 # regenerate SQL diagram BNFs and some other doc pages. Generating these docs
@@ -757,7 +764,16 @@ $(COCKROACH) go-install:
 .PHONY: build buildoss buildshort
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+buildshort: ## Build the CockroachDB binary without the admin UI.
+build: $(COCKROACH)
+buildoss: $(COCKROACHOSS)
+buildshort: $(COCKROACHSHORT)
+build buildoss buildshort: $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+
+# For historical reasons, symlink cockroach to cockroachshort.
+# TODO(benesch): see if it would break anyone's workflow to remove this.
+buildshort:
+	ln -sf $(COCKROACHSHORT) $(COCKROACH)
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
@@ -1240,9 +1256,9 @@ bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
 
-$(SETTINGS_DOC_PAGE): $(COCKROACH)
-	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
-	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
+$(SETTINGS_DOC_PAGE): $(build-output)
+	 @$(build-output) gen settings-list --format=html > $@.tmp
+	 @mv -f $@.tmp $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
