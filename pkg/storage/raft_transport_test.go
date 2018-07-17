@@ -150,7 +150,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	transport := storage.NewRaftTransport(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		cluster.MakeTestingClusterSettings(),
-		nodedialer.New(rttc.nodeRPCContext, storage.GossipAddressResolver(rttc.gossip)),
+		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
 		rttc.stopper,
 	)

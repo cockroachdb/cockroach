@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -382,6 +383,7 @@ func (ds *ServerImpl) setupFlow(
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
+		nodeDialer:     nodedialer.New(ds.RPCContext, gossip.AddressResolver(ds.Gossip)),
 		gossip:         ds.Gossip,
 		txn:            txn,
 		clientDB:       ds.DB,

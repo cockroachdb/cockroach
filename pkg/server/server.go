@@ -241,7 +241,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.registry,
 	)
-	s.nodeDialer = nodedialer.New(s.rpcContext, storage.GossipAddressResolver(s.gossip))
+	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during

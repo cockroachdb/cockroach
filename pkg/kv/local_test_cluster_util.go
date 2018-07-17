@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,11 +69,11 @@ func InitFactoryForLocalTestCluster(
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,
-				rpcContext *rpc.Context,
+				nodeDialer *nodedialer.Dialer,
 				replicas ReplicaSlice,
 				args roachpb.BatchRequest,
 			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, rpcContext, replicas, args)
+				transport, err := senderTransportFactory(opts, nodeDialer, replicas, args)
 				if err != nil {
 					return nil, err
 				}
