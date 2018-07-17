@@ -199,7 +199,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
+				if err := p.AddRendering(
 					[]tree.TypedExpr{
 						&tree.IndexedVar{Idx: 10},
 						&tree.IndexedVar{Idx: 11},
@@ -209,7 +209,9 @@ func TestProjectionAndRendering(t *testing.T) {
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost:        distsqlrun.PostProcessSpec{},
@@ -222,7 +224,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
+				if err := p.AddRendering(
 					[]tree.TypedExpr{
 						&tree.IndexedVar{Idx: 11},
 						&tree.IndexedVar{Idx: 13},
@@ -231,7 +233,10 @@ func TestProjectionAndRendering(t *testing.T) {
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("B"), strToType("D"), strToType("C")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
+
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
@@ -248,7 +253,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			ordering:    "3",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
+				if err := p.AddRendering(
 					[]tree.TypedExpr{
 						&tree.BinaryExpr{
 							Operator: tree.Plus,
@@ -259,7 +264,9 @@ func TestProjectionAndRendering(t *testing.T) {
 					nil,
 					[]int{0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
@@ -279,7 +286,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			ordering:    "0,-3",
 
 			action: func(p *PhysicalPlan) {
-				p.AddRendering(
+				if err := p.AddRendering(
 					[]tree.TypedExpr{
 						&tree.BinaryExpr{
 							Operator: tree.Plus,
@@ -291,7 +298,9 @@ func TestProjectionAndRendering(t *testing.T) {
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X"), strToType("A")},
-				)
+				); err != nil {
+					t.Fatal(err)
+				}
 			},
 
 			expPost: distsqlrun.PostProcessSpec{

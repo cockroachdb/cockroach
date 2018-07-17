@@ -515,15 +515,6 @@ func (p *planner) prepareForDistSQLSupportCheck(
 ) (bool, error) {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
-	// We don't support subqueries yet.
-	if len(p.curPlan.subqueryPlans) > 0 {
-		if returnError {
-			err := newQueryNotSupportedError("subqueries not supported yet")
-			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-			return false, err
-		}
-		return false, nil
-	}
 	return true, nil
 }
 
