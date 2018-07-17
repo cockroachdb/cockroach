@@ -63,6 +63,9 @@ var (
 	errLogOfNegNumber   = pgerror.NewError(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of a negative number")
 	errLogOfZero        = pgerror.NewError(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of zero")
 	errZeroIP           = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "zero length IP")
+	errChrValueTooSmall = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "input value must be >= 0")
+	errChrValueTooLarge = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 )
 
 const errInsufficientArgsFmtString = "unknown signature: %s()"
@@ -732,7 +735,28 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(ch)), nil
 			}
 			return nil, errEmptyInputString
-		}, types.Int, "Calculates the ASCII value for the first character in `val`.")),
+		}, types.Int, "Returns the character code of the first character in `val`. Despite the name, the function supports Unicode too.")),
+
+	"chr": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := tree.MustBeDInt(args[0])
+				var answer string
+				switch {
+				case x < 0:
+					return nil, errChrValueTooSmall
+				case x > utf8.MaxRune:
+					return nil, errChrValueTooLarge
+				default:
+					answer = string(rune(x))
+				}
+				return tree.NewDString(answer), nil
+			},
+			Info: "Returns the character with the code given in `val`. Inverse function of `ascii()`.",
+		},
+	),
 
 	"md5": hashBuiltin(
 		func() hash.Hash { return md5.New() },
