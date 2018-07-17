@@ -20,6 +20,8 @@ import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import * as protos from "ccl/src/js/protos";
 import { MilliToNano } from "src/util/convert";
 import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/metrics";
+import Loading from "oss/src/views/shared/components/loading";
+import spinner from "assets/spinner.gif";
 
 import { cockroach } from "ccl/src/js/protos";
 import IQuery = cockroach.ts.tspb.IQuery;
@@ -53,9 +55,9 @@ interface NodeCategoryListProps {
   requestMetrics: typeof requestMetricsAction;
 }
 
-const METRICS_KEY = "live-nodes-metrics";
+const IO_METRICS_KEY = "live-nodes-io-metrics";
 
-const METRICS = [
+const IO_METRICS = [
   "cr.node.sys.disk.read.bytes.host",
   "cr.node.sys.disk.write.bytes.host",
   "cr.node.sys.net.send.bytes.host",
@@ -66,12 +68,32 @@ interface LiveNodesState {
   intervalID: number;
 }
 
+/**
+ * LiveNodeListContainer ensures that the LiveNodeList component does not render
+ * until the list of nodes has loaded. The LiveNodeList component requires that
+ * the node list is available when it mounts so it can launch a request for
+ * IO metrics for each node.
+ */
+class LiveNodeListContainer extends React.Component<NodeCategoryListProps> {
+  render() {
+    const { statuses } = this.props;
+    return (
+      <Loading
+        loading={!statuses || statuses.length === 0}
+        image={spinner}
+        className="loading-image loading-image__spinner"
+      >
+        <LiveNodeList {...this.props} />
+      </Loading>
+    );
+  }
+}
+
 const METRIC_FETCH_INTERVAL_MS = 10000; // 10 sec, since that's how often we sample
 
 /**
- * LiveNodeList displays a sortable table of all "live" nodes, which includes
- * both healthy and suspect nodes. Included is a side-bar with summary
- * statistics for these nodes.
+ * LiveNodeListInner displays a sortable table of all "live" nodes, which includes
+ * both healthy and suspect nodes.
  */
 class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState> {
   componentDidMount() {
@@ -92,12 +114,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
   }
 
   getData() {
-    if (this.props.nodesSummary.nodeIDs.length === 0) {
-      console.log("getData: bailing out because we don't have node ids yet");
-      return;
-    }
-    console.log("getData: fetching data");
-
     // from metricDataProvider#current
     let now = moment();
     // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
@@ -109,7 +125,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
     };
 
     const queries: IQuery[] = [];
-    METRICS.forEach((metricName) => {
+    IO_METRICS.forEach((metricName) => {
       this.props.nodesSummary.nodeIDs.forEach((nodeID) => {
         queries.push({
           name: metricName,
@@ -126,14 +142,11 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
       queries,
     });
 
-    this.props.requestMetrics(METRICS_KEY, req);
+    this.props.requestMetrics(IO_METRICS_KEY, req);
   }
 
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
-    if (!statuses || statuses.length === 0) {
-      return null;
-    }
     const latestSummedIOMetrics = this.props.latestSummedIOMetrics;
 
     return <div>
@@ -400,7 +413,7 @@ type LatestMetricValuesByNode = {
 };
 
 const selectLatestIOMetrics = createSelector(
-  (state: AdminUIState) => state.metrics.queries[METRICS_KEY],
+  (state: AdminUIState) => state.metrics.queries[IO_METRICS_KEY],
   (metrics: MetricsQuery): LatestMetricValuesByNode => {
     if (!metrics || !metrics.data) {
       return null;
@@ -469,7 +482,7 @@ const LiveNodesConnected = connect(
     setSort: liveNodesSortSetting.set,
     requestMetrics: requestMetricsAction,
   },
-)(LiveNodeList);
+)(LiveNodeListContainer);
 
 /**
  * DeadNodesConnected is a redux-connected HOC of NotLiveNodeList.
