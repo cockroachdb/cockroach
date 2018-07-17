@@ -924,7 +924,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		&ex.sessionTracing,
 	)
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, planner.txn, planner.curPlan.plan, recv, planner.ExtendedEvalContext(),
+		ctx, planner.txn, planner, planner.curPlan.plan, recv, planner.ExtendedEvalContext(),
 	)
 	return recv.commErr
 }
