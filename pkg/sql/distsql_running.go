@@ -18,7 +18,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -529,7 +529,7 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
-// All errors encoutered are reported to the distSQLReceiver's resultWriter.
+// All errors encountered are reported to the distSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encoutered
 // while using that resultWriter), the error is also stored in
 // distSQLReceiver.commErr. That can be tested to see if a client session needs
@@ -537,20 +537,33 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	txn *client.Txn,
-	tree planNode,
+	p *planner,
+	plan planNode,
 	recv *distSQLReceiver,
 	evalCtx *extendedEvalContext,
 ) {
 	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
-
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 
-	plan, err := dsp.createPlanForNode(&planCtx, tree)
+	if len(p.curPlan.subqueryPlans) != 0 {
+		err := p.curPlan.evalSubqueries(runParams{
+			ctx:             planCtx.ctx,
+			extendedEvalCtx: planCtx.extendedEvalCtx,
+			p:               p,
+		})
+
+		if err != nil {
+			recv.SetError(errors.Wrapf(err, "error in running subquery:"))
+			return
+		}
+		log.VEvent(ctx, 2, "evaluated subqueries")
+	}
+
+	physPlan, err := dsp.createPlanForNode(&planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
 		return
 	}
-	dsp.FinalizePlan(&planCtx, &plan)
-
-	dsp.Run(&planCtx, txn, &plan, recv, evalCtx)
+	dsp.FinalizePlan(&planCtx, &physPlan)
+	dsp.Run(&planCtx, txn, &physPlan, recv, evalCtx)
 }
