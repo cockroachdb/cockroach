@@ -207,6 +207,10 @@ $(call make-lazy,TAR_XFORM_FLAG)
 SED_INPLACE = sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
 $(call make-lazy,SED_INPLACE)
 
+# MAKE_TERMERR is set automatically in Make v4.1+, but macOS is still shipping
+# v3.81.
+MAKE_TERMERR ?= $(shell [[ -t 2 ]] && echo true)
+
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
 
@@ -1065,7 +1069,7 @@ STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
 TSC                := ./node_modules/.bin/tsc
 KARMA              := ./node_modules/.bin/karma
-WEBPACK            := ./node_modules/.bin/webpack
+WEBPACK            := ./node_modules/.bin/webpack $(if $(MAKE_TERMERR),--progress)
 WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
 WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
