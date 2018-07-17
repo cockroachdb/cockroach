@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -2744,7 +2745,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	r.mu.mergeComplete = mergeCompleteCh
 	r.mu.Unlock()
 
-	return r.store.stopper.RunAsyncTask(context.Background(), "wait-for-merge", func(ctx context.Context) {
+	err = r.store.stopper.RunAsyncTask(context.Background(), "wait-for-merge", func(ctx context.Context) {
 		rs, _, err := client.RangeLookup(ctx, r.DB().NonTransactionalSender(), desc.StartKey.AsRawKey(),
 			roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 		if err != nil {
@@ -2788,6 +2789,15 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		close(mergeCompleteCh)
 		r.mu.Unlock()
 	})
+	if err == stop.ErrUnavailable {
+		// We weren't able to launch a goroutine to watch for the merge's completion
+		// because the server is shutting down. Normally failing to launch the
+		// watcher goroutine would wedge pending requests on the replica's
+		// mergeComplete channel forever, but since we're shutting down those
+		// requests will get dropped and retried on another node. Suppress the error.
+		err = nil
+	}
+	return err
 }
 
 // executeReadOnlyBatch updates the read timestamp cache and waits for any

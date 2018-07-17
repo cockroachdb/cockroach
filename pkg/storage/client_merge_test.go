@@ -993,6 +993,77 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store
+// containing the RHS of a merge can occur cleanly. This previously triggered
+// a fatal error (#27552).
+func TestStoreRangeMergeDuringShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	// Install a filter that triggers a shutdown when stop is non-zero and the
+	// rhsDesc requests a new lease.
+	var mtc *multiTestContext
+	var rhsDesc *roachpb.RangeDescriptor
+	var stop int32
+	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+		if atomic.LoadInt32(&stop) != 0 && args.RangeID == rhsDesc.RangeID && args.IsLeaseRequest {
+			// Shut down the store. The lease acquisition will notice that a merge is
+			// in progress and attempt to run a task to watch for its completion.
+			// Shutting down the store before running leasePostApply will prevent that
+			// task from launching. This error path would previously fatal a node
+			// incorrectly (#27552).
+			go mtc.Stop()
+			// Sleep to give the shutdown time to propagate. The test appeared to work
+			// without this sleep, but best to be somewhat robust to different
+			// goroutine schedules.
+			time.Sleep(10 * time.Millisecond)
+		}
+		return nil
+	}
+
+	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	store := mtc.Store(0)
+	stopper := mtc.engineStoppers[0]
+
+	var err error
+	_, rhsDesc, err = createSplitRanges(ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a merge transaction by launching a transaction that lays down
+	// intents on the two copies of the RHS range descriptor.
+	txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	if err := txn.Del(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey)); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Del(ctx, keys.RangeMetaKey(rhsDesc.StartKey)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Indicate to the store filter installed above that the next lease
+	// acquisition for the RHS should trigger a shutdown.
+	atomic.StoreInt32(&stop, 1)
+
+	// Expire all leases.
+	mtc.advanceClock(ctx)
+
+	// Send a dummy get request on the RHS to force a lease acquisition. We expect
+	// this to fail, as quiescing stores cannot acquire leases.
+	err = stopper.RunTaskWithErr(ctx, "test-get-rhs-key", func(ctx context.Context) error {
+		_, err := store.DB().Get(ctx, "dummy-rhs-key")
+		return err
+	})
+	if exp := "not lease holder"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %v", err, exp)
+	}
+}
+
 func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
