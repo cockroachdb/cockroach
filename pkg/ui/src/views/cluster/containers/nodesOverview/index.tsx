@@ -49,7 +49,7 @@ interface NodeCategoryListProps {
   setSort: typeof liveNodesSortSetting.set;
   statuses: INodeStatus[];
   nodesSummary: NodesSummary;
-  latestTSValues: ByNodeByMetric;
+  latestSummedIOMetrics: LatestIOMetricsByNode;
   requestMetrics: typeof requestMetricsAction;
 }
 
@@ -92,10 +92,11 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
   }
 
   getData() {
-    console.log("hello from getData");
     if (this.props.nodesSummary.nodeIDs.length === 0) {
+      console.log("getData: bailing out because we don't have node ids yet");
       return;
     }
+    console.log("getData: fetching data");
 
     // from metricDataProvider#current
     let now = moment();
@@ -133,7 +134,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
     if (!statuses || statuses.length === 0) {
       return null;
     }
-    const latestTSValues = this.props.latestTSValues;
+    const latestSummedIOMetrics = this.props.latestSummedIOMetrics;
 
     return <div>
       <section className="section section--heading">
@@ -218,25 +219,35 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState
             {
               title: "Disk IO",
               cell: (ns) => {
-                if (!latestTSValues) {
+                if (!latestSummedIOMetrics) {
                   return null;
                 }
-                const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
-                const reads = metricsForNode["cr.node." + MetricConstants.diskReadBytes];
-                const writes = metricsForNode["cr.node." + MetricConstants.diskWriteBytes];
-                return Bytes(reads + writes);
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return Bytes(metricsForNode.diskIO);
+              },
+              sort: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return metricsForNode.diskIO;
               },
             },
             {
               title: "Net IO",
               cell: (ns) => {
-                if (!latestTSValues) {
+                if (!latestSummedIOMetrics) {
                   return null;
                 }
-                const metricsForNode = latestTSValues[ns.desc.node_id.toString()];
-                const recv = metricsForNode["cr.node." + MetricConstants.netReadBytes];
-                const send = metricsForNode["cr.node." + MetricConstants.netWriteBytes];
-                return Bytes(recv + send);
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return Bytes(metricsForNode.netIO);
+              },
+              sort: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return metricsForNode.netIO;
               },
             },
             // Replicas - displays the total number of replicas on the node.
@@ -382,20 +393,20 @@ const partitionedStatuses = createSelector(
   },
 );
 
-type ByNodeByMetric = {
+type LatestMetricValuesByNode = {
   [nodeID: string]: {
     [metric: string]: number,
   },
 };
 
-const selectLatestTSValues = createSelector(
+const selectLatestIOMetrics = createSelector(
   (state: AdminUIState) => state.metrics.queries[METRICS_KEY],
-  (metrics: MetricsQuery) => {
+  (metrics: MetricsQuery): LatestMetricValuesByNode => {
     if (!metrics || !metrics.data) {
       return null;
     }
 
-    const byIDByMetric: ByNodeByMetric = {};
+    const byIDByMetric: LatestMetricValuesByNode = {};
 
     metrics.data.results.forEach((result) => {
       let metricsForNode = byIDByMetric[result.query.sources[0]];
@@ -410,6 +421,36 @@ const selectLatestTSValues = createSelector(
   },
 );
 
+type LatestIOMetricsByNode = {
+  [nodeID: string]: {
+    diskIO: number;
+    netIO: number;
+  },
+};
+
+const selectSummedLatestIOMetrics = createSelector(
+  selectLatestIOMetrics,
+  (metricsByNode: LatestMetricValuesByNode): LatestIOMetricsByNode => {
+    if (!metricsByNode) {
+      return null;
+    }
+
+    const result: LatestIOMetricsByNode = {};
+    _.forEach(metricsByNode, (metrics, nodeID) => {
+      const diskReads = metrics["cr.node." + MetricConstants.diskReadBytes];
+      const diskWrites = metrics["cr.node." + MetricConstants.diskWriteBytes];
+      const netSent = metrics["cr.node." + MetricConstants.netReadBytes];
+      const netReceived = metrics["cr.node." + MetricConstants.netWriteBytes];
+
+      result[nodeID] = {
+        diskIO: diskReads + diskWrites,
+        netIO: netSent + netReceived,
+      };
+    });
+    return result;
+  },
+);
+
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
@@ -421,7 +462,7 @@ const LiveNodesConnected = connect(
       sortSetting: liveNodesSortSetting.selector(state),
       statuses: statuses.live,
       nodesSummary: nodesSummarySelector(state),
-      latestTSValues: selectLatestTSValues(state),
+      latestSummedIOMetrics: selectSummedLatestIOMetrics(state),
     };
   },
   {
