@@ -305,8 +305,6 @@ func SynthesizeClusterVersionFromEngines(
 		origin string
 	}
 
-	// FIXME(tschottdorf): If we don't find anything, this should return v1.0, but
-	// we have to guarantee first that you always find something (should be OK).
 	maxMinVersion := originVersion{
 		Version: minSupportedVersion,
 		origin:  "(no store)",
@@ -441,6 +439,16 @@ func (ls *Stores) engines() []engine.Engine {
 // OnClusterVersionChange is invoked when the running node receives a notification
 // indicating that the cluster version has changed.
 func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) error {
+	synthCV, err := ls.SynthesizeClusterVersion(ctx)
+	if err != nil {
+		return errors.Wrap(err, "reading persisted cluster version")
+	}
+	// If the update downgrades the minimum version, ignore it. Must be
+	// a reordering. Note that we do carry out the upgrade if the MinVersion
+	// is identical, to backfill the engines that may still need it.
+	if cv.MinimumVersion.Less(synthCV.MinimumVersion) {
+		return nil
+	}
 	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
 		return errors.Wrap(err, "writing cluster version")
 	}
