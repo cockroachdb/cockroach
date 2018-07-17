@@ -60,6 +60,7 @@ root                 ·            ·                 (a, b, c)  ·
       │              exec mode    one row           ·          ·
       └── group      ·            ·                 (agg0)     ·
            │         aggregate 0  max(a)            ·          ·
+           │         scalar       ·                 ·          ·
            └── scan  ·            ·                 (a)        ·
 ·                    table        abc@primary       ·          ·
 ·                    spans        ALL               ·          ·

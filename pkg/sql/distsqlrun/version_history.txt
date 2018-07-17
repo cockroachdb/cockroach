@@ -68,3 +68,5 @@
 - Version: 16 (MinAcceptedVersion: 6)
     - Add SRF support via a new ProjectSet processor. The new processor spec
       would not be recognized by old versions.
+- Version: 17 (MinAcceptedVersion: 6)
+    - Add scalar vs non-scalar designation to aggregator.

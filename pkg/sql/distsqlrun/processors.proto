@@ -455,6 +455,19 @@ message AggregatorSpec {
     JSONB_AGG = 20;
   }
 
+  enum Type {
+    // This setting exists just for backwards compatibility; it's equivalent to
+    // SCALAR when there are no grouping columns, and to NON_SCALAR when there
+    // are grouping columns.
+    AUTO = 0;
+    // A scalar aggregation has no grouping columns and always returns one
+    // result row.
+    SCALAR = 1;
+    // A non-scalar aggregation returns no rows if there are no input rows; it
+    // may or may not have grouping columns.
+    NON_SCALAR = 2;
+  }
+
   message Aggregation {
     optional Func func = 1 [(gogoproto.nullable) = false];
 
@@ -479,6 +492,8 @@ message AggregatorSpec {
 
     reserved 3;
   }
+
+  optional Type type = 5 [(gogoproto.nullable) = false];
 
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -120,6 +120,10 @@ type aggregatorBase struct {
 
 	bucketsAcc mon.BoundAccount
 
+	// isScalar can only be set if there are no groupCols, and it means that we
+	// will generate a result row even if there are no input rows. Used for
+	// queries like SELECT MAX(n) FROM t.
+	isScalar         bool
 	groupCols        columns
 	orderedGroupCols columns
 	aggregations     []AggregatorSpec_Aggregation
@@ -153,6 +157,15 @@ func (ag *aggregatorBase) init(
 		ag.finishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
+	switch spec.Type {
+	case AggregatorSpec_SCALAR:
+		ag.isScalar = true
+	case AggregatorSpec_NON_SCALAR:
+		ag.isScalar = false
+	default:
+		// This case exists for backward compatibility.
+		ag.isScalar = (len(spec.GroupCols) == 0)
+	}
 	ag.groupCols = spec.GroupCols
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
@@ -515,7 +528,7 @@ func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatum
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
 	// aggregated.
-	if ag.bucket == nil && len(ag.groupCols) == 0 {
+	if ag.bucket == nil && ag.isScalar {
 		var err error
 		ag.bucket, err = ag.createAggregateFuncs()
 		if err != nil {

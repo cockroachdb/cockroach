@@ -96,6 +96,7 @@ SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT count(*) FROM (
 ----
 group                       ·                                            (count)
  │                          count_rows()                                 ·
+ │                          ·                                            ·
  └── render                 ·                                            ()
       └── render            ·                                            (generate_series[omitted])
            │                NULL                                         ·

@@ -1164,6 +1164,11 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 	}
 
+	aggType := distsqlrun.AggregatorSpec_NON_SCALAR
+	if n.isScalar {
+		aggType = distsqlrun.AggregatorSpec_SCALAR
+	}
+
 	inputTypes := p.ResultTypes
 
 	groupCols := make([]uint32, len(n.groupCols))
@@ -1272,6 +1277,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	planToStreamMapSet := false
 	if !multiStage {
 		finalAggsSpec = distsqlrun.AggregatorSpec{
+			Type:             aggType,
 			Aggregations:     aggregations,
 			GroupCols:        groupCols,
 			OrderedGroupCols: orderedGroupCols,
@@ -1494,6 +1500,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 
 		localAggsSpec := distsqlrun.AggregatorSpec{
+			Type:             aggType,
 			Aggregations:     localAggs,
 			GroupCols:        groupCols,
 			OrderedGroupCols: orderedGroupCols,
@@ -1507,6 +1514,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		)
 
 		finalAggsSpec = distsqlrun.AggregatorSpec{
+			Type:             aggType,
 			Aggregations:     finalAggs,
 			GroupCols:        finalGroupCols,
 			OrderedGroupCols: finalOrderedGroupCols,
