@@ -289,11 +289,17 @@ func checkDistAggregationInfo(
 
 	if info.FinalRendering != nil {
 		h := tree.MakeTypesOnlyIndexedVarHelper(sqlbase.ColumnTypesToDatumTypes(finalOutputTypes))
-		expr, err := info.FinalRendering(&h, varIdxs)
+		renderExpr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		finalProc.Post.RenderExprs = []distsqlrun.Expression{MakeExpression(expr, nil, nil)}
+		var expr distsqlrun.Expression
+		expr, err = MakeExpression(renderExpr, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		finalProc.Post.RenderExprs = []distsqlrun.Expression{expr}
+
 	}
 
 	procs = append(procs, finalProc)

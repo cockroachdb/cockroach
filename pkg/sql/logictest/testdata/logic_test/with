@@ -23,7 +23,7 @@ WITH t AS (SELECT * FROM y WHERE a < 3)
 
 
 # Using a CTE inside a subquery
-query I
+query I rowsort
 WITH t(x) AS (SELECT a FROM x)
   SELECT * FROM y WHERE a IN (SELECT x FROM t)
 ----
