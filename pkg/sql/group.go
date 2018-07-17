@@ -52,6 +52,10 @@ type groupNode struct {
 	// Indices of the group by columns in the source plan that have an ordering.
 	orderedGroupCols []int
 
+	// isScalar is set for "scalar groupby", where we want a result
+	// even if there are no input rows, e.g. SELECT MIN(x) FROM t.
+	isScalar bool
+
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
 
@@ -286,11 +290,7 @@ func (p *planner) groupBy(
 	postRender.sourceInfo = sqlbase.MultiSourceInfo{postRender.source.info}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
-
-	// TODO(peter): This memory isn't being accounted for. The similar code in
-	// sql/distsqlrun/aggregator.go does account for the memory.
-	group.run.buckets = make(map[string]struct{})
+	group.isScalar = len(groupByExprs) == 0
 
 	if log.V(2) {
 		strs := make([]string, 0, len(group.funcs))
@@ -315,8 +315,6 @@ type groupRun struct {
 
 	lastOrderedGroupKey tree.Datums
 	consumedGroupKey    bool
-
-	addNullBucketIfEmpty bool
 
 	// The current result row.
 	values tree.Datums
@@ -373,6 +371,13 @@ func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
 	n.run.scratch = bucket[:0]
 	n.run.gotOneRow = true
 
+	return nil
+}
+
+func (n *groupNode) startExec(params runParams) error {
+	// TODO(peter): This memory isn't being accounted for. The similar code in
+	// sql/distsqlrun/aggregator.go does account for the memory.
+	n.run.buckets = make(map[string]struct{})
 	return nil
 }
 
@@ -473,7 +478,7 @@ func (n *groupNode) Close(ctx context.Context) {
 // setupOutput runs once after all the input rows have been processed. It sets
 // up the necessary state to start iterating through the buckets in Next().
 func (n *groupNode) setupOutput() {
-	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
+	if len(n.run.buckets) < 1 && n.isScalar {
 		n.run.buckets[""] = struct{}{}
 	}
 	if n.run.values == nil {

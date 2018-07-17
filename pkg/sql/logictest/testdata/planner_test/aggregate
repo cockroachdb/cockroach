@@ -48,6 +48,7 @@ EXPLAIN (VERBOSE) SELECT count(k) FROM kv
 ----
 group           ·            ·
  │              aggregate 0  count(k)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.kv.k
       └── scan  ·            ·
@@ -63,6 +64,7 @@ group           ·            ·
  │              aggregate 0  count(k)
  │              aggregate 1  sum(k)
  │              aggregate 2  max(k)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.kv.k
       └── scan  ·            ·
@@ -74,6 +76,7 @@ EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
 group                ·            ·                                             (count)                                                       ·
  │                   aggregate 0  count(DISTINCT ((k, v, w, s) AS k, v, w, s))  ·                                                             ·
+ │                   scalar       ·                                             ·                                                             ·
  └── render          ·            ·                                             ("((k, v, w, s) AS k, v, w, s)")                              ·
       │              render 0     ((a.k, a.v, a.w, a.s) AS k, v, w, s)          ·                                                             ·
       └── join       ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
@@ -194,6 +197,7 @@ EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ----
 group           ·            ·
  │              aggregate 0  min(a)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.abc.a
       └── scan  ·            ·
@@ -226,6 +230,7 @@ EXPLAIN (VERBOSE) SELECT min(x) FROM xyz
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -240,6 +245,7 @@ EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -254,6 +260,7 @@ EXPLAIN (VERBOSE) SELECT max(x) FROM xyz
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.x
       └── revscan  ·            ·
@@ -268,6 +275,7 @@ EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 1
 ----
 group           ·            ·
  │              aggregate 0  min(y)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.y
       └── scan  ·            ·
@@ -282,6 +290,7 @@ EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 1
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.y
       └── revscan  ·            ·
@@ -296,6 +305,7 @@ EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 7
 ----
 group           ·            ·
  │              aggregate 0  min(y)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.y
       └── scan  ·            ·
@@ -310,6 +320,7 @@ EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 7
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.y
       └── revscan  ·            ·
@@ -324,6 +335,7 @@ EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -351,6 +363,7 @@ EXPLAIN (VERBOSE) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.x
       └── revscan  ·            ·
@@ -384,6 +397,7 @@ EXPLAIN (VERBOSE) SELECT variance(x) FROM xyz WHERE x = 1
 ----
 group           ·            ·
  │              aggregate 0  variance(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -417,6 +431,7 @@ EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ----
 group           ·            ·
  │              aggregate 0  min(a)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.abc.a
       └── scan  ·            ·
@@ -451,6 +466,7 @@ EXPLAIN (VERBOSE) SELECT max(a) FROM abc
 ----
 group              ·            ·
  │                 aggregate 0  max(a)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.abc.a
       └── revscan  ·            ·
@@ -628,6 +644,7 @@ EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test
 ----
 group           ·            ·                       (min)            ·
  │              aggregate 0  min(v)                  ·                ·
+ │              scalar       ·                       ·                ·
  └── render     ·            ·                       (v)              v!=NULL; +v
       │         render 0     test.public.opt_test.v  ·                ·
       └── scan  ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
@@ -641,6 +658,7 @@ EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                       (min)   ·
  │              aggregate 0  min(v)                  ·       ·
+ │              scalar       ·                       ·       ·
  └── render     ·            ·                       (v)     v!=NULL; +v
       │         render 0     test.public.opt_test.v  ·       ·
       └── scan  ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
@@ -656,6 +674,7 @@ EXPLAIN (VERBOSE) SELECT min(v+1) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                           (min)            ·
  │              aggregate 0  min(v + 1)                  ·                ·
+ │              scalar       ·                           ·                ·
  └── render     ·            ·                           ("v + 1")        ·
       │         render 0     test.public.opt_test.v + 1  ·                ·
       └── scan  ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
@@ -883,6 +902,7 @@ sort                      ·            ·                 (a)                  
       │                   render 1     agg0              ·                                        ·
       └── group           ·            ·                 (agg0)                                   ·
            │              aggregate 0  max(v)            ·                                        ·
+           │              scalar       ·                 ·                                        ·
            └── render     ·            ·                 (v)                                      v!=NULL
                 │         render 0     test.public.kv.v  ·                                        ·
                 └── scan  ·            ·                 (k[omitted], v, w[omitted], s[omitted])  k!=NULL; v!=NULL; key(k)
