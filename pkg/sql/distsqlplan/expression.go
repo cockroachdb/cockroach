@@ -58,6 +58,14 @@ func MakeExpression(
 		return distsqlrun.Expression{}
 	}
 
+	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
+		evalCtx: evalCtx,
+	}
+
+	exprWithoutSubqueries, _ := tree.WalkExpr(subqueryVisitor, expr)
+	if subqueryVisitor.err != nil {
+		panic("todo(arjun): refactor the return type of this function to return an error")
+	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
 	fmtCtx := exprFmtCtxBase(&buf, evalCtx)
@@ -72,9 +80,31 @@ func MakeExpression(
 			},
 		)
 	}
-	fmtCtx.FormatNode(expr)
+	fmtCtx.FormatNode(exprWithoutSubqueries)
 	if log.V(1) {
-		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
+		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(exprWithoutSubqueries))
 	}
 	return distsqlrun.Expression{Expr: buf.String()}
 }
+
+type evalAndReplaceSubqueryVisitor struct {
+	evalCtx *tree.EvalContext
+	err     error
+}
+
+var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
+
+func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	switch expr := expr.(type) {
+	case *tree.Subquery:
+		val, err := e.evalCtx.Planner.EvalSubquery(expr)
+		if err != nil {
+			e.err = err
+		}
+		return false, val
+	default:
+		return true, expr
+	}
+}
+
+func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
