@@ -54,7 +54,7 @@ func TestFormatStatement(t *testing.T) {
 		{`SHOW COLUMNS FROM foo`, tree.FmtAnonymize,
 			`SHOW COLUMNS FROM _`},
 		{`SHOW CREATE TABLE foo`, tree.FmtAnonymize,
-			`SHOW CREATE TABLE _`},
+			`SHOW CREATE _`},
 		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
 			`GRANT SELECT ON TABLE _ TO _`},
 
@@ -113,7 +113,7 @@ func TestFormatTableName(t *testing.T) {
 		{`SHOW COLUMNS FROM foo`,
 			`SHOW COLUMNS FROM xoxoxo`},
 		{`SHOW CREATE TABLE foo`,
-			`SHOW CREATE TABLE xoxoxo`},
+			`SHOW CREATE xoxoxo`},
 		// TODO(knz): TRUNCATE and GRANT table names are removed by
 		// tree.FmtAnonymize but not processed by table formatters.
 		//

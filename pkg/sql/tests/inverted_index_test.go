@@ -67,7 +67,7 @@ func TestInvertedIndex(t *testing.T) {
 
 	t.Run("ensure we're using the inverted index", func(t *testing.T) {
 		// Just to make sure we're using the inverted index.
-		explain := db.Query(t, `SELECT count(*) FROM [EXPLAIN SELECT * FROM test.jsons WHERE j @> '{"a": 1}'] WHERE "Description" = 'jsons@jsons_j_idx'`)
+		explain := db.Query(t, `SELECT count(*) FROM [EXPLAIN SELECT * FROM test.jsons WHERE j @> '{"a": 1}'] WHERE description = 'jsons@jsons_j_idx'`)
 		explain.Next()
 		var c int
 		if err := explain.Scan(&c); err != nil {

@@ -3123,9 +3123,9 @@ func TestCancelSchemaChange(t *testing.T) {
 					return nil
 				}
 				if _, err := db.Exec(`CANCEL JOB (
-					SELECT id FROM [SHOW JOBS]
+					SELECT job_id FROM [SHOW JOBS]
 					WHERE
-						type = 'SCHEMA CHANGE' AND
+						job_type = 'SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
 				)`, jobs.StatusRunning); err != nil {

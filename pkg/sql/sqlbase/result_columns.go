@@ -76,11 +76,11 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 // statement.
 var ExplainPlanColumns = ResultColumns{
 	// Tree shows the node type with the tree structure.
-	{Name: "Tree", Typ: types.String},
+	{Name: "tree", Typ: types.String},
 	// Field is the part of the node that a row of output pertains to.
-	{Name: "Field", Typ: types.String},
+	{Name: "field", Typ: types.String},
 	// Description contains details about the field.
-	{Name: "Description", Typ: types.String},
+	{Name: "description", Typ: types.String},
 }
 
 // ExplainPlanVerboseColumns are the result columns of an
@@ -88,29 +88,29 @@ var ExplainPlanColumns = ResultColumns{
 // statement when a flag like VERBOSE or TYPES is passed.
 var ExplainPlanVerboseColumns = ResultColumns{
 	// Tree shows the node type with the tree structure.
-	{Name: "Tree", Typ: types.String},
+	{Name: "tree", Typ: types.String},
 	// Level is the depth of the node in the tree. Hidden by default; can be
 	// retrieved using:
-	//   SELECT "Level" FROM [ EXPLAIN (VERBOSE) ... ].
-	{Name: "Level", Typ: types.Int, Hidden: true},
+	//   SELECT level FROM [ EXPLAIN (VERBOSE) ... ].
+	{Name: "level", Typ: types.Int, Hidden: true},
 	// Type is the node type. Hidden by default.
-	{Name: "Type", Typ: types.String, Hidden: true},
+	{Name: "node_type", Typ: types.String, Hidden: true},
 	// Field is the part of the node that a row of output pertains to.
-	{Name: "Field", Typ: types.String},
+	{Name: "field", Typ: types.String},
 	// Description contains details about the field.
-	{Name: "Description", Typ: types.String},
+	{Name: "description", Typ: types.String},
 	// Columns is the type signature of the data source.
-	{Name: "Columns", Typ: types.String},
+	{Name: "columns", Typ: types.String},
 	// Ordering indicates the known ordering of the data from this source.
-	{Name: "Ordering", Typ: types.String},
+	{Name: "ordering", Typ: types.String},
 }
 
 // ExplainDistSQLColumns are the result columns of an
 // EXPLAIN (DISTSQL) statement.
 var ExplainDistSQLColumns = ResultColumns{
-	{Name: "Automatic", Typ: types.Bool},
-	{Name: "URL", Typ: types.String},
-	{Name: "JSON", Typ: types.String, Hidden: true},
+	{Name: "automatic", Typ: types.Bool},
+	{Name: "url", Typ: types.String},
+	{Name: "json", Typ: types.String, Hidden: true},
 }
 
 // ExplainOptColumns are the result columns of an
@@ -125,7 +125,7 @@ var ShowTraceColumns = ResultColumns{
 	{Name: "age", Typ: types.Interval}, // Note GetTraceAgeColumnIdx below.
 	{Name: "message", Typ: types.String},
 	{Name: "tag", Typ: types.String},
-	{Name: "loc", Typ: types.String},
+	{Name: "location", Typ: types.String},
 	{Name: "operation", Typ: types.String},
 	{Name: "span", Typ: types.Int},
 }

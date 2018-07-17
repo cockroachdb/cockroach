@@ -99,7 +99,7 @@ ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE p1
 ----
-Start Key    End Key      Range ID  Replicas  Lease Holder
+start_key    end_key      range_id  replicas  lease_holder
 NULL         /2           1         {1}       1
 /2           /2/1/#/54/1  2         {2}       2
 /2/1/#/54/1  NULL         3         {3}       3
@@ -109,7 +109,7 @@ NULL         /2           1         {1}       1
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM INDEX b
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /0       3         {3}       3
 /0         /2       4         {4}       4
 /2         NULL     5         {5}       5
@@ -119,7 +119,7 @@ NULL       /0       3         {3}       3
 query TTITI colnames
 SHOW EXPERIMENTAL_RANGES FROM TABLE p2
 ----
-Start Key  End Key    Range ID  Replicas  Lease Holder
+start_key  end_key    range_id  replicas  lease_holder
 NULL       /0         5         {5}       5
 /0         /2         6         {1}       1
 /2         /2/#/55/2  7         {2}       2
@@ -284,7 +284,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  /"a"-/"a"/#
@@ -294,7 +294,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  -/"aa"
@@ -302,7 +302,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  /1-/1/#
@@ -312,7 +312,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  -/2

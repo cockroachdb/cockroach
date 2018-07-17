@@ -160,7 +160,7 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
-Tree            Field     Description       Columns          Ordering
+tree            field     description       columns          ordering
 distinct        ·         ·                 (v)              weak-key(v)
  └── render     ·         ·                 (v)              ·
       │         render 0  test.public.kv.v  ·                ·
@@ -172,7 +172,7 @@ distinct        ·         ·                 (v)              weak-key(v)
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
-Tree            Field      Description       Columns          Ordering
+tree            field      description       columns          ordering
 distinct        ·          ·                 (v)              weak-key(v); +v
  │              order key  v                 ·                ·
  └── render     ·          ·                 (v)              weak-key(v); +v
@@ -185,7 +185,7 @@ distinct        ·          ·                 (v)              weak-key(v); +v
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
-Tree       Field     Description       Columns          Ordering
+tree       field     description       columns          ordering
 render     ·         ·                 (v)              v!=NULL; key(v)
  │         render 0  test.public.kv.v  ·                ·
  └── scan  ·         ·                 (k[omitted], v)  v!=NULL; key(v)
@@ -199,7 +199,7 @@ CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
 ----
-Tree       Field     Description        Columns          Ordering
+tree       field     description        columns          ordering
 render     ·         ·                  (v)              v!=NULL; key(v)
  │         render 0  test.public.kv2.v  ·                ·
  └── scan  ·         ·                  (k[omitted], v)  v!=NULL; key(v)

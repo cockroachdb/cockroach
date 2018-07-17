@@ -59,12 +59,12 @@ SELECT rowid FROM t WHERE a = 10
 ----
 11
 
-query TTBTT
+query TTBTTT
 SHOW COLUMNS FROM t
 ----
-a  INT     true  NULL {}
-b  INT     true  NULL {}
-c  STRING  true  NULL {}
+a  INT     true  NULL  ·  {}
+b  INT     true  NULL  ·  {}
+c  STRING  true  NULL  ·  {}
 
 statement ok
 CREATE INDEX a_idx ON t (a)

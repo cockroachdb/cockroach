@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 query T colnames
 SHOW TABLES FROM test
 ----
-Table
+table_name
 a
 
 statement ok
@@ -62,17 +62,17 @@ CREATE TABLE c (
 query TTBITTBB colnames
 SHOW INDEXES FROM c
 ----
-Table  Name           Unique  Seq  Column  Direction  Storing  Implicit
-c      primary        true    1    id      ASC        false    false
-c      c_foo_idx      false   1    foo     ASC        false    false
-c      c_foo_idx      false   2    id      ASC        false    true
-c      c_foo_idx1     false   1    foo     ASC        false    false
-c      c_foo_idx1     false   2    id      ASC        false    true
-c      c_foo_bar_idx  false   1    foo     ASC        false    false
-c      c_foo_bar_idx  false   2    bar     DESC       false    false
-c      c_foo_bar_idx  false   3    id      ASC        false    true
-c      c_bar_key      true    1    bar     ASC        false    false
-c      c_bar_key      true    2    id      ASC        false    true
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
+c           primary        false       1             id           ASC        false    false
+c           c_foo_idx      true        1             foo          ASC        false    false
+c           c_foo_idx      true        2             id           ASC        false    true
+c           c_foo_idx1     true        1             foo          ASC        false    false
+c           c_foo_idx1     true        2             id           ASC        false    true
+c           c_foo_bar_idx  true        1             foo          ASC        false    false
+c           c_foo_bar_idx  true        2             bar          DESC       false    false
+c           c_foo_bar_idx  true        3             id           ASC        false    true
+c           c_bar_key      false       1             bar          ASC        false    false
+c           c_bar_key      false       2             id           ASC        false    true
 
 # primary keys can never be null
 
@@ -81,22 +81,22 @@ CREATE TABLE d (
   id    INT PRIMARY KEY NULL
 )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM d
 ----
-Field Type   Null  Default Indices
-id    INT    false NULL    {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+id           INT        false        NULL            ·                      {"primary"}
 
 statement ok
 CREATE TABLE e (
   id    INT NULL PRIMARY KEY
 )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM e
 ----
-Field Type   Null   Default Indices
-id    INT    false  NULL    {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+id           INT        false        NULL            ·                      {"primary"}
 
 statement ok
 CREATE TABLE f (
@@ -106,13 +106,13 @@ CREATE TABLE f (
   PRIMARY KEY (a, b, c)
 )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM f
 ----
-Field Type   Null  Default Indices
-a     INT   false  NULL    {"primary"}
-b     INT   false  NULL    {"primary"}
-c     INT   false  NULL    {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices
+a            INT        false        NULL            ·                      {"primary"}
+b            INT        false        NULL            ·                      {"primary"}
+c            INT        false        NULL            ·                      {"primary"}
 
 query T
 SHOW TABLES FROM test
@@ -156,26 +156,26 @@ CREATE TABLE test.users (
   FAMILY fam_3_username_email (username, email)
 )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM test.users
 ----
-Field       Type        Null    Default Indices
-id          INT         false   NULL    {"primary","foo","bar"}
-name        STRING      false   NULL    {"foo","bar"}
-title       STRING      true    NULL    {}
-nickname    STRING      true    NULL	{}
-username    STRING(10)  true    NULL	{}
-email       STRING(100) true    NULL    {}
+column_name  data_type    is_nullable  column_default  generation_expression  indices
+id           INT          false        NULL            ·                      {"primary","foo","bar"}
+name         STRING       false        NULL            ·                      {"foo","bar"}
+title        STRING       true         NULL            ·                      {}
+nickname     STRING       true         NULL            ·                      {}
+username     STRING(10)   true         NULL            ·                      {}
+email        STRING(100)  true         NULL            ·                      {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM test.users
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-users  primary  true    1    id      ASC        false    false
-users  foo      false   1    name    ASC        false    false
-users  foo      false   2    id      ASC        false    true
-users  bar      true    1    id      ASC        false    false
-users  bar      true    2    name    ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       primary     false       1             id           ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             name         ASC        false    false
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
@@ -218,11 +218,11 @@ CREATE TABLE test.dupe_generated (
 query TTTTB colnames
 SHOW CONSTRAINTS FROM test.dupe_generated
 ----
-table           name        type   details           validated
-dupe_generated  check_bar   CHECK  CHECK (bar > 2)   true
-dupe_generated  check_foo   CHECK  CHECK (foo > 2)   true
-dupe_generated  check_foo1  CHECK  CHECK (foo < 10)  true
-dupe_generated  check_foo2  CHECK  CHECK (foo > 1)   true
+table_name      constraint_name  constraint_type  details           validated
+dupe_generated  check_bar        CHECK            CHECK (bar > 2)   true
+dupe_generated  check_foo        CHECK            CHECK (foo > 2)   true
+dupe_generated  check_foo1       CHECK            CHECK (foo < 10)  true
+dupe_generated  check_foo2       CHECK            CHECK (foo > 1)   true
 
 statement ok
 CREATE TABLE test.named_constraints (
@@ -268,13 +268,13 @@ test.public.named_constraints  CREATE TABLE named_constraints (
 query TTTTB colnames
 SHOW CONSTRAINTS FROM test.named_constraints
 ----
-table              name  type         details                                  validated
-named_constraints  bar   UNIQUE       UNIQUE (id ASC, name ASC)                true
-named_constraints  ck1   CHECK        CHECK (length(nickname) < 10)            true
-named_constraints  ck2   CHECK        CHECK (length(nickname) < length(name))  true
-named_constraints  pk    PRIMARY KEY  PRIMARY KEY (id ASC)                     true
-named_constraints  uq    UNIQUE       UNIQUE (email ASC)                       true
-named_constraints  uq2   UNIQUE       UNIQUE (username ASC)                    true
+table_name         constraint_name  constraint_type  details                                  validated
+named_constraints  bar              UNIQUE           UNIQUE (id ASC, name ASC)                true
+named_constraints  ck1              CHECK            CHECK (length(nickname) < 10)            true
+named_constraints  ck2              CHECK            CHECK (length(nickname) < length(name))  true
+named_constraints  pk               PRIMARY KEY      PRIMARY KEY (id ASC)                     true
+named_constraints  uq               UNIQUE           UNIQUE (email ASC)                       true
+named_constraints  uq2              UNIQUE           UNIQUE (username ASC)                    true
 
 statement error duplicate constraint name: "pk"
 CREATE TABLE test.dupe_named_constraints (
@@ -350,52 +350,52 @@ CREATE TABLE test.alltypes (
   cvarchar12 VARCHAR(12)
   )
 
-query TTBTT colnames
+query TTBTTT colnames
 SHOW COLUMNS FROM test.alltypes
 ----
-Field             Type                      Null  Default         Indices
-cbigint           BIGINT                    true  NULL            {}
-cbigserial        INT                       true  unique_rowid()  {}
-cbit              BIT(1)                    true  NULL            {}
-cbit12            BIT(12)                   true  NULL            {}
-cblob             BYTES                     true  NULL            {}
-cbool             BOOL                      true  NULL            {}
-cbytea            BYTES                     true  NULL            {}
-cbytes            BYTES                     true  NULL            {}
-cchar             STRING                    true  NULL            {}
-cchar12           STRING(12)                true  NULL            {}
-cdate             DATE                      true  NULL            {}
-cdec              DECIMAL                   true  NULL            {}
-cdec1             DECIMAL(1)                true  NULL            {}
-cdec21            DECIMAL(2,1)              true  NULL            {}
-cdecimal          DECIMAL                   true  NULL            {}
-cdecimal1         DECIMAL(1)                true  NULL            {}
-cdecimal21        DECIMAL(2,1)              true  NULL            {}
-cdoubleprecision  DOUBLE PRECISION          true  NULL            {}
-cfloat            FLOAT                     true  NULL            {}
-cfloat4           REAL                      true  NULL            {}
-cfloat8           DOUBLE PRECISION          true  NULL            {}
-cint              INT                       true  NULL            {}
-cint2             SMALLINT                  true  NULL            {}
-cint4             INTEGER                   true  NULL            {}
-cint64            BIGINT                    true  NULL            {}
-cint8             BIGINT                    true  NULL            {}
-cinteger          INTEGER                   true  NULL            {}
-cinterval         INTERVAL                  true  NULL            {}
-cnumeric          DECIMAL                   true  NULL            {}
-cnumeric1         DECIMAL(1)                true  NULL            {}
-cnumeric21        DECIMAL(2,1)              true  NULL            {}
-creal             REAL                      true  NULL            {}
-cserial           INT                       true  unique_rowid()  {}
-csmallint         SMALLINT                  true  NULL            {}
-csmallserial      INT                       true  unique_rowid()  {}
-cstring           STRING                    true  NULL            {}
-cstring12         STRING(12)                true  NULL            {}
-ctext             STRING                    true  NULL            {}
-ctimestamp        TIMESTAMP                 true  NULL            {}
-ctimestampwtz     TIMESTAMP WITH TIME ZONE  true  NULL            {}
-cvarchar          STRING                    true  NULL            {}
-cvarchar12        STRING(12)                true  NULL            {}
+column_name       data_type                 is_nullable  column_default  generation_expression  indices
+cbigint           BIGINT                    true         NULL            ·                      {}
+cbigserial        INT                       true         unique_rowid()  ·                      {}
+cbit              BIT(1)                    true         NULL            ·                      {}
+cbit12            BIT(12)                   true         NULL            ·                      {}
+cblob             BYTES                     true         NULL            ·                      {}
+cbool             BOOL                      true         NULL            ·                      {}
+cbytea            BYTES                     true         NULL            ·                      {}
+cbytes            BYTES                     true         NULL            ·                      {}
+cchar             STRING                    true         NULL            ·                      {}
+cchar12           STRING(12)                true         NULL            ·                      {}
+cdate             DATE                      true         NULL            ·                      {}
+cdec              DECIMAL                   true         NULL            ·                      {}
+cdec1             DECIMAL(1)                true         NULL            ·                      {}
+cdec21            DECIMAL(2,1)              true         NULL            ·                      {}
+cdecimal          DECIMAL                   true         NULL            ·                      {}
+cdecimal1         DECIMAL(1)                true         NULL            ·                      {}
+cdecimal21        DECIMAL(2,1)              true         NULL            ·                      {}
+cdoubleprecision  DOUBLE PRECISION          true         NULL            ·                      {}
+cfloat            FLOAT                     true         NULL            ·                      {}
+cfloat4           REAL                      true         NULL            ·                      {}
+cfloat8           DOUBLE PRECISION          true         NULL            ·                      {}
+cint              INT                       true         NULL            ·                      {}
+cint2             SMALLINT                  true         NULL            ·                      {}
+cint4             INTEGER                   true         NULL            ·                      {}
+cint64            BIGINT                    true         NULL            ·                      {}
+cint8             BIGINT                    true         NULL            ·                      {}
+cinteger          INTEGER                   true         NULL            ·                      {}
+cinterval         INTERVAL                  true         NULL            ·                      {}
+cnumeric          DECIMAL                   true         NULL            ·                      {}
+cnumeric1         DECIMAL(1)                true         NULL            ·                      {}
+cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}
+creal             REAL                      true         NULL            ·                      {}
+cserial           INT                       true         unique_rowid()  ·                      {}
+csmallint         SMALLINT                  true         NULL            ·                      {}
+csmallserial      INT                       true         unique_rowid()  ·                      {}
+cstring           STRING                    true         NULL            ·                      {}
+cstring12         STRING(12)                true         NULL            ·                      {}
+ctext             STRING                    true         NULL            ·                      {}
+ctimestamp        TIMESTAMP                 true         NULL            ·                      {}
+ctimestampwtz     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+cvarchar          STRING                    true         NULL            ·                      {}
+cvarchar12        STRING(12)                true         NULL            ·                      {}
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng

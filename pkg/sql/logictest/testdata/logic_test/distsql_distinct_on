@@ -62,9 +62,9 @@ ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[5], '3', '4', '5')
 
 query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
+SHOW EXPERIMENTAL_RANGES FROM TABLE xyz
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /2       1         {1}       1
 /2         /4       2         {2}       2
 /4         /6       3         {3}       3
@@ -72,9 +72,9 @@ NULL       /2       1         {1}       1
 /7         NULL     5         {5}       5
 
 query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
+SHOW EXPERIMENTAL_RANGES FROM TABLE abc
 ----
-Start Key        End Key          Range ID  Replicas  Lease Holder
+start_key        end_key          range_id  replicas  lease_holder
 NULL             /NULL/NULL/NULL  5         {5}       5
 /NULL/NULL/NULL  /"1"/"1"/"2"     21        {1}       1
 /"1"/"1"/"2"     /"1"/"2"/"2"     22        {2}       2

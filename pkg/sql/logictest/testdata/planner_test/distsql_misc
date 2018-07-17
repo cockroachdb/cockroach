@@ -8,7 +8,7 @@ statement ok
 CREATE TABLE test (k INT PRIMARY KEY, v INT, data INT, INDEX secondary (v) STORING (data))
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL)
+SELECT url FROM [EXPLAIN (DISTSQL)
     SELECT leftside.v, leftside.k, leftside.data, rightside.v, rightside.k, rightside.data
     FROM
       (SELECT v,k,data FROM test@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY v,k,data) AS leftside
@@ -39,7 +39,7 @@ CREATE TABLE child (
 )
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL)
+SELECT url FROM [EXPLAIN (DISTSQL)
     SELECT p.child_id, p.id, p.id2
     FROM
       (SELECT child_id, id, id2 FROM child@{NO_INDEX_JOIN} ORDER BY id, id2) AS p
@@ -68,9 +68,9 @@ ALTER TABLE data EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames
-SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
-Start Key  End Key  Replicas  Lease Holder
+start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
 /1         /2       {2}       2
 /2         /3       {3}       3
@@ -83,6 +83,6 @@ NULL       /1       {1}       1
 /9         NULL     {5}       5
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s1 ON a FROM data]
+SELECT url FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s1 ON a FROM data]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lM-KszAUxfffU8hdfQOBJmr_ueosu5kO7ewGF6m5iIw1kkSYmeK7DyrSsbRRaGbpjSe_czjhnqGQAl_4CTVE78CAgA8EAiAQAoE5xARKJRPUWqrml06wFZ8QUQJZUVamGccEEqkQojOYzOQIEbzxY4575ALVjAIBgYZneYspVXbi6msjuOFAYFeZyNswiGsCsjKXK7XhKULEajIde-CnMkc1mw-R3fiQfWPkMUpp4-hguB3s3wVfeFUhlUCFYsCL67vWntNUYcqNVDNGp5v0_vuUescq-UCjn-5aDgaW2fSKmMOKRrB9RQvnFfnT8_oO845g-7xL53mD6XkDh3lHsH3elfO84fS8ocO8I9g-7_pPV84N8B51KQuNV6vn9s20WUkoUuz2l5aVSvBVyaTFdJ-7VtcOBGrTnbLuY1t0R43B32JmFfsDMbsW-3byCDqwqkO7OHzE99wqXtjJi0fIS6t4ZSevHiGv7V3RkWdif2TX7Lj-9xMAAP__kHfOZg==

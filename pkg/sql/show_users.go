@@ -24,5 +24,5 @@ import (
 // Privileges: SELECT on system.users.
 func (p *planner) ShowUsers(ctx context.Context, n *tree.ShowUsers) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW USERS",
-		`SELECT username FROM system.users WHERE "isRole" = false ORDER BY 1`, nil, nil)
+		`SELECT username AS user_name FROM system.users WHERE "isRole" = false ORDER BY 1`, nil, nil)
 }

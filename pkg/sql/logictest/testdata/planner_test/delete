@@ -57,7 +57,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Tree                 Field  Description
+tree                 field  description
 count                ·      ·
  └── delete          ·      ·
       │              from   unindexed

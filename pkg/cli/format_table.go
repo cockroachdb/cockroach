@@ -243,7 +243,7 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		// This width is sufficient to show a "standard text line width"
 		// on the screen when viewed as a single column on a 80-wide terminal.
 		//
-		// It's also wide enough for the output of SHOW CREATE TABLE on
+		// It's also wide enough for the output of SHOW CREATE on
 		// moderately long column definitions (e.g. including FK
 		// constraints).
 		p.table.SetColWidth(72)

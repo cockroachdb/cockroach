@@ -391,10 +391,10 @@ func tsOrNull(micros int64) tree.Datum {
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
-	id                 INT,
-	type               STRING,
+	job_id             INT,
+	job_type           STRING,
 	description        STRING,
-	username           STRING,
+	user_name          STRING,
 	descriptor_ids     INT[],
 	status             STRING,
 	created            TIMESTAMP,
@@ -646,8 +646,8 @@ CREATE TABLE crdb_internal.session_trace (
 var crdbInternalClusterSettingsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_settings (
-  name          STRING NOT NULL,
-  current_value STRING NOT NULL,
+  variable      STRING NOT NULL,
+  value         STRING NOT NULL,
   type          STRING NOT NULL,
   description   STRING NOT NULL
 );
@@ -698,7 +698,7 @@ const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   query_id         STRING,         -- the cluster-unique ID of the query
   node_id          INT NOT NULL,   -- the node on which the query is running
-  username         STRING,         -- the user running the query
+  user_name        STRING,         -- the user running the query
   start            TIMESTAMP,      -- the start time of the query
   query            STRING,         -- the SQL code of the query
   client_address   STRING,         -- the address of the client that issued the query
@@ -792,7 +792,7 @@ const sessionsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   node_id            INT NOT NULL,   -- the node on which the query is running
   session_id         STRING,         -- the ID of the session
-  username           STRING,         -- the user running the query
+  user_name          STRING,         -- the user running the query
   client_address     STRING,         -- the address of the client that issued the query
   application_name   STRING,         -- the name of the application as per SET application_name
   active_queries     STRING,         -- the currently running queries as SQL
@@ -1627,10 +1627,10 @@ CREATE TABLE crdb_internal.ranges (
 var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
-  id            INT NOT NULL,
-  cli_specifier STRING,
-  config_yaml   BYTES NOT NULL,
-  config_proto  BYTES NOT NULL
+  zone_id          INT NOT NULL,
+  cli_specifier    STRING,
+  config_yaml      BYTES NOT NULL,
+  config_protobuf  BYTES NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {

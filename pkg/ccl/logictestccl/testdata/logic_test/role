@@ -3,7 +3,7 @@
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement error a role named admin already exists
@@ -33,7 +33,7 @@ CREATE ROLE myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 myrole
 
@@ -61,7 +61,7 @@ DROP ROLE admin, myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 myrole
 
@@ -71,7 +71,7 @@ DROP ROLE myrole
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement error pq: role myrole does not exist
@@ -104,7 +104,7 @@ DROP ROLE rolea, roleb
 query T colnames
 SHOW ROLES
 ----
-rolename
+role_name
 admin
 
 statement ok
@@ -116,8 +116,8 @@ CREATE ROLE testrole
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role   member  isAdmin
-admin  root    true
+role_name  member  is_admin
+admin      root    true
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
@@ -169,9 +169,9 @@ testrole  testuser  false
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role      member    isAdmin
-admin     root      true
-testrole  testuser  false
+role_name  member    is_admin
+admin      root      true
+testrole   testuser  false
 
 user testuser
 
@@ -232,53 +232,53 @@ testrole  testuser2  true
 query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role      member     isAdmin
-admin     root       true
-admin     testuser   false
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      root       true
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin
 ----
-role      member     isAdmin
-admin     root       true
-admin     testuser   false
+role_name  member    is_admin
+admin      root      true
+admin      testuser  false
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser
 ----
-role      member     isAdmin
-admin     testuser   false
-testrole  testuser   true
+role_name  member    is_admin
+admin      testuser  false
+testrole   testuser  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE testrole FOR testuser2
 ----
-role      member     isAdmin
-testrole  testuser2  true
+role_name  member     is_admin
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE foo,testrole
 ----
-role      member     isAdmin
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser, testuser2
 ----
-role      member     isAdmin
-admin     testuser   false
-testrole  testuser   true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin, testrole FOR root, testuser2
 ----
-role      member     isAdmin
-admin     root       true
-testrole  testuser2  true
+role_name  member     is_admin
+admin      root       true
+testrole   testuser2  true
 
 statement ok
 DROP USER testuser
@@ -653,19 +653,19 @@ user testuser
 query TTTT colnames
 SHOW GRANTS ON DATABASE db2
 ----
-Database  Schema              User      Privileges
-db2       crdb_internal       admin     ALL
-db2       crdb_internal       newgroup  ALL
-db2       crdb_internal       root      ALL
-db2       information_schema  admin     ALL
-db2       information_schema  newgroup  ALL
-db2       information_schema  root      ALL
-db2       pg_catalog          admin     ALL
-db2       pg_catalog          newgroup  ALL
-db2       pg_catalog          root      ALL
-db2       public              admin     ALL
-db2       public              newgroup  ALL
-db2       public              root      ALL
+database_name  schema_name         grantee   privilege_type
+db2            crdb_internal       admin     ALL
+db2            crdb_internal       newgroup  ALL
+db2            crdb_internal       root      ALL
+db2            information_schema  admin     ALL
+db2            information_schema  newgroup  ALL
+db2            information_schema  root      ALL
+db2            pg_catalog          admin     ALL
+db2            pg_catalog          newgroup  ALL
+db2            pg_catalog          root      ALL
+db2            public              admin     ALL
+db2            public              newgroup  ALL
+db2            public              root      ALL
 
 statement ok
 CREATE TABLE db2.foo (k int);

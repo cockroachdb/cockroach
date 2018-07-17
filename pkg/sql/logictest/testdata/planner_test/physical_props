@@ -6,7 +6,7 @@ CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT)
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE b = c
 ----
-Tree  Field   Description   Columns       Ordering
+tree  field   description   columns       ordering
 scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
 ·     table   abcd@primary  ·             ·
 ·     spans   ALL           ·             ·
@@ -15,7 +15,7 @@ scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; b!=NULL; c!=NULL; key(
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1
 ----
-Tree  Field  Description   Columns       Ordering
+tree  field  description   columns       ordering
 scan  ·      ·             (a, b, c, d)  a=CONST; key()
 ·     table  abcd@primary  ·             ·
 ·     spans  /1-/1/#       ·             ·
@@ -23,7 +23,7 @@ scan  ·      ·             (a, b, c, d)  a=CONST; key()
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE b = 1
 ----
-Tree  Field   Description   Columns       Ordering
+tree  field   description   columns       ordering
 scan  ·       ·             (a, b, c, d)  b=CONST; a!=NULL; key(a)
 ·     table   abcd@primary  ·             ·
 ·     spans   ALL           ·             ·
@@ -32,7 +32,7 @@ scan  ·       ·             (a, b, c, d)  b=CONST; a!=NULL; key(a)
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1 AND b = 1
 ----
-Tree  Field   Description   Columns       Ordering
+tree  field   description   columns       ordering
 scan  ·       ·             (a, b, c, d)  a=CONST; b=CONST; key()
 ·     table   abcd@primary  ·             ·
 ·     spans   /1-/1/#       ·             ·
@@ -41,7 +41,7 @@ scan  ·       ·             (a, b, c, d)  a=CONST; b=CONST; key()
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1 AND b = d
 ----
-Tree  Field   Description   Columns       Ordering
+tree  field   description   columns       ordering
 scan  ·       ·             (a, b, c, d)  b=d; a=CONST; b!=NULL; d!=NULL; key()
 ·     table   abcd@primary  ·             ·
 ·     spans   /1-/1/#       ·             ·
@@ -50,7 +50,7 @@ scan  ·       ·             (a, b, c, d)  b=d; a=CONST; b!=NULL; d!=NULL; key(
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c
 ----
-Tree  Field   Description          Columns       Ordering
+tree  field   description          columns       ordering
 scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
 ·     table   abcd@primary         ·             ·
 ·     spans   ALL                  ·             ·
@@ -59,7 +59,7 @@ scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; b!=NULL; c!=N
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c AND c = 1
 ----
-Tree  Field   Description                        Columns       Ordering
+tree  field   description                        columns       ordering
 scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST; b!=NULL; c!=NULL; key()
 ·     table   abcd@primary                       ·             ·
 ·     spans   ALL                                ·             ·
@@ -68,7 +68,7 @@ scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST;
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = 1
 ----
-Tree         Field          Description        Columns    Ordering
+tree         field          description        columns    ordering
 filter       ·              ·                  (a, b, c)  a=CONST
  │           filter         x.a = 1            ·          ·
  └── values  ·              ·                  (a, b, c)  ·
@@ -83,7 +83,7 @@ filter       ·              ·                  (a, b, c)  a=CONST
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b
 ----
-Tree         Field          Description        Columns    Ordering
+tree         field          description        columns    ordering
 filter       ·              ·                  (a, b, c)  a=b; a!=NULL; b!=NULL
  │           filter         x.a = x.b          ·          ·
  └── values  ·              ·                  (a, b, c)  ·
@@ -98,7 +98,7 @@ filter       ·              ·                  (a, b, c)  a=b; a!=NULL; b!=NUL
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b AND b = 1
 ----
-Tree         Field          Description                Columns    Ordering
+tree         field          description                columns    ordering
 filter       ·              ·                          (a, b, c)  a=b; a=CONST; b!=NULL
  │           filter         (x.a = x.b) AND (x.b = 1)  ·          ·
  └── values  ·              ·                          (a, b, c)  ·
@@ -117,7 +117,7 @@ CREATE TABLE efg (e INT PRIMARY KEY, f INT, g INT)
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND a=1 AND f=g
 ----
-Tree       Field           Description   Columns                Ordering
+tree       field           description   columns                ordering
 join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
  │         type            inner         ·                      ·
  │         equality        (a) = (e)     ·                      ·
@@ -133,7 +133,7 @@ join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CO
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND b=1 AND f=g
 ----
-Tree       Field           Description   Columns                Ordering
+tree       field           description   columns                ordering
 join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; a!=NULL; key(a)
  │         type            inner         ·                      ·
  │         equality        (a) = (e)     ·                      ·
@@ -150,7 +150,7 @@ join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CO
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e
 ----
-Tree       Field           Description   Columns                Ordering
+tree       field           description   columns                ordering
 join       ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; key(a)
  │         type            inner         ·                      ·
  │         equality        (a) = (e)     ·                      ·
@@ -166,7 +166,7 @@ join       ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=f
 ----
-Tree       Field     Description   Columns                Ordering
+tree       field     description   columns                ordering
 join       ·         ·             (a, b, c, d, e, f, g)  ·
  │         type      inner         ·                      ·
  │         equality  (a) = (f)     ·                      ·
@@ -181,7 +181,7 @@ join       ·         ·             (a, b, c, d, e, f, g)  ·
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN (SELECT * FROM efg WITH ORDINALITY) ON a=e
 ----
-Tree             Field           Description   Columns                              Ordering
+tree             field           description   columns                              ordering
 join             ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
  │               type            inner         ·                                    ·
  │               equality        (a) = (e)     ·                                    ·
@@ -204,7 +204,7 @@ SELECT true FROM abc WHERE b=1 and b=c
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT true FROM abc WHERE b=1 and b=c;
 ----
-Tree       Field     Description          Columns                                    Ordering
+tree       field     description          columns                                    ordering
 render     ·         ·                    (bool)                                     bool=CONST
  │         render 0  true                 ·                                          ·
  └── scan  ·         ·                    (a[omitted], b, c, rowid[hidden,omitted])  b=c; b=CONST; c!=NULL; weak-key(a)

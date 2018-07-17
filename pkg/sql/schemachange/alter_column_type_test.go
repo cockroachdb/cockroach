@@ -314,7 +314,7 @@ func TestColumnConversions(t *testing.T) {
 					findColumn := func(colType testKey) bool {
 						var a, expr string
 						lookFor := fmt.Sprintf("a %s NULL,", columnType(colType).SQLString())
-						sqlDB.QueryRow(t, "SHOW CREATE TABLE d.t").Scan(&a, &expr)
+						sqlDB.QueryRow(t, "SHOW CREATE d.t").Scan(&a, &expr)
 						t.Log(lookFor, expr)
 						return strings.Contains(expr, lookFor)
 					}

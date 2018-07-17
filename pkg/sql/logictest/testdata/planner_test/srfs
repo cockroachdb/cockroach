@@ -64,7 +64,7 @@ subtest corr_SRFs
 
 # Check that sources get omitted properly.
 query TTT
-SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, 3) FROM t]
+SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, 3) FROM t]
 ----
 render            ·                                  (generate_series)
  │                generate_series_0.generate_series  ·
@@ -76,7 +76,7 @@ render            ·                                  (generate_series)
 
 # Check that SRFs get omitted properly.
 query TTT
-SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT a FROM (SELECT a, generate_series(1, 3) FROM t)]
+SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT a FROM (SELECT a, generate_series(1, 3) FROM t)]
 ----
 render                 ·                      (a)
  │                     a                      ·
@@ -92,7 +92,7 @@ render                 ·                      (a)
 # Check that an omitted column in the render doesn't cause the omitted
 # column to disappear from underneath the SRF.
 query TTT
-SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT generate_series(1, length(a)) FROM t)]
+SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT generate_series(1, length(a)) FROM t)]
 ----
 group                       ·                                            (count)
  │                          count_rows()                                 ·
@@ -106,7 +106,7 @@ group                       ·                                            (count
 ·                           ALL                                          ·
 
 query TTT
-SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)) FROM t]
+SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)) FROM t]
 ----
 render            ·                                            (generate_series)
  │                generate_series_0.generate_series            ·
@@ -118,7 +118,7 @@ render            ·                                            (generate_series
 
 # Check that the unary source gets processed properly.
 query TTT
-SELECT "Tree", "Description", "Columns" FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)), crdb_internal.unary_table(), generate_series(1, 3) FROM t]
+SELECT tree, description, columns FROM [EXPLAIN (VERBOSE) SELECT generate_series(1, length(a)), crdb_internal.unary_table(), generate_series(1, 3) FROM t]
 ----
 render            ·                                            (generate_series, "crdb_internal.unary_table", generate_series)
  │                generate_series_0.generate_series            ·

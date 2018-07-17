@@ -104,7 +104,7 @@ ALTER TABLE test.t DROP COLUMN xx;
 
 	for i, d := range testData {
 		t.Run(d.tableExpr, func(t *testing.T) {
-			sql := `SELECT "Columns" FROM [EXPLAIN(VERBOSE) SELECT * FROM ` + d.tableExpr + "]"
+			sql := `SELECT columns FROM [EXPLAIN(VERBOSE) SELECT * FROM ` + d.tableExpr + "]"
 			var columns string
 			if err := db.QueryRow(sql).Scan(&columns); err != nil {
 				if d.expectedError != "" {

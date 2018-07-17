@@ -214,9 +214,9 @@ func (s *adminServer) DatabaseDetails(
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
-			schemaCol     = "Schema"
-			userCol       = "User"
-			privilegesCol = "Privileges"
+			schemaCol     = "schema_name"
+			userCol       = "grantee"
+			privilegesCol = "privilege_type"
 		)
 
 		scanner := makeResultScanner(cols)
@@ -258,14 +258,14 @@ func (s *adminServer) DatabaseDetails(
 
 	// Marshal table names.
 	{
-		const tableCol = "Table"
+		const nameCol = "table_name"
 		scanner := makeResultScanner(cols)
 		if a, e := len(cols), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {
 			var tableName string
-			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
+			if err := scanner.Scan(row, nameCol, &tableName); err != nil {
 				return nil, err
 			}
 			resp.TableNames = append(resp.TableNames, tableName)
@@ -334,15 +334,16 @@ func (s *adminServer) TableDetails(
 	// for our API.
 	{
 		const (
-			fieldCol   = "Field" // column name
-			typeCol    = "Type"
-			nullCol    = "Null"
-			defaultCol = "Default"
+			colCol     = "column_name"
+			typeCol    = "data_type"
+			nullCol    = "is_nullable"
+			defaultCol = "column_default"
+			genCol     = "generation_expression"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
 			var col serverpb.TableDetailsResponse_Column
-			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
+			if err := scanner.Scan(row, colCol, &col.Name); err != nil {
 				return nil, err
 			}
 			if err := scanner.Scan(row, typeCol, &col.Type); err != nil {
@@ -357,6 +358,15 @@ func (s *adminServer) TableDetails(
 			}
 			if !isDefaultNull {
 				if err := scanner.Scan(row, defaultCol, &col.DefaultValue); err != nil {
+					return nil, err
+				}
+			}
+			isGenNull, err := scanner.IsNull(row, genCol)
+			if err != nil {
+				return nil, err
+			}
+			if !isGenNull {
+				if err := scanner.Scan(row, genCol, &col.GenerationExpression); err != nil {
 					return nil, err
 				}
 			}
@@ -377,13 +387,13 @@ func (s *adminServer) TableDetails(
 	}
 	{
 		const (
-			nameCol      = "Name"
-			uniqueCol    = "Unique"
-			seqCol       = "Seq"
-			columnCol    = "Column"
-			directionCol = "Direction"
-			storingCol   = "Storing"
-			implicitCol  = "Implicit"
+			nameCol      = "index_name"
+			nonUniqueCol = "non_unique"
+			seqCol       = "seq_in_index"
+			columnCol    = "column_name"
+			directionCol = "direction"
+			storingCol   = "storing"
+			implicitCol  = "implicit"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
@@ -392,9 +402,11 @@ func (s *adminServer) TableDetails(
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
 				return nil, err
 			}
-			if err := scanner.Scan(row, uniqueCol, &index.Unique); err != nil {
+			var nonUnique bool
+			if err := scanner.Scan(row, nonUniqueCol, &nonUnique); err != nil {
 				return nil, err
 			}
+			index.Unique = !nonUnique
 			if err := scanner.Scan(row, seqCol, &index.Seq); err != nil {
 				return nil, err
 			}
@@ -427,8 +439,8 @@ func (s *adminServer) TableDetails(
 	}
 	{
 		const (
-			userCol       = "User"
-			privilegesCol = "Privileges"
+			userCol       = "grantee"
+			privilegesCol = "privilege_type"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
@@ -446,10 +458,10 @@ func (s *adminServer) TableDetails(
 		}
 	}
 
-	// Marshal SHOW CREATE TABLE result.
+	// Marshal SHOW CREATE result.
 	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-show-create",
-		nil /* txn */, args, fmt.Sprintf("SHOW CREATE TABLE %s", escQualTable),
+		nil /* txn */, args, fmt.Sprintf("SHOW CREATE %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -458,14 +470,14 @@ func (s *adminServer) TableDetails(
 		return nil, s.serverError(err)
 	}
 	{
-		const createTableCol = "CreateTable"
+		const createCol = "create_statement"
 		if len(rows) != 1 {
-			return nil, s.serverErrorf("CreateTable response not available.")
+			return nil, s.serverErrorf("create response not available.")
 		}
 
 		scanner := makeResultScanner(cols)
 		var createStmt string
-		if err := scanner.Scan(rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(rows[0], createCol, &createStmt); err != nil {
 			return nil, err
 		}
 
@@ -1111,7 +1123,7 @@ func (s *adminServer) Jobs(
 
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT id, type, description, username, descriptor_ids, status,
+      SELECT job_id, job_type, description, user_name, descriptor_ids, status,
              created, started, finished, modified, fraction_completed, error
         FROM crdb_internal.jobs
        WHERE true
@@ -1120,7 +1132,7 @@ func (s *adminServer) Jobs(
 		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobspb.TypeUnspecified {
-		q.Append(" AND type = $", req.Type.String())
+		q.Append(" AND job_type = $", req.Type.String())
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {
@@ -1217,7 +1229,7 @@ func (s *adminServer) QueryPlan(
 	}
 
 	explain := fmt.Sprintf(
-		"SELECT \"JSON\" FROM [EXPLAIN (distsql) %s]",
+		"SELECT json FROM [EXPLAIN (DISTSQL) %s]",
 		strings.Trim(req.Query, ";"))
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-query-plan", nil /* txn */, args, explain,
@@ -1424,7 +1436,7 @@ func (s *adminServer) DataDistribution(
 
 		// Get zone config for table.
 		zoneConfigQuery := fmt.Sprintf(
-			`SELECT id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+			`SELECT zone_id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 			(*tree.Name)(dbName), (*tree.Name)(tableName),
 		)
 		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(

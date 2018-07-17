@@ -11,7 +11,7 @@ build
 EXPLAIN SELECT * FROM xy
 ----
 explain
- ├── columns: Tree:3(string) Field:4(string) Description:5(string)
+ ├── columns: tree:3(string) field:4(string) description:5(string)
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -19,7 +19,7 @@ build
 EXPLAIN (PLAN,SYMVARS) SELECT * FROM xy
 ----
 explain
- ├── columns: Tree:3(string) Field:4(string) Description:5(string)
+ ├── columns: tree:3(string) field:4(string) description:5(string)
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -27,7 +27,7 @@ build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
- ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -35,7 +35,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -44,7 +44,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
  └── sort
       ├── columns: x:1(int!null) y:2(int)
       ├── ordering: +2
@@ -55,7 +55,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: Tree:5(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+ ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
       ├── scan xy
@@ -74,22 +74,22 @@ explain
                 └── variable: column1 [type=int]
 
 build
-SELECT "Tree" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
+SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
 ----
 project
- ├── columns: Tree:3(string)
+ ├── columns: tree:3(string)
  └── explain
-      ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
       └── scan xy
            └── columns: x:1(int!null) y:2(int)
 
 build
-SELECT "Tree" FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
+SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
 ----
 project
- ├── columns: Tree:3(string)
+ ├── columns: tree:3(string)
  └── explain
-      ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
       └── sort
            ├── columns: x:1(int!null) x:1(int!null) y:2(int)
            ├── ordering: +2

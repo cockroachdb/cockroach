@@ -141,7 +141,7 @@ func VerifySystemJob(
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(t, `
-		SELECT type, description, username, descriptor_ids, status
+		SELECT job_type, description, user_name, descriptor_ids, status
 		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
 		offset,
 	).Scan(

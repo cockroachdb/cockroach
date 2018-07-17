@@ -48,7 +48,11 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT * FROM system.users WHERE username=$1 AND "isRole" = false`, args[0]))
+		makeQuery(`
+SELECT username AS user_name,
+       "isRole" as is_role
+  FROM system.users
+ WHERE username = $1 AND "isRole" = false`, args[0]))
 }
 
 // A lsUsersCmd command displays a list of users.

@@ -189,7 +189,7 @@ func verifyBackupRestoreStatementResult(
 	}
 
 	sqlDB.QueryRow(t,
-		`SELECT id, status, fraction_completed FROM crdb_internal.jobs WHERE id = $1`, actualJob.id,
+		`SELECT job_id, status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`, actualJob.id,
 	).Scan(
 		&expectedJob.id, &expectedJob.status, &expectedJob.fractionCompleted,
 	)
@@ -513,7 +513,7 @@ type inProgressState struct {
 func (ip inProgressState) latestJobID() (int64, error) {
 	var id int64
 	if err := ip.QueryRow(
-		`SELECT id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&id); err != nil {
 		return 0, err
 	}
@@ -608,7 +608,7 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 		}
 		var fractionCompleted float32
 		if err := ip.QueryRow(
-			`SELECT fraction_completed FROM crdb_internal.jobs WHERE id = $1`,
+			`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
 			jobID,
 		).Scan(&fractionCompleted); err != nil {
 			return err

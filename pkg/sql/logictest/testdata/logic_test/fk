@@ -27,10 +27,10 @@ CREATE TABLE unindexed (customer INT REFERENCES customers)
 query TTBITTBB colnames
 SHOW INDEXES FROM unindexed
 ----
-Table      Name                                            Unique  Seq  Column    Direction  Storing  Implicit
-unindexed  primary                                         true    1    rowid     ASC        false    false
-unindexed  unindexed_auto_index_fk_customer_ref_customers  false   1    customer  ASC        false    false
-unindexed  unindexed_auto_index_fk_customer_ref_customers  false   2    rowid     ASC        false    true
+table_name  index_name                                      non_unique  seq_in_index  column_name  direction  storing  implicit
+unindexed   primary                                         false       1             rowid        ASC        false    false
+unindexed   unindexed_auto_index_fk_customer_ref_customers  true        1             customer     ASC        false    false
+unindexed   unindexed_auto_index_fk_customer_ref_customers  true        2             rowid        ASC        false    true
 
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -393,10 +393,10 @@ TRUNCATE delivery, products, orders, "user content"."customer reviews"
 query TTTTB colnames
 SHOW CONSTRAINTS FROM orders
 ----
-table   name                     type         details                                                                                validated
-orders  fk_product_ref_products  FOREIGN KEY  FOREIGN KEY (product) REFERENCES products (sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
-orders  primary                  PRIMARY KEY  PRIMARY KEY (id ASC, shipment ASC)                                                     true
-orders  valid_customer           FOREIGN KEY  FOREIGN KEY (customer) REFERENCES customers (id)                                       true
+table_name  constraint_name          constraint_type  details                                                                                validated
+orders      fk_product_ref_products  FOREIGN KEY      FOREIGN KEY (product) REFERENCES products (sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
+orders      primary                  PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                     true
+orders      valid_customer           FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers (id)                                       true
 
 statement error "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key
@@ -543,14 +543,14 @@ CREATE TABLE refpairs_wrong_order (
 query TTBITTBB colnames
 SHOW INDEXES FROM refpairs_wrong_order
 ----
-Table                 Name                                            Unique  Seq  Column  Direction  Storing  Implicit
-refpairs_wrong_order  primary                                         true    1    rowid   ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   1    b       ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   2    a       ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   3    rowid   ASC        false    true
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   1    a       ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   2    b       ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   3    rowid   ASC        false    true
+table_name            index_name                                      non_unique  seq_in_index  column_name  direction  storing  implicit
+refpairs_wrong_order  primary                                         false       1             rowid        ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        1             b            ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        2             a            ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        3             rowid        ASC        false    true
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        1             a            ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        2             b            ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        3             rowid        ASC        false    true
 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
@@ -558,15 +558,15 @@ CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFE
 query TTBITTBB colnames
 SHOW INDEXES FROM refpairs_c_between
 ----
-Table               Name                                          Unique  Seq  Column  Direction  Storing  Implicit
-refpairs_c_between  primary                                       true    1    rowid   ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   1    a       ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   2    c       ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   3    b       ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   4    rowid   ASC        false    true
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   1    a       ASC        false    false
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   2    b       ASC        false    false
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   3    rowid   ASC        false    true
+table_name          index_name                                    non_unique  seq_in_index  column_name  direction  storing  implicit
+refpairs_c_between  primary                                       false       1             rowid        ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        1             a            ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        2             c            ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        3             b            ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        4             rowid        ASC        false    true
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        1             a            ASC        false    false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        2             b            ASC        false    false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        3             rowid        ASC        false    true
 
 statement ok
 CREATE TABLE refpairs (
@@ -580,12 +580,12 @@ CREATE TABLE refpairs (
 query TTBITTBB colnames
 SHOW INDEXES FROM refpairs
 ----
-Table     Name                Unique  Seq  Column  Direction  Storing  Implicit
-refpairs  primary             true    1    rowid   ASC        false    false
-refpairs  refpairs_a_b_c_idx  false   1    a       ASC        false    false
-refpairs  refpairs_a_b_c_idx  false   2    b       ASC        false    false
-refpairs  refpairs_a_b_c_idx  false   3    c       ASC        false    false
-refpairs  refpairs_a_b_c_idx  false   4    rowid   ASC        false    true
+table_name  index_name          non_unique  seq_in_index  column_name  direction  storing  implicit
+refpairs    primary             false       1             rowid        ASC        false    false
+refpairs    refpairs_a_b_c_idx  true        1             a            ASC        false    false
+refpairs    refpairs_a_b_c_idx  true        2             b            ASC        false    false
+refpairs    refpairs_a_b_c_idx  true        3             c            ASC        false    false
+refpairs    refpairs_a_b_c_idx  true        4             rowid        ASC        false    true
 
 query TT
 SHOW CREATE TABLE refpairs

@@ -12,72 +12,72 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 query BT colnames
 EXPLAIN (DISTSQL) VALUES (1)
 ----
-Automatic  URL
+automatic  url
 true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
-SELECT "JSON" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
+SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
 ----
-JSON
+json
 
 # Full table scan - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
 ----
 true
 
 # Partial scan - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k=1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k=1]
 ----
 false
 
 # Partial scan - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
 ----
 false
 
 # Partial scan with filter - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
 ----
 true
 
 # Sort - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v]
 ----
 true
 
 # Aggregation - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k]
 ----
 true
 
 # Hard limit in scan - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
 ----
 true
 
 # Soft limit in scan - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
 ----
 false
 
 # Limit after sort - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1]
 ----
 true
 
 # Limit after aggregation - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
 ----
 true
 
@@ -86,13 +86,13 @@ CREATE TABLE kw (k INT PRIMARY KEY, w INT)
 
 # Join - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw]
 ----
 true
 
 # Join with span - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw WHERE k=1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw WHERE k=1]
 ----
 true
 
@@ -101,19 +101,19 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
 
 # Index join - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
 ----
 false
 
 # Index join with filter on result - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b>1 AND c%2=0]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b>1 AND c%2=0]
 ----
 false
 
 # Index join with filter on index scan - distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
 ----
 true
 
@@ -137,12 +137,12 @@ INSERT INTO kw VALUES (1,1);
 # This query verifies stat collection for the tableReader, mergeJoiner, and
 # aggregator.
 query T
-SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.k GROUP BY kv.k]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.k GROUP BY kv.k]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJysk0Fv1DAQhe_8CmtOW2FpY29PlpCyXFChbFBVkBCKKhMPwSKJo7FDW1X731Hsw5Jss7CIW_w8n_3ejPMEnTO40y16UF9AQMmhJ1eh945GKRVcmQdQGQfb9UMY5ZJD5QhBPUGwoUFQcKu_NniD2iCtM-BgMGjbxGN7sq2mx_zHT-BA7t4zQm0UE8DBB900LNgWFcs8cCiGoFguoNxzcEM4XOiDrhGU2PN_MyUWTN3_B1Ny0dTBy9A5MkhoJj7KkfxTyTPJ3iPV-NbZDmktp8ka_BZWuXh58Yps_T19Ao8ymwWN2lHaiM1Lk3hU2-oH1mLr6JENHo1iMmPv7OtDz3guF9u2OWeW27omrHVwtN5MA-ejvyJ1Lo6Jw3b3-W5X3N7tPl5fr3Ix5t9-erPK5cVfTPsok0iZlmJcnhPjBn3vOo_zV_Dsydk4ejQ1pqfk3UAVfiBXxWvSsohcFAz6kHZlWlx1cSv-M7_D4gxYzmF5Et5M4GwOb07ClzO43L_4FQAA__-EfYCR
 
 # This query verifies stats collection for the hashJoiner, distinct and sorter.
 query T
-SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(kw.w) FROM kv JOIN kw ON kv.k = kw.w ORDER BY kw.w]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(kw.w) FROM kv JOIN kw ON kv.k = kw.w ORDER BY kw.w]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyck8FunDAQhu99CmtOrWppMZCLpUoo6qFppaZKe6s4uHi6sQIYzZgmUbTvXmEipbCBLnuD3_PBN_b4CVpv8atpkEH_BAWlhI58hcyehmgsuLIPoBMJru36MMSlhMoTgn6C4EKNoOGH-VXjDRqLtEtAgsVgXB0_25FrDD0Wd39AAvl7FoTGaqFAAgdT1yK4BrVIGCRc90GLQkF5kOD78PJDDmaPoNVBnielFqTuT5ZKF6XSRakXl771ZJHQTjzKgfxfySudfTJ8-9m7FmmXThur8Xd4W6h3H8jtb-MTyBiKWZcxO2o1UvPSMTyq5eAJrWBnUYtYAxIa8yAabDw9ip7RapEm4ou7fF6xju-e80RcnrC12Zbz_u4pIO2y6Y4U6v0JZ3zkrVa8l2zzLbYfHQfXVmGXz32HfRknId6FM-TXJC-2SN4gd75lnE_tq19OhlFFu8dx9Nn3VOE38lX8zfh6HbkYWOQwrqbjy1Ubl-Id_xdWG-B0DqercDaBkzmcrcL5OpyvwhczuDy8-RsAAP__mE7PKQ==

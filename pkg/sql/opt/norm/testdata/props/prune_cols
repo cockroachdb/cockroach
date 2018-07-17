@@ -396,7 +396,7 @@ build
 EXPLAIN SELECT * FROM a
 ----
 explain
- ├── columns: Tree:5(string) Field:6(string) Description:7(string)
+ ├── columns: tree:5(string) field:6(string) description:7(string)
  └── scan a
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       ├── key: (1)

@@ -469,24 +469,24 @@ project
 # Project uses subset of Offset columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down past Explain.
 opt
-SELECT "Tree", "Columns"
+SELECT tree, columns
 FROM
 (
     SELECT *
     FROM [ EXPLAIN (VERBOSE) SELECT * FROM a ]
-    ORDER BY "Tree"
+    ORDER BY tree
     OFFSET 1
 )
 ----
 project
- ├── columns: Tree:5(string) Columns:10(string)
+ ├── columns: tree:5(string) columns:10(string)
  └── offset
-      ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       ├── sort
-      │    ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │    ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       │    ├── ordering: +5
       │    └── explain
-      │         ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │         ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       │         └── scan a
       │              ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       │              ├── key: (1)
@@ -1343,7 +1343,7 @@ opt
 EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
 ----
 explain
- ├── columns: Tree:6(string) Field:7(string) Description:8(string)
+ ├── columns: tree:6(string) field:7(string) description:8(string)
  └── project
       ├── columns: a:1(int!null)
       ├── key: (1)

@@ -1330,6 +1330,12 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM generate_series(1, 32) WITH ORDINALITY AS s (x)`,
 			`SELECT a FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS s (x)`},
 
+		{`SHOW CREATE TABLE t`,
+			`SHOW CREATE t`},
+		{`SHOW CREATE VIEW t`,
+			`SHOW CREATE t`},
+		{`SHOW CREATE SEQUENCE t`,
+			`SHOW CREATE t`},
 		{`SHOW INDEX FROM t`,
 			`SHOW INDEXES FROM t`},
 		{`SHOW CONSTRAINT FROM t`,

@@ -31,8 +31,8 @@ import (
 // the schema depends on its parameters.
 var showHistogramColumns = sqlbase.ResultColumns{
 	{Name: "upper_bound", Typ: types.String},
-	{Name: "num_range", Typ: types.Int},
-	{Name: "num_eq", Typ: types.Int},
+	{Name: "range_rows", Typ: types.Int},
+	{Name: "equal_rows", Typ: types.Int},
 }
 
 // ShowHistogram returns a SHOW HISTOGRAM statement.

@@ -1562,7 +1562,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	// Let's make sure that DISTSQL will actually be used.
-	row := txn.QueryRow(`SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT count(1) FROM t]`)
+	row := txn.QueryRow(`SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT count(1) FROM t]`)
 	var automatic bool
 	if err := row.Scan(&automatic); err != nil {
 		t.Fatal(err)

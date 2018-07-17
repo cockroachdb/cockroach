@@ -106,7 +106,7 @@ Channel
 query ITTTTTTTTTRTI colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -129,9 +129,9 @@ SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
 query TTTT colnames
-SELECT * FROM crdb_internal.cluster_settings WHERE name = ''
+SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
-name  current_value  type  description
+variable  value  type  description
 
 query TT colnames
 SELECT * FROM crdb_internal.session_variables WHERE variable = ''
@@ -141,22 +141,22 @@ variable                       value
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query TTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
@@ -196,17 +196,17 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 query ITTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-id  cli_specifier  config_yaml  config_proto
+zone_id  cli_specifier  config_yaml  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (53, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (54, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0))
+  (17, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (53, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
-SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
+SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 ----
 0   .default
 15  system.jobs

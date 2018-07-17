@@ -60,10 +60,10 @@ sql.defaults.distsql
 0
 
 query TTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name LIKE '%organization'
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
-name                                               current_value  type  description
-cluster.organization                               ·              s     organization name
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
@@ -80,7 +80,7 @@ test
 query T colnames
 SELECT * FROM [SHOW DATABASES]
 ----
-Database
+database_name
 defaultdb
 postgres
 system
@@ -89,34 +89,34 @@ test
 query TTTTT colnames
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
-Database  Schema  Table       User   Privileges
-system    public  descriptor  admin  GRANT
-system    public  descriptor  admin  SELECT
-system    public  descriptor  root   GRANT
-system    public  descriptor  root   SELECT
+database_name  schema_name  table_name  grantee  privilege_type
+system         public       descriptor  admin    GRANT
+system         public       descriptor  admin    SELECT
+system         public       descriptor  root     GRANT
+system         public       descriptor  root     SELECT
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
-descriptor  primary  true    1    id      ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+descriptor  primary     false       1             id           ASC        false    false
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 ----
-table       name     type         details               validated
-descriptor  primary  PRIMARY KEY  PRIMARY KEY (id ASC)  true
+table_name  constraint_name  constraint_type  details               validated
+descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
-descriptor  primary  true    1    id      ASC        false    false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+descriptor  primary     false       1             id           ASC        false    false
 
 query T colnames
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
@@ -125,7 +125,7 @@ public
 query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-Table
+table_name
 descriptor
 eventlog
 jobs
@@ -142,22 +142,24 @@ web_sessions
 zones
 
 query ITTT colnames
-SELECT node_id,username,application_name,active_queries FROM [SHOW SESSIONS] WHERE active_queries != ''
+SELECT node_id, user_name, application_name, active_queries
+  FROM [SHOW SESSIONS]
+ WHERE active_queries != ''
 ----
-node_id  username  application_name  active_queries
-1        root      ·                 SELECT node_id, username, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
+node_id  user_name  application_name  active_queries
+1        root       ·                 SELECT node_id, user_name, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
 
 query ITT colnames
-SELECT node_id, username, query FROM [SHOW QUERIES]
+SELECT node_id, user_name, query FROM [SHOW QUERIES]
 ----
-node_id   username   query
-1         root       SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES]
+node_id  user_name  query
+1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
 query T colnames
 SELECT * FROM [SHOW SCHEMAS]
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
@@ -166,7 +168,7 @@ public
 query T colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-Table
+table_name
 foo
 
 
@@ -207,7 +209,7 @@ NoTxn
 query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
-Table                     CreateTable
+table_name                create_statement
 system.public.descriptor  CREATE TABLE descriptor (
                           id INT NOT NULL,
                           descriptor BYTES NULL,
@@ -220,14 +222,14 @@ system.public.descriptor  CREATE TABLE descriptor (
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
-View  CreateView
-v     CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
+table_name  create_statement
+v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
 
 
 query T colnames
 SELECT * FROM [SHOW USERS]
 ----
-username
+user_name
 root
 testuser
 
@@ -235,19 +237,19 @@ testuser
 query TTITI colnames
 SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       NULL     1         {1}       1
 
 query TTITI colnames
 CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       NULL     1         {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
 ----
-timestamp age message tag loc operation span
+timestamp  age  message  tag  location  operation  span
 
 query TTTT colnames
 SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
@@ -257,7 +259,7 @@ age  message  tag  operation
 query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-id  type  description  username  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
