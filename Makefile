@@ -81,7 +81,6 @@ GOFLAGS      :=
 TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
-BUILDMODE    := install
 BUILDTARGET  := ./pkg/cmd/cockroach
 SUFFIX       := $(GOEXE)
 INSTALL      := install
@@ -207,6 +206,10 @@ $(call make-lazy,TAR_XFORM_FLAG)
 # while BSD sed requires an empty string as the following argument.
 SED_INPLACE = sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
 $(call make-lazy,SED_INPLACE)
+
+# MAKE_TERMERR is set automatically in Make v4.1+, but macOS is still shipping
+# v3.81.
+MAKE_TERMERR ?= $(shell [[ -t 2 ]] && echo true)
 
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
@@ -664,7 +667,9 @@ build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
-COCKROACH := ./cockroach$(SUFFIX)
+COCKROACH      := ./cockroach$(SUFFIX)
+COCKROACHOSS   := ./cockroachoss$(SUFFIX)
+COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 
 SQLPARSER_TARGETS = \
 	pkg/sql/parser/sql.go \
@@ -687,14 +692,14 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name_string.go
 
 go-targets-ccl := \
-	$(COCKROACH) build buildshort go-install \
+	$(COCKROACH) $(COCKROACHSHORT) go-install \
 	bench benchshort \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
 	generate \
 	lint lintshort
 
-go-targets := $(go-targets-ccl) buildoss
+go-targets := $(go-targets-ccl) $(COCKROACHOSS)
 
 .DEFAULT_GOAL := all
 all: build
@@ -702,14 +707,20 @@ all: build
 .PHONY: c-deps
 c-deps: $(C_LIBS_CCL)
 
-$(COCKROACH) build buildoss buildshort: BUILDMODE = build -o $(COCKROACH)
+build-mode = build -o $(build-output)
 
-$(COCKROACH) build go-install generate: pkg/ui/distccl/bindata.go
+go-install: build-mode = install
 
-buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
-buildoss: $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
+$(COCKROACH): build-output = $(COCKROACH)
+$(COCKROACHOSS): build-output = $(COCKROACHOSS)
+$(COCKROACHSHORT): build-output = $(COCKROACHSHORT)
 
-buildshort: BUILDTARGET = ./pkg/cmd/cockroach-short
+$(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
+
+$(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
+$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
+
+$(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 
 $(go-targets-ccl): $(C_LIBS_CCL)
 
@@ -728,7 +739,7 @@ $(go-targets): override LINKFLAGS += \
 # The build.utcTime format must remain in sync with TimeFormat in
 # pkg/build/info.go. It is not installed in tests to avoid busting the cache on
 # every rebuild.
-$(COCKROACH) build buildoss buildshort go-install: override LINKFLAGS += \
+$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
@@ -737,11 +748,9 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: build buildoss buildshort go-install
-build: ## Build the CockroachDB binary.
-buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) go-install:
-	 $(xgo) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+.PHONY: go-install
+$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install:
+	 $(xgo) $(build-mode) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
 # regenerate SQL diagram BNFs and some other doc pages. Generating these docs
@@ -756,7 +765,19 @@ $(COCKROACH) go-install:
 # diagrams. When the generated files are not checked in, the breakage goes
 # unnoticed until the docs team comes along, potentially months later. Much
 # better to make the developer who introduces the breakage fix the breakage.
-build buildoss buildshort: $(COCKROACH) $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+.PHONY: build buildoss buildshort
+build: ## Build the CockroachDB binary.
+buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
+buildshort: ## Build the CockroachDB binary without the admin UI.
+build: $(COCKROACH)
+buildoss: $(COCKROACHOSS)
+buildshort: $(COCKROACHSHORT)
+build buildoss buildshort: $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+
+# For historical reasons, symlink cockroach to cockroachshort.
+# TODO(benesch): see if it would break anyone's workflow to remove this.
+buildshort:
+	ln -sf $(COCKROACHSHORT) $(COCKROACH)
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
@@ -807,7 +828,7 @@ check test testshort testrace bench benchshort:
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
-	$(xgo) test -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 testlogic: ## Run SQL Logic Tests.
 testlogic: bin/logictest
@@ -1048,7 +1069,7 @@ STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
 TSC                := ./node_modules/.bin/tsc
 KARMA              := ./node_modules/.bin/karma
-WEBPACK            := ./node_modules/.bin/webpack
+WEBPACK            := ./node_modules/.bin/webpack $(if $(MAKE_TERMERR),--progress)
 WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
 WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
@@ -1107,7 +1128,7 @@ ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
-pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f)
+pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
@@ -1239,9 +1260,9 @@ bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
 
-$(SETTINGS_DOC_PAGE): $(COCKROACH)
-	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
-	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
+$(SETTINGS_DOC_PAGE): $(build-output)
+	 @$(build-output) gen settings-list --format=html > $@.tmp
+	 @mv -f $@.tmp $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt

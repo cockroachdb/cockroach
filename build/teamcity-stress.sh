@@ -19,10 +19,10 @@ env=(
   "TAGS=${TAGS:-}"
 )
 
-build/builder.sh env "${env[@]}" bash <<EOF
+build/builder.sh env "${env[@]}" bash <<'EOF'
 set -euxo pipefail
 go install ./pkg/cmd/github-post
-make stress PKG="$PKG" TESTTIMEOUT=30m STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
+make stress PKG="$PKG" TESTTIMEOUT=30m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
   | tee artifacts/stress.log \
   || { go tool test2json < artifacts/stress.log | github-post; exit 1; }
 EOF
