@@ -455,7 +455,6 @@ select
            └── const: 7 [type=int]
 
 
-
 exec-ddl
 CREATE TABLE c (x INT PRIMARY KEY, y INT, z INT, w INT)
 ----
