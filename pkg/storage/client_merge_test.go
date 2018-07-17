@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1129,6 +1130,52 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestRangeStatsRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	keyPrefix := roachpb.RKey("dummy-prefix")
+	repl := store.LookupReplica(keyPrefix, nil)
+
+	// Write some random data to the range and verify that a RangeStatsRequest
+	// returns the same MVCC stats as the replica's in-memory state.
+	writeRandomDataToRange(t, store, repl.RangeID, keyPrefix)
+	expMS := repl.GetMVCCStats()
+	res, pErr := client.SendWrappedWith(ctx, store, roachpb.Header{
+		RangeID: repl.RangeID,
+	}, &roachpb.RangeStatsRequest{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	resMS := res.(*roachpb.RangeStatsResponse).MVCCStats
+	require.Equal(t, expMS, resMS)
+
+	// Write another key to the range and verify that the MVCC stats returned
+	// by a RangeStatsRequest reflect the additional key.
+	key := append(keyPrefix, roachpb.RKey("123")...)
+	if err := store.DB().Put(ctx, key, "123"); err != nil {
+		t.Fatal(err)
+	}
+	res, pErr = client.SendWrappedWith(ctx, store, roachpb.Header{
+		RangeID: repl.RangeID,
+	}, &roachpb.RangeStatsRequest{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	resMS = res.(*roachpb.RangeStatsResponse).MVCCStats
+	// Only verify the update is reflected in the key/value counts. Verifying
+	// the byte count would couple this test too tightly to our encoding scheme.
+	require.Equal(t, expMS.KeyCount+1, resMS.KeyCount)
+	require.Equal(t, expMS.ValCount+1, resMS.ValCount)
+	require.Equal(t, expMS.LiveCount+1, resMS.LiveCount)
 }
 
 func BenchmarkStoreRangeMerge(b *testing.B) {

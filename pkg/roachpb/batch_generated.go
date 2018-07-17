@@ -90,6 +90,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.RefreshRange
 	case *RequestUnion_GetSnapshotForMerge:
 		return t.GetSnapshotForMerge
+	case *RequestUnion_RangeStats:
+		return t.RangeStats
 	default:
 		return nil
 	}
@@ -174,6 +176,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.RefreshRange
 	case *ResponseUnion_GetSnapshotForMerge:
 		return t.GetSnapshotForMerge
+	case *ResponseUnion_RangeStats:
+		return t.RangeStats
 	default:
 		return nil
 	}
@@ -261,6 +265,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_RefreshRange{t}
 	case *GetSnapshotForMergeRequest:
 		union = &RequestUnion_GetSnapshotForMerge{t}
+	case *RangeStatsRequest:
+		union = &RequestUnion_RangeStats{t}
 	default:
 		return false
 	}
@@ -348,6 +354,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_RefreshRange{t}
 	case *GetSnapshotForMergeResponse:
 		union = &ResponseUnion_GetSnapshotForMerge{t}
+	case *RangeStatsResponse:
+		union = &ResponseUnion_RangeStats{t}
 	default:
 		return false
 	}
@@ -355,7 +363,7 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 	return true
 }
 
-type reqCounts [39]int32
+type reqCounts [40]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -441,6 +449,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[37]++
 		case *RequestUnion_GetSnapshotForMerge:
 			counts[38]++
+		case *RequestUnion_RangeStats:
+			counts[39]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -488,6 +498,7 @@ var requestNames = []string{
 	"Refresh",
 	"RefreshRng",
 	"GetSnapshotForMerge",
+	"RngStats",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -667,6 +678,10 @@ type getSnapshotForMergeResponseAlloc struct {
 	union ResponseUnion_GetSnapshotForMerge
 	resp  GetSnapshotForMergeResponse
 }
+type rangeStatsResponseAlloc struct {
+	union ResponseUnion_RangeStats
+	resp  RangeStatsResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -716,6 +731,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf36 []refreshResponseAlloc
 	var buf37 []refreshRangeResponseAlloc
 	var buf38 []getSnapshotForMergeResponseAlloc
+	var buf39 []rangeStatsResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -992,6 +1008,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf38[0].union.GetSnapshotForMerge = &buf38[0].resp
 			br.Responses[i].Value = &buf38[0].union
 			buf38 = buf38[1:]
+		case *RequestUnion_RangeStats:
+			if buf39 == nil {
+				buf39 = make([]rangeStatsResponseAlloc, counts[39])
+			}
+			buf39[0].union.RangeStats = &buf39[0].resp
+			br.Responses[i].Value = &buf39[0].union
+			buf39 = buf39[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

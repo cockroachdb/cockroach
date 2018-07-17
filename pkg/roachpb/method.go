@@ -146,4 +146,6 @@ const (
 	// GetSnapshotForMerge notifies a range that its left-hand neighbor has
 	// initiated a merge and needs a snapshot of its data.
 	GetSnapshotForMerge
+	// RangeStats returns the MVCC statistics for a range.
+	RangeStats
 )

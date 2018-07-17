@@ -1255,6 +1255,26 @@ message GetSnapshotForMergeResponse {
   ];
 }
 
+// RangeStatsRequest is the argument to the RangeStats() method. It requests the
+// MVCC statistics of the receiving range.
+message RangeStatsRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// RangeStatsResponse is the response to a RangeStatsRequest.
+message RangeStatsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // MVCCStats are the MVCC statistics for the range that processed the
+  // request.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "MVCCStats"
+  ];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1301,6 +1321,7 @@ message RequestUnion {
     RefreshRequest refresh = 40;
     RefreshRangeRequest refresh_range = 41;
     GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
+    RangeStatsRequest range_stats = 44;
   }
   reserved 15, 23, 25, 27;
 }
@@ -1347,6 +1368,7 @@ message ResponseUnion {
     RefreshResponse refresh = 40;
     RefreshRangeResponse refresh_range = 41;
     GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
+    RangeStatsResponse range_stats = 44;
   }
   reserved 15, 23, 25, 27, 28;
 }
