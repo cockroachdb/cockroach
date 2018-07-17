@@ -573,6 +573,9 @@ func (*RefreshRangeRequest) Method() Method { return RefreshRange }
 // Method implements the Request interface.
 func (*GetSnapshotForMergeRequest) Method() Method { return GetSnapshotForMerge }
 
+// Method implements the Request interface.
+func (*RangeStatsRequest) Method() Method { return RangeStats }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -803,6 +806,12 @@ func (r *RefreshRangeRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *GetSnapshotForMergeRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *RangeStatsRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1068,6 +1077,8 @@ func (*RefreshRequest) flags() int      { return isRead | isTxn | updatesReadTSC
 func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | updatesReadTSCache }
 
 func (*GetSnapshotForMergeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
+
+func (*RangeStatsRequest) flags() int { return isRead }
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {

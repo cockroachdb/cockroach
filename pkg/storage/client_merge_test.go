@@ -502,8 +502,8 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Write some values left and right of the proposed split key.
-	writeRandomDataToRange(t, store, lhsDesc.RangeID, []byte("aaa"))
-	writeRandomDataToRange(t, store, rhsDesc.RangeID, []byte("ccc"))
+	storage.WriteRandomDataToRange(t, store, lhsDesc.RangeID, []byte("aaa"))
+	storage.WriteRandomDataToRange(t, store, rhsDesc.RangeID, []byte("ccc"))
 
 	// Litter some abort span records. txn1 will leave a record on the LHS, txn2
 	// will leave a record on the RHS, and txn3 will leave a record on both. This
@@ -1145,8 +1145,8 @@ func BenchmarkStoreRangeMerge(b *testing.B) {
 	}
 
 	// Write some values left and right of the proposed split key.
-	writeRandomDataToRange(b, store, lhsDesc.RangeID, []byte("aaa"))
-	writeRandomDataToRange(b, store, rhsDesc.RangeID, []byte("ccc"))
+	storage.WriteRandomDataToRange(b, store, lhsDesc.RangeID, []byte("aaa"))
+	storage.WriteRandomDataToRange(b, store, rhsDesc.RangeID, []byte("ccc"))
 
 	// Create args to merge the b range back into the a range.
 	mArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())

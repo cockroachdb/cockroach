@@ -678,7 +678,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Write random data.
-	midKey := writeRandomDataToRange(t, store, repl.RangeID, keyPrefix)
+	midKey := storage.WriteRandomDataToRange(t, store, repl.RangeID, keyPrefix)
 
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
@@ -2096,8 +2096,8 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	// Write some values left and right of the split key.
 	aDesc := store.LookupReplica([]byte("a"), nil).Desc()
 	bDesc := store.LookupReplica([]byte("c"), nil).Desc()
-	writeRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
-	writeRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+	storage.WriteRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
+	storage.WriteRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
 
 	// Merge the b range back into the a range.
 	mArgs := adminMergeArgs(roachpb.KeyMin)
@@ -2119,27 +2119,6 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
-}
-
-func writeRandomDataToRange(
-	t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte,
-) (midpoint []byte) {
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
-		key := append([]byte(nil), keyPrefix...)
-		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-			RangeID: rangeID,
-		}, pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	midKey := append([]byte(nil), keyPrefix...)
-	midKey = append(midKey, []byte("Z")...)
-	return midKey
 }
 
 func writeRandomTimeSeriesDataToRange(
