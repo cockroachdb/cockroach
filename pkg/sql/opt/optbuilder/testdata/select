@@ -1059,3 +1059,36 @@ build
 SELECT * FROM a AS t(a, b, c)
 ----
 error (42P10): source "t" has 2 columns available but 3 columns specified
+
+build
+SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+project
+ ├── columns: e:2(int) f:3(string) g:4(bool)
+ ├── project
+ │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g})
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── tuple [type=tuple{int AS e, string AS f, bool AS g}]
+ │              ├── const: 1 [type=int]
+ │              ├── const: '2' [type=string]
+ │              └── true [type=bool]
+ └── projections
+      ├── column-access: 0 [type=int]
+      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+      ├── column-access: 1 [type=string]
+      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+      └── column-access: 2 [type=bool]
+           └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+
+build
+SELECT (((x, y) AS x, y)).x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ └── scan a
+      └── columns: x:1(int!null) y:2(float)

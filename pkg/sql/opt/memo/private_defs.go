@@ -27,6 +27,10 @@ import (
 // indicates an unknown private.
 type PrivateID uint32
 
+// TupleOrdinal is an ordinal index into an expression of type Tuple. It is
+// used by the ColumnAccess scalar expression.
+type TupleOrdinal uint32
+
 // FuncOpDef defines the value of the Def private field of the Function
 // operator. It provides the name and return type of the function, as well as a
 // pointer to an already resolved builtin overload definition.
