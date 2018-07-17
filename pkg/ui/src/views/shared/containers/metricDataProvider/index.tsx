@@ -171,7 +171,13 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
       // Do not attach data if queries are not equivalent.
       if (data && request && _.isEqual(request.queries, this.requestMessage(this.props).queries)) {
         return data;
+      }/*
+      else if request {
+        console.log(request, this.requestMessage(this.props));
       }
+      else {
+        console.log(this.props);
+      }*/
     }
     return undefined;
   }

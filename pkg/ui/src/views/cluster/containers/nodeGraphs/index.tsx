@@ -17,7 +17,7 @@ import AggregationSelector from "src/views/shared/containers/aggregationSelector
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
-import { AggregationLevel } from "src/redux/aggregationLevel";
+import { AggregationLevel, selectAggregationLevel } from "src/redux/aggregationLevel";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
@@ -37,6 +37,8 @@ import distributedDashboard from "./dashboards/distributed";
 import queuesDashboard from "./dashboards/queues";
 import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
+
+import { DashboardsPage } from "src/views/metrics";
 
 interface GraphDashboard {
   label: string;
@@ -74,6 +76,7 @@ interface NodeGraphsOwnProps {
   livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
   hoverState: HoverState;
+  aggregationLevel: AggregationLevel;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
@@ -136,7 +139,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   dashChange = (selected: DropdownOption) => {
-    this.setClusterPath(this.props.params[nodeIDAttr], selected.value, this.props.location.query.agg);
+    this.setClusterPath(this.props.params[nodeIDAttr], selected.value, this.props.aggregationLevel);
   }
 
   componentWillMount() {
@@ -148,7 +151,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary } = this.props;
+    const { params, nodesSummary, aggregationLevel } = this.props;
     const selectedDashboard = params[dashboardNameAttr];
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
@@ -182,6 +185,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       nodeSources,
       storeSources,
       tooltipSelection,
+      aggregationLevel,
     };
 
     const forwardParams = {
@@ -190,19 +194,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       hoverState: this.props.hoverState,
     };
 
-    // Generate graphs for the current dashboard, wrapping each one in a
-    // MetricsDataProvider with a unique key.
-    const graphs = dashboards[dashboard].component(dashboardProps);
-    const graphComponents = _.map(graphs, (graph, idx) => {
-      const key = `nodes.${dashboard}.${idx}`;
-      return (
-        <div key={key}>
-          <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, forwardParams) }
-          </MetricsDataProvider>
-        </div>
-      );
-    });
+    const graphComponents = (
+      <DashboardsPage
+        dashboard="overview"
+        aggregationLevel={aggregationLevel}
+        nodeSources={nodeIDs}
+        nodesSummary={nodesSummary}
+      />
+    );
 
     return (
       <div>
@@ -230,7 +229,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           {
             nodeSources ? null : (
               <PageConfigItem>
-                <AggregationSelector aggregationLevel={AggregationLevel.Cluster} />
+                <AggregationSelector aggregationLevel={aggregationLevel} />
               </PageConfigItem>
             )
           }
@@ -261,6 +260,7 @@ export default connect(
       nodesQueryValid: state.cachedData.nodes.valid,
       livenessQueryValid: state.cachedData.nodes.valid,
       hoverState: hoverStateSelector(state),
+      aggregationLevel: selectAggregationLevel(state),
     };
   },
   {
