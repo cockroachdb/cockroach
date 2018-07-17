@@ -311,22 +311,6 @@ New expression 5 of 5:
              ├── columns: k:1(int!null) i:2(int) s:4(string)
              ├── key: (1)
              └── fd: (1)-->(2,4)
-
-================================================================================
-GenerateIndexScans
-================================================================================
-Source expression:
-  sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
-   ├── key: (1)
-   ├── fd: (1)-->(2-4)
-   ├── ordering: +4,+1
-   └── scan a,rev
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-        ├── key: (1)
-        └── fd: (1)-->(2-4)
-
-No new expressions.
 ----
 ----
 
