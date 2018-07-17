@@ -118,6 +118,22 @@ func (ps *privateStorage) internColList(colList opt.ColList) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, colList)
 }
 
+// internTupleOrdinal adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internTupleOrdinal always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internTupleOrdinal(tupleOrdinal TupleOrdinal) PrivateID {
+	// The below code is carefully constructed to not allocate in the case
+	// where the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(tupleOrdinal))
+	typ := (*TupleOrdinal)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, tupleOrdinal)
+}
+
 // internOperator adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internOperator always

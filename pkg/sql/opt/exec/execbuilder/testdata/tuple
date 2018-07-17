@@ -109,3 +109,30 @@ render     ·         ·                                                        
  └── scan  ·         ·                                                                                   (v int)                                  ·
 ·          table     kv@primary                                                                          ·                                        ·
 ·          spans     ALL                                                                                 ·                                        ·
+
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+render          ·         ·                                                                                   (a int, b int, c int)                    ·
+ │              render 0  (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]                                 ·                                        ·
+ │              render 1  (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]                                 ·                                        ·
+ │              render 2  (((x)[tuple{int AS a, int AS b, int AS c}]).c)[int]                                 ·                                        ·
+ └── render     ·         ·                                                                                   (x tuple{int AS a, int AS b, int AS c})  ·
+      │         render 0  ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
+      └── scan  ·         ·                                                                                   (v int)                                  ·
+·               table     kv@primary                                                                          ·                                        ·
+·               spans     ALL                                                                                 ·                                        ·
+
+query TTTTT
+EXPLAIN (VERBOSE, TYPES) SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+render              ·         ·                                                                                   (e int, f string, g bool)                    ·
+ │                  render 0  (((x)[tuple{int AS e, string AS f, bool AS g}]).e)[int]                             ·                                            ·
+ │                  render 1  (((x)[tuple{int AS e, string AS f, bool AS g}]).f)[string]                          ·                                            ·
+ │                  render 2  (((x)[tuple{int AS e, string AS f, bool AS g}]).g)[bool]                            ·                                            ·
+ └── render         ·         ·                                                                                   (x tuple{int AS e, string AS f, bool AS g})  ·
+      │             render 0  (((1)[int], ('2')[string], (true)[bool]))[tuple{int AS e, string AS f, bool AS g}]  ·                                            ·
+      └── emptyrow  ·         ·                                                                                   ()                                           ·
