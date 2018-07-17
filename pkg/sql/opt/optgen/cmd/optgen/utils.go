@@ -78,6 +78,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.ShowTraceOpDef"
 	case "MergeOnDef":
 		return "*memo.MergeOnDef"
+	case "TupleOrdinal":
+		return "memo.TupleOrdinal"
 	case "Datum":
 		return "tree.Datum"
 	case "Type":

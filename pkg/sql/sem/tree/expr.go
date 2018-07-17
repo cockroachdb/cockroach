@@ -1565,7 +1565,7 @@ func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *Colum
 		Expr:           expr,
 		ColName:        colName,
 		ColIndex:       colIdx,
-		typeAnnotation: typeAnnotation{typ: expr.ResolvedType()},
+		typeAnnotation: typeAnnotation{typ: expr.ResolvedType().(types.TTuple).Types[colIdx]},
 	}
 }
 

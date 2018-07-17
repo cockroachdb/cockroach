@@ -126,6 +126,7 @@ func init() {
 		opt.CastOp:            typeCast,
 		opt.SubqueryOp:        typeSubquery,
 		opt.ArrayOp:           typeAsPrivate,
+		opt.ColumnAccessOp:    typeColumnAccess,
 
 		// Override default typeAsAggregate behavior for aggregate functions with
 		// a large number of possible overloads or where ReturnType depends on
@@ -291,6 +292,12 @@ func typeAsPrivate(ev ExprView) types.T {
 func typeSubquery(ev ExprView) types.T {
 	colID, _ := ev.Child(0).Logical().Relational.OutputCols.Next(0)
 	return ev.Metadata().ColumnType(opt.ColumnID(colID))
+}
+
+func typeColumnAccess(ev ExprView) types.T {
+	colIdx := ev.Private().(TupleOrdinal)
+	typ := ev.Child(0).Logical().Scalar.Type.(types.TTuple)
+	return typ.Types[colIdx]
 }
 
 // overload encapsulates information about a binary operator overload, to be
