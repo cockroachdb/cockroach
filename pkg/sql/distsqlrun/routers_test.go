@@ -48,16 +48,25 @@ func setupRouter(
 	inputTypes []sqlbase.ColumnType,
 	streams []RowReceiver,
 ) (router, *sync.WaitGroup) {
-	r, err := makeRouter(&spec, streams)
+	r, err := makeRouter(&spec, streams, mockStreamIDs(len(streams)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	ctx := context.TODO()
 	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: *evalCtx}
-	r.init(&flowCtx, inputTypes)
+	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.start(context.TODO(), wg, nil /* ctxCancel */)
+	r.start(ctx, wg, nil /* ctxCancel */)
 	return r, wg
+}
+
+func mockStreamIDs(numStreams int) []StreamID {
+	streamIDs := make([]StreamID, numStreams)
+	for i := range streamIDs {
+		streamIDs[i] = StreamID(i)
+	}
+	return streamIDs
 }
 
 func TestRouters(t *testing.T) {
@@ -571,15 +580,16 @@ func TestRouterBlocks(t *testing.T) {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
 			}
-			router, err := makeRouter(&tc.spec, recvs)
+			router, err := makeRouter(&tc.spec, recvs, mockStreamIDs(len(recvs)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			st := cluster.MakeTestingClusterSettings()
+			ctx := context.TODO()
 			flowCtx := FlowCtx{Settings: st, EvalCtx: tree.MakeTestingEvalContext(st)}
-			router.init(&flowCtx, colTypes)
+			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.start(context.TODO(), &wg, nil /* ctxCancel */)
+			router.start(ctx, &wg, nil /* ctxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
@@ -704,8 +714,9 @@ func TestRouterDiskSpill(t *testing.T) {
 	// Initialize the RowChannel with the minimal buffer size so as to block
 	// writes to the channel (after the first one).
 	rowChan.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	rb.setupStreams([]RowReceiver{&rowChan}, false /* disableBuffering */)
-	rb.init(&flowCtx, oneIntCol)
+	streams := []RowReceiver{&rowChan}
+	rb.setupStreams(streams, mockStreamIDs(len(streams)), false /* disableBuffering */)
+	rb.init(ctx, &flowCtx, oneIntCol)
 	rb.start(ctx, &wg, nil /* ctxCancel */)
 
 	rows := makeIntRows(numRows, numCols)
@@ -815,7 +826,7 @@ func TestRangeRouterInit(t *testing.T) {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
 			}
-			_, err := makeRouter(&spec, recvs)
+			_, err := makeRouter(&spec, recvs, mockStreamIDs(len(recvs)))
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("got %v, expected %v", err, tc.err)
 			}

@@ -309,6 +309,9 @@ type diskBackedRowContainer struct {
 
 	spilled bool
 
+	// memoryMonitor is mrc's bytes monitor, exposed to enable stats collection.
+	memoryMonitor *mon.BytesMonitor
+
 	// The following fields are used to create a diskRowContainer when spilling
 	// to disk.
 	engine      engine.Engine
@@ -343,6 +346,7 @@ func (f *diskBackedRowContainer) init(
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
+	f.memoryMonitor = memoryMonitor
 }
 
 func (f *diskBackedRowContainer) Len() int {

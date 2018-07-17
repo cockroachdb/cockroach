@@ -261,14 +261,16 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 // Pass-through routers are not supported; they should be handled separately.
 func (f *Flow) setupRouter(spec *OutputRouterSpec) (router, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
+	streamIDs := make([]StreamID, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
 		streams[i], err = f.setupOutboundStream(spec.Streams[i])
 		if err != nil {
 			return nil, err
 		}
+		streamIDs[i] = spec.Streams[i].StreamID
 	}
-	return makeRouter(spec, streams)
+	return makeRouter(spec, streams, streamIDs)
 }
 
 func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
@@ -334,7 +336,7 @@ func (f *Flow) makeProcessor(
 		copier := o.(*copyingRowReceiver)
 		switch o := copier.RowReceiver.(type) {
 		case router:
-			o.init(&f.FlowCtx, types)
+			o.init(ctx, &f.FlowCtx, types)
 		case *outbox:
 			o.init(types)
 		}
