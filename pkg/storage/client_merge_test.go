@@ -27,6 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -1062,6 +1064,159 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	if exp := "not lease holder"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %v", err, exp)
 	}
+}
+
+func TestMergeQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Skip("#27820")
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableScanner = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	sv := &store.ClusterSettings().SV
+	storage.MergeQueueEnabled.Override(sv, true)
+
+	split := func(t *testing.T, key roachpb.Key) {
+		t.Helper()
+		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), adminSplitArgs(key)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create two empty ranges, a - b and b - c, by splitting at a, b, and c.
+	split(t, roachpb.Key("a"))
+	split(t, roachpb.Key("b"))
+	split(t, roachpb.Key("c"))
+	lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+	rhs := store.LookupReplica(roachpb.RKey("b"), nil)
+	lhsDesc := lhs.Desc()
+	rhsDesc := rhs.Desc()
+
+	// setThresholds simulates a zone config update that updates the ranges'
+	// minimum and maximum sizes.
+	setThresholds := func(minBytes, maxBytes int64) {
+		lhs.SetByteThresholds(minBytes, maxBytes)
+		rhs.SetByteThresholds(minBytes, maxBytes)
+	}
+
+	defaultZone := config.DefaultZoneConfig()
+
+	reset := func(t *testing.T) {
+		t.Helper()
+		split(t, roachpb.Key("b"))
+		_, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    roachpb.Key("a"),
+				EndKey: roachpb.Key("c"),
+			},
+		})
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		setThresholds(defaultZone.RangeMinBytes, defaultZone.RangeMaxBytes)
+	}
+
+	verifyMerged := func(t *testing.T) {
+		t.Helper()
+		repl := store.LookupReplica(rhsDesc.StartKey, nil)
+		if !repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
+			t.Fatalf("ranges unexpectedly unmerged")
+		}
+	}
+
+	verifyUnmerged := func(t *testing.T) {
+		t.Helper()
+		repl := store.LookupReplica(rhsDesc.StartKey, nil)
+		if repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
+			t.Fatalf("ranges unexpectedly merged")
+		}
+	}
+
+	t.Run("both-empty", func(t *testing.T) {
+		reset(t)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("rhs-setting-threshold", func(t *testing.T) {
+		reset(t)
+
+		if err := store.DB().Put(ctx, "b-key", "val"); err != nil {
+			t.Fatal(err)
+		}
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		storage.MergeMaxRHSSize.Override(sv, 100)
+		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	rng, _ := randutil.NewPseudoRand()
+
+	t.Run("rhs-replica-threshold", func(t *testing.T) {
+		reset(t)
+
+		// Make the RHS cluster setting threshold irrelevant.
+		storage.MergeMaxRHSSize.Override(sv, 1<<32)
+		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
+
+		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
+		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
+			t.Fatal(err)
+		}
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("lhs-replica-threshold", func(t *testing.T) {
+		reset(t)
+
+		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
+		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
+			t.Fatal(err)
+		}
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("combined-threshold", func(t *testing.T) {
+		reset(t)
+
+		storage.MergeMaxRHSSize.Override(sv, 1<<32)
+		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
+
+		// The ranges are individually beneath the minimum size threshold, but
+		// together they'll exceed the maximum size threshold.
+		setThresholds(200, 200)
+		bytes := randutil.RandBytes(rng, 100)
+		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
+			t.Fatal(err)
+		}
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		setThresholds(200, 400)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
 }
 
 func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {

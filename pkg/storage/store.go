@@ -361,6 +361,7 @@ type Store struct {
 	allocator          Allocator                   // Makes allocation decisions
 	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
+	mergeQueue         *mergeQueue                 // Range merging queue
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
 	replicaGCQueue     *replicaGCQueue             // Replica GC queue
@@ -741,6 +742,8 @@ type StoreTestingKnobs struct {
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
 	// DisableGCQueue disables the GC queue.
 	DisableGCQueue bool
+	// DisableMergeQueue disables the merge queue.
+	DisableMergeQueue bool
 	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
@@ -949,6 +952,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
+		s.mergeQueue = newMergeQueue(s, s.db, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
 		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
@@ -956,7 +960,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
 		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
 		s.scanner.AddQueues(
-			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
+			s.gcQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
 			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
 
 		if s.cfg.TimeSeriesDataStore != nil {
@@ -969,6 +973,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableMergeQueue {
+		s.setMergeQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableReplicaGCQueue {
 		s.setReplicaGCQueueActive(false)
@@ -1661,11 +1668,13 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
 func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
-	// For every range, update its MaxBytes and check if it needs to be split.
+	// For every range, update its MaxBytes and check if it needs to be split or
+	// merged.
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		if zone, err := cfg.GetZoneConfigForKey(repl.Desc().StartKey); err == nil {
-			repl.SetMaxBytes(zone.RangeMaxBytes)
+			repl.SetByteThresholds(zone.RangeMinBytes, zone.RangeMaxBytes)
 		}
+		s.mergeQueue.MaybeAdd(repl, s.cfg.Clock.Now())
 		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true // more
 	})
@@ -4337,6 +4346,9 @@ func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.Clus
 
 func (s *Store) setGCQueueActive(active bool) {
 	s.gcQueue.SetDisabled(!active)
+}
+func (s *Store) setMergeQueueActive(active bool) {
+	s.mergeQueue.SetDisabled(!active)
 }
 func (s *Store) setRaftLogQueueActive(active bool) {
 	s.raftLogQueue.SetDisabled(!active)
