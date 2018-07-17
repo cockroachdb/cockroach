@@ -282,7 +282,7 @@ INSERT INTO example1(foo) VALUES(1)
 	}
 	drop()
 
-	// In the following two sub-benchmarks, 10,000 rows are inserted into the `example2` table.
+	// In the following two sub-benchmarks, `numFKRows` rows are inserted into the `example2` table.
 	// All of the rows are inserted in a single statement and deleted in a second statement.
 	// In the first test, the rows have no foreign key references to rows in `example1`.
 	// In the second, the rows all have references to a particular row in `example1`.
@@ -336,7 +336,7 @@ INSERT INTO example1(foo) VALUES(1)
 		}
 	})
 
-	// For the self-referential table benchmarks, 10,000 rows are inserted and there is again a contrast between
+	// For the self-referential table benchmarks, `numSRRows` rows are inserted and there is again a contrast between
 	// rows with foreign key references and those without.
 	// This measures the performance of cascading deletes.
 	const numSRRows = 10000
