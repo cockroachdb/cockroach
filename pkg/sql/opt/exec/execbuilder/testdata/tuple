@@ -109,3 +109,16 @@ render     ·         ·                                                        
  └── scan  ·         ·                                                                                   (v int)                                  ·
 ·          table     kv@primary                                                                          ·                                        ·
 ·          spans     ALL                                                                                 ·                                        ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+render          ·         ·                       (a, b, c)  ·
+ │              render 0  (x).a                   ·          ·
+ │              render 1  (x).b                   ·          ·
+ │              render 2  (x).c                   ·          ·
+ └── render     ·         ·                       (x)        ·
+      │         render 0  ((v, v, v) AS a, b, c)  ·          ·
+      └── scan  ·         ·                       (v)        ·
+·               table     kv@primary              ·          ·
+·               spans     ALL                     ·          ·

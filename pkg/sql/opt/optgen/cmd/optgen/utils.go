@@ -44,6 +44,8 @@ func mapType(typ string) string {
 
 func mapPrivateType(typ string) string {
 	switch typ {
+	case "ColIdx":
+		return "memo.ColIdx"
 	case "ColumnID":
 		return "opt.ColumnID"
 	case "ColSet":
