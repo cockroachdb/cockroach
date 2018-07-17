@@ -27,9 +27,7 @@ func registerClearRange(r *registry) {
 		Name:       `clearrange`,
 		MinVersion: `v2.1.0`,
 		Nodes:      nodes(10),
-		// At the time of writing, #24029 is still open and this test does indeed
-		// thoroughly brick the cluster.
-		Stable: false,
+		Stable:     true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
