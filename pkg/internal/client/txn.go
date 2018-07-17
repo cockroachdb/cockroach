@@ -638,8 +638,10 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 //
 // The deadline cannot be lower than txn.OrigTimestamp.
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	if txn.deadline == nil || deadline.Less(*txn.deadline) {
-		if deadline.Less(txn.OrigTimestamp()) {
+		if deadline.Less(txn.mu.Proto.OrigTimestamp) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s, txn: %s",
 				deadline, txn.Proto())
@@ -650,8 +652,8 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	return false
 }
 
-// resetDeadline resets the deadline.
-func (txn *Txn) resetDeadline() {
+// resetDeadlineLocked resets the deadline.
+func (txn *Txn) resetDeadlineLocked() {
 	txn.deadline = nil
 }
 
@@ -1289,7 +1291,7 @@ func (txn *Txn) BumpEpochAfterConcurrentRetryErrorLocked() {
 func (txn *Txn) updateStateOnRetryableErrLocked(
 	ctx context.Context, retryErr *roachpb.HandledRetryableTxnError,
 ) {
-	txn.resetDeadline()
+	txn.resetDeadlineLocked()
 	newTxn := &retryErr.Transaction
 
 	abortErr := txn.mu.Proto.ID != newTxn.ID
@@ -1362,7 +1364,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(msg string) error {
 	txn.Proto().Restart(txn.UserPriority(), 0 /* upgradePriority */, txn.Proto().Timestamp)
-	txn.resetDeadline()
+	txn.resetDeadlineLocked()
 	return roachpb.NewHandledRetryableTxnError(
 		msg,
 		txn.ID(),
