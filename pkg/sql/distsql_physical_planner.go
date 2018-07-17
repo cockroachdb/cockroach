@@ -419,6 +419,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *projectSetNode:
 		return dsp.checkSupportForNode(n.source)
 
+	case *zeroNode:
+		return shouldDistribute, nil
+
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2132,6 +2135,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *projectSetNode:
 		plan, err = dsp.createPlanForProjectSet(planCtx, n)
 
+	case *zeroNode:
+		plan, err = dsp.createPlanForZero(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
@@ -2640,6 +2646,44 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	return p, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForZero(
+	planCtx *planningCtx, n *zeroNode,
+) (physicalPlan, error) {
+	columns := len(n.columns)
+
+	s := distsqlrun.ValuesCoreSpec{
+		Columns: make([]distsqlrun.DatumInfo, columns),
+	}
+	types := make([]sqlbase.ColumnType, columns)
+
+	for i, t := range n.columns {
+		colTyp, err := sqlbase.DatumTypeToColumnType(t.Typ)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		types[i] = colTyp
+		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Type = types[i]
+	}
+
+	plan := distsqlplan.PhysicalPlan{
+		Processors: []distsqlplan.Processor{{
+			Node: dsp.nodeDesc.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
+				Output: []distsqlrun.OutputRouterSpec{{Type: 0}},
+			},
+		}},
+		ResultRouters: []distsqlplan.ProcessorIdx{0},
+		ResultTypes:   types,
+	}
+
+	return physicalPlan{
+		PhysicalPlan:       plan,
+		planToStreamColMap: identityMapInPlace(make([]int, columns)),
+	}, nil
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(
