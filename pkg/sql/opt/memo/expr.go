@@ -196,7 +196,7 @@ func (e *Expr) Replace(mem *Memo, replace ReplaceChildFunc) Expr {
 
 	// Append the private and construct a new Expr with possibly modified
 	// children.
-	privateID := e.privateID()
+	privateID := e.PrivateID()
 	if privateID != 0 {
 		operands[nth] = DynamicID(privateID)
 	}
@@ -206,10 +206,12 @@ func (e *Expr) Replace(mem *Memo, replace ReplaceChildFunc) Expr {
 // Private returns the value of this expression's private field, if it has one,
 // or nil if not.
 func (e *Expr) Private(mem *Memo) interface{} {
-	return mem.LookupPrivate(e.privateID())
+	return mem.LookupPrivate(e.PrivateID())
 }
 
-func (e *Expr) privateID() PrivateID {
+// PrivateID returns the interning identifier of this expression's private
+// field, or 0 if no private field exists.
+func (e *Expr) PrivateID() PrivateID {
 	priv := opLayoutTable[e.op].priv()
 	if priv == 0 {
 		return 0
