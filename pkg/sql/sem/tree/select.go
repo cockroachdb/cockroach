@@ -669,53 +669,42 @@ type WindowFrame struct {
 	Bounds WindowFrameBounds // the bounds of the frame
 }
 
-func (boundary *WindowFrameBound) write(ctx *FmtCtx) {
-	switch boundary.BoundType {
+// Format implements the NodeFormatter interface.
+func (node *WindowFrameBound) Format(ctx *FmtCtx) {
+	switch node.BoundType {
 	case UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
 	case ValuePreceding:
-		ctx.FormatNode(boundary.OffsetExpr)
+		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" PRECEDING")
 	case CurrentRow:
 		ctx.WriteString("CURRENT ROW")
 	case ValueFollowing:
-		ctx.FormatNode(boundary.OffsetExpr)
+		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" FOLLOWING")
 	case UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
-		panic("unexpected WindowFrameBoundType")
+		panic(fmt.Sprintf("unhandled case: %d", node.BoundType))
 	}
 }
 
 // Format implements the NodeFormatter interface.
-func (wf *WindowFrame) Format(ctx *FmtCtx) {
-	switch wf.Mode {
+func (node *WindowFrame) Format(ctx *FmtCtx) {
+	switch node.Mode {
 	case RANGE:
 		ctx.WriteString("RANGE ")
 	case ROWS:
 		ctx.WriteString("ROWS ")
 	default:
-		panic("unexpected WindowFrameMode")
+		panic(fmt.Sprintf("unhandled case: %d", node.Mode))
 	}
-	if wf.Bounds.EndBound != nil {
+	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")
-		wf.Bounds.StartBound.write(ctx)
+		ctx.FormatNode(node.Bounds.StartBound)
 		ctx.WriteString(" AND ")
-		wf.Bounds.EndBound.write(ctx)
+		ctx.FormatNode(node.Bounds.EndBound)
 	} else {
-		wf.Bounds.StartBound.write(ctx)
+		ctx.FormatNode(node.Bounds.StartBound)
 	}
-}
-
-// Copy returns a deep copy of wf.
-func (wf *WindowFrame) Copy() *WindowFrame {
-	frameCopy := &WindowFrame{Mode: wf.Mode}
-	startBoundCopy := *wf.Bounds.StartBound
-	frameCopy.Bounds = WindowFrameBounds{&startBoundCopy, nil}
-	if wf.Bounds.EndBound != nil {
-		endBoundCopy := *wf.Bounds.EndBound
-		frameCopy.Bounds.EndBound = &endBoundCopy
-	}
-	return frameCopy
 }
