@@ -11,6 +11,122 @@ eexpect ":/# "
 send "$argv sql\r"
 eexpect root@
 
+###START tests prompt customization
+
+start_test "Check that invalid prompt patterns cause an error."
+send "\\set prompt1 %?\r"
+eexpect "unrecognized format code in prompt"
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check that one can use % signs in the prompt."
+send "\\set prompt1 abc%%def\r"
+eexpect "abc%def"
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check that one can use all prompt customization keys."
+send "SET database = 'defaultdb';\r"
+eexpect "\nSET\r\n"
+eexpect root@
+send "\\set prompt1 %%M:%M:%%m:%m:%%>:%>:%%n:%n:%%/:%/:%%x:%x>\r"
+eexpect %M::26257:%m::%>:26257:%n:root:%/:defaultdb:%x:
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check that one can use %M 'full host' key." 
+send "\\set prompt1 FULLHOST:%M>\r"
+eexpect FULLHOST::26257
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check that one can use %m 'host name' key." 
+send "\\set prompt1 HOSTNAME:%m>\r"
+eexpect HOSTNAME:
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check that one can use %> 'port number' key." 
+send "\\set prompt1 PORT:%>>\r"
+eexpect PORT:26257
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+
+start_test "Check that one can use %n 'user name' key." 
+send "\\set prompt1 USER:%n>\r"
+eexpect USER:root
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+
+start_test "Check that one can use %/ 'database' key." 
+send "\\set prompt1 DATABASE:%/>\r"
+eexpect DATABASE:defaultdb
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+
+start_test "Check that one can use %x 'txn status' key." 
+send "\\set prompt1 txnStatus:%x>\r"
+eexpect txnStatus:
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check none define keys." 
+send "\\set prompt1 #&@ \r"
+eexpect #&@
+
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test
+
+start_test "Check continuePrompt working as expected."  
+send "\\set prompt1 ### \r"
+eexpect ###
+
+send "SET database \r"
+eexpect "\r\n -> "
+send "defaultdb;\r" 
+eexpect ###
+# Reset to default.
+send "\\unset prompt1\r"
+eexpect root@
+end_test 
+
+
+
+###END tests prompt customization
+
+
 start_test "Check option to echo statements"
 send "\\set echo\r"
 send "select 1;\r"
