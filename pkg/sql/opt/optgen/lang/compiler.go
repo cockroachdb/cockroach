@@ -36,6 +36,25 @@ func (c *CompiledExpr) LookupDefine(name string) *DefineExpr {
 	return c.defineIndex[name]
 }
 
+// LookupMatchingDefines returns the set of define expressions which either
+// exactly match the given name, or else have a tag that matches the given
+// name. If no matches can be found, then LookupMatchingDefines returns nil.
+func (c *CompiledExpr) LookupMatchingDefines(name string) DefineSetExpr {
+	var defines DefineSetExpr
+	define := c.LookupDefine(name)
+	if define != nil {
+		defines = append(defines, define)
+	} else {
+		// Name might be a tag name, so find all defines with that tag.
+		for _, define := range c.Defines {
+			if define.Tags.Contains(name) {
+				defines = append(defines, define)
+			}
+		}
+	}
+	return defines
+}
+
 // LookupMatchingRules returns the set of rules that match the given opname at
 // the top-level, or nil if none do. For example, "InnerJoin" would match this
 // rule:
@@ -218,7 +237,7 @@ func (c *ruleCompiler) compile(compiler *Compiler, rule *RuleExpr) {
 	// Expand root rules that match multiple operators into a separate match
 	// expression for each matching operator.
 	for _, name := range rule.Match.NameChoice() {
-		defines := c.findMatchingDefines(string(name))
+		defines := c.compiled.LookupMatchingDefines(string(name))
 		if len(defines) == 0 {
 			// No defines with that tag found, which is not allowed.
 			defines = nil
@@ -262,28 +281,6 @@ func (c *ruleCompiler) expandRule(opName NameExpr) {
 	}
 
 	c.compiled.Rules = append(c.compiled.Rules, newRule)
-}
-
-// findMatchingDefines returns the set of define expressions which either
-// exactly match the given name, or else have a tag that matches the given
-// name. If no matches can be found, then findMatchingDefines returns nil.
-func (c *ruleCompiler) findMatchingDefines(name string) []*DefineExpr {
-	var defines []*DefineExpr
-
-	compiled := c.compiler.compiled
-	define := compiled.LookupDefine(name)
-	if define != nil {
-		defines = append(defines, define)
-	} else {
-		// Name might be a tag name, so find all defines with that tag.
-		for _, define := range compiled.Defines {
-			if define.Tags.Contains(name) {
-				defines = append(defines, define)
-			}
-		}
-	}
-
-	return defines
 }
 
 // ruleContentCompiler is the workhorse of rule compilation. It is recursively
@@ -402,9 +399,14 @@ func (c *ruleContentCompiler) compileFunc(fn *FuncExpr) Expr {
 		// Ensure that all function names are defined and check whether this is a
 		// custom match function invocation.
 		for _, name := range fn.NameChoice() {
-			defines := c.compiler.findMatchingDefines(string(name))
+			defines := c.compiler.compiled.LookupMatchingDefines(string(name))
 			if defines != nil {
 				if !c.matchPattern {
+					if len(fn.NameChoice()) != 1 {
+						c.addErr(fn, errors.New("constructor cannot have multiple names"))
+						return fn
+					}
+
 					// Don't allow replace pattern name to be a tag name.
 					if len(defines) > 1 || string(defines[0].Name) != string(name) {
 						c.addErr(fn, fmt.Errorf("construct name cannot be a tag"))
@@ -414,6 +416,14 @@ func (c *ruleContentCompiler) compileFunc(fn *FuncExpr) Expr {
 				// Normalize single name into NameExpr rather than NamesExpr.
 				if len(fn.NameChoice()) == 1 {
 					funcName = &fn.NameChoice()[0]
+				}
+
+				// Ensure that each operator to be matched has a sufficient number
+				// of fields.
+				for _, define := range defines {
+					if len(define.Fields) < len(fn.Args) {
+						c.addErr(fn, fmt.Errorf("%s has only %d fields", define.Name, len(define.Fields)))
+					}
 				}
 			} else {
 				// This must be an invocation of a custom function, because

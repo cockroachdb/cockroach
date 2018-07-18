@@ -389,7 +389,7 @@ define Op {
 }
 
 [Strings]
-(Op $left:"foo" & (Func "bar")) => (Op "foo" (Func "bar"))
+(Op $input:"foo" & (Func "bar")) => (Op (Func "bar"))
 ----
 (Compiled
 	(Defines
@@ -412,15 +412,15 @@ define Op {
 				Name=Op
 				Args=(Slice
 					(Bind
-						Label="left"
+						Label="input"
 						Target=(And
 							Left="foo"
 							Right=(CustomFunc
 								Name=Func
 								Args=(Slice "bar")
-								Src=<test.opt:6:19>
+								Src=<test.opt:6:20>
 							)
-							Src=<test.opt:6:11>
+							Src=<test.opt:6:12>
 						)
 						Src=<test.opt:6:5>
 					)
@@ -430,14 +430,13 @@ define Op {
 			Replace=(Func
 				Name=Op
 				Args=(Slice
-					"foo"
 					(CustomFunc
 						Name=Func
 						Args=(Slice "bar")
-						Src=<test.opt:6:46>
+						Src=<test.opt:6:41>
 					)
 				)
-				Src=<test.opt:6:36>
+				Src=<test.opt:6:37>
 			)
 			Src=<test.opt:5:1>
 		)
@@ -449,7 +448,12 @@ define Op {
 #
 compile
 define Op {
-    Input Expr
+    Input1 Expr
+    Input2 Expr
+    Input3 Expr
+    Input4 Expr
+    Input5 Expr
+    Input6 Expr
 }
 
 [Lists]
@@ -476,7 +480,12 @@ define Op {
 			Tags=(Tags)
 			Name="Op"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Name="Input1" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Name="Input2" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Name="Input3" Type="Expr" Src=<test.opt:4:5>)
+				(DefineField Name="Input4" Type="Expr" Src=<test.opt:5:5>)
+				(DefineField Name="Input5" Type="Expr" Src=<test.opt:6:5>)
+				(DefineField Name="Input6" Type="Expr" Src=<test.opt:7:5>)
 			)
 			Src=<test.opt:1:1>
 		)
@@ -492,73 +501,73 @@ define Op {
 					(List
 						Items=(Slice
 							(ListAny)
-							(Func Name=Op Args=(Slice) Src=<test.opt:7:11>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:12:11>)
 							(ListAny)
 						)
-						Src=<test.opt:7:5>
+						Src=<test.opt:12:5>
 					)
 					(List
 						Items=(Slice
-							(Func Name=Op Args=(Slice) Src=<test.opt:8:7>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:13:7>)
 							(ListAny)
 						)
-						Src=<test.opt:8:5>
+						Src=<test.opt:13:5>
 					)
 					(List
 						Items=(Slice
 							(ListAny)
-							(Func Name=Op Args=(Slice) Src=<test.opt:9:11>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:14:11>)
 						)
-						Src=<test.opt:9:5>
+						Src=<test.opt:14:5>
 					)
 					(List
 						Items=(Slice (ListAny) (ListAny))
-						Src=<test.opt:10:5>
+						Src=<test.opt:15:5>
 					)
 					(List
 						Items=(Slice
-							(Func Name=Op Args=(Slice) Src=<test.opt:11:7>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:16:7>)
 						)
-						Src=<test.opt:11:5>
+						Src=<test.opt:16:5>
 					)
-					(List Items=(Slice) Src=<test.opt:12:5>)
+					(List Items=(Slice) Src=<test.opt:17:5>)
 				)
-				Src=<test.opt:6:1>
+				Src=<test.opt:11:1>
 			)
 			Replace=(Func
 				Name=Op
 				Args=(Slice
 					(List
 						Items=(Slice
-							(Func Name=Op Args=(Slice) Src=<test.opt:16:7>)
-							(Func Name=Op Args=(Slice) Src=<test.opt:16:12>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:21:7>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:21:12>)
 						)
-						Src=<test.opt:16:5>
+						Src=<test.opt:21:5>
 					)
 					(List
 						Items=(Slice
-							(Func Name=Op Args=(Slice) Src=<test.opt:17:7>)
+							(Func Name=Op Args=(Slice) Src=<test.opt:22:7>)
 						)
-						Src=<test.opt:17:5>
+						Src=<test.opt:22:5>
 					)
-					(List Items=(Slice) Src=<test.opt:18:5>)
+					(List Items=(Slice) Src=<test.opt:23:5>)
 					(CustomFunc
 						Name=Func
 						Args=(Slice
 							(List
 								Items=(Slice
-									(Func Name=Op Args=(Slice) Src=<test.opt:19:13>)
-									(Func Name=Op Args=(Slice) Src=<test.opt:19:18>)
+									(Func Name=Op Args=(Slice) Src=<test.opt:24:13>)
+									(Func Name=Op Args=(Slice) Src=<test.opt:24:18>)
 								)
-								Src=<test.opt:19:11>
+								Src=<test.opt:24:11>
 							)
 						)
-						Src=<test.opt:19:5>
+						Src=<test.opt:24:5>
 					)
 				)
-				Src=<test.opt:15:1>
+				Src=<test.opt:20:1>
 			)
-			Src=<test.opt:5:1>
+			Src=<test.opt:10:1>
 		)
 	)
 )
@@ -653,7 +662,9 @@ define Op {
     Input Expr
 }
 define Op {
-    Input Expr
+    Input1 Expr
+    Input2 Expr
+    Input3 Expr
 }
 
 [UnrecognizedName]
@@ -730,29 +741,37 @@ define Op {
 
 [ListConstructor]
 (Op) => (Op [ (SubFunc) ... ])
+
+[ConstructorMultipleNames]
+(Op) => (Op | Op)
+
+[NotEnoughMatchFields]
+(Op * * * *) => (Op)
 ----
 test.opt:5:1: duplicate 'Op' define statement
-test.opt:10:1: unrecognized match name 'Unknown'
-test.opt:13:10: too many arguments to OpName function
-test.opt:16:10: invalid OpName argument: argument must be a variable reference
-test.opt:19:18: duplicate bind label 'input'
-test.opt:22:26: duplicate bind label 'input'
-test.opt:25:22: unrecognized variable name 'unknown'
-test.opt:30:1: duplicate rule name 'DuplicateName'
-test.opt:34:5: match pattern cannot use variable references
-test.opt:37:5: custom function cannot have multiple names
-test.opt:40:11: custom match function cannot use lists
-test.opt:43:11: custom match function cannot use lists
-test.opt:46:11: custom match function cannot use boolean expressions
-test.opt:49:5: custom match function cannot use wildcard matcher
-test.opt:52:11: custom function name cannot be an operator name
-test.opt:55:9: construct name cannot be a tag
-test.opt:58:5: cannot match literal name 'Op'
-test.opt:61:16: Unknown is not an operator name
-test.opt:64:9: Unknown is not an operator name
-test.opt:67:1: cannot match dynamic name
-test.opt:70:5: cannot match dynamic name
-test.opt:73:5: custom function cannot have multiple names
-test.opt:76:13: custom function cannot have multiple names
-test.opt:79:25: list matcher cannot contain multiple expressions
-test.opt:82:13: list constructor cannot use '...'
+test.opt:12:1: unrecognized match name 'Unknown'
+test.opt:15:10: too many arguments to OpName function
+test.opt:18:10: invalid OpName argument: argument must be a variable reference
+test.opt:21:18: duplicate bind label 'input'
+test.opt:24:26: duplicate bind label 'input'
+test.opt:27:22: unrecognized variable name 'unknown'
+test.opt:32:1: duplicate rule name 'DuplicateName'
+test.opt:36:5: match pattern cannot use variable references
+test.opt:39:5: custom function cannot have multiple names
+test.opt:42:11: custom match function cannot use lists
+test.opt:45:11: custom match function cannot use lists
+test.opt:48:11: custom match function cannot use boolean expressions
+test.opt:51:5: custom match function cannot use wildcard matcher
+test.opt:54:11: custom function name cannot be an operator name
+test.opt:57:9: construct name cannot be a tag
+test.opt:60:5: cannot match literal name 'Op'
+test.opt:63:16: Unknown is not an operator name
+test.opt:66:9: Unknown is not an operator name
+test.opt:69:1: cannot match dynamic name
+test.opt:72:5: cannot match dynamic name
+test.opt:75:5: custom function cannot have multiple names
+test.opt:78:13: custom function cannot have multiple names
+test.opt:81:25: list matcher cannot contain multiple expressions
+test.opt:84:13: list constructor cannot use '...'
+test.opt:87:9: constructor cannot have multiple names
+test.opt:90:1: Op has only 3 fields
