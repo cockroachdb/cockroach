@@ -38,6 +38,40 @@ statement ok
 CREATE TABLE distsql_lookup_test_3 (g INT, h INT, INDEX g_idx (g));
 INSERT INTO distsql_lookup_test_3 VALUES (NULL, 1)
 
+# Set up the statistics as if the first table is much smaller than the others.
+# This will make lookup join into the second table be the best plan.
+# TODO(radu): we have to use very small row counts because of the poor row
+# count estimation for joins (left-rows * right-rows / 10).
+statement ok
+ALTER TABLE distsql_lookup_test_1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE distsql_lookup_test_2 INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+ALTER TABLE distsql_lookup_test_3 INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
 query IIIIII rowsort
 SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
 ----

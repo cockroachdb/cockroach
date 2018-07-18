@@ -1,0 +1,363 @@
+# LogicTest: 5node-dist-opt
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e))
+
+# Set up the statistics as if the first table is much smaller than the second.
+# This will make lookup join into the second table be the best plan.
+# TODO(radu): we have to use very small row counts because of the poor row
+# count estimation for joins (left-rows * right-rows / 10).
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
+----
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @6 = @2      ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
+----
+tree         field  description             columns             ordering
+lookup-join  ·      ·                       (a, b, c, d, e, f)  ·
+ │           type   inner                   ·                   ·
+ │           pred   (@6 = @2) AND (@5 > 1)  ·                   ·
+ ├── scan    ·      ·                       (a, b, c)           ·
+ │           table  abc@primary             ·                   ·
+ │           spans  /2-                     ·                   ·
+ └── scan    ·      ·                       (d, e, f)           ·
+·            table  def@primary             ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
+----
+tree         field  description             columns             ordering
+lookup-join  ·      ·                       (a, b, c, d, e, f)  ·
+ │           type   inner                   ·                   ·
+ │           pred   (@6 = @1) AND (@6 > 1)  ·                   ·
+ ├── scan    ·      ·                       (a, b, c)           ·
+ │           table  abc@primary             ·                   ·
+ │           spans  /2-                     ·                   ·
+ └── scan    ·      ·                       (d, e, f)           ·
+·            table  def@primary             ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
+----
+tree         field  description               columns             ordering
+lookup-join  ·      ·                         (a, b, c, d, e, f)  ·
+ │           type   inner                     ·                   ·
+ │           pred   (@6 = @2) AND (@1 >= @5)  ·                   ·
+ ├── scan    ·      ·                         (a, b, c)           ·
+ │           table  abc@primary               ·                   ·
+ │           spans  ALL                       ·                   ·
+ └── scan    ·      ·                         (d, e, f)           ·
+·            table  def@primary               ·                   ·
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
+----
+tree         field  description               columns             ordering
+lookup-join  ·      ·                         (a, b, c, d, e, f)  ·
+ │           type   inner                     ·                   ·
+ │           pred   (@6 = @2) AND (@1 >= @5)  ·                   ·
+ ├── scan    ·      ·                         (a, b, c)           ·
+ │           table  abc@primary               ·                   ·
+ │           spans  ALL                       ·                   ·
+ └── scan    ·      ·                         (d, e, f)           ·
+·            table  def@primary               ·                   ·
+
+# Verify a distsql plan.
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+----
+render            ·         ·                                                        (a, b, c, d)              ·
+ │                render 0  a                                                        ·                         ·
+ │                render 1  b                                                        ·                         ·
+ │                render 2  c                                                        ·                         ·
+ │                render 3  d                                                        ·                         ·
+ └── lookup-join  ·         ·                                                        (a, b, c, d, a, b, c, d)  ·
+      │           type      inner                                                    ·                         ·
+      │           pred      (((@1 = @5) AND (@2 = @6)) AND (@3 = @7)) AND (@4 = @8)  ·                         ·
+      ├── scan    ·         ·                                                        (a, b, c, d)              ·
+      │           table     data@primary                                             ·                         ·
+      │           spans     ALL                                                      ·                         ·
+      │           filter    c = 1                                                    ·                         ·
+      └── scan    ·         ·                                                        (a, b, c, d)              ·
+·                 table     data@primary                                             ·                         ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlU-L2zAQxe_9FGJOCaisZTt_VrCgQimkFG9Z9lZ8cKNhcZvVGEmGliXfvShuu07YyIaQg49j6em9-Y2wXsCQxqJ6RgfyGwjgkAKHDDjkwGEBJYfG0hadIxu2dIKN_gUy4VCbpvXhc8lhSxZBvoCv_Q5BwmP1fYcPWGm0Nwlw0OirenewaWz9XNnfSle-Ag6f6p1HK5nK2B0TUspN8QjlngO1_vV856snBCn2fHyGz1SbvxEW0QhfiH62DftBtWFkJFOCq5SrjKuA4b5gs9lMCXbH1GLOPhQf2UyloVrO_5Uhu1r9L_NQrudB3Prj8851lp7t7LWh1pDVaFEfdVPu3-i9oPfU3IjkZOfb3tmRtxg_WXGtyQ5k6E12ObHJpuPppteiO5ChR3c1MbrZeLrZtegOZOjRXU-Mbj6ebn4tugMZenRvJ0Z34DV7QNeQcTjqj56ENwH1E3YPiKPWbvGrpe3BpivvD7rDB43Od6uiKzamWwoB-2IRFadHYnEqTuPOA9ZZVJ3HxfkluRdR8TLuvLzEeRUVr-PO60ucb-OzSgauSfySnXqX-3d_AgAA___iTT6a
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+CREATE TABLE books2 (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+ALTER TABLE books INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE books2 INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+tree              field        description               columns                       ordering
+group             ·            ·                         (title)                       ·
+ │                aggregate 0  title                     ·                             ·
+ │                group by     @1                        ·                             ·
+ └── lookup-join  ·            ·                         (title, shelf, title, shelf)  ·
+      │           type         inner                     ·                             ·
+      │           pred         (@1 = @3) AND (@2 != @4)  ·                             ·
+      ├── scan    ·            ·                         (title, shelf)                ·
+      │           table        books@primary             ·                             ·
+      │           spans        ALL                       ·                             ·
+      └── scan    ·            ·                         (title, shelf)                ·
+·                 table        books2@primary            ·                             ·
+
+statement ok
+CREATE TABLE authors (name STRING PRIMARY KEY, book STRING)
+
+statement ok
+ALTER TABLE authors INJECT STATISTICS '[
+  {
+    "columns": ["name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+tree                   field        description               columns                                   ordering
+group                  ·            ·                         (name)                                    ·
+ │                     aggregate 0  name                      ·                                         ·
+ │                     group by     @5                        ·                                         ·
+ └── join              ·            ·                         (title, shelf, title, shelf, name, book)  ·
+      │                type         inner                     ·                                         ·
+      │                equality     (title) = (book)          ·                                         ·
+      ├── lookup-join  ·            ·                         (title, shelf, title, shelf)              ·
+      │    │           type         inner                     ·                                         ·
+      │    │           pred         (@1 = @3) AND (@2 != @4)  ·                                         ·
+      │    ├── scan    ·            ·                         (title, shelf)                            ·
+      │    │           table        books@primary             ·                                         ·
+      │    │           spans        ALL                       ·                                         ·
+      │    └── scan    ·            ·                         (title, shelf)                            ·
+      │                table        books2@primary            ·                                         ·
+      └── scan         ·            ·                         (name, book)                              ·
+·                      table        authors@primary           ·                                         ·
+·                      spans        ALL                       ·                                         ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyck0GL2zAQhe_9FeqcHFBJJNs5GAIK9NAtwSnL9lBKWLTx1HE3qzGSDC1L_ntRXNg4xErTo0bzzXt-Y72CoQpL_YIOiu8ggEMOGw6tpS06RzaU-6a76hcUMw6NaTsfyhsOW7IIxSv4xu8RCijpA7XTHDhU6HWzP7YdOFDn3yDndY1QzA_8ZLCID37QT3u8R12hnc4G46G1zYu2v9UT0bMDDuvOF0wJrlIYkxa3SH-mxvxVFhFlCRxWRM9dy35SYxiZ4CL4KVmiBFswlU7YsvzIEiXZ-wVT-eTUreQq5Sof9Sz_Ny552bTu_C6sd0wvHdV7k-kM2QotVucLv95ywfQn7XYhbLTTdOh5jz98osRkYZt65xMlLySXcZVzNR_9nuyW_JZ1bbHWnuw0G1pR4edelt8ey_XDY_l1tUrCHsdE84Holcdzj64l4_CfXs8sJIhVjf1GHHV2i18sbY8y_XF95I6FCp3vb-f94c70V8HgKSyisIzDMgpnA1icw-kNsDyHsyicx23nUXh2Bm8O7_4EAAD__zAfsGk=
+
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
+----
+tree              field     description      columns              ordering
+render            ·         ·                (name)               ·
+ │                render 0  name             ·                    ·
+ └── lookup-join  ·         ·                (name, book, title)  ·
+      │           type      inner            ·                    ·
+      │           pred      @2 = @3          ·                    ·
+      ├── scan    ·         ·                (name, book)         +name
+      │           table     authors@primary  ·                    ·
+      │           spans     ALL              ·                    ·
+      └── scan    ·         ·                (title)              ·
+·                 table     books2@primary   ·                    ·
+
+# Cross joins should not be planned as lookup joins.
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
+----
+tree            field     description     columns                                         ordering
+render          ·         ·               (title, edition, shelf, title, edition, shelf)  ·
+ │              render 0  title           ·                                               ·
+ │              render 1  edition         ·                                               ·
+ │              render 2  shelf           ·                                               ·
+ │              render 3  title           ·                                               ·
+ │              render 4  edition         ·                                               ·
+ │              render 5  shelf           ·                                               ·
+ └── join       ·         ·               (title, edition, shelf, title, edition, shelf)  ·
+      │         type      cross           ·                                               ·
+      ├── scan  ·         ·               (title, edition, shelf)                         ·
+      │         table     books2@primary  ·                                               ·
+      │         spans     ALL             ·                                               ·
+      └── scan  ·         ·               (title, edition, shelf)                         ·
+·               table     books@primary   ·                                               ·
+·               spans     ALL             ·                                               ·
+
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFLwzAUxu_-FeGdNoisabdLYBDBy0Q6GbtJD1n7mHVdXklSUEb_d0kjuImresz33u99X_hOYKjCXB_RgXwGARwWUHBoLZXoHNkgx6VV9QYy4VCbtvNBLjiUZBHkCXztGwQJOd1SO0uBQ4Ve182w1nOgzn9Bzus9gsx6fnZYjB_e6l2DG9QV2llycR5aWx-1fVe68y8h7zU_8R-_B6rNp5342W5HdHDhp49Eh65lr1QbRkYyFcR1ziYqY0um0im7y-_ZRM3Zkgkp5SrfTsNG5yVTgquUq4yrOVeLq9HTi-i_dLBB15Jx-KcSkr7ggNUeY8-OOlvik6VysInP9cANQoXOx2kWHysTRyHgOSxG4XQcTkfh5Btc9DcfAQAA__9BRuUo
+
+# TODO(radu): rework these tests once lookup join using non-covering index is
+# supported.
+#####################################
+##  LOOKUP JOIN ON SECONDARY INDEX  #
+#####################################
+## Create a table with a secondary index which stores another column.
+#statement ok
+#CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+#
+## Split into ten parts.
+#statement ok
+#ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+#
+## Relocate the ten parts to the five nodes.
+#statement ok
+#ALTER TABLE multiples EXPERIMENTAL_RELOCATE
+#  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+#
+## Lookup join on covering secondary index
+#query TTT colnames
+#EXPLAIN SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+#----
+#Tree            Field           Description
+#render          ·               ·
+# └── join       ·               ·
+#      │         type            inner
+#      │         equality        (a) = (b)
+#      │         mergeJoinOrder  +"(a=b)"
+#      ├── scan  ·               ·
+#      │         table           multiples@primary
+#      │         spans           ALL
+#      └── scan  ·               ·
+#·               table           multiples@bc
+#·               spans           ALL
+#
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lM1qg0AUhfd9inDXU-Ko-XOVbUpJSuiuuDDOJdiauTIzQkvw3YtaGg3JKERczs-Z73DOcM8gSeA2OqGG4AM4MHCBgQcMfGAwg5BBpihGrUmVV2rBRnxD4DBIZJabcjtkEJNCCM5gEpMiBPAeHVLcYyRQTR1gINBESVphMpWcIvWzPuWpSbIUNTDY5SaYrDmEBQPKzeVdbaIjQsAL1p_9Qon8Q8_a6EPcor4SfeXZ5JMSOSFZGfi3wtb-XTfuXTcXE7kkJVChaDkIixt-t_RM2ZQ7Vzdvs70Wm_dvgQ_dQge70cJ8hBbc_km4QyfRwW4ksRghCa9_Et7QSXSwG0ksR0jC75-EP3QSHexGEquRZ9QNN3vUGUmNvSaQU84wFEesB56mXMX4piiuMPVyV-mqDYHa1Ke8XmxkfVQabIq5Vey2xPxa7NrJHWjPqvbtYv8R3zOreG4nzx8hL6zipZ28fIS8snfldHwT-ye7ZofF028AAAD__2gv7bk=
+#
+## Lookup join on non-covering secondary index
+## The index join should be subsumed by joinreader, which takes care of the
+## primary index lookups.
+#query TTT colnames
+#EXPLAIN SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+#----
+#Tree                  Field           Description
+#render                ·               ·
+# └── join             ·               ·
+#      │               type            inner
+#      │               equality        (a) = (b)
+#      │               mergeJoinOrder  +"(a=b)"
+#      ├── scan        ·               ·
+#      │               table           multiples@primary
+#      │               spans           ALL
+#      └── index-join  ·               ·
+#           ├── scan   ·               ·
+#           │          table           multiples@bc
+#           │          spans           ALL
+#           └── scan   ·               ·
+#·                     table           multiples@primary
+#
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lM2LqzAUxffvryh3nUeNH_1w1W0fj3YosxtcWHMpzthcSSLMUPzfB3WYammjUHGZj5Pf4ZxwLyBJ4C4-o4bwDTgwcIGBBwx8YBBAxCBXlKDWpKorjWArPiF0GKQyL0y1HTFISCGEFzCpyRBCeI2PGR4wFqjmDjAQaOI0qzG5Ss-x-tqci8ykeYYaGOwLE842HKKSARXm-q428Qkh5CUbzv5HqfxBB130MelQ_xN9FPnsnVI5I1kb-LXCNsFDN-5DN1cThSQlUKHoOIjKO3539JfyOXdubt5nex02H94CH7uFHnarhcUELbjDk3DHTqKH3UpiOUES3vAkvLGT6GG3klhNkIQ_PAl_7CR62K0k1hPPqDtuDqhzkhoHTSCnmmEoTtgMPE2FSvBFUVJjmuW-1tUbArVpTnmz2MrmqDLYFnOr2O2I-a3YtZN70J5V7dvF_jO-A6t4YScvniEvreKVnbx6hry2d-X0fBP7J7tlR-Wf7wAAAP__gsjtvg==
+
+# TODO(radu): enable these tests.
+#############################
+##  LEFT OUTER LOOKUP JOIN  #
+#############################
+## Left join against primary index
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.b, t2.a FROM multiples t1 LEFT JOIN multiples t2 ON t1.b = t2.a]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF-Lm0AUxd_7KeQ-T1lHTTY7T3nZQpYlKSF9Kj5Y57LYmrnDzAhdFr97UUujIR2FCD7On-PveM5wP0CRxH12RgviO3BgEAGDGBgkwGAFKQNtKEdryTRXOsFO_gYRMiiUrlyznTLIySCID3CFKxEEnLIfJR4xk2geQmAg0WVF2WK0Kc6Zed-eq9IVukQLDA6VE8E2grRmQJW7fNe67A1B8JpNZ79Qof6iV0P06V2jCF6fv5yCw7fT8zF4Oez2wG5aeiX6VengJxUqICWCLf_nkzOP1ei_Vi8OK0VGokE5sJfWN35mT59JP_Dw6uZtdjxg8-kV8bkrGmH3KlovXVE0PaZo7phG2L2YHpeOKZ4eUzx3TCPsXkybpWNKpseUzB3TCLsX09PSMY2M8CNaTcripKkXNnMT5Rt2Q9ZSZXL8aihvMd3y0OraDYnWdae8W-xUd9QY7Iu5VxwNxPxaHPnJI-jYq0784uQe3yuveO0nr-8hP3rFGz95cw_5yd9VOPJM_I_smp3Wn_4EAAD__6ZdGew=
+#
+## Left join against covering secondary index
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlF9r2zAUxd_3Kcx91qhlO2mqp7x0kFKSEbKn4QfXuhRvjq6QZFgp_u7D9ljtkMiGGNJH_Tn-HZ8j7jsokrjNjmhB_AQODCJgEAODBBgsIGWgDeVoLZnmSifYyD8gQgaF0pVrtlMGORkE8Q6ucCWCgEP2UuIeM4nmLgQGEl1WlC1Gm-KYmbf1sSpdoUu0wGBXORGsY0hrBlS5j-9al70iCF6z6ewnKtQ_9GKIPrxpFMHz47dDsPtxeNwHT7vNFhi85AM3z0S_Kx38okIFpESw5v8tcrZOLrqMLrr8MFcpMhINyoGztD7zH1v6SvqOhyc3z7PjAZtPb4fP3c4Iu9fO8obtRNMTiuZOaITdS-j-hgnF0xOK505ohN1LaHXDhJLpCSVzJzTC7iX08Elm4BmXe7SalMVJEy5sZiTKV-wGqqXK5PjdUN5iuuWu1bUbEq3rTnm32KjuqDHYF3OvOBqI-ak48pNH0LFXnfjFyTW-F17x0k9eXkO-94pXfvLqGvKDv6tw5Jn4H9kpO62__A0AAP__DxgOwA==
+#
+## Left join against non-covering secondary index
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlF9r2zAUxd_3Kcx91qhlO2mqp7x0kFKSEbKn4QfXuhRvjq6QZFgp_u7D9ljtkMiGGNJH_Tn-HZ8j7jsokrjNjmhB_AQODCJgEAODBBgsIGWgDeVoLZnmSifYyD8gQgaF0pVrtlMGORkE8Q6ucCWCgEP2UuIeM4nmLgQGEl1WlC1Gm-KYmbf1sSpdoUu0wGBXORGsY0hrBlS5j-9al70iCF6z6ewnKtQ_9GKIPrxpFMHz47dDsPtxeNwHT7vNFhi85AM3z0S_Kx38okIFpESw5v8tcrZeXHQZXXT5Ya5SZCQalANnaX3mP7b0lfQdD09unmfHAzaf3g6fu50Rdq-d5Q3biaYnFM2d0Ai7l9D9DROKpycUz53QCLuX0OqGCSXTE0rmTmiE3Uvo4ZPMwDMu92g1KYuTJlzYzEiUr9gNVEuVyfG7obzFdMtdq2s3JFrXnfJusVHdUWOwL-ZecTQQ81Nx5CePoGOvOvGLk2t8L7zipZ-8vIZ87xWv_OTVNeQHf1fhyDPxP7JTdlp_-RsAAP__KqEOxQ==
+#
+## Left join with ON filter on covering index
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.c < 20]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlc9r2zAUx-_7K8Q7baBR_0qa6pRLCy4lGcE7bT641iPT5ugZSYaGkv99OB6rHVrZkFxytK2vP-99npBeQZPEVbFDC-IHhMAhAg4xcEiAwwxyDrWhEq0l0y7pAql8ARFwULpuXPs651CSQRCv4JSrEARkxXOFGywkmpsAOEh0haqOmNqoXWH2y11TOVVXaIHDunGCLWPIDxyocW__ta7YIojwwKezH0npf-jZEJ3taxTs6f4hY-vv2f2GPa7TFXB4LgfVPBH9aWr2m5RmpAVbtmZSLfHlQVUOTVsq-9kEQVyyKBBCpKuMfTZq-8sxqyQy0tX-y_-2Qr5MPuws-rCzt4YaTUaiQTnoJj-80_uKvlJ9EwYnK99nxwN2OH2i4aUnOsLuTXR-ZRONpluNLm11hN2zentlVuPpVuNLWx1h96wursxqMt1qcmmrI-ye1bsrszpyW23Q1qQtTjqxg_bMR7nF7oKw1JgSvxkqj5jucX3MHV9ItK77GnYPqe4-tQX2w6E3HA3C4Wk48pNH0LE3nfjDyTl1z7zhuZ88P4d86w0v_OTFOeQ7_6yCkW3i32Sn7Pzw6W8AAAD__16RXd8=
+#
+## Left join with ON filter on non-covering index
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.d < 30]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlUFvmzAUx-_7FNY7bZKnYiBp6hOXVqKqkilip40DxU-ZN2Ij20iNqnz3iTCtELUGKblwxPafn9_vWfYrKC1wXezRAv8BDCiEQCECCjFQWEBOoTa6RGu1aZd0gVS8AA8oSFU3rh3OKZTaIPBXcNJVCByy4rnCLRYCzU0AFAS6QlYnTG3kvjCHZN9UTtYVWqCwaRwnSQT5kYJu3Nt_rSt2CJwd6XT2o5bqH3oxRGeHGjl5un_IyOZ7dr8lj5t0DRSey8FunrT-09Tkt5aKaMVJ0ppJlcCXB1k5NJwkMfnZBEFUkijgnKfrjHw2cvfLESsFEq2qw5f_ZTGaLD6sLPywsreCGqWNQINiUE1-fKf2tf6q6xsWnK18nx0N2Gx6R9m1OzrC7nV0ObOOhtOthte2OsLuWb2dmdVoutXo2lZH2D2rq5lZjadbja9tdYTds3o3M6sjr9UWba2VxUk3dtDe-Sh22D0QVjemxG9GlydM97k55U4DAq3rZln3kapuqt1gP8y84XAQZufh0E8eQUfedOwPx5fse-ENL_3k5SXkW2945SevLiHf-XsVjBwT_yE7Z-fHT38DAAD__7jtXe4=
+#
+## Left join with ON filter and WHERE clause
+#query T
+#SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHERE t2.d < 30]
+#----
+#https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlUtr20AQx-_9FMuct0Srh-PsSZcEHIJdjHpqdVCkIaiVNcs-oCH4uxdZpZFMshLYBx338ddv9jfL6g1aqnBbHNCA_AECOITAIQIOMXBIIOegNJVoDOluSx_YVH9ABhzqVjnbTeccStII8g1sbRsECVnx3OAeiwr1TQAcKrRF3ZwwSteHQr-mB9fYWjVogMPOWcnSCPIjB3L2_bvGFi8IUhz5fPYj1e0_dDJGZ68KJXu6f8jY7nt2v2ePu80WODyXo2qeiH47xX5R3TJqJUs7Mw91Y1FLlibspwuCqGRRIKXcbLP_9QueJp8eIfz0CO-Vu5Z0hRqrUdn58YNDbukrqRsRnO38mB2N2GJ-68S1WzfBHrRutdTWhfP1hdfWN8Ee6Ltdqr5ovr7o2vom2AN966Xqi-fri6-tb4I90He3VH0Tv449GkWtwVmvatC9y1i9YP-IG3K6xG-ayhOmH-5OudNEhcb2q6IfbNp-qStwGBbecDgKi_Nw6CdPoCNvOvaH40vqTrzhlZ-8uoR86w2v_eT1JeQ7f6-CiWviv2Tn7Pz45W8AAAD__4bONQ0=

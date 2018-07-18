@@ -1,0 +1,359 @@
+# LogicTest: fakedist-opt local-opt
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));
+INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e));
+INSERT INTO def VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+statement ok
+CREATE TABLE gh (g INT, h INT, INDEX g_idx (g));
+INSERT INTO gh VALUES (NULL, 1)
+
+# Set up the statistics as if the first table is much smaller than the second.
+# This will make lookup join into the second table be the best plan.
+# TODO(radu): we have to use very small row counts because of the poor row
+# count estimation for joins (left-rows * right-rows / 10).
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+ALTER TABLE gh INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b
+----
+1  1  2  2     1  1
+2  1  1  2     1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b AND a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+# Filter right side of a lookup join with a restriction on an indexed column.
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = a WHERE f > 1
+----
+2  1  1  1  1  2
+2  NULL  2  1  1  2
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b AND a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+# Test lookup join with selecting a subset of the columns.
+query III rowsort
+SELECT a, b, e FROM abc JOIN def ON f = b WHERE a >= e
+----
+1  1  1
+2  1  1
+2  1  2
+
+# Test lookup join on NULL column. (https://github.com/cockroachdb/cockroach/issues/27032)
+query I
+SELECT h FROM abc JOIN gh ON b = g
+----
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c, d FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
+
+# Ensure lookup join performs properly on input that has more than 100 rows.
+query I
+SELECT count(*) FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+----
+1000
+
+statement ok
+CREATE TABLE foo (a int, b int); INSERT INTO foo VALUES (0, 1), (0, 2), (1, 1)
+
+statement ok
+CREATE TABLE bar (a int PRIMARY KEY, c int); INSERT INTO bar VALUES (0, 1), (1, 2), (2, 1)
+
+query III rowsort
+SELECT * FROM foo NATURAL JOIN bar
+----
+0  1  1
+0  2  1
+1  1  2
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition));
+INSERT INTO books VALUES
+  ('SICP', 1, 2),
+  ('Intro to Algo', 1, 1),
+  ('Intro to Algo', 2, 1),
+  ('Intro to Algo', 3, 2),
+  ('Art of Computer Programming', 1, 2),
+  ('Art of Computer Programming', 2, 2)
+
+statement ok
+CREATE TABLE books2 (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition));
+INSERT INTO books2 VALUES
+  ('SICP', 1, 2),
+  ('Intro to Algo', 1, 1),
+  ('Intro to Algo', 2, 1),
+  ('Intro to Algo', 3, 2),
+  ('Art of Computer Programming', 1, 2),
+  ('Art of Computer Programming', 2, 2)
+
+statement ok
+ALTER TABLE books INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE books2 INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+CREATE TABLE authors (name STRING, book STRING);
+INSERT INTO authors VALUES
+  ('Hal Abelson', 'SICP'),
+  ('Geral Jay Sussman', 'SICP'),
+  ('Thomas H Cormen', 'Intro to Algo'),
+  ('Charles E Leiserson', 'Intro to Algo'),
+  ('Ronald Rivest', 'Intro to Algo'),
+  ('Clifford Stein', 'Intro to Algo'),
+  ('Donald Knuth', 'Art of Computer Programming')
+
+statement ok
+ALTER TABLE authors INJECT STATISTICS '[
+  {
+    "columns": ["name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+# Filter on a column that is not returned or in the equality columns.
+query T rowsort
+SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+Intro to Algo
+
+query T rowsort
+SELECT DISTINCT authors.name FROM books AS b1, books2 as b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+Thomas H Cormen
+Charles E Leiserson
+Ronald Rivest
+Clifford Stein
+
+# Ensure lookup join preserves ordering from the left side.
+query T rowsort
+SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
+----
+Charles E Leiserson
+Charles E Leiserson
+Charles E Leiserson
+Clifford Stein
+Clifford Stein
+Clifford Stein
+Donald Knuth
+Donald Knuth
+Geral Jay Sussman
+Hal Abelson
+Ronald Rivest
+Ronald Rivest
+Ronald Rivest
+Thomas H Cormen
+Thomas H Cormen
+Thomas H Cormen
+
+# TODO(radu): rework these tests once lookup join using non-covering index is
+# supported.
+#####################################
+##  LOOKUP JOIN ON SECONDARY INDEX  #
+#####################################
+#
+## Create a table with a secondary index which stores another column.
+#statement ok
+#CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+#
+## Split into ten parts.
+#statement ok
+#ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+#
+## Relocate the ten parts to the five nodes.
+#statement ok
+#ALTER TABLE multiples EXPERIMENTAL_RELOCATE
+#  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+#
+## Generate 10 rows.
+#statement ok
+#INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
+#  generate_series(1, 10) AS a(x)
+#
+## Lookup join on covering secondary index
+#query II rowsort
+#SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+#----
+#2   3
+#4   6
+#6   9
+#8   12
+#10  15
+#
+## Lookup join on non-covering secondary index
+## The index join should be subsumed by joinreader, which takes care of the
+## primary index lookups.
+#query II rowsort
+#SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+#----
+#2   4
+#4   8
+#6   12
+#8   16
+#10  20
+
+# TODO(radu): enable these tests.
+#############################
+##  LEFT OUTER LOOKUP JOIN  #
+#############################
+## Left join against primary index
+#query II rowsort
+#SELECT t1.b, t2.a FROM multiples t1 LEFT JOIN multiples t2 ON t1.b = t2.a
+#----
+#2 2
+#4 4
+#6 6
+#8 8
+#10 10
+#12 NULL
+#14 NULL
+#16 NULL
+#18 NULL
+#20 NULL
+#
+## Left join against covering secondary index
+#query II rowsort
+#SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
+#----
+#3   NULL
+#6   9
+#9   NULL
+#12  18
+#15  NULL
+#18  27
+#21  NULL
+#24  NULL
+#27  NULL
+#30  NULL
+#
+## Left join against non-covering secondary index
+#query II rowsort
+#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
+#----
+#3   NULL
+#6   12
+#9   NULL
+#12  24
+#15  NULL
+#18  36
+#21  NULL
+#24  NULL
+#27  NULL
+#30  NULL
+#
+## Left join with ON filter on covering index
+#query II rowsort
+#SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.c < 20
+#----
+#3   NULL
+#6   9
+#9   NULL
+#12  18
+#15  NULL
+#18  NULL
+#21  NULL
+#24  NULL
+#27  NULL
+#30  NULL
+#
+## Left join with ON filter on non-covering index
+#query II rowsort
+#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.d < 30
+#----
+#3   NULL
+#6   12
+#9   NULL
+#12  24
+#15  NULL
+#18  NULL
+#21  NULL
+#24  NULL
+#27  NULL
+#30  NULL
+#
+## Left join with ON filter and WHERE clause
+#query II rowsort
+#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHERE t2.d < 30
+#----
+#6   12
+#12  24

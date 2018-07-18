@@ -459,6 +459,60 @@ func (ef *execFactory) ConstructIndexJoin(
 	}, nil
 }
 
+// ConstructLookupJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructLookupJoin(
+	joinType sqlbase.JoinType,
+	input exec.Node,
+	table opt.Table,
+	index opt.Index,
+	keyCols []exec.ColumnOrdinal,
+	lookupCols exec.ColumnOrdinalSet,
+	onCond tree.TypedExpr,
+	reqOrder sqlbase.ColumnOrdering,
+) (exec.Node, error) {
+	tabDesc := table.(*optTable).desc
+	indexDesc := index.(*optIndex).desc
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, lookupCols.Len()),
+	}
+
+	for c, ok := lookupCols.Next(0); ok; c, ok = lookupCols.Next(c + 1) {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
+	}
+
+	tableScan := ef.planner.Scan()
+
+	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+
+	tableScan.index = indexDesc
+	tableScan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	tableScan.disableBatchLimit()
+
+	n := &lookupJoinNode{
+		input:    input.(planNode),
+		table:    tableScan,
+		joinType: joinType,
+		props: physicalProps{
+			ordering: reqOrder,
+		},
+	}
+	if onCond != nil && onCond != tree.DBoolTrue {
+		n.onCond = onCond
+	}
+	n.keyCols = make([]int, len(keyCols))
+	for i, c := range keyCols {
+		n.keyCols[i] = int(c)
+	}
+	inputCols := planColumns(input.(planNode))
+	scanCols := planColumns(tableScan)
+	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
+	n.columns = append(n.columns, inputCols...)
+	n.columns = append(n.columns, scanCols...)
+	return n, nil
+}
+
 // ConstructLimit is part of the exec.Factory interface.
 func (ef *execFactory) ConstructLimit(
 	input exec.Node, limit, offset tree.TypedExpr,
