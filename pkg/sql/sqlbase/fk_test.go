@@ -216,7 +216,6 @@ func TestTablesNeededForFKs(t *testing.T) {
 }
 
 // BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
-// TODO
 func BenchmarkMultiRowFKChecks(b *testing.B) {
 	// Throughout the course of testing there are four tables that are set up at the beginning of each sub-benchmark and
 	// torn down at the end of each sub-benchmark.
