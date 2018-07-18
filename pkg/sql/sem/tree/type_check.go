@@ -2035,7 +2035,7 @@ func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 		}
 	}
 
-	WalkStmt(&v, stmt)
+	walkStmt(&v, stmt)
 	for placeholder, state := range v.placeholders {
 		if state.shouldAnnotate {
 			p[placeholder] = state.typ
