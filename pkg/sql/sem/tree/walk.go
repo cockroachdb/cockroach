@@ -208,25 +208,92 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
-	if expr.WindowDef != nil {
-		windowDefCopy := *expr.WindowDef
-		exprCopy.WindowDef = &windowDefCopy
-	}
 	exprCopy.Exprs = append(Exprs(nil), exprCopy.Exprs...)
-	if windowDef := exprCopy.WindowDef; windowDef != nil {
-		windowDef.Partitions = append(Exprs(nil), windowDef.Partitions...)
-		if len(windowDef.OrderBy) > 0 {
-			newOrderBy := make(OrderBy, len(windowDef.OrderBy))
-			for i, o := range windowDef.OrderBy {
-				newOrderBy[i] = &Order{OrderType: o.OrderType, Expr: o.Expr, Direction: o.Direction}
+	return &exprCopy
+}
+
+// Copy returns a deep copy of wf.
+func (node *WindowFrame) CopyNode() *WindowFrame {
+	ret := *node
+	return &ret
+}
+
+func walkWindowFrame(v Visitor, frame *WindowFrame) (*WindowFrame, bool) {
+	ret := frame
+	if frame.Bounds.StartBound != nil {
+		b, changed := walkWindowFrameBound(v, frame.Bounds.StartBound)
+		if changed {
+			if ret == frame {
+				ret = frame.CopyNode()
 			}
-			windowDef.OrderBy = newOrderBy
-		}
-		if windowDef.Frame != nil {
-			windowDef.Frame = windowDef.Frame.Copy()
+			ret.Bounds.StartBound = b
 		}
 	}
-	return &exprCopy
+	if frame.Bounds.EndBound != nil {
+		b, changed := walkWindowFrameBound(v, frame.Bounds.EndBound)
+		if changed {
+			if ret == frame {
+				ret = frame.CopyNode()
+			}
+			ret.Bounds.EndBound = b
+		}
+	}
+	return ret, ret != frame
+}
+
+func (node *WindowFrameBound) CopyNode() *WindowFrameBound {
+	ret := *node
+	return &ret
+}
+
+func walkWindowFrameBound(v Visitor, bound *WindowFrameBound) (*WindowFrameBound, bool) {
+	ret := bound
+	e, changed := WalkExpr(v, bound.OffsetExpr)
+	if changed {
+		if ret == bound {
+			ret = bound.CopyNode()
+		}
+		ret.OffsetExpr = e
+	}
+	return ret, ret != bound
+}
+
+func (node *WindowDef) CopyNode() *WindowDef {
+	wfCopy := *node
+	return &wfCopy
+}
+
+func walkWindowDef(v Visitor, windowDef *WindowDef) (*WindowDef, bool) {
+	ret := windowDef
+	if windowDef.Partitions != nil {
+		exprs, changed := walkExprSlice(v, windowDef.Partitions)
+		if changed {
+			if ret == windowDef {
+				ret = windowDef.CopyNode()
+			}
+			windowDef.Partitions = exprs
+		}
+	}
+	if windowDef.OrderBy != nil {
+		order, changed := walkOrderBy(v, windowDef.OrderBy)
+		if changed {
+			if ret == windowDef {
+				ret = windowDef.CopyNode()
+			}
+			windowDef.OrderBy = order
+		}
+	}
+	if windowDef.Frame != nil {
+		frame, changed := walkWindowFrame(v, windowDef.Frame)
+		if changed {
+			if ret == windowDef {
+				ret = windowDef.CopyNode()
+			}
+			windowDef.Frame = frame
+		}
+	}
+
+	return windowDef, windowDef != ret
 }
 
 // Walk implements the Expr interface.
@@ -242,49 +309,13 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 		}
 	}
 	if expr.WindowDef != nil {
-		for i := range expr.WindowDef.Partitions {
-			e, changed := WalkExpr(v, expr.WindowDef.Partitions[i])
-			if changed {
-				if ret == expr {
-					ret = expr.CopyNode()
-				}
-				ret.WindowDef.Partitions[i] = e
+		windowDef, changed := walkWindowDef(v, expr.WindowDef)
+		if changed {
+			if ret == expr {
+				ret = expr.CopyNode()
 			}
+			ret.WindowDef = windowDef
 		}
-		for i := range expr.WindowDef.OrderBy {
-			if expr.WindowDef.OrderBy[i].OrderType != OrderByColumn {
-				continue
-			}
-			e, changed := WalkExpr(v, expr.WindowDef.OrderBy[i].Expr)
-			if changed {
-				if ret == expr {
-					ret = expr.CopyNode()
-				}
-				ret.WindowDef.OrderBy[i].Expr = e
-			}
-		}
-		if expr.WindowDef.Frame != nil {
-			startBound, endBound := expr.WindowDef.Frame.Bounds.StartBound, expr.WindowDef.Frame.Bounds.EndBound
-			if startBound.OffsetExpr != nil {
-				e, changed := WalkExpr(v, startBound.OffsetExpr)
-				if changed {
-					if ret == expr {
-						ret = expr.CopyNode()
-					}
-					ret.WindowDef.Frame.Bounds.StartBound.OffsetExpr = e
-				}
-			}
-			if endBound != nil && endBound.OffsetExpr != nil {
-				e, changed := WalkExpr(v, endBound.OffsetExpr)
-				if changed {
-					if ret == expr {
-						ret = expr.CopyNode()
-					}
-					ret.WindowDef.Frame.Bounds.EndBound.OffsetExpr = e
-				}
-			}
-		}
-
 	}
 	if expr.Filter != nil {
 		e, changed := WalkExpr(v, expr.Filter)
@@ -1067,6 +1098,7 @@ func (stmt *SelectClause) CopyNode() *SelectClause {
 		hCopy := *stmt.Having
 		stmtCopy.Having = &hCopy
 	}
+	stmt.Window = append(Window(nil), stmt.Window...)
 	return &stmtCopy
 }
 
@@ -1125,25 +1157,15 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 	}
 
 	for i, windowDef := range stmt.Window {
-		if windowDef.Partitions != nil {
-			exprs, changed := walkExprSlice(v, windowDef.Partitions)
-			if changed {
-				if ret == stmt {
-					ret = stmt.CopyNode()
-				}
-				ret.Window[i].Partitions = exprs
+		w, changed := walkWindowDef(v, windowDef)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
 			}
-		}
-		if windowDef.OrderBy != nil {
-			order, changed := walkOrderBy(v, windowDef.OrderBy)
-			if changed {
-				if ret == stmt {
-					ret = stmt.CopyNode()
-				}
-				ret.Window[i].OrderBy = order
-			}
+			ret.Window[i] = w
 		}
 	}
+
 	return ret
 }
 
