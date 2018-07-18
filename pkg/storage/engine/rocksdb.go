@@ -991,6 +991,7 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	}
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
 		// Iterators that specify timestamp bounds cannot be cached.
+		fmt.Printf("%p: NewIterator(): time-bound\n", r)
 		return newRocksDBIterator(r.parent.rdb, opts, r, r.parent)
 	}
 	iter := &r.normalIter
@@ -998,8 +999,10 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
+		fmt.Printf("%p: NewIterator(prefix=%t): create\n", r, opts.Prefix)
 		iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
 	} else {
+		fmt.Printf("%p: NewIterator(prefix=%t): reuse\n", r, opts.Prefix)
 		iter.rocksDBIterator.setOptions(opts)
 	}
 	if iter.inuse {

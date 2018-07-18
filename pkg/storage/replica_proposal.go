@@ -175,25 +175,31 @@ func (r *Replica) computeChecksumPostApply(
 	r.mu.checksums[id] = ReplicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
-	// Caller is holding raftMu, so an engine snapshot is automatically
-	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.engine.NewSnapshot()
+	// Caller is holding raftMu, so an iterator is automatically Raft-consistent
+	// (i.e. not in the middle of an AddSSTable).
+	readonly := r.store.engine.NewReadOnly()
+	// This is somewhat hacky: because we're using the readonly engine from a
+	// different goroutine we want to ensure that the iterator is created while
+	// we're still holding raftMu, so we force the creation here. Note that the
+	// readonly engine caches the iterator.
+	iter := readonly.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
+	iter.Close()
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
-		defer snap.Close()
+		defer readonly.Close()
 		var snapshot *roachpb.RaftSnapshotData
 		if args.Snapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
 		}
-		result, err := r.sha512(ctx, desc, snap, snapshot)
+		result, err := r.sha512(ctx, desc, readonly, snapshot)
 		if err != nil {
 			log.Errorf(ctx, "%v", err)
 			result = nil
 		}
 		r.computeChecksumDone(ctx, id, result, snapshot)
 	}); err != nil {
-		defer snap.Close()
+		defer readonly.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, id, nil, nil)

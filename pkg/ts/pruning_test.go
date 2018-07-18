@@ -276,9 +276,9 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 	} {
-		snap := e.NewSnapshot()
-		actual, err := tm.DB.findTimeSeries(snap, tcase.start, tcase.end, tcase.timestamp)
-		snap.Close()
+		readonly := e.NewReadOnly()
+		actual, err := tm.DB.findTimeSeries(readonly, tcase.start, tcase.end, tcase.timestamp)
+		readonly.Close()
 		if err != nil {
 			t.Fatalf("case %d: unexpected error %q", i, err)
 		}

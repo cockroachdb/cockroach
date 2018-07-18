@@ -681,18 +681,18 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	midKey := writeRandomDataToRange(t, store, repl.RangeID, keyPrefix)
 
 	// Get the range stats now that we have data.
-	snap := store.Engine().NewSnapshot()
-	defer snap.Close()
-	ms, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	readonly := store.Engine().NewReadOnly()
+	ms, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyRecomputedStats(snap, repl.Desc(), ms, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(readonly, repl.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
 	if inMemMS := repl.GetMVCCStats(); inMemMS != ms {
 		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
 	}
+	readonly.Close()
 
 	manual.Increment(100)
 
@@ -704,14 +704,14 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	snap = store.Engine().NewSnapshot()
-	defer snap.Close()
-	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	readonly = store.Engine().NewReadOnly()
+	defer readonly.Close()
+	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey, nil)
-	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,10 +743,10 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, now); err != nil {
+	if err := verifyRecomputedStats(readonly, repl.Desc(), msLeft, now); err != nil {
 		t.Fatalf("failed to verify left range's stats after split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, now); err != nil {
+	if err := verifyRecomputedStats(readonly, replRight.Desc(), msRight, now); err != nil {
 		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }
@@ -888,14 +888,14 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	snap := store.Engine().NewSnapshot()
-	defer snap.Close()
-	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	readonly := store.Engine().NewReadOnly()
+	defer readonly.Close()
+	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey, nil)
-	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -910,10 +910,10 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, now); err != nil {
+	if err := verifyRecomputedStats(readonly, repl.Desc(), msLeft, now); err != nil {
 		t.Fatalf("failed to verify left range's stats after split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, now); err != nil {
+	if err := verifyRecomputedStats(readonly, replRight.Desc(), msRight, now); err != nil {
 		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }

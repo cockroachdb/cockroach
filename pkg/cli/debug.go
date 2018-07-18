@@ -685,12 +685,10 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, desc := range descs {
-		snap := db.NewSnapshot()
-		defer snap.Close()
 		info, err := storage.RunGC(
 			context.Background(),
 			&desc,
-			snap,
+			db,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
 			storage.NoopGCer{},

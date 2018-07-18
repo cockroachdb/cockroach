@@ -222,6 +222,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	rangeID := header.State.Desc.RangeID
 
+	// NB: close the replica data iterator before iterating over the entries in
+	// case snap.EngineSnap is caching iterators.
+	snap.Iter.Close()
+	snap.Iter = nil
+
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}

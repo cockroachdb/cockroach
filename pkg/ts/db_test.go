@@ -411,11 +411,11 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 // maintain calls the same operation called by the TS maintenance queue,
 // simulating the effects in the model at the same time.
 func (tm *testModelRunner) maintain(nowNanos int64) {
-	snap := tm.Store.Engine().NewSnapshot()
-	defer snap.Close()
+	readonly := tm.Store.Engine().NewReadOnly()
+	defer readonly.Close()
 	if err := tm.DB.MaintainTimeSeries(
 		context.TODO(),
-		snap,
+		readonly,
 		roachpb.RKey(keys.TimeseriesPrefix),
 		roachpb.RKey(keys.TimeseriesKeyMax),
 		tm.LocalTestCluster.DB,

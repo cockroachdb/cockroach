@@ -538,22 +538,22 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.Engine().NewSnapshot()
-	defer snap.Close()
-	msA, err := stateloader.Make(nil /* st */, lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	readonly := store.Engine().NewReadOnly()
+	defer readonly.Close()
+	msA, err := stateloader.Make(nil /* st */, lhsDesc.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	msB, err := stateloader.Make(nil /* st */, rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	msB, err := stateloader.Make(nil /* st */, rhsDesc.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, lhsDesc, msA, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(readonly, lhsDesc, msA, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range A's stats before split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, rhsDesc, msB, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(readonly, rhsDesc, msB, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range B's stats before split: %v", err)
 	}
 
@@ -567,15 +567,15 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey, nil)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.Engine().NewSnapshot()
-	defer snap.Close()
-	msMerged, err := stateloader.Make(nil /* st */, replMerged.RangeID).LoadMVCCStats(ctx, snap)
+	readonly = store.Engine().NewReadOnly()
+	defer readonly.Close()
+	msMerged, err := stateloader.Make(nil /* st */, replMerged.RangeID).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(readonly, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
