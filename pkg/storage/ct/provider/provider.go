@@ -153,7 +153,7 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	sub := &subscriber{ch, nil}
 	p.mu.Lock()
 	for i = range p.mu.subscribers {
-		if p.mu.subscribers == nil {
+		if p.mu.subscribers[i] == nil {
 			p.mu.subscribers[i] = sub
 		}
 	}
@@ -216,14 +216,18 @@ func (p *Provider) CanServe(
 	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
 ) bool {
 	var ok bool
-	// TODO(tschottdorf): add and use VisitDescending.
-	p.cfg.Storage.VisitAscending(nodeID, func(entry ctpb.Entry) bool {
+	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) bool {
 		mlai, found := entry.MLAI[rangeID]
+		ctOK := !entry.ClosedTimestamp.Less(ts)
+
 		ok = found &&
+			ctOK &&
 			mlai <= lai &&
-			entry.Epoch == epoch &&
-			!entry.ClosedTimestamp.Less(ts)
-		return ok // done when ok == true
+			entry.Epoch == epoch
+
+		// We're done either if we proved that the read is possible, or if we're
+		// already done looking at closed timestamps large enough to satisfy it.
+		return ok || !ctOK
 	})
 	return ok
 }

@@ -53,7 +53,7 @@ type Container struct {
 	Storage  ct.Storage
 	Provider ct.Provider
 	Server   ctpb.ClosedTimestampServer
-	Peers    ct.PeerRegistry
+	Clients  ct.ClientRegistry
 }
 
 // NewContainer initializes a Container from the given Config. The Container
@@ -93,7 +93,7 @@ func NewContainer(cfg Config) *Container {
 		Provider: provider,
 		Tracker:  tracker,
 		Server:   server,
-		Peers:    cttransport.NewClients(rConf),
+		Clients:  cttransport.NewClients(rConf),
 	}
 }
 

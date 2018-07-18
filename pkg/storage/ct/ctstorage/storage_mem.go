@@ -142,6 +142,17 @@ func (m *memStorage) VisitAscending(f func(ctpb.Entry) (done bool)) {
 	}
 }
 
+func (m *memStorage) VisitDescending(f func(ctpb.Entry) (done bool)) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for l, i := len(m.mu.buckets), 0; i < l; i++ {
+		if f(m.mu.buckets[i]) {
+			return
+		}
+	}
+}
+
 func merge(e, ee ctpb.Entry) ctpb.Entry {
 	// TODO(tschottdorf): if either of these hit, check that what we're
 	// returning has Full set. If we make it past, check that either of
