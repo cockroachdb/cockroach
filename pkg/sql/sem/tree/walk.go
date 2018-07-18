@@ -878,7 +878,9 @@ func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
 				order = append(OrderBy(nil), order...)
 				copied = true
 			}
-			order[i].Expr = e
+			orderByCopy := *order[i]
+			orderByCopy.Expr = e
+			order[i] = &orderByCopy
 		}
 	}
 	return order, copied
@@ -949,6 +951,7 @@ func (stmt *SelectClause) CopyNode() *SelectClause {
 		hCopy := *stmt.Having
 		stmtCopy.Having = &hCopy
 	}
+	stmtCopy.Window = append(Window(nil), stmt.Window...)
 	return &stmtCopy
 }
 
