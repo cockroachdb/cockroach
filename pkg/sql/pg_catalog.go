@@ -911,6 +911,26 @@ CREATE TABLE pg_catalog.pg_foreign_table (
 	},
 }
 
+func makeZeroedOidVector(size int) (tree.Datum, error) {
+	oidVector := tree.NewDArray(types.Oid)
+	for i := 0; i < size; i++ {
+		if err := oidVector.Append(oidZero); err != nil {
+			return nil, err
+		}
+	}
+	return oidVector, nil
+}
+
+func makeZeroedIntArray(size int) (tree.Datum, error) {
+	intArray := tree.NewDArray(types.Int)
+	for i := 0; i < size; i++ {
+		if err := intArray.Append(zeroVal); err != nil {
+			return nil, err
+		}
+	}
+	return intArray, nil
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
 var pgCatalogIndexTable = virtualSchemaTable{
 	schema: `
@@ -929,9 +949,9 @@ CREATE TABLE pg_catalog.pg_index (
     indislive BOOL,
     indisreplident BOOL,
     indkey INT2VECTOR,
-    indcollation INT,
-    indclass INT,
-    indoption INT,
+    indcollation OIDVECTOR,
+    indclass OIDVECTOR,
+    indoption INT2VECTOR,
     indexprs STRING,
     indpred STRING
 );
@@ -946,6 +966,28 @@ CREATE TABLE pg_catalog.pg_index (
 						table.GetIndexMutationCapabilities(index.ID)
 					isReady := isMutation && isWriteOnly
 					indkey, err := colIDArrayToVector(index.ColumnIDs)
+					if err != nil {
+						return err
+					}
+					// Get the collations for all of the columns. To do this we require
+					// the type of the column.
+					collationOids := tree.NewDArray(types.Oid)
+					for _, columnID := range index.ColumnIDs {
+						col, err := table.FindColumnByID(columnID)
+						if err != nil {
+							return err
+						}
+						if err := collationOids.Append(typColl(col.Type.ToDatumType(), h)); err != nil {
+							return err
+						}
+					}
+					// TODO(bram): #27763 indclass still needs to be populated but it
+					// requires pg_catalog.pg_opclass first.
+					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
+					if err != nil {
+						return err
+					}
+					indoption, err := makeZeroedIntArray(len(index.ColumnIDs))
 					if err != nil {
 						return err
 					}
@@ -964,9 +1006,9 @@ CREATE TABLE pg_catalog.pg_index (
 						tree.DBoolTrue,                           // indislive
 						tree.DBoolFalse,                          // indisreplident
 						indkey,                                   // indkey
-						zeroVal,                                  // indcollation
-						zeroVal,                                  // indclass
-						zeroVal,                                  // indoption
+						collationOids,                            // indcollation
+						indclass,                                 // indclass
+						indoption,                                // indoption
 						tree.DNull,                               // indexprs
 						tree.DNull,                               // indpred
 					)
