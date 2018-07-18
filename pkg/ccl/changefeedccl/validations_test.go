@@ -90,7 +90,7 @@ func TestValidations(t *testing.T) {
 			if err := rows.Scan(&topic, &key, &value); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
-			updated, resolved, err := parseMetaTimestamps(value)
+			updated, resolved, err := ParseJSONValueTimestamps(value)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -102,6 +102,20 @@ type ScanOpDef struct {
 	HardLimit int64
 }
 
+// VirtualScanOpDef defines the value of the Def private field of the
+// VirtualScan operator.
+type VirtualScanOpDef struct {
+	// Table identifies the virtual table to synthesize and scan. It is an id
+	// that can be passed to the Metadata.Table method in order to fetch
+	// opt.Table metadata.
+	Table opt.TableID
+
+	// Cols specifies the set of columns that the VirtualScan operator projects.
+	// This is always every column in the virtual table (i.e. never a subset even
+	// if all columns are not needed).
+	Cols opt.ColSet
+}
+
 // CanProvideOrdering returns true if the scan operator returns rows that
 // satisfy the given required ordering.
 func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.OrderingChoice) bool {

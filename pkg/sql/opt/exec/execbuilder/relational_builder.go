@@ -91,6 +91,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ScanOp:
 		ep, err = b.buildScan(ev)
 
+	case opt.VirtualScanOp:
+		ep, err = b.buildVirtualScan(ev)
+
 	case opt.SelectOp:
 		ep, err = b.buildSelect(ev)
 
@@ -259,6 +262,22 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		def.Reverse,
 		reqOrder,
 	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	res.root = root
+	return res, nil
+}
+
+func (b *Builder) buildVirtualScan(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.VirtualScanOpDef)
+	md := ev.Metadata()
+	tab := md.Table(def.Table)
+
+	_, output := b.getColumns(md, def.Cols, def.Table)
+	res := execPlan{outputCols: output}
+
+	root, err := b.factory.ConstructVirtualScan(tab)
 	if err != nil {
 		return execPlan{}, err
 	}

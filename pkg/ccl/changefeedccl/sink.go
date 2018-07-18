@@ -11,42 +11,57 @@ package changefeedccl
 import (
 	"context"
 	"strings"
-
-	"github.com/dustin/go-humanize"
+	"sync"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
-// SinkRow is a row to be emitting to a changefeed sink.
-type SinkRow struct {
-	Topic      string
-	Key, Value []byte
-}
-
-// Sink is an abstration for anything that a changefeed may emit into.
+// Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	EmitRows(ctx context.Context, rows []SinkRow) error
+	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
+	// error may be returned if a previously enqueued message has failed.
+	EmitRow(ctx context.Context, topic string, key, value []byte) error
+	// EmitResolvedTimestamp enqueues a resolved timestamp message for
+	// asynchronous delivery on every partition of every topic that has been
+	// seen by EmitRow. The list of partitions used may be stale. An error may
+	// be returned if a previously enqueued message has failed.
 	EmitResolvedTimestamp(ctx context.Context, payload []byte) error
+	// Flush blocks until every message enqueued by EmitRow and
+	// EmitResolvedTimestamp has been acknowledged by the sink. If an error is
+	// returned, no guarantees are given about which messages have been
+	// delivered or not delivered.
+	Flush(ctx context.Context) error
+	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }
 
+// kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
+// calls to Emit and Flush should be from the same goroutine.
 type kafkaSink struct {
 	// TODO(dan): This uses the shopify kafka producer library because the
 	// official confluent one depends on librdkafka and it didn't seem worth it
 	// to add a new c dep for the prototype. Revisit before 2.1 and check
 	// stability, performance, etc.
-	sarama.SyncProducer
-	client sarama.Client
-
 	kafkaTopicPrefix string
+	client           sarama.Client
+	producer         sarama.AsyncProducer
 	topicsSeen       map[string]struct{}
 
-	rowsEmitted  uint64
-	bytesEmitted uint64
+	stopWorkerCh chan struct{}
+	worker       sync.WaitGroup
+
+	// Only synchronized between the client goroutine and the worker goroutine.
+	mu struct {
+		syncutil.Mutex
+		inflight int64
+		flushErr error
+		flushCh  chan struct{}
+	}
 }
 
 func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error) {
@@ -64,62 +79,59 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 	if err != nil {
 		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
 	}
-	sink.SyncProducer, err = sarama.NewSyncProducerFromClient(sink.client)
+	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
 		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
 	}
+
+	sink.start()
 	return sink, nil
 }
 
-func (s *kafkaSink) Close() error {
-	err := s.SyncProducer.Close()
-	if s.client != nil {
-		if e := s.client.Close(); err == nil {
-			err = e
-		}
-	}
-	return err
+func (s *kafkaSink) start() {
+	s.stopWorkerCh = make(chan struct{})
+	s.worker.Add(1)
+	go s.workerLoop()
 }
 
-func (s *kafkaSink) EmitRows(ctx context.Context, rows []SinkRow) error {
-	// TODO(dan): Figure out if it's safe to reuse these after SendMessages
-	// returns and save them across calls to EmitRows.
-	m := make([]sarama.ProducerMessage, len(rows))
-	messages := make([]*sarama.ProducerMessage, len(rows))
+// Close implements the Sink interface.
+func (s *kafkaSink) Close() error {
+	close(s.stopWorkerCh)
+	s.worker.Wait()
 
-	var bytes uint64
-	for i, row := range rows {
-		topic := s.kafkaTopicPrefix + row.Topic
-		if _, ok := s.topicsSeen[topic]; !ok {
-			s.topicsSeen[topic] = struct{}{}
-		}
-		m[i] = sarama.ProducerMessage{
-			Topic: topic,
-			Key:   sarama.ByteEncoder(row.Key),
-			Value: sarama.ByteEncoder(row.Value),
-		}
-		messages[i] = &m[i]
-		bytes += uint64(len(row.Key) + len(row.Value))
+	s.producer.AsyncClose()
+	// Empty out the success and errors channels as required by AsyncClose.
+	for range s.producer.Errors() {
 	}
-	if err := s.SendMessages(messages); err != nil {
-		return errors.Wrapf(err, `sending %d messages to kafka`, len(rows))
+	for range s.producer.Successes() {
 	}
 
-	s.rowsEmitted += uint64(len(rows))
-	s.bytesEmitted += bytes
-	if log.V(1) {
-		log.Infof(ctx, "emitted %d records (%s) to kafka. total %d records (%s)",
-			len(rows), humanize.IBytes(bytes), s.rowsEmitted, humanize.IBytes(s.bytesEmitted))
+	// s.client is only nil in tests.
+	if s.client != nil {
+		return s.client.Close()
 	}
-
 	return nil
 }
 
+// EmitRow implements the Sink interface.
+func (s *kafkaSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+	topic = s.kafkaTopicPrefix + topic
+	if _, ok := s.topicsSeen[topic]; !ok {
+		s.topicsSeen[topic] = struct{}{}
+	}
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Key:   sarama.ByteEncoder(key),
+		Value: sarama.ByteEncoder(value),
+	}
+	return s.emitMessage(ctx, msg)
+}
+
+// EmitResolvedTimestamp implements the Sink interface.
 func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
 	// Staleness here does not impact correctness. Some new partitions will miss
 	// this resolved timestamp, but they'll eventually be picked up and get
 	// later ones.
-	messages := make([]*sarama.ProducerMessage, 0, len(s.topicsSeen))
 	for topic := range s.topicsSeen {
 		// TODO(dan): Figure out how expensive this is to call. Maybe we need to
 		// cache it and rate limit?
@@ -128,15 +140,95 @@ func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) e
 			return err
 		}
 		for _, partition := range partitions {
-			messages = append(messages, &sarama.ProducerMessage{
+			msg := &sarama.ProducerMessage{
 				Topic:     topic,
 				Partition: partition,
 				Key:       nil,
 				Value:     sarama.ByteEncoder(payload),
-			})
+			}
+			if err := s.emitMessage(ctx, msg); err != nil {
+				return err
+			}
 		}
 	}
-	return s.SendMessages(messages)
+	return nil
+}
+
+// Flush implements the Sink interface.
+func (s *kafkaSink) Flush(ctx context.Context) error {
+	flushCh := make(chan struct{}, 1)
+
+	s.mu.Lock()
+	inflight := s.mu.inflight
+	flushErr := s.mu.flushErr
+	s.mu.flushErr = nil
+	immediateFlush := inflight == 0 || flushErr != nil
+	if !immediateFlush {
+		s.mu.flushCh = flushCh
+	}
+	s.mu.Unlock()
+
+	if immediateFlush {
+		return flushErr
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "flush waiting for %d inflight messages", inflight)
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-flushCh:
+		s.mu.Lock()
+		flushErr := s.mu.flushErr
+		s.mu.flushErr = nil
+		s.mu.Unlock()
+		return flushErr
+	}
+}
+
+func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+	s.mu.Lock()
+	s.mu.inflight++
+	inflight := s.mu.inflight
+	s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.producer.Input() <- msg:
+	}
+
+	if log.V(2) {
+		log.Infof(ctx, "emitted %d inflight records to kafka", inflight)
+	}
+	return nil
+}
+
+func (s *kafkaSink) workerLoop() {
+	defer s.worker.Done()
+
+	for {
+		select {
+		case <-s.stopWorkerCh:
+			return
+		case <-s.producer.Successes():
+		case err := <-s.producer.Errors():
+			s.mu.Lock()
+			if s.mu.flushErr == nil {
+				s.mu.flushErr = err
+			}
+			s.mu.Unlock()
+		}
+
+		s.mu.Lock()
+		s.mu.inflight--
+		if s.mu.inflight == 0 && s.mu.flushCh != nil {
+			s.mu.flushCh <- struct{}{}
+			s.mu.flushCh = nil
+		}
+		s.mu.Unlock()
+	}
 }
 
 type changefeedPartitioner struct {
@@ -167,19 +259,16 @@ type channelSink struct {
 	alloc     sqlbase.DatumAlloc
 }
 
-func (s *channelSink) EmitRows(ctx context.Context, rows []SinkRow) error {
-	for _, row := range rows {
-		if err := s.emitDatums(ctx, tree.Datums{
-			s.alloc.NewDString(tree.DString(row.Topic)),
-			s.alloc.NewDBytes(tree.DBytes(row.Key)),
-			s.alloc.NewDBytes(tree.DBytes(row.Value)),
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+// EmitRow implements the Sink interface.
+func (s *channelSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+	return s.emitDatums(ctx, tree.Datums{
+		s.alloc.NewDString(tree.DString(topic)),
+		s.alloc.NewDBytes(tree.DBytes(key)),
+		s.alloc.NewDBytes(tree.DBytes(value)),
+	})
 }
 
+// EmitResolvedTimestamp implements the Sink interface.
 func (s *channelSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
 	return s.emitDatums(ctx, tree.Datums{
 		tree.DNull,
@@ -197,6 +286,12 @@ func (s *channelSink) emitDatums(ctx context.Context, row tree.Datums) error {
 	}
 }
 
+// Flush implements the Sink interface.
+func (s *channelSink) Flush(_ context.Context) error {
+	return nil
+}
+
+// Close implements the Sink interface.
 func (s *channelSink) Close() error {
 	// nil the channel so any later calls to EmitRow (there shouldn't be any)
 	// don't work.

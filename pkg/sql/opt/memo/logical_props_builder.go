@@ -53,6 +53,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.ScanOp:
 		return b.buildScanProps(ev)
 
+	case opt.VirtualScanOp:
+		return b.buildVirtualScanProps(ev)
+
 	case opt.SelectOp:
 		return b.buildSelectProps(ev)
 
@@ -153,6 +156,42 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// ----------
 	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
 	b.sb.buildScan(def)
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
+
+	def := ev.Private().(*VirtualScanOpDef)
+
+	// Output Columns
+	// --------------
+	// VirtualScan output columns are stored in the definition.
+	relational.OutputCols = def.Cols
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// VirtualScan operator never has outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	// VirtualScan operator has an empty FD set.
+
+	// Cardinality
+	// -----------
+	// Don't make any assumptions about cardinality of output.
+	relational.Cardinality = props.AnyCardinality
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
+	b.sb.buildVirtualScan(def)
 
 	return logical
 }
