@@ -116,7 +116,7 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
-	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 	table, err := t.find(ctx, timestamp, m)

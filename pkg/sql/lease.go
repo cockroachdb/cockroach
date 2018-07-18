@@ -675,21 +675,18 @@ func (t *tableState) find(
 // check if the latest known version meets the criterion, or attempt to
 // acquire a lease at the latest version with the hope that it meets
 // the criterion.
-func (t *tableState) ensureVersion(
-	ctx context.Context, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
+func ensureVersion(
+	ctx context.Context, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if s := t.mu.active.findNewest(); s != nil && minVersion <= s.Version {
+	if s := m.findNewest(tableID); s != nil && minVersion <= s.Version {
 		return nil
 	}
 
-	if err := t.acquireFreshestFromStoreLocked(ctx, m); err != nil {
+	if err := m.acquireFreshestFromStore(ctx, tableID); err != nil {
 		return err
 	}
 
-	if s := t.mu.active.findNewest(); s != nil && s.Version < minVersion {
+	if s := m.findNewest(tableID); s != nil && s.Version < minVersion {
 		return errors.Errorf("version %d for table %s does not exist yet", minVersion, s.Name)
 	}
 	return nil
@@ -771,15 +768,8 @@ func (t *tableState) findForTimestamp(
 // acquireFreshestFromStoreLocked acquires a new lease from the store and
 // inserts it into the active set. It guarantees that the lease returned is
 // the one acquired after the call is made. Use this if the lease we want to
-// get needs to see some descriptor updates that we know happened recently
-// (but that didn't cause the version to be incremented). E.g. if we suspect
-// there's a new name for a table, the caller can insist on getting a lease
-// reflecting this new name. Moreover, upon returning, the new lease is
-// guaranteed to be the last lease in t.mu.active (note that this is not
-// generally guaranteed, as leases are assigned random expiration times).
-//
-// t.mu must be locked.
-func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *LeaseManager) error {
+// get needs to see some descriptor updates that we know happened recently.
+func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
 	// We need to acquire a lease on a "fresh" descriptor, meaning that joining
 	// a potential in-progress lease acquisition is generally not good enough.
 	// If we are to join an in-progress acquisition, it needs to be an acquisition
@@ -797,20 +787,19 @@ func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *Leas
 	attemptsMade := 0
 	for {
 		// Acquire a fresh table lease.
-		t.mu.Unlock()
-		l, didAcquire, err := acquireNodeLease(ctx, m, t.id)
-		t.mu.Lock()
+		_, didAcquire, err := acquireNodeLease(ctx, m, tableID)
 		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
 			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireFreshestBlock)
 		}
 		if err != nil {
 			return err
 		}
-		if didAcquire && t.mu.active.isNewest(l) {
+
+		if didAcquire {
 			// Case 1: we didn't join an in-progress call and the lease is still
 			// valid.
 			break
-		} else if attemptsMade > 1 && t.mu.active.isNewest(l) {
+		} else if attemptsMade > 1 {
 			// Case 2: more than one acquisition has happened and the lease is still
 			// valid.
 			break
@@ -1017,7 +1006,7 @@ func purgeOldVersions(
 		return nil
 	}
 
-	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
+	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
 		return err
 	}
 
@@ -1091,7 +1080,7 @@ const (
 	// coming from tableState.acquire().
 	LeaseAcquireBlock LeaseAcquireBlockType = iota
 	// LeaseAcquireFreshestBlock denotes the LeaseAcquireResultBlockEvent is
-	// from tableState.acquireFreshestFromStoreLocked().
+	// from tableState.acquireFreshestFromStore().
 	LeaseAcquireFreshestBlock
 )
 
@@ -1103,7 +1092,7 @@ type LeaseStoreTestingKnobs struct {
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
 	// Called before waiting on a results from a DoChan call of acquireNodeLease
-	// in tableState.acquire() and tableState.acquireFreshestFromStoreLocked().
+	// in tableState.acquire() and tableState.acquireFreshestFromStore().
 	LeaseAcquireResultBlockEvent func(leaseBlockType LeaseAcquireBlockType)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
@@ -1305,6 +1294,14 @@ func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName
 	return table.ParentID == dbID && table.Name == tableName
 }
 
+// findNewest returns the newest table version state for the tableID.
+func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
+	t := m.findTableState(tableID, false /* create */)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.active.findNewest()
+}
+
 // AcquireByName returns a table version for the specified table valid for
 // the timestamp. It returns the table descriptor and a expiration time.
 // A transaction using this descriptor must ensure that its
@@ -1467,17 +1464,6 @@ func (m *LeaseManager) Acquire(
 		}
 	}
 	return &table.TableDescriptor, table.expiration, nil
-}
-
-// acquireFreshestFromStore acquires a new lease from the store. The lease
-// is guaranteed to have a version of the descriptor at least as recent as
-// the time of the call (i.e. if we were in the process of acquiring a lease
-// already, that lease is not good enough).
-func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
-	t := m.findTableState(tableID, true)
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.acquireFreshestFromStoreLocked(ctx, m)
 }
 
 // Release releases a previously acquired table.
