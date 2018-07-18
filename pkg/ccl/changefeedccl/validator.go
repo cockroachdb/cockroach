@@ -183,7 +183,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		return v.buffer[i].updated.Less(v.buffer[j].updated)
 	})
 
-	// var lastUpdated hlc.Timestamp
+	var lastUpdated hlc.Timestamp
 	for len(v.buffer) > 0 {
 		if v.resolved.Less(v.buffer[0].updated) {
 			break
@@ -191,19 +191,17 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		row := v.buffer[0]
 		v.buffer = v.buffer[1:]
 
-		// TODO(dan): The following should be enabled (and the tests
-		// unskipped once #27101 is fixed.
-		// if row.updated != lastUpdated {
-		// 	if lastUpdated != (hlc.Timestamp{}) {
-		// 		if err := v.fingerprint(lastUpdated); err != nil {
-		// 			return err
-		// 		}
-		// 	}
-		// 	if err := v.fingerprint(row.updated.Prev()); err != nil {
-		// 		return err
-		// 	}
-		// }
-		// lastUpdated = row.updated
+		if row.updated != lastUpdated {
+			if lastUpdated != (hlc.Timestamp{}) {
+				if err := v.fingerprint(lastUpdated); err != nil {
+					return err
+				}
+			}
+			if err := v.fingerprint(row.updated.Prev()); err != nil {
+				return err
+			}
+		}
+		lastUpdated = row.updated
 
 		value := make(map[string]interface{})
 		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
@@ -243,13 +241,13 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 
 func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 	var orig string
-	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, '') FROM [
+	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.origTable + `
 	] AS OF SYSTEM TIME '` + ts.AsOfSystemTime() + `'`).Scan(&orig); err != nil {
 		return err
 	}
 	var check string
-	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, '') FROM [
+	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.fprintTable + `
 	]`).Scan(&check); err != nil {
 		return err

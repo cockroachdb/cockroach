@@ -11,10 +11,11 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // rowFetcherCache maintains a cache of single table RowFetchers. Given a key
@@ -37,10 +38,10 @@ func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 }
 
 func (c *rowFetcherCache) RowFetcherForKey(
-	ctx context.Context, key engine.MVCCKey,
+	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
 ) (*sqlbase.RowFetcher, error) {
 	// TODO(dan): Handle interleaved tables.
-	_, tableID, _, err := sqlbase.DecodeTableIDIndexID(key.Key)
+	_, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +49,7 @@ func (c *rowFetcherCache) RowFetcherForKey(
 	// TODO(dan): We don't really need a lease, this is just a convenient way to
 	// get the right descriptor for a timestamp, so release it immediately after
 	// we acquire it. Avoid the lease entirely.
-	tableDesc, _, err := c.leaseMgr.Acquire(ctx, key.Timestamp, tableID)
+	tableDesc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 	if err != nil {
 		return nil, err
 	}
