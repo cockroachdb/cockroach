@@ -248,8 +248,9 @@ CREATE TABLE IF NOT EXISTS childNoFK(
   foo INT
 )
 `
-	// `self_referential` is a table which has a foreign key reference to itself (parent-child relationship) with
+	// `self_referential` has a foreign key reference to itself (parent-child relationship) with
 	// 		cascading updates and deletes
+	// `self_referential_noFK` has the same schema
 	// `self_referential_setnull` has an identical schema to `self_referential` except that instead of cascading
 	// 		on delete, it sets the reference field to null.
 	selfReferentialSchema := `
@@ -291,7 +292,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 			}
 		}
 	}
-	// This function tears down all the tables and is meant to be called at the end of each sub-benchmark.
+	// This function tears down all the tables and is meant to be called at the beginning and  end of each sub-benchmark.
 	drop := func() {
 		tables := [...]string{
 			"childFK",
@@ -308,13 +309,16 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 			}
 		}
 	}
+
+	// run an initial drop to make sure we're clean
 	drop()
 
-	// In the following two sub-benchmarks, `numFKRows` rows are inserted into the `example2` table.
-	// All of the rows are inserted in a single statement and deleted in a second statement.
-	// In the first test, the rows have no foreign key references to rows in `parentFK`.
-	// In the second, the rows all have references to a particular row in `parentFK`.
-	// The benchmarks primarily measure how insert performance changes when foreign key checks are present.
+	// The following sub-benchmarks are for the parentFK/childFK and parentNoFK/childNoFK tables.
+	// The insertRows and deleteRows sub-benchmarks of each kind measures insert performance and delete performance (respectively)
+	// of the following cases:
+	//     * {insert,delete}Rows_IdenticalFK: All rows in child reference the same row in parent
+	//     * {insert,delete}Rows_NoFK: Uses parentNoFK/childNoFK tables, no foreign key refs
+	//     * {insert,delete}Rows_UniqueFKs: All rows in child reference a distinct row in parent
 	const numFKRows = 10000
 	b.Run("insertRows_IdenticalFK", func(b *testing.B) {
 		drop()
@@ -341,8 +345,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 		b.StopTimer()
 	})
-	// deleteRows measures delete performance. It runs the same operations as `insertRows_IdenticalFK` but
-	// also performs a delete; the timer is only started once the inserts are finished and the delete begins.
 	b.Run("deleteRows_IdenticalFK", func(b *testing.B) {
 		drop()
 		setup()
@@ -477,9 +479,15 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	// For the self-referential table benchmarks, `numSRRows` rows are inserted and there is again a contrast between
 	// rows with foreign key references and those without.
-	// This measures the performance of cascading deletes.
+	// There are several different cases:
+	// Cascade: casacading deletes
+	// No_FK: no foreign key references
+	// SetNull: ... ON DELETE SET NULL foreign key reference
+	// Within each of these three categories, there are two cases:
+	// Chain: row i references row i-1, chaining until row 1
+	// ManyChildren: row 2..numSRRows all reference row 1
 	const numSRRows = 10000
-	b.Run("SelfReferential_FK_Chain_Delete", func(b *testing.B) {
+	b.Run("SelfReferential_Cascade_FK_Chain_Delete", func(b *testing.B) {
 		drop()
 		setup()
 		defer drop()
@@ -502,7 +510,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 
-	b.Run("SelfReferential_FK_ManyChildren_Delete", func(b *testing.B) {
+	b.Run("SelfReferential_Cascade_FK_ManyChildren_Delete", func(b *testing.B) {
 		drop()
 		setup()
 		defer drop()
@@ -548,7 +556,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 		b.StopTimer()
 	})
-
 	b.Run("SelfReferential_No_FK_ManyChildren_Delete", func(b *testing.B) {
 		drop()
 		setup()
@@ -570,7 +577,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 		b.StopTimer()
 	})
-
 	b.Run("SelfReferential_SetNull_FK_Chain_Delete", func(b *testing.B) {
 		drop()
 		setup()
