@@ -53,6 +53,27 @@ func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
 		scanOpDef.HardLimit == 0
 }
 
+// CanGenerateInvertedIndexScans returns true if new index Scan operators can
+// be generated on inverted indexes. Same as CanGenerateIndexScans, but with
+// the additional check that we have at least one inverted index on the table.
+func (c *CustomFuncs) CanGenerateInvertedIndexScans(def memo.PrivateID) bool {
+	if !c.CanGenerateIndexScans(def) {
+		return false
+	}
+
+	// Don't bother matching unless there's an inverted index.
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	md := c.e.mem.Metadata()
+	tab := md.Table(scanOpDef.Table)
+	// Index 0 is the primary index and is never inverted.
+	for i, n := 1, tab.IndexCount(); i < n; i++ {
+		if tab.Index(i).IsInverted() {
+			return true
+		}
+	}
+	return false
+}
+
 // GenerateIndexScans enumerates all indexes on the scan operator's table and
 // generates an alternate scan operator for each index that includes the set of
 // needed columns.
@@ -76,7 +97,7 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
 		if tab.Index(i).IsInverted() {
-			// Ignore inverted indexes for now.
+			// Ignore inverted indexes.
 			continue
 		}
 		indexCols := md.IndexColumns(scanOpDef.Table, i)
@@ -136,6 +157,77 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	return c.e.exprs
 }
 
+// GenerateInvertedIndexScans enumerates all inverted indexes on the scan
+// operator's table and generates a scan for each inverted index that can
+// service the query.
+// The resulting scan operator is pre-constrained and may come with an index join.
+// The reason it's pre-constrained is that we cannot treat an inverted index in
+// the same way as a regular index, since it does not actually contain the
+// indexed column.
+func (c *CustomFuncs) GenerateInvertedIndexScans(
+	def memo.PrivateID, filter memo.GroupID,
+) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	md := c.e.mem.Metadata()
+	tab := md.Table(scanOpDef.Table)
+
+	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
+	var pkColSet opt.ColSet
+	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+		pkColSet.Add(int(md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)))
+	}
+
+	// Iterate over all inverted indexes (index 0 is the primary index and is
+	// never inverted).
+	for i := 1; i < tab.IndexCount(); i++ {
+		if !tab.Index(i).IsInverted() {
+			continue
+		}
+
+		preDef := &memo.ScanOpDef{
+			Table: scanOpDef.Table,
+			Index: i,
+			// Though the index is marked as containing the JSONB column being
+			// indexed, it doesn't actually, and it's only valid to extract the
+			// primary key columns from it.
+			Cols: pkColSet,
+		}
+
+		constrainedScan, remainingFilter, ok := c.constrainedScanOpDef(filter, c.e.mem.InternScanOpDef(preDef), true /* isInverted */)
+		if !ok {
+			continue
+		}
+
+		// TODO(justin): We might not need to do an index join in order to get the
+		// correct columns, but it's difficult to tell at this point.
+		def := c.e.mem.InternIndexJoinDef(&memo.IndexJoinDef{
+			Table: scanOpDef.Table,
+			Cols:  scanOpDef.Cols,
+		})
+		scan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&constrainedScan))
+
+		if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+			c.e.exprs = append(
+				c.e.exprs,
+				memo.Expr(memo.MakeIndexJoinExpr(scan, def)),
+			)
+		} else {
+			c.e.exprs = append(
+				c.e.exprs,
+				memo.Expr(
+					memo.MakeSelectExpr(
+						c.e.f.ConstructIndexJoin(scan, def),
+						remainingFilter,
+					),
+				),
+			)
+		}
+	}
+
+	return c.e.exprs
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -155,7 +247,7 @@ func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID) bool {
 // constraint. If it cannot push the filter down (i.e. the resulting constraint
 // is unconstrained), then it returns ok = false in the third return value.
 func (c *CustomFuncs) constrainedScanOpDef(
-	filterGroup memo.GroupID, scanDef memo.PrivateID,
+	filterGroup memo.GroupID, scanDef memo.PrivateID, isInverted bool,
 ) (newDef memo.ScanOpDef, remainingFilter memo.GroupID, ok bool) {
 	scanOpDef := c.e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
 
@@ -179,7 +271,7 @@ func (c *CustomFuncs) constrainedScanOpDef(
 	// Generate index constraints.
 	var ic idxconstraint.Instance
 	filter := memo.MakeNormExprView(c.e.mem, filterGroup)
-	ic.Init(filter, columns, notNullCols, false /* isInverted */, c.e.evalCtx, c.e.f)
+	ic.Init(filter, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
 	constraint := ic.Constraint()
 	if constraint.IsUnconstrained() {
 		return memo.ScanOpDef{}, 0, false
@@ -211,7 +303,7 @@ func (c *CustomFuncs) constrainedScanOpDef(
 func (c *CustomFuncs) ConstrainScan(filterGroup memo.GroupID, scanDef memo.PrivateID) []memo.Expr {
 	c.e.exprs = c.e.exprs[:0]
 
-	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef)
+	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef, false /* isInverted */)
 	if !ok {
 		return nil
 	}
@@ -253,7 +345,7 @@ func (c *CustomFuncs) ConstrainIndexJoinScan(
 ) []memo.Expr {
 	c.e.exprs = c.e.exprs[:0]
 
-	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef)
+	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef, false /* isInverted */)
 	if !ok {
 		return nil
 	}

@@ -109,3 +109,13 @@
 )
 =>
 (ConstrainIndexJoinScan $filter $scanDef $indexJoinDef)
+
+# GenerateInvertedIndexScans creates alternate expressions for filters that can
+# be serviced by an inverted index.
+[GenerateInvertedIndexScans, Explore]
+(Select
+  (Scan $def:* & (CanGenerateInvertedIndexScans $def))
+  $filter:*
+)
+=>
+(GenerateInvertedIndexScans $def $filter)
