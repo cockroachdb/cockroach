@@ -4,6 +4,7 @@ import { connect } from "react-redux";
 import moment from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
+import Long from "long";
 
 import {
   livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
@@ -16,6 +17,16 @@ import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { Bytes } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import * as protos from "ccl/src/js/protos";
+import { MilliToNano } from "src/util/convert";
+import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/metrics";
+import Loading from "oss/src/views/shared/components/loading";
+import spinner from "assets/spinner.gif";
+
+import { cockroach } from "ccl/src/js/protos";
+import IQuery = cockroach.ts.tspb.IQuery;
+import TimeSeriesQueryDerivative = cockroach.ts.tspb.TimeSeriesQueryDerivative;
+import ITimeSeriesDatapoint = cockroach.ts.tspb.ITimeSeriesDatapoint;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -40,19 +51,103 @@ interface NodeCategoryListProps {
   setSort: typeof liveNodesSortSetting.set;
   statuses: INodeStatus[];
   nodesSummary: NodesSummary;
+  latestSummedIOMetrics: LatestIOMetricsByNode;
+  requestMetrics: typeof requestMetricsAction;
+}
+
+const IO_METRICS_KEY = "live-nodes-io-metrics";
+
+const IO_METRICS = [
+  "cr.node.sys.disk.read.bytes.host",
+  "cr.node.sys.disk.write.bytes.host",
+  "cr.node.sys.net.send.bytes.host",
+  "cr.node.sys.net.recv.bytes.host",
+];
+
+interface LiveNodesState {
+  intervalID: number;
 }
 
 /**
- * LiveNodeList displays a sortable table of all "live" nodes, which includes
- * both healthy and suspect nodes. Included is a side-bar with summary
- * statistics for these nodes.
+ * LiveNodeListContainer ensures that the LiveNodeList component does not render
+ * until the list of nodes has loaded. The LiveNodeList component requires that
+ * the node list is available when it mounts so it can launch a request for
+ * IO metrics for each node.
  */
-class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
+class LiveNodeListContainer extends React.Component<NodeCategoryListProps> {
+  render() {
+    const { statuses } = this.props;
+    return (
+      <Loading
+        loading={!statuses || statuses.length === 0}
+        image={spinner}
+        className="loading-image loading-image__spinner"
+      >
+        <LiveNodeList {...this.props} />
+      </Loading>
+    );
+  }
+}
+
+const METRIC_FETCH_INTERVAL_MS = 10000; // 10 sec, since that's how often we sample
+
+/**
+ * LiveNodeListInner displays a sortable table of all "live" nodes, which includes
+ * both healthy and suspect nodes.
+ */
+class LiveNodeList extends React.Component<NodeCategoryListProps, LiveNodesState> {
+  componentDidMount() {
+    this.getData();
+    const intervalID = setInterval(
+      () => {
+        this.getData();
+      },
+      METRIC_FETCH_INTERVAL_MS,
+    );
+    this.setState({
+      intervalID,
+    });
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.state.intervalID);
+  }
+
+  getData() {
+    // from metricDataProvider#current
+    let now = moment();
+    // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
+    now = moment(Math.floor(now.valueOf() / 10000) * 10000);
+    const timeInfo = {
+      start: Long.fromNumber(MilliToNano(now.clone().subtract(30, "s").valueOf())),
+      end: Long.fromNumber(MilliToNano(now.valueOf())),
+      sampleDuration: Long.fromNumber(MilliToNano(moment.duration(10, "s").asMilliseconds())),
+    };
+
+    const queries: IQuery[] = [];
+    IO_METRICS.forEach((metricName) => {
+      this.props.nodesSummary.nodeIDs.forEach((nodeID) => {
+        queries.push({
+          name: metricName,
+          sources: [nodeID],
+          derivative: TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE,
+        });
+      });
+    });
+
+    const req = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      start_nanos: timeInfo.start,
+      end_nanos: timeInfo.end,
+      sample_nanos: timeInfo.sampleDuration,
+      queries,
+    });
+
+    this.props.requestMetrics(IO_METRICS_KEY, req);
+  }
+
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
-    if (!statuses || statuses.length === 0) {
-      return null;
-    }
+    const latestSummedIOMetrics = this.props.latestSummedIOMetrics;
 
     return <div>
       <section className="section section--heading">
@@ -112,23 +207,67 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
-            // Used Capacity - displays the total persisted bytes maintained by the node.
             {
-              title: "Used Capacity",
-              cell: (ns) => Bytes(BytesUsed(ns)),
-              sort: (ns) => BytesUsed(ns),
-            },
-            // Replicas - displays the total number of replicas on the node.
-            {
-              title: "Replicas",
-              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-              sort: (ns) => ns.metrics[MetricConstants.replicas],
+              title: "CPU %",
+              cell: (ns) => {
+                const sys = ns.metrics[MetricConstants.sysCPUPercent];
+                const user = ns.metrics[MetricConstants.userCPUPercent];
+                const percentage = (sys + user) * 100;
+                return `${_.round(percentage, 2)}%`;
+              },
+              sort: (ns) => ns.metrics[MetricConstants.userCPUPercent] + ns.metrics[MetricConstants.sysCPUPercent],
             },
             // Mem Usage - total memory being used on this node.
             {
               title: "Mem Usage",
               cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
               sort: (ns) => ns.metrics[MetricConstants.rss],
+            },
+            // Used Capacity - displays the total persisted bytes maintained by the node.
+            {
+              title: "Used Capacity",
+              cell: (ns) => Bytes(BytesUsed(ns)),
+              sort: (ns) => BytesUsed(ns),
+            },
+            {
+              title: "Disk IO",
+              cell: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return Bytes(metricsForNode.diskIO);
+              },
+              sort: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return metricsForNode.diskIO;
+              },
+            },
+            {
+              title: "Net IO",
+              cell: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return Bytes(metricsForNode.netIO);
+              },
+              sort: (ns) => {
+                if (!latestSummedIOMetrics) {
+                  return null;
+                }
+                const metricsForNode = latestSummedIOMetrics[ns.desc.node_id.toString()];
+                return metricsForNode.netIO;
+              },
+            },
+            // Replicas - displays the total number of replicas on the node.
+            {
+              title: "Replicas",
+              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+              sort: (ns) => ns.metrics[MetricConstants.replicas],
             },
             // Version - the currently running version of cockroach.
             {
@@ -146,6 +285,13 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
       </section>
     </div>;
   }
+}
+
+function latestDataPoint(series: ITimeSeriesDatapoint[]): number {
+  if (series.length === 0) {
+    return null;
+  }
+  return series[series.length - 1].value;
 }
 
 /**
@@ -260,6 +406,64 @@ const partitionedStatuses = createSelector(
   },
 );
 
+type LatestMetricValuesByNode = {
+  [nodeID: string]: {
+    [metric: string]: number,
+  },
+};
+
+const selectLatestIOMetrics = createSelector(
+  (state: AdminUIState) => state.metrics.queries[IO_METRICS_KEY],
+  (metrics: MetricsQuery): LatestMetricValuesByNode => {
+    if (!metrics || !metrics.data) {
+      return null;
+    }
+
+    const byIDByMetric: LatestMetricValuesByNode = {};
+
+    metrics.data.results.forEach((result) => {
+      let metricsForNode = byIDByMetric[result.query.sources[0]];
+      if (!metricsForNode) {
+        metricsForNode = {};
+        byIDByMetric[result.query.sources[0]] = metricsForNode;
+      }
+      metricsForNode[result.query.name] = latestDataPoint(result.datapoints);
+    });
+
+    return byIDByMetric;
+  },
+);
+
+type LatestIOMetricsByNode = {
+  [nodeID: string]: {
+    diskIO: number;
+    netIO: number;
+  },
+};
+
+const selectSummedLatestIOMetrics = createSelector(
+  selectLatestIOMetrics,
+  (metricsByNode: LatestMetricValuesByNode): LatestIOMetricsByNode => {
+    if (!metricsByNode) {
+      return null;
+    }
+
+    const result: LatestIOMetricsByNode = {};
+    _.forEach(metricsByNode, (metrics, nodeID) => {
+      const diskReads = metrics["cr.node." + MetricConstants.diskReadBytes];
+      const diskWrites = metrics["cr.node." + MetricConstants.diskWriteBytes];
+      const netSent = metrics["cr.node." + MetricConstants.netReadBytes];
+      const netReceived = metrics["cr.node." + MetricConstants.netWriteBytes];
+
+      result[nodeID] = {
+        diskIO: diskReads + diskWrites,
+        netIO: netSent + netReceived,
+      };
+    });
+    return result;
+  },
+);
+
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
@@ -271,12 +475,14 @@ const LiveNodesConnected = connect(
       sortSetting: liveNodesSortSetting.selector(state),
       statuses: statuses.live,
       nodesSummary: nodesSummarySelector(state),
+      latestSummedIOMetrics: selectSummedLatestIOMetrics(state),
     };
   },
   {
     setSort: liveNodesSortSetting.set,
+    requestMetrics: requestMetricsAction,
   },
-)(LiveNodeList);
+)(LiveNodeListContainer);
 
 /**
  * DeadNodesConnected is a redux-connected HOC of NotLiveNodeList.

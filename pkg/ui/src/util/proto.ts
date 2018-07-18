@@ -69,6 +69,10 @@ export namespace MetricConstants {
   export const allocBytes: string = "sys.go.allocbytes";
   export const sqlConns: string = "sql.conns";
   export const rss: string = "sys.rss";
+  export const diskReadBytes: string = "sys.disk.read.bytes.host";
+  export const diskWriteBytes: string = "sys.disk.write.bytes.host";
+  export const netReadBytes: string = "sys.net.recv.bytes.host";
+  export const netWriteBytes: string = "sys.net.send.bytes.host";
 }
 
 /**
