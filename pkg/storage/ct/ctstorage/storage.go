@@ -53,16 +53,18 @@ import (
 // frontier. Emitted MLAIs may never even be proposed to Raft in the event of
 // an ill-timed crash, and so historic information is invaluable.
 //
-// TODO(tschottdorf): this shouldn't be an interface but a concrete impl, the
-// interface should sit below SingleStorage and abstract out only the buckets.
-// Or there isn't an interface at all but simply a persistence hook that can
-// be set when periodically writing to disk is desired.
+// TODO(tschottdorf): revisit whether this shouldn't be a concrete impl instead,
+// with only the buckets abstracted out.
 type SingleStorage interface {
 	fmt.Stringer
 	// VisitAscending walks through the buckets of the storage in ascending
 	// closed timestamp order, until the closure returns true (or all buckets
 	// have been visited).
 	VisitAscending(func(ctpb.Entry) (done bool))
+	// VisitDescending walks through the buckets of the storage in descending
+	// closed timestamp order, until the closure returns true (or all buckets
+	// have been visited).
+	VisitDescending(func(ctpb.Entry) (done bool))
 	// Add adds a new Entry to this storage. The entry is added to the most
 	// recent bucket and remaining buckets are rotated as indicated by their age
 	// relative to the newly added Entry.
@@ -107,6 +109,12 @@ func (ms *MultiStorage) getOrCreate(nodeID roachpb.NodeID) SingleStorage {
 func (ms *MultiStorage) VisitAscending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
 	ss := ms.getOrCreate(nodeID)
 	ss.VisitAscending(f)
+}
+
+// VisitDescending implements ct.Storage.
+func (ms *MultiStorage) VisitDescending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
+	ss := ms.getOrCreate(nodeID)
+	ss.VisitDescending(f)
 }
 
 // Add implements ct.Storage.
