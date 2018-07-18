@@ -87,3 +87,44 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestAllRegisteredWorkloadsSetupIdempotent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, meta := range workload.Registered() {
+		gen := meta.New()
+
+		t.Run(meta.Name, func(t *testing.T) {
+			switch meta.Name {
+			case `tpcc`:
+				t.Skip(`tpcc loads a lot of data`)
+			case `tpch`:
+				t.Skip(`tpch doesn't support initial data`)
+			case `roachmart`:
+				// Partitioning is idempotent, but with only a single server and
+				// without the expected locality flags, roachmart will complain.
+				// Disabled partitioning.
+				flags := gen.(workload.Flagser).Flags()
+				if err := flags.Set(`partition`, `false`); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			ctx := context.Background()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				UseDatabase: "d",
+			})
+			defer s.Stopper().Stop(ctx)
+			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+
+			const batchSize, concurrency = 0, 0
+			if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+				t.Fatalf(`%+v`, err)
+			}
+			// Test setup again. Should be idempotent.
+			if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+				t.Fatalf(`%+v`, err)
+			}
+		})
+	}
+}
