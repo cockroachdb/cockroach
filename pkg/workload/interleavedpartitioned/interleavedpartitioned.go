@@ -187,7 +187,6 @@ WHERE session_id = $2
 
 var (
 	retrieveQueries = []string{retrieveQuery0, retrieveQuery1, retrieveQuery2, retrieveQuery3, retrieveQuery4, retrieveQuery5, retrieveQuery6, retrieveQuery7}
-	updateQueries   = []string{updateQuery, updateQuery2}
 )
 
 func init() {
@@ -482,8 +481,10 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
-			_, err = updateStatement1.ExecContext(ctx, randString(rng, 100), sessionID)
-			updateStatement2, err := db.Prepare(updateQuery)
+			if _, err = updateStatement1.ExecContext(ctx, randString(rng, 100), sessionID); err != nil {
+				return err
+			}
+			updateStatement2, err := db.Prepare(updateQuery2)
 			if err != nil {
 				return err
 			}
