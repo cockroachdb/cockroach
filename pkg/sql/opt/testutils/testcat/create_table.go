@@ -56,6 +56,13 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	tc.qualifyTableName(tn)
 
 	tab := &Table{Name: *tn}
+
+	// Assume that every table in the "system" catalog is a virtual table. This
+	// is a simplified assumption for testing purposes.
+	if tn.CatalogName == "system" {
+		tab.IsVirtual = true
+	}
+
 	// Add the columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
@@ -81,7 +88,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	}
 
 	// If there is no primary index, add the hidden rowid column.
-	if len(tab.Indexes) == 0 {
+	if len(tab.Indexes) == 0 && !tab.IsVirtual {
 		rowid := &Column{Name: "rowid", Type: types.Int, Hidden: true}
 		tab.Columns = append(tab.Columns, rowid)
 		tab.addPrimaryColumnIndex(rowid.Name)

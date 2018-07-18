@@ -66,7 +66,7 @@ func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.
 	}
 	wrapper, ok := oc.wrappers[desc]
 	if !ok {
-		wrapper = newOptTable(oc.statsCache, desc)
+		wrapper = newOptTable(name, oc.statsCache, desc)
 		oc.wrappers[desc] = wrapper
 	}
 	return wrapper, nil
@@ -76,6 +76,10 @@ func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.
 // wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
 	desc *sqlbase.TableDescriptor
+
+	// name is the fully qualified, fully resolved, fully normalized name of the
+	// table.
+	name tree.TableName
 
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
@@ -97,8 +101,10 @@ type optTable struct {
 
 var _ opt.Table = &optTable{}
 
-func newOptTable(statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor) *optTable {
-	ot := &optTable{}
+func newOptTable(
+	name *tree.TableName, statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor,
+) *optTable {
+	ot := &optTable{name: *name}
 	ot.init(statsCache, desc)
 	return ot
 }
@@ -111,8 +117,8 @@ func (ot *optTable) init(statsCache *stats.TableStatisticsCache, desc *sqlbase.T
 }
 
 // TabName is part of the opt.Table interface.
-func (ot *optTable) TabName() opt.TableName {
-	return opt.TableName(ot.desc.Name)
+func (ot *optTable) TabName() *tree.TableName {
+	return &ot.name
 }
 
 // IsVirtualTable is part of the opt.Table interface.
@@ -132,6 +138,9 @@ func (ot *optTable) Column(i int) opt.Column {
 
 // IndexCount is part of the opt.Table interface.
 func (ot *optTable) IndexCount() int {
+	if ot.desc.IsVirtualTable() {
+		return 0
+	}
 	// Primary index is always present, so count is always >= 1.
 	return 1 + len(ot.desc.Indexes)
 }

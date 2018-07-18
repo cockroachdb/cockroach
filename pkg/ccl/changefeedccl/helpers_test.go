@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -28,33 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
-
-func parseMetaTimestamps(v []byte) (updated, resolved hlc.Timestamp, err error) {
-	var valueRaw struct {
-		CRDB struct {
-			Resolved string `json:"resolved"`
-			Updated  string `json:"updated"`
-		} `json:"__crdb__"`
-	}
-	if err := json.Unmarshal(v, &valueRaw); err != nil {
-		return hlc.Timestamp{}, hlc.Timestamp{}, err
-	}
-	if valueRaw.CRDB.Updated != `` {
-		var err error
-		updated, err = sql.ParseHLC(valueRaw.CRDB.Updated)
-		if err != nil {
-			return hlc.Timestamp{}, hlc.Timestamp{}, err
-		}
-	}
-	if valueRaw.CRDB.Resolved != `` {
-		var err error
-		resolved, err = sql.ParseHLC(valueRaw.CRDB.Resolved)
-		if err != nil {
-			return hlc.Timestamp{}, hlc.Timestamp{}, err
-		}
-	}
-	return updated, resolved, nil
-}
 
 // createBenchmarkChangefeed starts a changefeed with some extra hooks. It
 // watches `database.table` and outputs to `sinkURI`. The given `feedClock` is

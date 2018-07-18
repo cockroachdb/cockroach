@@ -79,6 +79,9 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate, logical)
 
+	case opt.VirtualScanOp:
+		cost = c.computeVirtualScanCost(candidate, logical)
+
 	case opt.SelectOp:
 		cost = c.computeSelectCost(candidate, logical)
 
@@ -146,6 +149,15 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 		perRowCost *= 2
 	}
 	return rowCount * (seqIOCostFactor + perRowCost)
+}
+
+func (c *coster) computeVirtualScanCost(
+	candidate *memo.BestExpr, logical *props.Logical,
+) memo.Cost {
+	// Virtual tables are generated on-the-fly according to system metadata that
+	// is assumed to be in memory.
+	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
+	return rowCount * cpuCostFactor
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of

@@ -386,15 +386,22 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	// TODO(andyk): Re-enable virtual tables when we can fully support them.
-	if bld.UsingVirtualTable {
-		return pgerror.Unimplemented("virtual table",
-			"virtual tables are not supported yet by the optimizer")
+	// If in the PREPARE phase, construct a dummy plan that has correct output
+	// columns. Only output columns and placeholder types are needed.
+	if p.extendedEvalCtx.PrepareOnly {
+		md := o.Memo().Metadata()
+		resultCols := make(sqlbase.ResultColumns, len(props.Presentation))
+		for i, col := range props.Presentation {
+			resultCols[i].Name = col.Label
+			resultCols[i].Typ = md.ColumnType(col.ID)
+		}
+		p.curPlan.plan = &zeroNode{columns: resultCols}
+		return nil
 	}
 
 	ev := o.Optimize(root, props)
 
-	factory := makeExecFactory(p)
+	factory := makeExecFactory(ctx, p)
 	plan, err := execbuilder.New(&factory, ev).Build()
 	if err != nil {
 		return err

@@ -317,21 +317,9 @@ func emitRows(
 		return nil, nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
 	}
 
-	var rows []SinkRow
 	var scratch bufalloc.ByteAllocator
-	emitRows := func(ctx context.Context) error {
-		if len(rows) == 0 {
-			return nil
-		}
-		err := sink.EmitRows(ctx, rows)
-		rows = rows[:0]
-		scratch = scratch[:0]
-		return err
-	}
-
 	var key, value bytes.Buffer
 	return func(ctx context.Context) error {
-		rows = rows[:0]
 		scratch = scratch[:0]
 
 		inputs, err := inputFn(ctx)
@@ -374,26 +362,21 @@ func emitRows(
 					jsonValue.Format(&value)
 				}
 
-				row := SinkRow{Topic: input.tableDesc.Name}
-				scratch, row.Key = scratch.Copy(key.Bytes(), 0 /* extraCap */)
-				scratch, row.Value = scratch.Copy(value.Bytes(), 0 /* extraCap */)
-				rows = append(rows, row)
-				if log.V(2) {
-					log.Infof(ctx, `row %s: %s -> %s`, row.Topic, row.Key, row.Value)
+				var keyCopy, valueCopy []byte
+				scratch, keyCopy = scratch.Copy(key.Bytes(), 0 /* extraCap */)
+				scratch, valueCopy = scratch.Copy(value.Bytes(), 0 /* extraCap */)
+				if err := sink.EmitRow(ctx, input.tableDesc.Name, keyCopy, valueCopy); err != nil {
+					return err
 				}
-
-				// TODO(dan): Tune this and make it based on bytes.
-				const kafkaBatchSize = 1000
-				if len(rows) >= kafkaBatchSize {
-					if err := emitRows(ctx); err != nil {
-						return err
-					}
+				if log.V(2) {
+					log.Infof(ctx, `row %s: %s -> %s`, input.tableDesc.Name, keyCopy, valueCopy)
 				}
 			}
 			if input.resolved != (hlc.Timestamp{}) {
-				// Clear out any rows in the buffer, because we're about to emit
-				// a guarantee that they've all been emitted.
-				if err := emitRows(ctx); err != nil {
+				// Make sure to flush the sink before saving the job progress,
+				// otherwise, we could lost any buffered messages and violate
+				// the at-least-once guarantee.
+				if err := sink.Flush(ctx); err != nil {
 					return err
 				}
 
@@ -424,7 +407,6 @@ func emitRows(
 				}
 			}
 		}
-
-		return emitRows(ctx)
+		return nil
 	}, closeFn, nil
 }
