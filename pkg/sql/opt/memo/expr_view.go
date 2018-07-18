@@ -430,8 +430,8 @@ func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	if ev.op == opt.MergeOnOp {
 		tp = tp.Childf("%v", ev.op)
 		def := ev.Private().(*MergeOnDef)
-		tp.Childf("left ordering: %s", def.LeftEq)
-		tp.Childf("right ordering: %s", def.RightEq)
+		tp.Childf("left equality columns: %s", def.LeftEq)
+		tp.Childf("right equality columns: %s", def.RightEq)
 	} else {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "%v", ev.op)

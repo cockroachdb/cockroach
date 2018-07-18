@@ -453,13 +453,23 @@ func (c *CustomFuncs) ConstructMergeJoins(
 			break
 		}
 		def := memo.MergeOnDef{JoinType: originalOp}
-		def.LeftEq.Columns = make([]props.OrderingColumnChoice, 0, n)
-		def.RightEq.Columns = make([]props.OrderingColumnChoice, 0, n)
+		def.LeftEq = make(opt.Ordering, n)
+		def.RightEq = make(opt.Ordering, n)
+		def.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		def.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
 		for i := 0; i < n; i++ {
 			eqIdx, _ := colToEq.Get(int(o[i].ID()))
-			def.LeftEq.AppendCol(leftEq[eqIdx], o[i].Descending())
-			def.RightEq.AppendCol(rightEq[eqIdx], o[i].Descending())
+			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
+			def.LeftEq[i] = opt.MakeOrderingColumn(l, descending)
+			def.RightEq[i] = opt.MakeOrderingColumn(r, descending)
+			def.LeftOrdering.AppendCol(l, descending)
+			def.RightOrdering.AppendCol(r, descending)
 		}
+
+		// Simplify the orderings with the corresponding FD sets.
+		def.LeftOrdering.Simplify(&c.e.mem.GroupProperties(left).Relational.FuncDeps)
+		def.RightOrdering.Simplify(&c.e.mem.GroupProperties(right).Relational.FuncDeps)
+
 		// TODO(radu): simplify the ON condition (we can remove the equalities we
 		// extracted).
 		mergeOn := c.e.f.ConstructMergeOn(on, c.e.mem.InternMergeOnDef(&def))
