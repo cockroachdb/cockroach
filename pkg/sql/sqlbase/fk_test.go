@@ -285,6 +285,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 			selfReferentialNoFKSchema,
 			selfReferentialSetNullSchema,
 		}
+		drop()
 		for _, s := range setupStatements {
 			if _, err := db.Exec(s); err != nil {
 				b.Fatal(err)
@@ -309,9 +310,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 	}
 
-	// run an initial drop to make sure we're clean
-	drop()
-
 	// The following sub-benchmarks are for the parentFK/childFK and parentNoFK/childNoFK tables.
 	// The insertRows and deleteRows sub-benchmarks of each kind measures insert performance and delete performance (respectively)
 	// of the following cases:
@@ -320,7 +318,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	//     * {insert,delete}Rows_UniqueFKs: All rows in child reference a distinct row in parent
 	const numFKRows = 10000
 	b.Run("insertRows_IdenticalFK", func(b *testing.B) {
-		drop()
 		setup()
 		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -345,7 +342,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 	b.Run("deleteRows_IdenticalFK", func(b *testing.B) {
-		drop()
 		setup()
 		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -374,7 +370,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("insertRows_uniqueFKs", func(b *testing.B) {
-		drop()
 		setup()
 		for i := 1; i <= numFKRows; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -403,7 +398,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("deleteRows_UniqueFKs", func(b *testing.B) {
-		drop()
 		setup()
 		for i := 1; i <= numFKRows; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -434,7 +428,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("insertRows_NoFK", func(b *testing.B) {
-		drop()
 		setup()
 		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -454,7 +447,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 	b.Run("deleteRows_NoFK", func(b *testing.B) {
-		drop()
 		setup()
 		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -487,7 +479,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	// ManyChildren: row 2..numSRRows all reference row 1
 	const numSRRows = 10000
 	b.Run("SelfReferential_Cascade_FK_Chain_Delete", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
@@ -510,7 +501,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("SelfReferential_Cascade_FK_ManyChildren_Delete", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
@@ -532,7 +522,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("SelfReferential_No_FK_Chain_Delete", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		var insert bytes.Buffer
@@ -556,7 +545,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 	b.Run("SelfReferential_No_FK_ManyChildren_Delete", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential_noFK(id) VALUES (1)`); err != nil {
@@ -577,7 +565,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 	b.Run("SelfReferential_SetNull_FK_Chain_Delete", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
@@ -601,7 +588,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 
 	b.Run("SelfReferential_SetNull_FK_ManyChildren", func(b *testing.B) {
-		drop()
 		setup()
 		defer drop()
 		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
