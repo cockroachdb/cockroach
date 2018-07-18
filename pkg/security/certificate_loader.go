@@ -171,21 +171,16 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 	prefix := parts[0]
 	switch parts[0] {
 	case `ca`:
-		if numParts == 2 {
-			// This is main CA certificate.
-			fileUsage = CAPem
-		} else if numParts == 3 {
-			switch parts[1] {
-			case `client`:
-				// CA for client certificates.
-				fileUsage = ClientCAPem
-			default:
-				return nil, errors.Errorf("CA certificate filename must be one of ca%s, ca.client%s",
-					certExtension, certExtension)
-			}
-		} else {
-			return nil, errors.Errorf("CA certificate filename must be one of ca%s, ca.client%s",
-				certExtension, certExtension)
+		// This is main CA certificate.
+		fileUsage = CAPem
+		if numParts != 2 {
+			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
+		}
+	case `ca-client`:
+		// This is client CA certificate.
+		fileUsage = ClientCAPem
+		if numParts != 2 {
+			return nil, errors.Errorf("client CA certificate filename should match ca-client%s", certExtension)
 		}
 	case `node`:
 		fileUsage = NodePem

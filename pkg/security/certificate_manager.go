@@ -61,15 +61,15 @@ var (
 // The nomenclature for certificates is as follows, all within the certs-dir.
 // - ca.crt             main CA certificate.
 //                      Used to verify everything unless overridden by more specifica CAs.
-// - ca.client.crt      CA certificate to verify client certificates.
+// - ca-client.crt      CA certificate to verify client certificates.
 //                      Used **IF AND ONLY IF** client.node.crt exists.
 // - node.crt           node certificate.
 //                      Server-side certificate (always) and client-side certificate unless
 //                      client.node.crt is found.
 //                      Verified using 'ca.crt'.
-// - client.<user>.crt  client certificate for 'user'. Verified using 'ca.crt', or 'ca.client.crt'.
+// - client.<user>.crt  client certificate for 'user'. Verified using 'ca.crt', or 'ca-client.crt'.
 // - client.node.crt    client certificate for the 'node' user. If this file exists,
-//                      we always use 'ca.client.crt' to verify client certificates.
+//                      we always use 'ca-client.crt' to verify client certificates.
 type CertificateManager struct {
 	// Certificate directory is not modified after initialization.
 	certsDir string
@@ -171,7 +171,7 @@ func (cm *CertificateManager) CACertPath() string {
 // ClientCACertPath returns the expected file path for the CA certificate
 // used to verify client certificates.
 func (cm *CertificateManager) ClientCACertPath() string {
-	return filepath.Join(cm.certsDir, "ca.client"+certExtension)
+	return filepath.Join(cm.certsDir, "ca-client"+certExtension)
 }
 
 // NodeCertPath returns the expected file path for the node certificate.

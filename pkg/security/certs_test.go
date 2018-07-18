@@ -12,8 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !windows
-
 package security_test
 
 import (
@@ -33,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 )
 
 func TestGenerateCACert(t *testing.T) {
@@ -183,10 +180,10 @@ func generateBaseCerts(certsDir string) error {
 
 // Generate certificates with separate CAs:
 // ca.crt: CA certificate
-// ca.client.crt: CA certificate to verify client certs
+// ca-client.crt: CA certificate to verify client certs
 // node.crt: node server cert: signed by ca.crt
-// client.node.crt: node client cert: signed by ca.client.crt
-// client.root.crt: root client cert: signed by ca.client.crt
+// client.node.crt: node client cert: signed by ca-client.crt
+// client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
 	if err := security.CreateCAPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
@@ -406,7 +403,7 @@ func TestUseSplitCACerts(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Test a SQL client with correct certs usage.
+	// Test a SQL client with various certificates.
 	testCases := []struct {
 		user, caName, certPrefix string
 		expectedError            string
@@ -434,37 +431,94 @@ func TestUseSplitCACerts(t *testing.T) {
 			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
 		}
 	}
+}
 
+// This is a fairly high-level test of CA and node certificates.
+// We construct SSL server and clients and use the generated certs.
+func TestUseWrongSplitCACerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if err := generateSplitCACerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete the ca-client.crt before starting the node.
+	// This will make the server fall back on using ca.crt.
 	// Now remove the node client cert which forces the server to use the general certs.
 	if err := os.Remove(filepath.Join(certsDir, "client.node.crt")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Trigger certificate rotation.
-	t.Log("issuing SIGHUP")
-	if err := unix.Kill(unix.Getpid(), unix.SIGHUP); err != nil {
+	// Start a test server and override certs.
+	// We use a real context since we want generated certs.
+	// Web session authentication is disabled in order to avoid the need to
+	// authenticate the individual clients being instantiated (session auth has
+	// no effect on what is being tested here).
+	params := base.TestServerArgs{
+		SSLCertsDir:                     certsDir,
+		DisableWebSessionAuthentication: true,
+	}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Insecure mode.
+	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext.Insecure = true
+	httpClient, err := clientContext.GetHTTPClient()
+	if err != nil {
 		t.Fatal(err)
 	}
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected SSL error, got success: %s", body)
+	}
 
-	// Try again, the first client should now fail, the second should succeed.
-	testutils.SucceedsSoon(t,
-		func() error {
-			pgUrl := makeSecurePGUrl(s.ServingAddr(), "root", certsDir, "ca.crt", "client.root.crt", "client.root.key")
-			goDB, err := gosql.Open("postgres", pgUrl)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer goDB.Close()
+	// New client. With certs this time.
+	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	httpClient, err = clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
+	}
 
-			_, err = goDB.Exec("SELECT 1")
-			if err == nil {
-				return errors.New("waiting for failure")
-			}
-			return nil
-		})
+	// Check KV connection.
+	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+		t.Error(err)
+	}
 
-	// Try again.
-	testCases = []struct {
+	// Try with various certificates.
+	testCases := []struct {
 		user, caName, certPrefix string
 		expectedError            string
 	}{

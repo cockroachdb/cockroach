@@ -50,7 +50,7 @@ func TestCertNomenclature(t *testing.T) {
 	}{
 		// Test valid names.
 		{"ca.crt", "", security.CAPem, ""},
-		{"ca.client.crt", "", security.ClientCAPem, ""},
+		{"ca-client.crt", "", security.ClientCAPem, ""},
 		{"node.crt", "", security.NodePem, ""},
 		{"client.root.crt", "", security.ClientPem, "root"},
 		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
@@ -60,9 +60,7 @@ func TestCertNomenclature(t *testing.T) {
 		{"crt", "not enough parts found", 0, ""},
 		{".crt", "unknown prefix", 0, ""},
 		{"ca2.crt", "unknown prefix \"ca2\"", 0, ""},
-		{"ca.foo.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
-		{"ca.clients.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
-		{"ca.ui.crt", "CA certificate filename must be one of ca.crt, ca.client.crt", 0, ""},
+		{"ca.client.crt", "CA certificate filename should match ca.crt", 0, ""},
 		{"node2.crt", "unknown prefix \"node2\"", 0, ""},
 		{"node.foo.crt", "node certificate filename should match node.crt", 0, ""},
 		{"client2.crt", "unknown prefix \"client2\"", 0, ""},

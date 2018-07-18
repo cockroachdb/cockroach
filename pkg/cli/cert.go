@@ -75,7 +75,7 @@ var createClientCACertCmd = &cobra.Command{
 	Use:   "create-client-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-client-ca-key>",
 	Short: "create client CA certificate and key",
 	Long: `
-Generate a client CA certificate "<certs-dir>/ca.client.crt" and CA key "<client-ca-key>".
+Generate a client CA certificate "<certs-dir>/ca-client.crt" and CA key "<client-ca-key>".
 The certs directory is created if it does not exist.
 
 If the CA key exists and --allow-ca-key-reuse is true, the key is used.

@@ -100,7 +100,7 @@ func CreateClientCAPair(
 // The filename of the certificate file must be specified.
 // It should be one of:
 // - ca.crt: the general CA certificate
-// - ca.client.crt: the CA certificate to verify client certificates
+// - ca-client.crt: the CA certificate to verify client certificates
 func createCACertAndKey(
 	certsDir, caKeyPath string,
 	caType PemUsage,
