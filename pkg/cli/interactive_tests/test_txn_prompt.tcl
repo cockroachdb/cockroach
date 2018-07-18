@@ -100,7 +100,7 @@ send "\\unset prompt1\r"
 eexpect root@
 end_test
 
-start_test "Check none define keys." 
+start_test "Check prompts that contain no formatting codes." 
 send "\\set prompt1 #&@ \r"
 eexpect #&@
 
@@ -121,10 +121,6 @@ eexpect ###
 send "\\unset prompt1\r"
 eexpect root@
 end_test 
-
-
-
-###END tests prompt customization
 
 
 start_test "Check option to echo statements"

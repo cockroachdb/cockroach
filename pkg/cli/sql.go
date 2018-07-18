@@ -641,7 +641,7 @@ func (c *cliState) refreshDatabaseName() (string, bool) {
 		c.lastKnownTxnStatus == " ?" /* Unknown */) {
 		return "", false
 	}
- 
+
 	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
 		return "", false
