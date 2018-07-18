@@ -47,7 +47,7 @@ type Clients struct {
 	clients syncutil.IntMap
 }
 
-var _ ct.PeerRegistry = (*Clients)(nil)
+var _ ct.ClientRegistry = (*Clients)(nil)
 
 // NewClients sets up a client registry.
 func NewClients(cfg Config) *Clients {

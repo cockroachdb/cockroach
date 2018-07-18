@@ -62,6 +62,11 @@ type Storage interface {
 	// non-incremental. The iteration stops when all states have been visited
 	// or the visitor returns true.
 	VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))
+	// VisitDescending visits the historical states contained within the Storage
+	// in descending closed timestamp order. Each state (Entry) is full, i.e.
+	// non-incremental. The iteration stops when all states have been visited
+	// or the visitor returns true.
+	VisitDescending(roachpb.NodeID, func(ctpb.Entry) (done bool))
 	// Add merges the given Entry into the state for the given NodeID. The first
 	// Entry passed in for any given Entry.Epoch must have Entry.Full set.
 	Add(roachpb.NodeID, ctpb.Entry)
@@ -100,13 +105,15 @@ type Provider interface {
 	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) bool
 }
 
-// A PeerRegistry is the client component of the follower reads subsystem. It
+// A ClientRegistry is the client component of the follower reads subsystem. It
 // contacts other nodes and requests a continuous stream of closed timestamp
 // updates which it relays to the Provider.
-type PeerRegistry interface {
-	// Request asks the peer node to produce an update for the supplied RangeID.
+type ClientRegistry interface {
+	// Request asynchronously notifies the given node that an update should be
+	// emitted for the given range.
 	Request(roachpb.NodeID, roachpb.RangeID)
-	// EnsureClient makes sure that the supplied node is contacted.
+	// EnsureClient instructs the registry to (asynchronously) request a stream
+	// of closed timestamp updates from the given node.
 	EnsureClient(roachpb.NodeID)
 }
 
