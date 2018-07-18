@@ -106,14 +106,6 @@ type clockMonotonicityTestCase struct {
 func makeClockMonotonicTests() testSpec {
 	testCases := []clockMonotonicityTestCase{
 		{
-			// Without enabling the feature to persist wall time, wall time is
-			// currently non monotonic on backward clock jumps when a node is down.
-			name:                     "non_persistent",
-			offset:                   -60 * time.Second,
-			persistWallTimeInterval:  0,
-			expectIncreasingWallTime: false,
-		},
-		{
 			name:                     "persistent",
 			offset:                   -60 * time.Second,
 			persistWallTimeInterval:  500 * time.Millisecond,
