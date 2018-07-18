@@ -391,7 +391,7 @@ func Post(ctx context.Context, detail, packageName, testName, message, authorEma
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, detail, packageName, testName, message, "tschottdorf@gmail.com")
+	return defaultP.post(ctx, detail, packageName, testName, message, "tobias.schottdorf@gmail.com")
 }
 
 // CanPost returns true if the github API token environment variable is set.
