@@ -1255,6 +1255,11 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
+	if node.Filter != nil {
+		ctx.WriteString(" FILTER (WHERE ")
+		ctx.FormatNode(node.Filter)
+		ctx.WriteString(")")
+	}
 	if window := node.WindowDef; window != nil {
 		ctx.WriteString(" OVER ")
 		if window.Name != "" {
@@ -1262,11 +1267,6 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		} else {
 			ctx.FormatNode(window)
 		}
-	}
-	if node.Filter != nil {
-		ctx.WriteString(" FILTER (WHERE ")
-		ctx.FormatNode(node.Filter)
-		ctx.WriteString(")")
 	}
 }
 
