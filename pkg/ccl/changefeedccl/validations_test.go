@@ -35,7 +35,7 @@ func TestValidations(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '1ms'`)
 
 	t.Run("bank", func(t *testing.T) {
 		const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
@@ -74,7 +74,7 @@ func TestValidations(t *testing.T) {
 			}
 		})
 
-		const requestedResolved = 100
+		const requestedResolved = 5
 		var numResolved, rowsSinceResolved int
 		v := Validators{
 			NewOrderValidator(`bank`),
