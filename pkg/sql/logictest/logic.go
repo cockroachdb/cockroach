@@ -1601,6 +1601,11 @@ func (t *logicTest) verifyError(
 		return cont, err
 	}
 	if !testutils.IsError(err, expectErr) {
+		if err == nil {
+			newErr := errors.Errorf("%s: %s\nexpected %q, but no error occurred", pos, sql, expectErr)
+			return false, newErr
+		}
+
 		errString := pgerror.FullError(err)
 		newErr := errors.Errorf("%s: %s\nexpected %q, but found %q", pos, sql, expectErr, errString)
 		if err != nil && strings.Contains(errString, expectErr) {

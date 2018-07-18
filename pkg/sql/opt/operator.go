@@ -164,6 +164,32 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 	return false
 }
 
+// AggregateIgnoresNulls returns true if the given aggregate operator has a
+// single input, and if it always evaluates to the same result regardless of
+// how many NULL values are included in that input, in any order.
+func AggregateIgnoresNulls(op Operator) bool {
+	switch op {
+	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, AnyNotNullOp:
+		return true
+	}
+	return false
+}
+
+// AggregateIsNullOnEmpty returns true if the given aggregate operator has a
+// single input, and if it returns NULL when the input set contains no values.
+// This group of aggregates overlaps considerably with the AggregateIgnoresNulls
+// group, with the notable exception of COUNT, which returns zero instead of
+// NULL when its input is empty.
+func AggregateIsNullOnEmpty(op Operator) bool {
+	switch op {
+	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp,
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, AnyNotNullOp:
+		return true
+	}
+	return false
+}
+
 func init() {
 	for optOp, treeOp := range ComparisonOpReverseMap {
 		ComparisonOpMap[treeOp] = optOp

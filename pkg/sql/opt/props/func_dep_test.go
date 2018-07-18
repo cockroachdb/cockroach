@@ -111,6 +111,52 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 	}
 }
 
+func TestFuncDeps_InClosureOf(t *testing.T) {
+	// ()~~>(a)
+	// (a)~~>(d)
+	// ()-->(b)
+	// (b)==(c)
+	// (c)==(b)
+	// (d)-->(e)
+	fd := &props.FuncDepSet{}
+	fd.AddConstants(util.MakeFastIntSet(1, 2))
+	fd.AddSynthesizedCol(util.MakeFastIntSet(1), 4)
+	fd.MakeOuter(util.MakeFastIntSet(1, 4), util.MakeFastIntSet())
+	fd.AddEquivalency(2, 3)
+	fd.AddSynthesizedCol(util.MakeFastIntSet(4), 5)
+	verifyFD(t, fd, "()-->(2,3), ()~~>(1), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
+
+	testcases := []struct {
+		cols     []int
+		in       []int
+		expected bool
+	}{
+		{cols: []int{}, in: []int{}, expected: true},
+		{cols: []int{}, in: []int{1}, expected: true},
+		{cols: []int{2, 3}, in: []int{}, expected: true},
+		{cols: []int{2}, in: []int{3}, expected: true},
+		{cols: []int{3}, in: []int{2}, expected: true},
+		{cols: []int{3, 5}, in: []int{2, 4}, expected: true},
+
+		{cols: []int{1}, in: []int{}, expected: false},
+		{cols: []int{4}, in: []int{5}, expected: false},
+		{cols: []int{2, 3, 4}, in: []int{1, 2, 3}, expected: false},
+	}
+
+	for _, tc := range testcases {
+		cols := util.MakeFastIntSet(tc.cols...)
+		in := util.MakeFastIntSet(tc.in...)
+		actual := fd.InClosureOf(cols, in)
+		if actual != tc.expected {
+			if tc.expected {
+				t.Errorf("expected %s to be in closure of %s", cols, in)
+			} else {
+				t.Errorf("expected %s to not be in closure of %s", cols, in)
+			}
+		}
+	}
+}
+
 func TestFuncDeps_ComputeEquivClosure(t *testing.T) {
 	// (a)==(b,d)
 	// (b)==(a,c)
@@ -590,10 +636,10 @@ func TestFuncDeps_MakeApply(t *testing.T) {
 	// CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
 	// CREATE UNIQUE INDEX ON abcde (b, c)
 	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
-	// SELECT *
-	// FROM abcde
-	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a LIMIT 1)
-	// ON True
+	//   SELECT *
+	//   FROM abcde
+	//   INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a LIMIT 1)
+	//   ON True
 	abcde := makeAbcdeFD(t)
 	mnpq := makeMnpqFD(t)
 	mnpq.MakeMax1Row(util.MakeFastIntSet(10, 11, 12, 13))
@@ -603,27 +649,53 @@ func TestFuncDeps_MakeApply(t *testing.T) {
 
 	// SELECT *
 	// FROM abcde
-	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a AND m=1 AND p=1)
+	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a AND p=1)
 	// ON True
 	abcde = makeAbcdeFD(t)
 	mnpq = makeMnpqFD(t)
 	mnpq.AddConstants(util.MakeFastIntSet(10, 12))
 	verifyFD(t, mnpq, "(11): ()-->(10,12), (11)-->(13)")
 	abcde.MakeApply(mnpq)
-	verifyFD(t, abcde, "(1)-->(2-5), (2,3)~~>(1,4,5)")
+	verifyFD(t, abcde, "(1,11): (1)-->(2-5), (2,3)~~>(1,4,5), (1,11)-->(10,12,13)")
+
+	// SELECT *
+	// FROM abcde
+	// INNER JOIN LATERAL (SELECT * FROM mnpq WHERE m=a AND p=q)
+	// ON True
+	abcde = makeAbcdeFD(t)
+	mnpq = makeMnpqFD(t)
+	mnpq.AddConstants(util.MakeFastIntSet(10))
+	mnpq.AddEquivalency(12, 13)
+	verifyFD(t, mnpq, "(11): ()-->(10), (11)-->(12,13), (12)==(13), (13)==(12)")
+	abcde.MakeApply(mnpq)
+	verifyFD(t, abcde, "(1,11): (1)-->(2-5), (2,3)~~>(1,4,5), (1,11)-->(10,12,13), (12)==(13), (13)==(12)")
 
 	// No key in outer relation.
 	//   SELECT *
 	//   FROM (SELECT b, c, d, e FROM abcde)
-	//   INNER JOIN LATERAL (SELECT * FROM mnpq LIMIT 1)
+	//   INNER JOIN LATERAL (SELECT * FROM mnpq WHERE p=q AND n=1)
 	//   ON True
 	abcde = makeAbcdeFD(t)
 	abcde.ProjectCols(util.MakeFastIntSet(2, 3, 4, 5))
 	mnpq = makeMnpqFD(t)
-	mnpq.MakeMax1Row(util.MakeFastIntSet(10, 11, 12, 13))
-	verifyFD(t, mnpq, "(): ()-->(10-13)")
+	mnpq.AddConstants(util.MakeFastIntSet(11))
+	mnpq.AddEquivalency(12, 13)
+	verifyFD(t, mnpq, "(10): ()-->(11), (10)-->(12,13), (12)==(13), (13)==(12)")
 	abcde.MakeApply(mnpq)
-	verifyFD(t, abcde, "(2,3)~~>(4,5)")
+	verifyFD(t, abcde, "(2,3)~~>(4,5), (12)==(13), (13)==(12)")
+
+	// No key in inner relation.
+	//   SELECT *
+	//   FROM abcde
+	//   INNER JOIN LATERAL (SELECT n, p, q FROM mnpq WHERE n=a AND p=1)
+	//   ON True
+	abcde = makeAbcdeFD(t)
+	mnpq = makeMnpqFD(t)
+	mnpq.AddConstants(util.MakeFastIntSet(11, 12))
+	mnpq.ProjectCols(util.MakeFastIntSet(11, 12, 13))
+	verifyFD(t, mnpq, "()-->(11,12)")
+	abcde.MakeApply(mnpq)
+	verifyFD(t, abcde, "(1)-->(2-5), (2,3)~~>(1,4,5)")
 }
 
 func TestFuncDeps_MakeOuter(t *testing.T) {
@@ -740,6 +812,18 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(4, 5, 12, 13))
 	verifyFD(t, loj, "(4,5)-->(6), (12,13)-->(14)")
 	testColsAreStrictKey(t, loj, util.MakeFastIntSet(4, 5, 6, 12, 13, 14), false)
+
+	// SELECT * FROM abcde LEFT JOIN LATERAL (SELECT p, q, p+q FROM mnpq) ON True
+	nullExtendedCols = util.MakeFastIntSet(12, 13, 14)
+	loj = makeAbcdeFD(t)
+	mnpq = makeMnpqFD(t)
+	mnpq.AddSynthesizedCol(util.MakeFastIntSet(12, 13), 14)
+	mnpq.ProjectCols(util.MakeFastIntSet(12, 13, 14))
+	verifyFD(t, mnpq, "(12,13)-->(14)")
+	loj.MakeApply(mnpq)
+	verifyFD(t, loj, "(1)-->(2-5), (2,3)~~>(1,4,5), (1,12,13)-->(14)")
+	loj.MakeOuter(nullExtendedCols, util.MakeFastIntSet(1))
+	verifyFD(t, loj, "(1)-->(2-5), (2,3)~~>(1,4,5)")
 }
 
 // Construct base table FD from figure 3.3, page 114:

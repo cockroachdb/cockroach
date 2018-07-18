@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -641,9 +640,4 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 		oc.AppendCol(c.ExtractColID(col), true /* descending */)
 	}
 	return c.e.f.InternOrderingChoice(&oc)
-}
-
-// AnyType returns the private ID of a new AnyTime type.
-func (c *CustomFuncs) AnyType() memo.PrivateID {
-	return c.e.f.InternType(types.Any)
 }

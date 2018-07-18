@@ -702,7 +702,7 @@ anti-join
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
-# Left-join as outer.
+# Right-join as outer.
 opt
 SELECT k FROM a
 WHERE
@@ -711,15 +711,15 @@ WHERE
     FROM xy
     INNER JOIN uv
     ON x=u AND x=k
-)=1
+) IS DISTINCT FROM 1
 ----
 project
  ├── columns: k:1(int!null)
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) count:10(int!null)
+      ├── columns: k:1(int!null) count:10(int)
       ├── key: (1)
-      ├── fd: ()-->(10)
+      ├── fd: (1)-->(10)
       ├── group-by
       │    ├── columns: k:1(int!null) count:10(int)
       │    ├── grouping columns: k:1(int!null)
@@ -754,8 +754,8 @@ project
       │    └── aggregations [outer=(6)]
       │         └── count [type=int, outer=(6)]
       │              └── variable: xy.x [type=int, outer=(6)]
-      └── filters [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
-           └── count = 1 [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight)]
+      └── filters [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
+           └── count IS DISTINCT FROM 1 [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
 
 # Can't decorrelate left-join as inner.
 opt
@@ -900,20 +900,81 @@ WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
 ----
 project
  ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
- ├── key: (1,3)
- ├── fd: (1)-->(2), (1,3)-->(2,4)
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
       ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1), (3)==(10), (10)==(3)
+      ├── group-by
+      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── grouping columns: x:1(int!null) u:3(int!null)
+      │    ├── key: (3)
+      │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
+      │    ├── inner-join
+      │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) k:5(int!null) i:6(int!null)
+      │    │    ├── key: (3)
+      │    │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6), (1)==(4,5), (4)==(1,5), (5)==(1,4)
+      │    │    ├── inner-join
+      │    │    │    ├── columns: u:3(int!null) v:4(int) k:5(int!null) i:6(int!null)
+      │    │    │    ├── key: (3,5)
+      │    │    │    ├── fd: (3)-->(4), (5)-->(6)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    │    │    ├── key: (3)
+      │    │    │    │    └── fd: (3)-->(4)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │    │    │    ├── key: (5)
+      │    │    │    │    ├── fd: (5)-->(6)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: k:5(int!null) i:6(int)
+      │    │    │    │    │    ├── key: (5)
+      │    │    │    │    │    └── fd: (5)-->(6)
+      │    │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │    │         └── a.i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │    └── true [type=bool]
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4,5), (4)==(1,5), (5)==(1,4)]
+      │    │         ├── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── aggregations [outer=(2,4,6)]
+      │         ├── max [type=int, outer=(6)]
+      │         │    └── variable: a.i [type=int, outer=(6)]
+      │         ├── any-not-null [type=int, outer=(4)]
+      │         │    └── variable: uv.v [type=int, outer=(4)]
+      │         └── any-not-null [type=int, outer=(2)]
+      │              └── variable: xy.y [type=int, outer=(2)]
+      └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+           └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
+
+# Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
+# IS DISTINCT FROM to retain left join.
+opt
+SELECT *
+FROM xy, uv
+WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (1,3)-->(2,4), (1)==(4), (4)==(1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
       ├── key: (1,3)
-      ├── fd: (1)-->(2), (1,3)-->(2,4,10), (3)==(10), (10)==(3)
+      ├── fd: (1)-->(2), (1,3)-->(2,4,10), (1)==(4), (4)==(1)
       ├── group-by
       │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
       │    ├── grouping columns: x:1(int!null) u:3(int!null)
       │    ├── key: (1,3)
-      │    ├── fd: (1)-->(2), (1,3)-->(2,4,10)
+      │    ├── fd: (1)-->(2), (1,3)-->(2,4,10), (1)==(4), (4)==(1)
       │    ├── inner-join-apply
       │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
-      │    │    ├── fd: (1)-->(2)
+      │    │    ├── key: (1,3,5)
+      │    │    ├── fd: (1)-->(2), (1,3)-->(4), (1,5)-->(6), (1)==(4), (4)==(1)
       │    │    ├── scan xy
       │    │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    │    ├── key: (1)
@@ -942,8 +1003,8 @@ project
       │         │    └── variable: uv.v [type=int, outer=(4)]
       │         └── any-not-null [type=int, outer=(2)]
       │              └── variable: xy.y [type=int, outer=(2)]
-      └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
-           └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
+      └── filters [type=bool, outer=(3,10)]
+           └── uv.u IS DISTINCT FROM max [type=bool, outer=(3,10)]
 
 # Synthesize key when one is not present.
 opt
@@ -1067,20 +1128,26 @@ project
  │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
  │    │    ├── fd: (10)-->(2,9)
- │    │    ├── left-join
- │    │    │    ├── columns: i:2(int) x:7(int) y:8(int) rownum:10(int!null)
- │    │    │    ├── key: (7,10)
- │    │    │    ├── fd: (10)-->(2), (7)-->(8)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: i:2(int!null) x:7(int!null) y:8(int!null) rownum:10(int!null)
+ │    │    │    ├── key: (10)
+ │    │    │    ├── fd: (10)-->(2), (7)-->(8), (2)==(7), (7)==(2)
  │    │    │    ├── row-number
  │    │    │    │    ├── columns: i:2(int) rownum:10(int!null)
  │    │    │    │    ├── key: (10)
  │    │    │    │    ├── fd: (10)-->(2)
  │    │    │    │    └── scan a
  │    │    │    │         └── columns: i:2(int)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:7(int!null) y:8(int)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: x:7(int!null) y:8(int!null)
  │    │    │    │    ├── key: (7)
- │    │    │    │    └── fd: (7)-->(8)
+ │    │    │    │    ├── fd: (7)-->(8)
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: x:7(int!null) y:8(int)
+ │    │    │    │    │    ├── key: (7)
+ │    │    │    │    │    └── fd: (7)-->(8)
+ │    │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
+ │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
  │    │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    │    │         └── xy.x = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── aggregations [outer=(2,8)]
@@ -1092,6 +1159,90 @@ project
  │         └── max = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
  └── projections [outer=(2)]
       └── const: 'foo' [type=string]
+
+# Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
+# use of left joins.
+opt
+SELECT *
+FROM a
+WHERE
+(
+    SELECT max(y)
+    FROM xy
+    WHERE
+    (
+        SELECT max(v) FROM uv WHERE u=k
+    ) IS NULL
+) IS NULL
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:11(int)
+      ├── key: (1)
+      ├── fd: ()-->(11), (1)-->(2-5)
+      ├── group-by
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:11(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,11)
+      │    ├── left-join-apply
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) max:10(int)
+      │    │    ├── key: (1,6)
+      │    │    ├── fd: (1)-->(2-5), (1,6)-->(7,10)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-5)
+      │    │    ├── select
+      │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
+      │    │    │    ├── outer: (1)
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: ()-->(10), (6)-->(7)
+      │    │    │    ├── group-by
+      │    │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
+      │    │    │    │    ├── grouping columns: x:6(int!null)
+      │    │    │    │    ├── outer: (1)
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    ├── fd: (6)-->(7,10)
+      │    │    │    │    ├── left-join
+      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int)
+      │    │    │    │    │    ├── outer: (1)
+      │    │    │    │    │    ├── key: (6,8)
+      │    │    │    │    │    ├── fd: (6)-->(7), (8)-->(9)
+      │    │    │    │    │    ├── scan xy
+      │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    │    │    ├── key: (6)
+      │    │    │    │    │    │    └── fd: (6)-->(7)
+      │    │    │    │    │    ├── scan uv
+      │    │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
+      │    │    │    │    │    │    ├── key: (8)
+      │    │    │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    │    │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │    │    │    │         └── uv.u = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │    │    └── aggregations [outer=(7,9)]
+      │    │    │    │         ├── max [type=int, outer=(9)]
+      │    │    │    │         │    └── variable: uv.v [type=int, outer=(9)]
+      │    │    │    │         └── any-not-null [type=int, outer=(7)]
+      │    │    │    │              └── variable: xy.y [type=int, outer=(7)]
+      │    │    │    └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+      │    │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(2-5,7)]
+      │         ├── max [type=int, outer=(7)]
+      │         │    └── variable: xy.y [type=int, outer=(7)]
+      │         ├── any-not-null [type=int, outer=(2)]
+      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         ├── any-not-null [type=float, outer=(3)]
+      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         ├── any-not-null [type=string, outer=(4)]
+      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         └── any-not-null [type=jsonb, outer=(5)]
+      │              └── variable: a.j [type=jsonb, outer=(5)]
+      └── filters [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           └── max IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
 
 # Don't decorrelate when agg function that doesn't ignore nulls is used.
 opt
@@ -1516,7 +1667,7 @@ project
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,7)
+      ├── fd: (1)-->(2-5,7), (2)==(7), (7)==(2)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
@@ -1605,7 +1756,7 @@ project
  └── inner-join-apply
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5,8,10)
+      ├── fd: (1)-->(2-5,8,10), (2)==(10), (10)==(2)
       ├── select
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
       │    ├── key: (1)
