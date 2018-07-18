@@ -70,6 +70,10 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               cell: (ns) => `n${ns.desc.node_id}`,
               sort: (ns) => ns.desc.node_id,
             },
+            {
+              title: "Cores",
+              cell: (ns) => ns.num_cores,
+            },
             // Node address column - displays the node address, links to the
             // node-specific page for this node.
             {
