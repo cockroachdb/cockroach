@@ -85,17 +85,13 @@ project
  │    │    ├── key columns: [2] = [3]
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- │    │    ├── ordering: +2
- │    │    ├── sort
+ │    │    ├── ordering: +(2|3) opt(1)
+ │    │    ├── scan phone_register
  │    │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null)
+ │    │    │    ├── constraint: /1/2: [/1 - /1]
  │    │    │    ├── key: (2)
  │    │    │    ├── fd: ()-->(1)
- │    │    │    ├── ordering: +2
- │    │    │    └── scan phone_register
- │    │    │         ├── columns: phone_id:1(int!null) person_id:2(int!null)
- │    │    │         ├── constraint: /1/2: [/1 - /1]
- │    │    │         ├── key: (2)
- │    │    │         └── fd: ()-->(1)
+ │    │    │    └── ordering: +2 opt(1)
  │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
  │    │         └── phone_register.person_id = phone.id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
  │    ├── scan phone
@@ -104,8 +100,8 @@ project
  │    │    ├── fd: (7)-->(9)
  │    │    └── ordering: +7
  │    └── merge-on
- │         ├── left ordering: +2
- │         ├── right ordering: +7
+ │         ├── left equality columns: +2
+ │         ├── right equality columns: +7
  │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │              └── phone.id = phone_register.person_id [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  └── projections [outer=(1-6,9)]
@@ -501,8 +497,8 @@ project
       │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
       │    │    │         └── customer_aud.rev <= $1 [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
       │    │    └── merge-on
-      │    │         ├── left ordering: +1
-      │    │         ├── right ordering: +7
+      │    │         ├── left equality columns: +1
+      │    │         ├── right equality columns: +7
       │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │    │              └── customer_aud.id = customer_aud.id [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(3-6,8)]
@@ -617,8 +613,8 @@ sort
            │    │    │    ├── key: (9,10)
            │    │    │    └── ordering: +9
            │    │    └── merge-on
-           │    │         ├── left ordering: +1
-           │    │         ├── right ordering: +9
+           │    │         ├── left equality columns: +1
+           │    │         ├── right equality columns: +9
            │    │         └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
            │    │              └── customer_aud.id = customer_aud.id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
            │    └── aggregations [outer=(3-8,10)]
@@ -1237,7 +1233,7 @@ semi-join (merge)
  ├── sort
  │    ├── columns: person_id:10(int) order_id:11(int!null)
  │    ├── fd: ()-->(11)
- │    ├── ordering: +10
+ │    ├── ordering: +10 opt(11)
  │    └── select
  │         ├── columns: person_id:10(int) order_id:11(int!null)
  │         ├── fd: ()-->(11)
@@ -1246,8 +1242,8 @@ semi-join (merge)
  │         └── filters [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
  │              └── phone.order_id = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight)]
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +10
+      ├── left equality columns: +1
+      ├── right equality columns: +10
       └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
            └── person.id = phone.person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
 
@@ -1466,15 +1462,15 @@ semi-join (merge)
  ├── select
  │    ├── columns: person_id:7(int!null) addresses:8(string!null)
  │    ├── fd: ()-->(8)
- │    ├── ordering: +7
+ │    ├── ordering: +7 opt(8)
  │    ├── scan person_addresses
  │    │    ├── columns: person_id:7(int!null) addresses:8(string)
- │    │    └── ordering: +7
+ │    │    └── ordering: +7 opt(8)
  │    └── filters [type=bool, outer=(8), constraints=(/8: [/'Home address' - /'Home address']; tight), fd=()-->(8)]
  │         └── person_addresses.addresses = 'Home address' [type=bool, outer=(8), constraints=(/8: [/'Home address' - /'Home address']; tight)]
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +7
+      ├── left equality columns: +1
+      ├── right equality columns: +7
       └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
            └── person.id = person_addresses.person_id [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
 
@@ -1516,8 +1512,8 @@ anti-join (merge)
  │    └── filters [type=bool, outer=(8)]
  │         └── (person_addresses.addresses = 'Home address') IS NOT false [type=bool, outer=(8)]
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +7
+      ├── left equality columns: +1
+      ├── right equality columns: +7
       └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
            └── person.id = person_addresses.person_id [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
 
@@ -1850,22 +1846,18 @@ project
  │    │    ├── key columns: [2] = [3]
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2)
- │    │    ├── ordering: +2
- │    │    ├── sort
+ │    │    ├── ordering: +(2|3) opt(1)
+ │    │    ├── scan newspaper_news
  │    │    │    ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null)
+ │    │    │    ├── constraint: /1/2: [/1 - /1]
  │    │    │    ├── key: (2)
  │    │    │    ├── fd: ()-->(1)
- │    │    │    ├── ordering: +2
- │    │    │    └── scan newspaper_news
- │    │    │         ├── columns: newspaper_id:1(int!null) news_news_id:2(int!null)
- │    │    │         ├── constraint: /1/2: [/1 - /1]
- │    │    │         ├── key: (2)
- │    │    │         └── fd: ()-->(1)
+ │    │    │    └── ordering: +2 opt(1)
  │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
  │    │         └── newspaper_news.news_news_id = news.news_id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
  │    └── merge-on
- │         ├── left ordering: +6
- │         ├── right ordering: +2
+ │         ├── left equality columns: +6
+ │         ├── right equality columns: +2
  │         └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
  │              └── news.news_id = newspaper_news.news_news_id [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
  └── projections [outer=(1-5,8)]
@@ -1971,22 +1963,18 @@ project
  │    │         │         │    ├── key columns: [2] = [3]
  │    │         │         │    ├── key: (3)
  │    │         │         │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- │    │         │         │    ├── ordering: +2
- │    │         │         │    ├── sort
+ │    │         │         │    ├── ordering: +(2|3) opt(1)
+ │    │         │         │    ├── scan generationuser_generationgroup
  │    │         │         │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null)
+ │    │         │         │    │    ├── constraint: /1/2: [/1 - /1]
  │    │         │         │    │    ├── key: (2)
  │    │         │         │    │    ├── fd: ()-->(1)
- │    │         │         │    │    ├── ordering: +2
- │    │         │         │    │    └── scan generationuser_generationgroup
- │    │         │         │    │         ├── columns: generationuser_id:1(int!null) ref_id:2(int!null)
- │    │         │         │    │         ├── constraint: /1/2: [/1 - /1]
- │    │         │         │    │         ├── key: (2)
- │    │         │         │    │         └── fd: ()-->(1)
+ │    │         │         │    │    └── ordering: +2 opt(1)
  │    │         │         │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
  │    │         │         │         └── generationuser_generationgroup.ref_id = generationgroup.id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
  │    │         │         └── merge-on
- │    │         │              ├── left ordering: +7
- │    │         │              ├── right ordering: +2
+ │    │         │              ├── left equality columns: +7
+ │    │         │              ├── right equality columns: +2
  │    │         │              └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    │         │                   └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │         ├── scan generationgroup

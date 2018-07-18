@@ -231,8 +231,8 @@ project
       │    │    ├── prune: (7,8)
       │    │    └── interesting orderings: (+7)
       │    └── merge-on
-      │         ├── left ordering: +1
-      │         ├── right ordering: +7
+      │         ├── left equality columns: +1
+      │         ├── right equality columns: +7
       │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy
@@ -281,8 +281,8 @@ project
       │    │    ├── prune: (7,8)
       │    │    └── interesting orderings: (+7)
       │    └── merge-on
-      │         ├── left ordering: +1
-      │         ├── right ordering: +7
+      │         ├── left equality columns: +1
+      │         ├── right equality columns: +7
       │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       ├── scan xy

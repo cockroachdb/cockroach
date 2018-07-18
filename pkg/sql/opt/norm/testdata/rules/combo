@@ -403,8 +403,8 @@ GenerateMergeJoins
   +      │    ├── key: (6)
   +      │    └── ordering: +6
   +      └── merge-on
-  +           ├── left ordering: +1
-  +           ├── right ordering: +6
+  +           ├── left equality columns: +1
+  +           ├── right equality columns: +6
   +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
   +                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 --------------------------------------------------------------------------------
@@ -436,8 +436,8 @@ GenerateLookupJoin (higher cost)
   -      │    ├── key: (6)
   -      │    └── ordering: +6
   -      └── merge-on
-  -           ├── left ordering: +1
-  -           ├── right ordering: +6
+  -           ├── left equality columns: +1
+  -           ├── right equality columns: +6
   -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
   -                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
   +      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -476,8 +476,8 @@ GenerateLookupJoinWithFilter (higher cost)
   -      │    ├── key: (6)
   -      │    └── ordering: +6
   -      └── merge-on
-  -           ├── left ordering: +1
-  -           ├── right ordering: +6
+  -           ├── left equality columns: +1
+  -           ├── right equality columns: +6
   -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
   -                └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
   +      │    └── key: (6)
@@ -511,8 +511,8 @@ Final best expression
         │    ├── key: (6)
         │    └── ordering: +6
         └── merge-on
-             ├── left ordering: +1
-             ├── right ordering: +6
+             ├── left equality columns: +1
+             ├── right equality columns: +6
              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
                   └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 

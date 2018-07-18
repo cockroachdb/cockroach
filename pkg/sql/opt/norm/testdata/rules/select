@@ -282,8 +282,8 @@ select
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
+ │         ├── left equality columns: +1
+ │         ├── right equality columns: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(6)]
@@ -309,8 +309,8 @@ semi-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -334,8 +334,8 @@ anti-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -481,8 +481,8 @@ select
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
+ │         ├── left equality columns: +1
+ │         ├── right equality columns: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(2)]
@@ -511,8 +511,8 @@ select
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
+ │         ├── left equality columns: +1
+ │         ├── right equality columns: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(2)]
@@ -530,12 +530,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(2)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(2)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
  ├── scan xy
@@ -544,8 +544,8 @@ semi-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -561,12 +561,12 @@ anti-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(2)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(2)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
  ├── scan xy
@@ -575,8 +575,8 @@ anti-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -656,8 +656,8 @@ select
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3
  │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
+ │         ├── left equality columns: +1
+ │         ├── right equality columns: +3
  │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  └── filters [type=bool, outer=(4)]
@@ -686,8 +686,8 @@ select
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3
  │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
+ │         ├── left equality columns: +1
+ │         ├── right equality columns: +3
  │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  └── filters [type=bool, outer=(4)]
@@ -714,8 +714,8 @@ inner-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
            └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]
@@ -738,8 +738,8 @@ inner-join (merge)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
+      ├── left equality columns: +1
+      ├── right equality columns: +6
       └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
            └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]

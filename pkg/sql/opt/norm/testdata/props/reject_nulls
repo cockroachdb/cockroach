@@ -469,8 +469,8 @@ project
       │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── merge-on
-      │    │         ├── left ordering: +1
-      │    │         ├── right ordering: +5
+      │    │         ├── left equality columns: +1
+      │    │         ├── right equality columns: +5
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │              └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    └── aggregations [outer=(2-4,6)]

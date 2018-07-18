@@ -675,8 +675,8 @@ sort
       │    │    └── filters [type=bool, outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
       │    │         └── lineitem.l_commitdate < lineitem.l_receiptdate [type=bool, outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
       │    └── merge-on
-      │         ├── left ordering: +1
-      │         ├── right ordering: +10
+      │         ├── left equality columns: +1
+      │         ├── right equality columns: +10
       │         └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │              └── lineitem.l_orderkey = orders.o_orderkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
       └── aggregations
@@ -2377,8 +2377,8 @@ limit
  │         │    │    │    │    │    │    └── filters [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
  │         │    │    │    │    │    │         └── lineitem.l_receiptdate > lineitem.l_commitdate [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
  │         │    │    │    │    │    └── merge-on
- │         │    │    │    │    │         ├── left ordering: +8
- │         │    │    │    │    │         ├── right ordering: +53
+ │         │    │    │    │    │         ├── left equality columns: +8
+ │         │    │    │    │    │         ├── right equality columns: +53
  │         │    │    │    │    │         └── filters [type=bool, outer=(8,10,53,55), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /53: (/NULL - ]; /55: (/NULL - ]), fd=(8)==(53), (53)==(8)]
  │         │    │    │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,53), constraints=(/8: (/NULL - ]; /53: (/NULL - ])]
  │         │    │    │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,55), constraints=(/10: (/NULL - ]; /55: (/NULL - ])]
