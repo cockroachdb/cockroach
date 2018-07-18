@@ -41,10 +41,22 @@ func (node *Update) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 	ctx.WriteString(" SET ")
 	ctx.FormatNode(&node.Exprs)
-	ctx.FormatNode(node.Where)
-	ctx.FormatNode(&node.OrderBy)
-	ctx.FormatNode(node.Limit)
-	ctx.FormatNode(node.Returning)
+	if node.Where != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Where)
+	}
+	if len(node.OrderBy) > 0 {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(&node.OrderBy)
+	}
+	if node.Limit != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Limit)
+	}
+	if HasReturningClause(node.Returning) {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Returning)
+	}
 }
 
 // UpdateExprs represents a list of update expressions.

@@ -32,7 +32,7 @@ type ReturningExprs SelectExprs
 
 // Format implements the NodeFormatter interface.
 func (r *ReturningExprs) Format(ctx *FmtCtx) {
-	ctx.WriteString(" RETURNING ")
+	ctx.WriteString("RETURNING ")
 	ctx.FormatNode((*SelectExprs)(r))
 }
 
@@ -44,7 +44,7 @@ type ReturningNothing struct{}
 
 // Format implements the NodeFormatter interface.
 func (*ReturningNothing) Format(ctx *FmtCtx) {
-	ctx.WriteString(" RETURNING NOTHING")
+	ctx.WriteString("RETURNING NOTHING")
 }
 
 // AbsentReturningClause is a ReturningClause variant representing the absence of
