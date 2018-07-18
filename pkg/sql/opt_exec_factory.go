@@ -301,15 +301,29 @@ func (ef *execFactory) ConstructMergeJoin(
 	return node, nil
 }
 
+// ConstructScalarGroupBy is part of the exec.Factory interface.
+func (ef *execFactory) ConstructScalarGroupBy(
+	input exec.Node, aggregations []exec.AggInfo,
+) (exec.Node, error) {
+	return ef.constructGroupBy(input, nil /* groupCols */, aggregations, true /* isScalar */)
+}
+
 // ConstructGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructGroupBy(
 	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo,
+) (exec.Node, error) {
+	return ef.constructGroupBy(input, groupCols, aggregations, false /* isScalar */)
+}
+
+func (ef *execFactory) constructGroupBy(
+	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo, isScalar bool,
 ) (exec.Node, error) {
 	n := &groupNode{
 		plan:      input.(planNode),
 		funcs:     make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
 		columns:   make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
 		groupCols: make([]int, len(groupCols)),
+		isScalar:  isScalar,
 	}
 	for i, col := range groupCols {
 		n.groupCols[i] = int(col)
@@ -364,10 +378,6 @@ func (ef *execFactory) ConstructGroupBy(
 			Typ:  agg.ResultType,
 		})
 	}
-
-	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	n.run.addNullBucketIfEmpty = len(groupCols) == 0
-	n.run.buckets = make(map[string]struct{})
 	return n, nil
 }
 

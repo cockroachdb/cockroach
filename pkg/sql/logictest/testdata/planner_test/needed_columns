@@ -220,6 +220,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 ----
 group                ·            ·             (count)                                               ·
  │                   aggregate 0  count_rows()  ·                                                     ·
+ │                   scalar       ·             ·                                                     ·
  └── render          ·            ·             ()                                                    ·
       └── render     ·            ·             (name[omitted], age[omitted])                         ·
            │         render 0     NULL          ·                                                     ·
@@ -239,6 +240,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM ab WHERE a=1
 ----
 group           ·            ·             (count)                   ·
  │              aggregate 0  count_rows()  ·                         ·
+ │              scalar       ·             ·                         ·
  └── render     ·            ·             ()                        ·
       └── scan  ·            ·             (a[omitted], b[omitted])  a=CONST; b!=NULL; key(b)
 ·               table        ab@primary    ·                         ·

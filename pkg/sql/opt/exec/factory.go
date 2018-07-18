@@ -106,10 +106,14 @@ type Factory interface {
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	) (Node, error)
 
-	// ConstructGroupBy returns a node that runs an aggregation. If group columns
-	// are specified, a set of aggregations is performed for each group of values
-	// on those columns (otherwise there is a single group).
+	// ConstructGroupBy returns a node that runs an aggregation. A set of
+	// aggregations is performed for each group of values on the groupCols.
 	ConstructGroupBy(input Node, groupCols []ColumnOrdinal, aggregations []AggInfo) (Node, error)
+
+	// ConstructScalarGroupBy returns a node that runs a scalar aggregation, i.e.
+	// one which performs a set of aggregations on all the input rows (as a single
+	// group) and has exactly one result row (even when there are no input rows).
+	ConstructScalarGroupBy(input Node, aggregations []AggInfo) (Node, error)
 
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
 	// operation (either the ALL or the DISTINCT version). The left and right

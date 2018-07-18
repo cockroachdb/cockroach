@@ -8,6 +8,7 @@ EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
 group            ·            ·                (max)           ·
  │               aggregate 0  max(ordinality)  ·               ·
+ │               scalar       ·                ·               ·
  └── ordinality  ·            ·                ("ordinality")  ·
       └── scan   ·            ·                ()              ·
 ·                table        foo@primary      ·               ·

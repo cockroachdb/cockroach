@@ -545,13 +545,6 @@ func (p *planner) optionallyUseOptimizer(
 		log.VEvent(ctx, 1, "optimizer disabled")
 		return false, nil
 	}
-	// TODO(radu): for now, the experimental force lookup join flag does not work
-	// with the optimizer. Turn the optimizer off for the query so the flag can
-	// still function.
-	if sd.OptimizerMode != sessiondata.OptimizerAlways && sd.LookupJoinEnabled {
-		log.VEvent(ctx, 1, "lookup join requested; not using optimizer")
-		return false, nil
-	}
 
 	log.VEvent(ctx, 1, "generating optimizer plan")
 

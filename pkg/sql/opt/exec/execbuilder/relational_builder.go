@@ -467,17 +467,16 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	aggregations := ev.Child(1)
-	numAgg := aggregations.ChildCount()
-	groupingCols := ev.Private().(*memo.GroupByDef).GroupingCols
-
-	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	var ep execPlan
+	groupingCols := ev.Private().(*memo.GroupByDef).GroupingCols
+	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(i, len(groupingColIdx))
 		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
 	}
 
+	aggregations := ev.Child(1)
+	numAgg := aggregations.ChildCount()
 	aggColList := aggregations.Private().(opt.ColList)
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
@@ -503,7 +502,13 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		ep.outputCols.Set(int(aggColList[i]), len(groupingColIdx)+i)
 	}
 
-	ep.root, err = b.factory.ConstructGroupBy(input.root, groupingColIdx, aggInfos)
+	// TODO(andyk): this condition is not correct in all cases and will be
+	// replaced by having two distinct operators.
+	if len(groupingColIdx) == 0 {
+		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
+	} else {
+		ep.root, err = b.factory.ConstructGroupBy(input.root, groupingColIdx, aggInfos)
+	}
 	if err != nil {
 		return execPlan{}, err
 	}
