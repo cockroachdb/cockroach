@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/cpu"
 )
 
 const (
@@ -422,6 +423,11 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
 	lastStoreMetricCount := atomic.LoadInt64(&mr.lastStoreMetricCount)
 
+	numCores, err := getNumCores(ctx)
+	if err != nil {
+		log.Warningf(ctx, "unable to get number of cores: %v", err)
+	}
+
 	// Generate a node status with no store data.
 	nodeStat := &NodeStatus{
 		Desc:          mr.mu.desc,
@@ -433,6 +439,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 		Args:          os.Args,
 		Env:           envutil.GetEnvVarsUsed(),
 		Activity:      activity,
+		NumCores:      numCores,
 	}
 
 	// If the cluster hasn't yet been definitively moved past the network stats
@@ -478,6 +485,19 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	}
 
 	return nodeStat
+}
+
+func getNumCores(ctx context.Context) (int32, error) {
+	numCores := int32(0)
+	cpuInfos, err := cpu.InfoWithContext(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, cpuInfo := range cpuInfos {
+		// TODO(vilterp): figure out a more robust way of accounting for hyperthreading than `*2`
+		numCores += cpuInfo.Cores * 2
+	}
+	return numCores, nil
 }
 
 // WriteNodeStatus writes the supplied summary to the given client.

@@ -57,6 +57,8 @@ message NodeStatus {
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
+  // num_cores is the number of logical cores on this machine.
+  int32 num_cores = 11;
 }
 
 // A HealthAlert is an undesired condition detected by a server which should be
