@@ -217,94 +217,99 @@ func TestTablesNeededForFKs(t *testing.T) {
 
 // BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
 func BenchmarkMultiRowFKChecks(b *testing.B) {
+
 	// Throughout the course of testing there are four tables that are set up at the beginning of each sub-benchmark and
 	// torn down at the end of each sub-benchmark.
 	// `childFK` has a foreign key that references `parentFK`.
-	parentFKSchema := `
+	fkTables := []struct {
+		tableName string
+		schema    string
+	}{
+		{
+			tableName: `parentFK`,
+			schema: `
 CREATE TABLE IF NOT EXISTS parentFK(
   foo INT PRIMARY KEY,
   bar INT
-)
-`
-	childFKSchema := `
+)`,
+		},
+		{
+			tableName: `childFK`,
+			schema: `
 CREATE TABLE IF NOT EXISTS childFK(
   baz INT PRIMARY KEY,
   foo INT,
   FOREIGN KEY(foo) REFERENCES parentFK(foo) ON UPDATE CASCADE ON DELETE CASCADE
 )
-`
-	// `parentNoFK` and `childNoFK` are the same as `parentFK` and `childFK` but `childNoFK` has no foreign key reference
-	// to `parentNoFK`
-	parentNoFKSchema := `
+`,
+		},
+		// `parentNoFK` and `childNoFK` are the same as `parentFK` and `childFK` but `childNoFK` has no foreign key reference
+		// to `parentNoFK`
+		{
+			tableName: `parentNoFK`,
+			schema: `
 CREATE TABLE IF NOT EXISTS parentNoFK(
   foo INT PRIMARY KEY,
   bar INT
 )
-`
-	childNoFKSchema := `
+`},
+		{
+			tableName: `childNoFK`,
+			schema: `
 CREATE TABLE IF NOT EXISTS childNoFK(
   baz INT PRIMARY KEY,
   foo INT
-)
-`
-	// `self_referential` has a foreign key reference to itself (parent-child relationship) with
-	// 		cascading updates and deletes
-	// `self_referential_noFK` has the same schema
-	// `self_referential_setnull` has an identical schema to `self_referential` except that instead of cascading
-	// 		on delete, it sets the reference field to null.
-	selfReferentialSchema := `
+)`,
+		},
+		// `self_referential` has a foreign key reference to itself (parent-child relationship) with
+		// 		cascading updates and deletes
+		// `self_referential_noFK` has the same schema
+		// `self_referential_setnull` has an identical schema to `self_referential` except that instead of cascading
+		// 		on delete, it sets the reference field to null.
+		{
+			tableName: `self_referential`,
+			schema: `
 CREATE TABLE IF NOT EXISTS self_referential(
 	id INT PRIMARY KEY,
 	pid INT,
 	FOREIGN KEY(pid) REFERENCES self_referential(id) ON UPDATE CASCADE ON DELETE CASCADE
-)
-`
-	selfReferentialNoFKSchema := `
+)`,
+		},
+		{
+			tableName: `self_referential_noFK`,
+			schema: `
 CREATE TABLE IF NOT EXISTS self_referential_noFK(
 	id INT PRIMARY KEY,
 	pid INT
-)
-`
-	selfReferentialSetNullSchema := `
+)`,
+		},
+		{
+			tableName: `self_referential_setnull`,
+			schema: `
 CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	id INT PRIMARY KEY,
 	pid INT,
 	FOREIGN KEY(pid) REFERENCES self_referential_setnull(id) ON UPDATE CASCADE ON DELETE SET NULL
-)
-`
+)`,
+		},
+	}
 	_, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
-	// This function is to be called at the beginning of each sub-benchmark to set up the necessary tables.
-	setup := func() {
-		setupStatements := []string{
-			parentFKSchema,
-			childFKSchema,
-			parentNoFKSchema,
-			childNoFKSchema,
-			selfReferentialSchema,
-			selfReferentialNoFKSchema,
-			selfReferentialSetNullSchema,
-		}
-		drop()
-		for _, s := range setupStatements {
-			if _, err := db.Exec(s); err != nil {
+	// This function tears down all the tables and is meant to be called at the beginning and  end of each sub-benchmark.
+	drop := func() {
+		// dropping has to be done in reverse so no drop causes a foreign key violation
+		for i := len(fkTables) - 1; i >= 0; i-- {
+			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, fkTables[i].tableName)); err != nil {
 				b.Fatal(err)
 			}
 		}
 	}
-	// This function tears down all the tables and is meant to be called at the beginning and  end of each sub-benchmark.
-	drop := func() {
-		tables := [...]string{
-			"childFK",
-			"parentFK",
-			"parentNoFK",
-			"childNoFK",
-			"self_referential",
-			"self_referential_noFK",
-			"self_referential_setnull",
-		}
-		for _, tableName := range tables {
-			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)); err != nil {
+
+	// This function is to be called at the beginning of each sub-benchmark to set up the necessary tables.
+	setup := func() {
+		drop()
+		for _, t := range fkTables {
+			if _, err := db.Exec(t.schema); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -580,7 +585,6 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 
 		b.ResetTimer()
-
 		if _, err := db.Exec(`DELETE FROM self_referential_setnull`); err != nil {
 			b.Fatal(err)
 		}
