@@ -534,7 +534,7 @@ crdb_oid    tablename  indexname     indexdef
 
 query OOIBBB colnames
 SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
@@ -543,23 +543,94 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 586319999   true          false           true        false         false
 4084598994  false         false           true        false         false
 
-query OOBBTIIITT colnames
+query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-586319999   4183203597  true       false           3 4     0             0         0          NULL      NULL
-4084598994  226054345   true       false           1 2     0             0         0          NULL      NULL
+586319999   4183203597  true       false           3 4     {0,0}         {0,0}     {0,0}      NULL      NULL
+4084598994  226054345   true       false           1 2     {0,0}         {0,0}     {0,0}      NULL      NULL
+
+statement ok
+SET DATABASE = system
+
+query OOIBBBBBBBBBBTTTTTT colnames
+SELECT *
+FROM pg_catalog.pg_index
+ORDER BY indexrelid
+----
+indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation             indclass  indoption  indexprs  indpred
+27122201    2904033927  2         true         true          false           true          false           true        false         false       true       false           1 6      {0,0}                    {0,0}      {0,0}      NULL      NULL
+235043584   971623778   2         true         true          false           true          false           true        false         false       true       false           1 2      {1661428263,1661428263}  {0,0}      {0,0}      NULL      NULL
+235043586   971623778   1         false        false         false           false         false           true        false         false       true       false           2        {1661428263}             {0}        {0}        NULL      NULL
+235043587   971623778   1         false        false         false           false         false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
+553144061   2568924675  2         true         true          false           true          false           true        false         false       true       false           1 2      {0,0}                    {0,0}      {0,0}      NULL      NULL
+633004884   1455563232  1         false        false         false           false         false           true        false         false       true       false           4        {0}                      {0}        {0}        NULL      NULL
+633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        {0}                      {0}        {0}        NULL      NULL
+633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
+961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
+1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      {0,0}                    {0,0}      {0,0}      NULL      NULL
+1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
+1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      {1661428263,0}           {0,0}      {0,0}      NULL      NULL
+2151986803  504491171   1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
+2490277766  936526412   1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
+2516644345  13912245    1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
+2795406519  4084372773  1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
+2916809960  3412769920  2         true         true          false           true          false           true        false         false       true       false           1 2      {0,1661428263}           {0,0}      {0,0}      NULL      NULL
+3042779560  1692823172  2         true         true          false           true          false           true        false         false       true       false           1 2      {1661428263,1661428263}  {0,0}      {0,0}      NULL      NULL
+4083294912  4199044472  4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  {0,0,0,0}                {0,0,0,0}  {0,0,0,0}  NULL      NULL
+
+# From #26504
+query OOI colnames
+SELECT indexrelid,
+       (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
+       (information_schema._pg_expandarray(indclass)).n AS operator_argument_position
+FROM pg_index
+ORDER BY indexrelid, operator_argument_position
+----
+indexrelid  operator_argument_type_oid  operator_argument_position
+27122201    0                           1
+27122201    0                           2
+235043584   0                           1
+235043584   0                           2
+235043586   0                           1
+235043587   0                           1
+553144061   0                           1
+553144061   0                           2
+633004884   0                           1
+633004885   0                           1
+633004886   0                           1
+961325075   0                           1
+1168848597  0                           1
+1168848597  0                           2
+1849259112  0                           1
+1849259115  0                           1
+1849259115  0                           2
+2151986803  0                           1
+2490277766  0                           1
+2516644345  0                           1
+2795406519  0                           1
+2916809960  0                           1
+2916809960  0                           2
+3042779560  0                           1
+3042779560  0                           2
+4083294912  0                           1
+4083294912  0                           2
+4083294912  0                           3
+4083294912  0                           4
 
 ## pg_catalog.pg_collation
+
+statement ok
+SET DATABASE = constraint_db
 
 query OTOOITT colnames
 SELECT * FROM pg_collation
