@@ -107,60 +107,64 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 	// started (this isn't great, but it's how it is right now).
 	c.poke()
 
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		var timer timeutil.Timer
-		defer timer.Stop()
+	// Run the Worker in a Task because the worker holds on to the engine and
+	// may still access it even though the stopper has allowed it to close.
+	_ = stopper.RunTask(ctx, "compactor", func(ctx context.Context) {
+		stopper.RunWorker(ctx, func(ctx context.Context) {
+			var timer timeutil.Timer
+			defer timer.Stop()
 
-		// The above timer will either be on c.minInterval() or c.maxAge(). The
-		// former applies if we know there are new suggestions waiting to be
-		// inspected: we want to look at them soon, but also want to make sure
-		// "related" suggestions arrive before we start compacting. When no new
-		// suggestions have been made since the last inspection, the expectation
-		// is that all we have to do is clean up any previously skipped ones (at
-		// least after sufficient time has passed), and so we wait out the max age.
-		var isFast bool
+			// The above timer will either be on c.minInterval() or c.maxAge(). The
+			// former applies if we know there are new suggestions waiting to be
+			// inspected: we want to look at them soon, but also want to make sure
+			// "related" suggestions arrive before we start compacting. When no new
+			// suggestions have been made since the last inspection, the expectation
+			// is that all we have to do is clean up any previously skipped ones (at
+			// least after sufficient time has passed), and so we wait out the max age.
+			var isFast bool
 
-		for {
-			select {
-			case <-stopper.ShouldStop():
-				return
+			for {
+				select {
+				case <-stopper.ShouldStop():
+					return
 
-			case <-c.ch:
-				// A new suggestion was made. Examine the compaction queue,
-				// which returns the number of bytes queued.
-				if bytesQueued, err := c.examineQueue(ctx); err != nil {
-					log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
-				} else if bytesQueued > 0 {
-					log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
-				} else {
-					// Queue is empty, don't set the timer. This can happen only at startup.
-					break
-				}
-				// Set the wait timer if not already set.
-				if !isFast {
+				case <-c.ch:
+					// A new suggestion was made. Examine the compaction queue,
+					// which returns the number of bytes queued.
+					if bytesQueued, err := c.examineQueue(ctx); err != nil {
+						log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
+					} else if bytesQueued > 0 {
+						log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
+					} else {
+						// Queue is empty, don't set the timer. This can happen only at startup.
+						break
+					}
+					// Set the wait timer if not already set.
+					if !isFast {
+						isFast = true
+						timer.Reset(c.minInterval())
+					}
+
+				case <-timer.C:
+					timer.Read = true
+					ok, err := c.processSuggestions(ctx)
+					if err != nil {
+						log.Warningf(ctx, "failed processing suggested compactions: %s", err)
+					}
+					if ok {
+						// The queue was processed, so either it's empty or contains suggestions
+						// that were skipped for now. Revisit when they are certainly expired.
+						isFast = false
+						timer.Reset(c.maxAge())
+						break
+					}
+					// More work to do, revisit after minInterval. Note that basically
+					// `ok == (err == nil)` but this refactor is left for a future commit.
 					isFast = true
 					timer.Reset(c.minInterval())
 				}
-
-			case <-timer.C:
-				timer.Read = true
-				ok, err := c.processSuggestions(ctx)
-				if err != nil {
-					log.Warningf(ctx, "failed processing suggested compactions: %s", err)
-				}
-				if ok {
-					// The queue was processed, so either it's empty or contains suggestions
-					// that were skipped for now. Revisit when they are certainly expired.
-					isFast = false
-					timer.Reset(c.maxAge())
-					break
-				}
-				// More work to do, revisit after minInterval. Note that basically
-				// `ok == (err == nil)` but this refactor is left for a future commit.
-				isFast = true
-				timer.Reset(c.minInterval())
 			}
-		}
+		})
 	})
 }
 
