@@ -66,6 +66,7 @@ root                              ·            ·                              
            │                      count        2                                                                            ·                            ·
            └── group              ·            ·                                                                            (max)                        ·
                 │                 aggregate 0  max(a)                                                                       ·                            ·
+                │                 scalar       ·                                                                            ·                            ·
                 └── render        ·            ·                                                                            (a)                          a!=NULL; key(a); -a
                      │            render 0     test.public.abc.a                                                            ·                            ·
                      └── revscan  ·            ·                                                                            (a, b[omitted], c[omitted])  a!=NULL; key(a); -a

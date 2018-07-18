@@ -322,6 +322,9 @@ func (v *planVisitor) visit(plan planNode) {
 					v.observer.attr(name, "group by", buf.String())
 				}
 			}
+			if n.isScalar {
+				v.observer.attr(name, "scalar", "")
+			}
 		}
 
 		v.visit(n.plan)
