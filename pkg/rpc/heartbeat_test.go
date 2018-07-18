@@ -162,17 +162,22 @@ func TestClockOffsetMismatch(t *testing.T) {
 		}
 	}()
 
+	ctx := context.Background()
+
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
 	hs := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
 		version:            &cluster.MakeTestingClusterSettings().Version,
 	}
+	hs.clusterID.Set(ctx, uuid.Nil)
 
 	request := &PingRequest{
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
+		ServerVersion:  hs.version.Version().MinimumVersion,
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
