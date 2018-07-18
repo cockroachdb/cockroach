@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
@@ -125,6 +126,11 @@ func (c *CustomFuncs) HasColType(group memo.GroupID, colTyp memo.PrivateID) bool
 		return false
 	}
 	return coltypes.ColTypeAsString(srcTyp) == coltypes.ColTypeAsString(dstTyp)
+}
+
+// IsString returns true if the given expression is of type String.
+func (c *CustomFuncs) IsString(group memo.GroupID) bool {
+	return c.LookupScalar(group).Type == types.String
 }
 
 // ColTypeToDatumType maps the given column type to a datum type.
@@ -975,4 +981,22 @@ func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
 		panic(err)
 	}
 	return c.f.ConstructConst(c.f.InternDatum(r))
+}
+
+// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
+func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
+	v := c.f.mem.LookupPrivate(c.f.mem.NormExpr(value).AsConst().Value()).(tree.Datum).(*tree.DJSON)
+	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+}
+
+// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
+func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
+	k := c.f.mem.LookupPrivate(c.f.mem.NormExpr(key).AsConst().Value()).(*tree.DString)
+	v := c.f.mem.LookupPrivate(c.f.mem.NormExpr(value).AsConst().Value()).(*tree.DJSON)
+
+	builder := json.NewObjectBuilder(1)
+	builder.Add(string(*k), v.JSON)
+	j := builder.Build()
+
+	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
 }
