@@ -684,7 +684,7 @@ type WindowFrame struct {
 	Bounds WindowFrameBounds // the bounds of the frame
 }
 
-func (boundary *WindowFrameBound) write(ctx *FmtCtx) {
+func (boundary *WindowFrameBound) Format(ctx *FmtCtx) {
 	switch boundary.BoundType {
 	case UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
@@ -715,11 +715,11 @@ func (wf *WindowFrame) Format(ctx *FmtCtx) {
 	}
 	if wf.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")
-		wf.Bounds.StartBound.write(ctx)
+		ctx.FormatNode(wf.Bounds.StartBound)
 		ctx.WriteString(" AND ")
-		wf.Bounds.EndBound.write(ctx)
+		ctx.FormatNode(wf.Bounds.EndBound)
 	} else {
-		wf.Bounds.StartBound.write(ctx)
+		ctx.FormatNode(wf.Bounds.StartBound)
 	}
 }
 
