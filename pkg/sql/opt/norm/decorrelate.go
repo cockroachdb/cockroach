@@ -184,12 +184,8 @@ func (c *CustomFuncs) ConstructApplyJoin(
 func (c *CustomFuncs) CanAggsIgnoreNulls(aggs memo.GroupID) bool {
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	for _, elem := range c.f.mem.LookupList(aggsExpr.Aggs()) {
-		switch c.f.mem.NormExpr(elem).Operator() {
-		case opt.AvgOp, opt.BoolAndOp, opt.BoolOrOp, opt.CountOp, opt.CountRowsOp,
-			opt.MaxOp, opt.MinOp, opt.SumIntOp, opt.SumOp, opt.SqrDiffOp,
-			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.AnyNotNullOp:
-
-		default:
+		op := c.f.mem.NormExpr(elem).Operator()
+		if op != opt.CountRowsOp && !opt.AggregateIgnoresNulls(op) {
 			return false
 		}
 	}

@@ -382,8 +382,8 @@ project
  │    ├── group-by
  │    │    ├── columns: a.x:1(int!null) y:2(int) max:6(string)
  │    │    ├── grouping columns: a.x:1(int!null)
- │    │    ├── left-join
- │    │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:4(string) z:5(decimal)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) z:5(decimal!null)
  │    │    │    ├── scan a
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
  │    │    │    ├── scan b

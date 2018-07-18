@@ -516,6 +516,12 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// InClosureOf returns true if the given columns are functionally determined by
+// the "in" column set.
+func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
+	return f.inClosureOf(cols, in, true /* strict */)
+}
+
 // ComputeClosure returns the strict closure of the given columns. The closure
 // includes the input columns plus all columns that are functionally dependent
 // on those columns, either directly or indirectly. Consider this set of FD's:
@@ -934,9 +940,9 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 // expected to operate on disjoint columns, so the FDs from each are simply
 // concatenated, rather than simplified via calls to addDependency (except for
 // case of constant columns).
-func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
-	for i := range fdset.deps {
-		fd := &fdset.deps[i]
+func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
+	for i := range inner.deps {
+		fd := &inner.deps[i]
 		if fd.from.Empty() {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 		} else {
@@ -944,8 +950,8 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 		}
 	}
 
-	if f.hasKey && fdset.hasKey {
-		f.setKey(f.key.Union(fdset.key))
+	if f.hasKey && inner.hasKey {
+		f.setKey(f.key.Union(inner.key))
 	} else {
 		f.ClearKey()
 	}
@@ -953,8 +959,9 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 
 // MakeApply modifies the FD set to reflect the impact of an apply join. This
 // FD set reflects the properties of the outer query, and the given FD set
-// reflects the properties of the inner query. The FD set from the inner query
-// is mostly ignored, since most FDs no longer hold. For example:
+// reflects the properties of the inner query. Constant FDs from inner set no
+// longer hold and some other dependencies need to be augmented in order to be
+// valid for the apply join operator. Consider this example:
 //
 //   SELECT *
 //   FROM a
@@ -962,30 +969,33 @@ func (f *FuncDepSet) MakeProduct(fdset *FuncDepSet) {
 //   ON True
 //
 // 1. The constant dependency created from the outer column reference b.y=a.y
-//    does not hold for the Apply operator.
+//    does not hold for the Apply operator, since b.y is no longer constant at
+//    this level. In general, constant dependencies cannot be retained, because
+//    they may have been generated from outer column equivalencies.
 // 2. If a strict dependency (b.x,b.y)-->(b.z) held, it would have been reduced
 //    to (b.x)-->(b.z) because (b.y) is constant in the inner query. However,
 //    (b.x)-->(b.z) does not hold for the Apply operator, since (b.y) is not
-//    constant in that case.
-// 3. Lax dependencies can be invalidated for similar reasons to #2.
-// 4. Equivalence dependencies in the inner query do still hold for the Apply
+//    constant in that case. However, the dependency *does* hold as long as its
+//    determinant is augmented by the left input's key columns (if key exists).
+// 3. Lax dependencies follow the same rules as #2.
+// 4. Equivalence dependencies in the inner query still hold for the Apply
 //    operator.
-// 5. Any key for the inner query cannot be inherited by the Apply operator,
-//    since it may have been reduced by an outer column constant, such as if the
-//    strict dependency in #2 had been a key. The exception is if the inner
-//    query returns at most one row, in which case a key can be derived for the
-//    Apply operator based on the outer query's key.
+// 5. If both the outer and inner inputs of the apply join have keys, then the
+//    concatenation of those keys is a key on the apply join result.
 //
-// Given that nearly all dependencies are invalidated by the Apply, and since
-// the hope is that the Apply can be eliminated anyway (via decorrelation),
-// MakeApply ignores most of the inner query's FD information.
 func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
-	if inner.HasMax1Row() {
-		if f.hasKey {
-			// Ensure that outer FD set's key references all columns from the inner
-			// FD set.
-			f.addDependency(f.key, inner.ColSet(), true /* strict */, false /* equiv */)
+	for i := range inner.deps {
+		fd := &inner.deps[i]
+		if fd.equiv {
+			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+		} else if !fd.from.Empty() && f.hasKey {
+			f.addDependency(f.key.Union(fd.from), fd.to, fd.strict, fd.equiv)
 		}
+	}
+
+	if f.hasKey && inner.hasKey {
+		f.setKey(f.key.Union(inner.key))
+		f.ensureKeyClosure(inner.ColSet())
 	} else {
 		f.ClearKey()
 	}
@@ -1003,6 +1013,7 @@ func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
 // the impact of outer joins on FDs.
 func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	var newFDs []funcDep
+	allCols := f.ColSet()
 
 	n := 0
 	for i := range f.deps {
@@ -1053,10 +1064,16 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 			//    the determinant, such as (c,d)-->(e), then the (NULL,NULL)
 			//    determinant will be unique, thus preserving a strict FD.
 			//
+			// 3. A dependency with determinant columns drawn from both sides of
+			//    the join is discarded, unless the determinant is a key for the
+			//    relation. Null-extending one side of the join does not disturb
+			//    the relation's keys, and keys always determine all other columns.
+			//
 			if fd.from.Intersects(nullExtendedCols) {
 				if !fd.from.SubsetOf(nullExtendedCols) {
+					// Rule #3, described above.
 					if !f.ColsAreStrictKey(fd.from) {
-						panic(fmt.Sprintf("determinant cannot contain columns from both sides of join: %s", f))
+						continue
 					}
 				} else {
 					// Rule #1, described above (determinant is on null-supplying side).
@@ -1102,7 +1119,7 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	// However, the key's closure may no longer include all columns in the
 	// relation, due to removing FDs and/or making them lax, so if necessary,
 	// add a new strict FD that ensures the key's closure is maintained.
-	f.ensureKeyClosure(f.ColSet())
+	f.ensureKeyClosure(allCols)
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there

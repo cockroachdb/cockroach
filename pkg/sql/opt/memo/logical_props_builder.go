@@ -389,7 +389,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		notNullCols := leftProps.NotNullCols.Union(rightProps.NotNullCols)
 
 		switch ev.Operator() {
-		case opt.InnerJoinOp:
+		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			// Add FDs from the ON predicate, which include equivalent columns and
 			// constant columns.
 			relational.FuncDeps.AddFrom(&onProps.FuncDeps)

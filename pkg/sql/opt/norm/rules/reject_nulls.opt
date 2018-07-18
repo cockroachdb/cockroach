@@ -1,0 +1,142 @@
+# =============================================================================
+# reject_nulls.opt contains normalization rules that simplify expressions based
+# on "null-rejecting filters". A null-rejecting filter on column x discards rows
+# in which the value of x is null. Many common SQL comparison expressions reject
+# null values, such as:
+#
+#   x = 1          -- Rejects nulls on x
+#   y < 10         -- Rejects nulls on y
+#   x = y          -- Rejects nulls on x and y
+#   x IS NOT NULL  -- Rejects nulls on x
+#
+# Null rejection analysis is used to simplify outer joins into inner joins. This
+# in turn unlocks additional rewrite rules that only work with inner joins. Some
+# of these rules are needed to fully decorrelate correlated subqueries, such as
+# this pattern:
+#
+#   SELECT * FROM a WHERE (SELECT MIN(z) FROM b WHERE a.x=b.x) = a.y
+#
+# Null rejection rules work in concert with predicate pushdown rules to first
+# recognize a null rejection filter at a higher level, and then to push it down
+# to a lower level where it can simplify an outer join. As an example:
+#
+#   SELECT min(b.y) FROM a LEFT JOIN b ON True GROUP BY a.x HAVING min(b.y)=1
+#
+# The min(b.y)=1 expression filters rows where min(b.y) is null, and because of
+# the properties of the SQL min function, it therefore excludes GroupBy input
+# rows where b.y is null. Since b.y is a null-extended LEFT JOIN column,
+# pushing down a "b.y IS NOT NULL" predicate will turn the LEFT JOIN into an
+# INNER JOIN.
+#
+# Filter synthesis and pushdown must be done with care in order to avoid
+# repeated pushdown of redundant filters. The null rejection rules rely on the
+# Logical.Rule.RejectNullCols property to determine when it's useful to create a
+# new IS NOT NULL filter. See the Logical.Rule.RejectNullCols comment for more
+# details on how this works.
+# =============================================================================
+
+
+# RejectNullsLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
+# FullJoin to a RightJoin) when there is a null-rejecting filter on any column
+# from the right side. The effect of the null-rejecting filter is that output
+# rows with all NULL values on the right side created by the left (or full) join
+# are eliminated, making the join equivalent to an inner (or right) join. For
+# example:
+#
+#   SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x WHERE b.y < 5
+#
+# can be reduced to:
+#
+#   SELECT * FROM a INNER JOIN b ON a.x = b.x WHERE b.y < 5
+#
+# since b.y < 5 is a null-rejecting filter on the right side.
+#
+# This rule is marked as high priority so that it runs before Select filter
+# pushdown rules. Those rules may remove a filter before it's had a chance to
+# rewrite the input join.
+#
+# Citations: [1]
+[RejectNullsLeftJoin, Normalize, HighPriority]
+(Select
+    $input:(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $right))
+)
+=>
+(Select
+    (ConstructNonLeftJoin
+        (OpName $input)
+        $left
+        $right
+        $on
+    )
+    $filter
+)
+
+# RejectNullsRightJoin is symmetric with RejectNullsLeftJoin. It reduces a
+# RightJoin operator to an InnerJoin operator (or a FullJoin to a LeftJoin) when
+# there is a null-rejecting filter on any column from the left side.
+#
+# This rule is marked as high priority for the same reason as
+# RejectNullsLeftJoin.
+[RejectNullsRightJoin, Normalize, HighPriority]
+(Select
+    $input:(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $left))
+)
+=>
+(Select
+    (ConstructNonRightJoin
+        (OpName $input)
+        $left
+        $right
+        $on
+    )
+    $filter
+)
+
+# RejectNullsGroupBy pushes a "col IS NOT NULL" null-rejecting filter below the
+# GroupBy operator if it allows null rejection for that column (i.e. if it's in
+# the NullRejectCols set). See ruleProps.buildGroupByProps for more details on
+# the criteria for setting NullRejectCols. See the file header comment for more
+# information on null rejection.
+#
+# This rule is important for decorrelation in cases similar to this:
+#
+#   SELECT * FROM a WHERE (SELECT MIN(z) FROM b WHERE a.x=b.x) = a.y
+#
+# The top-level "= a.y" filter rejects NULL values in the b.z column, which ends
+# up in the right side of a LeftJoin operator, thus enabling it to be mapped to
+# an InnerJoin operator.
+#
+# This rule is marked as low priority so that it runs after Select filter
+# pushdown rules. If a filter can be pushed down in its entirety, that's
+# preferable to synthesizing a new "col IS NOT NULL" filter.
+[RejectNullsGroupBy, Normalize, LowPriority]
+(Select
+    $input:(GroupBy
+        $innerInput:*
+        $aggregations:*
+        $def:*
+    )
+    $filter:(Filters) & (HasNullRejectingFilter $filter (NullRejectCols $input))
+)
+=>
+(Select
+    (GroupBy
+        (Select
+            $innerInput
+            (Filters [(IsNot (NullRejectAggVar $aggregations) (Null (AnyType)))])
+        )
+        $aggregations
+        $def
+    )
+    $filter
+)

@@ -474,10 +474,10 @@ project
       │    ├── grouping columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null)
       │    ├── key: (1,2)
       │    ├── fd: (1,2)-->(3-6,13)
-      │    ├── left-join (merge)
-      │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string) customer_aud.id:7(int) customer_aud.rev:8(int)
-      │    │    ├── key: (1,2,7,8)
-      │    │    ├── fd: (1,2)-->(3-6)
+      │    ├── inner-join (merge)
+      │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string) customer_aud.id:7(int!null) customer_aud.rev:8(int!null)
+      │    │    ├── key: (2,7,8)
+      │    │    ├── fd: (1,2)-->(3-6), (1)==(7), (7)==(1)
       │    │    ├── select
       │    │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string)
       │    │    │    ├── key: (1,2)
@@ -596,10 +596,10 @@ sort
            │    ├── grouping columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null)
            │    ├── key: (1,2)
            │    ├── fd: (1,2)-->(3-8,17)
-           │    ├── left-join (merge)
-           │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int) customer_aud.id:9(int) customer_aud.rev:10(int)
-           │    │    ├── key: (1,2,9,10)
-           │    │    ├── fd: (1,2)-->(3-8)
+           │    ├── inner-join (merge)
+           │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int) customer_aud.id:9(int!null) customer_aud.rev:10(int!null)
+           │    │    ├── key: (2,9,10)
+           │    │    ├── fd: (1,2)-->(3-8), (1)==(9), (9)==(1)
            │    │    ├── select
            │    │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int)
            │    │    │    ├── key: (1,2)
@@ -846,10 +846,10 @@ project
       │    ├── grouping columns: phone.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
-      │    ├── left-join
-      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int) phone_id:9(int)
-      │    │    ├── key: (1,6)
-      │    │    ├── fd: (1)-->(2-4), (6)-->(9)
+      │    ├── inner-join
+      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int!null) phone_id:9(int!null)
+      │    │    ├── key: (6)
+      │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
       │    │    ├── scan phone
       │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
       │    │    │    ├── key: (1)
@@ -963,10 +963,10 @@ project
       │    ├── grouping columns: phone.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
-      │    ├── left-join
-      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int) phone_id:9(int)
-      │    │    ├── key: (1,6)
-      │    │    ├── fd: (1)-->(2-4), (6)-->(9)
+      │    ├── inner-join
+      │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) phone_call.id:6(int!null) phone_id:9(int!null)
+      │    │    ├── key: (6)
+      │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
       │    │    ├── scan phone
       │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int)
       │    │    │    ├── key: (1)
@@ -1022,15 +1022,19 @@ project
       │    ├── grouping columns: person.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,12)
-      │    ├── left-join
-      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int) order_id:11(int)
-      │    │    ├── fd: (1)-->(2-6)
+      │    ├── inner-join
+      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) person_id:10(int!null) order_id:11(int!null)
+      │    │    ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       │    │    ├── scan person
       │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-6)
-      │    │    ├── scan phone
-      │    │    │    └── columns: person_id:10(int) order_id:11(int)
+      │    │    ├── select
+      │    │    │    ├── columns: person_id:10(int) order_id:11(int!null)
+      │    │    │    ├── scan phone
+      │    │    │    │    └── columns: person_id:10(int) order_id:11(int)
+      │    │    │    └── filters [type=bool, outer=(11), constraints=(/11: (/NULL - ]; tight)]
+      │    │    │         └── phone.order_id IS NOT NULL [type=bool, outer=(11), constraints=(/11: (/NULL - ]; tight)]
       │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── person.id = phone.person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
       │    └── aggregations [outer=(2-6,11)]
@@ -1276,26 +1280,29 @@ project
  ├── fd: (1)-->(2-6)
  └── select
       ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phone.id:7(int!null) phone.order_id:11(int!null) max:17(int!null)
-      ├── key: (1,7)
-      ├── fd: (1)-->(2-6), (1,7)-->(2-6,11,17), (11)==(17), (17)==(11)
+      ├── key: (7)
+      ├── fd: (1)-->(2-6), (7)-->(1-6,11,17), (11)==(17), (17)==(11)
       ├── group-by
       │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int) phone.id:7(int!null) phone.order_id:11(int) max:17(int)
       │    ├── grouping columns: person.id:1(int!null) phone.id:7(int!null)
-      │    ├── key: (1,7)
-      │    ├── fd: (1)-->(2-6), (1,7)-->(2-6,11,17)
-      │    ├── inner-join-apply
-      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int) phone.order_id:11(int) phone.person_id:15(int) phone.order_id:16(int)
-      │    │    ├── fd: (1)-->(2-6)
+      │    ├── key: (7)
+      │    ├── fd: (1)-->(2-6), (7)-->(1-6,11,17)
+      │    ├── inner-join
+      │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null) phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int!null) phone.order_id:11(int) phone.person_id:15(int!null) phone.order_id:16(int!null)
+      │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10,15), (10)==(1,15), (15)==(1,10)
       │    │    ├── scan person
       │    │    │    ├── columns: person.id:1(int!null) address:2(string) createdon:3(timestamp) name:4(string) nickname:5(string) version:6(int!null)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-6)
-      │    │    ├── right-join
-      │    │    │    ├── columns: phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int) phone.order_id:11(int) phone.person_id:15(int) phone.order_id:16(int)
-      │    │    │    ├── outer: (1)
+      │    │    ├── inner-join
+      │    │    │    ├── columns: phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int) phone.order_id:11(int) phone.person_id:15(int) phone.order_id:16(int!null)
       │    │    │    ├── fd: ()-->(9), (7)-->(10,11)
-      │    │    │    ├── scan phone
-      │    │    │    │    └── columns: phone.person_id:15(int) phone.order_id:16(int)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: phone.person_id:15(int) phone.order_id:16(int!null)
+      │    │    │    │    ├── scan phone
+      │    │    │    │    │    └── columns: phone.person_id:15(int) phone.order_id:16(int)
+      │    │    │    │    └── filters [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
+      │    │    │    │         └── phone.order_id IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
       │    │    │    ├── select
       │    │    │    │    ├── columns: phone.id:7(int!null) phone.phone_type:9(string!null) phone.person_id:10(int) phone.order_id:11(int)
       │    │    │    │    ├── key: (7)
@@ -1306,10 +1313,10 @@ project
       │    │    │    │    │    └── fd: (7)-->(9-11)
       │    │    │    │    └── filters [type=bool, outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(9)]
       │    │    │    │         └── phone.phone_type = 'LAND_LINE' [type=bool, outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight)]
-      │    │    │    └── filters [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
-      │    │    │         └── person.id = phone.person_id [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │         └── person.id = phone.person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    │    │    └── true [type=bool]
+      │    │    └── filters [type=bool, outer=(1,10,15), constraints=(/1: (/NULL - ]; /10: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(10,15), (10)==(1,15), (15)==(1,10)]
+      │    │         ├── person.id = phone.person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    │         └── person.id = phone.person_id [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ])]
       │    └── aggregations [outer=(2-6,11,16)]
       │         ├── max [type=int, outer=(16)]
       │         │    └── variable: phone.order_id [type=int, outer=(16)]
