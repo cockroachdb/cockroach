@@ -626,6 +626,14 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 		")",
 	)
 
+	if node.Filter != nil {
+		d = pretty.Fold(pretty.Concat,
+			d,
+			pretty.Text(" FILTER (WHERE "),
+			p.Doc(node.Filter),
+			pretty.Text(")"),
+		)
+	}
 	if window := node.WindowDef; window != nil {
 		var over pretty.Doc
 		if window.Name != "" {
@@ -639,14 +647,6 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 				pretty.Text(" OVER "),
 				over,
 			),
-		)
-	}
-	if node.Filter != nil {
-		d = pretty.Fold(pretty.Concat,
-			d,
-			pretty.Text(" FILTER (WHERE "),
-			p.Doc(node.Filter),
-			pretty.Text(")"),
 		)
 	}
 	return d
