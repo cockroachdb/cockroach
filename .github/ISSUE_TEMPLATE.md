@@ -1,4 +1,4 @@
-Is this a bug report or a feature request?
+Is this a bug report or a feature request? Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach.
 
 **BUG REPORT**
 
@@ -12,6 +12,4 @@ Please describe the issue you observed:
 
 **FEATURE REQUEST**
 
-Please describe the feature you are requesting, as well as your proposed use case for this feature.
-
-Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach.
+Please describe the feature you are requesting, as well as your proposed use case.
