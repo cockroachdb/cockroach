@@ -558,3 +558,9 @@ SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min
 4  1.99  4  5
 9  23    9  2.2
 7  8.9   7  6.2
+
+# Test that zeroNode is being handled correctly.
+query R
+SELECT sum(a) FROM data WHERE FALSE
+----
+NULL
