@@ -50,7 +50,10 @@ func registerVersion(r *registry) {
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
+		start := func() {
+			c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
+		}
+		start()
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -60,7 +63,24 @@ func registerVersion(r *registry) {
 			buffer = time.Minute
 		}
 
-		time.Sleep(10 * time.Second)
+		// See https://github.com/cockroachdb/cockroach/pull/27639 for an explanation
+		// of this hack. There was a bug which would leave the "old" nodes that joined
+		// the initial bootstrap node with a persisted cluster version of 1.1 (i.e.
+		// the MinSupportedVersion of the "old", at the time of writing v2.0, binary).
+		// When restarting such a node after the upgrade, it would barf because v1.1
+		// is not compatible with v2.1. The problem has been fixed on master, but this
+		// is testing against v2.0, which doesn't have this backported yet.
+		//
+		// By stopping and restarting the cluster after it was first set up, we avoid
+		// the problem. Post restart, the new cluster version will be persisted on all
+		// nodes.
+		//
+		// TODO(tschottdorf): remove this hack again once we're running v2.0.5 with a
+		// backport for this.
+		time.Sleep(5 * time.Second)
+		c.Stop(ctx, c.Range(1, nodes))
+		start()
+		time.Sleep(5 * time.Second)
 
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
@@ -107,6 +127,10 @@ func registerVersion(r *registry) {
 		}
 
 		m.Go(func() error {
+			l, err := c.l.childLogger("upgrader")
+			if err != nil {
+				return err
+			}
 			// NB: the number of calls to `sleep` needs to be reflected in `loadDuration`.
 			sleepAndCheck := func() error {
 				t.WorkerStatus("sleeping")
@@ -140,6 +164,7 @@ func registerVersion(r *registry) {
 			}
 
 			stop := func(node int) error {
+				l.printf("stopping node %d\n", node)
 				port := fmt.Sprintf("{pgport:%d}", node)
 				if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
 					return err
@@ -161,10 +186,12 @@ func registerVersion(r *registry) {
 			if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&oldVersion); err != nil {
 				return err
 			}
+			l.printf("cluster version is %s\n", oldVersion)
 
 			// Now perform a rolling restart into the new binary.
 			for i := 1; i < nodes; i++ {
 				t.WorkerStatus("upgrading ", i)
+				l.printf("upgrading %d\n", i)
 				if err := stop(i); err != nil {
 					return err
 				}
@@ -175,6 +202,7 @@ func registerVersion(r *registry) {
 				}
 			}
 
+			l.printf("stopping last node\n")
 			// Stop the last node.
 			if err := stop(nodes); err != nil {
 				return err
@@ -182,6 +210,7 @@ func registerVersion(r *registry) {
 
 			// Set cluster.preserve_downgrade_option to be the old cluster version to
 			// prevent upgrade.
+			l.printf("preventing automatic upgrade\n")
 			if _, err := db.ExecContext(ctx,
 				fmt.Sprintf("SET CLUSTER SETTING cluster.preserve_downgrade_option = '%s';", oldVersion),
 			); err != nil {
@@ -189,6 +218,7 @@ func registerVersion(r *registry) {
 			}
 
 			// Do upgrade for the last node.
+			l.printf("upgrading last node\n")
 			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
 			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
@@ -197,6 +227,7 @@ func registerVersion(r *registry) {
 
 			// Changed our mind, let's roll that back.
 			for i := 1; i <= nodes; i++ {
+				l.printf("downgrading node %d\n", i)
 				t.WorkerStatus("downgrading", i)
 				if err := stop(i); err != nil {
 					return err
@@ -210,6 +241,7 @@ func registerVersion(r *registry) {
 
 			// OK, let's go forward again.
 			for i := 1; i <= nodes; i++ {
+				l.printf("upgrading node %d (again)\n", i)
 				t.WorkerStatus("upgrading", i, "(again)")
 				if err := stop(i); err != nil {
 					return err
@@ -222,6 +254,7 @@ func registerVersion(r *registry) {
 			}
 
 			// Reset cluster.preserve_downgrade_option to allow auto upgrade.
+			l.printf("reenabling auto-upgrade\n")
 			if _, err := db.ExecContext(ctx,
 				"RESET CLUSTER SETTING cluster.preserve_downgrade_option;",
 			); err != nil {
