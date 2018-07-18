@@ -560,12 +560,22 @@ func (g *ruleGen) genDynamicMatch(
 	g.w.nestIndent("if %s {\n", buf.String())
 
 	if len(match.Args) > 0 {
+		// If there are multiple defines to match, use the first to determine
+		// whether each field should be matched as a group or a private. This must
+		// always exist, since the Optgen compiler has already validated the tree.
+		prototype := g.compiled.LookupMatchingDefines(string(match.NameChoice()[0]))[0]
+
 		// Match expression children in the same order as arguments to the match
 		// operator. If there are fewer arguments than there are children, then
 		// only the first N children need to be matched.
 		for index, matchArg := range match.Args {
-			childGroup := fmt.Sprintf("%s.ChildGroup(%s.mem, %d)", exprName, g.thisVar, index)
-			g.genMatch(matchArg, childGroup, false /* noMatch */)
+			var context string
+			if isPrivateType(string(prototype.Fields[index].Type)) {
+				context = fmt.Sprintf("%s.PrivateID()", exprName)
+			} else {
+				context = fmt.Sprintf("%s.ChildGroup(%s.mem, %d)", exprName, g.thisVar, index)
+			}
+			g.genMatch(matchArg, context, false /* noMatch */)
 		}
 	}
 }
