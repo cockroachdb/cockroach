@@ -412,7 +412,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 				}
 			}
 		}
-		return shouldDistribute, nil
+		return canDistribute, nil
 
 	case *createStatsNode:
 		return shouldDistribute, nil
@@ -427,6 +427,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *projectSetNode:
 		return dsp.checkSupportForNode(n.source)
+
+	case *zeroNode:
+		return canDistribute, nil
 
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
@@ -2226,6 +2229,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *projectSetNode:
 		plan, err = dsp.createPlanForProjectSet(planCtx, n)
 
+	case *zeroNode:
+		plan, err = dsp.createPlanForZero(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
@@ -2251,40 +2257,68 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	return plan, err
 }
 
+// createValuesPlan creates a plan with a single Values processor
+// located on the gateway node and initialized with given numRows
+// and rawBytes that need to be precomputed beforehand.
+func (dsp *DistSQLPlanner) createValuesPlan(
+	resultTypes []sqlbase.ColumnType, numRows int, rawBytes [][]byte,
+) (physicalPlan, error) {
+	numColumns := len(resultTypes)
+	s := distsqlrun.ValuesCoreSpec{
+		Columns: make([]distsqlrun.DatumInfo, numColumns),
+	}
+
+	for i, t := range resultTypes {
+		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Type = t
+	}
+
+	s.NumRows = uint64(numRows)
+	s.RawBytes = rawBytes
+
+	plan := distsqlplan.PhysicalPlan{
+		Processors: []distsqlplan.Processor{{
+			// TODO: find a better node to place processor at
+			Node: dsp.nodeDesc.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
+				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+			},
+		}},
+		ResultRouters: []distsqlplan.ProcessorIdx{0},
+		ResultTypes:   resultTypes,
+	}
+
+	return physicalPlan{
+		PhysicalPlan:       plan,
+		planToStreamColMap: identityMapInPlace(make([]int, numColumns)),
+	}, nil
+}
+
 func (dsp *DistSQLPlanner) createPlanForValues(
 	planCtx *planningCtx, n *valuesNode,
 ) (physicalPlan, error) {
-	columns := len(n.columns)
-
-	s := distsqlrun.ValuesCoreSpec{
-		Columns: make([]distsqlrun.DatumInfo, columns),
-	}
-	types := make([]sqlbase.ColumnType, columns)
-
-	for i, t := range n.columns {
-		colTyp, err := sqlbase.DatumTypeToColumnType(t.Typ)
-		if err != nil {
-			return physicalPlan{}, err
-		}
-		types[i] = colTyp
-		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
-		s.Columns[i].Type = types[i]
-	}
-
-	var a sqlbase.DatumAlloc
 	params := runParams{
 		ctx:             planCtx.ctx,
 		extendedEvalCtx: planCtx.extendedEvalCtx,
 		p:               nil,
 	}
+
+	types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
 	if err := n.startExec(params); err != nil {
 		return physicalPlan{}, err
 	}
 	defer n.Close(planCtx.ctx)
 
-	s.NumRows = uint64(n.rows.Len())
-	s.RawBytes = make([][]byte, n.rows.Len())
-	for i := 0; i < n.rows.Len(); i++ {
+	var a sqlbase.DatumAlloc
+
+	numRows := n.rows.Len()
+	rawBytes := make([][]byte, numRows)
+	for i := 0; i < numRows; i++ {
 		if next, err := n.Next(runParams{ctx: planCtx.ctx}); !next {
 			return physicalPlan{}, err
 		}
@@ -2294,31 +2328,26 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 		for j := range n.columns {
 			var err error
 			datum := sqlbase.DatumToEncDatum(types[j], datums[j])
-			buf, err = datum.Encode(&types[j], &a, s.Columns[j].Encoding, buf)
+			buf, err = datum.Encode(&types[j], &a, sqlbase.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return physicalPlan{}, err
 			}
 		}
-		s.RawBytes[i] = buf
+		rawBytes[i] = buf
 	}
 
-	plan := distsqlplan.PhysicalPlan{
-		Processors: []distsqlplan.Processor{{
-			// TODO: find a better node to place processor at
-			Node: dsp.nodeDesc.NodeID,
-			Spec: distsqlrun.ProcessorSpec{
-				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
-				Output: []distsqlrun.OutputRouterSpec{{Type: 0}},
-			},
-		}},
-		ResultRouters: []distsqlplan.ProcessorIdx{0},
-		ResultTypes:   types,
+	return dsp.createValuesPlan(types, numRows, rawBytes)
+}
+
+func (dsp *DistSQLPlanner) createPlanForZero(
+	planCtx *planningCtx, n *zeroNode,
+) (physicalPlan, error) {
+	types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
+	if err != nil {
+		return physicalPlan{}, err
 	}
 
-	return physicalPlan{
-		PhysicalPlan:       plan,
-		planToStreamColMap: identityMapInPlace(make([]int, columns)),
-	}, nil
+	return dsp.createValuesPlan(types, 0 /* numRows */, nil /* rawBytes */)
 }
 
 func createDistinctSpec(n *distinctNode, cols []int) *distsqlrun.DistinctSpec {
