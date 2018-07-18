@@ -315,6 +315,13 @@ type MergeOnDef struct {
 	// equality columns (to guarantee a certain output ordering). In the example
 	// above, if we can get ordering a+,b+,c+ on the left side and ordering d+,e+
 	// on the right side, we can guarantee a+,b+,c+ on the merge join results.
-	LeftEq  props.OrderingChoice
-	RightEq props.OrderingChoice
+	LeftEq  opt.Ordering
+	RightEq opt.Ordering
+
+	// LeftOrdering and RightOrdering are "simplified" versions of LeftEq/RightEq,
+	// taking into account functional dependencies. We need both versions because
+	// we need to configure execution with specific equality columns and
+	// orderings.
+	LeftOrdering  props.OrderingChoice
+	RightOrdering props.OrderingChoice
 }

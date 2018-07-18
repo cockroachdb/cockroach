@@ -192,9 +192,9 @@ func (o *Optimizer) buildChildPhysicalProps(
 			mergeOn := o.mem.NormExpr(mexpr.AsMergeJoin().MergeOn())
 			def := o.mem.LookupPrivate(mergeOn.AsMergeOn().Def()).(*memo.MergeOnDef)
 			if nth == 0 {
-				childProps.Ordering = def.LeftEq
+				childProps.Ordering = def.LeftOrdering
 			} else {
-				childProps.Ordering = def.RightEq
+				childProps.Ordering = def.RightOrdering
 			}
 		}
 		// ************************* WARNING *************************
