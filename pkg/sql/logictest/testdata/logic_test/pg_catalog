@@ -534,7 +534,7 @@ crdb_oid    tablename  indexname     indexdef
 
 query OOIBBB colnames
 SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
@@ -543,21 +543,30 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 586319999   true          false           true        false         false
 4084598994  false         false           true        false         false
 
-query OOBBTIIITT colnames
+query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
-from pg_catalog.pg_index
+FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-586319999   4183203597  true       false           3 4     0             0         0          NULL      NULL
-4084598994  226054345   true       false           1 2     0             0         0          NULL      NULL
+586319999   4183203597  true       false           3 4     NULL          NULL      NULL       NULL      NULL
+4084598994  226054345   true       false           1 2     NULL          NULL      NULL       NULL      NULL
+
+# From #26504
+query OTT colnames
+SELECT indexrelid,
+       (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
+       (information_schema._pg_expandarray(indclass)).n AS operator_argument_position
+FROM pg_index
+----
+indexrelid  operator_argument_type_oid  operator_argument_position
 
 ## pg_catalog.pg_collation
 

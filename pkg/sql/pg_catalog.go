@@ -929,9 +929,9 @@ CREATE TABLE pg_catalog.pg_index (
     indislive BOOL,
     indisreplident BOOL,
     indkey INT2VECTOR,
-    indcollation INT,
-    indclass INT,
-    indoption INT,
+    indcollation OIDVECTOR,
+    indclass OIDVECTOR,
+    indoption INT2VECTOR,
     indexprs STRING,
     indpred STRING
 );
@@ -964,9 +964,9 @@ CREATE TABLE pg_catalog.pg_index (
 						tree.DBoolTrue,                           // indislive
 						tree.DBoolFalse,                          // indisreplident
 						indkey,                                   // indkey
-						zeroVal,                                  // indcollation
-						zeroVal,                                  // indclass
-						zeroVal,                                  // indoption
+						tree.DNull,                               // indcollation
+						tree.DNull,                               // indclass
+						tree.DNull,                               // indoption
 						tree.DNull,                               // indexprs
 						tree.DNull,                               // indpred
 					)
