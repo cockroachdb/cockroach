@@ -612,27 +612,27 @@ func (node *AliasedTableExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
-	d := node.Exprs.doc(p)
-	if node.Type != 0 {
-		d = pretty.Concat(
-			pretty.Text(funcTypeName[node.Type]+" "),
-			d,
-		)
+	d := p.Doc(&node.Func)
+
+	if len(node.Exprs) > 0 {
+		args := node.Exprs.doc(p)
+		if node.Type != 0 {
+			args = pretty.ConcatLine(
+				pretty.Text(funcTypeName[node.Type]),
+				args,
+			)
+		}
+		d = pretty.Concat(d, pretty.Bracket("(", args, ")"))
+	} else {
+		d = pretty.Concat(d, pretty.Text("()"))
 	}
-
-	d = pretty.Bracket(
-		AsString(&node.Func)+"(",
-		d,
-		")",
-	)
-
 	if node.Filter != nil {
-		d = pretty.Fold(pretty.Concat,
+		d = pretty.Fold(pretty.ConcatSpace,
 			d,
-			pretty.Text(" FILTER (WHERE "),
-			p.Doc(node.Filter),
-			pretty.Text(")"),
-		)
+			pretty.Text("FILTER"),
+			pretty.Bracket("(",
+				p.nestUnder(pretty.Text("WHERE"), p.Doc(node.Filter)),
+				")"))
 	}
 	if window := node.WindowDef; window != nil {
 		var over pretty.Doc
@@ -641,15 +641,65 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 		} else {
 			over = p.Doc(window)
 		}
-		d = pretty.Concat(
+		d = pretty.Fold(pretty.ConcatSpace,
 			d,
-			pretty.Concat(
-				pretty.Text(" OVER "),
-				over,
-			),
+			pretty.Text("OVER"),
+			over,
 		)
 	}
 	return d
+}
+
+func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
+	rows := make([]pretty.RLTableRow, 0, 4)
+	if node.RefName != "" {
+		rows = append(rows, p.row("", p.Doc(&node.RefName)))
+	}
+	if len(node.Partitions) > 0 {
+		rows = append(rows, p.row("PARTITION BY", p.Doc(&node.Partitions)))
+	}
+	if len(node.OrderBy) > 0 {
+		rows = append(rows, node.OrderBy.docRow(p))
+	}
+	if node.Frame != nil {
+		rows = append(rows, node.Frame.docRow(p))
+	}
+	if len(rows) == 0 {
+		return pretty.Text("()")
+	}
+	return pretty.Bracket("(", p.rlTable(rows...), ")")
+}
+
+func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
+	kw := "RANGE"
+	if wf.Mode == ROWS {
+		kw = "ROWS"
+	}
+	d := p.Doc(wf.Bounds.StartBound)
+	if wf.Bounds.EndBound != nil {
+		d = p.rlTable(
+			p.row("BETWEEN", d),
+			p.row("AND", p.Doc(wf.Bounds.EndBound)),
+		)
+	}
+	return p.row(kw, d)
+}
+
+func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
+	switch node.BoundType {
+	case UnboundedPreceding:
+		return pretty.Text("UNBOUNDED PRECEDING")
+	case ValuePreceding:
+		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Text("PRECEDING"))
+	case CurrentRow:
+		return pretty.Text("CURRENT ROW")
+	case ValueFollowing:
+		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Text("FOLLOWING"))
+	case UnboundedFollowing:
+		return pretty.Text("UNBOUNDED FOLLOWING")
+	default:
+		panic(fmt.Sprintf("unexpected type %d", node.BoundType))
+	}
 }
 
 func (p *PrettyCfg) peelCompOperand(e Expr) Expr {
