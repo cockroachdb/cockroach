@@ -125,12 +125,12 @@ right-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(4)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(2,4), constraints=(/4: [/'foo' - /'foo']), fd=()-->(4)]
  │         ├── (a.i < 0) OR (a.i > 10) [type=bool, outer=(2)]
  │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
@@ -183,12 +183,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(4)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  ├── scan b
@@ -267,12 +267,12 @@ left-join (merge)
  │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string!null) j:7(jsonb)
  │    ├── key: (3)
  │    ├── fd: ()-->(6), (3)-->(4,5,7)
- │    ├── ordering: +3
+ │    ├── ordering: +3 opt(6)
  │    ├── scan a
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4-7)
- │    │    └── ordering: +3
+ │    │    └── ordering: +3 opt(6)
  │    └── filters [type=bool, outer=(4,6), constraints=(/6: [/'foo' - /'foo']), fd=()-->(6)]
  │         ├── (a.i < 0) OR (a.i > 10) [type=bool, outer=(4)]
  │         └── a.s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
