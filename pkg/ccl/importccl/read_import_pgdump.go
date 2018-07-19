@@ -11,6 +11,7 @@ package importccl
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -347,6 +349,12 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 	tn, err := n.Normalize()
 	if err != nil {
 		return "", err
+	}
+	if sc := tn.Schema(); sc != "" && sc != "public" {
+		return "", pgerror.Unimplemented(
+			"import non-public schema",
+			fmt.Sprintf("non-public schemas unsupported: %s", sc),
+		)
 	}
 	return tn.Table(), nil
 }
