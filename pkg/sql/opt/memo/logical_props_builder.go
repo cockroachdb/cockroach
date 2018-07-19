@@ -77,7 +77,7 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return b.buildSetProps(ev)
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp:
 		return b.buildGroupByProps(ev)
 
 	case opt.LimitOp:
@@ -571,7 +571,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 	// Cardinality
 	// -----------
-	if groupingColSet.Empty() {
+	if ev.Operator() == opt.ScalarGroupByOp {
 		// Scalar GroupBy returns exactly one row.
 		relational.Cardinality = props.OneCardinality
 	} else {

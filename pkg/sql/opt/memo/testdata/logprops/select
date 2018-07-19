@@ -119,7 +119,7 @@ select
  ├── stats: [rows=1, distinct(3)=1]
  ├── key: ()
  ├── fd: ()-->(3)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column3:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1, distinct(3)=1]
@@ -306,7 +306,7 @@ project
                 │         ├── stats: [rows=1]
                 │         ├── key: ()
                 │         ├── fd: ()-->(8)
-                │         └── group-by
+                │         └── scalar-group-by
                 │              ├── columns: count:8(int)
                 │              ├── outer: (2)
                 │              ├── cardinality: [1 - 1]

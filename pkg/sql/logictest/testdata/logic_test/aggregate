@@ -602,6 +602,18 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 14.0
 
+# Grouping columns can be eliminated, but should still return zero rows (i.e.
+# shouldn't use scalar GroupBy).
+query I
+SELECT max(v) FROM kv GROUP BY k HAVING k=100
+----
+
+# Same query as above, but using scalar GroupBy (should return default row).
+query I
+SELECT max(v) FROM kv WHERE k=100
+----
+NULL
+
 statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,

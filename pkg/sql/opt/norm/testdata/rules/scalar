@@ -381,7 +381,7 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters [type=bool]
       └── exists [type=bool]
-           └── group-by
+           └── scalar-group-by
                 ├── columns: max:13(string)
                 ├── cardinality: [1 - 1]
                 ├── key: ()

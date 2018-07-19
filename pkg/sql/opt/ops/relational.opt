@@ -209,13 +209,34 @@ define AntiJoinApply {
     On    Expr
 }
 
-# GroupBy is an operator that is used for performing aggregations (for queries
-# with aggregate functions, HAVING clauses and/or group by expressions). It
-# groups results that are equal on the grouping columns and computes
-# aggregations as described by Aggregations (which is always an Aggregations
-# operator). The arguments of the aggregations are columns from the input.
+# GroupBy computes aggregate functions over groups of input rows. Input rows
+# that are equal on the grouping columns are grouped together. The set of
+# computed aggregate functions is described by the Aggregations field (which is
+# always an Aggregations operator). The arguments of the aggregate functions are
+# columns from the input. If the set of input rows is empty, then the output of
+# the GroupBy operator will also be empty. If the grouping columns are empty,
+# then all input rows form a single group. GroupBy is used for queries with
+# aggregate functions, HAVING clauses and/or GROUP BY expressions.
 [Relational]
 define GroupBy {
+    Input        Expr
+    Aggregations Expr
+    Def          GroupByDef
+}
+
+# ScalarGroupBy computes aggregate functions over the complete set of input
+# rows. This is similar to GroupBy with empty grouping columns, where all input
+# rows form a single group. However, there is an important difference. If the
+# input set is empty, then the output of the ScalarGroupBy operator will have a
+# single row containing default values for each aggregate function (typically
+# null or zero, depending on the function). ScalarGroupBy always returns exactly
+# one row - either the single-group aggregates or the default aggregate values.
+#
+# ScalarGroupBy uses the same GroupByDef private so that it's possible to treat
+# both operators polymorphically. In the ScalarGroupBy case, the grouping column
+# field in GroupByDef is always empty.
+[Relational]
+define ScalarGroupBy {
     Input        Expr
     Aggregations Expr
     Def          GroupByDef

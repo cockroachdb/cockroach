@@ -220,7 +220,6 @@
             $aggregations:*
             $def:*
         ) &
-        ^(IsScalarGroupBy $def) &
         (IsUnorderedGroupBy $def)
     $on:*
 )
@@ -289,12 +288,11 @@
     $left:*
     $right:* &
         (HasOuterCols $right) &
-        (GroupBy
+        (ScalarGroupBy
             $input:*
             $aggregations:*
             $def:*
         ) &
-        (IsScalarGroupBy $def) &
         (CanAggsIgnoreNulls $aggregations) &
         (IsUnorderedGroupBy $def)
     $on:*

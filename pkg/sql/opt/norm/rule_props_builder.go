@@ -69,7 +69,7 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		b.buildSetProps(ev)
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp:
 		b.buildGroupByProps(ev)
 
 	case opt.LimitOp:

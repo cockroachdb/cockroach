@@ -38,16 +38,16 @@
 =>
 (Offset $input $offset (SimplifyLimitOffsetOrdering $input $ordering))
 
-# SimplifyGroupByOrdering removes redundant columns from the GroupBy operator's
+# SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
 # input ordering.
 [SimplifyGroupByOrdering, Normalize]
-(GroupBy
+(GroupBy | ScalarGroupBy
     $input:*
     $aggregations:*
     $def:* & (CanSimplifyGroupByOrdering $input $def)
 )
 =>
-(GroupBy $input $aggregations (SimplifyGroupByOrdering $input $def))
+((OpName) $input $aggregations (SimplifyGroupByOrdering $input $def))
 
 # SimplifyRowNumberOrdering removes redundant columns from the RowNumber
 # operator's input ordering.

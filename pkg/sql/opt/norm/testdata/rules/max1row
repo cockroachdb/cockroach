@@ -59,7 +59,7 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    └── group-by
+           │    └── scalar-group-by
            │         ├── columns: count:6(int)
            │         ├── cardinality: [1 - 1]
            │         ├── key: ()

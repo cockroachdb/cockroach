@@ -326,9 +326,9 @@ memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
 memo (optimized)
- ├── G1: (group-by G2 G3 cols=())
+ ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── "[presentation: array_agg:3]"
- │         ├── best: (group-by G2 G3 cols=())
+ │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1030.00
  ├── G2: (scan a,cols=(1)) (scan a,rev,cols=(1))
  │    └── ""
@@ -363,9 +363,9 @@ memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
 memo (optimized)
- ├── G1: (group-by G2 G3 cols=(),ordering=+2)
+ ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
- │         ├── best: (group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
+ │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
  │         └── cost: 1139.66
  ├── G2: (scan a) (scan a,rev)
  │    ├── ""

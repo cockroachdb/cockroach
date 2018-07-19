@@ -100,7 +100,7 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ProjectOp:
 		ep, err = b.buildProject(ev)
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp:
 		ep, err = b.buildGroupBy(ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
@@ -516,9 +516,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		ep.outputCols.Set(int(aggColList[i]), len(groupingColIdx)+i)
 	}
 
-	// TODO(andyk): this condition is not correct in all cases and will be
-	// replaced by having two distinct operators.
-	if len(groupingColIdx) == 0 {
+	if ev.Operator() == opt.ScalarGroupByOp {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
 		ep.root, err = b.factory.ConstructGroupBy(input.root, groupingColIdx, aggInfos)

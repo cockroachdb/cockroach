@@ -835,7 +835,7 @@ select
            └── subquery [type=int]
                 └── max1-row
                      ├── columns: min:7(int)
-                     └── group-by
+                     └── scalar-group-by
                           ├── columns: min:7(int)
                           ├── project
                           │    ├── columns: xyz.x:4(int!null)
@@ -858,7 +858,7 @@ select
            └── subquery [type=int]
                 └── max1-row
                      ├── columns: max:7(int)
-                     └── group-by
+                     └── scalar-group-by
                           ├── columns: max:7(int)
                           ├── project
                           │    ├── columns: xyz.x:4(int!null)
@@ -1634,7 +1634,7 @@ project
                           └── subquery [type=int]
                                └── max1-row
                                     ├── columns: max:8(int)
-                                    └── group-by
+                                    └── scalar-group-by
                                          ├── columns: max:8(int)
                                          ├── project
                                          │    ├── columns: a:7(int)

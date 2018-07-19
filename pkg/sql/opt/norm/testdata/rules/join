@@ -753,7 +753,7 @@ inner-join (merge)
  │         └── eq [type=bool, outer=(1,2)]
  │              ├── a.k * a.i [type=int, outer=(1,2)]
  │              └── subquery [type=int]
- │                   └── group-by
+ │                   └── scalar-group-by
  │                        ├── columns: min:10(int)
  │                        ├── cardinality: [1 - 1]
  │                        ├── key: ()
@@ -1047,7 +1047,7 @@ inner-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1070,7 +1070,7 @@ right-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1138,7 +1138,7 @@ right-join
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1162,7 +1162,7 @@ inner-join
  │    ├── columns: k:4(int!null) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1185,7 +1185,7 @@ right-join
  │    ├── columns: k:4(int!null) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1208,7 +1208,7 @@ right-join
  │    ├── columns: k:4(int!null) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()

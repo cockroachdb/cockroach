@@ -481,7 +481,7 @@ limit
  │         ├── subquery [type=int]
  │         │    └── max1-row
  │         │         ├── columns: count:8(int)
- │         │         └── group-by
+ │         │         └── scalar-group-by
  │         │              ├── columns: count:8(int)
  │         │              ├── project
  │         │              │    └── scan abc
@@ -493,7 +493,7 @@ limit
       ├── subquery [type=int]
       │    └── max1-row
       │         ├── columns: count:12(int)
-      │         └── group-by
+      │         └── scalar-group-by
       │              ├── columns: count:12(int)
       │              ├── project
       │              │    └── scan abc

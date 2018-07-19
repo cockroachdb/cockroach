@@ -831,7 +831,7 @@ WHERE
     AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01
     AND l_quantity < 24;
 ----
-group-by
+scalar-group-by
  ├── columns: revenue:18(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -1497,7 +1497,7 @@ sort
                           ├── cardinality: [1 - 1]
                           ├── key: ()
                           ├── fd: ()-->(35)
-                          ├── group-by
+                          ├── scalar-group-by
                           │    ├── columns: column34:34(float)
                           │    ├── cardinality: [1 - 1]
                           │    ├── key: ()
@@ -1722,7 +1722,7 @@ project
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(30)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column27:27(float) column29:29(float)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -1897,7 +1897,7 @@ project
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(45)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column44:44(float)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
@@ -2110,7 +2110,7 @@ WHERE
         AND l_shipinstruct = 'DELIVER IN PERSON'
     );
 ----
-group-by
+scalar-group-by
  ├── columns: revenue:27(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -2501,7 +2501,7 @@ sort
       │    │    │         └── gt [type=bool, outer=(6), constraints=(/6: (/NULL - ])]
       │    │    │              ├── variable: customer.c_acctbal [type=float, outer=(6)]
       │    │    │              └── subquery [type=float]
-      │    │    │                   └── group-by
+      │    │    │                   └── scalar-group-by
       │    │    │                        ├── columns: avg:17(float)
       │    │    │                        ├── cardinality: [1 - 1]
       │    │    │                        ├── key: ()

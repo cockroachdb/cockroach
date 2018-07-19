@@ -727,7 +727,7 @@ semi-join
  │    ├── stats: [rows=1, distinct(5)=1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)
- │    ├── group-by
+ │    ├── scalar-group-by
  │    │    ├── columns: cnt:5(int)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1, distinct(5)=1]

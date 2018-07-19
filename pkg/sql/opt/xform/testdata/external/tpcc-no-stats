@@ -672,7 +672,7 @@ SELECT sum(ol_amount)
 FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
 ----
-group-by
+scalar-group-by
  ├── columns: sum:11(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -751,7 +751,7 @@ FROM
     AND s_quantity < 15
 )
 ----
-group-by
+scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -814,7 +814,7 @@ FULL OUTER JOIN
 ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
 ----
-group-by
+scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -956,7 +956,7 @@ FROM
 )
 WHERE nod != -1
 ----
-group-by
+scalar-group-by
  ├── columns: count:8(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1268,7 +1268,7 @@ FULL OUTER JOIN
 ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
-group-by
+scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]

@@ -528,7 +528,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	existsProjection := pb.buildProjections()
 
 	return r.f.ConstructProject(
-		r.f.ConstructGroupBy(
+		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
 				subquery,
 				trueProjection,
@@ -650,7 +650,7 @@ func (r *subqueryHoister) constructGroupByAny(
 	nullVal := r.f.ConstructNull(r.f.InternType(types.Unknown))
 
 	return r.f.ConstructProject(
-		r.f.ConstructGroupBy(
+		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
 					input,
