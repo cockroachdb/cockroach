@@ -223,7 +223,7 @@ func (*Builder) getColumns(
 	return needed, output
 }
 
-func (b *Builder) makeSQLOrdering(
+func (b *Builder) makeSQLOrderingFromChoice(
 	plan execPlan, ordering *props.OrderingChoice,
 ) sqlbase.ColumnOrdering {
 	if ordering.Any() {
@@ -243,6 +243,20 @@ func (b *Builder) makeSQLOrdering(
 	return reqOrder
 }
 
+func (b *Builder) makeSQLOrdering(plan execPlan, ordering opt.Ordering) sqlbase.ColumnOrdering {
+	colOrder := make(sqlbase.ColumnOrdering, len(ordering))
+	for i := range ordering {
+		colOrder[i].ColIdx = int(plan.getColumnOrdinal(ordering[i].ID()))
+		if ordering[i].Descending() {
+			colOrder[i].Direction = encoding.Descending
+		} else {
+			colOrder[i].Direction = encoding.Ascending
+		}
+	}
+
+	return colOrder
+}
+
 func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	def := ev.Private().(*memo.ScanOpDef)
 	md := ev.Metadata()
@@ -251,7 +265,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	needed, output := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
-	reqOrder := b.makeSQLOrdering(res, &ev.Physical().Ordering)
+	reqOrder := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 
 	root, err := b.factory.ConstructScan(
 		tab,
@@ -380,8 +394,8 @@ func (b *Builder) buildMergeJoin(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	leftOrd := b.makeSQLOrdering(left, &def.LeftEq)
-	rightOrd := b.makeSQLOrdering(right, &def.RightEq)
+	leftOrd := b.makeSQLOrdering(left, def.LeftEq)
+	rightOrd := b.makeSQLOrdering(right, def.RightEq)
 	ep := execPlan{outputCols: outputCols}
 	ep.root, err = b.factory.ConstructMergeJoin(
 		joinType, left.root, right.root, onExpr, leftOrd, rightOrd,
@@ -677,7 +691,7 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 	// be in the needed set, so no need to add anything further to that.
 	var reqOrder sqlbase.ColumnOrdering
 	if ordering == nil {
-		reqOrder = b.makeSQLOrdering(res, &ev.Physical().Ordering)
+		reqOrder = b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 	}
 
 	res.root, err = b.factory.ConstructIndexJoin(input.root, md.Table(def.Table), needed, reqOrder)
@@ -723,7 +737,7 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	// Get sort *result column* ordinals. Don't confuse these with *table column*
 	// ordinals, which are used by the needed set. The sort columns should already
 	// be in the needed set, so no need to add anything further to that.
-	reqOrder := b.makeSQLOrdering(res, &ev.Physical().Ordering)
+	reqOrder := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
@@ -915,7 +929,7 @@ func (b *Builder) buildShowTrace(ev memo.ExprView) (execPlan, error) {
 func (b *Builder) buildSortedInput(
 	input execPlan, ordering *props.OrderingChoice,
 ) (execPlan, error) {
-	colOrd := b.makeSQLOrdering(input, ordering)
+	colOrd := b.makeSQLOrderingFromChoice(input, ordering)
 	node, err := b.factory.ConstructSort(input.root, colOrd)
 	if err != nil {
 		return execPlan{}, err

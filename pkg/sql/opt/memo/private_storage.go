@@ -368,8 +368,12 @@ func (ps *privateStorage) internMergeOnDef(def *MergeOnDef) PrivateID {
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeUvarint(uint64(def.JoinType))
-	ps.keyBuf.writeOrderingChoice(&def.LeftEq)
-	ps.keyBuf.writeOrderingChoice(&def.RightEq)
+	ps.keyBuf.writeOrdering(def.LeftEq)
+	ps.keyBuf.writeOrdering(def.RightEq)
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writeOrderingChoice(&def.LeftOrdering)
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writeOrderingChoice(&def.RightOrdering)
 	typ := (*MergeOnDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
