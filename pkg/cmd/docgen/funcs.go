@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func init() {
@@ -196,12 +195,6 @@ func generateFunctions(from []string, categorize bool) []byte {
 			args := fn.Types.String()
 
 			retType := fn.FixedReturnType()
-			if t, ok := retType.(types.TTuple); ok &&
-				props.Class == tree.GeneratorClass && len(t.Types) == 1 {
-				// Set-generating functions with just one tuple element are
-				// simplified to return just a scalar.
-				retType = t.Types[0]
-			}
 			ret := retType.String()
 
 			cat := props.Category

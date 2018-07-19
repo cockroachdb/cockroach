@@ -73,14 +73,21 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, group memo.GroupID, inScope, outScope *scope,
+	f *tree.FuncExpr, group memo.GroupID, columns int, label string, inScope, outScope *scope,
 ) (out memo.GroupID) {
-	typ := f.ResolvedType().(types.TTuple)
+	typ := f.ResolvedType()
 
-	// Add scope columns. Use the tuple labels in the SRF's return type as column
-	// labels.
-	for i := range typ.Types {
-		b.synthesizeColumn(outScope, typ.Labels[i], typ.Types[i], nil, group)
+	// Add scope columns.
+	if columns == 1 {
+		// Single-column return type.
+		b.synthesizeColumn(outScope, label, typ, f, group)
+	} else {
+		// Multi-column return type. Use the tuple labels in the SRF's return type
+		// as column labels.
+		tType := typ.(types.TTuple)
+		for i := range tType.Types {
+			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, group)
+		}
 	}
 
 	return group

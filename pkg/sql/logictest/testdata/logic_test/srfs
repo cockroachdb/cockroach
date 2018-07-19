@@ -943,3 +943,29 @@ subtest liquibase_example_query
 #          index_name,
 #          ordinal_position
 # ----
+
+subtest unnest_with_tuple_types
+
+query T colnames
+SELECT unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query error pq: type tuple{int, int} is not composite
+SELECT (unnest(ARRAY[(1,2),(3,4)])).*
+
+query T colnames
+SELECT * FROM unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query T colnames
+SELECT t.* FROM unnest(ARRAY[(1,2),(3,4)]) AS t
+----
+t
+(1,2)
+(3,4)

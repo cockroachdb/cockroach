@@ -135,17 +135,33 @@ func (p *planner) ProjectSet(
 
 		if tFunc, ok := normalized.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
 			// Set-generating functions: generate_series() etc.
-			tType := normalized.ResolvedType().(types.TTuple)
-			n.funcs[i] = tFunc
-			n.numColsPerGen[i] = len(tType.Types)
+			fd, err := tFunc.Func.Resolve(p.semaCtx.SearchPath)
+			if err != nil {
+				return planDataSource{}, err
+			}
 
-			// Prepare the result columns. Use the tuple labels in the SRF's
-			// return type as column labels.
-			for j := range tType.Types {
+			n.funcs[i] = tFunc
+			n.numColsPerGen[i] = len(fd.ReturnLabels)
+
+			typ := normalized.ResolvedType()
+			if n.numColsPerGen[i] == 1 {
+				// Single-column return type.
 				n.columns = append(n.columns, sqlbase.ResultColumn{
-					Name: tType.Labels[j],
-					Typ:  tType.Types[j],
+					Name: fd.ReturnLabels[0],
+					Typ:  typ,
 				})
+			} else {
+				// Multi-column return type.
+				tType := typ.(types.TTuple)
+
+				// Prepare the result columns. Use the tuple labels in the SRF's
+				// return type as column labels.
+				for j := range tType.Types {
+					n.columns = append(n.columns, sqlbase.ResultColumn{
+						Name: tType.Labels[j],
+						Typ:  tType.Types[j],
+					})
+				}
 			}
 		} else {
 			// A simple non-generator expression.

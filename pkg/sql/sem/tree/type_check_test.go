@@ -145,8 +145,14 @@ func TestTypeCheck(t *testing.T) {
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT`},
 		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
-		{`(generate_series(1,3)).generate_series`, `(generate_series(1:::INT, 3:::INT)).generate_series`},
-		{`(generate_series(1,3)).*`, `generate_series(1:::INT, 3:::INT)`},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1,3])).x`,
+			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).x`,
+		},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).*`,
+			`information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])`,
+		},
 		{`((ROW (1) AS a)).*`, `(ROW(1:::INT) AS a)`},
 		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
 
