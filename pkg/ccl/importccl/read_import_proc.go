@@ -226,7 +226,7 @@ func newRowConverter(
 	}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
-		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+		sqlbase.FKHelper{}, tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
 	}

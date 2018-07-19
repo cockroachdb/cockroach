@@ -160,6 +160,7 @@ type RowInserter struct {
 	InsertCols            []ColumnDescriptor
 	InsertColIDtoRowIndex map[ColumnID]int
 	Fks                   fkInsertHelper
+	FKHelper              FKHelper
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -175,6 +176,7 @@ func MakeRowInserter(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
+	fkHelper FKHelper,
 	insertCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
@@ -195,6 +197,7 @@ func MakeRowInserter(
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
+		FKHelper:              fkHelper,
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
@@ -648,7 +651,7 @@ func makeRowUpdaterWithoutCascader(
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables,
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, FKHelper{},
 			tableCols, SkipFKs, alloc); err != nil {
 			return RowUpdater{}, err
 		}
@@ -982,11 +985,12 @@ func MakeRowDeleter(
 	}
 	if checkFKs == CheckFKs {
 		var err error
-		rowDeleter.cascader, err = makeDeleteCascader(txn, tableDesc, fkTables, evalCtx, alloc)
 		rowDeleter.FKHelper = fkHelper
+		rowDeleter.cascader, err = makeDeleteCascader(txn, tableDesc, fkTables, evalCtx, alloc)
 		if err != nil {
 			return RowDeleter{}, err
 		}
+		rowDeleter.cascader.fkHelper = rowDeleter.FKHelper
 	}
 	return rowDeleter, nil
 }
