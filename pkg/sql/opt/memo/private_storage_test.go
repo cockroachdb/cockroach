@@ -466,8 +466,10 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
 	mergeOnDef := &MergeOnDef{
-		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
-		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
+		LeftEq:        opt.Ordering{+1, +2, +3},
+		RightEq:       opt.Ordering{+4, +5, +6},
+		LeftOrdering:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
 	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
@@ -521,8 +523,10 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
 	mergeOnDef := &MergeOnDef{
-		LeftEq:  props.ParseOrderingChoice("+1,+2,+3"),
-		RightEq: props.ParseOrderingChoice("+4,+5,+6"),
+		LeftEq:        opt.Ordering{+1, +2, +3},
+		RightEq:       opt.Ordering{+4, +5, +6},
+		LeftOrdering:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
 	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}

@@ -1412,12 +1412,12 @@ semi-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(4)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
@@ -1552,12 +1552,12 @@ anti-join (merge)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1
+ │    ├── ordering: +1 opt(4)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
