@@ -272,6 +272,7 @@ func (b *Builder) buildAggregation(
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
 func (b *Builder) buildHaving(having tree.Expr, inScope *scope) memo.GroupID {
+	b.semaCtx.Properties.Require("HAVING", tree.RejectWindowApplications|tree.RejectGenerators)
 	return b.buildScalar(inScope.resolveAndRequireType(having, types.Bool, "HAVING"), inScope)
 }
 
@@ -318,8 +319,8 @@ func (b *Builder) buildGrouping(
 		label = string(selects[col].As)
 	}
 
-	// Make sure the GROUP BY columns have no aggregates or window functions.
-	b.assertNoAggregationOrWindowing(groupBy, "GROUP BY")
+	// Make sure the GROUP BY columns have no special functions.
+	b.semaCtx.Properties.Require("GROUP BY", tree.RejectSpecial)
 
 	// Resolve types, expand stars, and flatten tuples.
 	exprs := b.expandStarAndResolveType(groupBy, inScope)

@@ -140,6 +140,10 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 			break
 		}
 		if ev.IsJoinApply() {
+			if ev.Child(1).Operator() == opt.ZipOp {
+				ep, err = b.buildProjectSet(ev)
+				break
+			}
 			return execPlan{}, errors.Errorf("could not decorrelate subquery")
 		}
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
@@ -751,16 +755,17 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	return res, nil
 }
 
-func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
+func (b *Builder) initZipBuild(ev memo.ExprView, outputCols opt.ColMap, scalarCtx buildScalarCtx) (
+	tree.TypedExprs, sqlbase.ResultColumns, []int, opt.ColMap, error,
+) {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
 	numColsPerGen := make([]int, len(exprs))
 	var err error
-	scalarCtx := buildScalarCtx{}
 	for i := range exprs {
 		child := ev.Child(i)
 		exprs[i], err = b.buildScalar(&scalarCtx, child)
 		if err != nil {
-			return execPlan{}, err
+			return nil, nil, nil, opt.ColMap{}, err
 		}
 
 		props := child.Private().(*memo.FuncOpDef).Properties
@@ -779,12 +784,24 @@ func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
 		resultCols[i].Typ = md.ColumnType(col)
 	}
 
-	// TODO(rytaft): We currently construct a ProjectSet with an empty Values
-	// node as input, which is correct when the SRFs and/or scalar functions in
-	// this Zip expression were originally in the FROM clause. Once we support
-	// SRFs in the SELECT list, the Zip may be on the right hand side of an
-	// InnerJoinApply operator. In this case, we will need to pass the left hand
-	// side of the join as input to ConstructProjectSet.
+	numInputCols := outputCols.Len()
+	zipCols := ev.Private().(opt.ColList)
+	for i, col := range zipCols {
+		outputCols.Set(int(col), i+numInputCols)
+	}
+
+	return exprs, resultCols, numColsPerGen, outputCols, nil
+}
+
+func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
+	exprs, resultCols, numColsPerGen, outputCols, err := b.initZipBuild(
+		ev, opt.ColMap{}, buildScalarCtx{},
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// This is an uncorrelated Zip, so the input to the ProjectSet node is empty.
 	input, err := b.factory.ConstructValues([][]tree.TypedExpr{{}}, nil)
 	if err != nil {
 		return execPlan{}, err
@@ -796,10 +813,31 @@ func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
 	}
 
 	ep := execPlan{root: node}
-	for i, col := range cols {
-		ep.outputCols.Set(int(col), i)
+	ep.outputCols = outputCols
+	return ep, nil
+}
+
+func (b *Builder) buildProjectSet(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
 	}
 
+	ctx := input.makeBuildScalarCtx()
+	exprs, resultCols, numColsPerGen, outputCols, err := b.initZipBuild(
+		ev.Child(1), input.outputCols.Copy(), ctx,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	node, err := b.factory.ConstructProjectSet(input.root, exprs, resultCols, numColsPerGen)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	ep := execPlan{root: node}
+	ep.outputCols = outputCols
 	return ep, nil
 }
 
