@@ -551,7 +551,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		OutputOrdering: kvOrdering,
 	}
 
-	p.AddSingleGroupStage(thisNode,
+	p.AddSingleProcessorStage(thisNode,
 		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlrun.PostProcessSpec{},
 		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},

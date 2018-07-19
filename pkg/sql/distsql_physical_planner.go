@@ -1621,7 +1621,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		if prevStageNode != 0 {
 			node = prevStageNode
 		}
-		p.AddSingleGroupStage(
+		p.AddSingleProcessorStage(
 			node,
 			distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggsSpec},
 			finalAggsPost,
@@ -1731,7 +1731,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		if len(plan.ResultRouters) == 1 {
 			node = plan.Processors[plan.ResultRouters[0]].Node
 		}
-		plan.AddSingleGroupStage(
+		plan.AddSingleProcessorStage(
 			node,
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
@@ -2412,7 +2412,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	plan.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
 
 	// TODO(arjun): We could distribute this final stage by hash.
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+	plan.AddSingleProcessorStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
 }
@@ -2465,7 +2465,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	// filtered), we could try to detect these cases and use AddNoGroupingStage
 	// instead.
 	outputTypes := append(plan.ResultTypes, projectSetSpec.GeneratedColumns...)
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, spec, distsqlrun.PostProcessSpec{}, outputTypes)
+	plan.AddSingleProcessorStage(dsp.nodeDesc.NodeID, spec, distsqlrun.PostProcessSpec{}, outputTypes)
 
 	// Add generated columns to planToStreamColMap.
 	for i := range projectSetSpec.GeneratedColumns {
@@ -2654,7 +2654,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// Resolve this by collecting results on a single node and adding a
 		// projection to the results that will be unioned.
 		for _, plan := range childPhysicalPlans {
-			plan.AddSingleGroupStage(
+			plan.AddSingleProcessorStage(
 				dsp.nodeDesc.NodeID,
 				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
 				distsqlrun.PostProcessSpec{},
@@ -2690,7 +2690,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			distinctSpec := distsqlrun.ProcessorCoreUnion{
 				Distinct: &distsqlrun.DistinctSpec{DistinctColumns: streamCols},
 			}
-			p.AddSingleGroupStage(
+			p.AddSingleProcessorStage(
 				dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
 		} else {
 			// UNION ALL is special: it doesn't have any required downstream
@@ -2698,7 +2698,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// which would violate an assumption later down the line. Check for this
 			// condition and add a no-op stage if it exists.
 			if err := p.CheckLastStagePost(); err != nil {
-				p.AddSingleGroupStage(
+				p.AddSingleProcessorStage(
 					dsp.nodeDesc.NodeID,
 					distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
 					distsqlrun.PostProcessSpec{},
@@ -2802,7 +2802,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan
 	// stage.
 	if len(plan.ResultRouters) != 1 ||
 		plan.Processors[plan.ResultRouters[0]].Node != thisNodeID {
-		plan.AddSingleGroupStage(
+		plan.AddSingleProcessorStage(
 			thisNodeID,
 			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
 			distsqlrun.PostProcessSpec{},
@@ -2814,7 +2814,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan
 	}
 
 	if len(metadataSenders) > 0 {
-		plan.AddSingleGroupStage(
+		plan.AddSingleProcessorStage(
 			thisNodeID,
 			distsqlrun.ProcessorCoreUnion{
 				MetadataTestReceiver: &distsqlrun.MetadataTestReceiverSpec{
