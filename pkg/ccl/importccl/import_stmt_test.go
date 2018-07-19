@@ -435,6 +435,50 @@ COPY t (a, b, c) FROM stdin;
 			},
 		},
 		{
+			name: "fk-circular",
+			typ:  "PGDUMP",
+			data: testPgdumpFkCircular,
+			query: map[string][][]string{
+				`SHOW TABLES`:     {{"a"}, {"b"}},
+				`SELECT i FROM a`: {{"2"}},
+				`SELECT j FROM b`: {{"2"}},
+
+				`SELECT dependson_name
+				FROM crdb_internal.backward_dependencies ORDER BY dependson_name`: {
+					{"a_i_fkey"},
+					{"b_j_fkey"},
+				},
+
+				`SELECT create_statement
+				FROM crdb_internal.create_statements
+				WHERE descriptor_name in ('a', 'b')
+				ORDER BY descriptor_name
+				`: {{
+					`CREATE TABLE a (
+	i INTEGER NOT NULL,
+	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b (j),
+	FAMILY "primary" (i)
+)`}, {
+					`CREATE TABLE b (
+	j INTEGER NOT NULL,
+	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a (i),
+	FAMILY "primary" (j)
+)`,
+				}},
+
+				`SHOW CONSTRAINTS FROM a`: {
+					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b (j)", "false"},
+					{"a", "a_pkey", "PRIMARY KEY", "PRIMARY KEY (i ASC)", "true"},
+				},
+				`SHOW CONSTRAINTS FROM b`: {
+					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a (i)", "false"},
+					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
+				},
+			},
+		},
+		{
 			name: "fk-skip",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
@@ -593,6 +637,36 @@ ALTER TABLE ONLY public.cities
 
 ALTER TABLE ONLY public.weather
     ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city);
+`
+
+	testPgdumpFkCircular = `
+CREATE TABLE public.a (
+    i integer NOT NULL
+);
+
+CREATE TABLE public.b (
+    j integer NOT NULL
+);
+
+COPY public.a (i) FROM stdin;
+2
+\.
+
+COPY public.b (j) FROM stdin;
+2
+\.
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_pkey PRIMARY KEY (i);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_pkey PRIMARY KEY (j);
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i);
 `
 )
 
