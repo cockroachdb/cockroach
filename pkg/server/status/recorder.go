@@ -446,6 +446,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 		Args:              os.Args,
 		Env:               envutil.GetEnvVarsUsed(),
 		Activity:          activity,
+		NumCpus:           int32(runtime.NumCPU()),
 		TotalSystemMemory: systemMemory,
 	}
 

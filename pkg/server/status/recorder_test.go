@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -347,6 +348,7 @@ func TestMetricsRecorder(t *testing.T) {
 			},
 		},
 		TotalSystemMemory: totalMemory,
+		NumCpus:           int32(runtime.NumCPU()),
 	}
 
 	// Make sure there is at least one environment variable that will be
