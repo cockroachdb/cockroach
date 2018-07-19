@@ -484,11 +484,11 @@ func (q *Queue) MaybeWaitForPush(
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
-			log.Event(ctx, "pusher giving up due to context cancellation")
+			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
 
 		case txn := <-push.pending:
-			log.Eventf(ctx, "result of pending push: %v", txn)
+			log.VEventf(ctx, 2, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
 			// proceeds and is redirected to the new range lease holder.
@@ -499,15 +499,15 @@ func (q *Queue) MaybeWaitForPush(
 			// pushed. If this PushTxn request is satisfied, return
 			// successful PushTxn response.
 			if isPushed(req, txn) {
-				log.Event(ctx, "push request is satisfied")
+				log.VEvent(ctx, 2, "push request is satisfied")
 				return createPushTxnResponse(txn), nil
 			}
 			// If not successfully pushed, return not pushed so request proceeds.
-			log.Event(ctx, "not pushed; returning to caller")
+			log.VEvent(ctx, 2, "not pushed; returning to caller")
 			return nil, nil
 
 		case <-pusheeTxnTimer.C:
-			log.Event(ctx, "querying pushee")
+			log.VEvent(ctx, 2, "querying pushee")
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
@@ -517,18 +517,22 @@ func (q *Queue) MaybeWaitForPush(
 				return nil, pErr
 			} else if updatedPushee == nil {
 				// Continue with push.
-				log.Event(ctx, "pushee not found, push should now succeed")
+				log.VEvent(ctx, 2, "pushee not found, push should now succeed")
 				return nil, nil
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
+			if updatedPushee.Status != roachpb.PENDING {
+				log.VEvent(ctx, 2, "push request is satisfied")
+				return createPushTxnResponse(updatedPushee), nil
+			}
 			if IsExpired(q.store.Clock().Now(), updatedPushee) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
 
 		case updatedPusher := <-queryPusherCh:
-			log.Eventf(ctx, "pusher was updated: %v", updatedPusher)
+			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
