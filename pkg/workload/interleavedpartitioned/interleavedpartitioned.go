@@ -99,7 +99,7 @@ UPSERT INTO system.locations VALUES
 	insertQueryParameters = `INSERT INTO parameters(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
 	insertQueryDevices    = `INSERT INTO devices(id, session_id, device_id, name, make, macaddress, model, serialno, created, updated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`
 	insertQueryQuery      = `INSERT INTO queries(session_id, id, created, updated) VALUES ($1, $2, now(), now())`
-	deleteQuery           = `DELETE FROM sessions WHERE session_id IN (SELECT session_id FROM sessions LIMIT $1)`
+	deleteQuery           = `DELETE FROM sessions WHERE created < now() - interval '5' minute LIMIT $1`
 	retrieveQuery0        = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
 	retrieveQuery1        = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
