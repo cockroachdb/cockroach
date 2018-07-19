@@ -14,7 +14,7 @@ inner-join
  │    │    ├── stats: [rows=1000]
  │    │    ├── function: upper [type=string]
  │    │    │    └── const: 'def' [type=string]
- │    │    ├── function: generate_series [type=tuple{int AS generate_series}]
+ │    │    ├── function: generate_series [type=int]
  │    │    │    ├── const: 1 [type=int]
  │    │    │    └── const: 3 [type=int]
  │    │    └── function: upper [type=string]
@@ -28,7 +28,7 @@ inner-join
  ├── zip
  │    ├── columns: generate_series:5(int)
  │    ├── stats: [rows=1000]
- │    └── function: generate_series [type=tuple{int AS generate_series}]
+ │    └── function: generate_series [type=int]
  │         ├── const: 1 [type=int]
  │         └── const: 4 [type=int]
  └── true [type=bool]
@@ -47,7 +47,7 @@ group-by
       ├── zip
       │    ├── columns: generate_series:2(int)
       │    ├── stats: [rows=1000, distinct(2)=700]
-      │    └── function: generate_series [type=tuple{int AS generate_series}]
+      │    └── function: generate_series [type=int]
       │         ├── const: 1 [type=int]
       │         └── const: 2 [type=int]
       ├── zip
