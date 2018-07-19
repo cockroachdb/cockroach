@@ -1045,7 +1045,7 @@ HoistProjectSubquery
   + │    │    ├── cardinality: [1 - 1]
   + │    │    ├── key: ()
   + │    │    ├── fd: ()-->(11)
-  + │    │    ├── group-by
+  + │    │    ├── scalar-group-by
   + │    │    │    ├── columns: bool_or:10(bool)
   + │    │    │    ├── outer: (1)
   + │    │    │    ├── cardinality: [1 - 1]
@@ -1091,7 +1091,7 @@ EnsureSelectFilters
     │    │    ├── cardinality: [1 - 1]
     │    │    ├── key: ()
     │    │    ├── fd: ()-->(11)
-    │    │    ├── group-by
+    │    │    ├── scalar-group-by
     │    │    │    ├── columns: bool_or:10(bool)
     │    │    │    ├── outer: (1)
     │    │    │    ├── cardinality: [1 - 1]
@@ -1140,7 +1140,7 @@ TryDecorrelateProject
   - │    │    ├── cardinality: [1 - 1]
   - │    │    ├── key: ()
   - │    │    ├── fd: ()-->(11)
-  - │    │    ├── group-by
+  - │    │    ├── scalar-group-by
   - │    │    │    ├── columns: bool_or:10(bool)
   - │    │    │    ├── outer: (1)
   - │    │    │    ├── cardinality: [1 - 1]
@@ -1158,7 +1158,7 @@ TryDecorrelateProject
   + │    │    │    ├── scan xy
   + │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    └── key: (1)
-  + │    │    │    ├── group-by
+  + │    │    │    ├── scalar-group-by
   + │    │    │    │    ├── columns: bool_or:10(bool)
     │    │    │    │    ├── outer: (1)
   - │    │    │    │    ├── select
@@ -1221,7 +1221,7 @@ TryDecorrelateScalarGroupBy
   - │    │    │    ├── scan xy
   - │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    └── key: (1)
-    │    │    │    ├── group-by
+  - │    │    │    ├── scalar-group-by
   - │    │    │    │    ├── columns: bool_or:10(bool)
   - │    │    │    │    ├── outer: (1)
   - │    │    │    │    ├── cardinality: [1 - 1]
@@ -1232,6 +1232,7 @@ TryDecorrelateScalarGroupBy
   - │    │    │    │    │    ├── outer: (1)
   - │    │    │    │    │    ├── select
   - │    │    │    │    │    │    ├── columns: k:3(int!null)
+  + │    │    │    ├── group-by
   + │    │    │    │    ├── columns: x:1(int!null) bool_or:10(bool)
   + │    │    │    │    ├── grouping columns: x:1(int!null)
   + │    │    │    │    ├── key: (1)

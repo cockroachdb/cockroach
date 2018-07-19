@@ -227,3 +227,37 @@ select
       └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
            ├── variable: column5 [type=decimal, outer=(5)]
            └── const: 5 [type=decimal]
+
+# Scalar GroupBy.
+build
+SELECT max(y), sum(z) FROM a HAVING sum(z) = 5.0
+----
+select
+ ├── columns: max:6(int) sum:5(float!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(5)=1]
+ ├── key: ()
+ ├── fd: ()-->(5,6)
+ ├── scalar-group-by
+ │    ├── columns: column5:5(float) max:6(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(5)=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6)
+ │    ├── project
+ │    │    ├── columns: y:2(int) z:3(float!null)
+ │    │    ├── stats: [rows=2000]
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │         ├── stats: [rows=2000]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── aggregations [outer=(2,3)]
+ │         ├── sum [type=float, outer=(3)]
+ │         │    └── variable: a.z [type=float, outer=(3)]
+ │         └── max [type=int, outer=(2)]
+ │              └── variable: a.y [type=int, outer=(2)]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight), fd=()-->(5)]
+      └── eq [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight)]
+           ├── variable: column5 [type=float, outer=(5)]
+           └── const: 5.0 [type=float]

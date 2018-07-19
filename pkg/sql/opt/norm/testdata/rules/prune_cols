@@ -1095,6 +1095,25 @@ project
  └── projections
       └── const: 1 [type=int]
 
+# Scalar GroupBy case.
+opt
+SELECT sumi FROM (SELECT sum(i) sumi, min(s||'foo') FROM a) a
+----
+scalar-group-by
+ ├── columns: sumi:5(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── project
+ │    ├── columns: column6:6(string) i:2(int)
+ │    ├── scan a
+ │    │    └── columns: i:2(int) s:4(string)
+ │    └── projections [outer=(2,4)]
+ │         └── a.s || 'foo' [type=string, outer=(4)]
+ └── aggregations [outer=(2)]
+      └── sum [type=decimal, outer=(2)]
+           └── variable: a.i [type=int, outer=(2)]
+
 # --------------------------------------------------
 # PruneGroupByCols
 # --------------------------------------------------
@@ -1138,7 +1157,7 @@ group-by
 opt
 SELECT min(i), max(k), max(k) FROM a
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(int) max:6(int) max:6(int)
  ├── cardinality: [1 - 1]
  ├── key: ()

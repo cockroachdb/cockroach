@@ -57,7 +57,7 @@ project
 build
 SELECT sum(x), max(y) FROM xyzs
 ----
-group-by
+scalar-group-by
  ├── columns: sum:5(decimal) max:6(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]

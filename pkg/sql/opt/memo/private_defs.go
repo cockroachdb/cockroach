@@ -134,11 +134,18 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.Orderin
 	return ordering.SubsetOf(required)
 }
 
-// GroupByDef defines the value of the Def private field of the GroupBy
-// operator.
+// GroupByDef defines the value of the Def private field of the GroupBy and
+// ScalarGroupBy operators. This struct is shared so that both operators can be
+// treated polymorphically.
 type GroupByDef struct {
+	// GroupingCols partitions the GroupBy input rows into aggregation groups.
+	// All rows sharing the same values for these columns are in the same group.
+	// GroupingCols is always empty in the ScalarGroupBy case.
 	GroupingCols opt.ColSet
-	Ordering     props.OrderingChoice
+
+	// Ordering specifies the sort order of values within each group. This is
+	// only significant for order-sensitive aggregation operators, like ArrayAgg.
+	Ordering props.OrderingChoice
 }
 
 // IndexJoinDef defines the value of the Def private field of the IndexJoin
