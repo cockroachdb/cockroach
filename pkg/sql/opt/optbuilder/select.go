@@ -299,6 +299,10 @@ func (b *Builder) buildSelectClause(
 		b.buildOrderBy(orderBy, outScope, projectionsScope)
 	}
 
+	if len(fromScope.srfs) > 0 {
+		outScope.group = b.constructProjectSet(outScope.group, fromScope.srfs)
+	}
+
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
 	outScope = projectionsScope
@@ -361,12 +365,14 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	}
 
 	if where != nil {
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+		b.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
+
 		// All "from" columns are visible to the filter expression.
 		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool, "WHERE")
-
-		// Make sure there are no aggregation/window functions in the filter
-		// (after subqueries have been expanded).
-		b.assertNoAggregationOrWindowing(texpr, "WHERE")
 
 		filter := b.buildScalar(texpr, outScope)
 		// Wrap the filter in a FiltersOp.

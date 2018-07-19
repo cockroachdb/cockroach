@@ -42,6 +42,12 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 		return
 	}
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("ORDER BY", tree.RejectGenerators)
+
 	orderByScope := inScope.push()
 	orderByScope.physicalProps.Ordering.Columns = make([]props.OrderingColumnChoice, 0, len(orderBy))
 

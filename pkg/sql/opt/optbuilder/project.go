@@ -75,6 +75,15 @@ func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
 func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, outScope *scope) {
+	// We need to save and restore the previous values of the replaceSRFs field
+	// and the field in semaCtx in case we are recursively called within a
+	// subquery context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	defer func(replaceSRFs bool) { inScope.replaceSRFs = replaceSRFs }(inScope.replaceSRFs)
+
+	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
+	inScope.replaceSRFs = true
+
 	for _, e := range selects {
 		// Pre-normalize any VarName so the work is not done twice below.
 		if err := e.NormalizeTopLevelVarName(); err != nil {
