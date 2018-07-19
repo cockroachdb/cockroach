@@ -179,3 +179,66 @@ project
       └── aggregations [outer=(4)]
            └── min [type=string, outer=(4)]
                 └── variable: a.s [type=string, outer=(4)]
+
+# --------------------------------------------------
+# ReduceGroupingCols
+# --------------------------------------------------
+opt
+SELECT k, min(i), f, s FROM a GROUP BY s, f, k
+----
+group-by
+ ├── columns: k:1(int!null) min:6(int) f:3(float) s:4(string)
+ ├── grouping columns: k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3,4,6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ └── aggregations [outer=(2-4)]
+      ├── min [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── any-not-null [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      └── any-not-null [type=string, outer=(4)]
+           └── variable: a.s [type=string, outer=(4)]
+
+# Eliminated columns are not part of projection.
+opt
+SELECT min(f) FROM a GROUP BY i, s, k
+----
+project
+ ├── columns: min:6(float)
+ └── group-by
+      ├── columns: i:2(int!null) s:4(string!null) min:6(float)
+      ├── grouping columns: i:2(int!null) s:4(string!null)
+      ├── key: (2,4)
+      ├── fd: (2,4)-->(6)
+      ├── scan a
+      │    ├── columns: i:2(int!null) f:3(float) s:4(string!null)
+      │    ├── key: (2,4)
+      │    └── fd: (2,4)-->(3), (2,3)~~>(4)
+      └── aggregations [outer=(3)]
+           └── min [type=float, outer=(3)]
+                └── variable: a.f [type=float, outer=(3)]
+
+# All grouping columns eliminated.
+opt
+SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
+----
+group-by
+ ├── columns: sum:6(float) i:2(int)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-3)
+ └── aggregations [outer=(2,3)]
+      ├── sum [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      └── any-not-null [type=int, outer=(2)]
+           └── variable: a.i [type=int, outer=(2)]
