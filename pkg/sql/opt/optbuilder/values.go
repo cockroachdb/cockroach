@@ -44,6 +44,14 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	// repeatedly, since InternList will copy values to memo storage.
 	elems := make([]memo.GroupID, numCols)
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+
+	// Ensure there are no special functions in the clause.
+	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
+
 	for _, tuple := range values.Tuples {
 		if numCols != len(tuple.Exprs) {
 			panic(builderError{pgerror.NewErrorf(
@@ -53,7 +61,6 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 		}
 
 		for i, expr := range tuple.Exprs {
-			b.assertNoAggregationOrWindowing(expr, "VALUES")
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
 			elems[i] = b.buildScalar(texpr, inScope)

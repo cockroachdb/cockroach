@@ -162,7 +162,7 @@ type Factory interface {
 	// between the output of the given node and the functional zip of the given
 	// expressions.
 	ConstructProjectSet(
-		n Node, exprs tree.TypedExprs, cols sqlbase.ResultColumns, numColsPerGen []int,
+		n Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 	) (Node, error)
 
 	// RenameColumns modifies the column names of a node.

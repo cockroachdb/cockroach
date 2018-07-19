@@ -24,52 +24,57 @@ EXPLAIN SELECT * FROM ROWS FROM (cos(1))
 project set    ·  ·
  └── emptyrow  ·  ·
 
+query TTT
+EXPLAIN SELECT generate_series(1, 3)
+----
+project set    ·  ·
+ └── emptyrow  ·  ·
 
-# TODO(radu): enable once SRF's are supported in the Select list.
-#
-#query TTT
-#EXPLAIN SELECT generate_series(1, 3)
-#----
-#generator  ·  ·
-#
-#subtest multiple_SRFs
-## See #20511
-#
-## query TTT
-## EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
-## ----
-## join            ·     ·
-## │              type  cross
-## ├── generator  ·     ·
-## └── generator  ·     ·
-#
-#statement ok
-#CREATE TABLE t (a string)
-#
-#statement ok
-#CREATE TABLE u (b string)
-#
-## query TTT
-## EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
-## ----
-## render                    ·         ·
-## │                        render 0  a
-## │                        render 1  b
-## │                        render 2  generate_series
-## │                        render 3  generate_series
-## └── join                 ·         ·
-##      │                   type      cross
-##      ├── join            ·         ·
-##      │    │              type      cross
-##      │    ├── join       ·         ·
-##      │    │    │         type      cross
-##      │    │    ├── scan  ·         ·
-##      │    │    │         table     t@primary
-##      │    │    │         spans     ALL
-##      │    │    └── scan  ·         ·
-##      │    │              table     u@primary
-##      │    │              spans     ALL
-##      │    └── generator  ·         ·
-##      │                   expr      generate_series(1, 2)
-##      └── generator       ·         ·
-##·                         expr      generate_series(3, 4)
+subtest multiple_SRFs
+# See #20511
+
+query TTT
+EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
+----
+project set    ·  ·
+ └── emptyrow  ·  ·
+
+statement ok
+CREATE TABLE t (a string)
+
+statement ok
+CREATE TABLE u (b string)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+----
+join                ·         ·                      (a, b, generate_series, generate_series)  ·
+ │                  type      cross                  ·                                         ·
+ ├── join           ·         ·                      (a, b)                                    ·
+ │    │             type      cross                  ·                                         ·
+ │    ├── scan      ·         ·                      (a)                                       ·
+ │    │             table     t@primary              ·                                         ·
+ │    │             spans     ALL                    ·                                         ·
+ │    └── scan      ·         ·                      (b)                                       ·
+ │                  table     u@primary              ·                                         ·
+ │                  spans     ALL                    ·                                         ·
+ └── project set    ·         ·                      (column5, column6)                        ·
+      │             render 0  generate_series(1, 2)  ·                                         ·
+      │             render 1  generate_series(3, 4)  ·                                         ·
+      └── emptyrow  ·         ·                      ()                                        ·
+
+subtest correlated_SRFs
+
+statement ok
+CREATE TABLE data (a INT PRIMARY KEY)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
+----
+sort              ·         ·                            (a, generate_series)  +a,+generate_series
+ │                order     +a,+generate_series          ·                     ·
+ └── project set  ·         ·                            (a, generate_series)  ·
+      │           render 0  generate_series(@1, @1 + 1)  ·                     ·
+      └── scan    ·         ·                            (a)                   ·
+·                 table     data@primary                 ·                     ·
+·                 spans     ALL                          ·                     ·

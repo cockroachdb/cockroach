@@ -91,12 +91,6 @@ query I rowsort
 SELECT job_id FROM crdb_internal.jobs
 ----
 
-query I rowsort
-SELECT generate_series(1, 2)
-----
-1
-2
-
 statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 
@@ -109,9 +103,6 @@ SELECT count(*) FILTER (WHERE v>10) FROM t
 
 query error pq: views and sequences are not supported
 SELECT * FROM tview
-
-query error pq: generator functions are not supported
-SELECT generate_series(1, 2)
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL
