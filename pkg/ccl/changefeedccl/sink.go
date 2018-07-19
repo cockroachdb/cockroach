@@ -12,6 +12,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -74,6 +75,13 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
 
+	// TODO(dan): I have no idea how to tune these yet, but we're getting a
+	// "Message was too large, server rejected it to avoid allocation" error
+	// without them.
+	config.Producer.Flush.Bytes = 1000000
+	config.Producer.Flush.MaxMessages = 1000
+	config.Producer.Flush.Frequency = time.Second
+
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
@@ -100,10 +108,35 @@ func (s *kafkaSink) Close() error {
 	s.worker.Wait()
 
 	s.producer.AsyncClose()
+
 	// Empty out the success and errors channels as required by AsyncClose.
-	for range s.producer.Errors() {
+	//
+	// TODO(dan): Sometimes this deadlocks for reasons I don't understand, so
+	// add an overall timeout to it. Note that this may leak the producer
+	// goroutines, but hopefully closing the client below will eventually clean
+	// that up? /shrug
+	const emptyTimeout = 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), emptyTimeout)
+	defer cancel()
+	for done := false; !done; {
+		select {
+		case <-ctx.Done():
+			done = true
+		case _, ok := <-s.producer.Errors():
+			if !ok {
+				done = true
+			}
+		}
 	}
-	for range s.producer.Successes() {
+	for done := false; !done; {
+		select {
+		case <-ctx.Done():
+			done = true
+		case _, ok := <-s.producer.Successes():
+			if !ok {
+				done = true
+			}
+		}
 	}
 
 	// s.client is only nil in tests.
