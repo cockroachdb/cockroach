@@ -182,6 +182,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
 				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
 			},
 		},
 	)
