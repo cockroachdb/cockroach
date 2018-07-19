@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"net/url"
+	"strings"
 	"sync"
 
 	"fmt"
@@ -209,7 +210,12 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 			for _, fkStmt := range fkStmts {
 				if _, err := sqlDB.Exec(fkStmt); err != nil {
-					return err
+					// If the statement failed because the fk already exists,
+					// ignore it. Return the error for any other reason.
+					const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+					if !strings.Contains(err.Error(), duplFKErr) {
+						return err
+					}
 				}
 			}
 			return nil

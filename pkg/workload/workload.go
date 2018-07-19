@@ -95,10 +95,11 @@ type Hooks struct {
 	Validate func() error
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
+	// Implementations should be idempotent.
 	PreLoad func(*gosql.DB) error
 	// PostLoad is called after workload tables are created workload data is
 	// loaded. It called after restoring a fixture. This, for example, is where
-	// creating foreign keys should go.
+	// creating foreign keys should go. Implementations should be idempotent.
 	PostLoad func(*gosql.DB) error
 	// PostRun is called after workload run has ended, with the start time of the
 	// run. This is where any post-run special printing or validation can be done.
@@ -249,7 +250,7 @@ func ApproxDatumSize(x interface{}) int64 {
 
 // Setup creates the given tables and fills them with initial data via batched
 // INSERTs. batchSize will only be used when positive (but INSERTs are batched
-// either way).
+// either way). The function is idempotent and can be called multiple times.
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
@@ -271,7 +272,7 @@ func Setup(
 	}
 
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE "%s" %s`, table.Name, table.Schema)
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
 			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
 		}
@@ -306,6 +307,7 @@ func Setup(
 				var numRows int
 				flush := func() error {
 					if len(params) > 0 {
+						insertStmtBuf.WriteString(` ON CONFLICT DO NOTHING`)
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
 							return errors.Wrapf(err, "failed insert into %s", table.Name)
