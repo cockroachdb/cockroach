@@ -309,6 +309,9 @@ func (r fkResolver) ObjectLookupFlags(ctx context.Context, required bool) sql.Ob
 func (r fkResolver) LookupObject(
 	ctx context.Context, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
+	if scName != "" {
+		obName = strings.TrimPrefix(obName, scName+".")
+	}
 	tbl, ok := r[obName]
 	if ok {
 		return true, tbl, nil

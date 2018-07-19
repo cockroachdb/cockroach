@@ -330,8 +330,8 @@ d
 			name: "mismatch cols",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE d.t (i int);
-				COPY d.t (s) FROM stdin;
+				CREATE TABLE t (i int);
+				COPY t (s) FROM stdin;
 				0
 				\.
 			`,
@@ -341,8 +341,8 @@ d
 			name: "missing COPY done",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE d.t (i int);
-				COPY d.t (i) FROM stdin;
+				CREATE TABLE t (i int);
+				COPY t (i) FROM stdin;
 0
 `,
 			err: `unexpected EOF`,
@@ -378,7 +378,7 @@ d
 			name: "not enough values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b) FROM stdin;
 1
@@ -390,7 +390,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b) FROM stdin;
 1	2	3
@@ -402,7 +402,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many cols",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b, c) FROM stdin;
 1	2	3
@@ -481,6 +481,12 @@ COPY t (a, b, c) FROM stdin;
 				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
 			},
 		},
+		{
+			name: "non-public schema",
+			typ:  "PGDUMP",
+			data: "create table s.t (i INT)",
+			err:  `non-public schemas unsupported: s`,
+		},
 
 		// Error
 		{
@@ -558,13 +564,13 @@ const (
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
 	testPgdumpFk = `
-CREATE TABLE cities (
+CREATE TABLE public.cities (
     city character varying(80) NOT NULL
 );
 
-ALTER TABLE cities OWNER TO postgres;
+ALTER TABLE public.cities OWNER TO postgres;
 
-CREATE TABLE weather (
+CREATE TABLE public.weather (
     city character varying(80),
     temp_lo integer,
     temp_hi integer,
@@ -572,21 +578,21 @@ CREATE TABLE weather (
     date date
 );
 
-ALTER TABLE weather OWNER TO postgres;
+ALTER TABLE public.weather OWNER TO postgres;
 
-COPY cities (city) FROM stdin;
+COPY public.cities (city) FROM stdin;
 Berkeley
 \.
 
-COPY weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
+COPY public.weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
 Berkeley	45	53	0	1994-11-28
 \.
 
-ALTER TABLE ONLY cities
+ALTER TABLE ONLY public.cities
     ADD CONSTRAINT cities_pkey PRIMARY KEY (city);
 
-ALTER TABLE ONLY weather
-    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities(city);
+ALTER TABLE ONLY public.weather
+    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city);
 `
 )
 
