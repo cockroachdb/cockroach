@@ -531,6 +531,66 @@ SELECT k, max(stddev) OVER (ORDER BY d DESC) FROM (SELECT k, d, stddev(d) OVER (
 7  3.5355339059327376220
 8  3.5355339059327376220
 
+query IRIII
+SELECT k, (rank() OVER wind + avg(w) OVER wind), w, (v + row_number() OVER wind), v FROM kv WINDOW wind AS (ORDER BY k) ORDER BY 1
+----
+1  4                      3  3     2
+3  6                      5  6     4
+5  7.3333333333333333333  5  NULL  NULL
+6  8                      3  6     2
+7  8.6                    2  7     2
+8  9.3333333333333333333  2  10    4
+
+query TIRRI
+SELECT s, w + k, (sum(w) OVER wind + avg(d) OVER wind), (min(w) OVER wind + d), v FROM kv WINDOW wind AS (ORDER BY w, k) ORDER BY k
+----
+a     4   10.9666666666666666667  3     2
+a     8   19.86                   10    4
+NULL  10  -29.45                  -319  NULL
+b     9   14.075                  6.4   2
+b     9   9.9                     9.9   2
+A     10  9.45                    5     4
+
+query IIII
+SELECT k, v + w, round(rank() OVER wind + lead(k, 3, v) OVER wind + lag(w, 1, 2) OVER wind + f::DECIMAL + avg(d) OVER wind)::INT, round(row_number() OVER wind::FLOAT + round(f) + dense_rank() OVER wind::FLOAT)::INT FROM kv WINDOW wind as (PARTITION BY v ORDER BY k) ORDER BY k
+----
+1  5     7     3
+3  9     17    4
+5  NULL  NULL  12
+6  5     14    8
+7  4     18    12
+8  6     20    7
+
+query II
+SELECT (rank() OVER wind + lead(k, 3, v) OVER wind + lag(w, 1, 2) OVER wind), (row_number() OVER wind + dense_rank() OVER wind) FROM kv WINDOW wind as (PARTITION BY v ORDER BY k) ORDER BY k
+----
+5     2
+7     2
+NULL  2
+7     4
+8     6
+11    4
+
+query RIR
+SELECT (round(avg(k) OVER w1 + sum(w) OVER w2) + row_number() OVER w2 + d + min(d) OVER w3 + f::DECIMAL) AS big_sum, v + w AS v_plus_w, (rank() OVER w3 + first_value(d) OVER w1 + nth_value(k, 2) OVER w1) AS small_sum FROM kv WINDOW w1 AS (PARTITION BY b ORDER BY k), w2 AS (PARTITION BY w ORDER BY k), w3 AS (PARTITION BY v ORDER BY k) ORDER BY k
+----
+8       5     NULL
+26      9     5
+-615.1  NULL  NULL
+20.8    5     6
+21.9    4     7
+22      6     -311
+
+query RI
+SELECT round(row_number() OVER w1 + lead(k, v, w) OVER w2 + avg(k) OVER w1), (lag(k, 1) OVER w1 + v + rank() OVER w2 + min(k) OVER w1) FROM kv WINDOW w1 AS (PARTITION BY w ORDER BY k), w2 AS (PARTITION BY b ORDER BY k) ORDER BY k
+----
+8     NULL
+9     NULL
+NULL  NULL
+9     7
+10    NULL
+12    20
+
 statement OK
 INSERT INTO kv VALUES
 (9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),
@@ -1264,7 +1324,7 @@ SELECT k, lead(k, 3, v) OVER (ORDER BY k) FROM kv ORDER BY 1
 11  NULL
 
 query II
-SELECT k, (lag(k, 5, w) OVER w + lead(k, 3, v) OVER w) FROM kv WINDOW w AS () ORDER BY 1
+SELECT k, (lag(k, 5, w) OVER w + lead(k, 3, v) OVER w) FROM kv WINDOW w AS (ORDER BY k) ORDER BY 1
 ----
 1   9
 3   12
@@ -1933,7 +1993,7 @@ Tablet      Kindle Fire      150.00   425.00
 Tablet      Samsung          200.00   350.00
 
 query TTRR
-SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ROWS 2 PRECEDING) AS running_sum FROM products ORDER BY group_id
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS 2 PRECEDING) AS running_sum FROM products ORDER BY group_id
 ----
 Smartphone  Microsoft Lumia  200.00   200.00
 Smartphone  HTC One          400.00   600.00
@@ -1948,7 +2008,7 @@ Tablet      Kindle Fire      150.00   850.00
 Tablet      Samsung          200.00   1050.00
 
 query TTRT
-SELECT group_name, product_name, price, array_agg(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS array_agg_price FROM products ORDER BY group_id
+SELECT group_name, product_name, price, array_agg(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 2 FOLLOWING) AS array_agg_price FROM products ORDER BY group_id
 ----
 Smartphone  Microsoft Lumia  200.00   {200.00,400.00,500.00}
 Smartphone  HTC One          400.00   {200.00,400.00,500.00,900.00}
@@ -1993,7 +2053,7 @@ Tablet      Kindle Fire       150.00  NULL
 Tablet      Samsung           200.00  NULL
 
 query TRRR
-SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
 ----
 Microsoft Lumia  200.00   200.00  900.00
 HTC One          400.00   200.00  900.00
@@ -2023,7 +2083,7 @@ Tablet      Kindle Fire       150.00               150.00
 Tablet      Samsung           200.00               200.00
 
 query TTRR
-SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS running_avg FROM products ORDER BY group_id
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS running_avg FROM products ORDER BY group_id
 ----
 Smartphone  Microsoft Lumia   200.00  600.00
 Smartphone  HTC One           400.00  700.00
@@ -2038,7 +2098,7 @@ Tablet      Kindle Fire       150.00  200.00
 Tablet      Samsung           200.00  NULL
 
 query TRRRRR
-SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS UNBOUNDED PRECEDING), max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING), sum(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING), avg(price) OVER (PARTITION BY group_name ROWS CURRENT ROW) FROM products ORDER BY group_id
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS UNBOUNDED PRECEDING), max(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING), sum(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING), avg(price) OVER (PARTITION BY group_name ROWS CURRENT ROW) FROM products ORDER BY group_id
 ----
 Microsoft Lumia  200.00   200.00   400.00   2000.00  200.00
 HTC One          400.00   200.00   500.00   2000.00  400.00
