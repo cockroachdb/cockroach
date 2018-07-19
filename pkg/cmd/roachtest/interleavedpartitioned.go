@@ -50,13 +50,9 @@ func registerInterleaved(r *registry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration " + ifLocal("10s", "10m")
-			var eastString string
-			if east {
-				eastString = " --east"
-			}
-			cmd := fmt.Sprintf(
-				"./workload run interleavedpartitioned --init "+eastString+" --sessions %d --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d "+
-					"--insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent %d --delete-batch-size %d"+duration+" {pgurl:1-%d}",
+			cmdEast := fmt.Sprintf(
+				"./workload run interleavedpartitioned --init --east --sessions %d --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d "+
+					"--insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent %d --delete-batch-size %d"+duration+" {pgurl:4-6} &",
 				sessions,
 				customersPerSession,
 				devicesPerSession,
@@ -70,10 +66,22 @@ func registerInterleaved(r *registry) {
 				updateLocalPercent,
 				deletePercent,
 				deleteBatchSize,
-				nodes,
 			)
 
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			cmdWest := fmt.Sprintf(
+				"./workload run interleavedpartitioned --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent %d --delete-batch-size %d"+duration+" {pgurl:1-3}",
+				insertPercent,
+				insertLocalPercent,
+				retrievePercent,
+				retrieveLocalPercent,
+				updatePercent,
+				updateLocalPercent,
+				deletePercent,
+				deleteBatchSize,
+			)
+
+			c.Run(ctx, c.Node(nodes+1), cmdEast)
+			c.Run(ctx, c.Node(nodes+1), cmdWest)
 			return nil
 		})
 		m.Wait()
