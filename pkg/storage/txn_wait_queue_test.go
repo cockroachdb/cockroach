@@ -246,6 +246,78 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	}
 }
 
+// TestTxnWaitQueueTxnSilentlyCompletes creates a waiter on a txn and verifies
+// that the waiter is eventually unblocked when the txn commits but UpdateTxn is
+// not called.
+//
+// This simulates the following observed sequence of events. A transaction, TA,
+// writes a key K. Another transaction, TB, attempts to read K. It notices the
+// intent on K and sends a PushTxnRequest. The PushTxnRequest fails and returns
+// a TransactionPushError. Before the replica handles the TransactionPushError,
+// TA commits and the replica fully processes its EndTransactionRequest. Only
+// then does the replica notice the TransactionPushError and put TB's
+// PushTxnRequest into TA's wait queue. Updates to TA will never be sent via
+// Queue.UpdateTxn, because Queue.UpdateTxn was already called when the
+// EndTransactionRequest was processed, before TB's PushTxnRequest was in TA's
+// wait queue.
+//
+// This sequence of events was previously mishandled when TA's transaction
+// record was not immediately cleaned up, e.g. because it had non-local intents.
+// The wait queue would continually poll TA's transaction record, notice it
+// still existed, and continue waiting. In production, this meant that the
+// PushTxnRequest would get stuck waiting out the full TxnLivenessThreshold for
+// the transaction record to expire. In unit tests, where the clock might never
+// be advanced, the PushTxnRequest could get stuck forever.
+func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	txn, err := createTxnForPushQueue(ctx, &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	req := &roachpb.PushTxnRequest{
+		PushType:  roachpb.PUSH_ABORT,
+		PusherTxn: *pusher,
+		PusheeTxn: txn.TxnMeta,
+	}
+
+	q := tc.repl.txnWaitQueue
+	q.Enable()
+	q.Enqueue(txn)
+
+	retCh := make(chan RespWithErr, 2)
+	go func() {
+		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+		retCh <- RespWithErr{resp, pErr}
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		expDeps := []uuid.UUID{pusher.ID}
+		if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
+			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
+		}
+		return nil
+	})
+
+	txn.Status = roachpb.COMMITTED
+	if err := writeTxnRecord(ctx, &tc, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Skip calling q.UpdateTxn to test that the wait queue periodically polls
+	// txn's record and notices when it is no longer pending.
+
+	respWithErr := <-retCh
+	if respWithErr.resp == nil || respWithErr.resp.PusheeTxn.Status != roachpb.COMMITTED {
+		t.Errorf("expected committed txn response; got %+v, err=%v", respWithErr.resp, respWithErr.pErr)
+	}
+}
+
 // TestTxnWaitQueueUpdateNotPushedTxn verifies that no PushTxnResponse
 // is returned in the event that the pushee txn only has its timestamp
 // updated.
