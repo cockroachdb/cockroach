@@ -151,8 +151,9 @@ gc:
 	initDiskSpace := int(1E9)
 
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes: nodes(numNodes),
+		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
+		MinVersion: `v2.1.0`,
+		Nodes:      nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
