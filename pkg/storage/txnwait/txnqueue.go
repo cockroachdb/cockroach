@@ -522,6 +522,10 @@ func (q *Queue) MaybeWaitForPush(
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
+			if updatedPushee.Status != roachpb.PENDING {
+				log.VEvent(ctx, 2, "push request is satisfied")
+				return createPushTxnResponse(updatedPushee), nil
+			}
 			if IsExpired(q.store.Clock().Now(), updatedPushee) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
