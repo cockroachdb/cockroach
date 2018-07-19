@@ -41,7 +41,7 @@ import (
 // iterators or generators in Python).
 type ValueGenerator interface {
 	// ResolvedType returns the type signature of this value generator.
-	ResolvedType() types.TTuple
+	ResolvedType() types.T
 
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart

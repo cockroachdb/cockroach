@@ -765,12 +765,21 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 
 func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
+	numColsPerGen := make([]int, len(exprs))
 	var err error
 	scalarCtx := buildScalarCtx{}
 	for i := range exprs {
-		exprs[i], err = b.buildScalar(&scalarCtx, ev.Child(i))
+		child := ev.Child(i)
+		exprs[i], err = b.buildScalar(&scalarCtx, child)
 		if err != nil {
 			return execPlan{}, err
+		}
+
+		props := child.Private().(*memo.FuncOpDef).Properties
+		if props.Class == tree.GeneratorClass {
+			numColsPerGen[i] = len(props.ReturnLabels)
+		} else {
+			numColsPerGen[i] = 1
 		}
 	}
 
@@ -793,7 +802,7 @@ func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	node, err := b.factory.ConstructProjectSet(input, exprs, resultCols)
+	node, err := b.factory.ConstructProjectSet(input, exprs, resultCols, numColsPerGen)
 	if err != nil {
 		return execPlan{}, err
 	}
