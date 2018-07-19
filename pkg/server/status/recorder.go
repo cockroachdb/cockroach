@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -433,6 +434,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 		Args:          os.Args,
 		Env:           envutil.GetEnvVarsUsed(),
 		Activity:      activity,
+		NumCpus:       int32(runtime.NumCPU()),
 	}
 
 	// If the cluster hasn't yet been definitively moved past the network stats
