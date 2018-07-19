@@ -195,7 +195,7 @@ func (sb *statisticsBuilder) init(
 // as it gets passed up the expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	if colSet.Len() == 0 {
-		return nil
+		panic("column statistics cannot be determined for empty column set")
 	}
 
 	// Check if the requested column statistic is already cached.
@@ -250,7 +250,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return sb.colStatSetOp(colSet)
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp:
 		return sb.colStatGroupBy(colSet)
 
 	case opt.LimitOp:
@@ -610,7 +610,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(colSet opt.ColSet) *props.ColumnSt
 
 func (sb *statisticsBuilder) buildGroupBy(inputStats *props.Statistics, groupingColSet opt.ColSet) {
 	if groupingColSet.Empty() {
-		// Scalar group by.
+		// ScalarGroupBy or GroupBy with empty grouping columns.
 		sb.s.RowCount = 1
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
@@ -622,16 +622,15 @@ func (sb *statisticsBuilder) buildGroupBy(inputStats *props.Statistics, grouping
 }
 
 func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet) *props.ColumnStatistic {
-	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
 	groupingColSet := sb.ev.Private().(*GroupByDef).GroupingCols
-
 	if groupingColSet.Empty() {
-		// Scalar group by.
+		// ScalarGroupBy or GroupBy with empty grouping columns.
 		colStat := sb.makeColStat(colSet)
 		colStat.DistinctCount = 1
 		return colStat
 	}
 
+	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
 	inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
 	if !colSet.SubsetOf(groupingColSet) {
 		// Some of the requested columns are aggregates. Estimate the distinct

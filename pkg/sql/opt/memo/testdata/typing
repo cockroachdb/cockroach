@@ -325,7 +325,7 @@ SELECT
     stddev(z), xor_agg(x::int), json_agg(x::json), jsonb_agg(x::jsonb)
 FROM b
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int) count:10(int) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:23(jsonb)
  ├── project
  │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) column22:22(jsonb) x:1(string!null) z:2(decimal!null)
