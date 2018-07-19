@@ -68,6 +68,9 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 		func(tx *gosql.Tx) error {
 			// This is the only join in the application, so we don't need to worry about
 			// this setting persisting incorrectly across queries.
+			// Note that this is not needed (and doesn't do anything) when the
+			// optimizer is on. We still set it for when the optimizer is disabled
+			// or when running against older versions of CRDB.
 			if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
 				return err
 			}
@@ -84,16 +87,19 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
+			// Note: we don't use count(DISTINCT s_i_id) because DISTINCT inside
+			// aggregates is not yet supported by the optimizer.
 			return tx.QueryRow(fmt.Sprintf(`
-				SELECT count(DISTINCT(s_i_id))
-				FROM order_line
-				JOIN stock
-				ON s_i_id=ol_i_id
-				  AND s_w_id=ol_w_id
-				WHERE ol_w_id = %[1]d
-				  AND ol_d_id = %[2]d
-				  AND ol_o_id BETWEEN %[3]d - 20 AND %[3]d - 1
-				  AND s_quantity < %[4]d`,
+			  SELECT count(*) FROM (
+			  	SELECT DISTINCT s_i_id
+			  	FROM order_line
+			  	JOIN stock
+			  	ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+			  	WHERE ol_w_id = %[1]d
+			  	  AND ol_d_id = %[2]d
+			  	  AND ol_o_id BETWEEN %[3]d - 20 AND %[3]d - 1
+			  	  AND s_quantity < %[4]d
+			  )`,
 				wID, d.dID, dNextOID, d.threshold),
 			).Scan(&d.lowStock)
 		}); err != nil {
