@@ -1054,19 +1054,6 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/xwb1989/sqlparser"
-  packages = [
-    ".",
-    "dependency/bytes2",
-    "dependency/hack",
-    "dependency/querypb",
-    "dependency/sqltypes",
-  ]
-  revision = "6aff8615a33faf1f260a3a8f800456511505d5fd"
-  source = "https://github.com/dt/sqlparser"
-
-[[projects]]
   name = "go.opencensus.io"
   packages = [
     "exporter/stackdriver/propagation",
@@ -1301,9 +1288,26 @@
   revision = "d73ab98e7c39fdcf9ba65062e43d34310f198353"
   version = "2017.2.2"
 
+[[projects]]
+  branch = "no-flag"
+  name = "vitess.io/vitess"
+  packages = [
+    "go/bytes2",
+    "go/hack",
+    "go/sqltypes",
+    "go/vt/proto/query",
+    "go/vt/proto/topodata",
+    "go/vt/proto/vtgate",
+    "go/vt/proto/vtrpc",
+    "go/vt/sqlparser",
+    "go/vt/vterrors",
+  ]
+  revision = "9b771c0853f6c6443569a8f14a5e8cdb57ffcbd1"
+  source = "https://github.com/cockroachdb/vitess"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8022836223059aead87f6d7d6b9451a5d7ad8a20f4358cb709ccf2859f9c74ce"
+  inputs-digest = "b827f3b21201b3e823cb4ad015a30496788510cf54dfdb3533cc8b79b0ea553f"
   solver-name = "gps-cdcl"
   solver-version = 1
