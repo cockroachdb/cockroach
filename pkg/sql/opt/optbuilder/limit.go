@@ -29,9 +29,15 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	ordering := &inScope.physicalProps.Ordering
 	orderingPrivID := b.factory.InternOrderingChoice(ordering)
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+
 	if limit.Offset != nil {
 		op := "OFFSET"
 		b.assertNoAggregationOrWindowing(limit.Offset, op)
+		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int, op)
 		offset := b.buildScalar(texpr, parentScope)
 		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
@@ -39,6 +45,7 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	if limit.Count != nil {
 		op := "LIMIT"
 		b.assertNoAggregationOrWindowing(limit.Count, op)
+		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int, op)
 		limit := b.buildScalar(texpr, parentScope)
 		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)

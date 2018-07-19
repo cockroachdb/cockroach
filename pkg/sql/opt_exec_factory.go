@@ -557,9 +557,10 @@ func (ef *execFactory) ConstructLimit(
 
 // ConstructProjectSet is part of the exec.Factory interface.
 func (ef *execFactory) ConstructProjectSet(
-	n exec.Node, exprs tree.TypedExprs, cols sqlbase.ResultColumns, numColsPerGen []int,
+	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
 	src := asDataSource(n)
+	cols := append(src.info.SourceColumns, zipCols...)
 	p := &projectSetNode{
 		source:          src.plan,
 		sourceInfo:      src.info,

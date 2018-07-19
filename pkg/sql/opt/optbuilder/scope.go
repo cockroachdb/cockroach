@@ -53,9 +53,14 @@ type scope struct {
 	// anchored directly to a relational expression.
 	columns int
 
-	// This is a temporary flag, which is currently used to allow generator
-	// functions in the FROM clause, but not in the SELECT list.
-	allowGeneratorFunc bool
+	// If replaceSRFs is true, replace raw SRFs with an srf struct. See
+	// the replaceSRF() function for more details.
+	replaceSRFs bool
+
+	// srfs contains all the SRFs that were replaced in this scope. It will be
+	// used by the Builder to convert the input from the FROM clause to a lateral
+	// cross join between the input and a Zip of all the srfs in this slice.
+	srfs []*srf
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -598,17 +603,9 @@ func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {
 // sql/subquery.go.
 func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
-	case *tree.TupleStar:
-		// TupleStars at the top level of a SELECT clause are replaced
-		// when the select's renders are prepared. If we encounter one
-		// here during expression analysis, it's being used as an argument
-		// to an inner expression. In that case, we just report its tuple
-		// operand unchanged.
-		return true, t.Expr
-
-	case *tree.AllColumnsSelector:
-		// AllColumnsSelectors at the top level of a SELECT clause are
-		// replaced when the select's renders are prepared. If we
+	case *tree.AllColumnsSelector, *tree.TupleStar:
+		// AllColumnsSelectors and TupleStars at the top level of a SELECT clause
+		// are replaced when the select's renders are prepared. If we
 		// encounter one here during expression analysis, it's being used
 		// as an argument to an inner expression/function. In that case,
 		// treat it as a tuple of the expanded columns.
@@ -644,14 +641,11 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if err != nil {
 			panic(builderError{err})
 		}
-		if !s.allowGeneratorFunc && isGenerator(def) {
-			panic(unimplementedf("generator functions are not supported"))
-		}
 
-		// Disallow nested SRFs. This field is currently set in Builder.buildZip().
-		// TODO(rytaft): This is a temporary solution and will need to change once
-		// we support SRFs in the SELECT list.
-		s.allowGeneratorFunc = false
+		if isGenerator(def) && s.replaceSRFs {
+			expr = s.replaceSRF(t)
+			break
+		}
 
 		if len(t.Exprs) != 1 {
 			break
@@ -744,6 +738,47 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	return true, expr
 }
 
+// replaceSRF returns an srf struct that can be used to replace a raw SRF. When
+// this struct is encountered during the build process, it is replaced with a
+// reference to the column returned by the SRF (if the SRF returns a single
+// column) or a tuple of column references (if the SRF returns multiple
+// columns).
+//
+// replaceSRF also stores a pointer to the new srf struct in this scope's srfs
+// slice. The slice is used later by the Builder to convert the input from
+// the FROM clause to a lateral cross join between the input and a Zip of all
+// the srfs in the s.srfs slice. See Builder.constructProjectSet in srfs.go for
+// more details.
+func (s *scope) replaceSRF(f *tree.FuncExpr) *srf {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
+
+	s.builder.semaCtx.Properties.Require("SELECT",
+		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
+
+	expr := f.Walk(s)
+	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	srfScope := s.push()
+	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), "", s, srfScope)
+	srf := &srf{
+		FuncExpr: typedFunc.(*tree.FuncExpr),
+		cols:     srfScope.cols,
+		group:    out,
+	}
+	s.srfs = append(s.srfs, srf)
+
+	// Add the output columns to this scope, so the column references added
+	// by the build process will not be treated as outer columns.
+	s.cols = append(s.cols, srf.cols...)
+	return srf
+}
+
 // Replace a raw subquery node with a typed subquery. multiRow specifies
 // whether the subquery is occurring in a single-row or multi-row
 // context. desiredColumns specifies the desired number of columns for the
@@ -751,6 +786,13 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // number of columns and is used when the normal type checking machinery will
 // verify that the correct number of columns is returned.
 func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
+	if s.replaceSRFs {
+		// We need to save and restore the previous value of the replaceSRFs field in
+		// case we are recursively called within a subquery context.
+		defer func() { s.replaceSRFs = true }()
+		s.replaceSRFs = false
+	}
+
 	outScope := s.builder.buildStmt(sub.Select, s)
 
 	// Treat the subquery result as an anonymous data source (i.e. column names
