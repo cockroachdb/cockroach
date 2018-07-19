@@ -127,7 +127,8 @@ func (o *Optimizer) buildChildPhysicalProps(
 		switch mexpr.Operator() {
 		case opt.LimitOp, opt.OffsetOp,
 			opt.ExplainOp,
-			opt.RowNumberOp, opt.GroupByOp,
+			opt.RowNumberOp,
+			opt.GroupByOp, opt.ScalarGroupByOp,
 			opt.MergeJoinOp:
 			// These operations can require an ordering of some child even if there is
 			// no ordering requirement on themselves.
@@ -163,7 +164,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 		}
 
-	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp:
+	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
 		// These ops require the ordering in their private.
 		if nth == 0 {
 			var ordering *props.OrderingChoice
@@ -175,7 +176,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 			case opt.RowNumberOp:
 				def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
 				ordering = &def.Ordering
-			case opt.GroupByOp:
+			case opt.GroupByOp, opt.ScalarGroupByOp:
 				def := mexpr.Private(o.mem).(*memo.GroupByDef)
 				ordering = &def.Ordering
 			}

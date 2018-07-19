@@ -116,6 +116,25 @@ sort
            └── array-agg [type=int[], outer=(2)]
                 └── variable: abcde.b [type=int, outer=(2)]
 
+# Scalar GroupBy case.
+opt
+SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
+----
+scalar-group-by
+ ├── columns: array_agg:6(int[])
+ ├── ordering: +1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan abcde
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── ordering: +1
+ └── aggregations [outer=(2)]
+      └── array-agg [type=int[], outer=(2)]
+           └── variable: abcde.b [type=int, outer=(2)]
+
 # --------------------------------------------------
 # SimplifyRowNumberOrdering
 # --------------------------------------------------

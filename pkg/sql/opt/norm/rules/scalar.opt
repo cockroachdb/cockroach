@@ -150,15 +150,7 @@
 # returns a non-empty set if its input is non-empty. Similarly, if its input is
 # empty, then it returns the empty set. Therefore, it's a no-op for Exists.
 [EliminateExistsGroupBy, Normalize]
-(Exists
-    (GroupBy
-        $input:*
-        *
-        $def:* & ^(IsScalarGroupBy $def)
-    )
-)
-=>
-(Exists $input)
+(Exists (GroupBy $input:*)) => (Exists $input)
 
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some
