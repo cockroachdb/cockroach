@@ -65,11 +65,10 @@ ignored = [
   name = "github.com/rubyist/circuitbreaker"
   branch = "master"
 
-# https://github.com/xwb1989/sqlparser/issues/31
-# https://github.com/xwb1989/sqlparser/issues/32
 [[constraint]]
-  name = "github.com/xwb1989/sqlparser"
-  source = "https://github.com/dt/sqlparser"
+  name = "vitess.io/vitess"
+  source = "https://github.com/cockroachdb/vitess"
+  branch = "no-flag"
 
 # The master version of go.uuid has an incompatible interface and (as
 # of 2018-06-06) a serious bug. Don't upgrade without making sure

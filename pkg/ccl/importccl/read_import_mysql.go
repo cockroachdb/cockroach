@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/pkg/errors"
-	mysql "github.com/xwb1989/sqlparser"
-	mysqltypes "github.com/xwb1989/sqlparser/dependency/sqltypes"
+	mysqltypes "vitess.io/vitess/go/sqltypes"
+	mysql "vitess.io/vitess/go/vt/sqlparser"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -87,18 +87,25 @@ func (m *mysqldumpReader) readFile(
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
+	tokens.SkipSpecialComments = true
 	for {
-		stmt, err := mysql.ParseNext(tokens)
+		stmt, err := mysql.ParseNextStrictDDL(tokens)
 		if err == io.EOF {
 			break
+		}
+		if err == mysql.ErrEmpty {
+			continue
 		}
 		if err != nil {
 			return errors.Wrap(err, "mysql parse error")
 		}
 		switch i := stmt.(type) {
 		case *mysql.DDL:
-			if i.Action != mysql.CreateStr {
+			if i.Action == mysql.DropStr {
 				continue
+			}
+			if i.Action != mysql.CreateStr {
+				return errors.Errorf("unsupported %q statement in mysqldump", i.Action)
 			}
 			name := i.NewName.Name.String()
 			conv, ok := m.tables[name]
@@ -234,11 +241,12 @@ func readMysqlCreateTable(
 ) ([]*sqlbase.TableDescriptor, error) {
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
+	tokens.SkipSpecialComments = true
 
 	var ret []*sqlbase.TableDescriptor
 	var found []string
 	for {
-		stmt, err := mysql.ParseNext(tokens)
+		stmt, err := mysql.ParseNextStrictDDL(tokens)
 		if err == io.EOF {
 			if match != "" {
 				return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(found, ", "))
@@ -247,6 +255,9 @@ func readMysqlCreateTable(
 				return nil, errors.Errorf("no table definition found")
 			}
 			return ret, nil
+		}
+		if err == mysql.ErrEmpty {
+			continue
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "mysql parse error")
