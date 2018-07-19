@@ -59,17 +59,14 @@ func TestImportData(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
-
 	tests := []struct {
-		name    string
-		create  string
-		with    string
-		typ     string
-		data    string
-		err     string
-		cleanup string
-		query   map[string][][]string
+		name   string
+		create string
+		with   string
+		typ    string
+		data   string
+		err    string
+		query  map[string][][]string
 	}{
 		{
 			name: "duplicate unique index key",
@@ -436,7 +433,6 @@ COPY t (a, b, c) FROM stdin;
 				`SHOW CONSTRAINTS FROM weather
 				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities (city)", "false"}},
 			},
-			cleanup: `DROP TABLE cities, weather`,
 		},
 		{
 			name: "fk-skip",
@@ -449,7 +445,6 @@ COPY t (a, b, c) FROM stdin;
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
 				`SHOW CONSTRAINTS FROM weather`:                                  {},
 			},
-			cleanup: `DROP TABLE cities, weather`,
 		},
 		{
 			name: "fk unreferenced",
@@ -465,7 +460,26 @@ COPY t (a, b, c) FROM stdin;
 			query: map[string][][]string{
 				`SHOW TABLES`: {{"weather"}},
 			},
-			cleanup: `DROP TABLE weather`,
+		},
+		{
+			name: "sequence",
+			typ:  "PGDUMP",
+			data: `
+					CREATE TABLE t (a INT);
+					CREATE SEQUENCE public.i_seq
+						START WITH 1
+						INCREMENT BY 1
+						NO MINVALUE
+						NO MAXVALUE
+						CACHE 1;
+					ALTER SEQUENCE public.i_seq OWNED BY public.i.id;
+					ALTER TABLE ONLY t ALTER COLUMN a SET DEFAULT nextval('public.i_seq'::regclass);
+					SELECT pg_catalog.setval('public.i_seq', 10, true);
+				`,
+			query: map[string][][]string{
+				`SELECT nextval('i_seq')`:    {{"11"}},
+				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
+			},
 		},
 
 		// Error
@@ -479,7 +493,7 @@ COPY t (a, b, c) FROM stdin;
 			name:   "sequences",
 			create: `i int default nextval('s')`,
 			typ:    "CSV",
-			err:    `sequence operations unsupported`,
+			err:    `"s" not found`,
 		},
 	}
 
@@ -491,9 +505,15 @@ COPY t (a, b, c) FROM stdin;
 	}))
 	defer srv.Close()
 
+	// Create and drop a table to make sure a descriptor ID gets used to verify
+	// ID rewrites happen correctly. Useful when running just a single test.
+	sqlDB.Exec(t, `CREATE TABLE blah (i int)`)
+	sqlDB.Exec(t, `DROP TABLE blah`)
+
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t, t`)
+			sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
+			defer sqlDB.Exec(t, `DROP DATABASE d`)
 			var q string
 			if tc.create != "" {
 				q = fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
@@ -509,13 +529,11 @@ COPY t (a, b, c) FROM stdin;
 			for query, res := range tc.query {
 				sqlDB.CheckQueryResults(t, query, res)
 			}
-			if tc.cleanup != "" {
-				sqlDB.Exec(t, tc.cleanup)
-			}
 		})
 	}
 
 	t.Run("mysqlout multiple", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
 		sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
 		dataString = "1"
 		sqlDB.Exec(t, `IMPORT TABLE d.t (s STRING) MYSQLOUTFILE DATA ($1, $1)`, srv.URL)
@@ -2104,6 +2122,25 @@ func TestImportPgDump(t *testing.T) {
 				if !testutils.IsError(err, expected) {
 					t.Fatalf("expected %s, got %v", expected, err)
 				}
+			}
+			if c.expected == expectAll {
+				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
+					"seqtable", `CREATE TABLE seqtable (
+	a INTEGER NULL DEFAULT nextval('public.a_seq':::STRING),
+	b INTEGER NULL,
+	FAMILY "primary" (a, b, rowid)
+)`,
+				}})
+				sqlDB.CheckQueryResults(t, `SHOW CREATE SEQUENCE a_seq`, [][]string{{
+					"a_seq", `CREATE SEQUENCE a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+				}})
+				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"7"}})
+				sqlDB.Exec(t, `INSERT INTO seqtable (b) VALUES (70)`)
+				sqlDB.CheckQueryResults(t,
+					`SELECT * FROM seqtable ORDER BY a`,
+					sqlDB.QueryStr(t, `select a+1, a*10 from generate_series(0, 7) a`),
+				)
+				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"8"}})
 			}
 		})
 	}

@@ -24,6 +24,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
@@ -85,8 +86,10 @@ func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
 func getMultiTablePostgresDumpTestdata(t *testing.T) string {
 	dest := filepath.Join(`testdata`, `pgdump`, `db.sql`)
 	if rewritePostgresTestData {
-		genSecondPostgresTestdata(t, func() {
-			genSimplePostgresTestdata(t, func() { pgdump(t, dest, "simple", "second") })
+		genSequencePostgresTestdata(t, func() {
+			genSecondPostgresTestdata(t, func() {
+				genSimplePostgresTestdata(t, func() { pgdump(t, dest) })
+			})
 		})
 	}
 	return dest
@@ -199,6 +202,23 @@ func genSecondPostgresTestdata(t *testing.T, dump func()) {
 	dump()
 }
 
+func genSequencePostgresTestdata(t *testing.T, dump func()) {
+	defer genPostgresTestdata(t,
+		"seqtable",
+		`a INT, b INT`,
+		func(sqlDB *gosql.DB) {
+			db := sqlutils.MakeSQLRunner(sqlDB)
+			db.Exec(t, `DROP SEQUENCE IF EXISTS a_seq`)
+			db.Exec(t, `CREATE SEQUENCE a_seq`)
+			db.Exec(t, `ALTER TABLE seqtable ALTER COLUMN a SET DEFAULT nextval('a_seq'::REGCLASS)`)
+			for i := 0; i < secondTableRows; i++ {
+				db.Exec(t, `INSERT INTO seqtable (b) VALUES ($1 * 10)`, i)
+			}
+		},
+	)()
+	dump()
+}
+
 // genPostgresTestdata connects to the a local postgres, creates the passed
 // table and calls the passed `load` func to populate it and returns a
 // cleanup func.
@@ -239,7 +259,7 @@ func pgdump(t *testing.T, dest string, tables ...string) {
 		t.Fatal(err)
 	}
 
-	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`, `--no-privileges`}
+	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`}
 	for _, table := range tables {
 		args = append(args, `-t`, table)
 	}
