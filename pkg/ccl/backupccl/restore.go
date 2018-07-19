@@ -43,7 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type tableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
+// TableRewriteMap maps old table IDs to new table and parent IDs.
+type TableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
 
 const (
 	restoreOptIntoDB               = "into_db"
@@ -193,8 +194,8 @@ func allocateTableRewrites(
 	sqlDescs []sqlbase.Descriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
 	opts map[string]string,
-) (tableRewriteMap, error) {
-	tableRewrites := make(tableRewriteMap)
+) (TableRewriteMap, error) {
+	tableRewrites := make(TableRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
 	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
@@ -389,11 +390,11 @@ func CheckTableExists(
 	return nil
 }
 
-// rewriteTableDescs mutates tables to match the ID and privilege specified in
-// tableRewrites, as well as adjusting cross-table references to use the new
-// IDs.
-func rewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap, overrideDB string,
+// RewriteTableDescs mutates tables to match the ID and privilege specified
+// in tableRewrites, as well as adjusting cross-table references to use the
+// new IDs. overrideDB can be specified to set database names in views.
+func RewriteTableDescs(
+	tables []*sqlbase.TableDescriptor, tableRewrites TableRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
@@ -956,7 +957,7 @@ func restore(
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
-	tableRewrites tableRewriteMap,
+	tableRewrites TableRewriteMap,
 	overrideDB string,
 	job *jobs.Job,
 	resultsCh chan<- tree.Datums,
@@ -998,7 +999,7 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
 		return mu.res, nil, nil, err
 	}
 
@@ -1318,7 +1319,7 @@ func doRestorePlan(
 			tables = append(tables, tableDesc)
 		}
 	}
-	if err := rewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
 	}
 
