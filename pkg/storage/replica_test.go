@@ -8127,6 +8127,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
 	cfg.RaftTickInterval = math.MaxInt32
+	// Enable so that pending commands are reproposed even though the replica
+	// will become the Raft leader.
+	cfg.RefreshPendingCommandsWhenLeader = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)

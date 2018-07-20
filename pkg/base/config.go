@@ -344,6 +344,10 @@ type RaftConfig struct {
 	// unless overridden.
 	RaftElectionTimeoutTicks int
 
+	// RefreshPendingCommandsWhenLeader specifies whether Raft leaders repropose
+	// pending commands every electionTicks.
+	RefreshPendingCommandsWhenLeader bool
+
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
