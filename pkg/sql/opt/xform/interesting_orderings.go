@@ -40,7 +40,7 @@ func GetInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 	case opt.ProjectOp:
 		res = interestingOrderingsForProject(ev)
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp:
 		res = interestingOrderingsForGroupBy(ev)
 
 	case opt.LimitOp, opt.OffsetOp:

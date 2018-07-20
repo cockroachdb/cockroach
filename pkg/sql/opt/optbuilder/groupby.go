@@ -138,18 +138,19 @@ func (b *Builder) constructGroupBy(
 		}
 	}
 
-	return b.factory.ConstructGroupBy(
-		input,
-		b.factory.ConstructAggregations(
-			b.factory.InternList(groupList),
-			b.factory.InternColList(colList),
-		),
-		b.factory.InternGroupByDef(&memo.GroupByDef{
-			GroupingCols: groupingColSet,
-			// The ordering of the GROUP BY is inherited from the input.
-			Ordering: ordering,
-		}),
+	aggs := b.factory.ConstructAggregations(
+		b.factory.InternList(groupList),
+		b.factory.InternColList(colList),
 	)
+	def := b.factory.InternGroupByDef(&memo.GroupByDef{
+		GroupingCols: groupingColSet,
+		// The ordering of the GROUP BY is inherited from the input.
+		Ordering: ordering,
+	})
+	if groupingColSet.Empty() {
+		return b.factory.ConstructScalarGroupBy(input, aggs, def)
+	}
+	return b.factory.ConstructGroupBy(input, aggs, def)
 }
 
 // buildAggregation builds the pre-projection and the aggregation operators.

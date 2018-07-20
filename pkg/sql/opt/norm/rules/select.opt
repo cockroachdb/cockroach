@@ -281,7 +281,7 @@
     (GroupBy
         $input:*
         $aggregations:*
-        $def:* & ^(IsScalarGroupBy $def)
+        $def:*
     )
     (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
 )

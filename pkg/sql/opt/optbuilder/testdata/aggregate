@@ -20,7 +20,7 @@ build
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
   variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: min:6(int) max:7(int) count:8(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_or:17(bool) xor_agg:19(bytes)
  ├── project
  │    ├── columns: column5:5(int!null) column14:14(bool!null) column16:16(bool!null) column18:18(bytes!null)
@@ -59,7 +59,7 @@ build
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v),
   variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(int) max:6(int) count:7(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_and:15(bool) xor_agg:17(bytes)
  ├── project
  │    ├── columns: column8:8(int!null) column14:14(bool) column16:16(bytes) v:2(int)
@@ -100,7 +100,7 @@ SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
 ----
 project
  ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:7(float) sum:8(decimal) stddev:9(decimal) variance:11(float) bool_and:13(bool) bool_or:14(bool) to_hex:17(string)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) column6:6(decimal) sum:8(decimal) stddev:9(decimal) column10:10(decimal) bool_and:13(bool) bool_or:14(bool) column16:16(bytes)
  │    ├── project
  │    │    ├── columns: column1:1(int!null) column12:12(bool!null) column15:15(bytes!null)
@@ -144,7 +144,7 @@ project
 build
 SELECT array_agg(1) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:6(int[])
  ├── project
  │    ├── columns: column5:5(int!null)
@@ -159,7 +159,7 @@ group-by
 build
 SELECT json_agg(v) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: json_agg:5(jsonb)
  ├── project
  │    ├── columns: v:2(int)
@@ -172,7 +172,7 @@ group-by
 build
 SELECT jsonb_agg(1)
 ----
-group-by
+scalar-group-by
  ├── columns: jsonb_agg:2(jsonb)
  ├── project
  │    ├── columns: column1:1(int!null)
@@ -226,7 +226,7 @@ array_agg(bool) -> bool[]
 build
 SELECT array_agg(NULL::TEXT)
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:2(string[])
  ├── project
  │    ├── columns: column1:1(string)
@@ -252,7 +252,7 @@ project
                 ├── columns: coalesce:7(int)
                 └── project
                      ├── columns: coalesce:7(int)
-                     ├── group-by
+                     ├── scalar-group-by
                      │    ├── columns: column6:6(int)
                      │    ├── project
                      │    │    ├── columns: column5:5(int!null)
@@ -592,7 +592,7 @@ group-by
 build
 SELECT count(*)
 ----
-group-by
+scalar-group-by
  ├── columns: count:1(int)
  ├── values
  │    └── tuple [type=tuple]
@@ -602,7 +602,7 @@ group-by
 build
 SELECT count(k) from kv
 ----
-group-by
+scalar-group-by
  ├── columns: count:5(int)
  ├── project
  │    ├── columns: k:1(int!null)
@@ -615,7 +615,7 @@ group-by
 build
 SELECT count(1)
 ----
-group-by
+scalar-group-by
  ├── columns: count:2(int)
  ├── project
  │    ├── columns: column1:1(int!null)
@@ -630,7 +630,7 @@ group-by
 build
 SELECT count(1) from kv
 ----
-group-by
+scalar-group-by
  ├── columns: count:6(int)
  ├── project
  │    ├── columns: column5:5(int!null)
@@ -758,7 +758,7 @@ sort
 build
 SELECT count(*), count(k), count(kv.v) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: count:5(int) count:6(int) count:7(int)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
@@ -774,7 +774,7 @@ group-by
 build
 SELECT count(kv.*) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: count:6(int)
  ├── project
  │    ├── columns: column5:5(tuple{int AS k, int AS v, int AS w, string AS s})
@@ -795,7 +795,7 @@ SELECT count((k, v)) FROM kv LIMIT 1
 ----
 limit
  ├── columns: count:6(int)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:6(int)
  │    ├── project
  │    │    ├── columns: column5:5(tuple{int, int})
@@ -815,7 +815,7 @@ SELECT count((k, v)) FROM kv OFFSET 1
 ----
 offset
  ├── columns: count:6(int)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: count:6(int)
  │    ├── project
  │    │    ├── columns: column5:5(tuple{int, int})
@@ -835,7 +835,7 @@ SELECT count(k)+count(kv.v) AS r FROM kv
 ----
 project
  ├── columns: r:7(int)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column5:5(int) column6:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -854,7 +854,7 @@ project
 build
 SELECT count(NULL::int), count((NULL, NULL))
 ----
-group-by
+scalar-group-by
  ├── columns: count:2(int) count:4(int)
  ├── project
  │    ├── columns: column1:1(int) column3:3(tuple{unknown, unknown})
@@ -875,7 +875,7 @@ group-by
 build
 SELECT min(k), max(k), min(v), max(v) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(int) max:6(int) min:7(int) max:8(int)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
@@ -894,7 +894,7 @@ group-by
 build
 SELECT min(k), max(k), min(v), max(v) FROM kv WHERE k > 8
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(int) max:6(int) min:7(int) max:8(int)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
@@ -919,7 +919,7 @@ group-by
 build
 SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:5(int[]) array_agg:6(string[])
  ├── ordering: +1
  ├── project
@@ -937,7 +937,7 @@ group-by
 build
 SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:5(int[])
  ├── ordering: +4
  ├── sort
@@ -956,7 +956,7 @@ SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY s)
 ----
 project
  ├── columns: "?column?":6(int[])
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column5:5(int[])
  │    ├── ordering: +4
  │    ├── sort
@@ -977,7 +977,7 @@ project
 build
 SELECT array_agg(s) FROM kv WHERE s IS NULL
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:5(string[])
  ├── project
  │    ├── columns: s:4(string)
@@ -996,7 +996,7 @@ group-by
 build
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: avg:5(decimal) avg:6(decimal) sum:7(decimal) sum:8(decimal)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
@@ -1015,7 +1015,7 @@ group-by
 build
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
-group-by
+scalar-group-by
  ├── columns: avg:6(decimal) avg:8(decimal) sum:9(decimal) sum:10(decimal)
  ├── project
  │    ├── columns: column5:5(decimal) column7:7(decimal)
@@ -1041,7 +1041,7 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv
 ----
 project
  ├── columns: r:7(decimal)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -1065,7 +1065,7 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv WHERE w*2 = k
 ----
 project
  ├── columns: r:7(decimal)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -1111,7 +1111,7 @@ TABLE abc
 build
 SELECT min(a), min(b), min(c), min(d) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(string) min:6(float) min:7(bool) min:8(decimal)
  ├── scan abc
  │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
@@ -1128,7 +1128,7 @@ group-by
 build
 SELECT max(a), max(b), max(c), max(d) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: max:5(string) max:6(float) max:7(bool) max:8(decimal)
  ├── scan abc
  │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
@@ -1145,7 +1145,7 @@ group-by
 build
 SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: avg:5(float) sum:6(float) avg:7(decimal) sum:8(decimal)
  ├── project
  │    ├── columns: b:2(float) d:4(decimal)
@@ -1175,7 +1175,7 @@ TABLE intervals
 build
 SELECT sum(a) FROM intervals
 ----
-group-by
+scalar-group-by
  ├── columns: sum:2(interval)
  ├── scan intervals
  │    └── columns: a:1(interval!null)
@@ -1242,7 +1242,7 @@ TABLE xyz
 build
 SELECT min(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1255,7 +1255,7 @@ group-by
 build
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1277,7 +1277,7 @@ group-by
 build
 SELECT max(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1290,7 +1290,7 @@ group-by
 build
 SELECT max(y) FROM xyz WHERE x = 1
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── project
  │    ├── columns: y:2(int)
@@ -1309,7 +1309,7 @@ group-by
 build
 SELECT min(y) FROM xyz WHERE x = 7
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── project
  │    ├── columns: y:2(int)
@@ -1328,7 +1328,7 @@ group-by
 build
 SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1351,7 +1351,7 @@ group-by
 build
 SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1379,7 +1379,7 @@ SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
 ----
 project
  ├── columns: variance:4(decimal) variance:6(decimal) round:8(float)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: variance:4(decimal) variance:6(decimal) column7:7(float)
  │    ├── project
  │    │    ├── columns: column5:5(decimal) x:1(int!null) z:3(float)
@@ -1403,7 +1403,7 @@ project
 build
 SELECT variance(x) FROM xyz WHERE x = 10
 ----
-group-by
+scalar-group-by
  ├── columns: variance:4(decimal)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1424,7 +1424,7 @@ SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
 ----
 project
  ├── columns: stddev:4(decimal) stddev:6(decimal) round:8(float)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: stddev:4(decimal) stddev:6(decimal) column7:7(float)
  │    ├── project
  │    │    ├── columns: column5:5(decimal) x:1(int!null) z:3(float)
@@ -1448,7 +1448,7 @@ project
 build
 SELECT stddev(x) FROM xyz WHERE x = 1
 ----
-group-by
+scalar-group-by
  ├── columns: stddev:4(decimal)
  ├── project
  │    ├── columns: x:1(int!null)
@@ -1469,7 +1469,7 @@ SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
 ----
 project
  ├── columns: avg:3(float) avg:6(float) avg:9(float)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column2:2(decimal) column5:5(float) column8:8(decimal)
  │    ├── project
  │    │    ├── columns: column1:1(int) column4:4(float) column7:7(decimal)
@@ -1500,7 +1500,7 @@ project
 build
 SELECT count(2::int), count(3::float), count(4::decimal)
 ----
-group-by
+scalar-group-by
  ├── columns: count:2(int) count:4(int) count:6(int)
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
@@ -1524,7 +1524,7 @@ group-by
 build
 SELECT sum(1::int), sum(2::float), sum(3::decimal)
 ----
-group-by
+scalar-group-by
  ├── columns: sum:2(decimal) sum:4(float) sum:6(decimal)
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
@@ -1548,7 +1548,7 @@ group-by
 build
 SELECT variance(1::int), variance(1::float), variance(1::decimal)
 ----
-group-by
+scalar-group-by
  ├── columns: variance:2(decimal) variance:4(float) variance:6(decimal)
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
@@ -1572,7 +1572,7 @@ group-by
 build
 SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 ----
-group-by
+scalar-group-by
  ├── columns: stddev:2(decimal) stddev:4(float) stddev:6(decimal)
  ├── project
  │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
@@ -1609,7 +1609,7 @@ limit
  │              └── subquery [type=decimal]
  │                   └── max1-row
  │                        ├── columns: avg:5(decimal)
- │                        └── group-by
+ │                        └── scalar-group-by
  │                             ├── columns: avg:5(decimal)
  │                             ├── project
  │                             │    ├── columns: column4:4(int!null)
@@ -1637,7 +1637,7 @@ limit
  │              └── subquery [type=decimal]
  │                   └── max1-row
  │                        ├── columns: avg:7(decimal)
- │                        └── group-by
+ │                        └── scalar-group-by
  │                             ├── columns: avg:7(decimal)
  │                             ├── project
  │                             │    ├── columns: xyz.y:5(int)
@@ -1660,7 +1660,7 @@ TABLE bools
 build
 SELECT bool_and(b), bool_or(b) FROM bools
 ----
-group-by
+scalar-group-by
  ├── columns: bool_and:3(bool) bool_or:4(bool)
  ├── project
  │    ├── columns: b:1(bool)
@@ -1703,7 +1703,7 @@ SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
 ----
 project
  ├── columns: to_hex:6(string) xor_agg:7(int)
- ├── group-by
+ ├── scalar-group-by
  │    ├── columns: column5:5(bytes) xor_agg:7(int)
  │    ├── project
  │    │    ├── columns: a:1(bytes) c:3(int)
@@ -1747,7 +1747,7 @@ sort
 build
 SELECT xor_agg(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 ----
-group-by
+scalar-group-by
  ├── columns: xor_agg:2(bytes)
  ├── values
  │    ├── columns: column1:1(bytes)
@@ -1762,7 +1762,7 @@ group-by
 build
 SELECT max(true), min(true)
 ----
-group-by
+scalar-group-by
  ├── columns: max:2(bool) min:3(bool)
  ├── project
  │    ├── columns: column1:1(bool!null)
@@ -1779,7 +1779,7 @@ group-by
 build
 SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-group-by
+scalar-group-by
  ├── columns: concat_agg:5(string)
  ├── ordering: +1
  ├── project
@@ -1795,7 +1795,7 @@ group-by
 build
 SELECT json_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-group-by
+scalar-group-by
  ├── columns: json_agg:5(jsonb)
  ├── ordering: +1
  ├── project
@@ -1811,7 +1811,7 @@ group-by
 build
 SELECT jsonb_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-group-by
+scalar-group-by
  ├── columns: jsonb_agg:5(jsonb)
  ├── ordering: +1
  ├── project
@@ -2635,7 +2635,7 @@ sort
  ├── ordering: +6
  └── project
       ├── columns: r:5(int!null) column6:6(int)
-      ├── group-by
+      ├── scalar-group-by
       │    ├── columns: column6:6(int)
       │    ├── project
       │    │    ├── columns: v:2(int)
@@ -2651,7 +2651,7 @@ sort
 build
 SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x+y)
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:5(int[])
  ├── ordering: +4
  ├── sort
@@ -2674,7 +2674,7 @@ group-by
 build
 SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
 ----
-group-by
+scalar-group-by
  ├── columns: array_agg:4(int[])
  ├── ordering: -1
  ├── sort

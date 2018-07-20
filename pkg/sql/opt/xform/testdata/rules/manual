@@ -100,28 +100,19 @@ scan abcde@bc
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  └── ordering: +2,+3,+1
 
-# Don't prune when the resulting Project cannot be merged with an operator lower
-# in the tree (in this case the GroupBy).
 opt
 SELECT d FROM (SELECT d, d+1 AS one FROM abcde) GROUP BY d, one ORDER BY d, one
 ----
 sort
  ├── columns: d:4(int)
  ├── key: (4)
- ├── fd: (4)-->(6)
  ├── ordering: +4
  └── group-by
-      ├── columns: d:4(int) one:6(int)
-      ├── grouping columns: d:4(int) one:6(int)
+      ├── columns: d:4(int)
+      ├── grouping columns: d:4(int)
       ├── key: (4)
-      ├── fd: (4)-->(6)
-      └── project
-           ├── columns: one:6(int) d:4(int)
-           ├── fd: (4)-->(6)
-           ├── scan abcde
-           │    └── columns: d:4(int)
-           └── projections [outer=(4)]
-                └── abcde.d + 1 [type=int, outer=(4)]
+      └── scan abcde
+           └── columns: d:4(int)
 
 # --------------------------------------------------
 # SimplifyProjectOrdering

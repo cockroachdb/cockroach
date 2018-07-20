@@ -10,23 +10,43 @@
 (GroupBy
     $input:*
     $aggregations:* & (HasNoCols $aggregations)
-    $def:* & (GroupingColsAreKey $def $input) & ^(IsScalarGroupBy $def)
+    $def:* & (GroupingColsAreKey $def $input)
 )
 =>
 $input
 
 # EliminateGroupByProject discards a nested Project operator that is only
 # removing columns from its input (and not synthesizing new ones). That's
-# something the GroupBy operator can do on its own.
+# something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
-(GroupBy
+(GroupBy | ScalarGroupBy
     $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
     $aggregations:*
     $def:*
 )
 =>
-(GroupBy
+((OpName)
     $innerInput
     $aggregations
     $def
+)
+
+# ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
+# operator and replaces them by AnyNotNull aggregate functions. A grouping
+# column is redundant if it is functionally determined by the other grouping
+# columns. If that's true, then its value must be constant within a group.
+# Therefore, it has no effect on the grouping and can instead be represented as
+# an AnyNotNull aggregate, since all rows in the group have the same value for
+# that column.
+[ReduceGroupingCols, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:*
+    $def:* & (CanReduceGroupingCols $input $def)
+)
+=>
+(GroupBy
+    $input
+    (AppendReducedGroupingCols $input $aggregations $def)
+    (ReduceGroupingCols $input $def)
 )
