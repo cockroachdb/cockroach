@@ -447,19 +447,21 @@ CREATE TABLE crdb_internal.jobs (
 			}
 
 			// Extract data from the progress field.
-			progress, err := jobs.UnmarshalProgress(progressBytes)
-			if err != nil {
-				baseErr := ""
-				if s, ok := errorStr.(*tree.DString); ok {
-					baseErr = string(*s)
-					if baseErr != "" {
-						baseErr += "\n"
+			if progressBytes != tree.DNull {
+				progress, err := jobs.UnmarshalProgress(progressBytes)
+				if err != nil {
+					baseErr := ""
+					if s, ok := errorStr.(*tree.DString); ok {
+						baseErr = string(*s)
+						if baseErr != "" {
+							baseErr += "\n"
+						}
 					}
+					errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
+				} else {
+					fractionCompleted = tree.NewDFloat(tree.DFloat(progress.FractionCompleted))
+					modified = tsOrNull(progress.ModifiedMicros)
 				}
-				errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
-			} else {
-				fractionCompleted = tree.NewDFloat(tree.DFloat(progress.FractionCompleted))
-				modified = tsOrNull(progress.ModifiedMicros)
 			}
 
 			// Report the data.
