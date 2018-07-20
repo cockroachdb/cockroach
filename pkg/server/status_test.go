@@ -894,25 +894,15 @@ func TestStatusAPIStatements(t *testing.T) {
 	statements := []struct {
 		stmt          string
 		fingerprinted string
-		notInStats    bool
 	}{
-		{
-			stmt: `CREATE DATABASE roachblog`,
-		},
-		{
-			stmt:       `USE roachblog`,
-			notInStats: true,
-		},
-		{
-			stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`,
-		},
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
 		},
-		{
-			stmt: `SELECT * FROM posts`,
-		},
+		{stmt: `SELECT * FROM posts`},
 	}
 
 	for _, stmt := range statements {
@@ -928,9 +918,6 @@ func TestStatusAPIStatements(t *testing.T) {
 	// See if the statements returned are what we executed.
 	var expectedStatements []string
 	for _, stmt := range statements {
-		if stmt.notInStats {
-			continue
-		}
 		var expectedStmt = stmt.stmt
 		if stmt.fingerprinted != "" {
 			expectedStmt = stmt.fingerprinted

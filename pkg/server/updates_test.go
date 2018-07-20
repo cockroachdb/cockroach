@@ -539,6 +539,8 @@ func TestReportUsage(t *testing.T) {
 		`[false,false] SET CLUSTER SETTING "cluster.organization" = _`,
 		`[false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+		`[false,false] SET application_name = DEFAULT`,
+		`[false,false] SET application_name = _`,
 		`[false,false] UPDATE _ SET _ = _ + _`,
 		`[false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[false,true] SELECT _ / $1`,
@@ -587,11 +589,13 @@ func TestReportUsage(t *testing.T) {
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
+			`SET application_name = _`,
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 			`UPDATE _ SET _ = _ + _`,
 			`SET CLUSTER SETTING "cluster.organization" = _`,
+			`SET application_name = DEFAULT`,
 		},
 	} {
 		hashedAppName := sql.HashForReporting(clusterSecret, appName)

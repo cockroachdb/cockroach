@@ -13,6 +13,7 @@ SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_
 ----
 true
 true
+true
 
 # Check that node_statement_statistics report per statement
 
@@ -119,6 +120,8 @@ SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
 SELECT x FROM test WHERE y NOT IN (_, _)                          ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
+SET application_name = _                                          ·
+SET distsql = "on"                                                ·
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved, but not the db prefix (#22700)
@@ -141,6 +144,8 @@ SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
 SELECT _ FROM _ WHERE _ NOT IN (_, _)
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
+SET application_name = _
+SET distsql = _
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
