@@ -348,6 +348,9 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if sc := tn.Schema(); sc != "" && sc != "public" {
+		return "", errors.Errorf("non-public schemas unsupported: %s", sc)
+	}
 	return tn.Table(), nil
 }
 
