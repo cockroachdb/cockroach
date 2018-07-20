@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local-opt
 
 # Check that node_statement_statistics report per application
 
@@ -107,7 +107,7 @@ SELECT key,flags
  WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
 key                                                               flags
-INSERT INTO test VALUES (_, _, __more1__), (__more1__)            ·
+INSERT INTO test VALUES (_, _, __more1__), (__more1__)            -
 SELECT ROW(_, _, __more3__) FROM test WHERE _                     ·
 SELECT key FROM test.crdb_internal.node_statement_statistics      ·
 SELECT sin(_)                                                     ·
@@ -118,10 +118,10 @@ SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
 SELECT x FROM test WHERE y IN (_, _, __more3__)                   ·
 SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
-SET application_name = _                                          ·
-SET distsql = "on"                                                ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  -
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        -
+SET application_name = _                                          -
+SET distsql = "on"                                                -
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved, but not the db prefix (#22700)

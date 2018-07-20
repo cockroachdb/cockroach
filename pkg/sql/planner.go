@@ -571,6 +571,7 @@ type sqlStatsCollector interface {
 	RecordStatement(
 		stmt Statement,
 		distSQLUsed bool,
+		optUsed bool,
 		automaticRetryCount int,
 		numRows int,
 		err error,
