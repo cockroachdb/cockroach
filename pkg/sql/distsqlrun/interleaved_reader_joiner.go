@@ -253,9 +253,8 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		defer log.Infof(ctx, "exiting")
 	}
 
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := irj.fetcher.StartScan(
-		ctx, txn, irj.allSpans, true /* limit batches */, irj.limitHint, false, /* traceKV */
+		ctx, txn, irj.allSpans, true /* limit batches */, irj.limitHint, irj.flowCtx.traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})

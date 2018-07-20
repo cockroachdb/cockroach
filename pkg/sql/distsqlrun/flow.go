@@ -106,6 +106,9 @@ type FlowCtx struct {
 
 	// JobRegistry is used during backfill to load jobs which keep state.
 	JobRegistry *jobs.Registry
+
+	// traceKV is true if KV tracing was requested by the session.
+	traceKV bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
