@@ -139,8 +139,13 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 // qualifyTableName updates the given table name to include catalog and schema
 // if not already included.
 func (tc *Catalog) qualifyTableName(name *tree.TableName) {
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
+	hadExplicitSchema := name.ExplicitSchema
+	hadExplicitCatalog := name.ExplicitCatalog
+	name.ExplicitSchema = true
+	name.ExplicitCatalog = true
+
+	if hadExplicitSchema {
+		if hadExplicitCatalog {
 			// Already 3 parts: nothing to do.
 			return
 		}
@@ -154,7 +159,6 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 		// Compatibility with CockroachDB v1.1: use D.public.T.
 		name.CatalogName = name.SchemaName
 		name.SchemaName = tree.PublicSchemaName
-		name.ExplicitCatalog = true
 		return
 	}
 
