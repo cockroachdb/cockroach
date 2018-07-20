@@ -769,8 +769,12 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 					select {
 					case <-time.After(timeout):
 						t.printf("test timed out (%s)", timeout)
-						if !debug && c != nil && c.destroyed != nil {
-							c.Destroy(ctx)
+						if c != nil {
+							c.FetchLogs(ctx)
+							// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
+							if !debug && c.destroyed != nil {
+								c.Destroy(ctx)
+							}
 						}
 					case <-done:
 					}
