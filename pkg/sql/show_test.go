@@ -818,9 +818,10 @@ func TestShowJobsWithError(t *testing.T) {
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs ORDER BY id LIMIT 1;
      -- Create a corrupted progress field.
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
      -- Corrupt both fields.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     -- Test what happens with a NULL progress field (which is a valid value).
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
 	`); err != nil {
 		t.Fatal(err)
@@ -837,6 +838,7 @@ func TestShowJobsWithError(t *testing.T) {
 
 	var desc, frac, errStr string
 
+	// Valid row.
 	rowNum := 0
 	if !rows.Next() {
 		t.Fatalf("%d too few rows", rowNum)
@@ -850,6 +852,7 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
+	// Corrupted payload but valid progress.
 	if !rows.Next() {
 		t.Fatalf("%d: too few rows", rowNum)
 	}
@@ -862,34 +865,61 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
-	for k := 0; k < 2; k++ {
-		if !rows.Next() {
-			t.Fatalf("%d: too few rows", rowNum)
-		}
-		if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-			t.Fatalf("%d: %v", rowNum, err)
-		}
-		t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
-		if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
-			t.Fatalf("%d: invalid row", rowNum)
-		}
-		rowNum++
+	// Corrupted progress but valid payload.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
 	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
 
-	for k := 0; k < 2; k++ {
-		if !rows.Next() {
-			t.Fatalf("%d: too few rows", rowNum)
-		}
-		if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-			t.Fatalf("%d: %v", rowNum, err)
-		}
-		t.Logf("row: %q %q %v", desc, errStr, frac)
-		if desc != "NULL" ||
-			!strings.Contains(errStr, "error decoding payload") ||
-			!strings.Contains(errStr, "error decoding progress") ||
-			frac[0] != '-' {
-			t.Fatalf("%d: invalid row", rowNum)
-		}
-		rowNum++
+	// Both payload and progress corrupted.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
 	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		!strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Valid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || errStr != "" || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Invalid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
 }
