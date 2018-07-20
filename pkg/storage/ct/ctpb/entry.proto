@@ -39,6 +39,16 @@ message Entry {
   map<int32, int64> mlai = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
     (gogoproto.castvalue) = "LAI",
     (gogoproto.customname) = "MLAI"];
+  // Full is true if the emitter promises that any future write to any range
+  // mentioned in this Entry will be reflected in a subsequent Entry before any
+  // stale follower reads are possible. For example, if range 1 is assigned an
+  // MLAI of 12 in this Entry and isn't mentioned in the five subsequent
+  // entries, the recipient may behave as if the MLAI of 12 were repeated across
+  // all of these entries.
+  //
+  // In practice, a Full message is received when a stream of Entries is first
+  // established (or the Epoch changes), and all other updates are incremental
+  // (i.e. not Full).
   bool full = 4;
 }
 

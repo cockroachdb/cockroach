@@ -52,7 +52,17 @@ type Entry struct {
 	Epoch           Epoch                                                        `protobuf:"varint,1,opt,name=epoch,proto3,casttype=Epoch" json:"epoch,omitempty"`
 	ClosedTimestamp cockroach_util_hlc.Timestamp                                 `protobuf:"bytes,2,opt,name=closed_timestamp,json=closedTimestamp" json:"closed_timestamp"`
 	MLAI            map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]LAI `protobuf:"bytes,3,rep,name=mlai,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID,castvalue=LAI" json:"mlai,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
-	Full            bool                                                         `protobuf:"varint,4,opt,name=full,proto3" json:"full,omitempty"`
+	// Full is true if the emitter promises that any future write to any range
+	// mentioned in this Entry will be reflected in a subsequent Entry before any
+	// stale follower reads are possible. For example, if range 1 is assigned an
+	// MLAI of 12 in this Entry and isn't mentioned in the five subsequent
+	// entries, the recipient may behave as if the MLAI of 12 were repeated across
+	// all of these entries.
+	//
+	// In practice, a Full message is received when a stream of Entries is first
+	// established (or the Epoch changes), and all other updates are incremental
+	// (i.e. not Full).
+	Full bool `protobuf:"varint,4,opt,name=full,proto3" json:"full,omitempty"`
 }
 
 func (m *Entry) Reset()                    { *m = Entry{} }
