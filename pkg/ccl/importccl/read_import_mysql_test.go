@@ -33,19 +33,29 @@ var testEvalCtx = &tree.EvalContext{
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 }
 
-func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.TableDescriptor {
+func descForTable(
+	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
+) *sqlbase.TableDescriptor {
+	t.Helper()
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("could not parse %q: %v", create, err)
 	}
 	stmt := parsed.(*tree.CreateTable)
-	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, NoFKs, testEvalCtx.StmtTimestamp.UnixNano())
+	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, testEvalCtx.StmtTimestamp.UnixNano())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("could interpret %q: %v", create, err)
 	}
 	if table.PrimaryIndex.Name == "primary" {
 		table.PrimaryIndex.Name = "PRIMARY"
 	}
+	table.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+		if idx.ForeignKey.IsSet() {
+			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+		}
+		return nil
+	})
+	table.State = sqlbase.TableDescriptor_PUBLIC
 	return table
 }
 
@@ -55,7 +65,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.TODO()
-	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
+	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
 	tables := map[string]*sqlbase.TableDescriptor{"simple": table}
 
 	converter, err := newMysqldumpReader(make(chan kvBatch, 10), tables, testEvalCtx)
@@ -116,14 +126,16 @@ func readFile(t *testing.T, name string) string {
 	return string(body)
 }
 
-func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescriptor {
+func readMysqlCreateFrom(
+	t *testing.T, path, name string, id sqlbase.ID, fks fkHandler,
+) *sqlbase.TableDescriptor {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	tbl, err := readMysqlCreateTable(f, testEvalCtx, expectedParent, name)
+	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,25 +145,37 @@ func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescript
 func TestMysqldumpSchemaReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 53)
-
 	files := getMysqldumpTestdata(t)
+
+	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 51, NoFKs)
+	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 51, NoFKs)
+	fks := fkHandler{
+		allowed:  true,
+		resolver: fkResolver(map[string]*sqlbase.TableDescriptor{referencedSimple.Name: referencedSimple}),
+	}
 
 	t.Run("simple", func(t *testing.T) {
 		expected := simpleTable
-		got := readMysqlCreateFrom(t, files.simple, "")
+		got := readMysqlCreateFrom(t, files.simple, "", 51, NoFKs)
+		compareTables(t, expected, got)
+	})
+
+	t.Run("second", func(t *testing.T) {
+		secondTable := descForTable(t, readFile(t, `second.cockroach-schema.sql`), expectedParent, 53, fks)
+		expected := secondTable
+		got := readMysqlCreateFrom(t, files.second, "", 53, fks)
 		compareTables(t, expected, got)
 	})
 
 	t.Run("everything", func(t *testing.T) {
-		expected := descForTable(t, readFile(t, `everything.cockroach-schema.sql`), expectedParent, 53)
-		got := readMysqlCreateFrom(t, files.everything, "")
+		expected := descForTable(t, readFile(t, `everything.cockroach-schema.sql`), expectedParent, 53, NoFKs)
+		got := readMysqlCreateFrom(t, files.everything, "", 53, NoFKs)
 		compareTables(t, expected, got)
 	})
 
 	t.Run("simple-in-multi", func(t *testing.T) {
 		expected := simpleTable
-		got := readMysqlCreateFrom(t, files.wholeDB, "simple")
+		got := readMysqlCreateFrom(t, files.wholeDB, "simple", 51, NoFKs)
 		compareTables(t, expected, got)
 	})
 }
@@ -195,7 +219,7 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 		)
 	}
 	for i := range expected.Indexes {
-		tableName := tree.NewUnqualifiedTableName(tree.Name(expected.Name))
+		tableName := &sqlbase.AnonymousTable
 		e, g := expected.Indexes[i].SQLString(tableName), got.Indexes[i].SQLString(tableName)
 		if e != g {
 			t.Fatalf("index %d: expected\n%s\ngot\n%s\n", i, e, g)
