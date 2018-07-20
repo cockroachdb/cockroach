@@ -57,11 +57,11 @@ select * from crdb_internal.node_runtime_info;
 
 	const (
 		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._; caused by i'm not safe"
+			"(_, _, __more2__); SELECT * FROM _._; caused by i'm not safe"
 		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by <redacted>"
+			"(_, _, __more2__); SELECT * FROM _._: caused by <redacted>"
 		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by something safe"
+			"(_, _, __more2__); SELECT * FROM _._: caused by something safe"
 	)
 
 	actMessage := safeErr.Error()
