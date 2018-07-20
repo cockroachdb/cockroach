@@ -393,6 +393,7 @@ func (ds *ServerImpl) setupFlow(
 		TempStorage:    ds.TempStorage,
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
+		traceKV:        req.TraceKV,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)

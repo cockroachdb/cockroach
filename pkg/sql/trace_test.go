@@ -500,6 +500,50 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
 }
 
+func TestKVTraceDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test that kv tracing works in distsql.
+	const numNodes = 2
+	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+		},
+	})
+	defer cluster.Stopper().Stop(context.TODO())
+
+	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
+	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
+	r.Exec(t, "ALTER TABLE a SPLIT AT VALUES(1)")
+	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
+
+	for node := 0; node < 2; node++ {
+		rows := r.Query(t,
+			fmt.Sprintf(`SELECT tag
+			 FROM [SHOW KV TRACE FOR SESSION]
+			 WHERE tag LIKE '%%%d%%'`, node))
+		if !rows.Next() {
+			t.Fatalf("no message from n%d found", node)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows := r.Query(t, `SELECT *
+           FROM [SHOW KV TRACE FOR SESSION]
+           WHERE MESSAGE LIKE '%fetched: %'`)
+	if !rows.Next() {
+		t.Fatal("No kv messages found")
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test that spans are collected from RPC that returned (structured) errors, in
 // addition to the spans from the successful retry of the RPC.
 func TestTraceFromErrorReplica(t *testing.T) {

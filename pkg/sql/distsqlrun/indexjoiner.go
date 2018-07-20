@@ -159,7 +159,7 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// Scan the primary index for this batch.
 			err := ij.fetcher.StartScan(
 				ij.ctx, ij.flowCtx.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
-				false /* traceKV */)
+				ij.flowCtx.traceKV)
 			if err != nil {
 				ij.moveToDraining(err)
 				return nil, ij.drainHelper()
