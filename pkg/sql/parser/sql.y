@@ -479,9 +479,9 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
 %token <str> DEALLOCATE DEFERRABLE DELETE DESC
-%token <str> DISCARD DISTINCT DO DOUBLE DROP
+%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE EMIT ENCODING END ESCAPE EXCEPT
+%token <str> ELSE EMIT ENCODING END ENUM ESCAPE EXCEPT
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
@@ -640,6 +640,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
+%type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
@@ -648,9 +649,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
-%type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_stats_stmt
+%type <tree.Statement> create_type_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -768,7 +769,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
-%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedName> table_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target
@@ -1905,15 +1906,16 @@ create_stmt:
 | CREATE error         // SHOW HELP: CREATE
 
 create_ddl_stmt:
-  create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
+  create_changefeed_stmt
+| create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
+| create_type_stmt     { /* SKIP DOC */ }
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
-| create_changefeed_stmt
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -4174,6 +4176,22 @@ create_view_stmt:
 | CREATE VIEW error // SHOW HELP: CREATE VIEW
 
 // TODO(a-robinson): CREATE OR REPLACE VIEW support (#2971).
+
+// CREATE TYPE/DOMAIN is not yet supported by CockroachDB but we
+// want to report it with the right issue number.
+create_type_stmt:
+  // Record/Composite types.
+  CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+  // Enum types.
+| CREATE TYPE type_name AS ENUM '(' error { return unimplementedWithIssue(sqllex, 24873) }
+  // Range types.
+| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
+  // Base (primitive) types.
+| CREATE TYPE type_name '(' error         { return unimplementedWithIssue(sqllex, 27793) }
+  // Shell types, gateway to define base types using the previous syntax.
+| CREATE TYPE type_name                   { return unimplementedWithIssue(sqllex, 27793) }
+  // Domain types.
+| CREATE DOMAIN type_name error           { return unimplementedWithIssue(sqllex, 27796) }
 
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
@@ -7864,6 +7882,8 @@ window_name:         name
 
 view_name:           table_name
 
+type_name:           db_object_name
+
 sequence_name:       db_object_name
 
 table_name:          db_object_name
@@ -8075,10 +8095,12 @@ unreserved_keyword:
 | DEALLOCATE
 | DELETE
 | DISCARD
+| DOMAIN
 | DOUBLE
 | DROP
 | EMIT
 | ENCODING
+| ENUM
 | ESCAPE
 | EXECUTE
 | EXPERIMENTAL
