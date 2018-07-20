@@ -1886,9 +1886,9 @@ func TestImportMysql(t *testing.T) {
 	}{
 		{`read data only`, expectSimple, `IMPORT TABLE simple (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`, simple},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, simple},
-		{`second table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, second},
+		{`second table dump`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1) WITH skip_foreign_keys`, second},
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
-		{`second from multi`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1)`, multitable},
+		{`second from multi`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1) WITH skip_foreign_keys`, multitable},
 		{`all from multi`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1925,8 +1925,8 @@ func TestImportMysql(t *testing.T) {
 					t.Fatalf("expected %d, got %d", expected, actual)
 				}
 				for _, row := range res {
-					if i, s := row[0], row[1]; i != s {
-						t.Fatalf("expected %s = %s", i, s)
+					if i, j := row[0], row[1]; i != "-"+j {
+						t.Fatalf("expected %s = - %s", i, j)
 					}
 				}
 			}
