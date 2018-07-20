@@ -209,7 +209,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, false, /* traceKV */
+		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
 		tr.moveToDraining(err)
 	}

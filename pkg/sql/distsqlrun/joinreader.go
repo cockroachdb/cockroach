@@ -382,7 +382,7 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 	}
 	err := jr.fetcher.StartScan(
 		jr.ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
-		false /* traceKV */)
+		jr.flowCtx.traceKV)
 	if err != nil {
 		jr.moveToDraining(err)
 		return jrStateUnknown, jr.drainHelper()
@@ -556,7 +556,7 @@ func (jr *joinReader) primaryLookup(
 
 	// Perform the primary index scan.
 	err := jr.primaryFetcher.StartScan(
-		ctx, txn, spans, false /* limitBatches */, 0 /* limitHint */, false /* traceKV */)
+		ctx, txn, spans, false /* limitBatches */, 0 /* limitHint */, jr.flowCtx.traceKV)
 	if err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, err
