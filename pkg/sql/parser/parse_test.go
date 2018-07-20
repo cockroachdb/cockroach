@@ -1894,6 +1894,13 @@ SELECT * FROM ab, LATERAL foo(a)
                                 ^
 HINT: See: https://github.com/cockroachdb/cockroach/issues/24560`,
 		},
+		{
+			`SELECT max(a ORDER BY b) FROM ab`,
+			`unimplemented at or near ")"
+SELECT max(a ORDER BY b) FROM ab
+                       ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/23620`,
+		},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
