@@ -733,6 +733,9 @@ type StoreTestingKnobs struct {
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
 	DisablePeriodicGossips bool
+	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
+	// leadership when it diverges from the range's leaseholder.
+	DisableLeaderFollowsLeaseholder bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool
@@ -742,6 +745,10 @@ type StoreTestingKnobs struct {
 	// DisableRefreshReasonTicks disables refreshing pending commands
 	// periodically.
 	DisableRefreshReasonTicks bool
+	// RefreshReasonTicksPeriod overrides the default period over which
+	// pending commands are refreshed. The period is specified as a multiple
+	// of Raft group ticks.
+	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
