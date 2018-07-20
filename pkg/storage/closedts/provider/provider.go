@@ -107,6 +107,8 @@ func (p *Provider) runCloser(ctx context.Context) {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %s", err)
 			}
 		} else {
+			// TODO(tschottdorf): if the epoch changes, this needs to make sure to produce a
+			// full update.
 			closed, m := p.cfg.Close(next)
 
 			ch <- ctpb.Entry{

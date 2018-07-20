@@ -966,7 +966,7 @@ type DataDistributionResponse_ZoneConfig struct {
 	// cli_specifier is ".default" for the default zone config.
 	// Otherwise, it's of the form [database.]table[@index[.partition]]
 	CliSpecifier string                      `protobuf:"bytes,1,opt,name=cli_specifier,json=cliSpecifier,proto3" json:"cli_specifier,omitempty"`
-	Config       cockroach_config.ZoneConfig `protobuf:"bytes,2,opt,name=config" json:"container"`
+	Config       cockroach_config.ZoneConfig `protobuf:"bytes,2,opt,name=config" json:"config"`
 	// config_yaml is the YAML representation of config.
 	ConfigYaml string `protobuf:"bytes,3,opt,name=config_yaml,json=configYaml,proto3" json:"config_yaml,omitempty"`
 }
