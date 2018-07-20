@@ -533,9 +533,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ServerPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenPort.Name)
 					} else if le.Addr == serverCfg.HTTPAddr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ServerHTTPPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPPort.Name)
 					}
 				}
 
@@ -910,7 +910,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
-		addr := startCtx.serverConnHost
+		addr := startCtx.serverListenAddr
 		if addr == "" {
 			addr = "<all your IP addresses>"
 		}

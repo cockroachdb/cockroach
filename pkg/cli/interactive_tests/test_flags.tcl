@@ -27,6 +27,38 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that --host causes a deprecation warning."
+send "$argv start --insecure --host=localhost\r"
+eexpect "host has been deprecated, use --listen-addr/--advertise-addr instead."
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
+start_test "Check that --host without --advertise causes a user warning."
+send "$argv start --insecure --host=localhost\r"
+eexpect "WARNING: --listen-addr/--host is specified, consider using --advertise"
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
+start_test "Check that --port causes a deprecation warning."
+send "$argv start --insecure --port=26257\r"
+eexpect "port has been deprecated, use --listen-port/--advertise-port instead."
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
+start_test "Check that --port without --advertise causes a user warning."
+send "$argv start --insecure --port=26257\r"
+eexpect "WARNING: --listen-port/--port is specified, consider using --advertise"
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
 start_test {Check that the "failed running SUBCOMMAND" message does not consider a flag the subcommand}
 send "$argv --verbosity 2 start --garbage\r"
 eexpect {Failed running "start"}
@@ -44,4 +76,3 @@ end_test
 
 send "exit 0\r"
 eexpect eof
-

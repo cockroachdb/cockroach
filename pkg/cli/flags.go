@@ -16,6 +16,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -44,18 +45,18 @@ import (
 // - the underlying context parameters must receive defaults in
 //   initCLIDefaults() even when they are otherwise overridden by the
 //   flags logic, because some tests to not use the flag logic at all.
-var serverConnPort, serverAdvertiseHost, serverAdvertisePort string
-var serverHTTPHost, serverHTTPPort string
+var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
+var serverHTTPAddr, serverHTTPPort string
 var clientConnHost, clientConnPort string
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
 func initPreFlagsDefaults() {
-	serverConnPort = base.DefaultPort
-	serverAdvertiseHost = ""
+	serverListenPort = base.DefaultPort
+	serverAdvertiseAddr = ""
 	serverAdvertisePort = ""
 
-	serverHTTPHost = ""
+	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
 
 	clientConnHost = ""
@@ -131,6 +132,26 @@ func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 	setFlagFromEnv(f, flagInfo)
 }
 
+// aliasStrVar wraps a string configuration option and is meant
+// to be used in addition to / next to another flag that targets the
+// same option. It does not implement "default values" so that the
+// main flag can perform the default logic.
+type aliasStrVar struct{ p *string }
+
+// String implements the pflag.Value interface.
+func (a aliasStrVar) String() string { return "" }
+
+// Set implements the pflag.Value interface.
+func (a aliasStrVar) Set(v string) error {
+	if v != "" {
+		*a.p = v
+	}
+	return nil
+}
+
+// Type implements the pflag.Value interface.
+func (a aliasStrVar) Type() string { return "string" }
+
 func init() {
 	initCLIDefaults()
 
@@ -148,7 +169,7 @@ func init() {
 
 	// Add a pre-run command for `start`.
 	AddPersistentPreRunE(StartCmd, func(cmd *cobra.Command, _ []string) error {
-		extraServerFlagInit()
+		extraServerFlagInit(cmd)
 		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 	})
 
@@ -190,14 +211,26 @@ func init() {
 		f := StartCmd.Flags()
 
 		// Server flags.
-		StringFlag(f, &startCtx.serverConnHost, cliflags.ServerHost, startCtx.serverConnHost)
-		StringFlag(f, &serverConnPort, cliflags.ServerPort, serverConnPort)
-		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, serverAdvertiseHost)
+		StringFlag(f, &startCtx.serverListenAddr, cliflags.ListenAddr, startCtx.serverListenAddr)
+		VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ListenAddrAlias)
+		_ = f.MarkDeprecated(cliflags.ListenAddrAlias.Name, "use --listen-addr/--advertise-addr instead.")
+
+		StringFlag(f, &serverListenPort, cliflags.ListenPort, serverListenPort)
+		VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ListenPortAlias)
+		_ = f.MarkDeprecated(cliflags.ListenPortAlias.Name, "use --listen-port/--advertise-port instead.")
+
+		StringFlag(f, &serverAdvertiseAddr, cliflags.AdvertiseAddr, serverAdvertiseAddr)
+		VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseAddrAlias)
+		_ = f.MarkDeprecated(cliflags.AdvertiseAddrAlias.Name, "use --advertise-addr instead.")
+
 		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
-		// The advertise port flag is used for testing purposes only and is kept hidden.
-		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
-		StringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, serverHTTPHost)
-		StringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, serverHTTPPort)
+
+		StringFlag(f, &serverHTTPAddr, cliflags.ListenHTTPAddr, serverHTTPAddr)
+		VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
+		_ = f.MarkDeprecated(cliflags.ListenHTTPAddrAlias.Name, "use --http-addr instead.")
+
+		StringFlag(f, &serverHTTPPort, cliflags.ListenHTTPPort, serverHTTPPort)
+
 		StringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 
@@ -400,28 +433,44 @@ func init() {
 	}
 }
 
-func extraServerFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(startCtx.serverConnHost, serverConnPort)
-	if serverAdvertiseHost == "" {
-		serverAdvertiseHost = startCtx.serverConnHost
+func extraServerFlagInit(cmd *cobra.Command) {
+	pf := cmd.Flags()
+	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ListenAddrAlias.Name).Changed
+	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseAddrAlias.Name).Changed
+	if listenAddrSpecified && !advAddrSpecified {
+		// We can't use log.Shout here, because at this point logging has
+		// not been initialized yet.
+		fmt.Fprintln(stderr, "*\n* WARNING: --listen-addr/--host is specified, consider using --advertise-addr too.\n*")
+	}
+	listenPortSpecified := pf.Lookup(cliflags.ListenPort.Name).Changed
+	advPortSpecified := pf.Lookup(cliflags.AdvertisePort.Name).Changed
+	if listenPortSpecified && !advPortSpecified {
+		// We can't use log.Shout here, because at this point logging has
+		// not been initialized yet.
+		fmt.Fprintln(stderr, "*\n* WARNING: --listen-port/--port is specified, consider using --advertise-port too.\n*")
+	}
+
+	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
+	if serverAdvertiseAddr == "" {
+		serverAdvertiseAddr = startCtx.serverListenAddr
 	}
 	if serverAdvertisePort == "" {
-		serverAdvertisePort = serverConnPort
+		serverAdvertisePort = serverListenPort
 	}
-	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
-	if serverHTTPHost == "" {
-		serverHTTPHost = startCtx.serverConnHost
+	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseAddr, serverAdvertisePort)
+	if serverHTTPAddr == "" {
+		serverHTTPAddr = startCtx.serverListenAddr
 	}
-	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 }
 
 func extraClientFlagInit() {
 	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
-	if serverHTTPHost == "" {
-		serverHTTPHost = startCtx.serverConnHost
+	if serverHTTPAddr == "" {
+		serverHTTPAddr = startCtx.serverListenAddr
 	}
-	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
