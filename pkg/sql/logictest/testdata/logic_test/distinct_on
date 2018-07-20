@@ -254,7 +254,7 @@ SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 #########################
 
 query I rowsort
-SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+SELECT DISTINCT ON(row_number() OVER(ORDER BY (pk1, pk2))) y FROM xyz
 ----
 1
 1
@@ -265,7 +265,7 @@ SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 1
 
 query I
-SELECT DISTINCT ON(row_number() OVER()) y FROM xyz ORDER BY row_number() OVER() DESC
+SELECT DISTINCT ON(row_number() OVER(ORDER BY (pk1, pk2))) y FROM xyz ORDER BY row_number() OVER(ORDER BY (pk1, pk2)) DESC
 ----
 1
 5
