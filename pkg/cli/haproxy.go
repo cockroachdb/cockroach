@@ -58,7 +58,7 @@ type haProxyNodeInfo struct {
 
 func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 	fs := flag.NewFlagSet("haproxy", flag.ContinueOnError)
-	checkPort := fs.String(cliflags.ServerHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
+	checkPort := fs.String(cliflags.ListenHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
 
 	// Discard parsing output.
 	fs.SetOutput(ioutil.Discard)
@@ -74,7 +74,7 @@ func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 		// when it encounters an undefined flag and we do not want to define all
 		// possible flags.
 		for i, arg := range status.Args {
-			if strings.Contains(arg, cliflags.ServerHTTPPort.Name) {
+			if strings.Contains(arg, cliflags.ListenHTTPPort.Name) {
 				_ = fs.Parse(status.Args[i:])
 			}
 		}
