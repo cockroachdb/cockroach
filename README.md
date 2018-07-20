@@ -9,6 +9,7 @@ CockroachDB is a cloud-native SQL database for building global, scalable cloud s
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
+- [Training](#training)
 - [Quickstart](#quickstart)
 - [Client Drivers](#client-drivers)
 - [Deployment](#deployment)
@@ -44,6 +45,11 @@ CockroachDB is production-ready. See our
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
 
+## Training
+
+Our [self guided training](https://www.cockroachlabs.com/docs/stable/training/) will show you how to install CRDB, import 
+data, administrate a cluster, troubleshoot common issues, and complete necessary maintenance tasks.
+
 ## Quickstart
 
 1. [Install CockroachDB](https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html).
@@ -77,19 +83,23 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Need Help?
 
-- [Troubleshooting documentation](https://www.cockroachlabs.com/docs/stable/troubleshooting-overview.html) -
+- If this is your first time using CRDB, we suggest completing [training before building your first cluster](https://www.cockroachlabs.com/docs/stable/training/). 
+  It's the same training we use internally. It covers everything from installing and importing your data to troubleshooting 
+  and decommissioning nodes, as well as the most common issues that trip up first time users.
+  
+- [Check out our troubleshooting documentation](https://www.cockroachlabs.com/docs/stable/troubleshooting-overview.html) -
   Learn how to troubleshoot common errors, cluster and node setup, and SQL query behavior,
   and how to use debug and error logs.
 
-- [CockroachDB Forum](https://forum.cockroachlabs.com/) and
-  [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - Ask questions,
-  find answers, and help other users.
+- If that doesn't help and you're stuck or have a question, [contact us on the CockroachDB Forum (https://forum.cockroachlabs.com/) or [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb). 
+  Our support team monitors the forum first for new questions.
 
-- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the most immediate
-  way to connect with CockroachDB engineers.
+- If you've found a bug, or want to request a new feature, help us out by
+  [opening a Github issue](https://github.com/cockroachdb/cockroach/issues/new).
 
-- For filing bugs, suggesting improvements, or requesting new features, help us out by
-  [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
+- [We're also on Gitter](https://gitter.im/cockroachdb/cockroach)
+
+
 
 ## Contributing
 
