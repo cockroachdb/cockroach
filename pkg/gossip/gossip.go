@@ -990,7 +990,7 @@ func (g *Gossip) GetSystemConfig() (config.SystemConfig, bool) {
 }
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
-// system config. It is notified after registration (if a system config is
+// system config. It is notified after registration (if a system container is
 // already set), and whenever a new system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	g.systemConfigMu.Lock()

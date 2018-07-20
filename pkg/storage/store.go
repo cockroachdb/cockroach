@@ -70,10 +70,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 
 	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts"             // silence lint
-	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/ctconfig"    // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/container"    // silence lint
 	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"        // silence lint
-	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/ctstorage"   // silence lint
-	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/cttransport" // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"   // silence lint
+	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/transport" // silence lint
 	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/minprop"     // silence lint
 	_ "github.com/cockroachdb/cockroach/pkg/storage/closedts/provider"    // silence lint
 )

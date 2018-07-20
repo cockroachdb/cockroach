@@ -336,7 +336,7 @@ func writeZoneConfig(
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
-// zone config exists for the given ID, it returns an empty zone config.
+// zone config exists for the given ID, it returns an empty zone container.
 func getZoneConfigRaw(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
 ) (config.ZoneConfig, error) {

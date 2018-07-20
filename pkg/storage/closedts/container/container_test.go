@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package closedts_test
+package container_test // intentionally test from external package
 
 import (
 	"errors"
@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +81,7 @@ func TestContainer(t *testing.T) {
 	)
 	grpcServer := rpc.NewServer(rpcContext)
 
-	cfg := ctconfig.Config{
+	cfg := container.Config{
 		Settings:   st,
 		Stopper:    stopper,
 		Clock:      clock,
@@ -89,10 +89,10 @@ func TestContainer(t *testing.T) {
 		Dialer:     dialer,
 		GRPCServer: grpcServer,
 	}
-	c := ctconfig.NewContainer(cfg)
+	c := container.NewContainer(cfg)
 	c.Start()
 
 	// Silence unused warnings.
 	var _, _ = ctpb.Epoch(0), ctpb.LAI(0)
-	var _ = ctconfig.DialerAdapter(nil)
+	var _ = container.DialerAdapter(nil)
 }

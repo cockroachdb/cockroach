@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package ctconfig
+package container
 
 import (
 	"context"
@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctstorage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/cttransport"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/minprop"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/provider"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 
 	"google.golang.org/grpc"
@@ -59,8 +59,8 @@ type Container struct {
 // NewContainer initializes a Container from the given Config. The Container
 // will need to be started separately.
 func NewContainer(cfg Config) *Container {
-	storage := ctstorage.NewMultiStorage(func() ctstorage.SingleStorage {
-		return ctstorage.NewMemStorage(5*closedts.TargetDuration.Get(&cfg.Settings.SV), 2)
+	storage := storage.NewMultiStorage(func() storage.SingleStorage {
+		return storage.NewMemStorage(5*closedts.TargetDuration.Get(&cfg.Settings.SV), 2)
 	})
 
 	tracker := minprop.NewTracker()
@@ -74,13 +74,13 @@ func NewContainer(cfg Config) *Container {
 	}
 	provider := provider.NewProvider(&pConf)
 
-	server := cttransport.NewServer(cfg.Stopper, provider, cfg.Refresh)
+	server := transport.NewServer(cfg.Stopper, provider, cfg.Refresh)
 
 	if cfg.GRPCServer != nil {
 		ctpb.RegisterClosedTimestampServer(cfg.GRPCServer, server)
 	}
 
-	rConf := cttransport.Config{
+	rConf := transport.Config{
 		Settings: cfg.Settings,
 		Stopper:  cfg.Stopper,
 		Dialer:   cfg.Dialer,
@@ -93,7 +93,7 @@ func NewContainer(cfg Config) *Container {
 		Provider: provider,
 		Tracker:  tracker,
 		Server:   server,
-		Clients:  cttransport.NewClients(rConf),
+		Clients:  transport.NewClients(rConf),
 	}
 }
 

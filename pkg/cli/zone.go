@@ -214,7 +214,7 @@ num_replicas: 3
 constraints: [ssd, -mem]
 EOF
 
-Note that the specified zone config is merged with the existing zone config for
+Note that the specified zone config is merged with the existing zone container for
 the database or table.
 `,
 	Args: cobra.ExactArgs(1),
