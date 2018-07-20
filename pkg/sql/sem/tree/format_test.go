@@ -58,6 +58,21 @@ func TestFormatStatement(t *testing.T) {
 		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
 			`GRANT SELECT ON TABLE _ TO _`},
 
+		{`INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_), (__more5__)`},
+		{`INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_, _, __more4__)`},
+		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (ARRAY[_, _, __more5__])`},
+		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
+			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
+			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (ARRAY[_, _, __more30__])`},
+
 		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, tree.FmtHideConstants,
 			`SELECT (_ + COALESCE(_, _, x)) - ARRAY[_]`},
 

@@ -57,7 +57,8 @@ const (
 	FmtShowTypes
 
 	// FmtHideConstants instructs the pretty-printer to produce a
-	// representation that does not disclose query-specific data.
+	// representation that does not disclose query-specific data. It
+	// also shorten long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
 	// FmtAnonymize instructs the pretty-printer to remove
