@@ -16,6 +16,11 @@
 
 package tree
 
+import (
+	"fmt"
+	"strings"
+)
+
 // formatNodeOrHideConstants recurses into a node for pretty-printing,
 // unless hideConstants is set in the flags and the node is a datum or
 // a literal.
@@ -25,13 +30,12 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 		case *ValuesClause:
 			v.formatHideConstants(ctx)
 			return
-		case *ComparisonExpr:
-			if v.Operator == In || v.Operator == NotIn {
-				if t, ok := v.Right.(*Tuple); ok {
-					v.formatInTupleAndHideConstants(ctx, t)
-					return
-				}
-			}
+		case *Tuple:
+			v.formatHideConstants(ctx)
+			return
+		case *Array:
+			v.formatHideConstants(ctx)
+			return
 		case *Placeholder:
 			// Placeholders should be printed as placeholder markers.
 			// Deliberately empty so we format as normal.
@@ -43,26 +47,15 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 	n.Format(ctx)
 }
 
-// formatInTupleAndHideConstants formats an "a IN (...)" expression
-// and collapses the tuple on the right to contain at most 2 elements
-// if it otherwise only contains literals or placeholders.
-// e.g.:
-//    a IN (1, 2, 3)       -> a IN (_, _)
-//    a IN (x+1, x+2, x+3) -> a IN (x+_, x+_, x+_)
-func (node *ComparisonExpr) formatInTupleAndHideConstants(ctx *FmtCtx, rightTuple *Tuple) {
-	exprFmtWithParen(ctx, node.Left)
-	ctx.WriteByte(' ')
-	ctx.WriteString(node.Operator.String())
-	ctx.WriteByte(' ')
-	rightTuple.formatHideConstants(ctx)
-}
-
 // formatHideConstants shortens multi-valued VALUES clauses to a
 // VALUES clause with a single value.
-// e.g. VALUES (a,b,c), (d,e,f) -> VALUES (_, _, _)
+// e.g. VALUES (a,b,c), (d,e,f) -> VALUES (_, _, _), (__more__)
 func (node *ValuesClause) formatHideConstants(ctx *FmtCtx) {
 	ctx.WriteString("VALUES ")
-	node.Tuples[0].Format(ctx)
+	ctx.FormatNode(node.Tuples[0])
+	if len(node.Tuples) > 1 {
+		ctx.Printf(", (%s)", arityString(len(node.Tuples)-1))
+	}
 }
 
 // formatHideConstants formats tuples containing only literals or
@@ -70,9 +63,9 @@ func (node *ValuesClause) formatHideConstants(ctx *FmtCtx) {
 // two elements, scrubbed.
 // e.g. (1)               -> (_)
 //      (1, 2)            -> (_, _)
-//      (1, 2, 3)         -> (_, _)
+//      (1, 2, 3)         -> (_, _, __more3__)
 //      ROW()             -> ROW()
-//      ROW($1, $2, $3)   -> ROW($1, $2)
+//      ROW($1, $2, $3)   -> ROW($1, $2, __more3__)
 //      (1+2, 2+3, 3+4)   -> (_ + _, _ + _, _ + _)
 //      (1+2, b, c)       -> (_ + _, b, c)
 func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
@@ -94,9 +87,68 @@ func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 	if i == len(node.Exprs) {
 		// We copy the node to preserve the "row" boolean flag.
 		v2 := *node
-		v2.Exprs = v2.Exprs[:2]
+		v2.Exprs = append(make(Exprs, 0, 3), v2.Exprs[:2]...)
+		if len(node.Exprs) > 2 {
+			v2.Exprs = append(v2.Exprs, arityIndicator(len(node.Exprs)-2))
+		}
+		if node.Labels != nil {
+			v2.Labels = node.Labels[:2]
+		}
 		v2.Format(ctx)
 		return
 	}
 	node.Format(ctx)
+}
+
+// formatHideConstants formats array expressions containing only
+// literals or placeholders and longer than 1 element as an array
+// expression of its first two elements, scrubbed.
+// e.g. array[1]             -> array[_]
+//      array[1, 2]          -> array[_, _]
+//      array[1, 2, 3]       -> array[_, _, __more3__]
+//      array[1+2, 2+3, 3+4] -> array[_ + _, _ + _, _ + _]
+func (node *Array) formatHideConstants(ctx *FmtCtx) {
+	if len(node.Exprs) < 2 {
+		node.Format(ctx)
+		return
+	}
+
+	// First, determine if there are only literals/placeholders.
+	var i int
+	for i = 0; i < len(node.Exprs); i++ {
+		switch node.Exprs[i].(type) {
+		case Datum, Constant, *Placeholder:
+			continue
+		}
+		break
+	}
+	// If so, then use the special representation.
+	if i == len(node.Exprs) {
+		// We copy the node to preserve the "row" boolean flag.
+		v2 := *node
+		v2.Exprs = append(make(Exprs, 0, 3), v2.Exprs[:2]...)
+		if len(node.Exprs) > 2 {
+			v2.Exprs = append(v2.Exprs, arityIndicator(len(node.Exprs)-2))
+		}
+		v2.Format(ctx)
+		return
+	}
+	node.Format(ctx)
+}
+
+func arityIndicator(n int) Expr {
+	return NewUnresolvedName(arityString(n))
+}
+
+func arityString(n int) string {
+	var v int
+	for v = 1; n >= 10; n /= 10 {
+		v = v * 10
+	}
+	v = v * n
+	return fmt.Sprintf("__more%d__", v)
+}
+
+func isArityIndicatorString(s string) bool {
+	return strings.HasPrefix(s, "__more")
 }

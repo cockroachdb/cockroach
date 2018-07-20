@@ -239,7 +239,9 @@ func TestReportUsage(t *testing.T) {
 		// should still not cause those strings to appear in reports.
 		for _, q := range []string{
 			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = 1 AND '%[1]s' = '%[1]s'`,
-			`INSERT INTO %[1]s.%[1]s VALUES (6), (7)`,
+			`INSERT INTO %[1]s.%[1]s VALUES (6), (7), (8)`,
+			`INSERT INTO %[1]s.%[1]s SELECT unnest(ARRAY[9, 10, 11, 12])`,
+			`SELECT (1, 20, 30, 40) = (SELECT %[1]s, 1, 2, 3 FROM %[1]s.%[1]s LIMIT 1)`,
 			`SET application_name = '%[1]s'`,
 			`SELECT %[1]s FROM %[1]s.%[1]s WHERE %[1]s = 1 AND lower('%[1]s') = lower('%[1]s')`,
 			`UPDATE %[1]s.%[1]s SET %[1]s = %[1]s + 1`,
@@ -533,9 +535,11 @@ func TestReportUsage(t *testing.T) {
 		`[false,false] ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
 		`[false,false] CREATE DATABASE _`,
 		`[false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
-		`[false,false] INSERT INTO _ VALUES (_)`,
-		`[false,false] INSERT INTO _ VALUES (length($1::STRING))`,
+		`[false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
+		`[false,false] INSERT INTO _ VALUES (_), (__more2__)`,
+		`[false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 		`[false,false] INSERT INTO _(_, _) VALUES (_, _)`,
+		`[false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 		`[false,false] SET CLUSTER SETTING "cluster.organization" = _`,
 		`[false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
@@ -579,9 +583,11 @@ func TestReportUsage(t *testing.T) {
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
 			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
-			`INSERT INTO _ VALUES (length($1::STRING))`,
-			`INSERT INTO _ VALUES (_)`,
+			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
+			`INSERT INTO _ VALUES (_), (__more2__)`,
+			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 			`INSERT INTO _(_, _) VALUES (_, _)`,
+			`SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,
@@ -617,7 +623,7 @@ func TestReportUsage(t *testing.T) {
 			}
 			for _, expected := range expectedStatements {
 				if _, ok := keys[expected]; !ok {
-					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
+					t.Fatalf("expected %q in app %s: %s", expected, pretty.Sprint(appName), pretty.Sprint(keys))
 				}
 			}
 		}
