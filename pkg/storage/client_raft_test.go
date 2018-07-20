@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1123,6 +1124,80 @@ func TestRefreshPendingCommands(t *testing.T) {
 
 			mtc.waitForValues(roachpb.Key("a"), []int64{15, 15, 15})
 		})
+	}
+}
+
+// Test that when a leader is not able to establish a quorum, its Raft log does
+// not grow without bound... SUPRISE! This currently fails.
+func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	sc.RaftTickInterval = 10 * time.Millisecond
+	// Disable periodic gossip tasks which can move the range 1 lease
+	// unexpectedly.
+	sc.TestingKnobs.DisablePeriodicGossips = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl, err := mtc.Store(0).GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
+
+	// Stop node 1 and 2.
+	mtc.stopStore(1)
+	mtc.stopStore(2)
+
+	// While they are down, write some data.
+	putRes := make(chan *roachpb.Error)
+	go func() {
+		putArgs := putArgs([]byte("b"), make([]byte, 8<<10))
+		_, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putArgs)
+		putRes <- err
+	}()
+
+	// Wait for a bit and watch for Raft log growth.
+	wait := time.After(30 * time.Second)
+	ticker := time.Tick(500 * time.Millisecond)
+Loop:
+	for {
+		select {
+		case <-wait:
+			break Loop
+		case <-ticker:
+			const logSizeLimit = 1 << 20 // 1 MB
+			logSize := repl.GetRaftLogSize()
+			logSizeStr := humanizeutil.IBytes(logSize)
+			if logSize > logSizeLimit {
+				t.Fatalf("log size grew to size %s", logSizeStr)
+			}
+			log.Infof(context.Background(), "raft log size = %s\n", logSizeStr)
+		case err := <-putRes:
+			t.Fatalf("write finished with quorum unavailable; err=%v", err)
+		}
+	}
+
+	// Start node 1 and 2 again.
+	mtc.restartStore(1)
+	mtc.restartStore(2)
+
+	// The write should now succeed.
+	if err := <-putRes; err != nil {
+		t.Fatal(err)
 	}
 }
 
