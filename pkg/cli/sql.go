@@ -128,6 +128,10 @@ type cliState struct {
 	// by Ctrl+D, causes the shell to terminate with an error --
 	// reporting the status of the last valid SQL statement executed.
 	exitErr error
+
+	// autoTrace, when non-empty, encloses the executed statements
+	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
+	autoTrace string
 }
 
 // cliStateEnum drives the CLI state machine in runInteractive().
@@ -247,6 +251,34 @@ var options = map[string]struct {
 	// display is used to retrieve the current value.
 	display func(c *cliState) string
 }{
+	`auto_trace`: {
+		"automatically run statement tracing on each executed statement",
+		false,
+		false,
+		func(c *cliState, val string) error {
+			val = strings.ToLower(strings.TrimSpace(val))
+			switch val {
+			case "false", "0", "off":
+				c.autoTrace = ""
+			case "true", "1":
+				val = "on"
+				fallthrough
+			default:
+				c.autoTrace = "on, " + val
+			}
+			return nil
+		},
+		func(c *cliState) error {
+			c.autoTrace = ""
+			return nil
+		},
+		func(c *cliState) string {
+			if c.autoTrace == "" {
+				return "off"
+			}
+			return c.autoTrace
+		},
+	},
 	`display_format`: {
 		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
 		false,
@@ -1053,15 +1085,72 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
 
+	// Are we tracing?
+	if c.autoTrace != "" {
+		// Clear the trace by disabling tracing, then restart tracing
+		// with the specified options.
+		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.autoTrace, nil)
+		if c.exitErr != nil {
+			fmt.Fprintln(stderr, c.exitErr)
+			maybeShowErrorDetails(stderr, c.exitErr, false)
+			if c.errExit {
+				return cliStop
+			}
+			return nextState
+		}
+	}
+
 	// Now run the statement/query.
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
 		fmt.Fprintln(stderr, c.exitErr)
 		maybeShowErrorDetails(stderr, c.exitErr, false)
-		if c.errExit {
-			return cliStop
+	}
+
+	// If we are tracing, stop tracing and display the trace. We do
+	// this even if there was an error: a trace on errors is useful.
+	if c.autoTrace != "" {
+		// First, disable tracing.
+		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
+			// Print the error for the SET tracing statement. This will
+			// appear below the error for the main query above, if any,
+			fmt.Fprintln(stderr, err)
+			maybeShowErrorDetails(stderr, err, false)
+			if c.exitErr == nil {
+				// The query had encountered no error above, but now we are
+				// encountering an error on SET tracing. Consider this to
+				// become the query's error.
+				c.exitErr = err
+			}
+			// If the query above had encountered an error already
+			// (c.exitErr != nil), we keep that as the main error for the
+			// shell.
+		} else {
+			traceType := ""
+			if strings.Contains(c.autoTrace, "kv") {
+				traceType = "kv"
+			}
+			if err := runQueryAndFormatResults(c.conn, os.Stdout,
+				makeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
+				fmt.Fprintln(stderr, err)
+				maybeShowErrorDetails(stderr, err, false)
+				if c.exitErr == nil {
+					// Both the query and SET tracing had encountered no error
+					// above, but now we are encountering an error on SHOW TRACE
+					// Consider this to become the query's error.
+					c.exitErr = err
+				}
+				// If the query above or SET tracing had encountered an error
+				// already (c.exitErr != nil), we keep that as the main error
+				// for the shell.
+			}
 		}
 	}
+
+	if c.exitErr != nil && c.errExit {
+		return cliStop
+	}
+
 	return nextState
 }
 
