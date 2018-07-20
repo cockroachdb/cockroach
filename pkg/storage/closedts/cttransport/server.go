@@ -19,8 +19,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -28,13 +28,13 @@ import (
 // Server handles incoming closed timestamp update stream requests.
 type Server struct {
 	stopper *stop.Stopper
-	p       ct.Producer
-	refresh ct.RefreshFn
+	p       closedts.Producer
+	refresh closedts.RefreshFn
 }
 
 // NewServer sets up a Server which relays information from the given producer
 // to incoming clients.
-func NewServer(stopper *stop.Stopper, p ct.Producer, refresh ct.RefreshFn) *Server {
+func NewServer(stopper *stop.Stopper, p closedts.Producer, refresh closedts.RefreshFn) *Server {
 	return &Server{
 		stopper: stopper,
 		p:       p,
@@ -49,7 +49,7 @@ func (s *Server) Get(client ctpb.ClosedTimestamp_GetServer) error {
 	ctx := client.Context()
 	ch := make(chan ctpb.Entry, 10)
 
-	// TODO: X*ct.CloseFraction*TargetInterval
+	// TODO: X*closedts.CloseFraction*TargetInterval
 	const closedTimestampNoUpdateWarnThreshold = 10 * time.Second
 	t := timeutil.NewTimer()
 

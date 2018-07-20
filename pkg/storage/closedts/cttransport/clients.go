@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -31,8 +31,8 @@ import (
 type Config struct {
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
-	Dialer   ct.Dialer
-	Sink     ct.Notifyee
+	Dialer   closedts.Dialer
+	Sink     closedts.Notifyee
 }
 
 // Clients manages clients receiving closed timestamp updates from
@@ -47,7 +47,7 @@ type Clients struct {
 	clients syncutil.IntMap
 }
 
-var _ ct.ClientRegistry = (*Clients)(nil)
+var _ closedts.ClientRegistry = (*Clients)(nil)
 
 // NewClients sets up a client registry.
 func NewClients(cfg Config) *Clients {

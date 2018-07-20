@@ -23,8 +23,8 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -75,7 +75,7 @@ type entry struct {
 	SingleStorage
 }
 
-// MultiStorage implements the ct.Storage interface.
+// MultiStorage implements the closedts.Storage interface.
 type MultiStorage struct {
 	f func() SingleStorage
 	// TODO(tschottdorf): clean up storages that haven't been used for extended
@@ -83,7 +83,7 @@ type MultiStorage struct {
 	m syncutil.IntMap
 }
 
-var _ ct.Storage = (*MultiStorage)(nil)
+var _ closedts.Storage = (*MultiStorage)(nil)
 
 // NewMultiStorage sets up a MultiStorage which uses the given factory method
 // for setting up the SingleStorage used for each individual NodeID for which
@@ -105,19 +105,19 @@ func (ms *MultiStorage) getOrCreate(nodeID roachpb.NodeID) SingleStorage {
 	return (*entry)(p).SingleStorage
 }
 
-// VisitAscending implements ct.Storage.
+// VisitAscending implements closedts.Storage.
 func (ms *MultiStorage) VisitAscending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
 	ss := ms.getOrCreate(nodeID)
 	ss.VisitAscending(f)
 }
 
-// VisitDescending implements ct.Storage.
+// VisitDescending implements closedts.Storage.
 func (ms *MultiStorage) VisitDescending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
 	ss := ms.getOrCreate(nodeID)
 	ss.VisitDescending(f)
 }
 
-// Add implements ct.Storage.
+// Add implements closedts.Storage.
 func (ms *MultiStorage) Add(nodeID roachpb.NodeID, entry ctpb.Entry) {
 	ss := ms.getOrCreate(nodeID)
 	ss.Add(entry)
