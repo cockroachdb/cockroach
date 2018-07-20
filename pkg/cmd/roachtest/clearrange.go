@@ -27,8 +27,12 @@ func registerClearRange(r *registry) {
 		Name:       `clearrange`,
 		MinVersion: `v2.1.0`,
 		Nodes:      nodes(10),
-		Stable:     true, // DO NOT COPY to new tests
+		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			// Use ZFS so the initial store dumps can be instantly rolled back to
+			// their pristine state. Useful for iterating quickly on the test.
+			c.Reformat(ctx, c.All(), "zfs")
+
 			// Created via:
 			// roachtest --cockroach cockroach-v2.0-8 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
@@ -42,8 +46,7 @@ func registerClearRange(r *registry) {
 				if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
 					t.Fatal(err)
 				}
-				// TODO(peter): re-enable once zfs intallation is automatic.
-				// c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+				c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
 			} else {
 				t.Status(`restoring store dumps`)
 				c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
@@ -71,6 +74,10 @@ func registerClearRange(r *registry) {
 				conn := c.Conn(ctx, 1)
 				defer conn.Close()
 
+				if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`); err != nil {
+					return err
+				}
+
 				t.WorkerStatus("dropping table")
 				defer t.WorkerStatus()
 
@@ -90,7 +97,7 @@ func registerClearRange(r *registry) {
 				// time to verify that nothing has gone wonky on the cluster.
 				//
 				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 15
+				const minutes = 45
 				t.WorkerStatus("repeatedly running count(*) on small table")
 				for i := 0; i < minutes; i++ {
 					after := time.After(time.Minute)
@@ -113,6 +120,8 @@ func registerClearRange(r *registry) {
 						return ctx.Err()
 					}
 				}
+				// TODO(benesch): verify that every last range in the table has been
+				// merged away. For now, just exercising the merge code is a good start.
 				return nil
 			})
 			m.Wait()
