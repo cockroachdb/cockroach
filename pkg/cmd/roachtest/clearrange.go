@@ -30,7 +30,7 @@ func registerClearRange(r *registry) {
 		Stable:     true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// Created via:
-			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
+			// roachtest --cockroach cockroach-v2.0-8 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
 			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
 				// TODO(peter): install zfs with 'roachprod reformat zfs'.
