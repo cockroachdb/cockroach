@@ -438,6 +438,19 @@ func (p *planner) rewriteIndexOrderings(
 				})
 			}
 
+			for _, id := range idxDesc.ExtraColumnIDs {
+				col, err := desc.FindColumnByID(id)
+				if err != nil {
+					return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "column with ID %d not found", id)
+				}
+
+				newOrderBy = append(newOrderBy, &tree.Order{
+					OrderType: tree.OrderByColumn,
+					Expr:      tree.NewColumnItem(tn, tree.Name(col.Name)),
+					Direction: chooseDirection(o.Direction == tree.Descending, sqlbase.IndexDescriptor_ASC),
+				})
+			}
+
 		default:
 			return nil, errors.Errorf("unknown ORDER BY specification: %s", tree.ErrString(&orderBy))
 		}

@@ -61,16 +61,8 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		if err != nil {
 			panic(builderError{err})
 		}
-		tab, err := b.catalog.FindTable(b.ctx, tn)
-		if err != nil {
-			pgerr, ok := err.(*pgerror.Error)
-			if ok && pgerr.Code == pgerror.CodeWrongObjectTypeError {
-				// Remap wrong object error to unimplemented error.
-				panic(unimplementedf("views and sequences are not supported"))
-			}
 
-			panic(builderError{err})
-		}
+		tab := b.resolveTable(tn)
 		return b.buildScan(tab, tn, inScope)
 
 	case *tree.ParenTableExpr:
