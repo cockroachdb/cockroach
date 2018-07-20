@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -34,9 +34,9 @@ import (
 type Config struct {
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
-	Storage  ct.Storage
-	Clock    ct.LiveClockFn
-	Close    ct.CloseFn
+	Storage  closedts.Storage
+	Clock    closedts.LiveClockFn
+	Close    closedts.CloseFn
 }
 
 type subscriber struct {
@@ -44,7 +44,7 @@ type subscriber struct {
 	queue []ctpb.Entry
 }
 
-// Provider implements ct.Provider. It orchestrates the flow of closed
+// Provider implements closedts.Provider. It orchestrates the flow of closed
 // timestamps and lets callers check whether they can serve reads.
 type Provider struct {
 	cfg *Config
@@ -58,7 +58,7 @@ type Provider struct {
 	everyClockLog log.EveryN
 }
 
-var _ ct.Provider = (*Provider)(nil)
+var _ closedts.Provider = (*Provider)(nil)
 
 // NewProvider initializes a Provider, that has yet to be started.
 func NewProvider(cfg *Config) *Provider {
@@ -69,7 +69,7 @@ func NewProvider(cfg *Config) *Provider {
 	}
 }
 
-// Start implements ct.Provider.
+// Start implements closedts.Provider.
 //
 // TODO(tschottdorf): the closer functionality could be extracted into its own
 // component, which would make the interfaces a little cleaner. Decide whether
@@ -87,8 +87,8 @@ func (p *Provider) runCloser(ctx context.Context) {
 
 	t := timeutil.NewTimer()
 	for {
-		closeFraction := ct.CloseFraction.Get(&p.cfg.Settings.SV)
-		targetDuration := float64(ct.TargetDuration.Get(&p.cfg.Settings.SV))
+		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
+		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
 		t.Reset(time.Duration(closeFraction * targetDuration))
 
 		select {
@@ -133,7 +133,7 @@ func (p *Provider) processNotification(nodeID roachpb.NodeID, entry ctpb.Entry) 
 	}
 }
 
-// Notify implements ct.Notifyee.
+// Notify implements closedts.Notifyee.
 func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
 	ctx := context.TODO()
@@ -147,7 +147,7 @@ func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	return ch
 }
 
-// Subscribe implements ct.Producer.
+// Subscribe implements closedts.Producer.
 func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	var i int
 	sub := &subscriber{ch, nil}
@@ -211,7 +211,7 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	}
 }
 
-// CanServe implements ct.Provider.
+// CanServe implements closedts.Provider.
 func (p *Provider) CanServe(
 	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
 ) bool {

@@ -12,8 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// Package ct houses the interfaces and basic definitions used by the various
-// components of the closed timestamp subsystems.
+// Package closedts houses the interfaces and basic definitions used by the
+// various components of the closed timestamp subsystems.
 //
 // The following diagram illustates how these components fit together. In
 // running operation, the components are grouped in a ctconfig.Container
@@ -40,14 +40,14 @@
 // | Replica |<--------| Server |         | Clients |<----------+
 // +---------+         +--------+ ------> +---------+  EnsureClient
 //                                  CT
-package ct
+package closedts
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 

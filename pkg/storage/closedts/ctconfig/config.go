@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/ctstorage"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/cttransport"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/minprop"
-	"github.com/cockroachdb/cockroach/pkg/storage/ct/provider"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctstorage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/cttransport"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/minprop"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/provider"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 
 	"google.golang.org/grpc"
@@ -36,9 +36,9 @@ import (
 type Config struct {
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
-	Clock    ct.LiveClockFn
-	Refresh  ct.RefreshFn
-	Dialer   ct.Dialer
+	Clock    closedts.LiveClockFn
+	Refresh  closedts.RefreshFn
+	Dialer   closedts.Dialer
 
 	// GRPCServer specifies an (optional) server to register the CT update server
 	// with.
@@ -50,17 +50,17 @@ type Config struct {
 type Container struct {
 	Config
 	Tracker  *minprop.Tracker
-	Storage  ct.Storage
-	Provider ct.Provider
+	Storage  closedts.Storage
+	Provider closedts.Provider
 	Server   ctpb.ClosedTimestampServer
-	Clients  ct.ClientRegistry
+	Clients  closedts.ClientRegistry
 }
 
 // NewContainer initializes a Container from the given Config. The Container
 // will need to be started separately.
 func NewContainer(cfg Config) *Container {
 	storage := ctstorage.NewMultiStorage(func() ctstorage.SingleStorage {
-		return ctstorage.NewMemStorage(5*ct.TargetDuration.Get(&cfg.Settings.SV), 2)
+		return ctstorage.NewMemStorage(5*closedts.TargetDuration.Get(&cfg.Settings.SV), 2)
 	})
 
 	tracker := minprop.NewTracker()
@@ -117,8 +117,8 @@ func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.
 	return ctpb.NewClosedTimestampClient(c).Get(ctx)
 }
 
-// DialerAdapter turns a node dialer into a ct.Dialer.
-func DialerAdapter(dialer *nodedialer.Dialer) ct.Dialer {
+// DialerAdapter turns a node dialer into a closedts.Dialer.
+func DialerAdapter(dialer *nodedialer.Dialer) closedts.Dialer {
 	return (*dialerAdapter)(dialer)
 
 }
