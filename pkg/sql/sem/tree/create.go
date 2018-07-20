@@ -371,10 +371,16 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey {
-		ctx.WriteString(" PRIMARY KEY")
-	} else if node.Unique {
-		ctx.WriteString(" UNIQUE")
+	if node.PrimaryKey || node.Unique {
+		if node.UniqueConstraintName != "" {
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(&node.UniqueConstraintName)
+		}
+		if node.PrimaryKey {
+			ctx.WriteString(" PRIMARY KEY")
+		} else if node.Unique {
+			ctx.WriteString(" UNIQUE")
+		}
 	}
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
