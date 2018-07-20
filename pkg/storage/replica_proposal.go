@@ -310,7 +310,8 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		r.txnWaitQueue.Clear(true /* disable */)
 	}
 
-	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) &&
+		!r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		// If this replica is the raft leader but it is not the new lease holder,
 		// then try to transfer the raft leadership to match the lease. We like it
 		// when leases and raft leadership are collocated because that facilitates
