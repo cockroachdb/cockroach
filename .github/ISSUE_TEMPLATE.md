@@ -15,7 +15,7 @@ Please describe the issue you observed, and any steps we can take to reproduce i
 
 - What did you see instead?
 
-- What is the impact?
+- What was the impact?
 
 **FEATURE REQUEST**
 
