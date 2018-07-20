@@ -331,7 +331,7 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			{strconv.Itoa(int(target)), "true", "0", "true", "true|false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
