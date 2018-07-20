@@ -15,7 +15,7 @@
 // Package closedts houses the interfaces and basic definitions used by the
 // various components of the closed timestamp subsystems.
 //
-// The following diagram illustates how these components fit together. In
+// The following diagram illustrates how these components fit together. In
 // running operation, the components are grouped in a ctconfig.Container
 // (intended as a pass-around per-instance Singleton).
 // Replicas proposing commands talk to the Tracker; replicas trying to serve

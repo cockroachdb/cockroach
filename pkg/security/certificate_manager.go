@@ -271,7 +271,7 @@ func (cm *CertificateManager) updateMetricsLocked() {
 }
 
 // GetServerTLSConfig returns a server TLS config with a callback to fetch the
-// latest TLS config. We still attempt to get the config to make sure
+// latest TLS config. We still attempt to get the container to make sure
 // the initial call has a valid config loaded.
 func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
 	if _, err := cm.GetEmbeddedServerTLSConfig(nil); err != nil {
