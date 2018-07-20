@@ -759,6 +759,9 @@ type StoreTestingKnobs struct {
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
 	DisablePeriodicGossips bool
+	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
+	// leadership when it diverges from the range's leaseholder.
+	DisableLeaderFollowsLeaseholder bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool

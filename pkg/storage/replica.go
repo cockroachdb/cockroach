@@ -382,8 +382,13 @@ type Replica struct {
 		// map must only be referenced while Replica.mu is held, except if the
 		// element is removed from the map first. The notable exception is the
 		// contained RaftCommand, which we treat as immutable.
-		proposals         map[storagebase.CmdIDKey]*ProposalData
-		internalRaftGroup *raft.RawNode
+		proposals map[storagebase.CmdIDKey]*ProposalData
+		// proposalsForwarded is maintained by Raft leaders and stores in-flight
+		// commands that were forwarded to the leader during its current term.
+		// The set allows leaders to detect duplicate forwarded commands and
+		// avoid re-proposing the same forwarded command multiple times.
+		proposalsForwarded map[storagebase.CmdIDKey]struct{}
+		internalRaftGroup  *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has
 		// been created from a preemptive snapshot (i.e. before being added to the
 		// Raft group). The replica ID will be non-zero whenever the replica is
@@ -692,6 +697,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.proposalsForwarded = map[storagebase.CmdIDKey]struct{}{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -850,6 +856,9 @@ func (r *Replica) cancelPendingCommandsLocked() {
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
 		p.finishApplication(pr)
+	}
+	for cmdID := range r.mu.proposalsForwarded {
+		delete(r.mu.proposalsForwarded, cmdID)
 	}
 }
 
@@ -3747,6 +3756,33 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
+		if req.Message.Type == raftpb.MsgProp {
+			// A proposal was forwarded to this replica.
+			if r.mu.replicaID == r.mu.leaderID {
+				// This replica is the leader. Record that the proposal
+				// was seen and drop the proposal if it was already seen.
+				// This prevents duplicate forwarded proposals from each
+				// being appended to a leader's raft log.
+				allSeen := true
+				for _, e := range req.Message.Entries {
+					switch e.Type {
+					case raftpb.EntryNormal:
+						cmdID, _ := DecodeRaftCommand(e.Data)
+						if _, ok := r.mu.proposalsForwarded[cmdID]; !ok {
+							r.mu.proposalsForwarded[cmdID] = struct{}{}
+							allSeen = false
+						}
+					case raftpb.EntryConfChange:
+						allSeen = false
+					default:
+						log.Fatalf(context.TODO(), "unexpected Raft entry: %v", e)
+					}
+				}
+				if allSeen {
+					return false /* unquiesceAndWakeLeader */, nil
+				}
+			}
+		}
 		err := raftGroup.Step(req.Message)
 		if err == raft.ErrProposalDropped {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -3854,6 +3890,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
 			refreshReason = reasonNewLeader
+		}
+		// Clear the forwarded proposal set. No-op if not previously the leader.
+		for cmdID := range r.mu.proposalsForwarded {
+			delete(r.mu.proposalsForwarded, cmdID)
 		}
 		leaderID = roachpb.ReplicaID(rd.SoftState.Lead)
 	}
@@ -4213,6 +4253,7 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 	if !r.store.TestingKnobs().DisableRefreshReasonTicks &&
+		(r.mu.replicaID != r.mu.leaderID || r.store.cfg.RefreshPendingCommandsWhenLeader) &&
 		r.mu.ticks%r.store.cfg.RaftElectionTimeoutTicks == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
 		// should wait before deciding that our previous proposal didn't go
@@ -4220,6 +4261,13 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 		// RaftElectionTimeoutTicks to refreshProposalsLocked means that commands
 		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
+		//
+		// However, we don't refresh proposals if we are the leader because
+		// doing so would be useless. The commands tracked by a leader replica
+		// were either all proposed when the replica was a leader or were
+		// re-proposed when the replica became a leader. Either way, they are
+		// guaranteed to be in the leader's Raft log so re-proposing won't do
+		// anything.
 		r.refreshProposalsLocked(
 			r.store.cfg.RaftElectionTimeoutTicks, reasonTicks,
 		)
@@ -4312,6 +4360,9 @@ func (r *Replica) maybeTransferRaftLeader(
 ) {
 	l := *r.mu.state.Lease
 	if !r.isLeaseValidRLocked(l, now) {
+		return
+	}
+	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
 	if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
@@ -5023,6 +5074,9 @@ func (r *Replica) processRaftCommand(
 		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
+
+	// Delete the entry for a forwarded proposal set.
+	delete(r.mu.proposalsForwarded, idKey)
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
