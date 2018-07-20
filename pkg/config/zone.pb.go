@@ -173,7 +173,7 @@ type Subzone struct {
 	PartitionName string `protobuf:"bytes,2,opt,name=partition_name,json=partitionName" json:"partition_name"`
 	// Config stores the ZoneConfig that applies to this Subzone. It never
 	// contains nested subzones.
-	Config ZoneConfig `protobuf:"bytes,3,opt,name=config" json:"container"`
+	Config ZoneConfig `protobuf:"bytes,3,opt,name=config" json:"config"`
 }
 
 func (m *Subzone) Reset()                    { *m = Subzone{} }
