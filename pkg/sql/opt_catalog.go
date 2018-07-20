@@ -105,6 +105,11 @@ func newOptTable(
 	name *tree.TableName, statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor,
 ) *optTable {
 	ot := &optTable{name: *name}
+
+	// The opt.Table interface requires that table names be fully qualified.
+	ot.name.ExplicitSchema = true
+	ot.name.ExplicitCatalog = true
+
 	ot.init(statsCache, desc)
 	return ot
 }
