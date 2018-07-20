@@ -496,7 +496,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
 		"--certs-dir=/certs/",
-		"--host=" + node.nodeStr,
+		"--listen-addr=" + node.nodeStr,
 		"--verbosity=1",
 	}
 

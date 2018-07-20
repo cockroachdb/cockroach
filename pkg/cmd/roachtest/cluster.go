@@ -756,7 +756,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	}
 	if local {
 		// This avoids annoying firewall prompts on macos
-		args = append(args, "--args", "--host=127.0.0.1")
+		args = append(args, "--args", "--listen-addr=127.0.0.1")
 	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
