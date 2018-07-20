@@ -213,10 +213,9 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 
 	log.VEventf(ctx, 1, "starting")
 
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		ctx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, false, /* traceKV */
+		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
 		tr.moveToDraining(err)
 	}

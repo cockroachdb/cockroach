@@ -691,7 +691,7 @@ func (z *zigzagJoiner) nextRow(
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
 			return nil, z.producerMeta(err)
@@ -831,14 +831,13 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		curInfo := z.infos[z.side]
 		// Fetch initial batch.
-		// TODO(pbardea): set the traceKV flag when requested by the session.
 		err := curInfo.fetcher.StartScan(
 			z.ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
 			log.Errorf(z.ctx, "scan error: %s", err)
