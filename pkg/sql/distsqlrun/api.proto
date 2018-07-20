@@ -46,6 +46,8 @@ message SetupFlowRequest {
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
   optional EvalContext evalContext = 6 [(gogoproto.nullable) = false];
+
+  optional bool TraceKV = 8 [(gogoproto.nullable) = false];
 }
 
 // EvalContext is used to marshall some planner.EvalContext members.

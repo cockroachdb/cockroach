@@ -160,6 +160,7 @@ func (dsp *DistSQLPlanner) Run(
 	setupReq := distsqlrun.SetupFlowRequest{
 		Version:     distsqlrun.Version,
 		EvalContext: evalCtxProto,
+		TraceKV:     evalCtx.Tracing.KVTracingEnabled(),
 	}
 	if txnCoordMeta != nil {
 		// The receiver may not know about the TxnCoordMeta field if it is
