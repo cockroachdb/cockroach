@@ -324,40 +324,71 @@ or both forms can be used together, for example:
 </PRE>`,
 	}
 
-	ServerHost = FlagInfo{
-		Name: "host",
+	ListenAddr = FlagInfo{
+		Name: "listen-addr",
 		Description: `
-The hostname to listen on. The node will also advertise itself using this
-hostname if advertise-host is not specified.`,
+The address or hostname to listen on. An IPv6 address can also be
+specified with the notation [...], for example [::1] or
+[fe80::f6f2:::].
+If --advertise-addr is left unspecified, the node will also announce
+this address for use by other nodes. It is strongly recommended to use
+--advertise-addr in cloud and container deployments or any setup where
+NAT is present between cluster nodes.`,
+	}
+
+	ServerHost = FlagInfo{
+		Name:        "host",
+		Description: `Alias for --listen-addr. Deprecated.`,
+	}
+
+	ListenPort = FlagInfo{
+		Name:      "listen-port",
+		Shorthand: "p",
+		Description: `
+The port to bind to.
+If --advertise-port is left unspecified, the node will also announce
+this port for use by other nodes. If a router implements NAT or N:M
+port forwarding, be sure to also use --advertise-port.`,
 	}
 
 	ServerPort = FlagInfo{
-		Name:      "port",
-		Shorthand: "p",
+		Name:        "port",
+		Description: `Alias for --listen-port. Deprecated.`,
+	}
+
+	AdvertiseAddr = FlagInfo{
+		Name: "advertise-addr",
 		Description: `
-The port to bind to.`,
+The address or hostname to advertise to other CockroachDB nodes for intra-cluster
+communication; it must resolve and be routable from other nodes in the cluster.
+An IPv6 address can also be specified with the notation [...], for
+example [::1] or [fe80::f6f2:::].`,
 	}
 
 	AdvertiseHost = FlagInfo{
-		Name: "advertise-host",
-		Description: `
-The hostname to advertise to other CockroachDB nodes for intra-cluster
-communication; it must resolve from other nodes in the cluster.`,
+		Name:        "advertise-host",
+		Description: `Alias for --advertise-addr. Deprecated.`,
 	}
 
 	AdvertisePort = FlagInfo{
 		Name: "advertise-port",
 		Description: `
 The port to advertise to other CockroachDB nodes for intra-cluster
-communication.`,
+communication. This should not be set differently from --listen-port
+unless port forwarding is set up on an intermediate firewall/router.`,
 	}
 
-	ServerHTTPHost = FlagInfo{
-		Name:        "http-host",
+	ListenHTTPAddr = FlagInfo{
+		Name:        "http-addr",
 		Description: `The hostname or IP address to bind to for HTTP requests.`,
 	}
 
-	ServerHTTPPort = FlagInfo{
+	ListenHTTPAddrAlias = FlagInfo{
+		Name:        "http-host",
+		Description: `Alias for --http-addr. Deprecated.`,
+	}
+
+	ListenHTTPPort = FlagInfo{
 		Name:        "http-port",
 		Description: `The port to bind to for HTTP requests.`,
 	}
@@ -397,10 +428,10 @@ production usage.`,
 		Name: "insecure",
 		Description: `
 Start an insecure node, using unencrypted (non-TLS) connections,
-listening on all IP addresses (unless --host is provided) and
+listening on all IP addresses (unless --listen-addr is provided) and
 disabling password authentication for all database users. This is
 strongly discouraged for production usage and should never be used on
-a public network without combining it with --host.`,
+a public network without combining it with --listen-addr.`,
 	}
 
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for

@@ -533,9 +533,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ServerPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenPort.Name)
 					} else if le.Addr == serverCfg.HTTPAddr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ServerHTTPPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPPort.Name)
 					}
 				}
 
@@ -552,6 +552,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
+
+			// Inform the user if the network settings are suspicious. We
+			// need to do that after starting the server because we need to
+			// know which advertise address NewServer() has decided.
+			hintServerCmdFlags(ctx, cmd)
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
@@ -788,6 +793,23 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return returnErr
 }
 
+func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
+	pf := cmd.Flags()
+
+	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
+	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
+
+	if !listenAddrSpecified && !advAddrSpecified {
+		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
+		log.Shout(ctx, log.Severity_WARNING,
+			"neither --listen-addr nor --advertise-addr was specified.\n"+
+				"The server will advertise "+fmt.Sprintf("%q", host)+" to other nodes, is this routable?\n\n"+
+				"Consider using:\n"+
+				"- for local-only servers:  --listen-addr=localhost\n"+
+				"- for multi-node clusters: --advertise-addr=<host/IP addr>\n")
+	}
+}
+
 func clientFlags() string {
 	flags := []string{os.Args[0]}
 	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
@@ -938,7 +960,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
-		addr := startCtx.serverConnHost
+		addr := startCtx.serverListenAddr
 		if addr == "" {
 			addr = "<all your IP addresses>"
 		}
