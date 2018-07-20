@@ -11,12 +11,10 @@ package importccl
 import (
 	"bufio"
 	gosql "database/sql"
-	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"unicode/utf8"
 
@@ -214,17 +212,15 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 	}
 	defer db.Close()
 
-	tableNames := []string{`simple`, `second`, `everything`}
-
-	for _, name := range tableNames {
-		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, name)); err != nil {
-			t.Fatal(err)
-		}
+	dropTables := `DROP TABLE IF EXISTS everything, third, second, simple CASCADE`
+	if _, err := db.Exec(dropTables); err != nil {
+		t.Fatal(err)
 	}
 
 	for _, schema := range []string{
 		`CREATE TABLE simple (i INT PRIMARY KEY, s text, b binary(200))`,
-		`CREATE TABLE second (i INT PRIMARY KEY, s VARCHAR(100))`,
+		`CREATE TABLE second (i INT PRIMARY KEY, k INT, FOREIGN KEY (k) REFERENCES simple (i), UNIQUE KEY ik (i, k), KEY ki (k, i))`,
+		`CREATE TABLE third (i INT PRIMARY KEY, a INT, b INT, FOREIGN KEY (a, b) REFERENCES second (i, k))`,
 		`CREATE TABLE everything (
 				i INT PRIMARY KEY,
 
@@ -279,18 +275,16 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < secondTableRows; i++ {
-		if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, i, strconv.Itoa(i)); err != nil {
+	for i := 1; i <= secondTableRows; i++ {
+		if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, -i, i); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	dump()
 
-	for _, name := range tableNames {
-		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, name)); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := db.Exec(dropTables); err != nil {
+		t.Fatal(err)
 	}
 }
 
