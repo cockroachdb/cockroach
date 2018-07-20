@@ -29,7 +29,7 @@ func registerBackup(r *registry) {
 
 			t.Status(`downloading store dumps`)
 			// Created via:
-			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
+			// roachtest --cockroach cockroach-v2.0.4-fb6939 store-gen --stores=10 bank \
 			//           --payload-bytes=10240 --ranges=0 --rows=65104166
 			location := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
 			storeDirsPath := storeDirURL(location, nodes, "2.0")
